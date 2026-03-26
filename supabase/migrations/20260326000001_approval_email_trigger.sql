@@ -25,7 +25,12 @@
 -- `supabase start`, it must be enabled in supabase/config.toml under
 -- [db.extensions] or installed manually.
 
-CREATE EXTENSION IF NOT EXISTS pg_net SCHEMA net;
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_net') THEN
+    CREATE EXTENSION pg_net;
+  END IF;
+END$$;
 
 
 -- ── 2. Trigger function ───────────────────────────────────────────────────────
