@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { useApprovalFlows, useUpdateApprovalFlow } from "@/lib/hooks/use-approval-flows";
+import { useApprovalFlows, useUpdateApprovalFlow, useCreateApprovalFlow } from "@/lib/hooks/use-approval-flows";
 import { useUsers } from "@/lib/hooks/use-users";
 import type { ApprovalFlow, ApprovalFlowStep, Role } from "@/types";
 
@@ -349,9 +349,24 @@ function FlowCard({ flow }: { flow: ApprovalFlow }) {
   );
 }
 
+const DEFAULT_FLOWS: { name: string; entityType: ApprovalFlow["entityType"] }[] = [
+  { name: "Requisition Approval", entityType: "requisition" },
+  { name: "Purchase Order Approval", entityType: "purchase_order" },
+];
+
 export function ApprovalFlowsPage() {
   const { data: flows, isLoading } = useApprovalFlows();
+  const { mutate: createFlow, isPending: creating } = useCreateApprovalFlow();
   const displayFlows = flows ?? [];
+
+  function handleInitialize() {
+    DEFAULT_FLOWS.forEach(({ name, entityType }) => {
+      const alreadyExists = displayFlows.some((f) => f.entityType === entityType);
+      if (!alreadyExists) {
+        createFlow({ name, entityType });
+      }
+    });
+  }
 
   return (
     <div className="mx-auto max-w-2xl space-y-8 p-6">
@@ -371,6 +386,17 @@ export function ApprovalFlowsPage() {
           {[1, 2].map((i) => (
             <div key={i} className="h-48 animate-pulse rounded-xl bg-slate-100" />
           ))}
+        </div>
+      ) : displayFlows.length === 0 ? (
+        <div className="flex flex-col items-center gap-4 rounded-xl border border-dashed border-slate-200 bg-slate-50 py-12 text-center">
+          <p className="text-sm font-medium text-slate-700">No approval flows configured</p>
+          <p className="max-w-sm text-xs text-slate-500">
+            Click below to create the default Requisition and Purchase Order approval flows,
+            then add approval steps to each one.
+          </p>
+          <Button size="sm" onClick={handleInitialize} disabled={creating}>
+            {creating ? "Creating…" : "Initialize Default Flows"}
+          </Button>
         </div>
       ) : (
         <div className="flex flex-col gap-6">

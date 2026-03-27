@@ -49,9 +49,12 @@ export function useOrgSettings() {
     queryKey: ["org-settings"],
     queryFn: async () => {
       const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not authenticated");
       const { data: profile, error: profileErr } = await supabase
         .from("profiles")
         .select("org_id")
+        .eq("id", user.id)
         .single();
       if (profileErr) throw profileErr;
 
@@ -71,9 +74,12 @@ export function useUpdateOrgSettings() {
   return useMutation({
     mutationFn: async (input: UpdateOrgSettingsInput) => {
       const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not authenticated");
       const { data: profile, error: profileErr } = await supabase
         .from("profiles")
         .select("org_id")
+        .eq("id", user.id)
         .single();
       if (profileErr) throw profileErr;
 

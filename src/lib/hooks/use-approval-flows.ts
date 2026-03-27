@@ -36,6 +36,26 @@ export function useApprovalFlow(entityType: ApprovalFlow["entityType"]) {
   });
 }
 
+/** Creates a new blank approval flow for the given entity type. */
+export function useCreateApprovalFlow() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ name, entityType }: { name: string; entityType: ApprovalFlow["entityType"] }) => {
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from("approval_flows")
+        .insert({ name, entity_type: entityType })
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["approval-flows"] });
+    },
+  });
+}
+
 /**
  * Replaces all steps for a given flow by deleting existing steps and inserting the new set.
  * This is a full replace — the caller passes the complete desired step array.

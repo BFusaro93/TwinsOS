@@ -41,6 +41,7 @@ export function NewVendorDialog({ open, onOpenChange, initialData, onCreated }: 
   const [address, setAddress] = useState("");
   const [notes, setNotes] = useState("");
   const [w9Status, setW9Status] = useState("");
+  const [isActive, setIsActive] = useState(true);
 
   const createVendor = useCreateVendor();
   const updateVendor = useUpdateVendor();
@@ -55,6 +56,7 @@ export function NewVendorDialog({ open, onOpenChange, initialData, onCreated }: 
       setAddress(initialData.address ?? "");
       setNotes(initialData.notes ?? "");
       setW9Status(initialData.w9Status);
+      setIsActive(initialData.isActive);
     }
   }, [open, initialData]);
 
@@ -70,6 +72,7 @@ export function NewVendorDialog({ open, onOpenChange, initialData, onCreated }: 
     setAddress("");
     setNotes("");
     setW9Status("");
+    setIsActive(true);
   }
 
   function handleSubmit(e: React.FormEvent) {
@@ -83,7 +86,7 @@ export function NewVendorDialog({ open, onOpenChange, initialData, onCreated }: 
       website: website || null,
       notes: notes || null,
       vendorType: null,
-      isActive: true,
+      isActive,
       w9Status: (w9Status as Vendor["w9Status"]) || "not_requested",
       w9ReceivedDate: null,
       w9ExpirationDate: null,
@@ -196,6 +199,27 @@ export function NewVendorDialog({ open, onOpenChange, initialData, onCreated }: 
                 placeholder="Optional notes about this vendor"
               />
             </div>
+
+            {/* Status toggle — half width (edit mode only) */}
+            {isEditing && (
+              <div className="grid gap-1.5">
+                <Label>Status</Label>
+                <div className="flex items-center gap-3 rounded-md border border-slate-200 px-3 py-2">
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={isActive}
+                    onClick={() => setIsActive(!isActive)}
+                    className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${isActive ? "bg-brand-500" : "bg-slate-200"}`}
+                  >
+                    <span
+                      className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${isActive ? "translate-x-4" : "translate-x-0"}`}
+                    />
+                  </button>
+                  <span className="text-sm text-slate-700">{isActive ? "Active" : "Inactive"}</span>
+                </div>
+              </div>
+            )}
 
             {/* W9 Status — half width */}
             <div className="grid gap-1.5">
