@@ -177,7 +177,7 @@ export function NewAssetDialog({ open, onOpenChange, initialData }: NewAssetDial
       purchasePrice: purchasePrice ? Math.round(parseFloat(purchasePrice) * 100) : null,
       paymentMethod: (paymentMethod as import("@/types/cmms").PaymentMethod) || null,
       financeInstitution: null,
-      photoUrl: null,
+      photoUrl: isEditing ? (initialData?.photoUrl ?? null) : null,
       notes: notes || null,
     };
     if (isEditing && initialData) {

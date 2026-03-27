@@ -205,7 +205,7 @@ export function NewVehicleDialog({ open, onOpenChange, initialData }: NewVehicle
       purchasePrice: purchasePrice ? Math.round(parseFloat(purchasePrice) * 100) : null,
       paymentMethod: (paymentMethod as import("@/types/cmms").PaymentMethod) || null,
       financeInstitution: financeInstitution || null,
-      photoUrl: null,
+      photoUrl: isEditing ? (initialData?.photoUrl ?? null) : null,
       notes: notes || null,
       licensePlate: licensePlate || null,
       vin: vin || null,
@@ -238,8 +238,9 @@ export function NewVehicleDialog({ open, onOpenChange, initialData }: NewVehicle
           </DialogDescription>
         </DialogHeader>
 
+        <form onSubmit={handleSubmit}>
         <div className="max-h-[70vh] overflow-y-auto px-1">
-          <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          <div className="flex flex-col gap-4">
             {/* Basic Info */}
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
               Basic Info
@@ -645,7 +646,7 @@ export function NewVehicleDialog({ open, onOpenChange, initialData }: NewVehicle
                 placeholder="Optional notes"
               />
             </div>
-          </form>
+          </div>
         </div>
 
         <DialogFooter>
@@ -655,11 +656,11 @@ export function NewVehicleDialog({ open, onOpenChange, initialData }: NewVehicle
           <Button
             type="submit"
             disabled={!isValid || saving}
-            onClick={handleSubmit}
           >
             {saving ? "Saving..." : isEditing ? "Save Changes" : "Create Vehicle"}
           </Button>
         </DialogFooter>
+        </form>
       </DialogContent>
     </Dialog>
   );

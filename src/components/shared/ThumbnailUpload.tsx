@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import { Camera, Loader2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
@@ -22,6 +22,16 @@ export function ThumbnailUpload({ imageUrl, alt, size = "md", onUpload }: Thumbn
   const sizeClass = sizeClasses[size];
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isUploading, setIsUploading] = useState(false);
+  // Local preview: show immediately after upload without waiting for parent prop update
+  const [localUrl, setLocalUrl] = useState<string | null>(null);
+  const displayUrl = localUrl ?? imageUrl;
+
+  // Once the parent's imageUrl prop catches up to what we uploaded, clear the local copy
+  useEffect(() => {
+    if (imageUrl && localUrl && imageUrl === localUrl) {
+      setLocalUrl(null);
+    }
+  }, [imageUrl, localUrl]);
 
   function handleClick() {
     if (!onUpload) return;
@@ -45,6 +55,7 @@ export function ThumbnailUpload({ imageUrl, alt, size = "md", onUpload }: Thumbn
       if (uploadError) throw uploadError;
 
       const { data } = supabase.storage.from("thumbnails").getPublicUrl(path);
+      setLocalUrl(data.publicUrl);
       onUpload(data.publicUrl);
     } catch (err) {
       console.error("[ThumbnailUpload]", err);
@@ -69,9 +80,9 @@ export function ThumbnailUpload({ imageUrl, alt, size = "md", onUpload }: Thumbn
         title={onUpload ? "Click to upload photo" : undefined}
         onClick={handleClick}
       >
-        {imageUrl ? (
+        {displayUrl ? (
           <img
-            src={imageUrl}
+            src={displayUrl}
             alt={alt}
             className="h-full w-full object-cover"
           />

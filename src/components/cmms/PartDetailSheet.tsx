@@ -68,15 +68,13 @@ function DetailsTab({
 
   const subParts = allParts.filter((p) => p.parentPartId === part.id);
   const parentPart = part.parentPartId ? allParts.find((p) => p.id === part.parentPartId) : null;
+  // Siblings: other generic/alternate parts that share the same OEM parent
+  const siblings = parentPart
+    ? allParts.filter((p) => p.parentPartId === parentPart.id && p.id !== part.id)
+    : [];
 
   return (
     <div className="flex flex-col gap-5 p-6">
-      {parentPart && (
-        <p className="text-xs text-slate-400">
-          Sub-part of{" "}
-          <span className="font-medium text-slate-600">{parentPart.name}</span>
-        </p>
-      )}
 
       {/* Purchasing catalog link */}
       {linkedProductName && (
@@ -178,7 +176,7 @@ function DetailsTab({
         )}
       </div>
 
-      {/* Sub-parts */}
+      {/* Sub-parts (OEM → generics) */}
       {subParts.length > 0 && (
         <>
           <Separator />
@@ -188,6 +186,76 @@ function DetailsTab({
             </p>
             <div className="flex flex-col gap-2">
               {subParts.map((sp) => (
+                <div
+                  key={sp.id}
+                  className="flex items-center justify-between rounded-md border border-slate-100 bg-slate-50 px-3 py-2"
+                >
+                  <div>
+                    <p className="text-sm font-medium text-slate-800">{sp.name}</p>
+                    <p className="text-xs text-slate-500">{sp.partNumber}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm font-medium text-slate-700">
+                      {formatCurrency(sp.unitCost)}
+                    </p>
+                    <p
+                      className={`text-xs font-medium ${
+                        !sp.isInventory
+                          ? "text-slate-400"
+                          : sp.quantityOnHand <= sp.minimumStock
+                          ? "text-red-600"
+                          : "text-green-600"
+                      }`}
+                    >
+                      {sp.isInventory ? `${sp.quantityOnHand} on hand` : "Not tracked"}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Interchangeable parts (generic → OEM parent + siblings) */}
+      {parentPart && (
+        <>
+          <Separator />
+          <div>
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+              Interchangeable Parts
+            </p>
+            <div className="flex flex-col gap-2">
+              {/* OEM / name-brand parent */}
+              <div className="flex items-center justify-between rounded-md border border-slate-100 bg-slate-50 px-3 py-2">
+                <div>
+                  <p className="text-sm font-medium text-slate-800">{parentPart.name}</p>
+                  <p className="text-xs text-slate-500">{parentPart.partNumber}</p>
+                </div>
+                <div className="flex flex-col items-end gap-1">
+                  <span className="rounded-full border border-brand-200 bg-brand-50 px-2 py-0.5 text-[10px] font-medium text-brand-700">
+                    OEM
+                  </span>
+                  <p className="text-sm font-medium text-slate-700">
+                    {formatCurrency(parentPart.unitCost)}
+                  </p>
+                  <p
+                    className={`text-xs font-medium ${
+                      !parentPart.isInventory
+                        ? "text-slate-400"
+                        : parentPart.quantityOnHand <= parentPart.minimumStock
+                        ? "text-red-600"
+                        : "text-green-600"
+                    }`}
+                  >
+                    {parentPart.isInventory
+                      ? `${parentPart.quantityOnHand} on hand`
+                      : "Not tracked"}
+                  </p>
+                </div>
+              </div>
+              {/* Sibling generics (other alternates for the same OEM parent) */}
+              {siblings.map((sp) => (
                 <div
                   key={sp.id}
                   className="flex items-center justify-between rounded-md border border-slate-100 bg-slate-50 px-3 py-2"

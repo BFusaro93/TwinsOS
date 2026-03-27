@@ -40,6 +40,39 @@ export function useAddAssetPart() {
   });
 }
 
+/** Inserts multiple asset_parts rows in one DB call.  Used when linking a
+ *  part that has interchangeable alternates so all are added together. */
+export function useBulkAddAssetParts() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (
+      inputs: Array<Omit<AssetPart, "id" | "orgId" | "createdBy" | "createdAt" | "updatedAt" | "deletedAt">>
+    ) => {
+      if (inputs.length === 0) return [] as AssetPart[];
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from("asset_parts")
+        .insert(
+          inputs.map((input) => ({
+            asset_id: input.assetId,
+            part_id: input.partId,
+            part_name: input.partName,
+            part_number: input.partNumber,
+          }))
+        )
+        .select();
+      if (error) throw error;
+      return data.map(mapAssetPart);
+    },
+    onSuccess: (results) => {
+      const assetIds = new Set(results.map((r) => r.assetId));
+      assetIds.forEach((id) =>
+        queryClient.invalidateQueries({ queryKey: ["asset-parts", id] })
+      );
+    },
+  });
+}
+
 export function useRemoveAssetPart() {
   const queryClient = useQueryClient();
   return useMutation({

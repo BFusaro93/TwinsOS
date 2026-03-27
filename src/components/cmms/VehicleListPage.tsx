@@ -14,6 +14,7 @@ import {
 import { ImportExportMenu } from "@/components/shared/ImportExportMenu";
 import { exportCSV } from "@/lib/csv";
 import { PageHeader } from "@/components/shared/PageHeader";
+import { getInitials, getAvatarColor } from "@/lib/utils";
 import { MasterDetailLayout } from "@/components/shared/MasterDetailLayout";
 import { FilterBar } from "@/components/shared/FilterBar";
 import { EmptyState } from "@/components/shared/EmptyState";
@@ -181,11 +182,33 @@ function ServiceRemindersView({
   }
 
   function VehicleRow({ v }: { v: Vehicle }) {
+    const initials = getInitials(v.name);
+    const avatarColor = getAvatarColor(v.name);
     return (
       <TableRow className="cursor-pointer hover:bg-slate-50" onClick={() => onRowClick(v)}>
         <TableCell>
-          <p className="font-medium text-slate-900">{v.name}</p>
-          <p className="text-xs text-slate-400">{v.licensePlate ?? v.assetTag}</p>
+          <div className="flex items-center gap-2.5">
+            {v.photoUrl ? (
+              <img
+                src={v.photoUrl}
+                alt={v.name}
+                className="h-8 w-8 shrink-0 rounded-full object-cover"
+              />
+            ) : (
+              <div
+                className={cn(
+                  "flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white",
+                  avatarColor
+                )}
+              >
+                {initials}
+              </div>
+            )}
+            <div>
+              <p className="font-medium text-slate-900">{v.name}</p>
+              <p className="text-xs text-slate-400">{v.licensePlate ?? v.assetTag}</p>
+            </div>
+          </div>
         </TableCell>
         <TableCell className="font-mono text-xs text-slate-500">{v.assetTag}</TableCell>
         <TableCell className="text-sm text-slate-600">{v.assignedCrew ?? "—"}</TableCell>
@@ -324,11 +347,13 @@ export function VehicleListPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [scanOpen, setScanOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"list" | "table" | "service">("list");
-  const [sheetVehicle, setSheetVehicle] = useState<Vehicle | null>(null);
+  const [sheetVehicleId, setSheetVehicleId] = useState<string | null>(null);
   const [visibleKeys, setVisibleKeys] = useState<string[]>(VEHICLE_COLUMNS.map((c) => c.key));
 
   const col = (key: string) => visibleKeys.includes(key);
   const all = vehicles ?? [];
+  // Always derive from the live query so the overlay shows fresh data (e.g. after thumbnail upload)
+  const sheetVehicle = sheetVehicleId ? (all.find((v) => v.id === sheetVehicleId) ?? null) : null;
 
   // Derive filter options from live data
   const makeOptions = Array.from(new Set(all.map((v) => v.make).filter(Boolean)))
@@ -489,13 +514,26 @@ export function VehicleListPage() {
               <TableRow
                 key={vehicle.id}
                 className="cursor-pointer hover:bg-slate-50"
-                onClick={() => setSheetVehicle(vehicle)}
+                onClick={() => setSheetVehicleId(vehicle.id)}
               >
                 {col("icon") && (
                   <TableCell className="w-12 py-2 pl-4 pr-0">
-                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-400 text-xs font-bold text-white">
-                      {vehicle.name.slice(0, 2).toUpperCase()}
-                    </div>
+                    {vehicle.photoUrl ? (
+                      <img
+                        src={vehicle.photoUrl}
+                        alt={vehicle.name}
+                        className="h-9 w-9 shrink-0 rounded-full object-cover"
+                      />
+                    ) : (
+                      <div
+                        className={cn(
+                          "flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white",
+                          getAvatarColor(vehicle.name)
+                        )}
+                      >
+                        {getInitials(vehicle.name)}
+                      </div>
+                    )}
                   </TableCell>
                 )}
                 <TableCell className="font-medium">{vehicle.name}</TableCell>
@@ -645,12 +683,12 @@ export function VehicleListPage() {
         <ServiceRemindersView
           vehicles={all}
           isLoading={isLoading}
-          onRowClick={setSheetVehicle}
+          onRowClick={(v) => setSheetVehicleId(v.id)}
         />
       )}
 
       {/* Detail sheet — used by table and service views */}
-      <Sheet open={!!sheetVehicle} onOpenChange={(o) => { if (!o) setSheetVehicle(null); }}>
+      <Sheet open={!!sheetVehicle} onOpenChange={(o) => { if (!o) setSheetVehicleId(null); }}>
         <SheetContent
           className="flex w-[580px] flex-col overflow-hidden p-0 sm:max-w-[580px]"
           onInteractOutside={(e) => e.preventDefault()}

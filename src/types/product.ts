@@ -22,4 +22,8 @@ export interface ProductItem extends BaseRecord {
   pictureUrl: string | null;
   /** Receipt history used for WAC and FIFO cost calculations. */
   costLayers: CostLayer[];
+  /** Minimum stock level before reorder — populated for maintenance_part items. */
+  minimumStock: number;
+  /** CMMS part category (e.g. "Electrical", "Hydraulic") — maintenance_part only. */
+  partCategory: string | null;
 }

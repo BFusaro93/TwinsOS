@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { RecordDetailTabs } from "@/components/shared/RecordDetailTabs";
@@ -256,6 +256,12 @@ export function PODetailPanel({ po }: PODetailPanelProps) {
   const [editOpen, setEditOpen] = useState(false);
   const [receiveOpen, setReceiveOpen] = useState(false);
   const [status, setStatus] = useState<POStatus>(po.status);
+
+  // Keep local status in sync when the PO is refetched from the server
+  // (e.g. after another user approves or the user navigates away and back)
+  useEffect(() => {
+    setStatus(po.status);
+  }, [po.status]);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
 
   const { data: projects = [] } = useProjects();

@@ -3,6 +3,12 @@ import { createClient } from "@/lib/supabase/client";
 import { mapProject } from "@/lib/supabase/mappers";
 import type { Project } from "@/types";
 
+function patchProjectCache(queryClient: ReturnType<typeof useQueryClient>, id: string, patch: Partial<Project>) {
+  queryClient.setQueryData<Project[]>(["projects"], (old) =>
+    old?.map((p) => p.id === id ? { ...p, ...patch } : p) ?? []
+  );
+}
+
 export function useProjects() {
   return useQuery({
     queryKey: ["projects"],
@@ -88,7 +94,26 @@ export function useUpdateProject() {
       if (error) throw error;
       return mapProject(data);
     },
-    onSuccess: (_, { id }) => {
+    onMutate: async ({ id, status, name, customerName, address, startDate, endDate, notes }) => {
+      await queryClient.cancelQueries({ queryKey: ["projects"] });
+      const previous = queryClient.getQueryData<Project[]>(["projects"]);
+      const patch: Partial<Project> = {};
+      if (status !== undefined) patch.status = status;
+      if (name !== undefined) patch.name = name;
+      if (customerName !== undefined) patch.customerName = customerName;
+      if (address !== undefined) patch.address = address;
+      if (startDate !== undefined) patch.startDate = startDate ?? null;
+      if (endDate !== undefined) patch.endDate = endDate;
+      if (notes !== undefined) patch.notes = notes;
+      patchProjectCache(queryClient, id, patch);
+      return { previous };
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData<Project[]>(["projects"], context.previous);
+      }
+    },
+    onSettled: (_, _err, { id }) => {
       queryClient.invalidateQueries({ queryKey: ["projects"] });
       queryClient.invalidateQueries({ queryKey: ["projects", id] });
     },

@@ -47,7 +47,7 @@ import {
 import { PROJECT_STATUS_LABELS } from "@/lib/constants";
 import { useRequisitions } from "@/lib/hooks/use-requisitions";
 import { usePurchaseOrders } from "@/lib/hooks/use-purchase-orders";
-import { useDeleteProject } from "@/lib/hooks/use-projects";
+import { useDeleteProject, useUpdateProject } from "@/lib/hooks/use-projects";
 import { usePOStore } from "@/stores";
 import type { PrefillItem } from "./NewRequisitionDialog";
 import type { POPrefillItem } from "./NewPODialog";
@@ -432,6 +432,7 @@ export function ProjectDetailPanel({ project }: ProjectDetailPanelProps) {
   const [status, setStatus] = useState<ProjectStatus>(project.status);
   const { setSelectedProjectId } = usePOStore();
   const { mutate: deleteProject, isPending: deleting } = useDeleteProject();
+  const { mutate: updateProject } = useUpdateProject();
 
   // Sync if a different project is selected
   useEffect(() => {
@@ -467,7 +468,16 @@ export function ProjectDetailPanel({ project }: ProjectDetailPanelProps) {
           {
             value: "details",
             label: "Details",
-            content: <DetailsTab project={project} status={status} onStatusChange={setStatus} />,
+            content: (
+              <DetailsTab
+                project={project}
+                status={status}
+                onStatusChange={(s) => {
+                  setStatus(s);
+                  updateProject({ id: project.id, status: s });
+                }}
+              />
+            ),
           },
           {
             value: "materials",

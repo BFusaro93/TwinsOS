@@ -230,6 +230,9 @@ function DetailsTab({ vehicle, status }: { vehicle: Vehicle; status: AssetStatus
   const [oilChangeDue, setOilChangeDue] = useState(vehicle.nextOilChangeDue);
   const [oilChangeMileage, setOilChangeMileage] = useState(vehicle.nextOilChangeMileage);
   const [inspectionDue, setInspectionDue] = useState(vehicle.nextInspectionStickerDue);
+  // Local photo URL so the thumbnail shows immediately on upload without waiting
+  // for the parent prop to propagate back through the query cache / stale sheet state.
+  const [localPhotoUrl, setLocalPhotoUrl] = useState<string | null | undefined>(vehicle.photoUrl);
   const { filterFields } = useSettingsStore();
   const enabledFilters = filterFields.filter((f) => f.enabled);
   const { mutate: updateVehicle } = useUpdateVehicle();
@@ -286,10 +289,13 @@ function DetailsTab({ vehicle, status }: { vehicle: Vehicle; status: AssetStatus
       {/* Thumbnail */}
       <div className="flex items-start gap-4">
         <ThumbnailUpload
-          imageUrl={vehicle.photoUrl}
+          imageUrl={localPhotoUrl}
           alt={vehicle.name}
           size="lg"
-          onUpload={(url) => updateVehicle({ id: vehicle.id, photoUrl: url })}
+          onUpload={(url) => {
+            setLocalPhotoUrl(url);
+            updateVehicle({ id: vehicle.id, photoUrl: url });
+          }}
         />
         <dl className="flex-1">
           <MetaRow label="Asset Tag" value={<span className="font-mono">{vehicle.assetTag}</span>} />

@@ -346,7 +346,7 @@ export function ApprovalChain({ entityId, onApproved, onRejected }: ApprovalChai
   const { currentUser } = useCurrentUserStore();
   const isAdmin = currentUser.role === "admin";
   const { data: requests = [], isLoading } = useApprovalRequests(entityId);
-  const { mutate: decide, isPending: deciding } = useDecideApproval(entityId);
+  const { mutate: decide, isPending: deciding, isError: decideError } = useDecideApproval(entityId);
 
   if (isLoading) {
     return (
@@ -392,7 +392,12 @@ export function ApprovalChain({ entityId, onApproved, onRejected }: ApprovalChai
   }
 
   return (
-    <div className="flex flex-col">
+    <div className="flex flex-col gap-3">
+      {decideError && (
+        <p className="rounded-md bg-red-50 px-3 py-2 text-xs text-red-600">
+          Failed to save your decision. You may not have permission to approve this item, or a connection error occurred. Please try again.
+        </p>
+      )}
       {groups.map((group, i) => (
         <StepGroupCard
           key={group.flowStepId}

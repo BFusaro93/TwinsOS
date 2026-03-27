@@ -66,6 +66,23 @@ export function useUpdateApprovalFlow() {
     mutationFn: async ({ flowId, steps }: { flowId: string; steps: ApprovalFlowStep[] }) => {
       const supabase = createClient();
 
+      // Null out flow_step_id on any in-flight approval_requests that reference
+      // the existing steps before we delete them.  Without this, the DELETE fails
+      // with a foreign-key violation when there are approval_requests in progress.
+      // (The DB migration adds ON DELETE SET NULL, but this ensures it works even
+      // in environments where the migration has not yet been applied.)
+      const { data: existingSteps } = await supabase
+        .from("approval_flow_steps")
+        .select("id")
+        .eq("flow_id", flowId);
+
+      if (existingSteps && existingSteps.length > 0) {
+        await supabase
+          .from("approval_requests")
+          .update({ flow_step_id: null })
+          .in("flow_step_id", existingSteps.map((s) => s.id));
+      }
+
       // Delete all existing steps for this flow
       const { error: deleteErr } = await supabase
         .from("approval_flow_steps")

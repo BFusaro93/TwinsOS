@@ -114,6 +114,8 @@ export function mapProductItem(row: ProductItemRow): ProductItem {
     quantityOnHand: row.quantity_on_hand,
     pictureUrl: row.picture_url,
     costLayers: (row.cost_layers as unknown as CostLayer[]) ?? [],
+    minimumStock: (row as unknown as { minimum_stock?: number }).minimum_stock ?? 0,
+    partCategory: (row as unknown as { part_category?: string | null }).part_category ?? null,
   };
 }
 

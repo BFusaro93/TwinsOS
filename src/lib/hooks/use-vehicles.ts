@@ -3,6 +3,12 @@ import { createClient } from "@/lib/supabase/client";
 import { mapVehicle } from "@/lib/supabase/mappers";
 import type { Vehicle, AssetStatus } from "@/types/cmms";
 
+function patchVehicleCache(queryClient: ReturnType<typeof useQueryClient>, id: string, patch: Partial<Vehicle>) {
+  queryClient.setQueryData<Vehicle[]>(["vehicles"], (old) =>
+    old?.map((v) => v.id === id ? { ...v, ...patch } : v) ?? []
+  );
+}
+
 export function useVehicles() {
   return useQuery({
     queryKey: ["vehicles"],
@@ -118,7 +124,21 @@ export function useUpdateVehicle() {
       if (error) throw error;
       return mapVehicle(data);
     },
-    onSuccess: (_, { id }) => {
+    onMutate: async ({ id, ...input }) => {
+      await queryClient.cancelQueries({ queryKey: ["vehicles"] });
+      const previous = queryClient.getQueryData<Vehicle[]>(["vehicles"]);
+      // Optimistically apply only the fields being changed
+      const patch: Partial<Vehicle> = {};
+      if (input.photoUrl !== undefined) patch.photoUrl = input.photoUrl;
+      if (input.name !== undefined) patch.name = input.name;
+      if (input.status !== undefined) patch.status = input.status;
+      if (Object.keys(patch).length > 0) patchVehicleCache(queryClient, id, patch);
+      return { previous };
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previous) queryClient.setQueryData<Vehicle[]>(["vehicles"], context.previous);
+    },
+    onSettled: (_, _err, { id }) => {
       queryClient.invalidateQueries({ queryKey: ["vehicles"] });
       queryClient.invalidateQueries({ queryKey: ["vehicles", id] });
     },

@@ -174,22 +174,36 @@ function EditStepForm({
 
 function FlowCard({ flow }: { flow: ApprovalFlow }) {
   const { data: allUsers = [] } = useUsers();
-  const { mutate: saveFlow, isPending: saving } = useUpdateApprovalFlow();
+  const { mutate: saveFlow, isPending: saving, isError: saveError } = useUpdateApprovalFlow();
   const [steps, setSteps] = useState<ApprovalFlowStep[]>(flow.steps);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [addingNew, setAddingNew] = useState(false);
   const [dirty, setDirty] = useState(false);
   const saveFlowRef = useRef(saveFlow);
   saveFlowRef.current = saveFlow;
+  const stepsRef = useRef(steps);
+  stepsRef.current = steps;
+  const dirtyRef = useRef(dirty);
+  dirtyRef.current = dirty;
 
-  // Auto-save 1.5 seconds after any step change
+  // Auto-save 400ms after any step change
   useEffect(() => {
     if (!dirty) return;
     const timer = setTimeout(() => {
-      saveFlowRef.current({ flowId: flow.id, steps }, { onSuccess: () => setDirty(false) });
-    }, 1500);
+      saveFlowRef.current({ flowId: flow.id, steps: stepsRef.current }, { onSuccess: () => setDirty(false) });
+    }, 400);
     return () => clearTimeout(timer);
   }, [steps, dirty, flow.id]);
+
+  // Flush any pending save when navigating away
+  useEffect(() => {
+    return () => {
+      if (dirtyRef.current) {
+        saveFlowRef.current({ flowId: flow.id, steps: stepsRef.current });
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [flow.id]);
 
   function handleSaveStep(updated: StepDraft) {
     if (editingId) {
@@ -257,6 +271,12 @@ function FlowCard({ flow }: { flow: ApprovalFlow }) {
           </Button>
         )}
       </div>
+
+      {saveError && (
+        <p className="mb-2 rounded-md bg-red-50 px-3 py-2 text-xs text-red-600">
+          Failed to save approval flow. Please try again.
+        </p>
+      )}
 
       <div className="flex flex-col gap-2">
         {steps.map((step, i) => (

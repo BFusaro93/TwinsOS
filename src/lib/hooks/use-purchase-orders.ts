@@ -201,7 +201,9 @@ export function useUpdatePurchaseOrderStatus() {
         .eq("id", id);
       if (error) throw error;
     },
-    onSuccess: (_, { id, status, invoiceNumber, paymentSubmittedToAP, paymentRemitted, paymentType, paymentBookedInQB }) => {
+    onMutate: async ({ id, status, invoiceNumber, paymentSubmittedToAP, paymentRemitted, paymentType, paymentBookedInQB }) => {
+      await queryClient.cancelQueries({ queryKey: ["purchase-orders"] });
+      const previous = queryClient.getQueryData<PurchaseOrder[]>(["purchase-orders"]);
       patchPOCache(queryClient, id, {
         status,
         ...(invoiceNumber !== undefined && { invoiceNumber }),
@@ -210,6 +212,14 @@ export function useUpdatePurchaseOrderStatus() {
         ...(paymentType !== undefined && { paymentType }),
         ...(paymentBookedInQB !== undefined && { paymentBookedInQB }),
       });
+      return { previous };
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData<PurchaseOrder[]>(["purchase-orders"], context.previous);
+      }
+    },
+    onSettled: (_, _err, { id }) => {
       queryClient.invalidateQueries({ queryKey: ["purchase-orders"] });
       queryClient.invalidateQueries({ queryKey: ["purchase-orders", id] });
     },

@@ -52,11 +52,14 @@ export function POListPage() {
   const [filterValues, setFilterValues] = useState<Record<string, string | string[]>>({});
   const [dialogOpen, setDialogOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"list" | "table">("list");
-  const [sheetPO, setSheetPO] = useState<PurchaseOrder | null>(null);
+  const [sheetPOId, setSheetPOId] = useState<string | null>(null);
   const [visibleKeys, setVisibleKeys] = useState<string[]>(PO_COLUMNS.map((c) => c.key));
 
   const col = (key: string) => visibleKeys.includes(key);
   const all = orders ?? [];
+  // Always derive from the live query so the sheet panel reflects cache updates
+  // (e.g. after submitting for approval the status change is visible immediately)
+  const sheetPO = sheetPOId ? (all.find((po) => po.id === sheetPOId) ?? null) : null;
 
   // Derive filter options from live data
   const vendorOptions = Array.from(new Set(all.map((po) => po.vendorName).filter(Boolean)))
@@ -203,7 +206,7 @@ export function POListPage() {
               <TableRow
                 key={po.id}
                 className="cursor-pointer hover:bg-slate-50"
-                onClick={() => setSheetPO(po)}
+                onClick={() => setSheetPOId(po.id)}
               >
                 <TableCell className="font-mono text-xs text-slate-500">{po.poNumber}</TableCell>
                 <TableCell className="font-medium">{po.vendorName}</TableCell>
@@ -288,7 +291,7 @@ export function POListPage() {
       )}
 
       {/* Table-mode detail sheet */}
-      <Sheet open={!!sheetPO} onOpenChange={(o) => { if (!o) setSheetPO(null); }}>
+      <Sheet open={!!sheetPO} onOpenChange={(o) => { if (!o) setSheetPOId(null); }}>
         <SheetContent
           className="flex w-[580px] flex-col overflow-hidden p-0 sm:max-w-[580px]"
           onInteractOutside={(e) => e.preventDefault()}

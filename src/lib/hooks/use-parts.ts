@@ -73,10 +73,46 @@ export function useCreatePart() {
         .select()
         .single();
       if (error) throw error;
-      return mapPart(data);
+      const part = mapPart(data);
+
+      // If this is a standalone part (no existing product link), auto-create a
+      // matching product_items entry so it appears in the PO product catalog.
+      if (!input.productItemId) {
+        const { data: product } = await supabase
+          .from("product_items")
+          .insert({
+            name: input.name,
+            part_number: input.partNumber || "",
+            description: input.description || "",
+            category: "maintenance_part",
+            unit_cost: input.unitCost,
+            price: input.unitCost,
+            vendor_id: input.vendorId || null,
+            vendor_name: input.vendorName || "",
+            alternate_vendors: [] as unknown as import("@/types/supabase").Json,
+            is_inventory: input.isInventory,
+            quantity_on_hand: input.quantityOnHand,
+            minimum_stock: input.minimumStock,
+            part_category: input.category || null,
+            cost_layers: [] as unknown as import("@/types/supabase").Json,
+          })
+          .select("id")
+          .single();
+
+        if (product) {
+          await supabase
+            .from("parts")
+            .update({ product_item_id: product.id })
+            .eq("id", part.id);
+          return { ...part, productItemId: product.id };
+        }
+      }
+
+      return part;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["parts"] });
+      queryClient.invalidateQueries({ queryKey: ["products"] });
     },
   });
 }

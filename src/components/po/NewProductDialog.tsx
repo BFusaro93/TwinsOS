@@ -24,6 +24,7 @@ import { useVendors } from "@/lib/hooks/use-vendors";
 import { useCreateProduct, useUpdateProduct } from "@/lib/hooks/use-products";
 import { VendorCombobox } from "@/components/shared/VendorCombobox";
 import { NewVendorDialog } from "@/components/shared/NewVendorDialog";
+import { useSettingsStore } from "@/stores/settings-store";
 import type { ProductItem, Vendor } from "@/types";
 
 interface NewProductDialogProps {
@@ -52,6 +53,11 @@ export function NewProductDialog({ open, onOpenChange, initialData, onCreated }:
   const [description, setDescription] = useState("");
   const [isInventory, setIsInventory] = useState(false);
   const [quantityOnHand, setQuantityOnHand] = useState("");
+  const [minimumStock, setMinimumStock] = useState("0");
+  const [partCategory, setPartCategory] = useState("none");
+  const { partCategories } = useSettingsStore();
+  const enabledPartCategories = partCategories.filter((c) => c.enabled);
+  const isMaintPart = category === "maintenance_part";
 
   const createProduct = useCreateProduct();
   const updateProduct = useUpdateProduct();
@@ -67,6 +73,8 @@ export function NewProductDialog({ open, onOpenChange, initialData, onCreated }:
       setDescription(initialData.description);
       setIsInventory(initialData.isInventory);
       setQuantityOnHand(String(initialData.quantityOnHand));
+      setMinimumStock(String(initialData.minimumStock ?? 0));
+      setPartCategory(initialData.partCategory ?? "none");
     }
   }, [open, initialData]);
 
@@ -83,6 +91,8 @@ export function NewProductDialog({ open, onOpenChange, initialData, onCreated }:
     setDescription("");
     setIsInventory(false);
     setQuantityOnHand("");
+    setMinimumStock("0");
+    setPartCategory("none");
     setExtraVendors([]);
   }
 
@@ -103,6 +113,8 @@ export function NewProductDialog({ open, onOpenChange, initialData, onCreated }:
       quantityOnHand: parseInt(quantityOnHand) || 0,
       pictureUrl: null,
       costLayers: [],
+      minimumStock: isMaintPart ? parseInt(minimumStock) || 0 : 0,
+      partCategory: isMaintPart && partCategory !== "none" ? partCategory : null,
     };
 
     if (isEditing && initialData) {
@@ -195,6 +207,47 @@ export function NewProductDialog({ open, onOpenChange, initialData, onCreated }:
                 onCreateNew={() => setVendorDialogOpen(true)}
               />
             </div>
+
+            {/* Maintenance-part-only: part category + min stock */}
+            {isMaintPart && (
+              <>
+                <div className="col-span-2 rounded-md border border-brand-100 bg-brand-50 px-3 py-2.5">
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-brand-600">
+                    CMMS Settings
+                  </p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="grid gap-1.5">
+                      <Label htmlFor="product-part-category">Part Category</Label>
+                      <Select value={partCategory} onValueChange={setPartCategory}>
+                        <SelectTrigger id="product-part-category">
+                          <SelectValue placeholder="Select category" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">No category</SelectItem>
+                          {enabledPartCategories.map((c) => (
+                            <SelectItem key={c.id} value={c.label}>
+                              {c.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="grid gap-1.5">
+                      <Label htmlFor="product-min-stock">Min Stock</Label>
+                      <Input
+                        id="product-min-stock"
+                        type="number"
+                        min={0}
+                        step={1}
+                        value={minimumStock}
+                        onChange={(e) => setMinimumStock(e.target.value)}
+                        placeholder="0"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
 
             {/* Unit Cost — half width */}
             <div className="grid gap-1.5">

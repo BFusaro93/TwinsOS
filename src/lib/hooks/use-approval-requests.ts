@@ -169,5 +169,8 @@ export function useDecideApproval(entityId: string) {
         queryClient.setQueryData(["approval-requests", entityId], freshRequests);
       }
     },
+    onError: (err) => {
+      console.error("[useDecideApproval]", err);
+    },
   });
 }

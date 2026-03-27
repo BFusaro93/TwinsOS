@@ -42,6 +42,9 @@ function MetaRow({ label, value }: { label: string; value: React.ReactNode }) {
 function DetailsTab({ asset, status }: { asset: Asset; status: AssetStatus }) {
   const [notes, setNotes] = useState(asset.notes ?? "");
   const [saved, setSaved] = useState(false);
+  // Local photo URL so the thumbnail shows immediately on upload without waiting
+  // for the parent prop to propagate back through the query cache / stale sheet state.
+  const [localPhotoUrl, setLocalPhotoUrl] = useState<string | null | undefined>(asset.photoUrl);
   const { filterFields } = useSettingsStore();
   const enabledFilters = filterFields.filter((f) => f.enabled);
   const { mutate: updateAsset } = useUpdateAsset();
@@ -63,10 +66,13 @@ function DetailsTab({ asset, status }: { asset: Asset; status: AssetStatus }) {
       {/* Thumbnail + identity */}
       <div className="flex items-start gap-4">
         <ThumbnailUpload
-          imageUrl={asset.photoUrl}
+          imageUrl={localPhotoUrl}
           alt={asset.name}
           size="lg"
-          onUpload={(url) => updateAsset({ id: asset.id, photoUrl: url })}
+          onUpload={(url) => {
+            setLocalPhotoUrl(url);
+            updateAsset({ id: asset.id, photoUrl: url });
+          }}
         />
         <dl className="flex-1">
         <MetaRow label="Asset Tag" value={<span className="font-mono">{asset.assetTag}</span>} />

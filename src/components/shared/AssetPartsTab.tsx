@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Plus, Search } from "lucide-react";
-import { useAssetParts, useAddAssetPart } from "@/lib/hooks/use-asset-parts";
+import { useAssetParts, useBulkAddAssetParts } from "@/lib/hooks/use-asset-parts";
 import { useParts } from "@/lib/hooks/use-parts";
 import { PartDetailSheet } from "@/components/cmms/PartDetailSheet";
 import { Button } from "@/components/ui/button";
@@ -24,7 +24,7 @@ interface AssetPartsTabProps {
 export function AssetPartsTab({ assetId, recordLabel = "asset" }: AssetPartsTabProps) {
   const { data: assetParts, isLoading } = useAssetParts(assetId);
   const { data: allParts } = useParts();
-  const { mutate: addAssetPart, isPending: linking } = useAddAssetPart();
+  const { mutate: bulkAddAssetParts, isPending: linking } = useBulkAddAssetParts();
 
   const [linkDialogOpen, setLinkDialogOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -45,8 +45,34 @@ export function AssetPartsTab({ assetId, recordLabel = "asset" }: AssetPartsTabP
   );
 
   function handleLink(part: Part) {
-    addAssetPart(
-      { assetId, partId: part.id, partName: part.name, partNumber: part.partNumber },
+    // Collect the selected part plus any interchangeable parts not yet linked.
+    // If the selected part is a generic (has parentPartId): include the OEM parent
+    // and any sibling alternates.  If it's the OEM parent: include its children.
+    const allPartsArr = allParts ?? [];
+    const interchangeable: Part[] = [];
+
+    if (part.parentPartId) {
+      // Generic part — add OEM parent + siblings
+      const parent = allPartsArr.find((p) => p.id === part.parentPartId);
+      if (parent) interchangeable.push(parent);
+      allPartsArr
+        .filter((p) => p.parentPartId === part.parentPartId && p.id !== part.id)
+        .forEach((p) => interchangeable.push(p));
+    } else {
+      // OEM / standalone part — add any generic alternates
+      allPartsArr
+        .filter((p) => p.parentPartId === part.id)
+        .forEach((p) => interchangeable.push(p));
+    }
+
+    // Build the full set: selected part + interchangeable parts not already linked
+    const toAdd: Part[] = [part];
+    for (const p of interchangeable) {
+      if (!linkedPartIds.has(p.id)) toAdd.push(p);
+    }
+
+    bulkAddAssetParts(
+      toAdd.map((p) => ({ assetId, partId: p.id, partName: p.name, partNumber: p.partNumber })),
       {
         onSuccess: () => {
           setLinkDialogOpen(false);

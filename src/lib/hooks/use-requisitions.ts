@@ -234,8 +234,18 @@ export function useUpdateRequisitionStatus() {
         .eq("id", id);
       if (error) throw error;
     },
-    onSuccess: (_, { id, status }) => {
+    onMutate: async ({ id, status }) => {
+      await queryClient.cancelQueries({ queryKey: ["requisitions"] });
+      const previous = queryClient.getQueryData<Requisition[]>(["requisitions"]);
       patchReqCache(queryClient, id, { status });
+      return { previous };
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData<Requisition[]>(["requisitions"], context.previous);
+      }
+    },
+    onSettled: (_, _err, { id }) => {
       queryClient.invalidateQueries({ queryKey: ["requisitions"] });
       queryClient.invalidateQueries({ queryKey: ["requisitions", id] });
     },

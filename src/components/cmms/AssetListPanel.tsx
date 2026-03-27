@@ -34,15 +34,23 @@ export function AssetListPanel({ assets, selectedId, onSelect }: AssetListPanelP
               isSelected && "border-l-2 border-l-brand-500 bg-brand-50 hover:bg-brand-50"
             )}
           >
-            {/* Avatar */}
-            <div
-              className={cn(
-                "flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white",
-                avatarColor
-              )}
-            >
-              {initials}
-            </div>
+            {/* Avatar / thumbnail */}
+            {asset.photoUrl ? (
+              <img
+                src={asset.photoUrl}
+                alt={asset.name}
+                className="h-9 w-9 shrink-0 rounded-full object-cover"
+              />
+            ) : (
+              <div
+                className={cn(
+                  "flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white",
+                  avatarColor
+                )}
+              >
+                {initials}
+              </div>
+            )}
 
             {/* Content */}
             <div className="min-w-0 flex-1">

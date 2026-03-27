@@ -3,6 +3,12 @@ import { createClient } from "@/lib/supabase/client";
 import { mapAsset } from "@/lib/supabase/mappers";
 import type { Asset, AssetStatus } from "@/types/cmms";
 
+function patchAssetCache(queryClient: ReturnType<typeof useQueryClient>, id: string, patch: Partial<Asset>) {
+  queryClient.setQueryData<Asset[]>(["assets"], (old) =>
+    old?.map((a) => a.id === id ? { ...a, ...patch } : a) ?? []
+  );
+}
+
 export function useAssets() {
   return useQuery({
     queryKey: ["assets"],
@@ -103,7 +109,20 @@ export function useUpdateAsset() {
       if (error) throw error;
       return mapAsset(data);
     },
-    onSuccess: (_, { id }) => {
+    onMutate: async ({ id, ...input }) => {
+      await queryClient.cancelQueries({ queryKey: ["assets"] });
+      const previous = queryClient.getQueryData<Asset[]>(["assets"]);
+      const patch: Partial<Asset> = {};
+      if (input.photoUrl !== undefined) patch.photoUrl = input.photoUrl;
+      if (input.name !== undefined) patch.name = input.name;
+      if (input.status !== undefined) patch.status = input.status;
+      if (Object.keys(patch).length > 0) patchAssetCache(queryClient, id, patch);
+      return { previous };
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previous) queryClient.setQueryData<Asset[]>(["assets"], context.previous);
+    },
+    onSettled: (_, _err, { id }) => {
       queryClient.invalidateQueries({ queryKey: ["assets"] });
       queryClient.invalidateQueries({ queryKey: ["assets", id] });
     },

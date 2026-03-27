@@ -153,6 +153,8 @@ export function useCreateProduct() {
           quantity_on_hand: input.quantityOnHand,
           picture_url: input.pictureUrl,
           cost_layers: input.costLayers as unknown as import("@/types/supabase").Json,
+          minimum_stock: input.minimumStock ?? 0,
+          part_category: input.partCategory ?? null,
         })
         .select()
         .single();
@@ -164,9 +166,10 @@ export function useCreateProduct() {
           name: input.name,
           part_number: input.partNumber || "",
           description: input.description || "",
-          category: "maintenance_part",
+          category: input.partCategory || "maintenance_part",
           unit_cost: input.unitCost,
           quantity_on_hand: input.quantityOnHand,
+          minimum_stock: input.minimumStock ?? 0,
           vendor_id: input.vendorId || null,
           vendor_name: input.vendorName || "",
           product_item_id: data.id,
@@ -202,16 +205,34 @@ export function useUpdateProduct() {
           ...(input.isInventory !== undefined && { is_inventory: input.isInventory }),
           ...(input.quantityOnHand !== undefined && { quantity_on_hand: input.quantityOnHand }),
           ...(input.pictureUrl !== undefined && { picture_url: input.pictureUrl }),
+          ...(input.minimumStock !== undefined && { minimum_stock: input.minimumStock }),
+          ...(input.partCategory !== undefined && { part_category: input.partCategory }),
         })
         .eq("id", id)
         .select()
         .single();
       if (error) throw error;
+
+      // Sync relevant fields to the linked Part record (if maintenance_part)
+      const syncFields: Record<string, unknown> = {};
+      if (input.name !== undefined) syncFields.name = input.name;
+      if (input.unitCost !== undefined) syncFields.unit_cost = input.unitCost;
+      if (input.minimumStock !== undefined) syncFields.minimum_stock = input.minimumStock;
+      if (input.partCategory !== undefined) syncFields.category = input.partCategory;
+      if (Object.keys(syncFields).length > 0) {
+        await supabase
+          .from("parts")
+          .update(syncFields)
+          .eq("product_item_id", id)
+          .is("deleted_at", null);
+      }
+
       return mapProductItem(data);
     },
     onSuccess: (_, { id }) => {
       queryClient.invalidateQueries({ queryKey: ["products"] });
       queryClient.invalidateQueries({ queryKey: ["products", id] });
+      queryClient.invalidateQueries({ queryKey: ["parts"] });
     },
   });
 }

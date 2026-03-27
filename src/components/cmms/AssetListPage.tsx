@@ -29,7 +29,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useAssets, useBulkImportAssets } from "@/lib/hooks/use-assets";
 import { useCMMSStore } from "@/stores";
 import { ASSET_STATUS_LABELS } from "@/lib/constants";
-import { cn, matchesFilter } from "@/lib/utils";
+import { cn, matchesFilter, getInitials, getAvatarColor } from "@/lib/utils";
 import type { Asset } from "@/types";
 
 const STATUS_OPTIONS = Object.entries(ASSET_STATUS_LABELS).map(([value, label]) => ({
@@ -60,11 +60,13 @@ export function AssetListPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [scanOpen, setScanOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"list" | "table">("list");
-  const [sheetAsset, setSheetAsset] = useState<Asset | null>(null);
+  const [sheetAssetId, setSheetAssetId] = useState<string | null>(null);
   const [visibleKeys, setVisibleKeys] = useState<string[]>(ASSET_COLUMNS.map((c) => c.key));
 
   const col = (key: string) => visibleKeys.includes(key);
   const all = assets ?? [];
+  // Always derive from the live query so the overlay shows fresh data (e.g. after thumbnail upload)
+  const sheetAsset = sheetAssetId ? (all.find((a) => a.id === sheetAssetId) ?? null) : null;
 
   // Derive filter options from live data
   const assetTypeOptions = Array.from(new Set(all.map((a) => a.assetType).filter(Boolean)))
@@ -223,16 +225,26 @@ export function AssetListPage() {
               <TableRow
                 key={asset.id}
                 className="cursor-pointer hover:bg-slate-50"
-                onClick={() => setSheetAsset(asset)}
+                onClick={() => setSheetAssetId(asset.id)}
               >
                 {col("icon") && (
                   <TableCell className="w-12 py-2 pl-4 pr-0">
-                    <div className={cn(
-                      "flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white",
-                      "bg-slate-400"
-                    )}>
-                      {asset.name.slice(0, 2).toUpperCase()}
-                    </div>
+                    {asset.photoUrl ? (
+                      <img
+                        src={asset.photoUrl}
+                        alt={asset.name}
+                        className="h-9 w-9 shrink-0 rounded-full object-cover"
+                      />
+                    ) : (
+                      <div
+                        className={cn(
+                          "flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white",
+                          getAvatarColor(asset.name)
+                        )}
+                      >
+                        {getInitials(asset.name)}
+                      </div>
+                    )}
                   </TableCell>
                 )}
                 <TableCell className="font-medium">{asset.name}</TableCell>
@@ -350,7 +362,7 @@ export function AssetListPage() {
       )}
 
       {/* Table-mode detail sheet */}
-      <Sheet open={!!sheetAsset} onOpenChange={(o) => { if (!o) setSheetAsset(null); }}>
+      <Sheet open={!!sheetAsset} onOpenChange={(o) => { if (!o) setSheetAssetId(null); }}>
         <SheetContent
           className="flex w-[720px] flex-col overflow-hidden p-0 sm:max-w-[720px]"
           onInteractOutside={(e) => e.preventDefault()}
