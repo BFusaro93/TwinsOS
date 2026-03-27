@@ -329,11 +329,12 @@ export function WorkOrderListPage() {
   const [filterValues, setFilterValues] = useState<Record<string, string | string[]>>({});
   const [dialogOpen, setDialogOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"list" | "table" | "upcoming">("list");
-  const [sheetWO, setSheetWO] = useState<WorkOrder | null>(null);
+  const [sheetWOId, setSheetWOId] = useState<string | null>(null);
   const [visibleKeys, setVisibleKeys] = useState<string[]>(WO_COLUMNS.map((c) => c.key));
 
   const col = (key: string) => visibleKeys.includes(key);
   const all = workOrders ?? [];
+  const sheetWO = sheetWOId ? (all.find((wo) => wo.id === sheetWOId) ?? null) : null;
 
   // Derive filter options from live data
   const assetOptions = Array.from(new Set(all.map((wo) => wo.assetName).filter(Boolean)))
@@ -479,7 +480,7 @@ export function WorkOrderListPage() {
               <TableRow
                 key={wo.id}
                 className="cursor-pointer hover:bg-slate-50"
-                onClick={() => setSheetWO(wo)}
+                onClick={() => setSheetWOId(wo.id)}
               >
                 <TableCell className="font-mono text-xs text-slate-500">{wo.workOrderNumber}</TableCell>
                 <TableCell className="font-medium">{wo.title}</TableCell>
@@ -605,12 +606,12 @@ export function WorkOrderListPage() {
         <UpcomingMaintenanceView
           workOrders={all}
           isLoading={isLoading}
-          onRowClick={setSheetWO}
+          onRowClick={(wo) => setSheetWOId(wo.id)}
         />
       )}
 
       {/* Detail sheet — used by both table view and upcoming view */}
-      <Sheet open={!!sheetWO} onOpenChange={(o) => { if (!o) setSheetWO(null); }}>
+      <Sheet open={!!sheetWO} onOpenChange={(o) => { if (!o) setSheetWOId(null); }}>
         <SheetContent
           className="flex w-[580px] flex-col overflow-hidden p-0 sm:max-w-[580px]"
           onInteractOutside={(e) => e.preventDefault()}

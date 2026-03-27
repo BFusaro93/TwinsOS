@@ -52,11 +52,12 @@ export function RequisitionListPage() {
   const [filterValues, setFilterValues] = useState<Record<string, string | string[]>>({});
   const [dialogOpen, setDialogOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"list" | "table">("list");
-  const [sheetReq, setSheetReq] = useState<Requisition | null>(null);
+  const [sheetReqId, setSheetReqId] = useState<string | null>(null);
   const [visibleKeys, setVisibleKeys] = useState<string[]>(REQ_COLUMNS.map((c) => c.key));
 
   const col = (key: string) => visibleKeys.includes(key);
   const all = requisitions ?? [];
+  const sheetReq = sheetReqId ? (all.find((r) => r.id === sheetReqId) ?? null) : null;
 
   // Derive filter options from live data
   const requesterOptions = Array.from(new Set(all.map((r) => r.requestedByName).filter(Boolean)))
@@ -185,7 +186,7 @@ export function RequisitionListPage() {
               <TableRow
                 key={req.id}
                 className="cursor-pointer hover:bg-slate-50"
-                onClick={() => setSheetReq(req)}
+                onClick={() => setSheetReqId(req.id)}
               >
                 <TableCell className="font-mono text-xs text-slate-500">{req.requisitionNumber}</TableCell>
                 <TableCell className="font-medium">{req.title}</TableCell>
@@ -268,7 +269,7 @@ export function RequisitionListPage() {
       )}
 
       {/* Table-mode detail sheet */}
-      <Sheet open={!!sheetReq} onOpenChange={(o) => { if (!o) setSheetReq(null); }}>
+      <Sheet open={!!sheetReq} onOpenChange={(o) => { if (!o) setSheetReqId(null); }}>
         <SheetContent
           className="flex w-[580px] flex-col overflow-hidden p-0 sm:max-w-[580px]"
           onInteractOutside={(e) => e.preventDefault()}

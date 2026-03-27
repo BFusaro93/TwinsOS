@@ -127,6 +127,36 @@ export function useUpdateRequestStatus() {
   });
 }
 
+export function useConvertRequestToWO() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      id,
+      linkedWorkOrderId,
+      linkedWorkOrderNumber,
+    }: {
+      id: string;
+      linkedWorkOrderId: string;
+      linkedWorkOrderNumber: string;
+    }) => {
+      const supabase = createClient();
+      const { error } = await supabase
+        .from("maintenance_requests")
+        .update({
+          status: "converted",
+          linked_work_order_id: linkedWorkOrderId,
+          linked_work_order_number: linkedWorkOrderNumber,
+        })
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: (_, { id }) => {
+      queryClient.invalidateQueries({ queryKey: ["requests"] });
+      queryClient.invalidateQueries({ queryKey: ["requests", id] });
+    },
+  });
+}
+
 export function useDeleteRequest() {
   const queryClient = useQueryClient();
   return useMutation({

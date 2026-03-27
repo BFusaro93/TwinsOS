@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, Search } from "lucide-react";
-import { useAssetParts, useBulkAddAssetParts } from "@/lib/hooks/use-asset-parts";
+import { Plus, Search, Trash2 } from "lucide-react";
+import { useAssetParts, useBulkAddAssetParts, useRemoveAssetPart } from "@/lib/hooks/use-asset-parts";
 import { useParts } from "@/lib/hooks/use-parts";
 import { PartDetailSheet } from "@/components/cmms/PartDetailSheet";
 import { Button } from "@/components/ui/button";
@@ -25,6 +25,7 @@ export function AssetPartsTab({ assetId, recordLabel = "asset" }: AssetPartsTabP
   const { data: assetParts, isLoading } = useAssetParts(assetId);
   const { data: allParts } = useParts();
   const { mutate: bulkAddAssetParts, isPending: linking } = useBulkAddAssetParts();
+  const { mutate: removeAssetPart } = useRemoveAssetPart();
 
   const [linkDialogOpen, setLinkDialogOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -130,6 +131,7 @@ export function AssetPartsTab({ assetId, recordLabel = "asset" }: AssetPartsTabP
                 <th className="px-3 py-2 text-right text-xs font-medium text-slate-500">
                   On Hand
                 </th>
+                <th className="w-8 px-2 py-2" />
               </tr>
             </thead>
             <tbody>
@@ -159,6 +161,15 @@ export function AssetPartsTab({ assetId, recordLabel = "asset" }: AssetPartsTabP
                       ) : (
                         <span className="text-slate-400">—</span>
                       )}
+                    </td>
+                    <td className="px-2 py-2">
+                      <button
+                        className="rounded p-1 text-slate-300 hover:bg-red-50 hover:text-red-500 transition-colors"
+                        title="Unlink part"
+                        onClick={() => removeAssetPart({ id: ap.id, assetId })}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
                     </td>
                   </tr>
                 );

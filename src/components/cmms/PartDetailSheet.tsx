@@ -51,6 +51,7 @@ function DetailsTab({
   qtyOnHand,
   setQtyOnHand,
   linkedProductName,
+  onPartClick,
 }: {
   part: Part;
   allParts: Part[];
@@ -58,6 +59,7 @@ function DetailsTab({
   qtyOnHand: number;
   setQtyOnHand: (n: number) => void;
   linkedProductName: string | null;
+  onPartClick: (p: Part) => void;
 }) {
   const isLowStock = part.isInventory && qtyOnHand <= part.minimumStock;
 
@@ -186,12 +188,13 @@ function DetailsTab({
             </p>
             <div className="flex flex-col gap-2">
               {subParts.map((sp) => (
-                <div
+                <button
                   key={sp.id}
-                  className="flex items-center justify-between rounded-md border border-slate-100 bg-slate-50 px-3 py-2"
+                  onClick={() => onPartClick(sp)}
+                  className="flex w-full items-center justify-between rounded-md border border-slate-100 bg-slate-50 px-3 py-2 text-left hover:border-brand-200 hover:bg-brand-50 transition-colors"
                 >
                   <div>
-                    <p className="text-sm font-medium text-slate-800">{sp.name}</p>
+                    <p className="text-sm font-medium text-brand-700 hover:underline">{sp.name}</p>
                     <p className="text-xs text-slate-500">{sp.partNumber}</p>
                   </div>
                   <div className="text-right">
@@ -210,7 +213,7 @@ function DetailsTab({
                       {sp.isInventory ? `${sp.quantityOnHand} on hand` : "Not tracked"}
                     </p>
                   </div>
-                </div>
+                </button>
               ))}
             </div>
           </div>
@@ -227,9 +230,12 @@ function DetailsTab({
             </p>
             <div className="flex flex-col gap-2">
               {/* OEM / name-brand parent */}
-              <div className="flex items-center justify-between rounded-md border border-slate-100 bg-slate-50 px-3 py-2">
+              <button
+                onClick={() => onPartClick(parentPart)}
+                className="flex w-full items-center justify-between rounded-md border border-slate-100 bg-slate-50 px-3 py-2 text-left hover:border-brand-200 hover:bg-brand-50 transition-colors"
+              >
                 <div>
-                  <p className="text-sm font-medium text-slate-800">{parentPart.name}</p>
+                  <p className="text-sm font-medium text-brand-700 hover:underline">{parentPart.name}</p>
                   <p className="text-xs text-slate-500">{parentPart.partNumber}</p>
                 </div>
                 <div className="flex flex-col items-end gap-1">
@@ -253,15 +259,16 @@ function DetailsTab({
                       : "Not tracked"}
                   </p>
                 </div>
-              </div>
+              </button>
               {/* Sibling generics (other alternates for the same OEM parent) */}
               {siblings.map((sp) => (
-                <div
+                <button
                   key={sp.id}
-                  className="flex items-center justify-between rounded-md border border-slate-100 bg-slate-50 px-3 py-2"
+                  onClick={() => onPartClick(sp)}
+                  className="flex w-full items-center justify-between rounded-md border border-slate-100 bg-slate-50 px-3 py-2 text-left hover:border-brand-200 hover:bg-brand-50 transition-colors"
                 >
                   <div>
-                    <p className="text-sm font-medium text-slate-800">{sp.name}</p>
+                    <p className="text-sm font-medium text-brand-700 hover:underline">{sp.name}</p>
                     <p className="text-xs text-slate-500">{sp.partNumber}</p>
                   </div>
                   <div className="text-right">
@@ -280,7 +287,7 @@ function DetailsTab({
                       {sp.isInventory ? `${sp.quantityOnHand} on hand` : "Not tracked"}
                     </p>
                   </div>
-                </div>
+                </button>
               ))}
             </div>
           </div>
@@ -434,6 +441,7 @@ export function PartDetailSheet({ part, open, onOpenChange }: PartDetailSheetPro
   const { mutate: updatePart } = useUpdatePart();
   const [qtyOnHand, setQtyOnHand] = useState<number | null>(null);
   const [editOpen, setEditOpen] = useState(false);
+  const [nestedPart, setNestedPart] = useState<Part | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Close on Escape key
@@ -569,6 +577,7 @@ export function PartDetailSheet({ part, open, onOpenChange }: PartDetailSheetPro
                 qtyOnHand={effectiveQty}
                 setQtyOnHand={handleQtyChange}
                 linkedProductName={linkedProductName}
+                onPartClick={(p) => setNestedPart(p)}
               />
             </TabsContent>
             <TabsContent value="assets & vehicles" className="mt-0 min-h-0 flex-1 overflow-y-auto">
@@ -585,6 +594,12 @@ export function PartDetailSheet({ part, open, onOpenChange }: PartDetailSheetPro
         document.body
       )}
       <NewPartDialog open={editOpen} onOpenChange={setEditOpen} initialData={part} />
+      {/* Nested sheet for clicking interchangeable parts */}
+      <PartDetailSheet
+        part={nestedPart}
+        open={!!nestedPart}
+        onOpenChange={(o) => { if (!o) setNestedPart(null); }}
+      />
     </>
   );
 }

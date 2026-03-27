@@ -23,7 +23,8 @@ import { EditButton } from "@/components/shared/EditButton";
 import { StatusFlowIndicator } from "@/components/shared/StatusFlowIndicator";
 import { NewRequestDialog } from "./NewRequestDialog";
 import { REQUEST_STATUS_LABELS, WO_PRIORITY_LABELS } from "@/lib/constants";
-import { useUpdateRequestStatus, useDeleteRequest } from "@/lib/hooks/use-requests";
+import { useUpdateRequestStatus, useDeleteRequest, useConvertRequestToWO } from "@/lib/hooks/use-requests";
+import { useCreateWorkOrder } from "@/lib/hooks/use-work-orders";
 import { useCMMSStore } from "@/stores";
 import type { MaintenanceRequest, MaintenanceRequestStatus } from "@/types";
 
@@ -59,10 +60,14 @@ function DetailsTab({
   request,
   status,
   onStatusChange,
+  onConvertToWO,
+  converting,
 }: {
   request: MaintenanceRequest;
   status: MaintenanceRequestStatus;
   onStatusChange: (s: MaintenanceRequestStatus) => void;
+  onConvertToWO: () => void;
+  converting: boolean;
 }) {
   const isError = status === "rejected";
 
@@ -86,7 +91,9 @@ function DetailsTab({
             <Button size="sm" variant="outline" className="text-red-600 hover:text-red-700 border-red-200 hover:border-red-300" onClick={() => onStatusChange("rejected")}>Reject</Button>
           </>)}
           {status === "approved" && (<>
-            <Button size="sm" onClick={() => onStatusChange("converted")}>Convert to Work Order</Button>
+            <Button size="sm" onClick={onConvertToWO} disabled={converting}>
+              {converting ? "Creating…" : "Convert to Work Order"}
+            </Button>
             <Button size="sm" variant="outline" className="text-red-600 hover:text-red-700 border-red-200 hover:border-red-300" onClick={() => onStatusChange("rejected")}>Reject</Button>
           </>)}
           {status === "rejected" && (
@@ -167,11 +174,48 @@ export function RequestDetailPanel({ request }: RequestDetailPanelProps) {
   const [status, setStatus] = useState<MaintenanceRequestStatus>(request.status);
   const { mutate: syncStatus } = useUpdateRequestStatus();
   const { mutate: deleteRequest, isPending: deleting } = useDeleteRequest();
+  const { mutate: createWorkOrder, isPending: converting } = useCreateWorkOrder();
+  const { mutate: convertToWO } = useConvertRequestToWO();
   const { setSelectedRequestId } = useCMMSStore();
 
   function handleStatusChange(s: MaintenanceRequestStatus) {
     setStatus(s);
     syncStatus({ id: request.id, status: s });
+  }
+
+  function handleConvertToWO() {
+    const workOrderNumber = `WO-${new Date().getFullYear()}-${Date.now().toString().slice(-5)}`;
+    createWorkOrder(
+      {
+        title: request.title,
+        description: request.description ?? null,
+        status: "open",
+        priority: request.priority,
+        woType: "reactive",
+        assetId: request.assetId ?? null,
+        assetName: request.assetName ?? null,
+        linkedEntityType: null,
+        assignedToId: null,
+        assignedToName: null,
+        dueDate: null,
+        category: null,
+        workOrderNumber,
+        parentWorkOrderId: null,
+        pmScheduleId: null,
+        isRecurring: false,
+        recurrenceFrequency: null,
+      },
+      {
+        onSuccess: (wo) => {
+          setStatus("converted");
+          convertToWO({
+            id: request.id,
+            linkedWorkOrderId: wo.id,
+            linkedWorkOrderNumber: wo.workOrderNumber,
+          });
+        },
+      }
+    );
   }
 
   return (
@@ -205,7 +249,7 @@ export function RequestDetailPanel({ request }: RequestDetailPanelProps) {
           {
             value: "details",
             label: "Details",
-            content: <DetailsTab request={request} status={status} onStatusChange={handleStatusChange} />,
+            content: <DetailsTab request={request} status={status} onStatusChange={handleStatusChange} onConvertToWO={handleConvertToWO} converting={converting} />,
           },
           {
             value: "history",
