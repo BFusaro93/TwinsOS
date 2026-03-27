@@ -373,18 +373,30 @@ export function ApprovalChain({ entityId, onApproved, onRejected }: ApprovalChai
     decide(
       { requestId: request.id, status, comment },
       {
-        onSuccess: (freshRequests) => {
-          if (status === "rejected") {
+        onSuccess: (result) => {
+          // The hook already wrote the entity status to the DB when allResolved is true.
+          // The component callbacks only need to update local UI state.
+          if (!result) return;
+          const { allResolved, freshMapped } = result;
+          if (!allResolved || !freshMapped) return;
+
+          const anyRejected = Array.from(
+            freshMapped.reduce((m, r) => {
+              if (!m.has(r.flowStepId)) m.set(r.flowStepId, []);
+              m.get(r.flowStepId)!.push(r);
+              return m;
+            }, new Map<string, typeof freshMapped>())
+            .values()
+          ).some((reqs) => {
+            if (reqs.every((r) => r.status === "skipped")) return false;
+            if (reqs.some((r) => r.status === "approved")) return false;
+            return reqs.filter((r) => r.status !== "skipped").some((r) => r.status === "rejected");
+          });
+
+          if (anyRejected) {
             onRejected?.();
-            return;
-          }
-          if (status === "approved" && freshRequests) {
-            // Use the fresh post-mutation data — not the stale closure
-            const freshGroups = groupByStep(freshRequests);
-            const stillPending = freshGroups.filter((g) => !isGroupResolved(g));
-            if (stillPending.length === 0) {
-              onApproved?.();
-            }
+          } else {
+            onApproved?.();
           }
         },
       }

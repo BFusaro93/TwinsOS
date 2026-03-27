@@ -117,7 +117,8 @@ function DetailsTab({
               onClick={() => {
                 submitForApproval(
                   { entityId: po.id, entityType: "purchase_order", grandTotalCents: grandTotalForSubmit },
-                  { onSuccess: () => handleStatusChange("pending") }
+                  // The hook updates the DB status — only update local state here
+                  { onSuccess: () => onStatusChange("pending") }
                 );
               }}
             >
@@ -132,8 +133,9 @@ function DetailsTab({
             <p className="mb-2 text-xs font-medium text-slate-500">Approval Chain</p>
             <ApprovalChain
               entityId={po.id}
-              onApproved={() => handleStatusChange("approved")}
-              onRejected={() => handleStatusChange("rejected")}
+              // The hook writes the DB status; only update local state here
+              onApproved={() => onStatusChange("approved")}
+              onRejected={() => onStatusChange("rejected")}
             />
           </div>
         )}

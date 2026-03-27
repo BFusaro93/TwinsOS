@@ -45,6 +45,19 @@ export function useSubmitForApproval() {
 
       const orgId = profile.org_id;
 
+      // ── Update entity status to pending atomically in this mutation ──────────
+      // This must happen before the component callback tries to do it separately,
+      // so there is only ONE DB write, not two racing mutations.
+      const table = entityType === "requisition" ? "requisitions" : "purchase_orders";
+      const pendingStatus = entityType === "requisition" ? "pending_approval" : "pending";
+      const { error: statusErr } = await supabase
+        .from(table)
+        .update({ status: pendingStatus })
+        .eq("id", entityId)
+        .select("id")
+        .single();
+      if (statusErr) throw statusErr;
+
       const { data: flow } = await supabase
         .from("approval_flows")
         .select("*, approval_flow_steps(*)")
@@ -53,7 +66,7 @@ export function useSubmitForApproval() {
         .is("deleted_at", null)
         .maybeSingle();
 
-      if (!flow) return;
+      if (!flow) return { entityType };
 
       const { data: orgUsers } = await supabase
         .from("profiles")
@@ -112,9 +125,17 @@ export function useSubmitForApproval() {
         const { error } = await supabase.from("approval_requests").insert(newRequests);
         if (error) throw error;
       }
+
+      return { entityType };
     },
-    onSuccess: (_, { entityId }) => {
+    onSuccess: (result, { entityId }) => {
       queryClient.invalidateQueries({ queryKey: ["approval-requests", entityId] });
+      // Invalidate the entity query so the list panel and status badge refresh
+      if (result?.entityType === "requisition") {
+        queryClient.invalidateQueries({ queryKey: ["requisitions"] });
+      } else {
+        queryClient.invalidateQueries({ queryKey: ["purchase-orders"] });
+      }
     },
   });
 }
@@ -133,9 +154,10 @@ export function useDecideApproval(entityId: string) {
       const supabase = createClient();
       const now = new Date().toISOString();
 
+      // Fetch the request first so we know flow_step_id and entity_type
       const { data: decided, error: fetchErr } = await supabase
         .from("approval_requests")
-        .select("flow_step_id, entity_id")
+        .select("flow_step_id, entity_id, entity_type")
         .eq("id", requestId)
         .single();
       if (fetchErr) throw fetchErr;
@@ -162,12 +184,59 @@ export function useDecideApproval(entityId: string) {
         .eq("entity_id", entityId)
         .order("order", { ascending: true });
       if (freshErr) throw freshErr;
-      return fresh.map(mapApprovalRequest);
-    },
-    onSuccess: (freshRequests) => {
-      if (freshRequests) {
-        queryClient.setQueryData(["approval-requests", entityId], freshRequests);
+
+      const freshMapped = fresh.map(mapApprovalRequest);
+
+      // ── Check if all approval steps are now resolved ──────────────────────
+      // If so, update the entity status atomically here (not in a separate mutation).
+      const stepGroups = new Map<string, typeof freshMapped>();
+      for (const r of freshMapped) {
+        if (!stepGroups.has(r.flowStepId)) stepGroups.set(r.flowStepId, []);
+        stepGroups.get(r.flowStepId)!.push(r);
       }
+
+      const allResolved =
+        stepGroups.size > 0 &&
+        Array.from(stepGroups.values()).every((reqs) => {
+          if (reqs.every((r) => r.status === "skipped")) return true;
+          if (reqs.some((r) => r.status === "approved")) return true;
+          const active = reqs.filter((r) => r.status !== "skipped");
+          return (
+            active.length > 0 &&
+            active.some((r) => r.status === "rejected") &&
+            active.every((r) => r.status === "rejected" || r.status === "superseded")
+          );
+        });
+
+      if (allResolved) {
+        const anyRejected = Array.from(stepGroups.values()).some((reqs) => {
+          if (reqs.every((r) => r.status === "skipped")) return false;
+          if (reqs.some((r) => r.status === "approved")) return false;
+          return reqs.filter((r) => r.status !== "skipped").some((r) => r.status === "rejected");
+        });
+
+        const newEntityStatus = anyRejected ? "rejected" : "approved";
+        const entityType = decided.entity_type;
+        const table = entityType === "requisition" ? "requisitions" : "purchase_orders";
+
+        const { error: entityErr } = await supabase
+          .from(table)
+          .update({ status: newEntityStatus })
+          .eq("id", entityId)
+          .select("id")
+          .single();
+        if (entityErr) throw entityErr;
+      }
+
+      return { freshMapped, allResolved, entityType: decided.entity_type };
+    },
+    onSuccess: ({ freshMapped }) => {
+      if (freshMapped) {
+        queryClient.setQueryData(["approval-requests", entityId], freshMapped);
+      }
+      // Always invalidate both entity queries since we may have updated one
+      queryClient.invalidateQueries({ queryKey: ["requisitions"] });
+      queryClient.invalidateQueries({ queryKey: ["purchase-orders"] });
     },
     onError: (err) => {
       console.error("[useDecideApproval]", err);
