@@ -198,7 +198,9 @@ export function useUpdatePurchaseOrderStatus() {
           ...(paymentType !== undefined && { payment_type: paymentType }),
           ...(paymentBookedInQB !== undefined && { payment_booked_in_qb: paymentBookedInQB }),
         })
-        .eq("id", id);
+        .eq("id", id)
+        .select("id")
+        .single();
       if (error) throw error;
     },
     onMutate: async ({ id, status, invoiceNumber, paymentSubmittedToAP, paymentRemitted, paymentType, paymentBookedInQB }) => {

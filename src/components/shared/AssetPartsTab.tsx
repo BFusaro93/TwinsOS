@@ -106,7 +106,7 @@ export function AssetPartsTab({ assetId, recordLabel = "asset" }: AssetPartsTabP
         <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
           {allLinked.length} part{allLinked.length !== 1 ? "s" : ""} linked
         </p>
-        <Button size="sm" variant="outline" onClick={() => setLinkDialogOpen(true)}>
+        <Button size="sm" variant="outline" onClick={() => { setSheetOpen(false); setSelectedPart(null); setLinkDialogOpen(true); }}>
           <Plus className="mr-1.5 h-3.5 w-3.5" />
           Link Part
         </Button>

@@ -137,6 +137,7 @@ export function useUpdatePart() {
           ...(input.parentPartId !== undefined && { parent_part_id: input.parentPartId }),
           ...(input.isInventory !== undefined && { is_inventory: input.isInventory }),
           ...(input.pictureUrl !== undefined && { picture_url: input.pictureUrl }),
+          ...(input.alternateVendors !== undefined && { alternate_vendors: input.alternateVendors as unknown as import("@/types/supabase").Json }),
         })
         .eq("id", id)
         .select()

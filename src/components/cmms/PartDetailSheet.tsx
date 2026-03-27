@@ -26,7 +26,16 @@ import { useParts, useUpdatePart } from "@/lib/hooks/use-parts";
 import { useRequisitions } from "@/lib/hooks/use-requisitions";
 import { usePurchaseOrders } from "@/lib/hooks/use-purchase-orders";
 import { useProducts } from "@/lib/hooks/use-products";
-import { ShoppingCart, X } from "lucide-react";
+import { Plus, Search, ShoppingCart, X } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import type { Part } from "@/types";
 
 interface PartDetailSheetProps {
@@ -52,6 +61,8 @@ function DetailsTab({
   setQtyOnHand,
   linkedProductName,
   onPartClick,
+  onAddGenericToOem,
+  onLinkSelfAsGeneric,
 }: {
   part: Part;
   allParts: Part[];
@@ -60,6 +71,8 @@ function DetailsTab({
   setQtyOnHand: (n: number) => void;
   linkedProductName: string | null;
   onPartClick: (p: Part) => void;
+  onAddGenericToOem: (oemId: string) => void;
+  onLinkSelfAsGeneric: () => void;
 }) {
   const isLowStock = part.isInventory && qtyOnHand <= part.minimumStock;
 
@@ -183,9 +196,20 @@ function DetailsTab({
         <>
           <Separator />
           <div>
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
-              Interchangeable / Generic Parts
-            </p>
+            <div className="mb-2 flex items-center justify-between">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                Interchangeable / Generic Parts
+              </p>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 gap-1 px-2 text-xs"
+                onClick={() => onAddGenericToOem(part.id)}
+              >
+                <Plus className="h-3 w-3" />
+                Add Alternative
+              </Button>
+            </div>
             <div className="flex flex-col gap-2">
               {subParts.map((sp) => (
                 <button
@@ -220,14 +244,44 @@ function DetailsTab({
         </>
       )}
 
+      {/* Standalone parts (no parent, no children) — offer to link as generic */}
+      {subParts.length === 0 && !parentPart && (
+        <>
+          <Separator />
+          <div>
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+              Interchangeable / Generic Parts
+            </p>
+            <button
+              onClick={() => onLinkSelfAsGeneric()}
+              className="flex w-full items-center gap-2 rounded-md border border-dashed border-slate-200 px-3 py-2.5 text-left text-sm text-slate-400 hover:border-brand-300 hover:bg-brand-50 hover:text-brand-600 transition-colors"
+            >
+              <Plus className="h-3.5 w-3.5 shrink-0" />
+              Link as generic alternative to an OEM part
+            </button>
+          </div>
+        </>
+      )}
+
       {/* Interchangeable parts (generic → OEM parent + siblings) */}
       {parentPart && (
         <>
           <Separator />
           <div>
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
-              Interchangeable Parts
-            </p>
+            <div className="mb-2 flex items-center justify-between">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                Interchangeable Parts
+              </p>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 gap-1 px-2 text-xs"
+                onClick={() => onAddGenericToOem(parentPart.id)}
+              >
+                <Plus className="h-3 w-3" />
+                Add Alternative
+              </Button>
+            </div>
             <div className="flex flex-col gap-2">
               {/* OEM / name-brand parent */}
               <button
@@ -443,6 +497,9 @@ export function PartDetailSheet({ part, open, onOpenChange }: PartDetailSheetPro
   const [editOpen, setEditOpen] = useState(false);
   const [nestedPart, setNestedPart] = useState<Part | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  // Interchangeable part picker state
+  const [interchangeablePickerOemId, setInterchangeablePickerOemId] = useState<string | null>(null);
+  const [linkSearch, setLinkSearch] = useState("");
 
   // Close on Escape key
   useEffect(() => {
@@ -578,6 +635,8 @@ export function PartDetailSheet({ part, open, onOpenChange }: PartDetailSheetPro
                 setQtyOnHand={handleQtyChange}
                 linkedProductName={linkedProductName}
                 onPartClick={(p) => setNestedPart(p)}
+                onAddGenericToOem={(oemId) => { setInterchangeablePickerOemId(oemId); setLinkSearch(""); }}
+                onLinkSelfAsGeneric={() => { setInterchangeablePickerOemId("__self__"); setLinkSearch(""); }}
               />
             </TabsContent>
             <TabsContent value="assets & vehicles" className="mt-0 min-h-0 flex-1 overflow-y-auto">
@@ -600,6 +659,101 @@ export function PartDetailSheet({ part, open, onOpenChange }: PartDetailSheetPro
         open={!!nestedPart}
         onOpenChange={(o) => { if (!o) setNestedPart(null); }}
       />
+
+      {/* ── Interchangeable part picker dialog ── */}
+      {(() => {
+        const isSelfLink = interchangeablePickerOemId === "__self__";
+        // For self-link mode: show all OEM parts (no parentPartId) except this part itself
+        // For add-to-oem mode: show all parts that don't already have a parentPartId and aren't already a child of the OEM
+        const oemId = isSelfLink ? null : interchangeablePickerOemId;
+        const alreadyChildIds = new Set(
+          (allParts ?? []).filter((p) => p.parentPartId === oemId).map((p) => p.id)
+        );
+        const pickerParts = (allParts ?? []).filter((p) => {
+          if (isSelfLink) {
+            // Pick an OEM part to become the parent of the current part
+            return p.id !== part.id && p.parentPartId === null;
+          }
+          // Pick a part to become a generic child of the given OEM
+          return p.id !== oemId && p.parentPartId === null && !alreadyChildIds.has(p.id);
+        });
+        const filtered = pickerParts.filter(
+          (p) =>
+            !linkSearch ||
+            p.name.toLowerCase().includes(linkSearch.toLowerCase()) ||
+            p.partNumber.toLowerCase().includes(linkSearch.toLowerCase())
+        );
+
+        function handlePick(picked: Part) {
+          if (isSelfLink) {
+            // Link current part as generic child of picked OEM
+            updatePart({ id: partId, parentPartId: picked.id });
+          } else {
+            // Link picked part as generic child of the OEM
+            updatePart({ id: picked.id, parentPartId: oemId! });
+          }
+          setInterchangeablePickerOemId(null);
+          setLinkSearch("");
+        }
+
+        return (
+          <Dialog
+            open={!!interchangeablePickerOemId}
+            onOpenChange={(o) => { if (!o) { setInterchangeablePickerOemId(null); setLinkSearch(""); } }}
+          >
+            <DialogContent className="sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle>
+                  {isSelfLink ? "Link as Generic Alternative" : "Add Generic Alternative"}
+                </DialogTitle>
+                <DialogDescription>
+                  {isSelfLink
+                    ? "Select the OEM part that this part is a generic alternative for."
+                    : "Select an existing part to add as a generic alternative for this OEM part."}
+                </DialogDescription>
+              </DialogHeader>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <Input
+                  placeholder="Search by name or part #…"
+                  value={linkSearch}
+                  onChange={(e) => setLinkSearch(e.target.value)}
+                  className="pl-9"
+                  autoFocus
+                />
+              </div>
+              <div className="max-h-72 overflow-y-auto">
+                {filtered.length === 0 ? (
+                  <p className="py-8 text-center text-sm text-slate-400">
+                    {linkSearch ? "No parts match your search." : "No eligible parts found."}
+                  </p>
+                ) : (
+                  <ul className="divide-y">
+                    {filtered.map((p) => (
+                      <li key={p.id}>
+                        <button
+                          className="flex w-full items-start gap-3 rounded px-1 py-2.5 text-left hover:bg-slate-50"
+                          onClick={() => handlePick(p)}
+                        >
+                          <div className="flex-1">
+                            <p className="text-sm font-medium text-slate-800">{p.name}</p>
+                            <p className="text-xs text-slate-500">
+                              {p.partNumber} &middot; {p.category}
+                            </p>
+                          </div>
+                          <span className="text-xs text-slate-400">
+                            {p.isInventory ? `${p.quantityOnHand} on hand` : "Not tracked"}
+                          </span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </DialogContent>
+          </Dialog>
+        );
+      })()}
     </>
   );
 }

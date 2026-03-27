@@ -231,7 +231,9 @@ export function useUpdateRequisitionStatus() {
           status,
           ...(convertedPoId !== undefined && { converted_po_id: convertedPoId }),
         })
-        .eq("id", id);
+        .eq("id", id)
+        .select("id")
+        .single();
       if (error) throw error;
     },
     onMutate: async ({ id, status }) => {

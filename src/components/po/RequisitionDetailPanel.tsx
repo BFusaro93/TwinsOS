@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Plus, ExternalLink } from "lucide-react";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { StatusBadge } from "@/components/shared/StatusBadge";
@@ -402,6 +402,12 @@ export function RequisitionDetailPanel({ requisition }: RequisitionDetailPanelPr
   const [convertOpen, setConvertOpen] = useState(false);
   const [poSheetOpen, setPoSheetOpen] = useState(false);
   const [status, setStatus] = useState<ApprovalStatus>(requisition.status);
+
+  // Keep local status in sync when the requisition is refetched from the server
+  // (e.g. after another user approves, or after navigating away and back)
+  useEffect(() => {
+    setStatus(requisition.status);
+  }, [requisition.status]);
   const [convertedPoIds, setConvertedPoIds] = useState<string[]>(
     requisition.convertedPoId ? [requisition.convertedPoId] : []
   );
