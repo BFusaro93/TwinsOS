@@ -300,7 +300,12 @@ export function ProductDetailSheet({ product, open, onOpenChange }: ProductDetai
       <SheetContent className="flex w-[580px] flex-col overflow-hidden p-0 sm:max-w-[580px]">
         <SheetHeader className="shrink-0 border-b px-6 py-4 pr-12">
           <div className="flex items-start gap-3">
-            <ThumbnailUpload imageUrl={product.pictureUrl} alt={product.name} size="md" />
+            <ThumbnailUpload
+              imageUrl={product.pictureUrl}
+              alt={product.name}
+              size="md"
+              onUpload={(url) => updateProduct({ id: productId, pictureUrl: url })}
+            />
             <div className="flex-1">
               <div className="flex items-center justify-between">
                 <SheetTitle className="text-left">{product.name}</SheetTitle>

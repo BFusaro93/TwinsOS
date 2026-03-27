@@ -201,6 +201,7 @@ export function useUpdateProduct() {
           ...(input.vendorName !== undefined && { vendor_name: input.vendorName }),
           ...(input.isInventory !== undefined && { is_inventory: input.isInventory }),
           ...(input.quantityOnHand !== undefined && { quantity_on_hand: input.quantityOnHand }),
+          ...(input.pictureUrl !== undefined && { picture_url: input.pictureUrl }),
         })
         .eq("id", id)
         .select()

@@ -62,7 +62,12 @@ function DetailsTab({ asset, status }: { asset: Asset; status: AssetStatus }) {
     <div className="flex flex-col gap-5 p-6">
       {/* Thumbnail + identity */}
       <div className="flex items-start gap-4">
-        <ThumbnailUpload imageUrl={asset.photoUrl} alt={asset.name} size="lg" />
+        <ThumbnailUpload
+          imageUrl={asset.photoUrl}
+          alt={asset.name}
+          size="lg"
+          onUpload={(url) => updateAsset({ id: asset.id, photoUrl: url })}
+        />
         <dl className="flex-1">
         <MetaRow label="Asset Tag" value={<span className="font-mono">{asset.assetTag}</span>} />
         <MetaRow label="Equipment #" value={asset.equipmentNumber} />

@@ -445,7 +445,12 @@ export function PartDetailSheet({ part, open, onOpenChange }: PartDetailSheetPro
           {/* Header — pr-12 leaves a clean gap for the absolute X button */}
           <div className="relative shrink-0 border-b px-6 py-4 pr-12">
             <div className="flex items-start gap-3">
-              <ThumbnailUpload imageUrl={part.pictureUrl} alt={part.name} size="md" />
+              <ThumbnailUpload
+                imageUrl={part.pictureUrl}
+                alt={part.name}
+                size="md"
+                onUpload={(url) => updatePart({ id: partId, pictureUrl: url })}
+              />
               <div className="min-w-0 flex-1">
                 {/* Name row: title on the left, Edit button on the right (in flow) */}
                 <div className="flex items-center gap-2">

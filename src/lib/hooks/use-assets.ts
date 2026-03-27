@@ -91,6 +91,14 @@ export function useUpdateAsset() {
         ...(input.location !== undefined && { location: input.location }),
         ...(input.notes !== undefined && { notes: input.notes }),
         ...(input.assignedCrew !== undefined && { assigned_crew: input.assignedCrew }),
+        ...(input.purchaseVendorId !== undefined && { purchase_vendor_id: input.purchaseVendorId }),
+        ...(input.purchaseVendorName !== undefined && { purchase_vendor_name: input.purchaseVendorName }),
+        ...(input.purchaseDate !== undefined && { purchase_date: input.purchaseDate }),
+        ...(input.purchasePrice !== undefined && { purchase_price: input.purchasePrice }),
+        ...(input.paymentMethod !== undefined && { payment_method: input.paymentMethod }),
+        ...(input.financeInstitution !== undefined && { finance_institution: input.financeInstitution }),
+        ...(input.photoUrl !== undefined && { photo_url: input.photoUrl }),
+        ...(input.barcode !== undefined && { barcode: input.barcode }),
       }).eq("id", id).select().single();
       if (error) throw error;
       return mapAsset(data);

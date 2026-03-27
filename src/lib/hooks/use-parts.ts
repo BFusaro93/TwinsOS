@@ -100,6 +100,7 @@ export function useUpdatePart() {
           ...(input.vendorName !== undefined && { vendor_name: input.vendorName }),
           ...(input.parentPartId !== undefined && { parent_part_id: input.parentPartId }),
           ...(input.isInventory !== undefined && { is_inventory: input.isInventory }),
+          ...(input.pictureUrl !== undefined && { picture_url: input.pictureUrl }),
         })
         .eq("id", id)
         .select()

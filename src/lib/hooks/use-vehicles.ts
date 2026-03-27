@@ -73,6 +73,7 @@ export function useCreateVehicle() {
       return mapVehicle(data);
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["vehicles"] }),
+    onError: (err) => console.error("[useCreateVehicle]", err),
   });
 }
 
@@ -106,6 +107,13 @@ export function useUpdateVehicle() {
         ...(input.nextOilChangeDue !== undefined && { next_oil_change_due: input.nextOilChangeDue }),
         ...(input.nextOilChangeMileage !== undefined && { next_oil_change_mileage: input.nextOilChangeMileage }),
         ...(input.nextInspectionStickerDue !== undefined && { next_inspection_sticker_due: input.nextInspectionStickerDue }),
+        ...(input.purchaseVendorId !== undefined && { purchase_vendor_id: input.purchaseVendorId }),
+        ...(input.purchaseVendorName !== undefined && { purchase_vendor_name: input.purchaseVendorName }),
+        ...(input.purchaseDate !== undefined && { purchase_date: input.purchaseDate }),
+        ...(input.purchasePrice !== undefined && { purchase_price: input.purchasePrice }),
+        ...(input.paymentMethod !== undefined && { payment_method: input.paymentMethod }),
+        ...(input.photoUrl !== undefined && { photo_url: input.photoUrl }),
+        ...(input.barcode !== undefined && { barcode: input.barcode }),
       }).eq("id", id).select().single();
       if (error) throw error;
       return mapVehicle(data);
