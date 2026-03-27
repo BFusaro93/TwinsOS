@@ -54,16 +54,21 @@ export function NewVehicleDialog({ open, onOpenChange, initialData }: NewVehicle
   // Vehicle Info
   const [licensePlate, setLicensePlate] = useState("");
   const [vin, setVin] = useState("");
-  const [samsaraVehicleId, setSamsaraVehicleId] = useState("");
   const [fuelType, setFuelType] = useState("none");
 
   // Equipment Details
   const [make, setMake] = useState("");
   const [model, setModel] = useState("");
   const [year, setYear] = useState("");
-  const [serialNumber, setSerialNumber] = useState("");
   const [engineModel, setEngineModel] = useState("");
-  const [engineSerialNumber, setEngineSerialNumber] = useState("");
+
+  // Finance
+  const [financeInstitution, setFinanceInstitution] = useState("");
+
+  // Quick Reference Part #s
+  const [airFilterPartNumber, setAirFilterPartNumber] = useState("");
+  const [oilFilterPartNumber, setOilFilterPartNumber] = useState("");
+  const [sparkPlugPartNumber, setSparkPlugPartNumber] = useState("");
 
   // Assignment
   const [division, setDivision] = useState("");
@@ -97,9 +102,11 @@ export function NewVehicleDialog({ open, onOpenChange, initialData }: NewVehicle
       setMake(initialData.make ?? "");
       setModel(initialData.model ?? "");
       setYear(initialData.year ? String(initialData.year) : "");
-      setSerialNumber(initialData.serialNumber ?? "");
       setEngineModel(initialData.engineModel ?? "");
-      setEngineSerialNumber(initialData.engineSerialNumber ?? "");
+      setFinanceInstitution(initialData.financeInstitution ?? "");
+      setAirFilterPartNumber(initialData.airFilterPartNumber ?? "");
+      setOilFilterPartNumber(initialData.oilFilterPartNumber ?? "");
+      setSparkPlugPartNumber(initialData.sparkPlugPartNumber ?? "");
       setDivision(initialData.division ?? "");
       setAssignedCrew(initialData.assignedCrew ?? "");
       setLocation(initialData.location ?? "none");
@@ -110,7 +117,6 @@ export function NewVehicleDialog({ open, onOpenChange, initialData }: NewVehicle
       setNotes(initialData.notes ?? "");
       setLicensePlate(initialData.licensePlate ?? "");
       setVin(initialData.vin ?? "");
-      setSamsaraVehicleId(initialData.samsaraVehicleId ?? "");
       setFuelType(initialData.fuelType ?? "none");
       setNextOilChangeDue(initialData.nextOilChangeDue ?? "");
       setNextOilChangeMileage(initialData.nextOilChangeMileage != null ? String(initialData.nextOilChangeMileage) : "");
@@ -151,7 +157,6 @@ export function NewVehicleDialog({ open, onOpenChange, initialData }: NewVehicle
     setStatus("active");
     setLicensePlate("");
     setVin("");
-    setSamsaraVehicleId("");
     setFuelType("none");
     setNextOilChangeDue("");
     setNextOilChangeMileage("");
@@ -159,9 +164,11 @@ export function NewVehicleDialog({ open, onOpenChange, initialData }: NewVehicle
     setMake("");
     setModel("");
     setYear("");
-    setSerialNumber("");
     setEngineModel("");
-    setEngineSerialNumber("");
+    setFinanceInstitution("");
+    setAirFilterPartNumber("");
+    setOilFilterPartNumber("");
+    setSparkPlugPartNumber("");
     setDivision("");
     setAssignedCrew("");
     setLocation("none");
@@ -185,8 +192,8 @@ export function NewVehicleDialog({ open, onOpenChange, initialData }: NewVehicle
       make: make || null,
       model: model || null,
       year: year ? parseInt(year) : null,
-      serialNumber: serialNumber || null,
-      engineSerialNumber: engineSerialNumber || null,
+      serialNumber: null,
+      engineSerialNumber: null,
       division: division || null,
       assignedCrew: assignedCrew || null,
       barcode: null,
@@ -197,21 +204,20 @@ export function NewVehicleDialog({ open, onOpenChange, initialData }: NewVehicle
       purchaseDate: purchaseDate || null,
       purchasePrice: purchasePrice ? Math.round(parseFloat(purchasePrice) * 100) : null,
       paymentMethod: (paymentMethod as import("@/types/cmms").PaymentMethod) || null,
-      financeInstitution: null,
+      financeInstitution: financeInstitution || null,
       photoUrl: null,
       notes: notes || null,
       licensePlate: licensePlate || null,
       vin: vin || null,
-      samsaraVehicleId: samsaraVehicleId || null,
+      samsaraVehicleId: null,
       fuelType: fuelType !== "none" ? fuelType : null,
       nextOilChangeDue: nextOilChangeDue || null,
       nextOilChangeMileage: nextOilChangeMileage ? parseInt(nextOilChangeMileage) : null,
       nextInspectionStickerDue: nextInspectionStickerDue || null,
-      // Vehicle extends Asset — these Asset-only fields don't exist on vehicles table
-      airFilterPartNumber: null,
-      oilFilterPartNumber: null,
-      sparkPlugPartNumber: null,
-      engineModel: null,
+      airFilterPartNumber: airFilterPartNumber || null,
+      oilFilterPartNumber: oilFilterPartNumber || null,
+      sparkPlugPartNumber: sparkPlugPartNumber || null,
+      engineModel: engineModel || null,
       manufacturer: null,
     };
     if (isEditing && initialData) {
@@ -346,16 +352,6 @@ export function NewVehicleDialog({ open, onOpenChange, initialData }: NewVehicle
 
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-1.5">
-                <Label htmlFor="samsara-vehicle-id">Samsara Vehicle ID</Label>
-                <Input
-                  id="samsara-vehicle-id"
-                  value={samsaraVehicleId}
-                  onChange={(e) => setSamsaraVehicleId(e.target.value)}
-                  placeholder="Samsara vehicle identifier"
-                />
-              </div>
-
-              <div className="grid gap-1.5">
                 <Label htmlFor="vehicle-fuel-type">Fuel Type</Label>
                 <Select value={fuelType} onValueChange={setFuelType}>
                   <SelectTrigger id="vehicle-fuel-type">
@@ -473,34 +469,12 @@ export function NewVehicleDialog({ open, onOpenChange, initialData }: NewVehicle
               )}
 
               <div className="grid gap-1.5">
-                <Label htmlFor="vehicle-serial">Serial Number</Label>
-                <Input
-                  id="vehicle-serial"
-                  value={serialNumber}
-                  onChange={(e) => setSerialNumber(e.target.value)}
-                  placeholder="Serial number"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="grid gap-1.5">
                 <Label htmlFor="vehicle-engine-model">Engine Model</Label>
                 <Input
                   id="vehicle-engine-model"
                   value={engineModel}
                   onChange={(e) => setEngineModel(e.target.value)}
                   placeholder="e.g. 6.7L Power Stroke"
-                />
-              </div>
-
-              <div className="grid gap-1.5">
-                <Label htmlFor="vehicle-engine-serial">Engine Serial #</Label>
-                <Input
-                  id="vehicle-engine-serial"
-                  value={engineSerialNumber}
-                  onChange={(e) => setEngineSerialNumber(e.target.value)}
-                  placeholder="Engine serial number"
                 />
               </div>
             </div>
@@ -609,6 +583,50 @@ export function NewVehicleDialog({ open, onOpenChange, initialData }: NewVehicle
                     <SelectItem value="rental">Rental</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+
+              <div className="grid gap-1.5">
+                <Label htmlFor="vehicle-finance-institution">Finance Institution</Label>
+                <Input
+                  id="vehicle-finance-institution"
+                  value={financeInstitution}
+                  onChange={(e) => setFinanceInstitution(e.target.value)}
+                  placeholder="e.g. Ford Motor Credit"
+                />
+              </div>
+            </div>
+
+            {/* Quick Reference Part #s */}
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+              Quick Reference Part #&apos;s
+            </p>
+            <div className="grid grid-cols-3 gap-4">
+              <div className="grid gap-1.5">
+                <Label htmlFor="vehicle-air-filter">Air Filter</Label>
+                <Input
+                  id="vehicle-air-filter"
+                  value={airFilterPartNumber}
+                  onChange={(e) => setAirFilterPartNumber(e.target.value)}
+                  placeholder="Part #"
+                />
+              </div>
+              <div className="grid gap-1.5">
+                <Label htmlFor="vehicle-oil-filter">Oil Filter</Label>
+                <Input
+                  id="vehicle-oil-filter"
+                  value={oilFilterPartNumber}
+                  onChange={(e) => setOilFilterPartNumber(e.target.value)}
+                  placeholder="Part #"
+                />
+              </div>
+              <div className="grid gap-1.5">
+                <Label htmlFor="vehicle-spark-plug">Spark Plug</Label>
+                <Input
+                  id="vehicle-spark-plug"
+                  value={sparkPlugPartNumber}
+                  onChange={(e) => setSparkPlugPartNumber(e.target.value)}
+                  placeholder="Part #"
+                />
               </div>
             </div>
 

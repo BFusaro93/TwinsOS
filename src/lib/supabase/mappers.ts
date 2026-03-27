@@ -361,11 +361,15 @@ export function mapVehicle(row: VehicleRow): Vehicle {
     year: row.year,
     serialNumber: row.serial_number,
     engineSerialNumber: row.engine_serial_number,
-    airFilterPartNumber: null,
-    oilFilterPartNumber: null,
-    sparkPlugPartNumber: null,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    airFilterPartNumber: (row as any).air_filter_part_number ?? null,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    oilFilterPartNumber: (row as any).oil_filter_part_number ?? null,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    sparkPlugPartNumber: (row as any).spark_plug_part_number ?? null,
     division: row.division,
-    engineModel: null,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    engineModel: (row as any).engine_model ?? null,
     manufacturer: null,
     assignedCrew: row.assigned_crew,
     barcode: row.barcode,

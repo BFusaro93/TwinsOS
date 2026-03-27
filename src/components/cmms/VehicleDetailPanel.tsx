@@ -321,22 +321,6 @@ function DetailsTab({ vehicle, status }: { vehicle: Vehicle; status: AssetStatus
         </dl>
       </div>
 
-      {vehicle.samsaraVehicleId && (
-        <>
-          <Separator />
-          <div>
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
-              Integrations
-            </p>
-            <dl>
-              <MetaRow
-                label="Samsara ID"
-                value={<span className="font-mono text-xs">{vehicle.samsaraVehicleId}</span>}
-              />
-            </dl>
-          </div>
-        </>
-      )}
 
       <Separator />
 
