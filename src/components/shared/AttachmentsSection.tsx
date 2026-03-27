@@ -1,8 +1,9 @@
 "use client";
 
-import { Paperclip, FileText, Image, Upload } from "lucide-react";
+import { useRef } from "react";
+import { FileText, Image, Upload } from "lucide-react";
 import { formatDate } from "@/lib/utils";
-import { useAttachments } from "@/lib/hooks/use-attachments";
+import { useAttachments, useUploadAttachment, useDownloadAttachment } from "@/lib/hooks/use-attachments";
 import { Button } from "@/components/ui/button";
 import type { AttachmentRecordType } from "@/types";
 
@@ -26,18 +27,46 @@ function FileIcon({ fileType }: { fileType: string }) {
 
 export function AttachmentsSection({ recordType, recordId }: AttachmentsSectionProps) {
   const { data: attachments, isLoading } = useAttachments(recordType, recordId);
+  const upload = useUploadAttachment(recordType, recordId);
+  const download = useDownloadAttachment();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    upload.mutate(file);
+    // Reset input so the same file can be re-uploaded if needed
+    e.target.value = "";
+  }
 
   return (
     <div className="flex flex-col gap-3">
+      {/* Hidden file input */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        className="hidden"
+        onChange={handleFileChange}
+        accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt"
+      />
+
       {/* Upload button */}
       <Button
         variant="outline"
         size="sm"
         className="w-full border-dashed text-slate-500 hover:text-slate-700"
+        onClick={() => fileInputRef.current?.click()}
+        disabled={upload.isPending}
       >
         <Upload className="mr-2 h-3.5 w-3.5" />
-        Upload File
+        {upload.isPending ? "Uploading…" : "Upload File"}
       </Button>
+
+      {upload.isError && (
+        <p className="text-xs text-red-500">
+          Upload failed — make sure the &quot;attachments&quot; storage bucket exists in Supabase.
+        </p>
+      )}
 
       {/* File list */}
       {isLoading ? (
@@ -58,7 +87,10 @@ export function AttachmentsSection({ recordType, recordId }: AttachmentsSectionP
                   {formatBytes(att.fileSize)} · Uploaded by {att.uploadedByName} · {formatDate(att.createdAt)}
                 </p>
               </div>
-              <button className="shrink-0 text-xs text-brand-600 hover:underline">
+              <button
+                className="shrink-0 text-xs text-brand-600 hover:underline"
+                onClick={() => download.mutate({ storagePath: att.storagePath, fileName: att.fileName })}
+              >
                 View
               </button>
             </li>

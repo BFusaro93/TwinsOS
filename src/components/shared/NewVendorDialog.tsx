@@ -58,8 +58,7 @@ export function NewVendorDialog({ open, onOpenChange, initialData, onCreated }: 
     }
   }, [open, initialData]);
 
-  const isValid =
-    name.trim() !== "" && contactName.trim() !== "" && email.trim() !== "";
+  const isValid = name.trim() !== "";
 
   function handleClose() {
     onOpenChange(false);
@@ -132,9 +131,7 @@ export function NewVendorDialog({ open, onOpenChange, initialData, onCreated }: 
 
             {/* Contact Name — half width */}
             <div className="grid gap-1.5">
-              <Label htmlFor="vendor-contact-name">
-                Contact Name <span className="text-red-500">*</span>
-              </Label>
+              <Label htmlFor="vendor-contact-name">Contact Name</Label>
               <Input
                 id="vendor-contact-name"
                 value={contactName}
@@ -145,9 +142,7 @@ export function NewVendorDialog({ open, onOpenChange, initialData, onCreated }: 
 
             {/* Email — half width */}
             <div className="grid gap-1.5">
-              <Label htmlFor="vendor-email">
-                Email <span className="text-red-500">*</span>
-              </Label>
+              <Label htmlFor="vendor-email">Email</Label>
               <Input
                 id="vendor-email"
                 type="email"

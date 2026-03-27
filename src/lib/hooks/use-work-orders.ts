@@ -3,6 +3,12 @@ import { createClient } from "@/lib/supabase/client";
 import { mapWorkOrder } from "@/lib/supabase/mappers";
 import type { WorkOrder, WorkOrderStatus } from "@/types/cmms";
 
+function patchWOCache(queryClient: ReturnType<typeof useQueryClient>, id: string, patch: Partial<WorkOrder>) {
+  queryClient.setQueryData<WorkOrder[]>(["work-orders"], (old) =>
+    old?.map((wo) => wo.id === id ? { ...wo, ...patch } : wo) ?? []
+  );
+}
+
 export function useWorkOrders() {
   return useQuery({
     queryKey: ["work-orders"],
@@ -70,7 +76,8 @@ export function useUpdateWorkOrderStatus() {
       const { error } = await supabase.from("work_orders").update({ status }).eq("id", id);
       if (error) throw error;
     },
-    onSuccess: (_, { id }) => {
+    onSuccess: (_, { id, status }) => {
+      if (status) patchWOCache(queryClient, id, { status });
       queryClient.invalidateQueries({ queryKey: ["work-orders"] });
       queryClient.invalidateQueries({ queryKey: ["work-orders", id] });
     },
@@ -96,7 +103,8 @@ export function useUpdateWorkOrder() {
       if (error) throw error;
       return mapWorkOrder(data);
     },
-    onSuccess: (_, { id }) => {
+    onSuccess: (data, { id }) => {
+      if (data) patchWOCache(queryClient, id, data);
       queryClient.invalidateQueries({ queryKey: ["work-orders"] });
       queryClient.invalidateQueries({ queryKey: ["work-orders", id] });
     },

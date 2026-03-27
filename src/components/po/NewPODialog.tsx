@@ -101,7 +101,7 @@ export function NewPODialog({ open, onOpenChange, initialData, prefillData, onCr
   const { data: vendors } = useVendors();
   const { data: parts = [] } = useParts();
   const { data: projects = [] } = useProjects();
-  const { costMethod } = useSettingsStore();
+  const { costMethod, taxRatePercent: orgTaxRate } = useSettingsStore();
 
   // Extra items created inline during this session
   const [extraVendors, setExtraVendors] = useState<Vendor[]>([]);
@@ -126,7 +126,7 @@ export function NewPODialog({ open, onOpenChange, initialData, prefillData, onCr
   const [invoiceNumber, setInvoiceNumber] = useState("");
   const [notes, setNotes] = useState("");
   const [lineItems, setLineItems] = useState<DraftLineItem[]>(() => [emptyLineItem()]);
-  const [taxRatePercent, setTaxRatePercent] = useState("7");
+  const [taxRatePercent, setTaxRatePercent] = useState(() => String(orgTaxRate ?? 7));
   const [shippingCost, setShippingCost] = useState("");
   const { mutate: createPO, isPending: creating } = useCreatePurchaseOrder();
   const { mutate: updatePO, isPending: updating } = useUpdatePurchaseOrder();

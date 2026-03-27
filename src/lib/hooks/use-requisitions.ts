@@ -1,7 +1,13 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 import { mapRequisition } from "@/lib/supabase/mappers";
-import type { ApprovalStatus, LineItem } from "@/types";
+import type { ApprovalStatus, LineItem, Requisition } from "@/types";
+
+function patchReqCache(queryClient: ReturnType<typeof useQueryClient>, id: string, patch: Partial<Requisition>) {
+  queryClient.setQueryData<Requisition[]>(["requisitions"], (old) =>
+    old?.map((r) => r.id === id ? { ...r, ...patch } : r) ?? []
+  );
+}
 
 const REQ_SELECT = "*, requisition_line_items (*)";
 
@@ -228,7 +234,8 @@ export function useUpdateRequisitionStatus() {
         .eq("id", id);
       if (error) throw error;
     },
-    onSuccess: (_, { id }) => {
+    onSuccess: (_, { id, status }) => {
+      patchReqCache(queryClient, id, { status });
       queryClient.invalidateQueries({ queryKey: ["requisitions"] });
       queryClient.invalidateQueries({ queryKey: ["requisitions", id] });
     },

@@ -3,6 +3,13 @@ import { createClient } from "@/lib/supabase/client";
 import { mapPurchaseOrder } from "@/lib/supabase/mappers";
 import type { PurchaseOrder, POStatus, LineItem } from "@/types";
 
+// Helper: immediately update a PO in every cached list
+function patchPOCache(queryClient: ReturnType<typeof useQueryClient>, id: string, patch: Partial<PurchaseOrder>) {
+  queryClient.setQueryData<PurchaseOrder[]>(["purchase-orders"], (old) =>
+    old?.map((po) => po.id === id ? { ...po, ...patch } : po) ?? []
+  );
+}
+
 const PO_SELECT = "*, po_line_items (*)";
 
 export function usePurchaseOrders() {
@@ -194,7 +201,15 @@ export function useUpdatePurchaseOrderStatus() {
         .eq("id", id);
       if (error) throw error;
     },
-    onSuccess: (_, { id }) => {
+    onSuccess: (_, { id, status, invoiceNumber, paymentSubmittedToAP, paymentRemitted, paymentType, paymentBookedInQB }) => {
+      patchPOCache(queryClient, id, {
+        status,
+        ...(invoiceNumber !== undefined && { invoiceNumber }),
+        ...(paymentSubmittedToAP !== undefined && { paymentSubmittedToAP }),
+        ...(paymentRemitted !== undefined && { paymentRemitted }),
+        ...(paymentType !== undefined && { paymentType }),
+        ...(paymentBookedInQB !== undefined && { paymentBookedInQB }),
+      });
       queryClient.invalidateQueries({ queryKey: ["purchase-orders"] });
       queryClient.invalidateQueries({ queryKey: ["purchase-orders", id] });
     },

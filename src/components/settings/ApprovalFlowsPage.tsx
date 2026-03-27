@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { GripVertical, Plus, Pencil, Trash2, Save, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -179,6 +179,17 @@ function FlowCard({ flow }: { flow: ApprovalFlow }) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [addingNew, setAddingNew] = useState(false);
   const [dirty, setDirty] = useState(false);
+  const saveFlowRef = useRef(saveFlow);
+  saveFlowRef.current = saveFlow;
+
+  // Auto-save 1.5 seconds after any step change
+  useEffect(() => {
+    if (!dirty) return;
+    const timer = setTimeout(() => {
+      saveFlowRef.current({ flowId: flow.id, steps }, { onSuccess: () => setDirty(false) });
+    }, 1500);
+    return () => clearTimeout(timer);
+  }, [steps, dirty, flow.id]);
 
   function handleSaveStep(updated: StepDraft) {
     if (editingId) {

@@ -101,7 +101,7 @@ export function NewRequisitionDialog({ open, onOpenChange, initialData, prefillD
   const { data: vendors } = useVendors();
   const { data: parts = [] } = useParts();
   const { data: projects = [] } = useProjects();
-  const { costMethod } = useSettingsStore();
+  const { costMethod, taxRatePercent: orgTaxRate } = useSettingsStore();
 
   // Extra items created inline during this session
   const [extraVendors, setExtraVendors] = useState<Vendor[]>([]);
@@ -124,7 +124,7 @@ export function NewRequisitionDialog({ open, onOpenChange, initialData, prefillD
   const [vendorId, setVendorId] = useState("none");
   const [notes, setNotes] = useState("");
   const [lineItems, setLineItems] = useState<DraftLineItem[]>(() => [emptyLineItem()]);
-  const [taxRatePercent, setTaxRatePercent] = useState("7");
+  const [taxRatePercent, setTaxRatePercent] = useState(() => String(orgTaxRate ?? 7));
   const [shippingCost, setShippingCost] = useState("");
 
   const createRequisition = useCreateRequisition();

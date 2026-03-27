@@ -157,10 +157,28 @@ export function useCreateProduct() {
         .select()
         .single();
       if (error) throw error;
+
+      // If this is a maintenance part, mirror it into the CMMS parts inventory
+      if (input.category === "maintenance_part") {
+        await supabase.from("parts").insert({
+          name: input.name,
+          part_number: input.partNumber || "",
+          description: input.description || "",
+          category: "maintenance_part",
+          unit_cost: input.unitCost,
+          quantity_on_hand: input.quantityOnHand,
+          vendor_id: input.vendorId || null,
+          vendor_name: input.vendorName || "",
+          product_item_id: data.id,
+          is_inventory: input.isInventory,
+        });
+      }
+
       return mapProductItem(data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["products"] });
+      queryClient.invalidateQueries({ queryKey: ["parts"] });
     },
   });
 }
