@@ -232,7 +232,7 @@ export function AutomationDialog({
         if (!woTitle.trim()) return false;
         break;
       case "send_notification":
-        if (!notifMessage.trim()) return false;
+        // message is optional — no validation needed
         break;
       case "send_email":
         if (!emailRecipient.trim()) return false;

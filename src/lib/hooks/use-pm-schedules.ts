@@ -50,6 +50,7 @@ export function useCreatePMSchedule() {
       return mapPMSchedule(data);
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["pm-schedules"] }),
+    onError: (err) => console.error("[useCreatePMSchedule]", err),
   });
 }
 

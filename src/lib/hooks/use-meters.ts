@@ -48,6 +48,7 @@ export function useCreateMeter() {
       return mapMeter(data);
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["meters"] }),
+    onError: (err) => console.error("[useCreateMeter]", err),
   });
 }
 
