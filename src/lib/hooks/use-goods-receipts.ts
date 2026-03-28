@@ -146,8 +146,8 @@ export function useUpdateGoodsReceipt() {
         for (const line of input.lines) {
           const oldQty = oldByLineId.get(line.id);
           if (oldQty !== undefined && oldQty !== line.quantityReceived) {
-            await supabase.rpc("insert_audit_entry", {
-              p_org_id: currentReceipt.org_id,
+            const { error: rpcErr } = await supabase.rpc("insert_audit_entry", {
+              p_org_id: currentReceipt.org_id as string,
               p_record_type: "receiving",
               p_record_id: input.id,
               p_action: "updated",
@@ -156,6 +156,11 @@ export function useUpdateGoodsReceipt() {
               p_old_value: String(oldQty),
               p_new_value: String(line.quantityReceived),
             });
+            // Non-critical: don't fail the whole update if audit insert fails
+            if (rpcErr) {
+              // eslint-disable-next-line no-console
+              console.warn("Audit insert failed:", rpcErr.message);
+            }
           }
         }
       }
