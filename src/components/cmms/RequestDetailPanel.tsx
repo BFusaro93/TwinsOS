@@ -26,6 +26,7 @@ import { REQUEST_STATUS_LABELS, WO_PRIORITY_LABELS } from "@/lib/constants";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { useUpdateRequestStatus, useDeleteRequest, useConvertRequestToWO } from "@/lib/hooks/use-requests";
 import { useCreateWorkOrder, useWorkOrders } from "@/lib/hooks/use-work-orders";
+import { useVehicles } from "@/lib/hooks/use-vehicles";
 import { useCMMSStore } from "@/stores";
 import { WorkOrderDetailPanel } from "./WorkOrderDetailPanel";
 import type { MaintenanceRequest, MaintenanceRequestStatus } from "@/types";
@@ -183,6 +184,7 @@ export function RequestDetailPanel({ request }: RequestDetailPanelProps) {
   const [woSheetOpen, setWoSheetOpen] = useState(false);
   const [status, setStatus] = useState<MaintenanceRequestStatus>(request.status);
   const { data: workOrders = [] } = useWorkOrders();
+  const { data: vehicles = [] } = useVehicles();
   const linkedWO = request.linkedWorkOrderId
     ? workOrders.find((wo) => wo.id === request.linkedWorkOrderId) ?? null
     : null;
@@ -208,7 +210,9 @@ export function RequestDetailPanel({ request }: RequestDetailPanelProps) {
         woType: "reactive",
         assetId: request.assetId ?? null,
         assetName: request.assetName ?? null,
-        linkedEntityType: null,
+        linkedEntityType: request.assetId
+          ? (vehicles.some((v) => v.id === request.assetId) ? "vehicle" : "asset")
+          : null,
         assignedToId: null,
         assignedToName: null,
         assignedToIds: [],

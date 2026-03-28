@@ -286,11 +286,10 @@ function DetailsTab({
           }
         />
         <MetaRow
-          label={workOrder.linkedEntityType === "vehicle" ? "Vehicle" : "Asset"}
+          label={onVehicleClick ? "Vehicle" : "Asset"}
           value={(() => {
             if (!workOrder.assetName) return null;
-            const clickHandler =
-              workOrder.linkedEntityType === "vehicle" ? onVehicleClick : onAssetClick;
+            const clickHandler = onVehicleClick ?? onAssetClick;
             return clickHandler ? (
               <button
                 type="button"

@@ -164,11 +164,11 @@ export function useUpdateGoodsReceipt() {
               record_id: input.id,
               action: "updated",
               changed_by_name: userName,
-              description: `${line.productItemName}: Quantity received updated`,
+              description: `${line.productItemName}: Quantity received ${oldQty} → ${line.quantityReceived}`,
               field_changed: "quantity_received",
               old_value: String(oldQty),
               new_value: String(line.quantityReceived),
-            });
+            }).select().single();
           }
         }
       }
