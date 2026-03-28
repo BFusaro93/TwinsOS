@@ -123,7 +123,7 @@ export function useUpdateGoodsReceipt() {
       const { data: currentLines } = await supabase
         .from("goods_receipt_lines")
         .select("id, quantity_received")
-        .eq("goods_receipt_id", input.id);
+        .eq("receipt_id", input.id);
       const oldByLineId = new Map(
         (currentLines ?? []).map((l) => [l.id, l.quantity_received as number])
       );
