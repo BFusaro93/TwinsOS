@@ -74,7 +74,7 @@ function DetailsTab({
 }) {
   const [lineItems, setLineItems] = useState<LineItem[]>(po.lineItems);
   const { currentUser } = useCurrentUserStore();
-  const { mutate: submitForApproval, isPending: submitting, isError: submitError, error: submitErrorObj } = useSubmitForApproval();
+  const { mutate: submitForApproval, isPending: submitting } = useSubmitForApproval();
   const { mutate: syncStatus } = useUpdatePurchaseOrderStatus();
 
   // Write status change to shared store so the list panel stays in sync
@@ -125,12 +125,6 @@ function DetailsTab({
               {submitting ? "Submitting…" : "Submit for Approval"}
             </Button>
           </div>
-        )}
-
-        {submitError && (
-          <p className="mt-2 rounded-md bg-red-50 px-3 py-2 text-xs text-red-600">
-            Submit failed: {submitErrorObj instanceof Error ? submitErrorObj.message : JSON.stringify(submitErrorObj)}
-          </p>
         )}
 
         {/* Approval chain */}
