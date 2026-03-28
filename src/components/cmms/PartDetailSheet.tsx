@@ -25,7 +25,7 @@ import { AssetDetailPanel } from "@/components/cmms/AssetDetailPanel";
 import { VehicleDetailPanel } from "@/components/cmms/VehicleDetailPanel";
 import { NewPartDialog } from "@/components/cmms/NewPartDialog";
 import { ManageVendorsDialog } from "@/components/shared/ManageVendorsDialog";
-import { Sheet, SheetContent } from "@/components/ui/sheet";
+
 import { useParts, useUpdatePart } from "@/lib/hooks/use-parts";
 import { useRequisitions } from "@/lib/hooks/use-requisitions";
 import { usePurchaseOrders } from "@/lib/hooks/use-purchase-orders";
@@ -545,8 +545,13 @@ export function PartDetailSheet({ part, open, onOpenChange }: PartDetailSheetPro
 
   if (!part || !open) return null;
 
-  const effectiveQty = qtyOnHand ?? part.quantityOnHand;
-  const partId = part.id;
+  // Derive the latest part data from the query cache so that when mutations
+  // invalidate and refetch, the detail sheet re-renders with fresh data
+  // instead of staying stuck on the stale prop passed from the parent.
+  const livePart = (allParts ?? []).find((p) => p.id === part.id) ?? part;
+
+  const effectiveQty = qtyOnHand ?? livePart.quantityOnHand;
+  const partId = livePart.id;
 
   function handleQtyChange(n: number) {
     setQtyOnHand(n);
@@ -565,13 +570,16 @@ export function PartDetailSheet({ part, open, onOpenChange }: PartDetailSheetPro
     });
   }
 
+  // Use livePart for all rendering below so vendor changes show immediately
+  // after the query cache refreshes (the prop may be stale from parent state).
+
   // Match by productItemId FK first; fall back to part-number match for
   // cases where the link wasn't set explicitly (e.g. items added before the FK existed)
   const linkedProduct =
     (products ?? []).find(
       (p) =>
         p.category === "maintenance_part" &&
-        (p.id === part.productItemId || p.partNumber === part.partNumber)
+        (p.id === livePart.productItemId || p.partNumber === livePart.partNumber)
     ) ?? null;
   const linkedProductName = linkedProduct?.name ?? null;
 
@@ -582,12 +590,12 @@ export function PartDetailSheet({ part, open, onOpenChange }: PartDetailSheetPro
     (requisitions ?? [])
       .filter((r) => activeReqStatuses.has(r.status))
       .flatMap((r) => r.lineItems)
-      .filter((li) => li.partNumber === part.partNumber)
+      .filter((li) => li.partNumber === livePart.partNumber)
       .reduce((sum, li) => sum + li.quantity, 0) +
     (purchaseOrders ?? [])
       .filter((po) => activePoStatuses.has(po.status))
       .flatMap((po) => po.lineItems)
-      .filter((li) => li.partNumber === part.partNumber)
+      .filter((li) => li.partNumber === livePart.partNumber)
       .reduce((sum, li) => sum + li.quantity, 0);
 
   // Rendered via portal so it sits above the primary asset sheet without being
@@ -599,7 +607,7 @@ export function PartDetailSheet({ part, open, onOpenChange }: PartDetailSheetPro
         <>
           {/* Dark backdrop */}
           <div
-            className="fixed inset-0 z-[199] bg-black/40 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0"
+            className="fixed inset-0 z-[199] bg-black/80 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0"
             onClick={() => onOpenChange(false)}
             aria-hidden="true"
           />
@@ -607,15 +615,15 @@ export function PartDetailSheet({ part, open, onOpenChange }: PartDetailSheetPro
             ref={containerRef}
             role="dialog"
             aria-modal="true"
-            aria-label={part.name}
+            aria-label={livePart.name}
             className="pointer-events-auto fixed inset-y-0 right-0 z-[200] flex w-[580px] flex-col overflow-hidden border-l bg-background shadow-xl"
           >
           {/* Header — pr-12 leaves a clean gap for the absolute X button */}
           <div className="relative shrink-0 border-b px-6 py-4 pr-12">
             <div className="flex items-start gap-3">
               <ThumbnailUpload
-                imageUrl={part.pictureUrl}
-                alt={part.name}
+                imageUrl={livePart.pictureUrl}
+                alt={livePart.name}
                 size="md"
                 onUpload={(url) => updatePart({ id: partId, pictureUrl: url })}
               />
@@ -623,13 +631,13 @@ export function PartDetailSheet({ part, open, onOpenChange }: PartDetailSheetPro
                 {/* Name row: title on the left, Edit button on the right (in flow) */}
                 <div className="flex items-center gap-2">
                   <h2 className="min-w-0 flex-1 truncate text-lg font-semibold text-foreground">
-                    {part.name}
+                    {livePart.name}
                   </h2>
                   <EditButton onClick={() => setEditOpen(true)} />
                 </div>
                 <div className="mt-1 flex items-center gap-2">
                   <span className="rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600 capitalize">
-                    {part.category}
+                    {livePart.category}
                   </span>
                 </div>
               </div>
@@ -663,7 +671,7 @@ export function PartDetailSheet({ part, open, onOpenChange }: PartDetailSheetPro
             </div>
             <TabsContent value="details" className="mt-0 min-h-0 flex-1 overflow-y-auto">
               <DetailsTab
-                part={part}
+                part={livePart}
                 allParts={allParts ?? []}
                 onOrderQty={onOrderQty}
                 qtyOnHand={effectiveQty}
@@ -677,9 +685,9 @@ export function PartDetailSheet({ part, open, onOpenChange }: PartDetailSheetPro
             </TabsContent>
             <TabsContent value="assets & vehicles" className="mt-0 min-h-0 flex-1 overflow-y-auto">
               <PartAssetsTab
-                partId={part.id}
-                partName={part.name}
-                partNumber={part.partNumber}
+                partId={livePart.id}
+                partName={livePart.name}
+                partNumber={livePart.partNumber}
                 onRecordClick={(item) => {
                   if (item.kind === "asset") setAssetSheetId(item.record.id);
                   else setVehicleSheetId(item.record.id);
@@ -687,22 +695,22 @@ export function PartDetailSheet({ part, open, onOpenChange }: PartDetailSheetPro
               />
             </TabsContent>
             <TabsContent value="history" className="mt-0 min-h-0 flex-1 overflow-y-auto">
-              <HistoryTab part={part} purchaseOrders={purchaseOrders} />
+              <HistoryTab part={livePart} purchaseOrders={purchaseOrders} />
             </TabsContent>
             <TabsContent value="audit trail" className="mt-0 min-h-0 flex-1 overflow-y-auto">
-              <AuditTrailTab recordType="part" recordId={part.id} />
+              <AuditTrailTab recordType="part" recordId={livePart.id} />
             </TabsContent>
           </Tabs>
         </div>
         </>,
         document.body
       )}
-      <NewPartDialog open={editOpen} onOpenChange={setEditOpen} initialData={part} />
+      <NewPartDialog open={editOpen} onOpenChange={setEditOpen} initialData={livePart} />
       <ManageVendorsDialog
         open={manageVendorsOpen}
         onOpenChange={setManageVendorsOpen}
-        primaryVendor={part.vendorName ? { vendorId: part.vendorId ?? "", vendorName: part.vendorName } : null}
-        alternateVendors={part.alternateVendors}
+        primaryVendor={livePart.vendorName ? { vendorId: livePart.vendorId ?? "", vendorName: livePart.vendorName } : null}
+        alternateVendors={livePart.alternateVendors}
         onSave={handleVendorsSave}
       />
       {/* Nested sheet for clicking interchangeable parts */}
@@ -718,16 +726,30 @@ export function PartDetailSheet({ part, open, onOpenChange }: PartDetailSheetPro
         const selectedVehicle = vehicleSheetId ? allVehicles.find((v) => v.id === vehicleSheetId) ?? null : null;
         return (
           <>
-            <Sheet open={!!selectedAsset} onOpenChange={(o) => { if (!o) setAssetSheetId(null); }}>
-              <SheetContent className="flex w-[720px] flex-col overflow-hidden p-0 sm:max-w-[720px]">
-                {selectedAsset && <AssetDetailPanel asset={selectedAsset} />}
-              </SheetContent>
-            </Sheet>
-            <Sheet open={!!selectedVehicle} onOpenChange={(o) => { if (!o) setVehicleSheetId(null); }}>
-              <SheetContent className="flex w-[720px] flex-col overflow-hidden p-0 sm:max-w-[720px]">
-                {selectedVehicle && <VehicleDetailPanel vehicle={selectedVehicle} />}
-              </SheetContent>
-            </Sheet>
+            {selectedAsset && createPortal(
+              <>
+                <div className="fixed inset-0 z-[209] bg-black/80" onClick={() => setAssetSheetId(null)} aria-hidden="true" />
+                <div className="fixed inset-y-0 right-0 z-[210] flex w-[720px] flex-col overflow-y-auto border-l bg-background shadow-xl">
+                  <button type="button" onClick={() => setAssetSheetId(null)} className="absolute right-4 top-4 z-10 rounded-sm p-0.5 opacity-70 hover:opacity-100">
+                    <X className="h-4 w-4" />
+                  </button>
+                  <AssetDetailPanel asset={selectedAsset} />
+                </div>
+              </>,
+              document.body
+            )}
+            {selectedVehicle && createPortal(
+              <>
+                <div className="fixed inset-0 z-[209] bg-black/80" onClick={() => setVehicleSheetId(null)} aria-hidden="true" />
+                <div className="fixed inset-y-0 right-0 z-[210] flex w-[720px] flex-col overflow-y-auto border-l bg-background shadow-xl">
+                  <button type="button" onClick={() => setVehicleSheetId(null)} className="absolute right-4 top-4 z-10 rounded-sm p-0.5 opacity-70 hover:opacity-100">
+                    <X className="h-4 w-4" />
+                  </button>
+                  <VehicleDetailPanel vehicle={selectedVehicle} />
+                </div>
+              </>,
+              document.body
+            )}
           </>
         );
       })()}
@@ -744,7 +766,7 @@ export function PartDetailSheet({ part, open, onOpenChange }: PartDetailSheetPro
         const pickerParts = (allParts ?? []).filter((p) => {
           if (isSelfLink) {
             // Pick an OEM part to become the parent of the current part
-            return p.id !== part.id && p.parentPartId === null;
+            return p.id !== livePart.id && p.parentPartId === null;
           }
           // Pick a part to become a generic child of the given OEM
           return p.id !== oemId && p.parentPartId === null && !alreadyChildIds.has(p.id);

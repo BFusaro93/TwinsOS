@@ -17,6 +17,10 @@ export interface WorkOrder extends BaseRecord {
   linkedEntityType: "asset" | "vehicle" | null;
   assignedToId: string | null;
   assignedToName: string | null;
+  /** All assigned user IDs (multi-assignee). First entry matches assignedToId. */
+  assignedToIds: string[];
+  /** All assigned user display names (multi-assignee). First entry matches assignedToName. */
+  assignedToNames: string[];
   dueDate: string | null;
   category: string | null;
   workOrderNumber: string;

@@ -76,8 +76,10 @@ function WOLinkCard({ wo, onClick }: { wo: WorkOrder; onClick: () => void }) {
       <div className="min-w-0">
         <p className="text-xs font-semibold text-slate-500">{wo.workOrderNumber}</p>
         <p className="truncate text-sm font-medium text-slate-800">{wo.assetName ?? wo.title}</p>
-        {wo.assignedToName && (
-          <p className="text-xs text-slate-400">{wo.assignedToName}</p>
+        {(wo.assignedToNames.length > 0 || wo.assignedToName) && (
+          <p className="text-xs text-slate-400">
+            {wo.assignedToNames.length > 0 ? wo.assignedToNames.join(", ") : wo.assignedToName}
+          </p>
         )}
       </div>
       <StatusBadge variant={wo.status} label={WO_STATUS_LABELS[wo.status]} />
@@ -290,7 +292,14 @@ function DetailsTab({
             );
           })()}
         />
-        <MetaRow label="Assigned To" value={workOrder.assignedToName} />
+        <MetaRow
+          label="Assigned To"
+          value={
+            workOrder.assignedToNames.length > 0
+              ? workOrder.assignedToNames.join(", ")
+              : workOrder.assignedToName
+          }
+        />
         <MetaRow label="Category" value={workOrder.category} />
         <MetaRow
           label="Type"

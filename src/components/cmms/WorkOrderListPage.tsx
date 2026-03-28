@@ -203,7 +203,9 @@ function UpcomingMaintenanceView({
             <span className="text-sm text-slate-400">No due date</span>
           )}
         </TableCell>
-        <TableCell className="text-sm text-slate-600">{wo.assignedToName ?? "—"}</TableCell>
+        <TableCell className="text-sm text-slate-600">
+          {wo.assignedToNames.length > 0 ? wo.assignedToNames.join(", ") : (wo.assignedToName ?? "—")}
+        </TableCell>
         <TableCell>
           <StatusBadge
             variant={wo.status as Parameters<typeof StatusBadge>[0]["variant"]}
@@ -343,9 +345,9 @@ export function WorkOrderListPage() {
     .sort()
     .map((v) => ({ value: v!, label: v! }));
 
-  const assigneeOptions = Array.from(new Set(all.map((wo) => wo.assignedToName).filter(Boolean)))
+  const assigneeOptions = Array.from(new Set(all.flatMap((wo) => wo.assignedToNames.length > 0 ? wo.assignedToNames : (wo.assignedToName ? [wo.assignedToName] : [])).filter(Boolean)))
     .sort()
-    .map((v) => ({ value: v!, label: v! }));
+    .map((v) => ({ value: v, label: v }));
 
   const categoryOptions = Array.from(new Set(all.map((wo) => wo.category).filter(Boolean)))
     .sort()
@@ -377,14 +379,15 @@ export function WorkOrderListPage() {
       wo.workOrderNumber.toLowerCase().includes(q) ||
       wo.title.toLowerCase().includes(q) ||
       (wo.assetName ?? "").toLowerCase().includes(q) ||
-      (wo.assignedToName ?? "").toLowerCase().includes(q) ||
+      (wo.assignedToNames.length > 0 ? wo.assignedToNames.join(" ") : wo.assignedToName ?? "").toLowerCase().includes(q) ||
       (wo.category ?? "").toLowerCase().includes(q);
     const matchStatus    = matchesFilter(wo.status, filterValues.status);
     const matchPriority  = matchesFilter(wo.priority, filterValues.priority);
     const matchType      = matchesFilter(wo.woType ?? "", filterValues.woType);
     const matchRecurring = matchesFilter(wo.isRecurring ? "yes" : "no", filterValues.recurring);
     const matchAsset     = matchesFilter(wo.assetName ?? "", filterValues.assetName);
-    const matchAssignee  = matchesFilter(wo.assignedToName ?? "", filterValues.assignedToName);
+    const assigneeNames = wo.assignedToNames.length > 0 ? wo.assignedToNames : (wo.assignedToName ? [wo.assignedToName] : []);
+    const matchAssignee  = !filterValues.assignedToName?.length || assigneeNames.some((n) => matchesFilter(n, filterValues.assignedToName));
     const matchCategory  = matchesFilter(wo.category ?? "", filterValues.category);
     return matchSearch && matchStatus && matchPriority && matchType && matchRecurring && matchAsset && matchAssignee && matchCategory;
   });
@@ -517,7 +520,9 @@ export function WorkOrderListPage() {
                   <TableCell className="text-slate-600">{wo.assetName ?? "—"}</TableCell>
                 )}
                 {col("assignedToName") && (
-                  <TableCell className="text-slate-600">{wo.assignedToName ?? "—"}</TableCell>
+                  <TableCell className="text-slate-600">
+                    {wo.assignedToNames.length > 0 ? wo.assignedToNames.join(", ") : (wo.assignedToName ?? "—")}
+                  </TableCell>
                 )}
                 {col("category") && (
                   <TableCell className="text-slate-600">{wo.category ?? "—"}</TableCell>

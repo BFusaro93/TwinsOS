@@ -415,6 +415,10 @@ export function mapWorkOrder(row: WorkOrderRow): WorkOrder {
     linkedEntityType: row.linked_entity_type as WorkOrder["linkedEntityType"],
     assignedToId: row.assigned_to_id,
     assignedToName: row.assigned_to_name,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    assignedToIds: Array.isArray((row as any).assigned_to_ids) ? ((row as any).assigned_to_ids as string[]) : [],
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    assignedToNames: Array.isArray((row as any).assigned_to_names) ? ((row as any).assigned_to_names as string[]) : [],
     dueDate: row.due_date,
     category: row.category,
     workOrderNumber: row.work_order_number,

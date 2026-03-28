@@ -53,6 +53,10 @@ export function useCreateWorkOrder() {
         linked_entity_type: input.linkedEntityType,
         assigned_to_id: input.assignedToId,
         assigned_to_name: input.assignedToName,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        assigned_to_ids: (input.assignedToIds ?? []) as any,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        assigned_to_names: (input.assignedToNames ?? []) as any,
         due_date: input.dueDate,
         category: input.category,
         work_order_number: input.workOrderNumber,
@@ -96,6 +100,10 @@ export function useUpdateWorkOrder() {
         ...(input.priority !== undefined && { priority: input.priority }),
         ...(input.assignedToId !== undefined && { assigned_to_id: input.assignedToId }),
         ...(input.assignedToName !== undefined && { assigned_to_name: input.assignedToName }),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        ...(input.assignedToIds !== undefined && { assigned_to_ids: input.assignedToIds as any }),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        ...(input.assignedToNames !== undefined && { assigned_to_names: input.assignedToNames as any }),
         ...(input.dueDate !== undefined && { due_date: input.dueDate }),
         ...(input.category !== undefined && { category: input.category }),
         ...(input.woType !== undefined && { wo_type: input.woType }),

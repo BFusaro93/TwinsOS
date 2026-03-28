@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Trash2 } from "lucide-react";
+import { ExternalLink, Trash2 } from "lucide-react";
 import { formatDate } from "@/lib/utils";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { RecordDetailTabs } from "@/components/shared/RecordDetailTabs";
@@ -140,8 +140,9 @@ function DetailsTab({
               <button
                 type="button"
                 onClick={() => onOpenWoSheet()}
-                className="font-mono text-brand-700 hover:underline"
+                className="inline-flex items-center gap-1.5 rounded-md border border-brand-200 bg-brand-50 px-2 py-0.5 text-xs font-medium text-brand-700 hover:bg-brand-100 transition-colors"
               >
+                <ExternalLink className="h-3 w-3" />
                 {request.linkedWorkOrderNumber}
               </button>
             }
@@ -210,6 +211,8 @@ export function RequestDetailPanel({ request }: RequestDetailPanelProps) {
         linkedEntityType: null,
         assignedToId: null,
         assignedToName: null,
+        assignedToIds: [],
+        assignedToNames: [],
         dueDate: null,
         category: null,
         workOrderNumber,

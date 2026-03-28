@@ -201,6 +201,8 @@ export function NewWorkOrderDialog({ open, onOpenChange, initialData }: NewWorkO
       category: category !== "none" ? category : null,
       assignedToId,
       assignedToName,
+      assignedToIds: assignedToId ? [assignedToId] : [] as string[],
+      assignedToNames: assignedToName ? [assignedToName] : [] as string[],
       dueDate: dueDate || null,
       isRecurring: recurrenceFrequency !== "none",
       recurrenceFrequency: recurrenceFrequency !== "none"

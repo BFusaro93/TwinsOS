@@ -30,7 +30,7 @@ interface PartAssetsTabProps {
   onRecordClick?: (item: LinkedRecord) => void;
 }
 
-export function PartAssetsTab({ partId, partName, onRecordClick }: PartAssetsTabProps) {
+export function PartAssetsTab({ partId, partName, partNumber, onRecordClick }: PartAssetsTabProps) {
   const queryClient = useQueryClient();
   const { data: links = [], isLoading } = usePartAssetLinks(partId);
   const { data: allAssets = [] } = useAssets();
@@ -81,7 +81,7 @@ export function PartAssetsTab({ partId, partName, onRecordClick }: PartAssetsTab
         assetId: record.id,
         partId,
         partName,
-        partNumber: (record as Asset).assetTag ?? "",
+        partNumber,
       },
       {
         onSuccess: () => {

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Info } from "lucide-react";
+import { ExternalLink, Info } from "lucide-react";
 import { formatDate, formatCurrency } from "@/lib/utils";
 import { EditButton } from "@/components/shared/EditButton";
 import { StatusFlowIndicator } from "@/components/shared/StatusFlowIndicator";
@@ -24,7 +24,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
+
 import type { GoodsReceipt } from "@/types";
 
 interface ReceivingDetailPanelProps {
@@ -74,10 +74,13 @@ function DetailsTab({
         <MetaRow
           label="Purchase Order"
           value={
-            <button type="button" onClick={onPOClick}>
-              <Badge variant="outline" className="cursor-pointer border-blue-200 bg-blue-50 text-blue-700 hover:opacity-80">
-                {receipt.poNumber}
-              </Badge>
+            <button
+              type="button"
+              onClick={onPOClick}
+              className="inline-flex items-center gap-1.5 rounded-md border border-brand-200 bg-brand-50 px-2 py-0.5 text-xs font-medium text-brand-700 hover:bg-brand-100 transition-colors"
+            >
+              <ExternalLink className="h-3 w-3" />
+              {receipt.poNumber}
             </button>
           }
         />
