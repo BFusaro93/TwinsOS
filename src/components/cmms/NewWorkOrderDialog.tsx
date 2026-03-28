@@ -24,6 +24,8 @@ import { useAssets } from "@/lib/hooks/use-assets";
 import { useVehicles } from "@/lib/hooks/use-vehicles";
 import { useUsers } from "@/lib/hooks/use-users";
 import { useCreateWorkOrder, useUpdateWorkOrder } from "@/lib/hooks/use-work-orders";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useSettingsStore } from "@/stores/settings-store";
 import { useRequiredFields } from "@/lib/hooks/use-required-fields";
 import { ASSET_STATUS_LABELS } from "@/lib/constants";
@@ -64,9 +66,8 @@ export function NewWorkOrderDialog({ open, onOpenChange, initialData }: NewWorkO
   const [entityKey, setEntityKey] = useState("none"); // used in edit mode: "asset:<id>" | "vehicle:<id>" | "none"
   const [entityKeys, setEntityKeys] = useState<string[]>([]); // used in create mode (multi-select)
   const [dueDate, setDueDate] = useState("");
-  // Assigned to — "user:<id>" | "other" | ""
-  const [assignedToKey, setAssignedToKey] = useState("none");
-  const [assignedToOther, setAssignedToOther] = useState("");
+  // Assigned to — multi-select user IDs
+  const [assignedToIds, setAssignedToIds] = useState<string[]>([]);
   // Optional status change for the linked asset/vehicle (only in single-select mode)
   const [newEntityStatus, setNewEntityStatus] = useState("no_change");
   const [description, setDescription] = useState("");
@@ -110,7 +111,6 @@ export function NewWorkOrderDialog({ open, onOpenChange, initialData }: NewWorkO
     ? entityOptions.find((e) => e.id === entityKeys[0]) ?? null
     : null;
   const statusChangeEntity = isEditing ? selectedEntity : singleCreateEntity;
-  const showOtherInput = assignedToKey === "other";
 
   useEffect(() => {
     if (open && initialData) {
@@ -126,18 +126,14 @@ export function NewWorkOrderDialog({ open, onOpenChange, initialData }: NewWorkO
         setEntityKey("none");
       }
       setDueDate(initialData.dueDate ?? "");
-      // Assigned to — try to match a user by name
-      const matchedUser = (users ?? []).find(
-        (u) => u.name === initialData.assignedToName
+      // Assigned to — load multi-assignee IDs
+      setAssignedToIds(
+        initialData.assignedToIds?.length
+          ? initialData.assignedToIds
+          : initialData.assignedToId
+            ? [initialData.assignedToId]
+            : []
       );
-      if (matchedUser) {
-        setAssignedToKey(`user:${matchedUser.id}`);
-      } else if (initialData.assignedToName) {
-        setAssignedToKey("other");
-        setAssignedToOther(initialData.assignedToName);
-      } else {
-        setAssignedToKey("none");
-      }
       setDescription(initialData.description ?? "");
       setNewEntityStatus("no_change");
       setRecurrenceFrequency(initialData.recurrenceFrequency ?? "none");
@@ -146,7 +142,7 @@ export function NewWorkOrderDialog({ open, onOpenChange, initialData }: NewWorkO
 
   const isValid = title.trim() && priority
     && (!rf.isRequired("category") || (category !== "" && category !== "none"))
-    && (!rf.isRequired("assigned_to") || (assignedToKey !== "" && assignedToKey !== "none"))
+    && (!rf.isRequired("assigned_to") || assignedToIds.length > 0)
     && (!rf.isRequired("due_date") || dueDate !== "");
 
   function handleClose() {
@@ -158,8 +154,7 @@ export function NewWorkOrderDialog({ open, onOpenChange, initialData }: NewWorkO
     setEntityKey("none");
     setEntityKeys([]);
     setDueDate("");
-    setAssignedToKey("none");
-    setAssignedToOther("");
+    setAssignedToIds([]);
     setNewEntityStatus("no_change");
     setDescription("");
     setRecurrenceFrequency("none");
@@ -180,18 +175,12 @@ export function NewWorkOrderDialog({ open, onOpenChange, initialData }: NewWorkO
     };
   }
 
-  function resolveAssignedTo(): { assignedToId: string | null; assignedToName: string | null } {
-    if (!assignedToKey || assignedToKey === "none") return { assignedToId: null, assignedToName: null };
-    if (assignedToKey === "other") return { assignedToId: null, assignedToName: assignedToOther || null };
-    const [, id] = assignedToKey.split(":");
-    const user = (users ?? []).find((u) => u.id === id);
-    return { assignedToId: id ?? null, assignedToName: user?.name ?? null };
-  }
-
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!isValid) return;
-    const { assignedToId, assignedToName } = resolveAssignedTo();
+    const resolvedNames = assignedToIds
+      .map((id) => (users ?? []).find((u) => u.id === id)?.name ?? "")
+      .filter(Boolean);
     const commonFields = {
       title,
       description: description || null,
@@ -199,10 +188,10 @@ export function NewWorkOrderDialog({ open, onOpenChange, initialData }: NewWorkO
       priority: priority as import("@/types/cmms").WorkOrderPriority,
       woType: woType !== "none" ? (woType as "reactive" | "preventive") : null,
       category: category !== "none" ? category : null,
-      assignedToId,
-      assignedToName,
-      assignedToIds: assignedToId ? [assignedToId] : [] as string[],
-      assignedToNames: assignedToName ? [assignedToName] : [] as string[],
+      assignedToId: assignedToIds[0] ?? null,
+      assignedToName: (users ?? []).find((u) => u.id === assignedToIds[0])?.name ?? null,
+      assignedToIds: assignedToIds,
+      assignedToNames: resolvedNames,
       dueDate: dueDate || null,
       isRecurring: recurrenceFrequency !== "none",
       recurrenceFrequency: recurrenceFrequency !== "none"
@@ -408,32 +397,33 @@ export function NewWorkOrderDialog({ open, onOpenChange, initialData }: NewWorkO
               <div className="grid grid-cols-2 gap-4">
                 {rf.isVisible("assigned_to") && (
                   <div className="grid gap-1.5">
-                    <Label htmlFor="wo-assigned-to">Assigned To{rf.req("assigned_to")}</Label>
-                    <Select value={assignedToKey} onValueChange={setAssignedToKey}>
-                      <SelectTrigger id="wo-assigned-to">
-                        <SelectValue placeholder="Select user" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">Unassigned</SelectItem>
-                        {(users ?? []).map((u) => (
-                          <SelectItem key={`user:${u.id}`} value={`user:${u.id}`}>
-                            <span>{u.name}</span>
-                            <span className="ml-1.5 text-xs capitalize text-slate-400">
-                              {u.role}
-                            </span>
-                          </SelectItem>
-                        ))}
-                        <SelectItem value="other">Other (enter name)</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    {showOtherInput && (
-                      <Input
-                        className="mt-1"
-                        placeholder="Enter name"
-                        value={assignedToOther}
-                        onChange={(e) => setAssignedToOther(e.target.value)}
-                      />
-                    )}
+                    <Label>Assigned To{rf.req("assigned_to")}</Label>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" className="justify-start text-left font-normal h-10">
+                          {assignedToIds.length === 0
+                            ? "Select assignees..."
+                            : `${assignedToIds.length} assigned`}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-56 p-2" align="start">
+                        <div className="flex flex-col gap-1 max-h-48 overflow-y-auto">
+                          {(users ?? []).map((u) => (
+                            <label key={u.id} className="flex items-center gap-2 rounded px-2 py-1.5 hover:bg-slate-50 cursor-pointer">
+                              <Checkbox
+                                checked={assignedToIds.includes(u.id)}
+                                onCheckedChange={(checked) => {
+                                  setAssignedToIds((prev) =>
+                                    checked ? [...prev, u.id] : prev.filter((id) => id !== u.id)
+                                  );
+                                }}
+                              />
+                              <span className="text-sm">{u.name}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </PopoverContent>
+                    </Popover>
                   </div>
                 )}
 

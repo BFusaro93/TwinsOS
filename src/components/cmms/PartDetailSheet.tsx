@@ -605,12 +605,6 @@ export function PartDetailSheet({ part, open, onOpenChange }: PartDetailSheetPro
     <>
       {createPortal(
         <>
-          {/* Dark backdrop */}
-          <div
-            className="fixed inset-0 z-[199] bg-black/80 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0"
-            onClick={() => onOpenChange(false)}
-            aria-hidden="true"
-          />
           <div
             ref={containerRef}
             role="dialog"
@@ -728,7 +722,6 @@ export function PartDetailSheet({ part, open, onOpenChange }: PartDetailSheetPro
           <>
             {selectedAsset && createPortal(
               <>
-                <div className="fixed inset-0 z-[209] bg-black/80" onClick={() => setAssetSheetId(null)} aria-hidden="true" />
                 <div className="fixed inset-y-0 right-0 z-[210] flex w-[720px] flex-col overflow-y-auto border-l bg-background shadow-xl">
                   <button type="button" onClick={() => setAssetSheetId(null)} className="absolute right-4 top-4 z-10 rounded-sm p-0.5 opacity-70 hover:opacity-100">
                     <X className="h-4 w-4" />
@@ -740,7 +733,6 @@ export function PartDetailSheet({ part, open, onOpenChange }: PartDetailSheetPro
             )}
             {selectedVehicle && createPortal(
               <>
-                <div className="fixed inset-0 z-[209] bg-black/80" onClick={() => setVehicleSheetId(null)} aria-hidden="true" />
                 <div className="fixed inset-y-0 right-0 z-[210] flex w-[720px] flex-col overflow-y-auto border-l bg-background shadow-xl">
                   <button type="button" onClick={() => setVehicleSheetId(null)} className="absolute right-4 top-4 z-10 rounded-sm p-0.5 opacity-70 hover:opacity-100">
                     <X className="h-4 w-4" />

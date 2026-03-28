@@ -94,7 +94,10 @@ export function useCreateGoodsReceipt() {
       if (fetchError) throw fetchError;
       return mapGoodsReceipt(full);
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["goods-receipts"] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["goods-receipts"] });
+      queryClient.invalidateQueries({ queryKey: ["audit-log"] });
+    },
   });
 }
 
@@ -149,6 +152,7 @@ export function useUpdateGoodsReceipt() {
     onSuccess: (_, { id }) => {
       queryClient.invalidateQueries({ queryKey: ["goods-receipts"] });
       queryClient.invalidateQueries({ queryKey: ["goods-receipts", id] });
+      queryClient.invalidateQueries({ queryKey: ["audit-log", "receiving", id] });
     },
   });
 }

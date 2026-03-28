@@ -111,12 +111,12 @@ export function NewPartDialog({ open, onOpenChange, initialData, onCreated }: Ne
       unitCost: Math.round((parseFloat(unitCost) || 0) * 100),
       vendorId: vendorId || null,
       vendorName: vendor?.name ?? null,
-      alternateVendors: [],
+      alternateVendors: initialData?.alternateVendors ?? [],
       parentPartId: parentPartId === "none" ? null : parentPartId,
       isInventory,
-      pictureUrl: null,
-      productItemId: null,
-      costLayers: [],
+      pictureUrl: initialData?.pictureUrl ?? null,
+      productItemId: initialData?.productItemId ?? null,
+      costLayers: initialData?.costLayers ?? [],
     };
 
     if (isEditing && initialData) {
