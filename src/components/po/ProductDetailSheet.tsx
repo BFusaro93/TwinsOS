@@ -34,6 +34,7 @@ import { useState } from "react";
 import { Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { EditButton } from "@/components/shared/EditButton";
+import { ManageVendorsDialog } from "@/components/shared/ManageVendorsDialog";
 import { NewProductDialog } from "./NewProductDialog";
 import { QtyAdjustControl } from "@/components/shared/QtyAdjustControl";
 import { AuditTrailTab } from "@/components/shared/AuditTrailTab";
@@ -64,11 +65,13 @@ function DetailsTab({
   onOrderQty,
   qtyOnHand,
   setQtyOnHand,
+  onManageVendors,
 }: {
   product: ProductItem;
   onOrderQty: number;
   qtyOnHand: number;
   setQtyOnHand: (n: number) => void;
+  onManageVendors: () => void;
 }) {
   const margin =
     product.price > 0
@@ -105,8 +108,44 @@ function DetailsTab({
           label="Part #"
           value={product.partNumber}
         />
-        <DetailRow label="Vendor" value={product.vendorName} />
       </dl>
+
+      <Separator />
+
+      {/* Vendors */}
+      <div>
+        <div className="mb-2 flex items-center justify-between">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Vendors</p>
+          <Button size="sm" variant="outline" className="h-7 text-xs" onClick={onManageVendors}>
+            Manage
+          </Button>
+        </div>
+        {(() => {
+          const allVendors = [
+            ...(product.vendorName ? [{ vendorId: product.vendorId, vendorName: product.vendorName }] : []),
+            ...product.alternateVendors,
+          ];
+          return allVendors.length > 0 ? (
+            <div className="flex flex-col gap-1.5">
+              {allVendors.map((v, i) => (
+                <div key={v.vendorId} className="flex items-center gap-2">
+                  <span className="text-sm text-slate-700">{v.vendorName}</span>
+                  {i === 0 && (
+                    <Badge
+                      variant="outline"
+                      className="border-brand-200 bg-brand-50 text-brand-700 text-xs"
+                    >
+                      Primary
+                    </Badge>
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-slate-400">No vendor assigned</p>
+          );
+        })()}
+      </div>
 
       <Separator />
 
@@ -267,6 +306,7 @@ export function ProductDetailSheet({ product, open, onOpenChange }: ProductDetai
   const [qtyOnHand, setQtyOnHand] = useState<number | null>(null);
   const [editOpen, setEditOpen] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [manageVendorsOpen, setManageVendorsOpen] = useState(false);
   const { mutate: deleteProduct, isPending: deleting } = useDeleteProduct();
   const { mutate: updateProduct } = useUpdateProduct();
 
@@ -278,6 +318,18 @@ export function ProductDetailSheet({ product, open, onOpenChange }: ProductDetai
   function handleQtyChange(n: number) {
     setQtyOnHand(n);
     updateProduct({ id: productId, quantityOnHand: n });
+  }
+
+  function handleVendorsSave(
+    primary: { vendorId: string; vendorName: string } | null,
+    alternates: Array<{ vendorId: string; vendorName: string }>,
+  ) {
+    updateProduct({
+      id: productId,
+      vendorId: primary?.vendorId ?? "",
+      vendorName: primary?.vendorName ?? "",
+      alternateVendors: alternates,
+    });
   }
 
   const activeReqStatuses = new Set(["draft", "pending_approval", "approved"]);
@@ -356,6 +408,7 @@ export function ProductDetailSheet({ product, open, onOpenChange }: ProductDetai
               onOrderQty={onOrderQty}
               qtyOnHand={effectiveQty}
               setQtyOnHand={handleQtyChange}
+              onManageVendors={() => setManageVendorsOpen(true)}
             />
           </TabsContent>
           <TabsContent value="history" className="mt-0 flex-1 overflow-y-auto">
@@ -367,6 +420,13 @@ export function ProductDetailSheet({ product, open, onOpenChange }: ProductDetai
         </Tabs>
       </SheetContent>
       <NewProductDialog open={editOpen} onOpenChange={setEditOpen} initialData={product} />
+      <ManageVendorsDialog
+        open={manageVendorsOpen}
+        onOpenChange={setManageVendorsOpen}
+        primaryVendor={product.vendorName ? { vendorId: product.vendorId, vendorName: product.vendorName } : null}
+        alternateVendors={product.alternateVendors}
+        onSave={handleVendorsSave}
+      />
 
       <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
         <AlertDialogContent>

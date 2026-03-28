@@ -207,6 +207,7 @@ export function useUpdateProduct() {
           ...(input.pictureUrl !== undefined && { picture_url: input.pictureUrl }),
           ...(input.minimumStock !== undefined && { minimum_stock: input.minimumStock }),
           ...(input.partCategory !== undefined && { part_category: input.partCategory }),
+          ...(input.alternateVendors !== undefined && { alternate_vendors: input.alternateVendors as unknown as import("@/types/supabase").Json }),
         })
         .eq("id", id)
         .select()

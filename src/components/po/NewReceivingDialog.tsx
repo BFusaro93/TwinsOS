@@ -29,9 +29,10 @@ interface NewReceivingDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   initialData?: GoodsReceipt | null;
+  onReceiptEdit?: (allFullyReceived: boolean) => void;
 }
 
-export function NewReceivingDialog({ open, onOpenChange, initialData }: NewReceivingDialogProps) {
+export function NewReceivingDialog({ open, onOpenChange, initialData, onReceiptEdit }: NewReceivingDialogProps) {
   const [notes, setNotes] = useState("");
   const [lines, setLines] = useState<
     Array<{
@@ -80,7 +81,13 @@ export function NewReceivingDialog({ open, onOpenChange, initialData }: NewRecei
         notes: notes || null,
         lines: lines.map((l) => ({ id: l.id, quantityReceived: l.quantityReceived, quantityOrdered: l.quantityOrdered, unitCost: l.unitCost })),
       },
-      { onSuccess: () => onOpenChange(false) }
+      {
+        onSuccess: () => {
+          const allFull = lines.every((l) => l.quantityReceived >= l.quantityOrdered);
+          onReceiptEdit?.(allFull);
+          onOpenChange(false);
+        },
+      }
     );
   }
   const saving = updateGoodsReceipt.isPending;

@@ -22,6 +22,7 @@ import { QtyAdjustControl } from "@/components/shared/QtyAdjustControl";
 import { AuditTrailTab } from "@/components/shared/AuditTrailTab";
 import { PartAssetsTab } from "@/components/cmms/PartAssetsTab";
 import { NewPartDialog } from "@/components/cmms/NewPartDialog";
+import { ManageVendorsDialog } from "@/components/shared/ManageVendorsDialog";
 import { useParts, useUpdatePart } from "@/lib/hooks/use-parts";
 import { useRequisitions } from "@/lib/hooks/use-requisitions";
 import { usePurchaseOrders } from "@/lib/hooks/use-purchase-orders";
@@ -63,6 +64,7 @@ function DetailsTab({
   onPartClick,
   onAddGenericToOem,
   onLinkSelfAsGeneric,
+  onManageVendors,
 }: {
   part: Part;
   allParts: Part[];
@@ -73,6 +75,7 @@ function DetailsTab({
   onPartClick: (p: Part) => void;
   onAddGenericToOem: (oemId: string) => void;
   onLinkSelfAsGeneric: () => void;
+  onManageVendors: () => void;
 }) {
   const isLowStock = part.isInventory && qtyOnHand <= part.minimumStock;
 
@@ -167,9 +170,12 @@ function DetailsTab({
       {/* Vendors */}
       <Separator />
       <div>
-        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
-          Vendors
-        </p>
+        <div className="mb-2 flex items-center justify-between">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Vendors</p>
+          <Button size="sm" variant="outline" className="h-7 text-xs" onClick={onManageVendors}>
+            Manage
+          </Button>
+        </div>
         {allVendors.length > 0 ? (
           <div className="flex flex-col gap-1.5">
             {allVendors.map((v, i) => (
@@ -497,6 +503,7 @@ export function PartDetailSheet({ part, open, onOpenChange }: PartDetailSheetPro
   const [editOpen, setEditOpen] = useState(false);
   const [nestedPart, setNestedPart] = useState<Part | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const [manageVendorsOpen, setManageVendorsOpen] = useState(false);
   // Interchangeable part picker state
   const [interchangeablePickerOemId, setInterchangeablePickerOemId] = useState<string | null>(null);
   const [linkSearch, setLinkSearch] = useState("");
@@ -537,6 +544,18 @@ export function PartDetailSheet({ part, open, onOpenChange }: PartDetailSheetPro
     updatePart({ id: partId, quantityOnHand: n });
   }
 
+  function handleVendorsSave(
+    primary: { vendorId: string; vendorName: string } | null,
+    alternates: Array<{ vendorId: string; vendorName: string }>,
+  ) {
+    updatePart({
+      id: partId,
+      vendorId: primary?.vendorId ?? null,
+      vendorName: primary?.vendorName ?? null,
+      alternateVendors: alternates,
+    });
+  }
+
   // Match by productItemId FK first; fall back to part-number match for
   // cases where the link wasn't set explicitly (e.g. items added before the FK existed)
   const linkedProduct =
@@ -571,7 +590,7 @@ export function PartDetailSheet({ part, open, onOpenChange }: PartDetailSheetPro
         <>
           {/* Dark backdrop */}
           <div
-            className="fixed inset-0 z-[199] bg-black/80 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0"
+            className="fixed inset-0 z-[199] bg-black/40 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0"
             onClick={() => onOpenChange(false)}
             aria-hidden="true"
           />
@@ -644,6 +663,7 @@ export function PartDetailSheet({ part, open, onOpenChange }: PartDetailSheetPro
                 onPartClick={(p) => setNestedPart(p)}
                 onAddGenericToOem={(oemId) => { setInterchangeablePickerOemId(oemId); setLinkSearch(""); }}
                 onLinkSelfAsGeneric={() => { setInterchangeablePickerOemId("__self__"); setLinkSearch(""); }}
+                onManageVendors={() => setManageVendorsOpen(true)}
               />
             </TabsContent>
             <TabsContent value="assets & vehicles" className="mt-0 min-h-0 flex-1 overflow-y-auto">
@@ -661,6 +681,13 @@ export function PartDetailSheet({ part, open, onOpenChange }: PartDetailSheetPro
         document.body
       )}
       <NewPartDialog open={editOpen} onOpenChange={setEditOpen} initialData={part} />
+      <ManageVendorsDialog
+        open={manageVendorsOpen}
+        onOpenChange={setManageVendorsOpen}
+        primaryVendor={part.vendorName ? { vendorId: part.vendorId ?? "", vendorName: part.vendorName } : null}
+        alternateVendors={part.alternateVendors}
+        onSave={handleVendorsSave}
+      />
       {/* Nested sheet for clicking interchangeable parts */}
       <PartDetailSheet
         part={nestedPart}

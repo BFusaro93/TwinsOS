@@ -12,7 +12,10 @@ import { CommentsSection } from "@/components/shared/CommentsSection";
 import { AuditTrailTab } from "@/components/shared/AuditTrailTab";
 import { NewReceivingDialog } from "./NewReceivingDialog";
 import { ProductDetailSheet } from "./ProductDetailSheet";
+import { PODetailSheet } from "./PODetailSheet";
 import { useProducts } from "@/lib/hooks/use-products";
+import { usePurchaseOrders, useUpdatePurchaseOrderStatus } from "@/lib/hooks/use-purchase-orders";
+import { useGoodsReceipts } from "@/lib/hooks/use-goods-receipts";
 import {
   Table,
   TableBody,
@@ -46,9 +49,11 @@ const RECEIVING_FLOW_STEPS = [
 function DetailsTab({
   receipt,
   onProductClick,
+  onPOClick,
 }: {
   receipt: GoodsReceipt;
   onProductClick: (partNumber: string) => void;
+  onPOClick: () => void;
 }) {
   const hasMaintParts = receipt.lines.some((l) => l.isMaintPart);
   const taxLabel =
@@ -69,9 +74,11 @@ function DetailsTab({
         <MetaRow
           label="Purchase Order"
           value={
-            <Badge variant="outline" className="border-blue-200 bg-blue-50 text-blue-700">
-              {receipt.poNumber}
-            </Badge>
+            <button type="button" onClick={onPOClick}>
+              <Badge variant="outline" className="cursor-pointer border-blue-200 bg-blue-50 text-blue-700 hover:opacity-80">
+                {receipt.poNumber}
+              </Badge>
+            </button>
           }
         />
         <MetaRow label="Received By" value={receipt.receivedByName} />
@@ -203,12 +210,31 @@ function FilesTab({ receipt }: { receipt: GoodsReceipt }) {
 export function ReceivingDetailPanel({ receipt }: ReceivingDetailPanelProps) {
   const [editOpen, setEditOpen] = useState(false);
   const [selectedPartNumber, setSelectedPartNumber] = useState<string | null>(null);
+  const [poSheetOpen, setPoSheetOpen] = useState(false);
   const { data: products = [] } = useProducts();
+  const { data: purchaseOrders = [] } = usePurchaseOrders();
+  const { data: allReceipts = [] } = useGoodsReceipts();
+  const syncPOStatus = useUpdatePurchaseOrderStatus();
 
   const selectedProduct =
     selectedPartNumber
       ? (products.find((p) => p.partNumber === selectedPartNumber) ?? null)
       : null;
+
+  const linkedPO = purchaseOrders.find((po) => po.id === receipt.purchaseOrderId) ?? null;
+
+  function handleReceiptEdit(currentReceiptAllFull: boolean) {
+    if (!linkedPO) return;
+    // Check ALL receipts for this PO, not just the current one
+    const poReceipts = allReceipts.filter((r) => r.purchaseOrderId === receipt.purchaseOrderId && r.id !== receipt.id);
+    const othersFull = poReceipts.every((r) => r.lines.every((l) => l.quantityRemaining <= 0));
+    const allFullyReceived = currentReceiptAllFull && othersFull;
+    const newStatus = allFullyReceived ? "completed" : "partially_fulfilled";
+    // Only update if different from current PO status
+    if (linkedPO.status !== newStatus) {
+      syncPOStatus.mutate({ id: linkedPO.id, status: newStatus });
+    }
+  }
 
   return (
     <div className="flex h-full flex-col">
@@ -231,6 +257,7 @@ export function ReceivingDetailPanel({ receipt }: ReceivingDetailPanelProps) {
               <DetailsTab
                 receipt={receipt}
                 onProductClick={(partNumber) => setSelectedPartNumber(partNumber)}
+                onPOClick={() => setPoSheetOpen(true)}
               />
             ),
           },
@@ -243,13 +270,18 @@ export function ReceivingDetailPanel({ receipt }: ReceivingDetailPanelProps) {
         ]}
       />
 
-      <NewReceivingDialog open={editOpen} onOpenChange={setEditOpen} initialData={receipt} />
+      <NewReceivingDialog open={editOpen} onOpenChange={setEditOpen} initialData={receipt} onReceiptEdit={handleReceiptEdit} />
       <ProductDetailSheet
         open={!!selectedProduct}
         onOpenChange={(o) => {
           if (!o) setSelectedPartNumber(null);
         }}
         product={selectedProduct}
+      />
+      <PODetailSheet
+        po={linkedPO}
+        open={poSheetOpen && !!linkedPO}
+        onOpenChange={(o) => { if (!o) setPoSheetOpen(false); }}
       />
     </div>
   );
