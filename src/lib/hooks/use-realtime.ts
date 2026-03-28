@@ -4,6 +4,15 @@ import { useEffect } from "react";
 import { useQueryClient, type QueryKey } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 
+// ── Mutation guard ────────────────────────────────────────────────────────────
+// Mutations that write to DB trigger Realtime events mid-flight, which start
+// refetches that can return stale data and overwrite optimistic cache patches.
+// Acquire the guard in onMutate, release in onSettled. While active, Realtime
+// invalidations are suppressed — the mutation's own onSettled handles refresh.
+let _guardCount = 0;
+export function suppressRealtime() { _guardCount++; }
+export function resumeRealtime() { _guardCount--; }
+
 /**
  * Subscribes to Supabase Realtime postgres_changes for a single table and
  * invalidates the given TanStack Query key on any INSERT / UPDATE / DELETE.
@@ -24,6 +33,9 @@ export function useTableRealtime(table: string, queryKey: QueryKey) {
         "postgres_changes",
         { event: "*", schema: "public", table },
         () => {
+          // Skip invalidation while mutations are in progress — the mutation's
+          // own onSettled will refresh data after the DB write has committed.
+          if (_guardCount > 0) return;
           queryClient.invalidateQueries({ queryKey });
         }
       )

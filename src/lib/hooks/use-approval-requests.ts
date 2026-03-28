@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/client";
 import { mapApprovalRequest } from "@/lib/supabase/mappers";
 import { patchReqCache } from "./use-requisitions";
 import { patchPOCache } from "./use-purchase-orders";
+import { suppressRealtime, resumeRealtime } from "./use-realtime";
 import type { ApprovalRequest, ApprovalRequestStatus, ApprovalFlow, Requisition, PurchaseOrder } from "@/types";
 
 export function useApprovalRequests(entityId: string) {
@@ -131,7 +132,9 @@ export function useSubmitForApproval() {
       return { entityType };
     },
     onMutate: async ({ entityId, entityType }) => {
-      // Cancel in-flight entity refetches so stale data cannot overwrite the cache
+      // Block Realtime invalidations for the entire mutation lifecycle
+      suppressRealtime();
+
       await queryClient.cancelQueries({ queryKey: ["requisitions"] });
       await queryClient.cancelQueries({ queryKey: ["purchase-orders"] });
       const previousReqs = queryClient.getQueryData<Requisition[]>(["requisitions"]);
@@ -147,20 +150,7 @@ export function useSubmitForApproval() {
 
       return { previousReqs, previousPOs };
     },
-    onSuccess: (_result, { entityId, entityType }) => {
-      // Cancel refetches that Realtime triggered DURING the mutationFn.
-      // cancelQueries aborts fetch signals synchronously — no await needed.
-      queryClient.cancelQueries({ queryKey: ["requisitions"] });
-      queryClient.cancelQueries({ queryKey: ["purchase-orders"] });
-
-      // Re-patch the cache in case a cancelled refetch partially landed
-      const pendingStatus = entityType === "requisition" ? "pending_approval" : "pending";
-      if (entityType === "requisition") {
-        patchReqCache(queryClient, entityId, { status: pendingStatus as Requisition["status"] });
-      } else {
-        patchPOCache(queryClient, entityId, { status: pendingStatus as PurchaseOrder["status"] });
-      }
-
+    onSuccess: (_result, { entityId }) => {
       queryClient.invalidateQueries({ queryKey: ["approval-requests", entityId] });
     },
     onError: (_err, _vars, context) => {
@@ -172,6 +162,8 @@ export function useSubmitForApproval() {
       }
     },
     onSettled: (_data, _err, { entityType }) => {
+      // Release guard THEN invalidate — the refetch will see committed DB data
+      resumeRealtime();
       if (entityType === "requisition") {
         queryClient.invalidateQueries({ queryKey: ["requisitions"] });
       } else {
@@ -274,7 +266,9 @@ export function useDecideApproval(entityId: string) {
       return { freshMapped, allResolved, entityType: decided.entity_type, newEntityStatus };
     },
     onMutate: async () => {
-      // Cancel in-flight entity refetches so stale data cannot overwrite the cache
+      // Block Realtime invalidations for the entire mutation lifecycle
+      suppressRealtime();
+
       await queryClient.cancelQueries({ queryKey: ["requisitions"] });
       await queryClient.cancelQueries({ queryKey: ["purchase-orders"] });
       const previousReqs = queryClient.getQueryData<Requisition[]>(["requisitions"]);
@@ -282,18 +276,11 @@ export function useDecideApproval(entityId: string) {
       return { previousReqs, previousPOs };
     },
     onSuccess: ({ freshMapped, allResolved, entityType, newEntityStatus }) => {
-      // Cancel refetches that Realtime triggered DURING the mutationFn.
-      // cancelQueries aborts fetch signals synchronously — no await needed.
-      // IMPORTANT: must NOT be async — TanStack Query doesn't await onSuccess,
-      // so onSettled would fire before this completes if we used await.
-      queryClient.cancelQueries({ queryKey: ["requisitions"] });
-      queryClient.cancelQueries({ queryKey: ["purchase-orders"] });
-
       // Patch approval-requests cache with fresh server data
       if (freshMapped) {
         queryClient.setQueryData(["approval-requests", entityId], freshMapped);
       }
-      // Immediately patch entity cache so Realtime refetches can't revert the status
+      // Patch entity cache so UI reflects the new status immediately
       if (allResolved && newEntityStatus) {
         if (entityType === "requisition") {
           patchReqCache(queryClient, entityId, { status: newEntityStatus as Requisition["status"] });
@@ -311,6 +298,8 @@ export function useDecideApproval(entityId: string) {
       }
     },
     onSettled: () => {
+      // Release guard THEN invalidate — the refetch will see committed DB data
+      resumeRealtime();
       queryClient.invalidateQueries({ queryKey: ["requisitions"] });
       queryClient.invalidateQueries({ queryKey: ["purchase-orders"] });
     },
