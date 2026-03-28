@@ -112,20 +112,23 @@ export function useUpdateGoodsReceipt() {
       lines: GoodsReceiptLineUpdate[];
     }) => {
       const supabase = createClient();
-      const { error: headerError } = await supabase
+
+      // Fetch current receipt header + line quantities for audit comparison
+      const { data: currentReceipt } = await supabase
         .from("goods_receipts")
-        .update({ notes: input.notes })
-        .eq("id", input.id);
-      if (headerError) throw headerError;
-      // Fetch current line quantities for audit comparison
+        .select("org_id, receipt_number, notes, tax_rate_percent, shipping_cost")
+        .eq("id", input.id)
+        .single();
+
       const { data: currentLines } = await supabase
         .from("goods_receipt_lines")
-        .select("id, quantity_received, product_item_name")
+        .select("id, quantity_received")
         .eq("goods_receipt_id", input.id);
       const oldByLineId = new Map(
         (currentLines ?? []).map((l) => [l.id, l.quantity_received as number])
       );
 
+      // Update line items
       for (const line of input.lines) {
         const { error: lineError } = await supabase
           .from("goods_receipt_lines")
@@ -137,18 +140,13 @@ export function useUpdateGoodsReceipt() {
         if (lineError) throw lineError;
       }
 
-      // Write audit entries for changed line item quantities
-      const { data: receiptForAudit } = await supabase
-        .from("goods_receipts")
-        .select("org_id, receipt_number")
-        .eq("id", input.id)
-        .single();
-      if (receiptForAudit) {
+      // Write audit entries for each changed line item quantity
+      if (currentReceipt) {
         for (const line of input.lines) {
           const oldQty = oldByLineId.get(line.id);
           if (oldQty !== undefined && oldQty !== line.quantityReceived) {
             await supabase.from("audit_log").insert({
-              org_id: receiptForAudit.org_id,
+              org_id: currentReceipt.org_id,
               record_type: "receiving",
               record_id: input.id,
               action: "updated",
@@ -161,21 +159,27 @@ export function useUpdateGoodsReceipt() {
           }
         }
       }
-      // Recalculate header totals
-      const { data: receiptRow } = await supabase
-        .from("goods_receipts")
-        .select("tax_rate_percent, shipping_cost")
-        .eq("id", input.id)
-        .single();
-      if (receiptRow) {
+
+      // Build a single header update with notes + recalculated totals
+      // (one DB write = one trigger fire with all changed fields)
+      if (currentReceipt) {
+        const taxRate = currentReceipt.tax_rate_percent as number;
+        const shippingCost = currentReceipt.shipping_cost as number;
         const newSubtotal = input.lines.reduce((sum, l) => sum + l.quantityReceived * l.unitCost, 0);
-        const newSalesTax = Math.round(newSubtotal * ((receiptRow.tax_rate_percent as number) / 100));
-        const newGrandTotal = newSubtotal + newSalesTax + receiptRow.shipping_cost;
-        await supabase.from("goods_receipts").update({
+        const newSalesTax = Math.round(newSubtotal * (taxRate / 100));
+        const newGrandTotal = newSubtotal + newSalesTax + shippingCost;
+
+        const headerPatch: Record<string, unknown> = {
           subtotal: newSubtotal,
           sales_tax: newSalesTax,
           grand_total: newGrandTotal,
-        }).eq("id", input.id);
+        };
+        // Only include notes if it actually changed to avoid spurious audit entries
+        if (input.notes !== (currentReceipt.notes as string | null)) {
+          headerPatch.notes = input.notes;
+        }
+
+        await supabase.from("goods_receipts").update(headerPatch).eq("id", input.id);
       }
       const { data, error: fetchError } = await supabase
         .from("goods_receipts")

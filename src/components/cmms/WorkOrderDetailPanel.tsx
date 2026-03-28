@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { formatDate } from "@/lib/utils";
+import { formatDate, getInitials } from "@/lib/utils";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { RecordDetailTabs } from "@/components/shared/RecordDetailTabs";
 import { CommentsSection } from "@/components/shared/CommentsSection";
@@ -312,50 +312,57 @@ function DetailsTab({
               ? workOrder.assignedToNames
               : (workOrder.assignedToName ? [workOrder.assignedToName] : []);
             return (
-              <Popover>
-                <PopoverTrigger asChild>
-                  <button
-                    type="button"
-                    className="flex h-8 w-full max-w-[200px] items-center justify-between rounded-md border border-input bg-background px-2.5 text-xs ring-offset-background hover:bg-accent hover:text-accent-foreground"
+              <div className="flex flex-wrap items-center gap-1.5">
+                {displayNames.map((name, i) => (
+                  <span
+                    key={selectedIds[i] ?? i}
+                    className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700"
                   >
-                    <span className="truncate">
-                      {displayNames.length === 0
-                        ? "Assign..."
-                        : displayNames.length === 1
-                          ? displayNames[0]
-                          : `${displayNames.length} assigned`}
+                    <span className="flex h-4 w-4 items-center justify-center rounded-full bg-slate-400 text-[9px] font-bold text-white">
+                      {getInitials(name)}
                     </span>
-                    <ChevronDown className="ml-1 h-3 w-3 shrink-0 opacity-50" />
-                  </button>
-                </PopoverTrigger>
-                <PopoverContent className="w-48 p-1" align="start">
-                  <div className="flex max-h-48 flex-col overflow-y-auto">
-                    {users.map((u) => {
-                      const isChecked = selectedIds.includes(u.id);
-                      return (
-                        <label
-                          key={u.id}
-                          className="flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-xs hover:bg-accent"
-                        >
-                          <Checkbox
-                            checked={isChecked}
-                            onCheckedChange={(checked) => {
-                              const nextIds = checked
-                                ? [...selectedIds, u.id]
-                                : selectedIds.filter((id) => id !== u.id);
-                              const nextNames = checked
-                                ? [...displayNames, u.name]
-                                : displayNames.filter((_, i) => selectedIds[i] !== u.id);
-                              onAssigneeChange(nextIds, nextNames);
-                            }}
-                          />
-                          <span className="truncate">{u.name}</span>
-                        </label>
-                      );
-                    })}
-                  </div>
-                </PopoverContent>
-              </Popover>
+                    {name}
+                  </span>
+                ))}
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      className="inline-flex h-6 items-center gap-1 rounded-full border border-dashed border-slate-300 px-2 text-[11px] text-slate-500 hover:bg-slate-50"
+                    >
+                      {displayNames.length === 0 ? "Assign" : "Edit"}
+                      <ChevronDown className="h-3 w-3 opacity-50" />
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-48 p-1" align="start">
+                    <div className="flex max-h-48 flex-col overflow-y-auto">
+                      {users.map((u) => {
+                        const isChecked = selectedIds.includes(u.id);
+                        return (
+                          <label
+                            key={u.id}
+                            className="flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-xs hover:bg-accent"
+                          >
+                            <Checkbox
+                              checked={isChecked}
+                              onCheckedChange={(checked) => {
+                                const nextIds = checked
+                                  ? [...selectedIds, u.id]
+                                  : selectedIds.filter((id) => id !== u.id);
+                                const nextNames = checked
+                                  ? [...displayNames, u.name]
+                                  : displayNames.filter((_, i) => selectedIds[i] !== u.id);
+                                onAssigneeChange(nextIds, nextNames);
+                              }}
+                            />
+                            <span className="truncate">{u.name}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              </div>
             );
           })()}
         />
@@ -482,7 +489,7 @@ export function WorkOrderDetailPanel({ workOrder }: WorkOrderDetailPanelProps) {
       ? (assets.find((a) => a.id === workOrder.assetId) ?? null)
       : null;
   const linkedVehicle =
-    workOrder.assetId && workOrder.linkedEntityType === "vehicle"
+    workOrder.assetId && (workOrder.linkedEntityType === "vehicle" || (!linkedAsset && workOrder.assetId))
       ? (vehicles.find((v) => v.id === workOrder.assetId) ?? null)
       : null;
 
