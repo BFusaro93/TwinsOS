@@ -147,7 +147,19 @@ export function useSubmitForApproval() {
 
       return { previousReqs, previousPOs };
     },
-    onSuccess: (_result, { entityId }) => {
+    onSuccess: async (_result, { entityId, entityType }) => {
+      // Cancel any refetches that Realtime triggered DURING the mutationFn
+      await queryClient.cancelQueries({ queryKey: ["requisitions"] });
+      await queryClient.cancelQueries({ queryKey: ["purchase-orders"] });
+
+      // Re-patch the cache in case a cancelled refetch partially landed
+      const pendingStatus = entityType === "requisition" ? "pending_approval" : "pending";
+      if (entityType === "requisition") {
+        patchReqCache(queryClient, entityId, { status: pendingStatus as Requisition["status"] });
+      } else {
+        patchPOCache(queryClient, entityId, { status: pendingStatus as PurchaseOrder["status"] });
+      }
+
       queryClient.invalidateQueries({ queryKey: ["approval-requests", entityId] });
     },
     onError: (_err, _vars, context) => {
@@ -268,7 +280,13 @@ export function useDecideApproval(entityId: string) {
       const previousPOs = queryClient.getQueryData<PurchaseOrder[]>(["purchase-orders"]);
       return { previousReqs, previousPOs };
     },
-    onSuccess: ({ freshMapped, allResolved, entityType, newEntityStatus }) => {
+    onSuccess: async ({ freshMapped, allResolved, entityType, newEntityStatus }) => {
+      // Cancel any refetches that Realtime triggered DURING the mutationFn.
+      // onMutate only cancels queries that were in-flight before the mutation started;
+      // Realtime fires new invalidations when the DB writes commit mid-mutation.
+      await queryClient.cancelQueries({ queryKey: ["requisitions"] });
+      await queryClient.cancelQueries({ queryKey: ["purchase-orders"] });
+
       // Patch approval-requests cache with fresh server data
       if (freshMapped) {
         queryClient.setQueryData(["approval-requests", entityId], freshMapped);
