@@ -11,6 +11,8 @@ import { EmptyState } from "@/components/shared/EmptyState";
 import { BarcodeScanModal } from "@/components/shared/BarcodeScanModal";
 import { AdvancedSearchDialog } from "@/components/shared/AdvancedSearchDialog";
 import { ColumnChooser, type ColumnDef } from "@/components/shared/ColumnChooser";
+import { SortableTableHead } from "@/components/shared/SortableTableHead";
+import { useSort } from "@/lib/hooks/use-sort";
 import { AssetListPanel } from "./AssetListPanel";
 import { AssetDetailPanel } from "./AssetDetailPanel";
 import { NewAssetDialog } from "./NewAssetDialog";
@@ -117,6 +119,8 @@ export function AssetListPage() {
     return matchSearch && matchStatus && matchType && matchMake && matchDivision && matchLocation;
   });
 
+  const { sortKey, sortDir, toggle, sorted } = useSort(filtered, "name", "asc");
+
   const selectedAsset =
     (filtered.find((a) => a.id === selectedAssetId) ??
       all.find((a) => a.id === selectedAssetId)) ??
@@ -191,16 +195,16 @@ export function AssetListPage() {
           <TableHeader>
             <TableRow className="bg-slate-50">
               {col("icon") && <TableHead className="w-12" />}
-              <TableHead>Name</TableHead>
-              {col("assetTag") && <TableHead>Asset Tag</TableHead>}
-              {col("equipmentNumber") && <TableHead>Equipment #</TableHead>}
-              {col("assetType") && <TableHead>Type</TableHead>}
-              {col("make") && <TableHead>Make</TableHead>}
-              {col("model") && <TableHead>Model</TableHead>}
-              {col("year") && <TableHead>Year</TableHead>}
-              {col("division") && <TableHead>Division</TableHead>}
-              {col("location") && <TableHead>Location</TableHead>}
-              {col("status") && <TableHead>Status</TableHead>}
+              <SortableTableHead label="Name" sortKey="name" activeSortKey={sortKey} sortDir={sortDir} onToggle={toggle} />
+              {col("assetTag") && <SortableTableHead label="Asset Tag" sortKey="assetTag" activeSortKey={sortKey} sortDir={sortDir} onToggle={toggle} />}
+              {col("equipmentNumber") && <SortableTableHead label="Equipment #" sortKey="equipmentNumber" activeSortKey={sortKey} sortDir={sortDir} onToggle={toggle} />}
+              {col("assetType") && <SortableTableHead label="Type" sortKey="assetType" activeSortKey={sortKey} sortDir={sortDir} onToggle={toggle} />}
+              {col("make") && <SortableTableHead label="Make" sortKey="make" activeSortKey={sortKey} sortDir={sortDir} onToggle={toggle} />}
+              {col("model") && <SortableTableHead label="Model" sortKey="model" activeSortKey={sortKey} sortDir={sortDir} onToggle={toggle} />}
+              {col("year") && <SortableTableHead label="Year" sortKey="year" activeSortKey={sortKey} sortDir={sortDir} onToggle={toggle} />}
+              {col("division") && <SortableTableHead label="Division" sortKey="division" activeSortKey={sortKey} sortDir={sortDir} onToggle={toggle} />}
+              {col("location") && <SortableTableHead label="Location" sortKey="location" activeSortKey={sortKey} sortDir={sortDir} onToggle={toggle} />}
+              {col("status") && <SortableTableHead label="Status" sortKey="status" activeSortKey={sortKey} sortDir={sortDir} onToggle={toggle} />}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -221,7 +225,7 @@ export function AssetListPage() {
               </TableRow>
             )}
 
-            {!isLoading && filtered.map((asset) => (
+            {!isLoading && sorted.map((asset) => (
               <TableRow
                 key={asset.id}
                 className="cursor-pointer hover:bg-slate-50"

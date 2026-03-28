@@ -23,9 +23,11 @@ import { EditButton } from "@/components/shared/EditButton";
 import { StatusFlowIndicator } from "@/components/shared/StatusFlowIndicator";
 import { NewRequestDialog } from "./NewRequestDialog";
 import { REQUEST_STATUS_LABELS, WO_PRIORITY_LABELS } from "@/lib/constants";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { useUpdateRequestStatus, useDeleteRequest, useConvertRequestToWO } from "@/lib/hooks/use-requests";
-import { useCreateWorkOrder } from "@/lib/hooks/use-work-orders";
+import { useCreateWorkOrder, useWorkOrders } from "@/lib/hooks/use-work-orders";
 import { useCMMSStore } from "@/stores";
+import { WorkOrderDetailPanel } from "./WorkOrderDetailPanel";
 import type { MaintenanceRequest, MaintenanceRequestStatus } from "@/types";
 
 interface RequestDetailPanelProps {
@@ -62,12 +64,14 @@ function DetailsTab({
   onStatusChange,
   onConvertToWO,
   converting,
+  onOpenWoSheet,
 }: {
   request: MaintenanceRequest;
   status: MaintenanceRequestStatus;
   onStatusChange: (s: MaintenanceRequestStatus) => void;
   onConvertToWO: () => void;
   converting: boolean;
+  onOpenWoSheet: () => void;
 }) {
   const isError = status === "rejected";
 
@@ -133,9 +137,13 @@ function DetailsTab({
           <MetaRow
             label="Work Order"
             value={
-              <span className="font-mono text-brand-700">
+              <button
+                type="button"
+                onClick={() => onOpenWoSheet()}
+                className="font-mono text-brand-700 hover:underline"
+              >
                 {request.linkedWorkOrderNumber}
-              </span>
+              </button>
             }
           />
         )}
@@ -171,7 +179,12 @@ function FilesTab({ request }: { request: MaintenanceRequest }) {
 export function RequestDetailPanel({ request }: RequestDetailPanelProps) {
   const [editOpen, setEditOpen] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [woSheetOpen, setWoSheetOpen] = useState(false);
   const [status, setStatus] = useState<MaintenanceRequestStatus>(request.status);
+  const { data: workOrders = [] } = useWorkOrders();
+  const linkedWO = request.linkedWorkOrderId
+    ? workOrders.find((wo) => wo.id === request.linkedWorkOrderId) ?? null
+    : null;
   const { mutate: syncStatus } = useUpdateRequestStatus();
   const { mutate: deleteRequest, isPending: deleting } = useDeleteRequest();
   const { mutate: createWorkOrder, isPending: converting } = useCreateWorkOrder();
@@ -249,7 +262,7 @@ export function RequestDetailPanel({ request }: RequestDetailPanelProps) {
           {
             value: "details",
             label: "Details",
-            content: <DetailsTab request={request} status={status} onStatusChange={handleStatusChange} onConvertToWO={handleConvertToWO} converting={converting} />,
+            content: <DetailsTab request={request} status={status} onStatusChange={handleStatusChange} onConvertToWO={handleConvertToWO} converting={converting} onOpenWoSheet={() => setWoSheetOpen(true)} />,
           },
           {
             value: "history",
@@ -292,6 +305,15 @@ export function RequestDetailPanel({ request }: RequestDetailPanelProps) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <Sheet open={woSheetOpen && !!linkedWO} onOpenChange={(o) => { if (!o) setWoSheetOpen(false); }}>
+        <SheetContent className="flex w-[580px] flex-col overflow-hidden p-0 sm:max-w-[580px]">
+          <SheetHeader className="sr-only">
+            <SheetTitle>{linkedWO?.workOrderNumber}</SheetTitle>
+          </SheetHeader>
+          {linkedWO && <WorkOrderDetailPanel workOrder={linkedWO} />}
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }

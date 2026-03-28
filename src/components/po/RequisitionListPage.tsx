@@ -25,6 +25,8 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { useRequisitions } from "@/lib/hooks/use-requisitions";
 import { usePOStore } from "@/stores";
+import { useSort } from "@/lib/hooks/use-sort";
+import { SortableTableHead } from "@/components/shared/SortableTableHead";
 import { APPROVAL_STATUS_LABELS } from "@/lib/constants";
 import { formatCurrency, formatDate, matchesFilter } from "@/lib/utils";
 import type { ApprovalStatus, Requisition } from "@/types";
@@ -97,6 +99,8 @@ export function RequisitionListPage() {
     return matchSearch && matchStatus && matchRequester && matchVendor;
   });
 
+  const { sortKey, sortDir, toggle, sorted } = useSort(filtered, "createdAt", "desc");
+
   const selectedReq = filtered.find((r) => r.id === selectedRequisitionId) ?? null;
 
   // ── Shared filter controls ─────────────────────────────────────────────────
@@ -154,14 +158,14 @@ export function RequisitionListPage() {
         <Table>
           <TableHeader>
             <TableRow className="bg-slate-50">
-              <TableHead>Req #</TableHead>
-              <TableHead>Title</TableHead>
-              {col("status")          && <TableHead>Status</TableHead>}
-              {col("requestedByName") && <TableHead>Requested By</TableHead>}
-              {col("vendorName")      && <TableHead>Vendor</TableHead>}
-              {col("lineItems")       && <TableHead className="text-right">Items</TableHead>}
-              {col("grandTotal")      && <TableHead className="text-right">Total</TableHead>}
-              {col("createdAt")       && <TableHead>Created</TableHead>}
+              <SortableTableHead label="Req #" sortKey="requisitionNumber" activeSortKey={sortKey} sortDir={sortDir} onToggle={toggle} />
+              <SortableTableHead label="Title" sortKey="title" activeSortKey={sortKey} sortDir={sortDir} onToggle={toggle} />
+              {col("status")          && <SortableTableHead label="Status" sortKey="status" activeSortKey={sortKey} sortDir={sortDir} onToggle={toggle} />}
+              {col("requestedByName") && <SortableTableHead label="Requested By" sortKey="requestedByName" activeSortKey={sortKey} sortDir={sortDir} onToggle={toggle} />}
+              {col("vendorName")      && <SortableTableHead label="Vendor" sortKey="vendorName" activeSortKey={sortKey} sortDir={sortDir} onToggle={toggle} />}
+              {col("lineItems")       && <SortableTableHead label="Items" sortKey="lineItems" activeSortKey={sortKey} sortDir={sortDir} onToggle={toggle} className="text-right" />}
+              {col("grandTotal")      && <SortableTableHead label="Total" sortKey="grandTotal" activeSortKey={sortKey} sortDir={sortDir} onToggle={toggle} className="text-right" />}
+              {col("createdAt")       && <SortableTableHead label="Created" sortKey="createdAt" activeSortKey={sortKey} sortDir={sortDir} onToggle={toggle} />}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -182,7 +186,7 @@ export function RequisitionListPage() {
               </TableRow>
             )}
 
-            {!isLoading && filtered.map((req) => (
+            {!isLoading && sorted.map((req) => (
               <TableRow
                 key={req.id}
                 className="cursor-pointer hover:bg-slate-50"

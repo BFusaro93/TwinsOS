@@ -568,13 +568,20 @@ export function PartDetailSheet({ part, open, onOpenChange }: PartDetailSheetPro
   return (
     <>
       {createPortal(
-        <div
-          ref={containerRef}
-          role="dialog"
-          aria-modal="true"
-          aria-label={part.name}
-          className="pointer-events-auto fixed inset-y-0 right-0 z-[200] flex w-[580px] flex-col overflow-hidden border-l bg-background shadow-xl"
-        >
+        <>
+          {/* Dark backdrop */}
+          <div
+            className="fixed inset-0 z-[199] bg-black/80 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0"
+            onClick={() => onOpenChange(false)}
+            aria-hidden="true"
+          />
+          <div
+            ref={containerRef}
+            role="dialog"
+            aria-modal="true"
+            aria-label={part.name}
+            className="pointer-events-auto fixed inset-y-0 right-0 z-[200] flex w-[580px] flex-col overflow-hidden border-l bg-background shadow-xl"
+          >
           {/* Header — pr-12 leaves a clean gap for the absolute X button */}
           <div className="relative shrink-0 border-b px-6 py-4 pr-12">
             <div className="flex items-start gap-3">
@@ -649,7 +656,8 @@ export function PartDetailSheet({ part, open, onOpenChange }: PartDetailSheetPro
               <AuditTrailTab recordType="part" recordId={part.id} />
             </TabsContent>
           </Tabs>
-        </div>,
+        </div>
+        </>,
         document.body
       )}
       <NewPartDialog open={editOpen} onOpenChange={setEditOpen} initialData={part} />

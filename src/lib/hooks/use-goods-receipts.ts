@@ -6,6 +6,8 @@ import type { GoodsReceipt, GoodsReceiptLine } from "@/types/receiving";
 export type GoodsReceiptLineUpdate = {
   id: string;
   quantityReceived: number;
+  quantityOrdered: number;
+  unitCost: number;
 };
 
 export function useGoodsReceipts() {
@@ -113,9 +115,28 @@ export function useUpdateGoodsReceipt() {
       for (const line of input.lines) {
         const { error: lineError } = await supabase
           .from("goods_receipt_lines")
-          .update({ quantity_received: line.quantityReceived })
+          .update({
+            quantity_received: line.quantityReceived,
+            quantity_remaining: line.quantityOrdered - line.quantityReceived,
+          })
           .eq("id", line.id);
         if (lineError) throw lineError;
+      }
+      // Recalculate header totals
+      const { data: receiptRow } = await supabase
+        .from("goods_receipts")
+        .select("tax_rate_percent, shipping_cost")
+        .eq("id", input.id)
+        .single();
+      if (receiptRow) {
+        const newSubtotal = input.lines.reduce((sum, l) => sum + l.quantityReceived * l.unitCost, 0);
+        const newSalesTax = Math.round(newSubtotal * ((receiptRow.tax_rate_percent as number) / 100));
+        const newGrandTotal = newSubtotal + newSalesTax + receiptRow.shipping_cost;
+        await supabase.from("goods_receipts").update({
+          subtotal: newSubtotal,
+          sales_tax: newSalesTax,
+          grand_total: newGrandTotal,
+        }).eq("id", input.id);
       }
       const { data, error: fetchError } = await supabase
         .from("goods_receipts")

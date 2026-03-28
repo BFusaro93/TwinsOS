@@ -25,6 +25,8 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { usePurchaseOrders } from "@/lib/hooks/use-purchase-orders";
 import { usePOStore } from "@/stores";
+import { useSort } from "@/lib/hooks/use-sort";
+import { SortableTableHead } from "@/components/shared/SortableTableHead";
 import { PO_STATUS_LABELS } from "@/lib/constants";
 import { formatCurrency, formatDate, matchesFilter } from "@/lib/utils";
 import type { POStatus, PurchaseOrder } from "@/types";
@@ -114,6 +116,8 @@ export function POListPage() {
     return matchSearch && matchStatus && matchVendor && matchPayment;
   });
 
+  const { sortKey, sortDir, toggle, sorted } = useSort(filtered, "createdAt", "desc");
+
   const selectedPO =
     (filtered.find((po) => po.id === selectedPOId) ??
       all.find((po) => po.id === selectedPOId)) ??
@@ -174,14 +178,14 @@ export function POListPage() {
         <Table>
           <TableHeader>
             <TableRow className="bg-slate-50">
-              <TableHead>PO #</TableHead>
-              <TableHead>Vendor</TableHead>
-              {col("status")     && <TableHead>Status</TableHead>}
-              {col("lineItems")  && <TableHead className="text-right">Items</TableHead>}
-              {col("grandTotal") && <TableHead className="text-right">Total</TableHead>}
-              {col("payment")    && <TableHead>Payment</TableHead>}
-              {col("poDate")     && <TableHead>PO Date</TableHead>}
-              {col("createdAt")  && <TableHead>Created</TableHead>}
+              <SortableTableHead label="PO #" sortKey="poNumber" activeSortKey={sortKey} sortDir={sortDir} onToggle={toggle} />
+              <SortableTableHead label="Vendor" sortKey="vendorName" activeSortKey={sortKey} sortDir={sortDir} onToggle={toggle} />
+              {col("status")     && <SortableTableHead label="Status" sortKey="status" activeSortKey={sortKey} sortDir={sortDir} onToggle={toggle} />}
+              {col("lineItems")  && <SortableTableHead label="Items" sortKey="lineItems" activeSortKey={sortKey} sortDir={sortDir} onToggle={toggle} className="text-right" />}
+              {col("grandTotal") && <SortableTableHead label="Total" sortKey="grandTotal" activeSortKey={sortKey} sortDir={sortDir} onToggle={toggle} className="text-right" />}
+              {col("payment")    && <SortableTableHead label="Payment" sortKey="payment" activeSortKey={sortKey} sortDir={sortDir} onToggle={toggle} />}
+              {col("poDate")     && <SortableTableHead label="PO Date" sortKey="poDate" activeSortKey={sortKey} sortDir={sortDir} onToggle={toggle} />}
+              {col("createdAt")  && <SortableTableHead label="Created" sortKey="createdAt" activeSortKey={sortKey} sortDir={sortDir} onToggle={toggle} />}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -202,7 +206,7 @@ export function POListPage() {
               </TableRow>
             )}
 
-            {!isLoading && filtered.map((po) => (
+            {!isLoading && sorted.map((po) => (
               <TableRow
                 key={po.id}
                 className="cursor-pointer hover:bg-slate-50"

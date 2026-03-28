@@ -21,6 +21,8 @@ import { EmptyState } from "@/components/shared/EmptyState";
 import { BarcodeScanModal } from "@/components/shared/BarcodeScanModal";
 import { AdvancedSearchDialog } from "@/components/shared/AdvancedSearchDialog";
 import { ColumnChooser, type ColumnDef } from "@/components/shared/ColumnChooser";
+import { SortableTableHead } from "@/components/shared/SortableTableHead";
+import { useSort } from "@/lib/hooks/use-sort";
 import { VehicleListPanel } from "./VehicleListPanel";
 import { VehicleDetailPanel } from "./VehicleDetailPanel";
 import { NewVehicleDialog } from "./NewVehicleDialog";
@@ -404,6 +406,8 @@ export function VehicleListPage() {
     return matchSearch && matchStatus && matchMake && matchDivision && matchFuel && matchCrew;
   });
 
+  const { sortKey, sortDir, toggle, sorted } = useSort(filtered, "name", "asc");
+
   const selectedVehicle =
     (filtered.find((v) => v.id === selectedVehicleId) ??
       all.find((v) => v.id === selectedVehicleId)) ??
@@ -479,17 +483,17 @@ export function VehicleListPage() {
           <TableHeader>
             <TableRow className="bg-slate-50">
               {col("icon") && <TableHead className="w-12" />}
-              <TableHead>Name</TableHead>
-              {col("assetTag")        && <TableHead>Asset Tag</TableHead>}
-              {col("equipmentNumber") && <TableHead>Equipment #</TableHead>}
-              {col("make")            && <TableHead>Make</TableHead>}
-              {col("model")           && <TableHead>Model</TableHead>}
-              {col("year")            && <TableHead>Year</TableHead>}
-              {col("licensePlate")    && <TableHead>License Plate</TableHead>}
-              {col("division")        && <TableHead>Division</TableHead>}
-              {col("assignedCrew")    && <TableHead>Assigned Crew</TableHead>}
-              {col("fuelType")        && <TableHead>Fuel Type</TableHead>}
-              {col("status")          && <TableHead>Status</TableHead>}
+              <SortableTableHead label="Name" sortKey="name" activeSortKey={sortKey} sortDir={sortDir} onToggle={toggle} />
+              {col("assetTag") && <SortableTableHead label="Asset Tag" sortKey="assetTag" activeSortKey={sortKey} sortDir={sortDir} onToggle={toggle} />}
+              {col("equipmentNumber") && <SortableTableHead label="Equipment #" sortKey="equipmentNumber" activeSortKey={sortKey} sortDir={sortDir} onToggle={toggle} />}
+              {col("make") && <SortableTableHead label="Make" sortKey="make" activeSortKey={sortKey} sortDir={sortDir} onToggle={toggle} />}
+              {col("model") && <SortableTableHead label="Model" sortKey="model" activeSortKey={sortKey} sortDir={sortDir} onToggle={toggle} />}
+              {col("year") && <SortableTableHead label="Year" sortKey="year" activeSortKey={sortKey} sortDir={sortDir} onToggle={toggle} />}
+              {col("licensePlate") && <SortableTableHead label="License Plate" sortKey="licensePlate" activeSortKey={sortKey} sortDir={sortDir} onToggle={toggle} />}
+              {col("division") && <SortableTableHead label="Division" sortKey="division" activeSortKey={sortKey} sortDir={sortDir} onToggle={toggle} />}
+              {col("assignedCrew") && <SortableTableHead label="Assigned Crew" sortKey="assignedCrew" activeSortKey={sortKey} sortDir={sortDir} onToggle={toggle} />}
+              {col("fuelType") && <SortableTableHead label="Fuel Type" sortKey="fuelType" activeSortKey={sortKey} sortDir={sortDir} onToggle={toggle} />}
+              {col("status") && <SortableTableHead label="Status" sortKey="status" activeSortKey={sortKey} sortDir={sortDir} onToggle={toggle} />}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -510,7 +514,7 @@ export function VehicleListPage() {
               </TableRow>
             )}
 
-            {!isLoading && filtered.map((vehicle) => (
+            {!isLoading && sorted.map((vehicle) => (
               <TableRow
                 key={vehicle.id}
                 className="cursor-pointer hover:bg-slate-50"

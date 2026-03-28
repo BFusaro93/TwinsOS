@@ -78,7 +78,7 @@ export function NewReceivingDialog({ open, onOpenChange, initialData }: NewRecei
       {
         id: initialData.id,
         notes: notes || null,
-        lines: lines.map((l) => ({ id: l.id, quantityReceived: l.quantityReceived })),
+        lines: lines.map((l) => ({ id: l.id, quantityReceived: l.quantityReceived, quantityOrdered: l.quantityOrdered, unitCost: l.unitCost })),
       },
       { onSuccess: () => onOpenChange(false) }
     );

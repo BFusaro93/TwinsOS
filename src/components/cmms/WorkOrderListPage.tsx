@@ -33,6 +33,8 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { useWorkOrders } from "@/lib/hooks/use-work-orders";
 import { useCMMSStore } from "@/stores";
+import { useSort } from "@/lib/hooks/use-sort";
+import { SortableTableHead } from "@/components/shared/SortableTableHead";
 import { WO_STATUS_LABELS, WO_PRIORITY_LABELS } from "@/lib/constants";
 import { cn, formatDate, matchesFilter } from "@/lib/utils";
 import type { WorkOrder, WorkOrderStatus, WorkOrderPriority } from "@/types";
@@ -387,6 +389,8 @@ export function WorkOrderListPage() {
     return matchSearch && matchStatus && matchPriority && matchType && matchRecurring && matchAsset && matchAssignee && matchCategory;
   });
 
+  const { sortKey, sortDir, toggle, sorted } = useSort(filtered, "createdAt", "desc");
+
   const selectedWO =
     (filtered.find((wo) => wo.id === selectedWorkOrderId) ??
       all.find((wo) => wo.id === selectedWorkOrderId)) ??
@@ -447,15 +451,15 @@ export function WorkOrderListPage() {
         <Table>
           <TableHeader>
             <TableRow className="bg-slate-50">
-              <TableHead>WO #</TableHead>
-              <TableHead>Title</TableHead>
-              {col("status")         && <TableHead>Status</TableHead>}
-              {col("priority")       && <TableHead>Priority</TableHead>}
-              {col("woType")         && <TableHead>Type</TableHead>}
-              {col("assetName")      && <TableHead>Asset / Vehicle</TableHead>}
-              {col("assignedToName") && <TableHead>Assigned To</TableHead>}
-              {col("category")       && <TableHead>Category</TableHead>}
-              {col("dueDate")        && <TableHead>Due Date</TableHead>}
+              <SortableTableHead label="WO #" sortKey="workOrderNumber" activeSortKey={sortKey} sortDir={sortDir} onToggle={toggle} />
+              <SortableTableHead label="Title" sortKey="title" activeSortKey={sortKey} sortDir={sortDir} onToggle={toggle} />
+              {col("status")         && <SortableTableHead label="Status" sortKey="status" activeSortKey={sortKey} sortDir={sortDir} onToggle={toggle} />}
+              {col("priority")       && <SortableTableHead label="Priority" sortKey="priority" activeSortKey={sortKey} sortDir={sortDir} onToggle={toggle} />}
+              {col("woType")         && <SortableTableHead label="Type" sortKey="woType" activeSortKey={sortKey} sortDir={sortDir} onToggle={toggle} />}
+              {col("assetName")      && <SortableTableHead label="Asset / Vehicle" sortKey="assetName" activeSortKey={sortKey} sortDir={sortDir} onToggle={toggle} />}
+              {col("assignedToName") && <SortableTableHead label="Assigned To" sortKey="assignedToName" activeSortKey={sortKey} sortDir={sortDir} onToggle={toggle} />}
+              {col("category")       && <SortableTableHead label="Category" sortKey="category" activeSortKey={sortKey} sortDir={sortDir} onToggle={toggle} />}
+              {col("dueDate")        && <SortableTableHead label="Due Date" sortKey="dueDate" activeSortKey={sortKey} sortDir={sortDir} onToggle={toggle} />}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -476,7 +480,7 @@ export function WorkOrderListPage() {
               </TableRow>
             )}
 
-            {!isLoading && filtered.map((wo) => (
+            {!isLoading && sorted.map((wo) => (
               <TableRow
                 key={wo.id}
                 className="cursor-pointer hover:bg-slate-50"
