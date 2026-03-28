@@ -4,7 +4,7 @@ import { mapPurchaseOrder } from "@/lib/supabase/mappers";
 import type { PurchaseOrder, POStatus, LineItem } from "@/types";
 
 // Helper: immediately update a PO in every cached list
-function patchPOCache(queryClient: ReturnType<typeof useQueryClient>, id: string, patch: Partial<PurchaseOrder>) {
+export function patchPOCache(queryClient: ReturnType<typeof useQueryClient>, id: string, patch: Partial<PurchaseOrder>) {
   queryClient.setQueryData<PurchaseOrder[]>(["purchase-orders"], (old) =>
     old?.map((po) => po.id === id ? { ...po, ...patch } : po) ?? []
   );

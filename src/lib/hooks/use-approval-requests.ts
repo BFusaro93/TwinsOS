@@ -1,7 +1,9 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 import { mapApprovalRequest } from "@/lib/supabase/mappers";
-import type { ApprovalRequest, ApprovalRequestStatus, ApprovalFlow } from "@/types";
+import { patchReqCache } from "./use-requisitions";
+import { patchPOCache } from "./use-purchase-orders";
+import type { ApprovalRequest, ApprovalRequestStatus, ApprovalFlow, Requisition, PurchaseOrder } from "@/types";
 
 export function useApprovalRequests(entityId: string) {
   return useQuery<ApprovalRequest[]>({
@@ -128,10 +130,36 @@ export function useSubmitForApproval() {
 
       return { entityType };
     },
-    onSuccess: (result, { entityId }) => {
+    onMutate: async ({ entityId, entityType }) => {
+      // Cancel in-flight entity refetches so stale data cannot overwrite the cache
+      await queryClient.cancelQueries({ queryKey: ["requisitions"] });
+      await queryClient.cancelQueries({ queryKey: ["purchase-orders"] });
+      const previousReqs = queryClient.getQueryData<Requisition[]>(["requisitions"]);
+      const previousPOs = queryClient.getQueryData<PurchaseOrder[]>(["purchase-orders"]);
+
+      // Optimistically set the entity to its pending status
+      const pendingStatus = entityType === "requisition" ? "pending_approval" : "pending";
+      if (entityType === "requisition") {
+        patchReqCache(queryClient, entityId, { status: pendingStatus as Requisition["status"] });
+      } else {
+        patchPOCache(queryClient, entityId, { status: pendingStatus as PurchaseOrder["status"] });
+      }
+
+      return { previousReqs, previousPOs };
+    },
+    onSuccess: (_result, { entityId }) => {
       queryClient.invalidateQueries({ queryKey: ["approval-requests", entityId] });
-      // Invalidate the entity query so the list panel and status badge refresh
-      if (result?.entityType === "requisition") {
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previousReqs) {
+        queryClient.setQueryData<Requisition[]>(["requisitions"], context.previousReqs);
+      }
+      if (context?.previousPOs) {
+        queryClient.setQueryData<PurchaseOrder[]>(["purchase-orders"], context.previousPOs);
+      }
+    },
+    onSettled: (_data, _err, { entityType }) => {
+      if (entityType === "requisition") {
         queryClient.invalidateQueries({ queryKey: ["requisitions"] });
       } else {
         queryClient.invalidateQueries({ queryKey: ["purchase-orders"] });
@@ -208,6 +236,8 @@ export function useDecideApproval(entityId: string) {
           );
         });
 
+      let newEntityStatus: string | undefined;
+
       if (allResolved) {
         const anyRejected = Array.from(stepGroups.values()).some((reqs) => {
           if (reqs.every((r) => r.status === "skipped")) return false;
@@ -215,7 +245,7 @@ export function useDecideApproval(entityId: string) {
           return reqs.filter((r) => r.status !== "skipped").some((r) => r.status === "rejected");
         });
 
-        const newEntityStatus = anyRejected ? "rejected" : "approved";
+        newEntityStatus = anyRejected ? "rejected" : "approved";
         const entityType = decided.entity_type;
         const table = entityType === "requisition" ? "requisitions" : "purchase_orders";
 
@@ -228,18 +258,41 @@ export function useDecideApproval(entityId: string) {
         if (entityErr) throw entityErr;
       }
 
-      return { freshMapped, allResolved, entityType: decided.entity_type };
+      return { freshMapped, allResolved, entityType: decided.entity_type, newEntityStatus };
     },
-    onSuccess: ({ freshMapped }) => {
+    onMutate: async () => {
+      // Cancel in-flight entity refetches so stale data cannot overwrite the cache
+      await queryClient.cancelQueries({ queryKey: ["requisitions"] });
+      await queryClient.cancelQueries({ queryKey: ["purchase-orders"] });
+      const previousReqs = queryClient.getQueryData<Requisition[]>(["requisitions"]);
+      const previousPOs = queryClient.getQueryData<PurchaseOrder[]>(["purchase-orders"]);
+      return { previousReqs, previousPOs };
+    },
+    onSuccess: ({ freshMapped, allResolved, entityType, newEntityStatus }) => {
+      // Patch approval-requests cache with fresh server data
       if (freshMapped) {
         queryClient.setQueryData(["approval-requests", entityId], freshMapped);
       }
-      // Always invalidate both entity queries since we may have updated one
+      // Immediately patch entity cache so Realtime refetches can't revert the status
+      if (allResolved && newEntityStatus) {
+        if (entityType === "requisition") {
+          patchReqCache(queryClient, entityId, { status: newEntityStatus as Requisition["status"] });
+        } else {
+          patchPOCache(queryClient, entityId, { status: newEntityStatus as PurchaseOrder["status"] });
+        }
+      }
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previousReqs) {
+        queryClient.setQueryData<Requisition[]>(["requisitions"], context.previousReqs);
+      }
+      if (context?.previousPOs) {
+        queryClient.setQueryData<PurchaseOrder[]>(["purchase-orders"], context.previousPOs);
+      }
+    },
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["requisitions"] });
       queryClient.invalidateQueries({ queryKey: ["purchase-orders"] });
-    },
-    onError: (err) => {
-      console.error("[useDecideApproval]", err);
     },
   });
 }
