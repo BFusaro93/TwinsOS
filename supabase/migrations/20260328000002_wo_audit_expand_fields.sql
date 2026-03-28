@@ -179,7 +179,7 @@ BEGIN
         ]
         WHEN 'work_orders' THEN ARRAY[
           'title', 'priority', 'assigned_to_name', 'assigned_to_names',
-          'assigned_to_ids', 'due_date', 'category', 'description', 'wo_type'
+          'due_date', 'category', 'categories', 'description', 'wo_type'
         ]
         WHEN 'requisitions' THEN ARRAY[
           'title', 'vendor_name', 'notes', 'grand_total'

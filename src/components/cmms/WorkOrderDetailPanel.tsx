@@ -575,7 +575,10 @@ export function WorkOrderDetailPanel({ workOrder }: WorkOrderDetailPanelProps) {
               <DetailsTab
                 workOrder={workOrder}
                 status={status}
-                onStatusChange={setStatus}
+                onStatusChange={(s) => {
+                  setStatus(s);
+                  updateWO({ id: workOrder.id, status: s });
+                }}
                 onAssetClick={linkedAsset ? () => setAssetSheetOpen(true) : undefined}
                 onVehicleClick={linkedVehicle ? () => setVehicleSheetOpen(true) : undefined}
                 subWorkOrders={subWorkOrders}

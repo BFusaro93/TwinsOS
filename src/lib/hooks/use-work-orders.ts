@@ -86,6 +86,7 @@ export function useUpdateWorkOrderStatus() {
       if (status) patchWOCache(queryClient, id, { status });
       queryClient.invalidateQueries({ queryKey: ["work-orders"] });
       queryClient.invalidateQueries({ queryKey: ["work-orders", id] });
+      queryClient.invalidateQueries({ queryKey: ["audit-log", "work_order", id] });
     },
   });
 }
