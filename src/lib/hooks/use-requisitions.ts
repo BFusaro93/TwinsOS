@@ -211,6 +211,42 @@ export function useUpdateRequisition() {
   });
 }
 
+/**
+ * Bulk-inserts requisitions from a CSV import (header-level only, no line items).
+ * Rows missing `title` are silently skipped.
+ */
+export function useBulkImportRequisitions() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (rows: Record<string, string>[]) => {
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      const requestedByName = user?.user_metadata?.name ?? user?.email ?? "Unknown";
+
+      const inserts = rows
+        .filter((r) => r.title?.trim())
+        .map((r) => ({
+          title: r.title.trim(),
+          requisition_number: r.requisitionNumber?.trim() || `REQ-${new Date().getFullYear()}-${Date.now().toString().slice(-6)}`,
+          requested_by_id: user?.id ?? null,
+          requested_by_name: requestedByName,
+          vendor_name: r.vendorName?.trim() || null,
+          notes: r.notes?.trim() || null,
+          subtotal: 0,
+          tax_rate_percent: 0,
+          sales_tax: 0,
+          shipping_cost: 0,
+          grand_total: 0,
+        }));
+      if (inserts.length === 0) return 0;
+      const { error } = await supabase.from("requisitions").insert(inserts);
+      if (error) throw error;
+      return inserts.length;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["requisitions"] }),
+  });
+}
+
 export function useUpdateRequisitionStatus() {
   const queryClient = useQueryClient();
 

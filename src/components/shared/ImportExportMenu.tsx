@@ -50,6 +50,7 @@ export function ImportExportMenu({
   const [parsedRows, setParsedRows] = useState<Record<string, string>[]>([]);
   const [parseError, setParseError] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
 
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -89,10 +90,16 @@ export function ImportExportMenu({
 
   async function handleConfirmImport() {
     setImporting(true);
+    setImportError(null);
     try {
       await onImport(parsedRows);
       setPreviewOpen(false);
       setParsedRows([]);
+      setImportError(null);
+    } catch (err) {
+      setImportError(
+        err instanceof Error ? err.message : "Import failed. Please check your data and try again."
+      );
     } finally {
       setImporting(false);
     }
@@ -147,7 +154,7 @@ export function ImportExportMenu({
       />
 
       {/* Import preview / error dialog */}
-      <Dialog open={previewOpen} onOpenChange={(o) => { if (!o) { setPreviewOpen(false); setParsedRows([]); setParseError(null); } }}>
+      <Dialog open={previewOpen} onOpenChange={(o) => { if (!o) { setPreviewOpen(false); setParsedRows([]); setParseError(null); setImportError(null); } }}>
         <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>
@@ -187,8 +194,14 @@ export function ImportExportMenu({
             </div>
           )}
 
+          {importError && (
+            <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {importError}
+            </div>
+          )}
+
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setPreviewOpen(false); setParsedRows([]); setParseError(null); }}>
+            <Button variant="outline" onClick={() => { setPreviewOpen(false); setParsedRows([]); setParseError(null); setImportError(null); }}>
               Cancel
             </Button>
             {!parseError && (

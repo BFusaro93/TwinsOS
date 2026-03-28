@@ -105,6 +105,37 @@ export function useUpdateVendor() {
   });
 }
 
+/**
+ * Bulk-inserts vendors from a CSV import.
+ * Rows missing `name` are silently skipped.
+ */
+export function useBulkImportVendors() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (rows: Record<string, string>[]) => {
+      const supabase = createClient();
+      const inserts = rows
+        .filter((r) => r.name?.trim())
+        .map((r) => ({
+          name: r.name.trim(),
+          contact_name: r.contactName?.trim() || "",
+          email: r.email?.trim() || "",
+          phone: r.phone?.trim() || "",
+          address: r.address?.trim() || "",
+          website: r.website?.trim() || null,
+          notes: r.notes?.trim() || null,
+          vendor_type: r.vendorType?.trim() || null,
+          is_active: r.isActive?.toLowerCase() !== "false",
+        }));
+      if (inserts.length === 0) return 0;
+      const { error } = await supabase.from("vendors").upsert(inserts, { onConflict: "org_id,name" });
+      if (error) throw error;
+      return inserts.length;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["vendors"] }),
+  });
+}
+
 export function useDeleteVendor() {
   const queryClient = useQueryClient();
   return useMutation({

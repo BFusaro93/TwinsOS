@@ -40,6 +40,15 @@ import { useSettingsStore } from "@/stores/settings-store";
 import type { FieldRequirement } from "@/stores/settings-store";
 import { COST_METHOD_LABELS, type CostMethod } from "@/lib/cost-methods";
 import { useOrgSettings, useUpdateOrgSettings } from "@/lib/hooks/use-org-settings";
+import { useWorkOrders, useBulkImportWorkOrders } from "@/lib/hooks/use-work-orders";
+import { useAssets, useBulkImportAssets } from "@/lib/hooks/use-assets";
+import { useVehicles, useBulkImportVehicles } from "@/lib/hooks/use-vehicles";
+import { useParts, useBulkImportParts } from "@/lib/hooks/use-parts";
+import { useVendors, useBulkImportVendors } from "@/lib/hooks/use-vendors";
+import { useRequisitions, useBulkImportRequisitions } from "@/lib/hooks/use-requisitions";
+import { usePurchaseOrders, useBulkImportPurchaseOrders } from "@/lib/hooks/use-purchase-orders";
+import { downloadCSV, readCSVFile } from "@/lib/csv";
+import { formatCurrency } from "@/lib/utils";
 
 // ── Shared helpers ────────────────────────────────────────────────────────────
 
@@ -399,8 +408,9 @@ function GeneralTab() {
   } = useSettingsStore();
 
   const { data: remoteSettings } = useOrgSettings();
-  const { mutate: updateOrgSettings } = useUpdateOrgSettings();
+  const { mutate: updateOrgSettings, isPending: savingSettings } = useUpdateOrgSettings();
   const seeded = useRef(false);
+  const [addressSaved, setAddressSaved] = useState(false);
 
   const [taxDraft, setTaxDraft] = useState(taxRatePercent);
   const [orgNameDraft, setOrgNameDraft] = useState(orgName);
@@ -596,9 +606,21 @@ function GeneralTab() {
               <Button
                 size="sm"
                 className="h-8 w-full"
-                onClick={() => updateOrgSettings({ address: companyAddress })}
+                disabled={savingSettings}
+                onClick={() => {
+                  setAddressSaved(false);
+                  updateOrgSettings(
+                    { address: companyAddress },
+                    {
+                      onSuccess: () => {
+                        setAddressSaved(true);
+                        setTimeout(() => setAddressSaved(false), 2000);
+                      },
+                    }
+                  );
+                }}
               >
-                Save Address
+                {savingSettings ? "Saving..." : addressSaved ? "Saved!" : "Save Address"}
               </Button>
             </div>
           </div>
@@ -948,29 +970,159 @@ function RequiredFieldsTab() {
 
 // ── ImportExportTab ───────────────────────────────────────────────────────────
 
-const EXPORT_TILES: { label: string; icon: React.ReactNode }[] = [
-  { label: "Work Orders",     icon: <ClipboardList className="h-6 w-6" /> },
-  { label: "Assets",          icon: <Cog className="h-6 w-6" /> },
-  { label: "Vehicles",        icon: <Truck className="h-6 w-6" /> },
-  { label: "Parts",           icon: <Package className="h-6 w-6" /> },
-  { label: "Vendors",         icon: <Building2 className="h-6 w-6" /> },
-  { label: "Requisitions",    icon: <FileText className="h-6 w-6" /> },
-  { label: "Purchase Orders", icon: <ShoppingCart className="h-6 w-6" /> },
-  { label: "Locations",       icon: <MapPin className="h-6 w-6" /> },
-];
-
-const IMPORT_TILES: { label: string; icon: React.ReactNode }[] = [
-  { label: "Work Orders",  icon: <ClipboardList className="h-6 w-6" /> },
-  { label: "Assets",       icon: <Cog className="h-6 w-6" /> },
-  { label: "Vehicles",     icon: <Truck className="h-6 w-6" /> },
-  { label: "Parts",        icon: <Package className="h-6 w-6" /> },
-  { label: "Vendors",      icon: <Building2 className="h-6 w-6" /> },
-  { label: "Requisitions", icon: <FileText className="h-6 w-6" /> },
-];
-
 function ImportExportTab() {
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [importTarget, setImportTarget] = useState<string | null>(null);
+  const [importStatus, setImportStatus] = useState<{ type: "success" | "error"; message: string } | null>(null);
+
+  // Data hooks for exports
+  const { data: workOrders } = useWorkOrders();
+  const { data: assets } = useAssets();
+  const { data: vehicles } = useVehicles();
+  const { data: parts } = useParts();
+  const { data: vendors } = useVendors();
+  const { data: requisitions } = useRequisitions();
+  const { data: purchaseOrders } = usePurchaseOrders();
+
+  // Bulk import hooks
+  const { mutateAsync: bulkImportWorkOrders, isPending: importingWO } = useBulkImportWorkOrders();
+  const { mutateAsync: bulkImportAssets, isPending: importingAssets } = useBulkImportAssets();
+  const { mutateAsync: bulkImportVehicles, isPending: importingVehicles } = useBulkImportVehicles();
+  const { mutateAsync: bulkImportParts, isPending: importingParts } = useBulkImportParts();
+  const { mutateAsync: bulkImportVendors, isPending: importingVendors } = useBulkImportVendors();
+  const { mutateAsync: bulkImportRequisitions, isPending: importingReqs } = useBulkImportRequisitions();
+
+  const isImporting = importingWO || importingAssets || importingVehicles || importingParts || importingVendors || importingReqs;
+
+  // Export handlers
+  function handleExport(label: string) {
+    switch (label) {
+      case "Work Orders":
+        if (!workOrders?.length) return;
+        downloadCSV("work-orders.csv",
+          ["workOrderNumber", "title", "description", "status", "priority", "woType", "assetName", "assignedToName", "dueDate", "category"],
+          workOrders.map((wo) => [wo.workOrderNumber, wo.title, wo.description ?? "", wo.status, wo.priority, wo.woType ?? "", wo.assetName ?? "", wo.assignedToName ?? "", wo.dueDate ?? "", wo.category ?? ""]));
+        break;
+      case "Assets":
+        if (!assets?.length) return;
+        downloadCSV("assets.csv",
+          ["name", "assetTag", "equipmentNumber", "assetType", "status", "make", "model", "year", "serialNumber", "location", "assignedCrew"],
+          assets.map((a) => [a.name, a.assetTag, a.equipmentNumber ?? "", a.assetType, a.status, a.make ?? "", a.model ?? "", a.year ?? "", a.serialNumber ?? "", a.location ?? "", a.assignedCrew ?? ""]));
+        break;
+      case "Vehicles":
+        if (!vehicles?.length) return;
+        downloadCSV("vehicles.csv",
+          ["name", "assetTag", "make", "model", "year", "status", "licensePlate", "vin", "fuelType", "assignedCrew", "location"],
+          vehicles.map((v) => [v.name, v.assetTag, v.make ?? "", v.model ?? "", v.year ?? "", v.status, v.licensePlate ?? "", v.vin ?? "", v.fuelType ?? "", v.assignedCrew ?? "", v.location ?? ""]));
+        break;
+      case "Parts":
+        if (!parts?.length) return;
+        downloadCSV("parts.csv",
+          ["name", "partNumber", "description", "category", "quantityOnHand", "minimumStock", "unitCost", "vendorName"],
+          parts.map((p) => [p.name, p.partNumber, p.description ?? "", p.category, p.quantityOnHand, p.minimumStock, formatCurrency(p.unitCost), p.vendorName ?? ""]));
+        break;
+      case "Vendors":
+        if (!vendors?.length) return;
+        downloadCSV("vendors.csv",
+          ["name", "contactName", "email", "phone", "address", "website", "vendorType", "isActive", "w9Status"],
+          vendors.map((v) => [v.name, v.contactName, v.email, v.phone, v.address, v.website ?? "", v.vendorType ?? "", v.isActive, v.w9Status]));
+        break;
+      case "Requisitions":
+        if (!requisitions?.length) return;
+        downloadCSV("requisitions.csv",
+          ["requisitionNumber", "title", "status", "requestedByName", "vendorName", "grandTotal", "notes"],
+          requisitions.map((r) => [r.requisitionNumber, r.title, r.status, r.requestedByName, r.vendorName ?? "", formatCurrency(r.grandTotal), r.notes ?? ""]));
+        break;
+      case "Purchase Orders":
+        if (!purchaseOrders?.length) return;
+        downloadCSV("purchase-orders.csv",
+          ["poNumber", "poDate", "status", "vendorName", "invoiceNumber", "grandTotal", "notes"],
+          purchaseOrders.map((po) => [po.poNumber, po.poDate ?? "", po.status, po.vendorName, po.invoiceNumber ?? "", formatCurrency(po.grandTotal), po.notes ?? ""]));
+        break;
+      default:
+        break;
+    }
+  }
+
+  // Import handler — picks the right bulk import mutation
+  async function handleImportFile(file: File) {
+    if (!importTarget) return;
+    setImportStatus(null);
+    try {
+      const rows = await readCSVFile(file);
+      if (rows.length === 0) {
+        setImportStatus({ type: "error", message: "CSV file is empty or has no data rows." });
+        return;
+      }
+      let count = 0;
+      switch (importTarget) {
+        case "Work Orders":  count = await bulkImportWorkOrders(rows) ?? 0; break;
+        case "Assets":       count = await bulkImportAssets(rows) ?? 0; break;
+        case "Vehicles":     count = await bulkImportVehicles(rows) ?? 0; break;
+        case "Parts":        count = await bulkImportParts(rows) ?? 0; break;
+        case "Vendors":      count = await bulkImportVendors(rows) ?? 0; break;
+        case "Requisitions": count = await bulkImportRequisitions(rows) ?? 0; break;
+        default: break;
+      }
+      setImportStatus({ type: "success", message: `Successfully imported ${count} ${importTarget.toLowerCase()}.` });
+    } catch (err) {
+      setImportStatus({
+        type: "error",
+        message: err instanceof Error ? err.message : "Import failed. Please check your CSV format.",
+      });
+    }
+    setImportTarget(null);
+  }
+
+  const EXPORT_TILES: { label: string; icon: React.ReactNode }[] = [
+    { label: "Work Orders",     icon: <ClipboardList className="h-6 w-6" /> },
+    { label: "Assets",          icon: <Cog className="h-6 w-6" /> },
+    { label: "Vehicles",        icon: <Truck className="h-6 w-6" /> },
+    { label: "Parts",           icon: <Package className="h-6 w-6" /> },
+    { label: "Vendors",         icon: <Building2 className="h-6 w-6" /> },
+    { label: "Requisitions",    icon: <FileText className="h-6 w-6" /> },
+    { label: "Purchase Orders", icon: <ShoppingCart className="h-6 w-6" /> },
+    { label: "Locations",       icon: <MapPin className="h-6 w-6" /> },
+  ];
+
+  const IMPORT_TILES: { label: string; icon: React.ReactNode }[] = [
+    { label: "Work Orders",  icon: <ClipboardList className="h-6 w-6" /> },
+    { label: "Assets",       icon: <Cog className="h-6 w-6" /> },
+    { label: "Vehicles",     icon: <Truck className="h-6 w-6" /> },
+    { label: "Parts",        icon: <Package className="h-6 w-6" /> },
+    { label: "Vendors",      icon: <Building2 className="h-6 w-6" /> },
+    { label: "Requisitions", icon: <FileText className="h-6 w-6" /> },
+  ];
+
   return (
     <div className="flex flex-col gap-6">
+      {/* Status banner */}
+      {importStatus && (
+        <div className={`rounded-md border px-4 py-3 text-sm ${
+          importStatus.type === "success"
+            ? "border-green-200 bg-green-50 text-green-700"
+            : "border-red-200 bg-red-50 text-red-700"
+        }`}>
+          {importStatus.message}
+          <button className="ml-2 font-medium underline" onClick={() => setImportStatus(null)}>
+            Dismiss
+          </button>
+        </div>
+      )}
+
+      {/* Hidden file input for imports */}
+      <input
+        ref={fileRef}
+        type="file"
+        accept=".csv,text/csv"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          e.target.value = "";
+          if (file) handleImportFile(file);
+        }}
+      />
+
       {/* Export */}
       <div className="rounded-lg border bg-white shadow-sm">
         <div className="px-6 py-4">
@@ -983,8 +1135,9 @@ function ImportExportTab() {
             {EXPORT_TILES.map(({ label, icon }) => (
               <button
                 key={label}
-                onClick={() => alert(`Export ${label} — coming soon`)}
-                className="flex flex-col items-center gap-2 rounded-lg border border-slate-200 p-5 text-slate-500 transition-colors hover:border-brand-300 hover:bg-brand-50 hover:text-brand-600"
+                onClick={() => label === "Locations" ? undefined : handleExport(label)}
+                disabled={label === "Locations"}
+                className="flex flex-col items-center gap-2 rounded-lg border border-slate-200 p-5 text-slate-500 transition-colors hover:border-brand-300 hover:bg-brand-50 hover:text-brand-600 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {icon}
                 <span className="text-sm">{label}</span>
@@ -1006,11 +1159,18 @@ function ImportExportTab() {
             {IMPORT_TILES.map(({ label, icon }) => (
               <button
                 key={label}
-                onClick={() => alert(`Import ${label} — coming soon`)}
-                className="flex flex-col items-center gap-2 rounded-lg border border-slate-200 p-5 text-slate-500 transition-colors hover:border-brand-300 hover:bg-brand-50 hover:text-brand-600"
+                disabled={isImporting}
+                onClick={() => {
+                  setImportTarget(label);
+                  setImportStatus(null);
+                  fileRef.current?.click();
+                }}
+                className="flex flex-col items-center gap-2 rounded-lg border border-slate-200 p-5 text-slate-500 transition-colors hover:border-brand-300 hover:bg-brand-50 hover:text-brand-600 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {icon}
-                <span className="text-sm">{label}</span>
+                <span className="text-sm">
+                  {isImporting && importTarget === label ? "Importing..." : label}
+                </span>
               </button>
             ))}
           </div>

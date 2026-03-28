@@ -166,6 +166,39 @@ export function useUpdatePurchaseOrder() {
   });
 }
 
+/**
+ * Bulk-inserts purchase orders from a CSV import (header-level only, no line items).
+ * Rows missing `poNumber` or `vendorName` are silently skipped.
+ */
+export function useBulkImportPurchaseOrders() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (rows: Record<string, string>[]) => {
+      const supabase = createClient();
+      const inserts = rows
+        .filter((r) => r.poNumber?.trim() && r.vendorName?.trim())
+        .map((r) => ({
+          po_number: r.poNumber.trim(),
+          vendor_name: r.vendorName.trim(),
+          po_date: r.poDate?.trim() || null,
+          invoice_number: r.invoiceNumber?.trim() || null,
+          status: r.status?.trim() || "requested",
+          notes: r.notes?.trim() || null,
+          subtotal: 0,
+          tax_rate_percent: 0,
+          sales_tax: 0,
+          shipping_cost: 0,
+          grand_total: 0,
+        }));
+      if (inserts.length === 0) return 0;
+      const { error } = await supabase.from("purchase_orders").insert(inserts);
+      if (error) throw error;
+      return inserts.length;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["purchase-orders"] }),
+  });
+}
+
 export function useUpdatePurchaseOrderStatus() {
   const queryClient = useQueryClient();
 

@@ -125,6 +125,51 @@ export function useUpdateWorkOrder() {
   });
 }
 
+const VALID_WO_STATUSES = new Set(["open", "on_hold", "in_progress", "done"]);
+const VALID_WO_PRIORITIES = new Set(["low", "medium", "high", "critical"]);
+
+function normaliseWOStatus(raw: string): string {
+  const s = raw.trim().toLowerCase().replace(/\s+/g, "_");
+  return VALID_WO_STATUSES.has(s) ? s : "open";
+}
+
+function normaliseWOPriority(raw: string): string {
+  const s = raw.trim().toLowerCase();
+  return VALID_WO_PRIORITIES.has(s) ? s : "medium";
+}
+
+/**
+ * Bulk-inserts work orders from a CSV import.
+ * Rows missing `title` are silently skipped.
+ */
+export function useBulkImportWorkOrders() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (rows: Record<string, string>[]) => {
+      const supabase = createClient();
+      const inserts = rows
+        .filter((r) => r.title?.trim())
+        .map((r) => ({
+          title: r.title.trim(),
+          description: r.description?.trim() || null,
+          status: normaliseWOStatus(r.status ?? ""),
+          priority: normaliseWOPriority(r.priority ?? ""),
+          wo_type: r.woType?.trim() || null,
+          asset_name: r.assetName?.trim() || null,
+          assigned_to_name: r.assignedToName?.trim() || null,
+          due_date: r.dueDate?.trim() || null,
+          category: r.category?.trim() || null,
+          work_order_number: r.workOrderNumber?.trim() || `WO-${Date.now().toString().slice(-6)}-${Math.random().toString(36).slice(2, 5)}`,
+        }));
+      if (inserts.length === 0) return 0;
+      const { error } = await supabase.from("work_orders").insert(inserts);
+      if (error) throw error;
+      return inserts.length;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["work-orders"] }),
+  });
+}
+
 export function useDeleteWorkOrder() {
   const queryClient = useQueryClient();
   return useMutation({

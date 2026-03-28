@@ -321,24 +321,29 @@ export function NewWorkOrderDialog({ open, onOpenChange, initialData }: NewWorkO
               {rf.isVisible("category") && (
                 <div className="grid gap-1.5">
                   <Label>Category{rf.req("category")}</Label>
-                  <Popover>
+                  <Popover modal>
                     <PopoverTrigger asChild>
                       <Button variant="outline" className="justify-start text-left font-normal h-10">
                         {categoryIds.length === 0
                           ? "Select categories..."
-                          : categoryIds.map((id) => enabledCategories.find((c) => c.id === id)?.label ?? id).join(", ")}
+                          : categoryIds.map((id) => {
+                              const cat = enabledCategories.find((c) => c.id === id || c.label === id);
+                              return cat?.label ?? id;
+                            }).join(", ")}
                       </Button>
                     </PopoverTrigger>
-                    <PopoverContent className="w-56 p-2" align="start">
+                    <PopoverContent className="w-56 p-2 z-[9999]" align="start">
                       <div className="flex flex-col gap-1 max-h-48 overflow-y-auto">
                         {enabledCategories.map((c) => (
                           <label key={c.id} className="flex items-center gap-2 rounded px-2 py-1.5 hover:bg-slate-50 cursor-pointer">
                             <Checkbox
-                              checked={categoryIds.includes(c.id)}
+                              checked={categoryIds.includes(c.id) || categoryIds.includes(c.label)}
                               onCheckedChange={(checked) => {
-                                setCategoryIds((prev) =>
-                                  checked ? [...prev, c.id] : prev.filter((id) => id !== c.id)
-                                );
+                                setCategoryIds((prev) => {
+                                  // Remove both id and label variants for clean state
+                                  const cleaned = prev.filter((v) => v !== c.id && v !== c.label);
+                                  return checked ? [...cleaned, c.id] : cleaned;
+                                });
                               }}
                             />
                             <span className="text-sm">{c.label}</span>
@@ -412,7 +417,7 @@ export function NewWorkOrderDialog({ open, onOpenChange, initialData }: NewWorkO
                 {rf.isVisible("assigned_to") && (
                   <div className="grid gap-1.5">
                     <Label>Assigned To{rf.req("assigned_to")}</Label>
-                    <Popover>
+                    <Popover modal>
                       <PopoverTrigger asChild>
                         <Button variant="outline" className="justify-start text-left font-normal h-10">
                           {assignedToIds.length === 0
@@ -420,7 +425,7 @@ export function NewWorkOrderDialog({ open, onOpenChange, initialData }: NewWorkO
                             : `${assignedToIds.length} assigned`}
                         </Button>
                       </PopoverTrigger>
-                      <PopoverContent className="w-56 p-2" align="start">
+                      <PopoverContent className="w-56 p-2 z-[9999]" align="start">
                         <div className="flex flex-col gap-1 max-h-48 overflow-y-auto">
                           {(users ?? []).map((u) => (
                             <label key={u.id} className="flex items-center gap-2 rounded px-2 py-1.5 hover:bg-slate-50 cursor-pointer">
