@@ -140,35 +140,22 @@ export function useUpdateGoodsReceipt() {
         if (lineError) throw lineError;
       }
 
-      // Write audit entries for each changed line item quantity
+      // Write audit entries for each changed line item quantity via RPC
+      // (direct inserts are blocked by RLS; the RPC uses SECURITY DEFINER)
       if (currentReceipt) {
-        // Get current user for audit entries
-        const { data: { user } } = await supabase.auth.getUser();
-        let userName = "System";
-        if (user) {
-          const { data: profile } = await supabase
-            .from("profiles")
-            .select("name")
-            .eq("id", user.id)
-            .single();
-          userName = profile?.name ?? user.email ?? "System";
-        }
-
         for (const line of input.lines) {
           const oldQty = oldByLineId.get(line.id);
           if (oldQty !== undefined && oldQty !== line.quantityReceived) {
-            await supabase.from("audit_log").insert({
-              org_id: currentReceipt.org_id,
-              created_by: user?.id ?? null,
-              record_type: "receiving",
-              record_id: input.id,
-              action: "updated",
-              changed_by_name: userName,
-              description: `${line.productItemName}: Quantity received ${oldQty} → ${line.quantityReceived}`,
-              field_changed: "quantity_received",
-              old_value: String(oldQty),
-              new_value: String(line.quantityReceived),
-            }).select().single();
+            await supabase.rpc("insert_audit_entry", {
+              p_org_id: currentReceipt.org_id,
+              p_record_type: "receiving",
+              p_record_id: input.id,
+              p_action: "updated",
+              p_description: `${line.productItemName}: Quantity received ${oldQty} → ${line.quantityReceived}`,
+              p_field_changed: "quantity_received",
+              p_old_value: String(oldQty),
+              p_new_value: String(line.quantityReceived),
+            });
           }
         }
       }
