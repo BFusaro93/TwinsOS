@@ -23,6 +23,8 @@ export interface WorkOrder extends BaseRecord {
   assignedToNames: string[];
   dueDate: string | null;
   category: string | null;
+  /** All assigned category IDs (multi-category). First entry matches category. */
+  categories: string[];
   workOrderNumber: string;
   /**
    * When set, this WO is a sub-work-order of the referenced parent WO.

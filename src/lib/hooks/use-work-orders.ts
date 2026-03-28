@@ -59,6 +59,8 @@ export function useCreateWorkOrder() {
         assigned_to_names: (input.assignedToNames ?? []) as any,
         due_date: input.dueDate,
         category: input.category,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        categories: (input.categories ?? []) as any,
         work_order_number: input.workOrderNumber,
         parent_work_order_id: input.parentWorkOrderId,
         pm_schedule_id: input.pmScheduleId,
@@ -106,6 +108,8 @@ export function useUpdateWorkOrder() {
         ...(input.assignedToNames !== undefined && { assigned_to_names: input.assignedToNames as any }),
         ...(input.dueDate !== undefined && { due_date: input.dueDate }),
         ...(input.category !== undefined && { category: input.category }),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        ...(input.categories !== undefined && { categories: input.categories as any }),
         ...(input.woType !== undefined && { wo_type: input.woType }),
       }).eq("id", id).select().single();
       if (error) throw error;
@@ -115,6 +119,7 @@ export function useUpdateWorkOrder() {
       if (data) patchWOCache(queryClient, id, data);
       queryClient.invalidateQueries({ queryKey: ["work-orders"] });
       queryClient.invalidateQueries({ queryKey: ["work-orders", id] });
+      queryClient.invalidateQueries({ queryKey: ["audit-log", "work_order", id] });
     },
   });
 }

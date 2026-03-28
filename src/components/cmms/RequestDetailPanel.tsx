@@ -215,6 +215,7 @@ export function RequestDetailPanel({ request }: RequestDetailPanelProps) {
         assignedToNames: [],
         dueDate: null,
         category: null,
+        categories: [],
         workOrderNumber,
         parentWorkOrderId: null,
         pmScheduleId: null,

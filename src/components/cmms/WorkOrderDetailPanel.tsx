@@ -163,7 +163,7 @@ function DetailsTab({
   onSubWOClick: (id: string) => void;
   onParentWOClick: () => void;
   onAssigneeChange: (ids: string[], names: string[]) => void;
-  onCategoryChange: (category: string | null) => void;
+  onCategoryChange: (categories: string[]) => void;
   users: Array<{ id: string; name: string }>;
   woCategories: Array<{ id: string; label: string; enabled: boolean }>;
 }) {
@@ -368,22 +368,62 @@ function DetailsTab({
         />
         <MetaRow
           label="Category"
-          value={
-            <Select
-              value={workOrder.category ?? "none"}
-              onValueChange={(val) => onCategoryChange(val === "none" ? null : val)}
-            >
-              <SelectTrigger className="h-8 w-full max-w-[200px] text-xs">
-                <SelectValue placeholder="No Category" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">No Category</SelectItem>
-                {woCategories.filter((c) => c.enabled).map((c) => (
-                  <SelectItem key={c.id} value={c.id}>{c.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          }
+          value={(() => {
+            const selectedCats = workOrder.categories.length > 0
+              ? workOrder.categories
+              : (workOrder.category ? [workOrder.category] : []);
+            const enabledCats = woCategories.filter((c) => c.enabled);
+            return (
+              <div className="flex flex-wrap items-center gap-1.5">
+                {selectedCats.map((catId) => {
+                  const cat = enabledCats.find((c) => c.id === catId);
+                  return (
+                    <span
+                      key={catId}
+                      className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700"
+                    >
+                      {cat?.label ?? catId}
+                    </span>
+                  );
+                })}
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      className="inline-flex h-6 items-center gap-1 rounded-full border border-dashed border-slate-300 px-2 text-[11px] text-slate-500 hover:bg-slate-50"
+                    >
+                      {selectedCats.length === 0 ? "Add" : "Edit"}
+                      <ChevronDown className="h-3 w-3 opacity-50" />
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-48 p-1" align="start">
+                    <div className="flex max-h-48 flex-col overflow-y-auto">
+                      {enabledCats.map((c) => {
+                        const isChecked = selectedCats.includes(c.id);
+                        return (
+                          <label
+                            key={c.id}
+                            className="flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-xs hover:bg-accent"
+                          >
+                            <Checkbox
+                              checked={isChecked}
+                              onCheckedChange={(checked) => {
+                                const nextCats = checked
+                                  ? [...selectedCats, c.id]
+                                  : selectedCats.filter((id) => id !== c.id);
+                                onCategoryChange(nextCats);
+                              }}
+                            />
+                            <span className="truncate">{c.label}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              </div>
+            );
+          })()}
         />
         <MetaRow
           label="Type"
@@ -551,8 +591,12 @@ export function WorkOrderDetailPanel({ workOrder }: WorkOrderDetailPanelProps) {
                     assignedToNames: names,
                   });
                 }}
-                onCategoryChange={(category) => {
-                  updateWO({ id: workOrder.id, category });
+                onCategoryChange={(categories) => {
+                  updateWO({
+                    id: workOrder.id,
+                    category: categories[0] ?? null,
+                    categories,
+                  });
                 }}
                 users={users}
                 woCategories={woCategories ?? []}

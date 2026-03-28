@@ -421,6 +421,8 @@ export function mapWorkOrder(row: WorkOrderRow): WorkOrder {
     assignedToNames: Array.isArray((row as any).assigned_to_names) ? ((row as any).assigned_to_names as string[]) : [],
     dueDate: row.due_date,
     category: row.category,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    categories: Array.isArray((row as any).categories) ? ((row as any).categories as string[]) : (row.category ? [row.category] : []),
     workOrderNumber: row.work_order_number,
     parentWorkOrderId: row.parent_work_order_id,
     pmScheduleId: row.pm_schedule_id,

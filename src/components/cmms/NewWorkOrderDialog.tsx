@@ -62,7 +62,7 @@ export function NewWorkOrderDialog({ open, onOpenChange, initialData }: NewWorkO
   const [title, setTitle] = useState("");
   const [priority, setPriority] = useState("medium");
   const [woType, setWoType] = useState("none");
-  const [category, setCategory] = useState("none");
+  const [categoryIds, setCategoryIds] = useState<string[]>([]);
   const [entityKey, setEntityKey] = useState("none"); // used in edit mode: "asset:<id>" | "vehicle:<id>" | "none"
   const [entityKeys, setEntityKeys] = useState<string[]>([]); // used in create mode (multi-select)
   const [dueDate, setDueDate] = useState("");
@@ -117,7 +117,7 @@ export function NewWorkOrderDialog({ open, onOpenChange, initialData }: NewWorkO
       setTitle(initialData.title);
       setPriority(initialData.priority);
       setWoType(initialData.woType ?? "none");
-      setCategory(initialData.category ?? "none");
+      setCategoryIds(initialData.categories?.length ? initialData.categories : (initialData.category ? [initialData.category] : []));
       // Reconstruct entity key from stored data
       if (initialData.assetId) {
         const type = initialData.linkedEntityType ?? "asset";
@@ -141,7 +141,7 @@ export function NewWorkOrderDialog({ open, onOpenChange, initialData }: NewWorkO
   }, [open, initialData, users]);
 
   const isValid = title.trim() && priority
-    && (!rf.isRequired("category") || (category !== "" && category !== "none"))
+    && (!rf.isRequired("category") || categoryIds.length > 0)
     && (!rf.isRequired("assigned_to") || assignedToIds.length > 0)
     && (!rf.isRequired("due_date") || dueDate !== "");
 
@@ -150,7 +150,7 @@ export function NewWorkOrderDialog({ open, onOpenChange, initialData }: NewWorkO
     setTitle("");
     setPriority("medium");
     setWoType("none");
-    setCategory("none");
+    setCategoryIds([]);
     setEntityKey("none");
     setEntityKeys([]);
     setDueDate("");
@@ -187,7 +187,8 @@ export function NewWorkOrderDialog({ open, onOpenChange, initialData }: NewWorkO
       status: "open" as import("@/types/cmms").WorkOrderStatus,
       priority: priority as import("@/types/cmms").WorkOrderPriority,
       woType: woType !== "none" ? (woType as "reactive" | "preventive") : null,
-      category: category !== "none" ? category : null,
+      category: categoryIds[0] ?? null,
+      categories: categoryIds,
       assignedToId: assignedToIds[0] ?? null,
       assignedToName: (users ?? []).find((u) => u.id === assignedToIds[0])?.name ?? null,
       assignedToIds: assignedToIds,
@@ -316,23 +317,36 @@ export function NewWorkOrderDialog({ open, onOpenChange, initialData }: NewWorkO
                 </div>
               </div>
 
-              {/* Category */}
+              {/* Category (multi-select) */}
               {rf.isVisible("category") && (
                 <div className="grid gap-1.5">
-                  <Label htmlFor="wo-category">Category{rf.req("category")}</Label>
-                  <Select value={category} onValueChange={setCategory}>
-                    <SelectTrigger id="wo-category">
-                      <SelectValue placeholder="Select category" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">No category</SelectItem>
-                      {enabledCategories.map((c) => (
-                        <SelectItem key={c.id} value={c.label}>
-                          {c.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Label>Category{rf.req("category")}</Label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" className="justify-start text-left font-normal h-10">
+                        {categoryIds.length === 0
+                          ? "Select categories..."
+                          : categoryIds.map((id) => enabledCategories.find((c) => c.id === id)?.label ?? id).join(", ")}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-56 p-2" align="start">
+                      <div className="flex flex-col gap-1 max-h-48 overflow-y-auto">
+                        {enabledCategories.map((c) => (
+                          <label key={c.id} className="flex items-center gap-2 rounded px-2 py-1.5 hover:bg-slate-50 cursor-pointer">
+                            <Checkbox
+                              checked={categoryIds.includes(c.id)}
+                              onCheckedChange={(checked) => {
+                                setCategoryIds((prev) =>
+                                  checked ? [...prev, c.id] : prev.filter((id) => id !== c.id)
+                                );
+                              }}
+                            />
+                            <span className="text-sm">{c.label}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </PopoverContent>
+                  </Popover>
                 </div>
               )}
 

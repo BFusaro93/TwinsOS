@@ -170,11 +170,13 @@ export function WorkOrderListPanel({ workOrders, selectedId, onSelect }: WorkOrd
                   ))}
                 </div>
               )}
-              {wo.category && (
-                <div className="mt-1">
-                  <span className="rounded-full border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[10px] font-medium text-slate-500">
-                    {(woCategories ?? []).find((c) => c.id === wo.category)?.label ?? wo.category}
-                  </span>
+              {(wo.categories?.length > 0 || wo.category) && (
+                <div className="mt-1 flex flex-wrap gap-1">
+                  {(wo.categories?.length > 0 ? wo.categories : (wo.category ? [wo.category] : [])).map((catId) => (
+                    <span key={catId} className="rounded-full border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[10px] font-medium text-slate-500">
+                      {(woCategories ?? []).find((c) => c.id === catId)?.label ?? catId}
+                    </span>
+                  ))}
                 </div>
               )}
             </div>
