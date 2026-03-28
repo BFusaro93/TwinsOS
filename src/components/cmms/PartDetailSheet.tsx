@@ -21,12 +21,17 @@ import { EditButton } from "@/components/shared/EditButton";
 import { QtyAdjustControl } from "@/components/shared/QtyAdjustControl";
 import { AuditTrailTab } from "@/components/shared/AuditTrailTab";
 import { PartAssetsTab } from "@/components/cmms/PartAssetsTab";
+import { AssetDetailPanel } from "@/components/cmms/AssetDetailPanel";
+import { VehicleDetailPanel } from "@/components/cmms/VehicleDetailPanel";
 import { NewPartDialog } from "@/components/cmms/NewPartDialog";
 import { ManageVendorsDialog } from "@/components/shared/ManageVendorsDialog";
+import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { useParts, useUpdatePart } from "@/lib/hooks/use-parts";
 import { useRequisitions } from "@/lib/hooks/use-requisitions";
 import { usePurchaseOrders } from "@/lib/hooks/use-purchase-orders";
 import { useProducts } from "@/lib/hooks/use-products";
+import { useAssets } from "@/lib/hooks/use-assets";
+import { useVehicles } from "@/lib/hooks/use-vehicles";
 import { Plus, Search, ShoppingCart, X } from "lucide-react";
 import {
   Dialog,
@@ -498,12 +503,16 @@ export function PartDetailSheet({ part, open, onOpenChange }: PartDetailSheetPro
   const { data: requisitions } = useRequisitions();
   const { data: purchaseOrders } = usePurchaseOrders();
   const { data: products } = useProducts();
+  const { data: allAssets = [] } = useAssets();
+  const { data: allVehicles = [] } = useVehicles();
   const { mutate: updatePart } = useUpdatePart();
   const [qtyOnHand, setQtyOnHand] = useState<number | null>(null);
   const [editOpen, setEditOpen] = useState(false);
   const [nestedPart, setNestedPart] = useState<Part | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [manageVendorsOpen, setManageVendorsOpen] = useState(false);
+  const [assetSheetId, setAssetSheetId] = useState<string | null>(null);
+  const [vehicleSheetId, setVehicleSheetId] = useState<string | null>(null);
   // Interchangeable part picker state
   const [interchangeablePickerOemId, setInterchangeablePickerOemId] = useState<string | null>(null);
   const [linkSearch, setLinkSearch] = useState("");
@@ -667,7 +676,15 @@ export function PartDetailSheet({ part, open, onOpenChange }: PartDetailSheetPro
               />
             </TabsContent>
             <TabsContent value="assets & vehicles" className="mt-0 min-h-0 flex-1 overflow-y-auto">
-              <PartAssetsTab partId={part.id} partName={part.name} partNumber={part.partNumber} />
+              <PartAssetsTab
+                partId={part.id}
+                partName={part.name}
+                partNumber={part.partNumber}
+                onRecordClick={(item) => {
+                  if (item.kind === "asset") setAssetSheetId(item.record.id);
+                  else setVehicleSheetId(item.record.id);
+                }}
+              />
             </TabsContent>
             <TabsContent value="history" className="mt-0 min-h-0 flex-1 overflow-y-auto">
               <HistoryTab part={part} purchaseOrders={purchaseOrders} />
@@ -694,6 +711,26 @@ export function PartDetailSheet({ part, open, onOpenChange }: PartDetailSheetPro
         open={!!nestedPart}
         onOpenChange={(o) => { if (!o) setNestedPart(null); }}
       />
+
+      {/* ── Asset / Vehicle detail overlays ── */}
+      {(() => {
+        const selectedAsset = assetSheetId ? allAssets.find((a) => a.id === assetSheetId) ?? null : null;
+        const selectedVehicle = vehicleSheetId ? allVehicles.find((v) => v.id === vehicleSheetId) ?? null : null;
+        return (
+          <>
+            <Sheet open={!!selectedAsset} onOpenChange={(o) => { if (!o) setAssetSheetId(null); }}>
+              <SheetContent className="flex w-[720px] flex-col overflow-hidden p-0 sm:max-w-[720px]">
+                {selectedAsset && <AssetDetailPanel asset={selectedAsset} />}
+              </SheetContent>
+            </Sheet>
+            <Sheet open={!!selectedVehicle} onOpenChange={(o) => { if (!o) setVehicleSheetId(null); }}>
+              <SheetContent className="flex w-[720px] flex-col overflow-hidden p-0 sm:max-w-[720px]">
+                {selectedVehicle && <VehicleDetailPanel vehicle={selectedVehicle} />}
+              </SheetContent>
+            </Sheet>
+          </>
+        );
+      })()}
 
       {/* ── Interchangeable part picker dialog ── */}
       {(() => {

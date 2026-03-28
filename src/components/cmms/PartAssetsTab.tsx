@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, Search, Truck, Cpu } from "lucide-react";
+import { Plus, Search, Trash2, Truck, Cpu } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,26 +14,29 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { ASSET_STATUS_LABELS } from "@/lib/constants";
-import { usePartAssetLinks, useAddPartAssetLink } from "@/lib/hooks/use-asset-parts";
+import { usePartAssetLinks, useAddPartAssetLink, useRemoveAssetPart } from "@/lib/hooks/use-asset-parts";
 import { useAssets } from "@/lib/hooks/use-assets";
 import { useVehicles } from "@/lib/hooks/use-vehicles";
 import type { Asset, Vehicle } from "@/types";
+
+type LinkedRecord =
+  | { kind: "asset"; record: Asset; linkId: string }
+  | { kind: "vehicle"; record: Vehicle; linkId: string };
 
 interface PartAssetsTabProps {
   partId: string;
   partName: string;
   partNumber: string;
+  onRecordClick?: (item: LinkedRecord) => void;
 }
 
-type LinkedRecord =
-  | { kind: "asset"; record: Asset }
-  | { kind: "vehicle"; record: Vehicle };
-
-export function PartAssetsTab({ partId, partName }: PartAssetsTabProps) {
+export function PartAssetsTab({ partId, partName, onRecordClick }: PartAssetsTabProps) {
+  const queryClient = useQueryClient();
   const { data: links = [], isLoading } = usePartAssetLinks(partId);
   const { data: allAssets = [] } = useAssets();
   const { data: allVehicles = [] } = useVehicles();
   const { mutate: addLink, isPending: linking } = useAddPartAssetLink();
+  const { mutate: removeLink } = useRemoveAssetPart();
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -42,9 +46,9 @@ export function PartAssetsTab({ partId, partName }: PartAssetsTabProps) {
 
   const items: LinkedRecord[] = links.reduce<LinkedRecord[]>((acc, link) => {
     const vehicle = allVehicles.find((v) => v.id === link.assetId);
-    if (vehicle) return [...acc, { kind: "vehicle", record: vehicle }];
+    if (vehicle) return [...acc, { kind: "vehicle", record: vehicle, linkId: link.id }];
     const asset = allAssets.find((a) => a.id === link.assetId);
-    if (asset) return [...acc, { kind: "asset", record: asset }];
+    if (asset) return [...acc, { kind: "asset", record: asset, linkId: link.id }];
     return acc;
   }, []);
 
@@ -52,10 +56,10 @@ export function PartAssetsTab({ partId, partName }: PartAssetsTabProps) {
   const unlinked: LinkedRecord[] = [
     ...allVehicles
       .filter((v) => !linkedIds.has(v.id))
-      .map((v): LinkedRecord => ({ kind: "vehicle", record: v })),
+      .map((v): LinkedRecord => ({ kind: "vehicle", record: v, linkId: "" })),
     ...allAssets
       .filter((a) => !linkedIds.has(a.id))
-      .map((a): LinkedRecord => ({ kind: "asset", record: a })),
+      .map((a): LinkedRecord => ({ kind: "asset", record: a, linkId: "" })),
   ];
 
   const filtered = search
@@ -122,12 +126,21 @@ export function PartAssetsTab({ partId, partName }: PartAssetsTabProps) {
                 <th className="px-3 py-2 text-left text-xs font-medium text-slate-500">Name</th>
                 <th className="px-3 py-2 text-left text-xs font-medium text-slate-500">Asset Type</th>
                 <th className="px-3 py-2 text-left text-xs font-medium text-slate-500">Status</th>
+                <th className="w-10" />
               </tr>
             </thead>
             <tbody>
-              {items.map(({ kind, record }) => (
+              {items.map(({ kind, record, linkId }) => (
                 <tr key={record.id} className="border-t border-slate-100 hover:bg-slate-50">
-                  <td className="px-3 py-2 font-medium text-slate-800">{record.name}</td>
+                  <td className="px-3 py-2">
+                    <button
+                      type="button"
+                      onClick={() => onRecordClick?.({ kind, record, linkId } as LinkedRecord)}
+                      className="font-medium text-brand-600 hover:underline text-left"
+                    >
+                      {record.name}
+                    </button>
+                  </td>
                   <td className="px-3 py-2">
                     <span className="flex items-center gap-1.5 text-slate-500">
                       {kind === "vehicle" ? (
@@ -145,6 +158,22 @@ export function PartAssetsTab({ partId, partName }: PartAssetsTabProps) {
                       variant={record.status}
                       label={ASSET_STATUS_LABELS[record.status] ?? record.status}
                     />
+                  </td>
+                  <td className="px-2 py-2 text-right">
+                    <button
+                      type="button"
+                      title="Unlink"
+                      className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-500"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        removeLink(
+                          { id: linkId, assetId: record.id },
+                          { onSuccess: () => queryClient.invalidateQueries({ queryKey: ["part-asset-links", partId] }) }
+                        );
+                      }}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
                   </td>
                 </tr>
               ))}

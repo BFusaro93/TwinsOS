@@ -44,6 +44,7 @@ export function ManageVendorsDialog({
   const { data: allVendors } = useVendors();
   const [primary, setPrimary] = useState<VendorRef | null>(primaryVendor);
   const [alternates, setAlternates] = useState<VendorRef[]>(alternateVendors);
+  const [selectKey, setSelectKey] = useState(0);
 
   // Sync local state when dialog opens with new props
   useEffect(() => {
@@ -81,6 +82,7 @@ export function ManageVendorsDialog({
     } else {
       setAlternates((prev) => [...prev, ref]);
     }
+    setSelectKey((k) => k + 1);
   }
 
   function handleSave() {
@@ -141,7 +143,7 @@ export function ManageVendorsDialog({
           {availableVendors.length > 0 && (
             <div>
               <p className="mb-1.5 text-xs font-medium text-slate-500">Add Vendor</p>
-              <Select onValueChange={handleAdd} value="">
+              <Select key={selectKey} onValueChange={handleAdd} value="">
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder="Select a vendor..." />
                 </SelectTrigger>

@@ -2,7 +2,11 @@
 
 import { cn, formatDate, getInitials, getAvatarColor } from "@/lib/utils";
 import { StatusBadge } from "@/components/shared/StatusBadge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { WO_STATUS_LABELS, WO_PRIORITY_LABELS } from "@/lib/constants";
+import { useUsers } from "@/lib/hooks/use-users";
+import { useUpdateWorkOrder } from "@/lib/hooks/use-work-orders";
+import { useSettingsStore } from "@/stores";
 import type { WorkOrder } from "@/types";
 
 interface WorkOrderListPanelProps {
@@ -12,6 +16,10 @@ interface WorkOrderListPanelProps {
 }
 
 export function WorkOrderListPanel({ workOrders, selectedId, onSelect }: WorkOrderListPanelProps) {
+  const { data: users = [] } = useUsers();
+  const { mutate: updateWO } = useUpdateWorkOrder();
+  const { woCategories } = useSettingsStore();
+
   return (
     <div className="flex flex-col overflow-y-auto">
       {workOrders.length === 0 && (
@@ -60,6 +68,51 @@ export function WorkOrderListPanel({ workOrders, selectedId, onSelect }: WorkOrd
               <div className="mt-1 flex items-center gap-1.5">
                 <StatusBadge variant={wo.status} label={WO_STATUS_LABELS[wo.status]} />
                 <StatusBadge variant={wo.priority} label={WO_PRIORITY_LABELS[wo.priority]} />
+              </div>
+              <div className="mt-1.5 flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                {/* Assignee */}
+                <Select
+                  value={wo.assignedToId ?? "unassigned"}
+                  onValueChange={(val) => {
+                    const user = users.find((u) => u.id === val);
+                    updateWO({
+                      id: wo.id,
+                      assignedToId: val === "unassigned" ? null : val,
+                      assignedToName: user?.name ?? null,
+                    });
+                  }}
+                >
+                  <SelectTrigger className="h-6 w-[120px] text-[11px] px-2">
+                    <SelectValue placeholder="Assign..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="unassigned">Unassigned</SelectItem>
+                    {users.map((u) => (
+                      <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                {/* Category */}
+                <Select
+                  value={wo.category ?? "none"}
+                  onValueChange={(val) => {
+                    updateWO({
+                      id: wo.id,
+                      category: val === "none" ? null : val,
+                    });
+                  }}
+                >
+                  <SelectTrigger className="h-6 w-[100px] text-[11px] px-2">
+                    <SelectValue placeholder="Category..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No Category</SelectItem>
+                    {(woCategories ?? []).filter((c) => c.enabled).map((c) => (
+                      <SelectItem key={c.id} value={c.id}>{c.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
           </button>

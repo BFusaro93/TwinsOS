@@ -2,6 +2,7 @@
 
 import { cn, relativeTime, getInitials, getAvatarColor } from "@/lib/utils";
 import { StatusBadge } from "@/components/shared/StatusBadge";
+import { Badge } from "@/components/ui/badge";
 import { REQUEST_STATUS_LABELS, WO_PRIORITY_LABELS } from "@/lib/constants";
 import type { MaintenanceRequest } from "@/types";
 
@@ -63,6 +64,14 @@ export function RequestListPanel({ requests, selectedId, onSelect }: RequestList
                   variant={req.priority}
                   label={WO_PRIORITY_LABELS[req.priority]}
                 />
+                {req.status === "converted" && req.linkedWorkOrderNumber && (
+                  <Badge
+                    variant="outline"
+                    className="border-blue-200 bg-blue-50 text-blue-700 text-[10px]"
+                  >
+                    &rarr; {req.linkedWorkOrderNumber}
+                  </Badge>
+                )}
               </div>
             </div>
           </button>
