@@ -1068,7 +1068,11 @@ function ImportExportTab() {
     } catch (err) {
       setImportStatus({
         type: "error",
-        message: err instanceof Error ? err.message : "Import failed. Please check your CSV format.",
+        message: err instanceof Error
+          ? err.message
+          : typeof err === "object" && err !== null && "message" in err
+            ? String((err as { message: string }).message)
+            : "Import failed. Please check your CSV format.",
       });
     }
     setImportTarget(null);

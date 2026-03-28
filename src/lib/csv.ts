@@ -105,7 +105,11 @@ function parseRow(line: string): string[] {
  * Returns an empty array if the text has fewer than 2 rows.
  */
 export function parseCSV(text: string): Record<string, string>[] {
-  const lines = text.trim().split("\n").filter(Boolean);
+  // Strip BOM (Excel UTF-8 CSVs often start with \uFEFF)
+  const cleaned = text.replace(/^\uFEFF/, "");
+  // Normalize line endings: \r\n → \n, lone \r → \n
+  const normalized = cleaned.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  const lines = normalized.trim().split("\n").filter(Boolean);
   if (lines.length < 2) return [];
   const headers = parseRow(lines[0]).map((h) => h.trim());
   return lines.slice(1).map((line) => {
