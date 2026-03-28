@@ -147,10 +147,11 @@ export function useSubmitForApproval() {
 
       return { previousReqs, previousPOs };
     },
-    onSuccess: async (_result, { entityId, entityType }) => {
-      // Cancel any refetches that Realtime triggered DURING the mutationFn
-      await queryClient.cancelQueries({ queryKey: ["requisitions"] });
-      await queryClient.cancelQueries({ queryKey: ["purchase-orders"] });
+    onSuccess: (_result, { entityId, entityType }) => {
+      // Cancel refetches that Realtime triggered DURING the mutationFn.
+      // cancelQueries aborts fetch signals synchronously — no await needed.
+      queryClient.cancelQueries({ queryKey: ["requisitions"] });
+      queryClient.cancelQueries({ queryKey: ["purchase-orders"] });
 
       // Re-patch the cache in case a cancelled refetch partially landed
       const pendingStatus = entityType === "requisition" ? "pending_approval" : "pending";
@@ -280,12 +281,13 @@ export function useDecideApproval(entityId: string) {
       const previousPOs = queryClient.getQueryData<PurchaseOrder[]>(["purchase-orders"]);
       return { previousReqs, previousPOs };
     },
-    onSuccess: async ({ freshMapped, allResolved, entityType, newEntityStatus }) => {
-      // Cancel any refetches that Realtime triggered DURING the mutationFn.
-      // onMutate only cancels queries that were in-flight before the mutation started;
-      // Realtime fires new invalidations when the DB writes commit mid-mutation.
-      await queryClient.cancelQueries({ queryKey: ["requisitions"] });
-      await queryClient.cancelQueries({ queryKey: ["purchase-orders"] });
+    onSuccess: ({ freshMapped, allResolved, entityType, newEntityStatus }) => {
+      // Cancel refetches that Realtime triggered DURING the mutationFn.
+      // cancelQueries aborts fetch signals synchronously — no await needed.
+      // IMPORTANT: must NOT be async — TanStack Query doesn't await onSuccess,
+      // so onSettled would fire before this completes if we used await.
+      queryClient.cancelQueries({ queryKey: ["requisitions"] });
+      queryClient.cancelQueries({ queryKey: ["purchase-orders"] });
 
       // Patch approval-requests cache with fresh server data
       if (freshMapped) {
