@@ -79,7 +79,7 @@ export function NewReceivingDialog({ open, onOpenChange, initialData, onReceiptE
       {
         id: initialData.id,
         notes: notes || null,
-        lines: lines.map((l) => ({ id: l.id, quantityReceived: l.quantityReceived, quantityOrdered: l.quantityOrdered, unitCost: l.unitCost })),
+        lines: lines.map((l) => ({ id: l.id, productItemName: l.productItemName, quantityReceived: l.quantityReceived, quantityOrdered: l.quantityOrdered, unitCost: l.unitCost })),
       },
       {
         onSuccess: () => {

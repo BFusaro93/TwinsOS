@@ -606,6 +606,11 @@ export function PartDetailSheet({ part, open, onOpenChange }: PartDetailSheetPro
       {createPortal(
         <>
           <div
+            className="fixed inset-0 z-[199] bg-black/80 data-[state=open]:animate-in data-[state=open]:fade-in-0"
+            data-state="open"
+            onClick={() => onOpenChange(false)}
+          />
+          <div
             ref={containerRef}
             role="dialog"
             aria-modal="true"

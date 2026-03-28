@@ -170,31 +170,13 @@ export function WorkOrderListPanel({ workOrders, selectedId, onSelect }: WorkOrd
                   ))}
                 </div>
               )}
-              <div className="mt-1.5 flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-                {/* Assignee multi-select */}
-                <AssigneeMultiSelect wo={wo} users={users} updateWO={updateWO} />
-
-                {/* Category */}
-                <Select
-                  value={wo.category ?? "none"}
-                  onValueChange={(val) => {
-                    updateWO({
-                      id: wo.id,
-                      category: val === "none" ? null : val,
-                    });
-                  }}
-                >
-                  <SelectTrigger className="h-6 w-[100px] text-[11px] px-2">
-                    <SelectValue placeholder="Category..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">No Category</SelectItem>
-                    {(woCategories ?? []).filter((c) => c.enabled).map((c) => (
-                      <SelectItem key={c.id} value={c.id}>{c.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              {wo.category && (
+                <div className="mt-1">
+                  <span className="rounded-full border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[10px] font-medium text-slate-500">
+                    {(woCategories ?? []).find((c) => c.id === wo.category)?.label ?? wo.category}
+                  </span>
+                </div>
+              )}
             </div>
           </button>
         );

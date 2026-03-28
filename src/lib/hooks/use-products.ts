@@ -220,6 +220,7 @@ export function useUpdateProduct() {
       if (input.unitCost !== undefined) syncFields.unit_cost = input.unitCost;
       if (input.minimumStock !== undefined) syncFields.minimum_stock = input.minimumStock;
       if (input.partCategory !== undefined) syncFields.category = input.partCategory;
+      if (input.pictureUrl !== undefined) syncFields.picture_url = input.pictureUrl;
       if (Object.keys(syncFields).length > 0) {
         await supabase
           .from("parts")

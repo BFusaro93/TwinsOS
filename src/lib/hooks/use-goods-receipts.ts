@@ -5,7 +5,9 @@ import type { GoodsReceipt, GoodsReceiptLine } from "@/types/receiving";
 
 export type GoodsReceiptLineUpdate = {
   id: string;
+  productItemName: string;
   quantityReceived: number;
+  previousQuantityReceived?: number;
   quantityOrdered: number;
   unitCost: number;
 };
@@ -115,6 +117,15 @@ export function useUpdateGoodsReceipt() {
         .update({ notes: input.notes })
         .eq("id", input.id);
       if (headerError) throw headerError;
+      // Fetch current line quantities for audit comparison
+      const { data: currentLines } = await supabase
+        .from("goods_receipt_lines")
+        .select("id, quantity_received, product_item_name")
+        .eq("goods_receipt_id", input.id);
+      const oldByLineId = new Map(
+        (currentLines ?? []).map((l) => [l.id, l.quantity_received as number])
+      );
+
       for (const line of input.lines) {
         const { error: lineError } = await supabase
           .from("goods_receipt_lines")
@@ -124,6 +135,31 @@ export function useUpdateGoodsReceipt() {
           })
           .eq("id", line.id);
         if (lineError) throw lineError;
+      }
+
+      // Write audit entries for changed line item quantities
+      const { data: receiptForAudit } = await supabase
+        .from("goods_receipts")
+        .select("org_id, receipt_number")
+        .eq("id", input.id)
+        .single();
+      if (receiptForAudit) {
+        for (const line of input.lines) {
+          const oldQty = oldByLineId.get(line.id);
+          if (oldQty !== undefined && oldQty !== line.quantityReceived) {
+            await supabase.from("audit_log").insert({
+              org_id: receiptForAudit.org_id,
+              record_type: "receiving",
+              record_id: input.id,
+              action: "updated",
+              changed_by_name: "System",
+              description: `${line.productItemName}: Quantity received updated`,
+              field_changed: "quantity_received",
+              old_value: String(oldQty),
+              new_value: String(line.quantityReceived),
+            });
+          }
+        }
       }
       // Recalculate header totals
       const { data: receiptRow } = await supabase

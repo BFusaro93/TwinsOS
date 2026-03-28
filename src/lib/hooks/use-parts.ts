@@ -143,11 +143,21 @@ export function useUpdatePart() {
         .select()
         .single();
       if (error) throw error;
+
+      // Sync pictureUrl to the linked product if it was updated
+      if (input.pictureUrl !== undefined && data.product_item_id) {
+        await supabase
+          .from("product_items")
+          .update({ picture_url: input.pictureUrl })
+          .eq("id", data.product_item_id);
+      }
+
       return mapPart(data);
     },
     onSuccess: (_, { id }) => {
       queryClient.invalidateQueries({ queryKey: ["parts"] });
       queryClient.invalidateQueries({ queryKey: ["parts", id] });
+      queryClient.invalidateQueries({ queryKey: ["products"] });
     },
   });
 }

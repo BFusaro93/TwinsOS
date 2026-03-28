@@ -19,8 +19,12 @@ import { NewWorkOrderDialog } from "./NewWorkOrderDialog";
 import { WO_STATUS_LABELS, WO_PRIORITY_LABELS, ASSET_STATUS_LABELS } from "@/lib/constants";
 import { useAssets, useUpdateAssetStatus } from "@/lib/hooks/use-assets";
 import { useVehicles, useUpdateVehicleStatus } from "@/lib/hooks/use-vehicles";
-import { useWorkOrders } from "@/lib/hooks/use-work-orders";
-import { useCMMSStore } from "@/stores";
+import { useWorkOrders, useUpdateWorkOrder } from "@/lib/hooks/use-work-orders";
+import { useUsers } from "@/lib/hooks/use-users";
+import { useCMMSStore, useSettingsStore } from "@/stores";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Checkbox } from "@/components/ui/checkbox";
+import { ChevronDown } from "lucide-react";
 import { printWO } from "@/lib/print";
 import { Download, GitBranch, CheckCircle2 } from "lucide-react";
 import {
@@ -144,6 +148,10 @@ function DetailsTab({
   parentWorkOrder,
   onSubWOClick,
   onParentWOClick,
+  onAssigneeChange,
+  onCategoryChange,
+  users,
+  woCategories,
 }: {
   workOrder: WorkOrder;
   status: WorkOrderStatus;
@@ -154,6 +162,10 @@ function DetailsTab({
   parentWorkOrder: WorkOrder | null;
   onSubWOClick: (id: string) => void;
   onParentWOClick: () => void;
+  onAssigneeChange: (ids: string[], names: string[]) => void;
+  onCategoryChange: (category: string | null) => void;
+  users: Array<{ id: string; name: string }>;
+  woCategories: Array<{ id: string; label: string; enabled: boolean }>;
 }) {
   const [completing, setCompleting] = useState(false);
   const [newEntityStatus, setNewEntityStatus] = useState<AssetStatus | "no_change">("no_change");
@@ -294,13 +306,78 @@ function DetailsTab({
         />
         <MetaRow
           label="Assigned To"
+          value={(() => {
+            const selectedIds = workOrder.assignedToIds.length > 0 ? workOrder.assignedToIds : (workOrder.assignedToId ? [workOrder.assignedToId] : []);
+            const displayNames = workOrder.assignedToNames.length > 0
+              ? workOrder.assignedToNames
+              : (workOrder.assignedToName ? [workOrder.assignedToName] : []);
+            return (
+              <Popover>
+                <PopoverTrigger asChild>
+                  <button
+                    type="button"
+                    className="flex h-8 w-full max-w-[200px] items-center justify-between rounded-md border border-input bg-background px-2.5 text-xs ring-offset-background hover:bg-accent hover:text-accent-foreground"
+                  >
+                    <span className="truncate">
+                      {displayNames.length === 0
+                        ? "Assign..."
+                        : displayNames.length === 1
+                          ? displayNames[0]
+                          : `${displayNames.length} assigned`}
+                    </span>
+                    <ChevronDown className="ml-1 h-3 w-3 shrink-0 opacity-50" />
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent className="w-48 p-1" align="start">
+                  <div className="flex max-h-48 flex-col overflow-y-auto">
+                    {users.map((u) => {
+                      const isChecked = selectedIds.includes(u.id);
+                      return (
+                        <label
+                          key={u.id}
+                          className="flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-xs hover:bg-accent"
+                        >
+                          <Checkbox
+                            checked={isChecked}
+                            onCheckedChange={(checked) => {
+                              const nextIds = checked
+                                ? [...selectedIds, u.id]
+                                : selectedIds.filter((id) => id !== u.id);
+                              const nextNames = checked
+                                ? [...displayNames, u.name]
+                                : displayNames.filter((_, i) => selectedIds[i] !== u.id);
+                              onAssigneeChange(nextIds, nextNames);
+                            }}
+                          />
+                          <span className="truncate">{u.name}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </PopoverContent>
+              </Popover>
+            );
+          })()}
+        />
+        <MetaRow
+          label="Category"
           value={
-            workOrder.assignedToNames.length > 0
-              ? workOrder.assignedToNames.join(", ")
-              : workOrder.assignedToName
+            <Select
+              value={workOrder.category ?? "none"}
+              onValueChange={(val) => onCategoryChange(val === "none" ? null : val)}
+            >
+              <SelectTrigger className="h-8 w-full max-w-[200px] text-xs">
+                <SelectValue placeholder="No Category" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">No Category</SelectItem>
+                {woCategories.filter((c) => c.enabled).map((c) => (
+                  <SelectItem key={c.id} value={c.id}>{c.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           }
         />
-        <MetaRow label="Category" value={workOrder.category} />
         <MetaRow
           label="Type"
           value={
@@ -397,6 +474,9 @@ export function WorkOrderDetailPanel({ workOrder }: WorkOrderDetailPanelProps) {
   const { data: vehicles = [] } = useVehicles();
   const { data: allWorkOrders = [] } = useWorkOrders();
   const { setSelectedWorkOrderId } = useCMMSStore();
+  const { data: users = [] } = useUsers();
+  const { woCategories } = useSettingsStore();
+  const { mutate: updateWO } = useUpdateWorkOrder();
   const linkedAsset =
     workOrder.assetId && workOrder.linkedEntityType !== "vehicle"
       ? (assets.find((a) => a.id === workOrder.assetId) ?? null)
@@ -455,6 +535,20 @@ export function WorkOrderDetailPanel({ workOrder }: WorkOrderDetailPanelProps) {
                 parentWorkOrder={parentWorkOrder}
                 onSubWOClick={(id) => setSubWOSheetId(id)}
                 onParentWOClick={() => setParentWOSheetOpen(true)}
+                onAssigneeChange={(ids, names) => {
+                  updateWO({
+                    id: workOrder.id,
+                    assignedToId: ids[0] ?? null,
+                    assignedToName: names[0] ?? null,
+                    assignedToIds: ids,
+                    assignedToNames: names,
+                  });
+                }}
+                onCategoryChange={(category) => {
+                  updateWO({ id: workOrder.id, category });
+                }}
+                users={users}
+                woCategories={woCategories ?? []}
               />
             ),
           },
