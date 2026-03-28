@@ -285,7 +285,10 @@ export function PODetailPanel({ po }: PODetailPanelProps) {
         </div>
         <div className="flex items-center gap-2">
           <StatusBadge variant={status} label={PO_STATUS_LABELS[status]} />
-          <Button variant="outline" size="sm" className="gap-1.5" onClick={() => printPO(po)}>
+          <Button variant="outline" size="sm" className="gap-1.5" onClick={() => {
+            const projMap = new Map(projects.map((p) => [p.id, p.name]));
+            printPO(po, projMap);
+          }}>
             <Download className="h-3.5 w-3.5" />
             PDF
           </Button>

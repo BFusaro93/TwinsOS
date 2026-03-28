@@ -369,16 +369,11 @@ function buildHeaderHtml(opts: {
   `;
 }
 
-function buildFooterHtml(phone: string): string {
-  if (!phone) return "";
-  return `
-    <div class="footer">
-      ${escapeHtml(phone)}
-    </div>
-  `;
+function buildFooterHtml(): string {
+  return "";
 }
 
-export function printPO(po: PurchaseOrder): void {
+export function printPO(po: PurchaseOrder, projectMap?: Map<string, string>): void {
   const { orgName, logoDataUrl, companyAddress, brandColor } = useSettingsStore.getState();
 
   const subtotal = po.lineItems.reduce((s, li) => s + li.quantity * li.unitCost, 0);
@@ -388,6 +383,7 @@ export function printPO(po: PurchaseOrder): void {
   const addressLines = [
     companyAddress.street,
     [companyAddress.city, companyAddress.state, companyAddress.zip].filter(Boolean).join(", "),
+    companyAddress.phone,
   ].filter(Boolean);
 
   const headerHtml = buildHeaderHtml({
@@ -406,7 +402,7 @@ export function printPO(po: PurchaseOrder): void {
       <td>${idx + 1}</td>
       <td>${escapeHtml(li.productItemName)}</td>
       <td>${li.partNumber ? escapeHtml(li.partNumber) : "\u2014"}</td>
-      <td>${li.projectId ? escapeHtml(li.projectId) : "\u2014"}</td>
+      <td>${li.projectId ? escapeHtml(projectMap?.get(li.projectId) ?? li.projectId) : "\u2014"}</td>
       <td class="text-right">${li.quantity}</td>
       <td class="text-right">${formatMoney(li.unitCost)}</td>
       <td class="text-right">${formatMoney(li.quantity * li.unitCost)}</td>
@@ -501,19 +497,20 @@ export function printPO(po: PurchaseOrder): void {
 
   ${notesHtml}
 
-  ${buildFooterHtml(companyAddress.phone)}
+  ${buildFooterHtml()}
 </body>
 </html>`;
 
   openPrintWindow(html);
 }
 
-export function printWO(workOrder: WorkOrder): void {
+export function printWO(workOrder: WorkOrder, woParts?: Array<{ partName: string; partNumber: string; quantity: number; unitCost: number }>): void {
   const { orgName, logoDataUrl, companyAddress, brandColor } = useSettingsStore.getState();
 
   const addressLines = [
     companyAddress.street,
     [companyAddress.city, companyAddress.state, companyAddress.zip].filter(Boolean).join(", "),
+    companyAddress.phone,
   ].filter(Boolean);
 
   const headerHtml = buildHeaderHtml({
@@ -590,7 +587,44 @@ export function printWO(workOrder: WorkOrder): void {
 
   ${descriptionHtml}
 
-  ${buildFooterHtml(companyAddress.phone)}
+  ${woParts && woParts.length > 0 ? `
+  <div class="section-title">Parts</div>
+  <table>
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Part</th>
+        <th>Part #</th>
+        <th class="text-right">Qty</th>
+        <th class="text-right">Unit Cost</th>
+        <th class="text-right">Total</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${woParts.map((p, i) => `
+      <tr>
+        <td>${i + 1}</td>
+        <td>${escapeHtml(p.partName)}</td>
+        <td>${p.partNumber ? escapeHtml(p.partNumber) : "\u2014"}</td>
+        <td class="text-right">${p.quantity}</td>
+        <td class="text-right">${formatMoney(p.unitCost)}</td>
+        <td class="text-right">${formatMoney(p.quantity * p.unitCost)}</td>
+      </tr>
+      `).join("")}
+    </tbody>
+  </table>
+
+  <div class="totals-wrapper">
+    <div class="totals-box">
+      <div class="totals-row grand">
+        <span class="totals-label">Parts Total</span>
+        <span class="totals-value">${formatMoney(woParts.reduce((s, p) => s + p.quantity * p.unitCost, 0))}</span>
+      </div>
+    </div>
+  </div>
+  ` : ""}
+
+  ${buildFooterHtml()}
 </body>
 </html>`;
 

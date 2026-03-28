@@ -26,6 +26,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Checkbox } from "@/components/ui/checkbox";
 import { ChevronDown } from "lucide-react";
 import { printWO } from "@/lib/print";
+import { useWOParts } from "@/lib/hooks/use-wo-costs";
 import { Download, GitBranch, CheckCircle2 } from "lucide-react";
 import {
   Select,
@@ -521,6 +522,7 @@ export function WorkOrderDetailPanel({ workOrder }: WorkOrderDetailPanelProps) {
   const { data: allWorkOrders = [] } = useWorkOrders();
   const { setSelectedWorkOrderId } = useCMMSStore();
   const { data: users = [] } = useUsers();
+  const { data: woParts = [] } = useWOParts(workOrder.id);
   const { woCategories } = useSettingsStore();
   const { mutate: updateWO } = useUpdateWorkOrder();
   const linkedAsset =
@@ -557,7 +559,7 @@ export function WorkOrderDetailPanel({ workOrder }: WorkOrderDetailPanelProps) {
             variant={status}
             label={WO_STATUS_LABELS[status]}
           />
-          <Button variant="outline" size="sm" className="gap-1.5" onClick={() => printWO(workOrder)}>
+          <Button variant="outline" size="sm" className="gap-1.5" onClick={() => printWO(workOrder, woParts)}>
             <Download className="h-3.5 w-3.5" />
             PDF
           </Button>
