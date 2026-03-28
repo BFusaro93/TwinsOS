@@ -160,11 +160,11 @@ export function useUpdateVehicleStatus() {
   });
 }
 
-const VALID_VEHICLE_STATUSES = new Set(["in_service", "out_of_service", "under_maintenance", "retired"]);
+const VALID_VEHICLE_STATUSES = new Set(["active", "inactive", "in_shop", "out_of_service", "disposed"]);
 
 function normaliseVehicleStatus(raw: string): string {
   const s = raw.trim().toLowerCase().replace(/\s+/g, "_");
-  return VALID_VEHICLE_STATUSES.has(s) ? s : "in_service";
+  return VALID_VEHICLE_STATUSES.has(s) ? s : "active";
 }
 
 /**
