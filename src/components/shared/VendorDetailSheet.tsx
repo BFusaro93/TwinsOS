@@ -552,7 +552,6 @@ export function VendorDetailSheet({ vendor, open, onOpenChange }: VendorDetailSh
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         className="flex w-[580px] flex-col overflow-hidden p-0 sm:max-w-[580px]"
-        onInteractOutside={(e) => e.preventDefault()}
       >
         <SheetHeader className="shrink-0 border-b px-6 py-4 pr-12">
           <div className="flex items-center gap-3">

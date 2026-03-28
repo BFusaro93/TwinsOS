@@ -272,7 +272,6 @@ export function RequisitionListPage() {
       <Sheet open={!!sheetReq} onOpenChange={(o) => { if (!o) setSheetReqId(null); }}>
         <SheetContent
           className="flex w-[580px] flex-col overflow-hidden p-0 sm:max-w-[580px]"
-          onInteractOutside={(e) => e.preventDefault()}
         >
           {sheetReq && <RequisitionDetailPanel key={sheetReq.id} requisition={sheetReq} />}
         </SheetContent>

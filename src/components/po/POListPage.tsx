@@ -294,7 +294,6 @@ export function POListPage() {
       <Sheet open={!!sheetPO} onOpenChange={(o) => { if (!o) setSheetPOId(null); }}>
         <SheetContent
           className="flex w-[580px] flex-col overflow-hidden p-0 sm:max-w-[580px]"
-          onInteractOutside={(e) => e.preventDefault()}
         >
           {sheetPO && <PODetailPanel key={sheetPO.id} po={sheetPO} />}
         </SheetContent>

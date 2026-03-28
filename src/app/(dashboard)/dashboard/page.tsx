@@ -177,10 +177,10 @@ export default function DashboardPage() {
           Purchasing
         </p>
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-          <StatCard title="Open Requisitions" value={poKPIs.openRequisitions} icon={FileText} />
-          <StatCard title="Pending Approval" value={poKPIs.pendingApproval} icon={Clock} />
-          <StatCard title="Open Purchase Orders" value={poKPIs.openPOs} icon={ShoppingCart} />
-          <StatCard title="Spend MTD" value={formatCurrency(poKPIs.totalSpendMTD)} icon={DollarSign} />
+          <StatCard title="Open Requisitions" value={poKPIs.openRequisitions} icon={FileText} href="/po/requisitions" />
+          <StatCard title="Pending Approval" value={poKPIs.pendingApproval} icon={Clock} href="/po/requisitions" />
+          <StatCard title="Open Purchase Orders" value={poKPIs.openPOs} icon={ShoppingCart} href="/po/orders" />
+          <StatCard title="Spend MTD" value={formatCurrency(poKPIs.totalSpendMTD)} icon={DollarSign} href="/po/orders" />
         </div>
       </section>
 
@@ -190,15 +190,16 @@ export default function DashboardPage() {
           Maintenance
         </p>
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-          <StatCard title="Open Work Orders" value={cmmsKPIs.openWorkOrders} icon={Wrench} />
-          <StatCard title="High Priority" value={cmmsKPIs.highPriority} icon={AlertTriangle} />
-          <StatCard title="Overdue WOs" value={cmmsKPIs.overdueWOs} icon={Clock} />
+          <StatCard title="Open Work Orders" value={cmmsKPIs.openWorkOrders} icon={Wrench} href="/cmms/work-orders" />
+          <StatCard title="High Priority" value={cmmsKPIs.highPriority} icon={AlertTriangle} href="/cmms/work-orders" />
+          <StatCard title="Overdue WOs" value={cmmsKPIs.overdueWOs} icon={Clock} href="/cmms/work-orders" />
           <StatCard
             title="PM Compliance"
             value={`${cmmsKPIs.pmComplianceRate}%`}
             subValue={cmmsKPIs.assetsInService}
             subLabel="assets in service"
             icon={CheckCircle2}
+            href="/cmms/pm-schedules"
           />
         </div>
       </section>

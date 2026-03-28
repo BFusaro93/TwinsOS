@@ -691,7 +691,6 @@ export function VehicleListPage() {
       <Sheet open={!!sheetVehicle} onOpenChange={(o) => { if (!o) setSheetVehicleId(null); }}>
         <SheetContent
           className="flex w-[580px] flex-col overflow-hidden p-0 sm:max-w-[580px]"
-          onInteractOutside={(e) => e.preventDefault()}
         >
           {sheetVehicle && <VehicleDetailPanel vehicle={sheetVehicle} />}
         </SheetContent>

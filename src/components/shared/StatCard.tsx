@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -10,6 +11,7 @@ interface StatCardProps {
   trend?: "up" | "down" | "neutral";
   trendValue?: string;
   className?: string;
+  href?: string;
 }
 
 export function StatCard({
@@ -21,14 +23,10 @@ export function StatCard({
   trend,
   trendValue,
   className,
+  href,
 }: StatCardProps) {
-  return (
-    <div
-      className={cn(
-        "rounded-lg border bg-white p-5 shadow-sm",
-        className
-      )}
-    >
+  const content = (
+    <>
       <div className="flex items-start justify-between">
         <p className="text-sm font-medium text-slate-500">{title}</p>
         {Icon && (
@@ -64,6 +62,22 @@ export function StatCard({
           </span>
         </div>
       )}
-    </div>
+    </>
   );
+
+  const cardClassName = cn(
+    "rounded-lg border bg-white p-5 shadow-sm",
+    href && "transition-shadow hover:shadow-md cursor-pointer",
+    className,
+  );
+
+  if (href) {
+    return (
+      <Link href={href} className={cardClassName}>
+        {content}
+      </Link>
+    );
+  }
+
+  return <div className={cardClassName}>{content}</div>;
 }

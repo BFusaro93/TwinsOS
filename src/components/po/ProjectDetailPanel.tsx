@@ -51,7 +51,17 @@ import { useDeleteProject, useUpdateProject } from "@/lib/hooks/use-projects";
 import { usePOStore } from "@/stores";
 import type { PrefillItem } from "./NewRequisitionDialog";
 import type { POPrefillItem } from "./NewPODialog";
-import type { Project, ProjectStatus } from "@/types";
+import { PODetailSheet } from "./PODetailSheet";
+import { ProductDetailSheet } from "./ProductDetailSheet";
+import { RequisitionDetailPanel } from "./RequisitionDetailPanel";
+import { useProducts } from "@/lib/hooks/use-products";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import type { Project, ProjectStatus, Requisition, PurchaseOrder } from "@/types";
 
 interface ProjectDetailPanelProps {
   project: Project;
@@ -87,8 +97,10 @@ function MetaRow({ label, value }: { label: string; value: React.ReactNode }) {
 
 interface ProjectLineItem {
   id: string;
+  sourceId: string;
   sourceNumber: string;
   sourceType: "requisition" | "po" | "direct";
+  productItemId: string;
   productItemName: string;
   partNumber: string;
   quantity: number;
@@ -99,6 +111,7 @@ interface ProjectLineItem {
 function MaterialsTab({ project }: { project: Project }) {
   const { data: requisitions } = useRequisitions();
   const { data: purchaseOrders } = usePurchaseOrders();
+  const { data: products = [] } = useProducts();
   // Build the initial list from linked REQ / PO line items
   const persisted: ProjectLineItem[] = [];
   (requisitions ?? []).forEach((req) => {
@@ -107,8 +120,10 @@ function MaterialsTab({ project }: { project: Project }) {
       .forEach((li) => {
         persisted.push({
           id: li.id,
+          sourceId: req.id,
           sourceNumber: req.requisitionNumber,
           sourceType: "requisition",
+          productItemId: li.productItemId ?? "",
           productItemName: li.productItemName,
           partNumber: li.partNumber,
           quantity: li.quantity,
@@ -123,8 +138,10 @@ function MaterialsTab({ project }: { project: Project }) {
       .forEach((li) => {
         persisted.push({
           id: li.id,
+          sourceId: po.id,
           sourceNumber: po.poNumber,
           sourceType: "po",
+          productItemId: li.productItemId ?? "",
           productItemName: li.productItemName,
           partNumber: li.partNumber,
           quantity: li.quantity,
@@ -167,6 +184,21 @@ function MaterialsTab({ project }: { project: Project }) {
     setItems((prev) => prev.filter((li) => li.id !== id));
   }
 
+  // Source / Product overlay state
+  const [selectedSourceItem, setSelectedSourceItem] = useState<ProjectLineItem | null>(null);
+  const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
+
+  const selectedProduct = selectedProductId
+    ? products.find((p) => p.id === selectedProductId) ?? null
+    : null;
+
+  const selectedRequisition = selectedSourceItem?.sourceType === "requisition"
+    ? (requisitions ?? []).find((r) => r.id === selectedSourceItem.sourceId) ?? null
+    : null;
+  const selectedPO = selectedSourceItem?.sourceType === "po"
+    ? (purchaseOrders ?? []).find((po) => po.id === selectedSourceItem.sourceId) ?? null
+    : null;
+
   // Add Materials dialog (multi-select, 2-step)
   const [addOpen, setAddOpen] = useState(false);
 
@@ -177,11 +209,13 @@ function MaterialsTab({ project }: { project: Project }) {
   const [poPrefill, setPoPrefill] = useState<{ projectId: string; items: POPrefillItem[] } | null>(null);
 
   function handleAddConfirm(draftItems: AddMaterialsDraftItem[], destination: AddMaterialsDestination) {
-    const toProjectItems = (src: AddMaterialsDraftItem[], sourceNumber: string, sourceType: ProjectLineItem["sourceType"]): ProjectLineItem[] =>
+    const toProjectItems = (src: AddMaterialsDraftItem[], sourceNumber: string, sourceType: ProjectLineItem["sourceType"], sourceId = ""): ProjectLineItem[] =>
       src.map((i) => ({
         id: `${sourceType}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        sourceId,
         sourceNumber,
         sourceType,
+        productItemId: i.productKey,
         productItemName: i.productName,
         partNumber: i.partNumber,
         quantity: i.quantity,
@@ -242,24 +276,45 @@ function MaterialsTab({ project }: { project: Project }) {
               <TableBody>
                 {items.map((li) => (
                   <TableRow key={li.id} className="group text-sm">
-                    <TableCell className="font-medium">{li.productItemName}</TableCell>
+                    <TableCell className="font-medium">
+                      {li.productItemId ? (
+                        <button
+                          type="button"
+                          onClick={() => setSelectedProductId(li.productItemId)}
+                          className="text-left font-medium text-brand-600 hover:underline"
+                        >
+                          {li.productItemName}
+                        </button>
+                      ) : (
+                        li.productItemName
+                      )}
+                    </TableCell>
                     <TableCell className="font-mono text-xs text-slate-500">{li.partNumber}</TableCell>
                     <TableCell className="text-right">{li.quantity}</TableCell>
                     <TableCell className="text-right text-slate-600">{formatCurrency(li.unitCost)}</TableCell>
                     <TableCell className="text-right font-medium">{formatCurrency(li.quantity * li.unitCost)}</TableCell>
                     <TableCell>
-                      <Badge
-                        variant="outline"
-                        className={
-                          li.sourceType === "po"
-                            ? "border-blue-200 bg-blue-50 text-blue-700"
-                            : li.sourceType === "direct"
-                            ? "border-green-200 bg-green-50 text-green-700"
-                            : "border-slate-200 bg-slate-50 text-slate-600"
-                        }
-                      >
-                        {li.sourceNumber}
-                      </Badge>
+                      {li.sourceType !== "direct" && li.sourceId ? (
+                        <button type="button" onClick={() => setSelectedSourceItem(li)}>
+                          <Badge
+                            variant="outline"
+                            className={`cursor-pointer hover:opacity-80 ${
+                              li.sourceType === "po"
+                                ? "border-blue-200 bg-blue-50 text-blue-700"
+                                : "border-slate-200 bg-slate-50 text-slate-600"
+                            }`}
+                          >
+                            {li.sourceNumber}
+                          </Badge>
+                        </button>
+                      ) : (
+                        <Badge
+                          variant="outline"
+                          className="border-green-200 bg-green-50 text-green-700"
+                        >
+                          {li.sourceNumber}
+                        </Badge>
+                      )}
                     </TableCell>
                     <TableCell className="px-2 text-right">
                       <div className="flex items-center justify-end gap-1 opacity-0 transition-opacity group-hover:opacity-100">
@@ -294,6 +349,35 @@ function MaterialsTab({ project }: { project: Project }) {
 
       <NewRequisitionDialog open={reqOpen} onOpenChange={setReqOpen} prefillData={reqPrefill} />
       <NewPODialog open={poOpen} onOpenChange={setPoOpen} prefillData={poPrefill} />
+
+      {/* Source overlay — Requisition */}
+      <Sheet
+        open={!!selectedRequisition}
+        onOpenChange={(o) => { if (!o) setSelectedSourceItem(null); }}
+      >
+        <SheetContent className="flex w-[580px] flex-col overflow-hidden p-0 sm:max-w-[580px]">
+          <SheetHeader className="sr-only">
+            <SheetTitle>{selectedRequisition?.requisitionNumber}</SheetTitle>
+          </SheetHeader>
+          {selectedRequisition && (
+            <RequisitionDetailPanel key={selectedRequisition.id} requisition={selectedRequisition} />
+          )}
+        </SheetContent>
+      </Sheet>
+
+      {/* Source overlay — PO */}
+      <PODetailSheet
+        po={selectedPO}
+        open={!!selectedPO}
+        onOpenChange={(o) => { if (!o) setSelectedSourceItem(null); }}
+      />
+
+      {/* Product overlay */}
+      <ProductDetailSheet
+        product={selectedProduct}
+        open={!!selectedProduct}
+        onOpenChange={(o) => { if (!o) setSelectedProductId(null); }}
+      />
 
       {/* Edit dialog */}
       <Dialog open={!!editingItem} onOpenChange={(o) => { if (!o) setEditingId(null); }}>

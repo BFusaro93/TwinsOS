@@ -365,7 +365,6 @@ export function AssetListPage() {
       <Sheet open={!!sheetAsset} onOpenChange={(o) => { if (!o) setSheetAssetId(null); }}>
         <SheetContent
           className="flex w-[720px] flex-col overflow-hidden p-0 sm:max-w-[720px]"
-          onInteractOutside={(e) => e.preventDefault()}
         >
           {sheetAsset && <AssetDetailPanel asset={sheetAsset} />}
         </SheetContent>

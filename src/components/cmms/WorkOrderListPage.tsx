@@ -614,7 +614,6 @@ export function WorkOrderListPage() {
       <Sheet open={!!sheetWO} onOpenChange={(o) => { if (!o) setSheetWOId(null); }}>
         <SheetContent
           className="flex w-[580px] flex-col overflow-hidden p-0 sm:max-w-[580px]"
-          onInteractOutside={(e) => e.preventDefault()}
         >
           {sheetWO && <WorkOrderDetailPanel workOrder={sheetWO} />}
         </SheetContent>
