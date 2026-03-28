@@ -140,33 +140,17 @@ export function useUpdateGoodsReceipt() {
         if (lineError) throw lineError;
       }
 
-      // Write audit entries for each changed line item quantity via RPC
-      // (direct inserts are blocked by RLS; the RPC uses SECURITY DEFINER)
-      if (currentReceipt) {
-        for (const line of input.lines) {
-          const oldQty = oldByLineId.get(line.id);
-          if (oldQty !== undefined && oldQty !== line.quantityReceived) {
-            const { error: rpcErr } = await supabase.rpc("insert_audit_entry", {
-              p_org_id: currentReceipt.org_id as string,
-              p_record_type: "receiving",
-              p_record_id: input.id,
-              p_action: "updated",
-              p_description: `${line.productItemName}: Quantity received ${oldQty} → ${line.quantityReceived}`,
-              p_field_changed: "quantity_received",
-              p_old_value: String(oldQty),
-              p_new_value: String(line.quantityReceived),
-            });
-            // Non-critical: don't fail the whole update if audit insert fails
-            if (rpcErr) {
-              // eslint-disable-next-line no-console
-              console.warn("Audit insert failed:", rpcErr.message);
-            }
-          }
+      // Build a single header update with notes + recalculated totals
+      // (one DB write = one trigger fire with all changed fields)
+      // Collect quantity changes for audit entries after header update
+      const qtyChanges: Array<{ name: string; oldQty: number; newQty: number }> = [];
+      for (const line of input.lines) {
+        const oldQty = oldByLineId.get(line.id);
+        if (oldQty !== undefined && oldQty !== line.quantityReceived) {
+          qtyChanges.push({ name: line.productItemName, oldQty, newQty: line.quantityReceived });
         }
       }
 
-      // Build a single header update with notes + recalculated totals
-      // (one DB write = one trigger fire with all changed fields)
       if (currentReceipt) {
         const taxRate = currentReceipt.tax_rate_percent as number;
         const shippingCost = currentReceipt.shipping_cost as number;
@@ -186,6 +170,23 @@ export function useUpdateGoodsReceipt() {
 
         await supabase.from("goods_receipts").update(headerPatch).eq("id", input.id);
       }
+
+      // Write audit entries for quantity changes via SECURITY DEFINER RPC
+      if (currentReceipt && qtyChanges.length > 0) {
+        for (const chg of qtyChanges) {
+          await supabase.rpc("insert_audit_entry", {
+            p_org_id: currentReceipt.org_id as string,
+            p_record_type: "receiving",
+            p_record_id: input.id,
+            p_action: "updated",
+            p_description: `${chg.name}: Quantity received ${chg.oldQty} → ${chg.newQty}`,
+            p_field_changed: "quantity_received",
+            p_old_value: String(chg.oldQty),
+            p_new_value: String(chg.newQty),
+          });
+        }
+      }
+
       const { data, error: fetchError } = await supabase
         .from("goods_receipts")
         .select("*, goods_receipt_lines (*)")
