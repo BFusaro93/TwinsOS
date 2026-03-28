@@ -261,7 +261,7 @@ export function useBulkImportParts() {
           };
         });
       if (inserts.length === 0) return 0;
-      const { error } = await supabase.from("parts").upsert(inserts, { onConflict: "org_id,part_number" });
+      const { error } = await supabase.from("parts").insert(inserts);
       if (error) throw error;
       return inserts.length;
     },

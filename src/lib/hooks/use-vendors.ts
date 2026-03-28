@@ -128,7 +128,7 @@ export function useBulkImportVendors() {
           is_active: r.isActive?.toLowerCase() !== "false",
         }));
       if (inserts.length === 0) return 0;
-      const { error } = await supabase.from("vendors").upsert(inserts, { onConflict: "org_id,name" });
+      const { error } = await supabase.from("vendors").insert(inserts);
       if (error) throw error;
       return inserts.length;
     },

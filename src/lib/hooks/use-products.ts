@@ -274,7 +274,7 @@ export function useBulkImportProducts() {
           };
         });
       if (inserts.length === 0) return 0;
-      const { error } = await supabase.from("product_items").upsert(inserts, { onConflict: "org_id,part_number" });
+      const { error } = await supabase.from("product_items").insert(inserts);
       if (error) throw error;
       return inserts.length;
     },

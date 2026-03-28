@@ -175,7 +175,7 @@ export function useBulkImportAssets() {
           status: normaliseAssetStatus(r.status ?? ""),
         }));
       if (inserts.length === 0) return 0;
-      const { error } = await supabase.from("assets").upsert(inserts, { onConflict: "org_id,asset_tag" });
+      const { error } = await supabase.from("assets").insert(inserts);
       if (error) throw error;
       return inserts.length;
     },
