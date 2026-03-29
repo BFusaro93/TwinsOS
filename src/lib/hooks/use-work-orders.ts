@@ -162,9 +162,31 @@ export function useBulkImportWorkOrders() {
           work_order_number: r.workOrderNumber?.trim() || `WO-${Date.now().toString().slice(-6)}-${Math.random().toString(36).slice(2, 5)}`,
         }));
       if (inserts.length === 0) return 0;
-      const { error } = await supabase.from("work_orders").insert(inserts);
-      if (error) throw error;
-      return inserts.length;
+
+      // Insert one-by-one; on duplicate work_order_number, update the existing row
+      let count = 0;
+      for (const row of inserts) {
+        const { error } = await supabase.from("work_orders").insert(row);
+        if (error?.code === "23505") {
+          const { data: { user } } = await supabase.auth.getUser();
+          const { data: profile } = await supabase.from("profiles").select("org_id").eq("id", user!.id).single();
+          await supabase.from("work_orders").update({
+            title: row.title,
+            description: row.description,
+            status: row.status,
+            priority: row.priority,
+            wo_type: row.wo_type,
+            asset_name: row.asset_name,
+            assigned_to_name: row.assigned_to_name,
+            due_date: row.due_date,
+            category: row.category,
+          }).eq("work_order_number", row.work_order_number).eq("org_id", profile!.org_id).is("deleted_at", null);
+        } else if (error) {
+          throw error;
+        }
+        count++;
+      }
+      return count;
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["work-orders"] }),
   });

@@ -180,9 +180,36 @@ export function useBulkImportAssets() {
           finance_institution: r.financeInstitution?.trim() || null,
         }));
       if (inserts.length === 0) return 0;
-      const { error } = await supabase.from("assets").insert(inserts);
-      if (error) throw error;
-      return inserts.length;
+
+      // Insert one-by-one; on duplicate asset_tag, update the existing row
+      let count = 0;
+      for (const row of inserts) {
+        const { error } = await supabase.from("assets").insert(row);
+        if (error?.code === "23505") {
+          const { data: { user } } = await supabase.auth.getUser();
+          const { data: profile } = await supabase.from("profiles").select("org_id").eq("id", user!.id).single();
+          await supabase.from("assets").update({
+            name: row.name,
+            equipment_number: row.equipment_number,
+            asset_type: row.asset_type,
+            make: row.make,
+            model: row.model,
+            year: row.year,
+            serial_number: row.serial_number,
+            location: row.location,
+            status: row.status,
+            purchase_vendor_name: row.purchase_vendor_name,
+            purchase_date: row.purchase_date,
+            purchase_price: row.purchase_price,
+            payment_method: row.payment_method,
+            finance_institution: row.finance_institution,
+          }).eq("asset_tag", row.asset_tag).eq("org_id", profile!.org_id).is("deleted_at", null);
+        } else if (error) {
+          throw error;
+        }
+        count++;
+      }
+      return count;
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["assets"] }),
   });

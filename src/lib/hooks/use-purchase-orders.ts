@@ -176,9 +176,9 @@ export function useBulkImportPurchaseOrders() {
     mutationFn: async (rows: Record<string, string>[]) => {
       const supabase = createClient();
       const inserts = rows
-        .filter((r) => r.poNumber?.trim() && r.vendorName?.trim())
+        .filter((r) => r.vendorName?.trim())
         .map((r) => ({
-          po_number: r.poNumber.trim(),
+          po_number: r.poNumber?.trim() || `PO-${Date.now().toString().slice(-6)}-${Math.random().toString(36).slice(2, 5)}`,
           vendor_name: r.vendorName.trim(),
           po_date: r.poDate?.trim() || null,
           invoice_number: r.invoiceNumber?.trim() || null,
@@ -191,9 +191,26 @@ export function useBulkImportPurchaseOrders() {
           grand_total: 0,
         }));
       if (inserts.length === 0) return 0;
-      const { error } = await supabase.from("purchase_orders").insert(inserts);
-      if (error) throw error;
-      return inserts.length;
+
+      // Insert one-by-one; on duplicate po_number, update the existing row
+      let count = 0;
+      for (const row of inserts) {
+        const { error } = await supabase.from("purchase_orders").insert(row);
+        if (error?.code === "23505") {
+          const { data: { user } } = await supabase.auth.getUser();
+          const { data: profile } = await supabase.from("profiles").select("org_id").eq("id", user!.id).single();
+          await supabase.from("purchase_orders").update({
+            vendor_name: row.vendor_name,
+            po_date: row.po_date,
+            invoice_number: row.invoice_number,
+            notes: row.notes,
+          }).eq("po_number", row.po_number).eq("org_id", profile!.org_id).is("deleted_at", null);
+        } else if (error) {
+          throw error;
+        }
+        count++;
+      }
+      return count;
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["purchase-orders"] }),
   });

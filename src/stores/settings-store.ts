@@ -283,6 +283,7 @@ interface SettingsState {
     taxRatePercent?: number;
     costMethod?: CostMethod;
     portalEnabled?: boolean;
+    logoDataUrl?: string | null;
     woCategories?: WOCategoryConfig[];
     partCategories?: PartCategoryConfig[];
     assetTypes?: AssetTypeConfig[];
@@ -548,6 +549,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
       ...(data.taxRatePercent !== undefined && { taxRatePercent: data.taxRatePercent }),
       ...(data.costMethod !== undefined   && { costMethod: data.costMethod }),
       ...(data.portalEnabled !== undefined && { portalEnabled: data.portalEnabled }),
+      ...(data.logoDataUrl !== undefined && { logoDataUrl: data.logoDataUrl }),
       ...(data.woCategories !== undefined && { woCategories: data.woCategories }),
       ...(data.partCategories !== undefined && { partCategories: data.partCategories }),
       ...(data.assetTypes !== undefined   && { assetTypes: data.assetTypes }),

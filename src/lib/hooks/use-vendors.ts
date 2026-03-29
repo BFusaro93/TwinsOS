@@ -128,9 +128,30 @@ export function useBulkImportVendors() {
           is_active: r.isActive?.toLowerCase() !== "false",
         }));
       if (inserts.length === 0) return 0;
-      const { error } = await supabase.from("vendors").insert(inserts);
-      if (error) throw error;
-      return inserts.length;
+
+      // Insert one-by-one; on duplicate name, update the existing row
+      let count = 0;
+      for (const row of inserts) {
+        const { error } = await supabase.from("vendors").insert(row);
+        if (error?.code === "23505") {
+          const { data: { user } } = await supabase.auth.getUser();
+          const { data: profile } = await supabase.from("profiles").select("org_id").eq("id", user!.id).single();
+          await supabase.from("vendors").update({
+            contact_name: row.contact_name,
+            email: row.email,
+            phone: row.phone,
+            address: row.address,
+            website: row.website,
+            notes: row.notes,
+            vendor_type: row.vendor_type,
+            is_active: row.is_active,
+          }).eq("name", row.name).eq("org_id", profile!.org_id).is("deleted_at", null);
+        } else if (error) {
+          throw error;
+        }
+        count++;
+      }
+      return count;
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["vendors"] }),
   });

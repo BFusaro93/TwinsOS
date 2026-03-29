@@ -197,9 +197,36 @@ export function useBulkImportVehicles() {
           asset_type: "vehicle",
         }));
       if (inserts.length === 0) return 0;
-      const { error } = await supabase.from("vehicles").insert(inserts);
-      if (error) throw error;
-      return inserts.length;
+
+      // Insert one-by-one; on duplicate asset_tag, update the existing row
+      let count = 0;
+      for (const row of inserts) {
+        const { error } = await supabase.from("vehicles").insert(row);
+        if (error?.code === "23505") {
+          const { data: { user } } = await supabase.auth.getUser();
+          const { data: profile } = await supabase.from("profiles").select("org_id").eq("id", user!.id).single();
+          await supabase.from("vehicles").update({
+            name: row.name,
+            make: row.make,
+            model: row.model,
+            year: row.year,
+            license_plate: row.license_plate,
+            vin: row.vin,
+            fuel_type: row.fuel_type,
+            status: row.status,
+            assigned_crew: row.assigned_crew,
+            purchase_vendor_name: row.purchase_vendor_name,
+            purchase_date: row.purchase_date,
+            purchase_price: row.purchase_price,
+            payment_method: row.payment_method,
+            finance_institution: row.finance_institution,
+          }).eq("asset_tag", row.asset_tag).eq("org_id", profile!.org_id).is("deleted_at", null);
+        } else if (error) {
+          throw error;
+        }
+        count++;
+      }
+      return count;
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["vehicles"] }),
   });

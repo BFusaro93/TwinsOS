@@ -90,7 +90,17 @@ export function useUpdateOrgSettings() {
       if (input.taxRatePercent !== undefined) patch.tax_rate_percent = input.taxRatePercent;
       if (input.costMethod !== undefined)    patch.cost_method      = input.costMethod;
       if (input.portalEnabled !== undefined) patch.portal_enabled   = input.portalEnabled;
-      if (input.customizations !== undefined) patch.customizations  = input.customizations;
+
+      // Merge customizations with existing values instead of replacing them
+      if (input.customizations !== undefined) {
+        const { data: existing } = await supabase
+          .from("organizations")
+          .select("customizations")
+          .eq("id", profile.org_id)
+          .single();
+        const prev = (existing?.customizations as Record<string, unknown>) ?? {};
+        patch.customizations = { ...prev, ...input.customizations };
+      }
 
       const { error } = await supabase
         .from("organizations")

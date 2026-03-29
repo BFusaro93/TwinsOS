@@ -13,9 +13,8 @@ import {
   Download,
   ExternalLink,
   FileText,
-  MapPin,
-  Package,
   Plus,
+  ShoppingBag,
   ShoppingCart,
   Trash2,
   Truck,
@@ -55,6 +54,7 @@ import { useParts, useBulkImportParts } from "@/lib/hooks/use-parts";
 import { useVendors, useBulkImportVendors } from "@/lib/hooks/use-vendors";
 import { useRequisitions, useBulkImportRequisitions } from "@/lib/hooks/use-requisitions";
 import { usePurchaseOrders, useBulkImportPurchaseOrders } from "@/lib/hooks/use-purchase-orders";
+import { useProducts, useBulkImportProducts } from "@/lib/hooks/use-products";
 import { downloadCSV, readCSVFile } from "@/lib/csv";
 import { autoMapColumns, remapRows } from "@/components/shared/ImportExportMenu";
 import { formatCurrency } from "@/lib/utils";
@@ -451,6 +451,7 @@ function GeneralTab() {
     reader.onload = (ev) => {
       const result = ev.target?.result as string;
       setLogoDataUrl(result);
+      updateOrgSettings({ customizations: { logoDataUrl: result } });
     };
     reader.readAsDataURL(file);
     e.target.value = "";
@@ -535,7 +536,7 @@ function GeneralTab() {
                       size="sm"
                       variant="ghost"
                       className="h-7 gap-1 text-xs text-red-500 hover:text-red-600"
-                      onClick={() => setLogoDataUrl(null)}
+                      onClick={() => { setLogoDataUrl(null); updateOrgSettings({ customizations: { logoDataUrl: null } }); }}
                     >
                       <Trash2 className="h-3 w-3" /> Remove
                     </Button>
@@ -1141,6 +1142,7 @@ function ImportExportTab() {
   const { data: vendors } = useVendors();
   const { data: requisitions } = useRequisitions();
   const { data: purchaseOrders } = usePurchaseOrders();
+  const { data: products } = useProducts();
 
   // Bulk import hooks
   const { mutateAsync: bulkImportWorkOrders, isPending: importingWO } = useBulkImportWorkOrders();
@@ -1149,6 +1151,8 @@ function ImportExportTab() {
   const { mutateAsync: bulkImportParts, isPending: importingParts } = useBulkImportParts();
   const { mutateAsync: bulkImportVendors, isPending: importingVendors } = useBulkImportVendors();
   const { mutateAsync: bulkImportRequisitions, isPending: importingReqs } = useBulkImportRequisitions();
+  const { mutateAsync: bulkImportProducts, isPending: importingProducts } = useBulkImportProducts();
+  const { mutateAsync: bulkImportPurchaseOrders, isPending: importingPOs } = useBulkImportPurchaseOrders();
 
   // Export handlers
   function handleExport(label: string) {
@@ -1195,15 +1199,12 @@ function ImportExportTab() {
           ["poNumber", "poDate", "status", "vendorName", "invoiceNumber", "grandTotal", "notes"],
           purchaseOrders.map((po) => [po.poNumber, po.poDate ?? "", po.status, po.vendorName, po.invoiceNumber ?? "", formatCurrency(po.grandTotal), po.notes ?? ""]));
         break;
-      case "Locations": {
-        const { locations: locs } = useSettingsStore.getState();
-        const enabled = locs.filter((l) => l.enabled);
-        if (!enabled.length) return;
-        downloadCSV("locations.csv",
-          ["id", "label", "enabled"],
-          enabled.map((l) => [l.id, l.label, String(l.enabled)]));
+      case "Products":
+        if (!products?.length) return;
+        downloadCSV("products.csv",
+          ["name", "partNumber", "description", "category", "unitCost", "price", "quantityOnHand", "vendorName", "isInventory"],
+          products.map((p) => [p.name, p.partNumber, p.description ?? "", p.category, formatCurrency(p.unitCost), formatCurrency(p.price), String(p.quantityOnHand), p.vendorName ?? "", p.isInventory ? "yes" : "no"]));
         break;
-      }
       default:
         break;
     }
@@ -1213,11 +1214,11 @@ function ImportExportTab() {
     { label: "Work Orders",     icon: <ClipboardList className="h-6 w-6" /> },
     { label: "Assets",          icon: <Cog className="h-6 w-6" /> },
     { label: "Vehicles",        icon: <Truck className="h-6 w-6" /> },
-    { label: "Parts",           icon: <Package className="h-6 w-6" /> },
+    { label: "Parts",           icon: <Cog className="h-6 w-6" /> },
     { label: "Vendors",         icon: <Building2 className="h-6 w-6" /> },
     { label: "Requisitions",    icon: <FileText className="h-6 w-6" /> },
     { label: "Purchase Orders", icon: <ShoppingCart className="h-6 w-6" /> },
-    { label: "Locations",       icon: <MapPin className="h-6 w-6" /> },
+    { label: "Products",        icon: <ShoppingBag className="h-6 w-6" /> },
   ];
 
   return (
@@ -1272,9 +1273,11 @@ function ImportExportTab() {
               { label: "Work Orders",  icon: <ClipboardList className="h-6 w-6" />, onImport: (r: Record<string, string>[]) => bulkImportWorkOrders(r), templateColumns: ["title", "description", "priority", "status", "category", "assetName", "assignedToName", "dueDate"], required: ["title"] },
               { label: "Assets",       icon: <Cog className="h-6 w-6" />,           onImport: (r: Record<string, string>[]) => bulkImportAssets(r),     templateColumns: ["name", "assetTag", "equipmentNumber", "assetType", "make", "model", "year", "serialNumber", "location", "status", "purchaseVendorName", "purchaseDate", "purchasePrice", "paymentMethod", "financeInstitution"], required: ["name", "assetTag"] },
               { label: "Vehicles",     icon: <Truck className="h-6 w-6" />,         onImport: (r: Record<string, string>[]) => bulkImportVehicles(r),   templateColumns: ["name", "assetTag", "make", "model", "year", "licensePlate", "vin", "fuelType", "status", "assignedCrew", "purchaseVendorName", "purchaseDate", "purchasePrice", "paymentMethod", "financeInstitution"], required: ["name", "assetTag"] },
-              { label: "Parts",        icon: <Package className="h-6 w-6" />,       onImport: (r: Record<string, string>[]) => bulkImportParts(r),      templateColumns: ["name", "partNumber", "description", "category", "unitCost", "quantityOnHand", "minimumStock", "vendorName", "location"], required: ["name", "partNumber"] },
+              { label: "Parts",        icon: <Cog className="h-6 w-6" />,            onImport: (r: Record<string, string>[]) => bulkImportParts(r),      templateColumns: ["name", "partNumber", "description", "category", "unitCost", "quantityOnHand", "minimumStock", "vendorName", "location"], required: ["name", "partNumber"] },
               { label: "Vendors",      icon: <Building2 className="h-6 w-6" />,     onImport: (r: Record<string, string>[]) => bulkImportVendors(r),    templateColumns: ["name", "contactName", "email", "phone", "address", "vendorType", "website", "notes"], required: ["name"] },
-              { label: "Requisitions", icon: <FileText className="h-6 w-6" />,      onImport: (r: Record<string, string>[]) => bulkImportRequisitions(r), templateColumns: ["title", "vendorName", "notes"], required: ["title"] },
+              { label: "Requisitions",    icon: <FileText className="h-6 w-6" />,      onImport: (r: Record<string, string>[]) => bulkImportRequisitions(r), templateColumns: ["title", "vendorName", "notes"], required: ["title"] },
+              { label: "Products",        icon: <ShoppingBag className="h-6 w-6" />,  onImport: (r: Record<string, string>[]) => bulkImportProducts(r), templateColumns: ["name", "partNumber", "description", "category", "unitCost", "price", "quantityOnHand", "vendorName", "isInventory"], required: ["name", "partNumber", "category"] },
+              { label: "Purchase Orders", icon: <ShoppingCart className="h-6 w-6" />,  onImport: (r: Record<string, string>[]) => bulkImportPurchaseOrders(r), templateColumns: ["vendorName", "poDate", "notes", "invoiceNumber"], required: ["vendorName"] },
             ].map((tile) => (
               <ImportTile
                 key={tile.label}

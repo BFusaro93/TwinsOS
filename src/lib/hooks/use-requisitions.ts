@@ -239,9 +239,27 @@ export function useBulkImportRequisitions() {
           grand_total: 0,
         }));
       if (inserts.length === 0) return 0;
-      const { error } = await supabase.from("requisitions").insert(inserts);
-      if (error) throw error;
-      return inserts.length;
+
+      // Insert one-by-one; on duplicate requisition_number, update the existing row
+      let count = 0;
+      for (const row of inserts) {
+        const { error } = await supabase.from("requisitions").insert(row);
+        if (error?.code === "23505") {
+          const { data: { user: u } } = await supabase.auth.getUser();
+          const { data: profile } = await supabase.from("profiles").select("org_id").eq("id", u!.id).single();
+          await supabase.from("requisitions").update({
+            title: row.title,
+            requested_by_id: row.requested_by_id,
+            requested_by_name: row.requested_by_name,
+            vendor_name: row.vendor_name,
+            notes: row.notes,
+          }).eq("requisition_number", row.requisition_number).eq("org_id", profile!.org_id).is("deleted_at", null);
+        } else if (error) {
+          throw error;
+        }
+        count++;
+      }
+      return count;
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["requisitions"] }),
   });

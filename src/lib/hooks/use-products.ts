@@ -274,9 +274,30 @@ export function useBulkImportProducts() {
           };
         });
       if (inserts.length === 0) return 0;
-      const { error } = await supabase.from("product_items").insert(inserts);
-      if (error) throw error;
-      return inserts.length;
+
+      // Insert one-by-one; on duplicate part_number, update the existing row
+      let count = 0;
+      for (const row of inserts) {
+        const { error } = await supabase.from("product_items").insert(row);
+        if (error?.code === "23505") {
+          const { data: { user } } = await supabase.auth.getUser();
+          const { data: profile } = await supabase.from("profiles").select("org_id").eq("id", user!.id).single();
+          await supabase.from("product_items").update({
+            name: row.name,
+            description: row.description,
+            category: row.category,
+            unit_cost: row.unit_cost,
+            price: row.price,
+            vendor_name: row.vendor_name,
+            is_inventory: row.is_inventory,
+            quantity_on_hand: row.quantity_on_hand,
+          }).eq("part_number", row.part_number).eq("org_id", profile!.org_id).is("deleted_at", null);
+        } else if (error) {
+          throw error;
+        }
+        count++;
+      }
+      return count;
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["products"] }),
   });
