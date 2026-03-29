@@ -551,6 +551,8 @@ export function PartDetailSheet({ part, open, onOpenChange }: PartDetailSheetPro
     };
   }, [open]);
 
+  const { data: woAssignedQty = 0 } = usePartOpenWOQty(part?.id ?? "");
+
   if (!part || !open) return null;
 
   // Derive the latest part data from the query cache so that when mutations
@@ -605,8 +607,6 @@ export function PartDetailSheet({ part, open, onOpenChange }: PartDetailSheetPro
       .flatMap((po) => po.lineItems)
       .filter((li) => li.partNumber === livePart.partNumber)
       .reduce((sum, li) => sum + li.quantity, 0);
-
-  const { data: woAssignedQty = 0 } = usePartOpenWOQty(livePart.id);
 
   // Rendered via portal so it sits above the primary asset sheet without being
   // nested inside the Radix Dialog tree — avoids react-remove-scroll blocking
