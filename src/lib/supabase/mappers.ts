@@ -297,6 +297,8 @@ export function mapPart(row: PartRow): Part {
     parentPartId: row.parent_part_id,
     isInventory: row.is_inventory,
     pictureUrl: row.picture_url,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    location: (row as any).location ?? null,
     productItemId: row.product_item_id,
     costLayers: (row.cost_layers as unknown as CostLayer[]) ?? [],
   };

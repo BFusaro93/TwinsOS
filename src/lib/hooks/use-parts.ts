@@ -138,6 +138,7 @@ export function useUpdatePart() {
           ...(input.isInventory !== undefined && { is_inventory: input.isInventory }),
           ...(input.pictureUrl !== undefined && { picture_url: input.pictureUrl }),
           ...(input.alternateVendors !== undefined && { alternate_vendors: input.alternateVendors as unknown as import("@/types/supabase").Json }),
+          ...(input.location !== undefined && { location: input.location }),
         })
         .eq("id", id)
         .select()
@@ -255,6 +256,7 @@ export function useBulkImportParts() {
             quantity_on_hand: qoh,
             minimum_stock: minStock,
             vendor_name: r.vendorName?.trim() || null,
+            location: r.location?.trim() || null,
             is_inventory: qoh > 0 || minStock > 0,
             cost_layers: [] as unknown as import("@/types/supabase").Json,
             alternate_vendors: [] as unknown as import("@/types/supabase").Json,

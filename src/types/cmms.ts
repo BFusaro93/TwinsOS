@@ -118,6 +118,8 @@ export interface Part extends BaseRecord {
   parentPartId: string | null; // for interchangeable/generic sub-parts
   isInventory: boolean;
   pictureUrl: string | null;
+  /** Storage location for this part (shared list with assets/vehicles) */
+  location: string | null;
   /**
    * FK to ProductItem (category: maintenance_part).
    * When set, this Part is the CMMS inventory record for that purchasing catalog entry.

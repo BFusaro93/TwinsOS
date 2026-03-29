@@ -16,8 +16,10 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { getInitials, getAvatarColor, matchesIsActiveFilter } from "@/lib/utils";
-import { useVendors } from "@/lib/hooks/use-vendors";
+import { useVendors, useBulkImportVendors } from "@/lib/hooks/use-vendors";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ImportExportMenu } from "./ImportExportMenu";
+import { downloadCSV } from "@/lib/csv";
 import type { Vendor } from "@/types";
 import { NewVendorDialog } from "./NewVendorDialog";
 
@@ -28,6 +30,7 @@ const STATUS_FILTER = [
 
 export function VendorsPage() {
   const { data: vendors, isLoading } = useVendors();
+  const { mutateAsync: bulkImportVendors } = useBulkImportVendors();
   const [selectedVendor, setSelectedVendor] = useState<Vendor | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [newVendorOpen, setNewVendorOpen] = useState(false);
@@ -57,10 +60,23 @@ export function VendorsPage() {
         title="Vendors"
         description="Manage your supplier and vendor contacts"
         action={
-          <Button size="sm" onClick={() => setNewVendorOpen(true)}>
-            <Plus className="mr-1.5 h-4 w-4" />
-            New Vendor
-          </Button>
+          <div className="flex items-center gap-2">
+            <ImportExportMenu
+              entityLabel="Vendors"
+              onExport={() => {
+                const rows = (vendors ?? []).map((v) => [v.name, v.contactName, v.email, v.phone, v.address, v.vendorType, v.isActive ? "Active" : "Inactive", v.website, v.notes]);
+                downloadCSV("vendors-export.csv", ["Name", "Contact Name", "Email", "Phone", "Address", "Vendor Type", "Is Active", "Website", "Notes"], rows);
+              }}
+              onImport={(rows) => bulkImportVendors(rows)}
+              templateColumns={["name", "contactName", "email", "phone", "address", "vendorType", "website", "notes"]}
+              templateFilename="vendors-template.csv"
+              requiredColumns={["name"]}
+            />
+            <Button size="sm" onClick={() => setNewVendorOpen(true)}>
+              <Plus className="mr-1.5 h-4 w-4" />
+              New Vendor
+            </Button>
+          </div>
         }
       />
 

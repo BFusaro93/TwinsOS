@@ -80,6 +80,12 @@ const COMMON_ALIASES: Record<string, string[]> = {
   shippingCost:    ["shippingcost", "shipping cost", "shipping"],
   startDate:       ["startdate", "start date", "start"],
   endDate:         ["enddate", "end date", "end"],
+  purchaseVendorName: ["purchasevendorname", "purchase vendor", "purchased from", "dealer"],
+  purchaseDate:    ["purchasedate", "purchase date", "date purchased"],
+  purchasePrice:   ["purchaseprice", "purchase price", "price paid", "purchase cost"],
+  paymentMethod:   ["paymentmethod", "payment method", "payment"],
+  financeInstitution: ["financeinstitution", "finance institution", "financed by", "lender"],
+  location:        ["location", "loc", "storage location", "warehouse"],
 };
 
 /**

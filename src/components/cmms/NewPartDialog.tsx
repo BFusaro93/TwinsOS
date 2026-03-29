@@ -54,6 +54,7 @@ export function NewPartDialog({ open, onOpenChange, initialData, onCreated }: Ne
   const [minimumStock, setMinimumStock] = useState("0");
   const [unitCost, setUnitCost] = useState("");
   const [isInventory, setIsInventory] = useState(false);
+  const [location, setLocation] = useState("");
   const [vendorId, setVendorId] = useState("");
   const [description, setDescription] = useState("");
   const [parentPartId, setParentPartId] = useState("none");
@@ -75,6 +76,7 @@ export function NewPartDialog({ open, onOpenChange, initialData, onCreated }: Ne
       setMinimumStock(String(initialData.minimumStock));
       setUnitCost((initialData.unitCost / 100).toFixed(2));
       setIsInventory(initialData.isInventory);
+      setLocation(initialData.location ?? "");
       setVendorId(initialData.vendorId ?? "");
       setDescription(initialData.description);
       setParentPartId(initialData.parentPartId ?? "none");
@@ -92,6 +94,7 @@ export function NewPartDialog({ open, onOpenChange, initialData, onCreated }: Ne
     setMinimumStock("0");
     setUnitCost("");
     setIsInventory(false);
+    setLocation("");
     setVendorId("");
     setDescription("");
     setParentPartId("none");
@@ -114,6 +117,7 @@ export function NewPartDialog({ open, onOpenChange, initialData, onCreated }: Ne
       alternateVendors: initialData?.alternateVendors ?? [],
       parentPartId: parentPartId === "none" ? null : parentPartId,
       isInventory,
+      location: location.trim() || null,
       pictureUrl: initialData?.pictureUrl ?? null,
       productItemId: initialData?.productItemId ?? null,
       costLayers: initialData?.costLayers ?? [],
@@ -257,6 +261,17 @@ export function NewPartDialog({ open, onOpenChange, initialData, onCreated }: Ne
                 value={unitCost}
                 onChange={(e) => setUnitCost(e.target.value)}
                 placeholder="0.00"
+              />
+            </div>
+
+            {/* Location */}
+            <div className="grid gap-1.5">
+              <Label htmlFor="part-location">Location</Label>
+              <Input
+                id="part-location"
+                value={location}
+                onChange={(e) => setLocation(e.target.value)}
+                placeholder="e.g. Warehouse A, Shelf 3"
               />
             </div>
 

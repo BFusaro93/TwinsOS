@@ -130,7 +130,7 @@ export function PartsPage() {
           <div className="flex items-center gap-2">
             <ImportExportMenu
               entityLabel="Parts"
-              templateColumns={["name", "partNumber", "description", "category", "unitCost", "quantityOnHand", "minimumStock", "vendorName"]}
+              templateColumns={["name", "partNumber", "description", "category", "unitCost", "quantityOnHand", "minimumStock", "vendorName", "location"]}
               templateFilename="parts-template.csv"
               requiredColumns={["name", "partNumber"]}
               onExport={() =>

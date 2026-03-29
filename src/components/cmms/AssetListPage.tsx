@@ -314,7 +314,7 @@ export function AssetListPage() {
             </Button>
             <ImportExportMenu
               entityLabel="Assets"
-              templateColumns={["name", "assetTag", "equipmentNumber", "assetType", "make", "model", "year", "serialNumber", "location", "status"]}
+              templateColumns={["name", "assetTag", "equipmentNumber", "assetType", "make", "model", "year", "serialNumber", "location", "status", "purchaseVendorName", "purchaseDate", "purchasePrice", "paymentMethod", "financeInstitution"]}
               templateFilename="assets-template.csv"
               requiredColumns={["name", "assetTag"]}
               onExport={() =>

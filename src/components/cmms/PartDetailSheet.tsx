@@ -158,7 +158,7 @@ function DetailsTab({
               </Badge>
             )}
             {woAssignedQty > 0 && (
-              <Badge variant="outline" className="border-orange-200 bg-orange-50 text-orange-700">
+              <Badge variant="outline" className="border-blue-200 bg-blue-50 text-blue-700">
                 {woAssignedQty} assigned to open WOs
               </Badge>
             )}
@@ -178,6 +178,7 @@ function DetailsTab({
         <MetaRow label="Part #" value={part.partNumber} />
         <MetaRow label="Category" value={part.category} />
         <MetaRow label="Unit Cost" value={formatCurrency(part.unitCost)} />
+        {part.location && <MetaRow label="Location" value={part.location} />}
       </dl>
 
       {/* Vendors */}

@@ -45,7 +45,7 @@ function buildStyles(brandColor: string): string {
     }
 
     @media print {
-      body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      body { -webkit-print-color-adjust: exact; print-color-adjust: exact; padding: 0; }
       .no-print { display: none !important; }
     }
 
@@ -56,7 +56,9 @@ function buildStyles(brandColor: string): string {
       color: #1e293b;
       font-size: 14px;
       line-height: 1.5;
-      padding: 0;
+      padding: 32px;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
     }
 
     /* ── Accent bar ─────────────────────────────────────── */
