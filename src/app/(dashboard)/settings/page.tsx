@@ -26,6 +26,14 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -48,7 +56,7 @@ import { useVendors, useBulkImportVendors } from "@/lib/hooks/use-vendors";
 import { useRequisitions, useBulkImportRequisitions } from "@/lib/hooks/use-requisitions";
 import { usePurchaseOrders, useBulkImportPurchaseOrders } from "@/lib/hooks/use-purchase-orders";
 import { downloadCSV, readCSVFile } from "@/lib/csv";
-import { ImportExportMenu } from "@/components/shared/ImportExportMenu";
+import { autoMapColumns, remapRows } from "@/components/shared/ImportExportMenu";
 import { formatCurrency } from "@/lib/utils";
 
 // ── Shared helpers ────────────────────────────────────────────────────────────
@@ -969,6 +977,157 @@ function RequiredFieldsTab() {
   );
 }
 
+// ── Import tile (renders as icon+label tile, opens file picker → mapping dialog) ─
+
+function ImportTile({
+  label,
+  icon,
+  onImport,
+  templateColumns,
+  requiredColumns,
+  onStatus,
+}: {
+  label: string;
+  icon: React.ReactNode;
+  onImport: (rows: Record<string, string>[]) => Promise<unknown>;
+  templateColumns: string[];
+  requiredColumns: string[];
+  onStatus: (s: { type: "success" | "error"; message: string }) => void;
+}) {
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [mappingOpen, setMappingOpen] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [rawRows, setRawRows] = useState<Record<string, string>[]>([]);
+  const [csvColumns, setCsvColumns] = useState<string[]>([]);
+  const [columnMapping, setColumnMapping] = useState<Record<string, string>>({});
+  const [parsedRows, setParsedRows] = useState<Record<string, string>[]>([]);
+  const [importing, setImporting] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
+
+  async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = "";
+    try {
+      const rows = await readCSVFile(file);
+      if (rows.length === 0) { onStatus({ type: "error", message: "CSV file is empty." }); return; }
+      const cols = Object.keys(rows[0]);
+      setCsvColumns(cols);
+      setRawRows(rows);
+      const mapping = autoMapColumns(cols, templateColumns);
+      setColumnMapping(mapping);
+      const allMapped = templateColumns.every((f) => mapping[f]);
+      if (allMapped) { proceedToPreview(rows, mapping); } else { setMappingOpen(true); }
+    } catch { onStatus({ type: "error", message: "Failed to read CSV file." }); }
+  }
+
+  function proceedToPreview(rows: Record<string, string>[], mapping: Record<string, string>) {
+    const remapped = remapRows(rows, mapping);
+    const mappedFields = new Set(Object.keys(mapping).filter((k) => mapping[k] && mapping[k] !== "__skip__"));
+    const missing = requiredColumns.filter((c) => !mappedFields.has(c));
+    if (missing.length) {
+      setImportError(`Missing required field mapping: ${missing.join(", ")}`);
+      setParsedRows([]);
+      setMappingOpen(false);
+      setPreviewOpen(true);
+      return;
+    }
+    setImportError(null);
+    setParsedRows(remapped);
+    setMappingOpen(false);
+    setPreviewOpen(true);
+  }
+
+  async function handleConfirm() {
+    setImporting(true);
+    setImportError(null);
+    try {
+      await onImport(parsedRows);
+      setPreviewOpen(false);
+      onStatus({ type: "success", message: `Successfully imported ${parsedRows.length} ${label.toLowerCase()}.` });
+    } catch (err) {
+      setImportError(err instanceof Error ? err.message : "Import failed.");
+    } finally { setImporting(false); }
+  }
+
+  function resetAll() { setMappingOpen(false); setPreviewOpen(false); setRawRows([]); setCsvColumns([]); setColumnMapping({}); setParsedRows([]); setImportError(null); }
+
+  const fieldLabel = (f: string) => f.replace(/([A-Z])/g, " $1").replace(/^./, (c) => c.toUpperCase()).trim();
+
+  return (
+    <>
+      <button
+        onClick={() => fileRef.current?.click()}
+        className="flex flex-col items-center gap-2 rounded-lg border border-slate-200 p-5 text-slate-500 transition-colors hover:border-brand-300 hover:bg-brand-50 hover:text-brand-600"
+      >
+        {icon}
+        <span className="text-sm">{label}</span>
+      </button>
+      <input ref={fileRef} type="file" accept=".csv,text/csv" className="hidden" onChange={handleFile} />
+
+      {/* Mapping dialog */}
+      <Dialog open={mappingOpen} onOpenChange={(o) => { if (!o) resetAll(); }}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Map Columns — {label}</DialogTitle>
+            <DialogDescription>{rawRows.length} rows found. Match your CSV columns to the expected fields.</DialogDescription>
+          </DialogHeader>
+          <div className="max-h-80 overflow-y-auto">
+            <div className="flex flex-col gap-3">
+              {templateColumns.map((field) => (
+                <div key={field} className="grid grid-cols-2 items-center gap-3">
+                  <label className="text-sm font-medium text-slate-700">
+                    {fieldLabel(field)}
+                    {requiredColumns.includes(field) && <span className="text-red-500"> *</span>}
+                  </label>
+                  <Select value={columnMapping[field] || "__skip__"} onValueChange={(v) => setColumnMapping((prev) => ({ ...prev, [field]: v === "__skip__" ? "" : v }))}>
+                    <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Skip" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__skip__"><span className="text-slate-400">— Skip —</span></SelectItem>
+                      {csvColumns.map((col) => (<SelectItem key={col} value={col}>{col}</SelectItem>))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              ))}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={resetAll}>Cancel</Button>
+            <Button onClick={() => proceedToPreview(rawRows, columnMapping)}>Continue to Preview</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Preview dialog */}
+      <Dialog open={previewOpen} onOpenChange={(o) => { if (!o) resetAll(); }}>
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>{importError ? "Import Error" : `Import ${label}`}</DialogTitle>
+            <DialogDescription>{importError ?? `${parsedRows.length} rows ready to import.`}</DialogDescription>
+          </DialogHeader>
+          {!importError && parsedRows.length > 0 && (
+            <div className="max-h-64 overflow-auto rounded-md border text-xs">
+              <table className="w-full">
+                <thead className="sticky top-0 bg-slate-50">
+                  <tr>{Object.keys(parsedRows[0]).map((col) => (<th key={col} className="border-b px-3 py-2 text-left font-semibold text-slate-600">{fieldLabel(col)}</th>))}</tr>
+                </thead>
+                <tbody>
+                  {parsedRows.slice(0, 5).map((row, i) => (<tr key={i} className="border-b last:border-0">{Object.keys(parsedRows[0]).map((col) => (<td key={col} className="px-3 py-1.5 text-slate-700">{row[col] || "—"}</td>))}</tr>))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          {importError && <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{importError}</div>}
+          <DialogFooter>
+            <Button variant="outline" onClick={resetAll}>Cancel</Button>
+            {!importError && <Button onClick={handleConfirm} disabled={importing}>{importing ? "Importing..." : `Import ${parsedRows.length} Rows`}</Button>}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
 // ── ImportExportTab ───────────────────────────────────────────────────────────
 
 function ImportExportTab() {
@@ -1036,6 +1195,15 @@ function ImportExportTab() {
           ["poNumber", "poDate", "status", "vendorName", "invoiceNumber", "grandTotal", "notes"],
           purchaseOrders.map((po) => [po.poNumber, po.poDate ?? "", po.status, po.vendorName, po.invoiceNumber ?? "", formatCurrency(po.grandTotal), po.notes ?? ""]));
         break;
+      case "Locations": {
+        const { locations: locs } = useSettingsStore.getState();
+        const enabled = locs.filter((l) => l.enabled);
+        if (!enabled.length) return;
+        downloadCSV("locations.csv",
+          ["id", "label", "enabled"],
+          enabled.map((l) => [l.id, l.label, String(l.enabled)]));
+        break;
+      }
       default:
         break;
     }
@@ -1080,9 +1248,8 @@ function ImportExportTab() {
             {EXPORT_TILES.map(({ label, icon }) => (
               <button
                 key={label}
-                onClick={() => label === "Locations" ? undefined : handleExport(label)}
-                disabled={label === "Locations"}
-                className="flex flex-col items-center gap-2 rounded-lg border border-slate-200 p-5 text-slate-500 transition-colors hover:border-brand-300 hover:bg-brand-50 hover:text-brand-600 disabled:cursor-not-allowed disabled:opacity-50"
+                onClick={() => handleExport(label)}
+                className="flex flex-col items-center gap-2 rounded-lg border border-slate-200 p-5 text-slate-500 transition-colors hover:border-brand-300 hover:bg-brand-50 hover:text-brand-600"
               >
                 {icon}
                 <span className="text-sm">{label}</span>
@@ -1092,63 +1259,33 @@ function ImportExportTab() {
         </div>
       </div>
 
-      {/* Import — uses ImportExportMenu for each entity so the column mapping dialog shows */}
+      {/* Import */}
       <div className="rounded-lg border bg-white shadow-sm">
         <div className="px-6 py-4">
           <h2 className="text-sm font-semibold text-slate-900">Import Data</h2>
-          <p className="mt-0.5 text-xs text-slate-500">Upload a CSV to bulk-import records — each entity has its own column mapping</p>
+          <p className="mt-0.5 text-xs text-slate-500">Upload a CSV to bulk-import records</p>
         </div>
         <Separator />
         <div className="p-6">
-          <div className="grid grid-cols-3 gap-4 sm:grid-cols-4 lg:grid-cols-6">
-            <ImportExportMenu
-              entityLabel="Work Orders"
-              onExport={() => handleExport("Work Orders")}
-              onImport={(rows) => bulkImportWorkOrders(rows)}
-              templateColumns={["title", "description", "priority", "status", "category", "assetName", "assignedToName", "dueDate"]}
-              templateFilename="work-orders-template.csv"
-              requiredColumns={["title"]}
-            />
-            <ImportExportMenu
-              entityLabel="Assets"
-              onExport={() => handleExport("Assets")}
-              onImport={(rows) => bulkImportAssets(rows)}
-              templateColumns={["name", "assetTag", "equipmentNumber", "assetType", "make", "model", "year", "serialNumber", "location", "status", "purchaseVendorName", "purchaseDate", "purchasePrice", "paymentMethod", "financeInstitution"]}
-              templateFilename="assets-template.csv"
-              requiredColumns={["name", "assetTag"]}
-            />
-            <ImportExportMenu
-              entityLabel="Vehicles"
-              onExport={() => handleExport("Vehicles")}
-              onImport={(rows) => bulkImportVehicles(rows)}
-              templateColumns={["name", "assetTag", "make", "model", "year", "licensePlate", "vin", "fuelType", "status", "assignedCrew", "purchaseVendorName", "purchaseDate", "purchasePrice", "paymentMethod", "financeInstitution"]}
-              templateFilename="vehicles-template.csv"
-              requiredColumns={["name", "assetTag"]}
-            />
-            <ImportExportMenu
-              entityLabel="Parts"
-              onExport={() => handleExport("Parts")}
-              onImport={(rows) => bulkImportParts(rows)}
-              templateColumns={["name", "partNumber", "description", "category", "unitCost", "quantityOnHand", "minimumStock", "vendorName", "location"]}
-              templateFilename="parts-template.csv"
-              requiredColumns={["name", "partNumber"]}
-            />
-            <ImportExportMenu
-              entityLabel="Vendors"
-              onExport={() => handleExport("Vendors")}
-              onImport={(rows) => bulkImportVendors(rows)}
-              templateColumns={["name", "contactName", "email", "phone", "address", "vendorType", "website", "notes"]}
-              templateFilename="vendors-template.csv"
-              requiredColumns={["name"]}
-            />
-            <ImportExportMenu
-              entityLabel="Requisitions"
-              onExport={() => handleExport("Requisitions")}
-              onImport={(rows) => bulkImportRequisitions(rows)}
-              templateColumns={["title", "vendorName", "notes"]}
-              templateFilename="requisitions-template.csv"
-              requiredColumns={["title"]}
-            />
+          <div className="grid grid-cols-4 gap-4">
+            {[
+              { label: "Work Orders",  icon: <ClipboardList className="h-6 w-6" />, onImport: (r: Record<string, string>[]) => bulkImportWorkOrders(r), templateColumns: ["title", "description", "priority", "status", "category", "assetName", "assignedToName", "dueDate"], required: ["title"] },
+              { label: "Assets",       icon: <Cog className="h-6 w-6" />,           onImport: (r: Record<string, string>[]) => bulkImportAssets(r),     templateColumns: ["name", "assetTag", "equipmentNumber", "assetType", "make", "model", "year", "serialNumber", "location", "status", "purchaseVendorName", "purchaseDate", "purchasePrice", "paymentMethod", "financeInstitution"], required: ["name", "assetTag"] },
+              { label: "Vehicles",     icon: <Truck className="h-6 w-6" />,         onImport: (r: Record<string, string>[]) => bulkImportVehicles(r),   templateColumns: ["name", "assetTag", "make", "model", "year", "licensePlate", "vin", "fuelType", "status", "assignedCrew", "purchaseVendorName", "purchaseDate", "purchasePrice", "paymentMethod", "financeInstitution"], required: ["name", "assetTag"] },
+              { label: "Parts",        icon: <Package className="h-6 w-6" />,       onImport: (r: Record<string, string>[]) => bulkImportParts(r),      templateColumns: ["name", "partNumber", "description", "category", "unitCost", "quantityOnHand", "minimumStock", "vendorName", "location"], required: ["name", "partNumber"] },
+              { label: "Vendors",      icon: <Building2 className="h-6 w-6" />,     onImport: (r: Record<string, string>[]) => bulkImportVendors(r),    templateColumns: ["name", "contactName", "email", "phone", "address", "vendorType", "website", "notes"], required: ["name"] },
+              { label: "Requisitions", icon: <FileText className="h-6 w-6" />,      onImport: (r: Record<string, string>[]) => bulkImportRequisitions(r), templateColumns: ["title", "vendorName", "notes"], required: ["title"] },
+            ].map((tile) => (
+              <ImportTile
+                key={tile.label}
+                label={tile.label}
+                icon={tile.icon}
+                onImport={tile.onImport}
+                templateColumns={tile.templateColumns}
+                requiredColumns={tile.required}
+                onStatus={setImportStatus}
+              />
+            ))}
           </div>
         </div>
       </div>
