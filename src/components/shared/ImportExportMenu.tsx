@@ -92,7 +92,7 @@ const COMMON_ALIASES: Record<string, string[]> = {
  * Auto-map CSV columns to expected fields.
  * Tries exact match, then case-insensitive, then aliases.
  */
-function autoMapColumns(
+export function autoMapColumns(
   csvColumns: string[],
   expectedFields: string[],
 ): Record<string, string> {
@@ -138,7 +138,7 @@ function autoMapColumns(
 }
 
 /** Remap parsed CSV rows using the column mapping */
-function remapRows(
+export function remapRows(
   rows: Record<string, string>[],
   mapping: Record<string, string>,
 ): Record<string, string>[] {
@@ -226,11 +226,10 @@ export function ImportExportMenu({
     const remapped = remapRows(rows, mapping);
 
     if (requiredColumns?.length) {
-      const sampleRow = remapped[0] ?? {};
-      const mappedFields = Object.keys(sampleRow);
-      const missing = requiredColumns.filter((c) => !mappedFields.includes(c) || !sampleRow[c]?.trim());
+      const mappedFields = new Set(Object.keys(mapping).filter((k) => mapping[k] && mapping[k] !== "__skip__"));
+      const missing = requiredColumns.filter((c) => !mappedFields.has(c));
       if (missing.length) {
-        setParseError(`Missing or empty required fields: ${missing.map(fieldLabel).join(", ")}. Please map these columns.`);
+        setParseError(`Missing required field mapping: ${missing.map(fieldLabel).join(", ")}. Please map these columns.`);
         setParsedRows([]);
         setPreviewOpen(true);
         return;
