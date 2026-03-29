@@ -336,7 +336,7 @@ export function ImportExportMenu({
 
       {/* ── Step 1: Column Mapping Dialog ──────────────────────────────────── */}
       <Dialog open={mappingOpen} onOpenChange={(o) => { if (!o) resetAll(); }}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="sm:max-w-xl">
           <DialogHeader>
             <DialogTitle>Map Columns</DialogTitle>
             <DialogDescription>

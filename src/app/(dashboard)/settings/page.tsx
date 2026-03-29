@@ -1067,7 +1067,7 @@ function ImportTile({
 
       {/* Mapping dialog */}
       <Dialog open={mappingOpen} onOpenChange={(o) => { if (!o) resetAll(); }}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="sm:max-w-xl">
           <DialogHeader>
             <DialogTitle>Map Columns — {label}</DialogTitle>
             <DialogDescription>{rawRows.length} rows found. Match your CSV columns to the expected fields.</DialogDescription>

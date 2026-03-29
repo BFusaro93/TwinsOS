@@ -111,7 +111,14 @@ export function parseCSV(text: string): Record<string, string>[] {
   const normalized = cleaned.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
   const lines = normalized.trim().split("\n").filter(Boolean);
   if (lines.length < 2) return [];
-  const headers = parseRow(lines[0]).map((h) => h.trim());
+  const rawHeaders = parseRow(lines[0]).map((h) => h.trim());
+  // Deduplicate headers: if "Part Number" appears twice, the second becomes "Part Number (2)"
+  const seen = new Map<string, number>();
+  const headers = rawHeaders.map((h) => {
+    const count = (seen.get(h) ?? 0) + 1;
+    seen.set(h, count);
+    return count > 1 ? `${h} (${count})` : h;
+  });
   return lines.slice(1).map((line) => {
     const values = parseRow(line);
     return Object.fromEntries(headers.map((h, i) => [h, (values[i] ?? "").trim()]));
