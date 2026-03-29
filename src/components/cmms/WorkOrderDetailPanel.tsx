@@ -19,7 +19,7 @@ import { NewWorkOrderDialog } from "./NewWorkOrderDialog";
 import { WO_STATUS_LABELS, WO_PRIORITY_LABELS, ASSET_STATUS_LABELS } from "@/lib/constants";
 import { useAssets, useUpdateAssetStatus } from "@/lib/hooks/use-assets";
 import { useVehicles, useUpdateVehicleStatus } from "@/lib/hooks/use-vehicles";
-import { useWorkOrders, useUpdateWorkOrder } from "@/lib/hooks/use-work-orders";
+import { useWorkOrders, useUpdateWorkOrder, useDeleteWorkOrder } from "@/lib/hooks/use-work-orders";
 import { useUsers } from "@/lib/hooks/use-users";
 import { useCMMSStore, useSettingsStore } from "@/stores";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -27,7 +27,17 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { ChevronDown } from "lucide-react";
 import { printWO } from "@/lib/print";
 import { useWOParts } from "@/lib/hooks/use-wo-costs";
-import { Download, GitBranch, CheckCircle2 } from "lucide-react";
+import { Download, GitBranch, CheckCircle2, Trash2 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   Select,
   SelectContent,
@@ -174,12 +184,15 @@ function DetailsTab({
   const { mutate: updateAssetStatus } = useUpdateAssetStatus();
   const { mutate: updateVehicleStatus } = useUpdateVehicleStatus();
 
-  const hasLinkedEntity = !!workOrder.assetId && !!workOrder.linkedEntityType;
-  const entityLabel = workOrder.linkedEntityType === "vehicle" ? "Vehicle" : "Asset";
+  const hasLinkedEntity = !!workOrder.assetId;
+  // Determine entity type: use linkedEntityType if set, otherwise infer from click handlers
+  const resolvedEntityType = workOrder.linkedEntityType
+    ?? (onVehicleClick ? "vehicle" : "asset");
+  const entityLabel = resolvedEntityType === "vehicle" ? "Vehicle" : "Asset";
 
   function handleConfirmComplete() {
     if (hasLinkedEntity && newEntityStatus !== "no_change" && workOrder.assetId) {
-      if (workOrder.linkedEntityType === "vehicle") {
+      if (resolvedEntityType === "vehicle") {
         updateVehicleStatus({ id: workOrder.assetId, status: newEntityStatus });
       } else {
         updateAssetStatus({ id: workOrder.assetId, status: newEntityStatus });
@@ -516,11 +529,13 @@ export function WorkOrderDetailPanel({ workOrder }: WorkOrderDetailPanelProps) {
   const [vehicleSheetOpen, setVehicleSheetOpen] = useState(false);
   const [subWOSheetId, setSubWOSheetId] = useState<string | null>(null);
   const [parentWOSheetOpen, setParentWOSheetOpen] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [status, setStatus] = useState<WorkOrderStatus>(workOrder.status);
   const { data: assets = [] } = useAssets();
   const { data: vehicles = [] } = useVehicles();
   const { data: allWorkOrders = [] } = useWorkOrders();
   const { setSelectedWorkOrderId } = useCMMSStore();
+  const { mutate: deleteWO, isPending: deleting } = useDeleteWorkOrder();
   const { data: users = [] } = useUsers();
   const { data: woParts = [] } = useWOParts(workOrder.id);
   const { woCategories } = useSettingsStore();
@@ -564,8 +579,44 @@ export function WorkOrderDetailPanel({ workOrder }: WorkOrderDetailPanelProps) {
             PDF
           </Button>
           <EditButton onClick={() => setEditOpen(true)} />
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 text-slate-400 hover:bg-red-50 hover:text-red-500"
+            onClick={() => setDeleteConfirmOpen(true)}
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
         </div>
       </div>
+
+      <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Work Order</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete <strong>{workOrder.workOrderNumber}</strong>? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 hover:bg-red-700 focus:ring-red-500"
+              disabled={deleting}
+              onClick={() =>
+                deleteWO(workOrder.id, {
+                  onSuccess: () => {
+                    setDeleteConfirmOpen(false);
+                    setSelectedWorkOrderId(null);
+                  },
+                })
+              }
+            >
+              {deleting ? "Deleting\u2026" : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <RecordDetailTabs
         tabs={[

@@ -12,6 +12,17 @@ import { POPaymentTracking } from "./POPaymentTracking";
 import { ProductDetailSheet } from "./ProductDetailSheet";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Trash2 } from "lucide-react";
 import { EditButton } from "@/components/shared/EditButton";
 import { NewPODialog } from "./NewPODialog";
 import { ReceiveGoodsDialog } from "./ReceiveGoodsDialog";
@@ -21,8 +32,8 @@ import { PO_STATUS_LABELS } from "@/lib/constants";
 import { useProducts } from "@/lib/hooks/use-products";
 import { useProjects } from "@/lib/hooks/use-projects";
 import { useSubmitForApproval } from "@/lib/hooks/use-approval-requests";
-import { useUpdatePurchaseOrderStatus } from "@/lib/hooks/use-purchase-orders";
-import { useCurrentUserStore } from "@/stores";
+import { useUpdatePurchaseOrderStatus, useDeletePurchaseOrder } from "@/lib/hooks/use-purchase-orders";
+import { useCurrentUserStore, usePOStore } from "@/stores";
 import { ProjectDetailSheet } from "./ProjectDetailSheet";
 import { printPO } from "@/lib/print";
 import { Download } from "lucide-react";
@@ -266,9 +277,12 @@ export function PODetailPanel({ po }: PODetailPanelProps) {
   }, [po.status]);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
 
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const { data: projects = [] } = useProjects();
   const selectedProject = projects.find((p) => p.id === selectedProjectId) ?? null;
   const { mutate: syncStatus } = useUpdatePurchaseOrderStatus();
+  const { mutate: deletePO, isPending: deleting } = useDeletePurchaseOrder();
+  const { setSelectedPOId } = usePOStore();
 
   function handleReceiptSubmit(fullyReceived: boolean) {
     const newStatus: POStatus = fullyReceived ? "completed" : "partially_fulfilled";
@@ -293,8 +307,44 @@ export function PODetailPanel({ po }: PODetailPanelProps) {
             PDF
           </Button>
           <EditButton onClick={() => setEditOpen(true)} />
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 text-slate-400 hover:bg-red-50 hover:text-red-500"
+            onClick={() => setDeleteConfirmOpen(true)}
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
         </div>
       </div>
+
+      <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Purchase Order</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete <strong>{po.poNumber}</strong>? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 hover:bg-red-700 focus:ring-red-500"
+              disabled={deleting}
+              onClick={() =>
+                deletePO(po.id, {
+                  onSuccess: () => {
+                    setDeleteConfirmOpen(false);
+                    setSelectedPOId(null);
+                  },
+                })
+              }
+            >
+              {deleting ? "Deleting\u2026" : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <RecordDetailTabs
         tabs={[

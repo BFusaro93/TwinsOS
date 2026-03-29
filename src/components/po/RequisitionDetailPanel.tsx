@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Plus, ExternalLink } from "lucide-react";
+import { Plus, ExternalLink, Trash2 } from "lucide-react";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { RecordDetailTabs } from "@/components/shared/RecordDetailTabs";
@@ -22,6 +22,16 @@ import { CatalogItemCombobox } from "@/components/shared/CatalogItemCombobox";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import {
   Dialog,
@@ -42,7 +52,7 @@ import { useParts } from "@/lib/hooks/use-parts";
 import { useProjects } from "@/lib/hooks/use-projects";
 import { usePurchaseOrders } from "@/lib/hooks/use-purchase-orders";
 import { useSubmitForApproval } from "@/lib/hooks/use-approval-requests";
-import { useUpdateRequisitionStatus, useAddRequisitionLineItem } from "@/lib/hooks/use-requisitions";
+import { useUpdateRequisitionStatus, useAddRequisitionLineItem, useDeleteRequisition } from "@/lib/hooks/use-requisitions";
 import { useCurrentUserStore } from "@/stores";
 import type { Requisition, LineItem, ApprovalStatus, PurchaseOrder } from "@/types";
 
@@ -416,7 +426,9 @@ export function RequisitionDetailPanel({ requisition }: RequisitionDetailPanelPr
   const [splitOpen, setSplitOpen] = useState(false);
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const { mutate: syncStatus } = useUpdateRequisitionStatus();
+  const { mutate: deleteReq, isPending: deleting } = useDeleteRequisition();
 
   const { data: products = [] } = useProducts();
   const { data: projects = [] } = useProjects();
@@ -477,8 +489,41 @@ export function RequisitionDetailPanel({ requisition }: RequisitionDetailPanelPr
         <div className="flex items-center gap-2">
           <StatusBadge variant={status} label={APPROVAL_STATUS_LABELS[status]} />
           <EditButton onClick={() => setEditOpen(true)} />
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 text-slate-400 hover:bg-red-50 hover:text-red-500"
+            onClick={() => setDeleteConfirmOpen(true)}
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
         </div>
       </div>
+
+      <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Requisition</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete <strong>{requisition.requisitionNumber}</strong>? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 hover:bg-red-700 focus:ring-red-500"
+              disabled={deleting}
+              onClick={() =>
+                deleteReq(requisition.id, {
+                  onSuccess: () => setDeleteConfirmOpen(false),
+                })
+              }
+            >
+              {deleting ? "Deleting\u2026" : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <RecordDetailTabs
         tabs={[

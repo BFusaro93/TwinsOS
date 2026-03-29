@@ -289,3 +289,15 @@ export function useUpdateRequisitionStatus() {
     },
   });
 }
+
+export function useDeleteRequisition() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const supabase = createClient();
+      const { error } = await supabase.from("requisitions").update({ deleted_at: new Date().toISOString() }).eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["requisitions"] }),
+  });
+}
