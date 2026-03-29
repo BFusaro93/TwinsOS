@@ -173,6 +173,11 @@ export function useBulkImportAssets() {
           serial_number: r.serialNumber?.trim() || null,
           location: r.location?.trim() || null,
           status: normaliseAssetStatus(r.status ?? ""),
+          purchase_vendor_name: r.purchaseVendorName?.trim() || null,
+          purchase_date: r.purchaseDate?.trim() || null,
+          purchase_price: r.purchasePrice ? Math.round(parseFloat(r.purchasePrice) * 100) || null : null,
+          payment_method: r.paymentMethod?.trim() || null,
+          finance_institution: r.financeInstitution?.trim() || null,
         }));
       if (inserts.length === 0) return 0;
       const { error } = await supabase.from("assets").insert(inserts);

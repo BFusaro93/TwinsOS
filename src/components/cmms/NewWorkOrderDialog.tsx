@@ -207,7 +207,7 @@ export function NewWorkOrderDialog({ open, onOpenChange, initialData }: NewWorkO
         { onSuccess: () => handleClose() }
       );
     } else if (entityKeys.length > 1) {
-      // Multi-entity: create parent WO then sub-WOs
+      // Multi-entity: create parent WO then sub-WOs sequentially
       const parentNumber = `WO-${new Date().getFullYear()}-${Date.now().toString().slice(-6)}`;
       createWO.mutate(
         {
@@ -218,25 +218,24 @@ export function NewWorkOrderDialog({ open, onOpenChange, initialData }: NewWorkO
           linkedEntityType: null,
         },
         {
-          onSuccess: (parent) => {
-            let remaining = entityKeys.length;
-            entityKeys.forEach((key, i) => {
+          onSuccess: async (parent) => {
+            // Create sub-WOs sequentially to avoid race conditions
+            for (let i = 0; i < entityKeys.length; i++) {
+              const key = entityKeys[i];
               const subNumber = `WO-${new Date().getFullYear()}-${(Date.now() + i + 1).toString().slice(-6)}`;
-              createWO.mutate(
-                {
-                  ...commonFields,
-                  workOrderNumber: subNumber,
-                  parentWorkOrderId: parent.id,
-                  ...buildEntityFields(key),
-                },
-                {
-                  onSuccess: () => {
-                    remaining -= 1;
-                    if (remaining === 0) handleClose();
+              await new Promise<void>((resolve) => {
+                createWO.mutate(
+                  {
+                    ...commonFields,
+                    workOrderNumber: subNumber,
+                    parentWorkOrderId: parent.id,
+                    ...buildEntityFields(key),
                   },
-                }
-              );
-            });
+                  { onSuccess: () => resolve(), onError: () => resolve() }
+                );
+              });
+            }
+            handleClose();
           },
         }
       );

@@ -74,7 +74,7 @@ export function MultiEntityCombobox({
 
   return (
     <div className="flex flex-col gap-2">
-      <Popover open={open} onOpenChange={setOpen}>
+      <Popover open={open} onOpenChange={setOpen} modal>
         <PopoverTrigger asChild>
           <Button
             id={id}
@@ -90,7 +90,7 @@ export function MultiEntityCombobox({
             <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
           </Button>
         </PopoverTrigger>
-        <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+        <PopoverContent className="w-[--radix-popover-trigger-width] p-0 z-[9999]" align="start">
           <Command
             filter={(itemValue, search) =>
               itemValue.toLowerCase().includes(search.toLowerCase()) ? 1 : 0

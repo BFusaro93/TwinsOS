@@ -189,6 +189,11 @@ export function useBulkImportVehicles() {
           fuel_type: r.fuelType?.trim() || null,
           status: normaliseVehicleStatus(r.status ?? ""),
           assigned_crew: r.assignedCrew?.trim() || null,
+          purchase_vendor_name: r.purchaseVendorName?.trim() || null,
+          purchase_date: r.purchaseDate?.trim() || null,
+          purchase_price: r.purchasePrice ? Math.round(parseFloat(r.purchasePrice) * 100) || null : null,
+          payment_method: r.paymentMethod?.trim() || null,
+          finance_institution: r.financeInstitution?.trim() || null,
           asset_type: "vehicle",
         }));
       if (inserts.length === 0) return 0;

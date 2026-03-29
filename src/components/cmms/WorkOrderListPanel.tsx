@@ -9,7 +9,7 @@ import { WO_STATUS_LABELS, WO_PRIORITY_LABELS } from "@/lib/constants";
 import { useUsers } from "@/lib/hooks/use-users";
 import { useUpdateWorkOrder } from "@/lib/hooks/use-work-orders";
 import { useSettingsStore } from "@/stores";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, GitBranch } from "lucide-react";
 import type { WorkOrder } from "@/types";
 
 interface WorkOrderListPanelProps {
@@ -105,6 +105,14 @@ export function WorkOrderListPanel({ workOrders, selectedId, onSelect }: WorkOrd
   const { mutate: updateWO } = useUpdateWorkOrder();
   const { woCategories } = useSettingsStore();
 
+  // Build a map of parent WO id → child count for "Parent" pill
+  const childCountMap = new Map<string, number>();
+  for (const wo of workOrders) {
+    if (wo.parentWorkOrderId) {
+      childCountMap.set(wo.parentWorkOrderId, (childCountMap.get(wo.parentWorkOrderId) ?? 0) + 1);
+    }
+  }
+
   return (
     <div className="flex flex-col overflow-y-auto">
       {workOrders.length === 0 && (
@@ -153,6 +161,17 @@ export function WorkOrderListPanel({ workOrders, selectedId, onSelect }: WorkOrd
               <div className="mt-1 flex items-center gap-1.5">
                 <StatusBadge variant={wo.status} label={WO_STATUS_LABELS[wo.status]} />
                 <StatusBadge variant={wo.priority} label={WO_PRIORITY_LABELS[wo.priority]} />
+                {childCountMap.has(wo.id) && (
+                  <span className="inline-flex items-center gap-0.5 rounded-full border border-indigo-200 bg-indigo-50 px-1.5 py-0.5 text-[10px] font-medium text-indigo-700">
+                    <GitBranch className="h-2.5 w-2.5" />
+                    {childCountMap.get(wo.id)} sub-WO{(childCountMap.get(wo.id) ?? 0) > 1 ? "s" : ""}
+                  </span>
+                )}
+                {wo.parentWorkOrderId && (
+                  <span className="rounded-full border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[10px] font-medium text-slate-500">
+                    Sub-WO
+                  </span>
+                )}
               </div>
               {/* Assignee badges */}
               {wo.assignedToNames.length > 0 && (
