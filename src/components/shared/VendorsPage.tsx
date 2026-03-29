@@ -106,7 +106,7 @@ export function VendorsPage() {
         searchPlaceholder="Search vendors..."
       />
 
-      <div className="overflow-hidden rounded-lg border bg-white shadow-sm">
+      <div className="min-h-0 flex-1 overflow-auto rounded-lg border bg-white shadow-sm">
         <Table>
           <TableHeader>
             <TableRow className="bg-slate-50">
