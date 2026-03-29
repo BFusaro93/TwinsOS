@@ -104,12 +104,36 @@ function parseRow(line: string): string[] {
  * Parse a CSV string into an array of row objects keyed by the header row.
  * Returns an empty array if the text has fewer than 2 rows.
  */
+/**
+ * Split CSV text into logical rows, handling quoted fields that contain newlines.
+ * A line break inside a quoted field does NOT start a new row.
+ */
+function splitCSVRows(text: string): string[] {
+  const rows: string[] = [];
+  let current = "";
+  let inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (ch === '"') {
+      inQuotes = !inQuotes;
+      current += ch;
+    } else if ((ch === "\n" || ch === "\r") && !inQuotes) {
+      // Skip \n after \r (CRLF)
+      if (ch === "\r" && text[i + 1] === "\n") i++;
+      if (current.trim()) rows.push(current);
+      current = "";
+    } else {
+      current += ch;
+    }
+  }
+  if (current.trim()) rows.push(current);
+  return rows;
+}
+
 export function parseCSV(text: string): Record<string, string>[] {
   // Strip BOM (Excel UTF-8 CSVs often start with \uFEFF)
   const cleaned = text.replace(/^\uFEFF/, "");
-  // Normalize line endings: \r\n → \n, lone \r → \n
-  const normalized = cleaned.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
-  const lines = normalized.trim().split("\n").filter(Boolean);
+  const lines = splitCSVRows(cleaned);
   if (lines.length < 2) return [];
   const rawHeaders = parseRow(lines[0]).map((h) => h.trim());
   // Deduplicate headers: if "Part Number" appears twice, the second becomes "Part Number (2)"

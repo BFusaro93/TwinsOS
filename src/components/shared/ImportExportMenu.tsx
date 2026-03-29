@@ -137,20 +137,22 @@ export function autoMapColumns(
   return mapping;
 }
 
-/** Remap parsed CSV rows using the column mapping */
+/** Remap parsed CSV rows using the column mapping, filtering out empty rows */
 export function remapRows(
   rows: Record<string, string>[],
   mapping: Record<string, string>,
 ): Record<string, string>[] {
-  return rows.map((row) => {
-    const mapped: Record<string, string> = {};
-    for (const [field, csvCol] of Object.entries(mapping)) {
-      if (csvCol && csvCol !== "__skip__") {
-        mapped[field] = row[csvCol] ?? "";
+  return rows
+    .map((row) => {
+      const mapped: Record<string, string> = {};
+      for (const [field, csvCol] of Object.entries(mapping)) {
+        if (csvCol && csvCol !== "__skip__") {
+          mapped[field] = row[csvCol] ?? "";
+        }
       }
-    }
-    return mapped;
-  });
+      return mapped;
+    })
+    .filter((row) => Object.values(row).some((v) => v.trim() !== ""));
 }
 
 /** Human-readable label for a camelCase field name */
