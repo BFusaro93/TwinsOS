@@ -104,7 +104,7 @@ export function ProductsPage() {
         title="Products"
         description="Manage parts, materials, and supplies"
         action={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <ImportExportMenu
               entityLabel="Products"
               templateColumns={["name", "partNumber", "description", "category", "unitCost", "isInventory", "quantityOnHand", "vendorName"]}

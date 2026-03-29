@@ -61,7 +61,7 @@ export function VendorsPage() {
         title="Vendors"
         description="Manage your supplier and vendor contacts"
         action={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <ImportExportMenu
               entityLabel="Vendors"
               onExport={() => {

@@ -257,7 +257,7 @@ export function POListPage() {
       <PageHeader
         title="Purchase Orders"
         action={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Button
               variant="outline"
               size="sm"

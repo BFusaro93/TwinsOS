@@ -16,7 +16,7 @@ export function PageHeader({ title, description, action, className }: PageHeader
           <p className="mt-0.5 text-sm text-slate-500">{description}</p>
         )}
       </div>
-      {action && <div className="shrink-0">{action}</div>}
+      {action && <div className="flex flex-wrap gap-2 shrink-0">{action}</div>}
     </div>
   );
 }

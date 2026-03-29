@@ -128,7 +128,7 @@ export function PartsPage() {
         title="Parts Inventory"
         description="Spare parts and consumables"
         action={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <ImportExportMenu
               entityLabel="Parts"
               templateColumns={["name", "partNumber", "description", "category", "unitCost", "quantityOnHand", "minimumStock", "vendorName", "location"]}

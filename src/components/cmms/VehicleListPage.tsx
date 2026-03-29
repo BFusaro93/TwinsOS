@@ -590,7 +590,7 @@ export function VehicleListPage() {
       <PageHeader
         title="Vehicles"
         action={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {/* View toggles */}
             <div className="flex items-center rounded-md border bg-white shadow-sm">
               <Button
