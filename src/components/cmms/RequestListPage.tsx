@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useStickyState } from "@/lib/hooks/use-sticky-state";
 import { Plus, ClipboardList, Maximize2, Minimize2 } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { MasterDetailLayout } from "@/components/shared/MasterDetailLayout";
@@ -54,7 +55,7 @@ export function RequestListPage() {
   const { data: requests, isLoading } = useRequests();
   const { selectedRequestId, setSelectedRequestId } = useCMMSStore();
   const [search, setSearch] = useState("");
-  const [filterValues, setFilterValues] = useState<Record<string, string | string[]>>({});
+  const [filterValues, setFilterValues] = useStickyState<Record<string, string | string[]>>("request-filters", {});
   const [dialogOpen, setDialogOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"list" | "table">("list");
   const [sheetRequestId, setSheetRequestId] = useState<string | null>(null);

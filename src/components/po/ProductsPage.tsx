@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useStickyState } from "@/lib/hooks/use-sticky-state";
 import { Plus, Package, BookOpen } from "lucide-react";
 import { ColumnChooser, type ColumnDef } from "@/components/shared/ColumnChooser";
 import { ImportExportMenu } from "@/components/shared/ImportExportMenu";
@@ -59,7 +60,7 @@ export function ProductsPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [bulkPriceOpen, setBulkPriceOpen] = useState(false);
   const [search, setSearch] = useState("");
-  const [filterValues, setFilterValues] = useState<Record<string, string | string[]>>({});
+  const [filterValues, setFilterValues] = useStickyState<Record<string, string | string[]>>("product-filters", {});
   const [visibleKeys, setVisibleKeys] = useState<string[]>(PRODUCTS_COLUMNS.map((c) => c.key));
 
   const col = (key: string) => visibleKeys.includes(key);

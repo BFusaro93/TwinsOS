@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useStickyState } from "@/lib/hooks/use-sticky-state";
 import { useSearchParams } from "next/navigation";
 import { Plus, Package, Cog, ShoppingCart } from "lucide-react";
 import { ColumnChooser, type ColumnDef } from "@/components/shared/ColumnChooser";
@@ -67,7 +68,7 @@ export function PartsPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [bulkCostOpen, setBulkCostOpen] = useState(false);
   const [search, setSearch] = useState("");
-  const [filterValues, setFilterValues] = useState<Record<string, string | string[]>>({});
+  const [filterValues, setFilterValues] = useStickyState<Record<string, string | string[]>>("parts-filters", {});
   const [visibleKeys, setVisibleKeys] = useState<string[]>(PARTS_COLUMNS.map((c) => c.key));
 
   const col = (key: string) => visibleKeys.includes(key);

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useStickyState } from "@/lib/hooks/use-sticky-state";
 import { Gauge, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -22,7 +23,7 @@ const SOURCE_OPTIONS = [
 export function MetersPage() {
   const [newMeterOpen, setNewMeterOpen] = useState(false);
   const [search, setSearch] = useState("");
-  const [filterValues, setFilterValues] = useState<Record<string, string | string[]>>({});
+  const [filterValues, setFilterValues] = useStickyState<Record<string, string | string[]>>("meter-filters", {});
   const { data: meters, isLoading } = useMeters();
   const { selectedMeterId, setSelectedMeterId } = useCMMSStore();
 

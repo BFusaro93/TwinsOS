@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useStickyState } from "@/lib/hooks/use-sticky-state";
 import { Building2, Plus } from "lucide-react";
 import { PageHeader } from "./PageHeader";
 import { FilterBar } from "./FilterBar";
@@ -35,7 +36,7 @@ export function VendorsPage() {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [newVendorOpen, setNewVendorOpen] = useState(false);
   const [search, setSearch] = useState("");
-  const [filterValues, setFilterValues] = useState<Record<string, string | string[]>>({});
+  const [filterValues, setFilterValues] = useStickyState<Record<string, string | string[]>>("vendor-filters", {});
 
   const filtered = (vendors ?? []).filter((v) => {
     const q = search.toLowerCase();

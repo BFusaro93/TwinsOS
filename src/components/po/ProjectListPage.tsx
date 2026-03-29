@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useStickyState } from "@/lib/hooks/use-sticky-state";
 import { Plus, FolderKanban, Maximize2, Minimize2 } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { MasterDetailLayout } from "@/components/shared/MasterDetailLayout";
@@ -49,7 +50,7 @@ export function ProjectListPage() {
   const { selectedProjectId, setSelectedProjectId } = usePOStore();
   const [newProjectOpen, setNewProjectOpen] = useState(false);
   const [search, setSearch] = useState("");
-  const [filterValues, setFilterValues] = useState<Record<string, string | string[]>>({});
+  const [filterValues, setFilterValues] = useStickyState<Record<string, string | string[]>>("project-filters", {});
   const [viewMode, setViewMode] = useState<"list" | "table">("list");
   const [sheetProjectId, setSheetProjectId] = useState<string | null>(null);
   const [visibleKeys, setVisibleKeys] = useState<string[]>(PROJECT_COLUMNS.map((c) => c.key));

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useStickyState } from "@/lib/hooks/use-sticky-state";
 import { Plus, CalendarClock } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { MasterDetailLayout } from "@/components/shared/MasterDetailLayout";
@@ -30,7 +31,7 @@ export function PMScheduleListPage() {
   const { data: schedules, isLoading } = usePMSchedules();
   const { selectedPMScheduleId, setSelectedPMScheduleId } = useCMMSStore();
   const [search, setSearch] = useState("");
-  const [filterValues, setFilterValues] = useState<Record<string, string | string[]>>({});
+  const [filterValues, setFilterValues] = useStickyState<Record<string, string | string[]>>("pm-filters", {});
   const [dialogOpen, setDialogOpen] = useState(false);
 
   const filtered = (schedules ?? []).filter((s) => {

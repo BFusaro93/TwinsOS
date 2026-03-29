@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useStickyState } from "@/lib/hooks/use-sticky-state";
 import { Maximize2, Minimize2, Plus, ShoppingCart } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { MasterDetailLayout } from "@/components/shared/MasterDetailLayout";
@@ -51,7 +52,7 @@ export function POListPage() {
   const { data: orders, isLoading } = usePurchaseOrders();
   const { selectedPOId, setSelectedPOId } = usePOStore();
   const [search, setSearch] = useState("");
-  const [filterValues, setFilterValues] = useState<Record<string, string | string[]>>({});
+  const [filterValues, setFilterValues] = useStickyState<Record<string, string | string[]>>("po-filters", {});
   const [dialogOpen, setDialogOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"list" | "table">("list");
   const [sheetPOId, setSheetPOId] = useState<string | null>(null);

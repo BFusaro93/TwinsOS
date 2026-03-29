@@ -444,17 +444,32 @@ function GeneralTab() {
   const logoInputRef = useRef<HTMLInputElement>(null);
   const [copied, setCopied] = useState(false);
 
-  function handleLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
+  async function handleLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      const result = ev.target?.result as string;
-      setLogoDataUrl(result);
-      updateOrgSettings({ customizations: { logoDataUrl: result } });
-    };
-    reader.readAsDataURL(file);
     e.target.value = "";
+    try {
+      const { createClient } = await import("@/lib/supabase/client");
+      const supabase = createClient();
+      const ext = file.name.split(".").pop() ?? "png";
+      const path = `logos/company-logo-${Date.now()}.${ext}`;
+      const { error: uploadError } = await supabase.storage
+        .from("thumbnails")
+        .upload(path, file, { upsert: true });
+      if (uploadError) throw uploadError;
+      const { data } = supabase.storage.from("thumbnails").getPublicUrl(path);
+      setLogoDataUrl(data.publicUrl);
+      updateOrgSettings({ customizations: { logoDataUrl: data.publicUrl } });
+    } catch {
+      // Fall back to base64 if storage fails
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const result = ev.target?.result as string;
+        setLogoDataUrl(result);
+        updateOrgSettings({ customizations: { logoDataUrl: result } });
+      };
+      reader.readAsDataURL(file);
+    }
   }
 
   return (
@@ -1514,13 +1529,13 @@ export default function SettingsPage() {
         <p className="mt-1 text-sm text-slate-500">Manage your organization settings</p>
       </div>
       <Tabs defaultValue="general" className="mt-4">
-        <div className="border-b px-6">
-          <TabsList className="h-auto gap-0 rounded-none bg-transparent p-0">
+        <div className="border-b px-4 md:px-6">
+          <TabsList className="h-auto flex-wrap gap-0 rounded-none bg-transparent p-0">
             {TAB_KEYS.map((tab) => (
               <TabsTrigger
                 key={tab}
                 value={tab}
-                className="rounded-none border-b-2 border-transparent px-4 py-3 text-sm font-medium text-slate-600 data-[state=active]:border-brand-500 data-[state=active]:bg-transparent data-[state=active]:text-brand-600 data-[state=active]:shadow-none"
+                className="rounded-none border-b-2 border-transparent px-3 py-2.5 text-xs font-medium text-slate-600 md:px-4 md:py-3 md:text-sm data-[state=active]:border-brand-500 data-[state=active]:bg-transparent data-[state=active]:text-brand-600 data-[state=active]:shadow-none"
               >
                 {tabLabel(tab)}
               </TabsTrigger>

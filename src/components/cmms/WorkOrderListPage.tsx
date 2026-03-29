@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useStickyState } from "@/lib/hooks/use-sticky-state";
 import {
   CalendarClock,
   Maximize2,
@@ -330,7 +331,7 @@ export function WorkOrderListPage() {
   const { data: workOrders, isLoading } = useWorkOrders();
   const { selectedWorkOrderId, setSelectedWorkOrderId } = useCMMSStore();
   const [search, setSearch] = useState("");
-  const [filterValues, setFilterValues] = useState<Record<string, string | string[]>>({});
+  const [filterValues, setFilterValues] = useStickyState<Record<string, string | string[]>>("wo-filters", {});
   const [dialogOpen, setDialogOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"list" | "table" | "upcoming">("list");
   const [sheetWOId, setSheetWOId] = useState<string | null>(null);

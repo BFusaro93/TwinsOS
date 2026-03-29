@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useStickyState } from "@/lib/hooks/use-sticky-state";
 import { HardHat, Maximize2, Minimize2, Plus, ScanLine } from "lucide-react";
 import { ImportExportMenu } from "@/components/shared/ImportExportMenu";
 import { exportCSV } from "@/lib/csv";
@@ -58,7 +59,7 @@ export function AssetListPage() {
   const { mutateAsync: bulkImportAssets } = useBulkImportAssets();
   const { selectedAssetId, setSelectedAssetId } = useCMMSStore();
   const [search, setSearch] = useState("");
-  const [filterValues, setFilterValues] = useState<Record<string, string | string[]>>({});
+  const [filterValues, setFilterValues] = useStickyState<Record<string, string | string[]>>("asset-filters", {});
   const [dialogOpen, setDialogOpen] = useState(false);
   const [scanOpen, setScanOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"list" | "table">("list");

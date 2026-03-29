@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useStickyState } from "@/lib/hooks/use-sticky-state";
 import {
   ClipboardCheck,
   Droplets,
@@ -345,7 +346,7 @@ export function VehicleListPage() {
   const { mutateAsync: bulkImportVehicles } = useBulkImportVehicles();
   const { selectedVehicleId, setSelectedVehicleId } = useCMMSStore();
   const [search, setSearch] = useState("");
-  const [filterValues, setFilterValues] = useState<Record<string, string | string[]>>({});
+  const [filterValues, setFilterValues] = useStickyState<Record<string, string | string[]>>("vehicle-filters", {});
   const [dialogOpen, setDialogOpen] = useState(false);
   const [scanOpen, setScanOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"list" | "table" | "service">("list");
