@@ -27,6 +27,7 @@ import { NewPartDialog } from "@/components/cmms/NewPartDialog";
 import { ManageVendorsDialog } from "@/components/shared/ManageVendorsDialog";
 
 import { useParts, useUpdatePart } from "@/lib/hooks/use-parts";
+import { usePartOpenWOQty } from "@/lib/hooks/use-wo-costs";
 import { useRequisitions } from "@/lib/hooks/use-requisitions";
 import { usePurchaseOrders } from "@/lib/hooks/use-purchase-orders";
 import { useProducts } from "@/lib/hooks/use-products";
@@ -63,6 +64,7 @@ function DetailsTab({
   part,
   allParts,
   onOrderQty,
+  woAssignedQty,
   qtyOnHand,
   setQtyOnHand,
   linkedProductName,
@@ -74,6 +76,7 @@ function DetailsTab({
   part: Part;
   allParts: Part[];
   onOrderQty: number;
+  woAssignedQty: number;
   qtyOnHand: number;
   setQtyOnHand: (n: number) => void;
   linkedProductName: string | null;
@@ -152,6 +155,11 @@ function DetailsTab({
             {onOrderQty > 0 && (
               <Badge variant="outline" className="border-blue-200 bg-blue-50 text-blue-700">
                 {onOrderQty} on order
+              </Badge>
+            )}
+            {woAssignedQty > 0 && (
+              <Badge variant="outline" className="border-orange-200 bg-orange-50 text-orange-700">
+                {woAssignedQty} assigned to open WOs
               </Badge>
             )}
           </div>
@@ -598,6 +606,8 @@ export function PartDetailSheet({ part, open, onOpenChange }: PartDetailSheetPro
       .filter((li) => li.partNumber === livePart.partNumber)
       .reduce((sum, li) => sum + li.quantity, 0);
 
+  const { data: woAssignedQty = 0 } = usePartOpenWOQty(livePart.id);
+
   // Rendered via portal so it sits above the primary asset sheet without being
   // nested inside the Radix Dialog tree — avoids react-remove-scroll blocking
   // scroll events inside this panel.
@@ -673,6 +683,7 @@ export function PartDetailSheet({ part, open, onOpenChange }: PartDetailSheetPro
                 part={livePart}
                 allParts={allParts ?? []}
                 onOrderQty={onOrderQty}
+                woAssignedQty={woAssignedQty}
                 qtyOnHand={effectiveQty}
                 setQtyOnHand={handleQtyChange}
                 linkedProductName={linkedProductName}

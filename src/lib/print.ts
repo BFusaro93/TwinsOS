@@ -8,10 +8,7 @@ function openPrintWindow(html: string) {
   win.document.write(html);
   win.document.close();
   win.focus();
-  setTimeout(() => {
-    win.print();
-    win.close();
-  }, 500);
+  // Open as preview only — user can print via Ctrl+P / Cmd+P or browser menu
 }
 
 function formatMoney(cents: number): string {

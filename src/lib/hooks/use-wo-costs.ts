@@ -3,6 +3,38 @@ import { createClient } from "@/lib/supabase/client";
 import { mapWOPart, mapWOLaborEntry, mapWOVendorCharge } from "@/lib/supabase/mappers";
 import type { WOPart, WOLaborEntry, WOVendorCharge } from "@/types/cmms";
 
+// ── Part → Open WO Assignments ───────────────────────────────────────────────
+
+/**
+ * Returns the total quantity of a given part assigned to open work orders.
+ */
+export function usePartOpenWOQty(partId: string) {
+  return useQuery({
+    queryKey: ["part-wo-qty", partId],
+    queryFn: async () => {
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from("wo_parts")
+        .select("quantity, work_order_id, work_orders!inner(status)")
+        .eq("part_id", partId)
+        .is("deleted_at", null)
+        .in("work_orders.status", ["open", "in_progress", "on_hold"]);
+      if (error) {
+        // Fallback: if the join fails, fetch without status filter
+        const { data: fallback, error: fallbackErr } = await supabase
+          .from("wo_parts")
+          .select("quantity")
+          .eq("part_id", partId)
+          .is("deleted_at", null);
+        if (fallbackErr) throw fallbackErr;
+        return (fallback ?? []).reduce((sum, r) => sum + (r.quantity as number), 0);
+      }
+      return (data ?? []).reduce((sum, r) => sum + (r.quantity as number), 0);
+    },
+    enabled: !!partId,
+  });
+}
+
 // ── WO Parts ──────────────────────────────────────────────────────────────────
 
 export function useWOParts(workOrderId: string) {

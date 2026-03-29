@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { formatDate, getInitials } from "@/lib/utils";
+import { cn, formatDate, getInitials } from "@/lib/utils";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { RecordDetailTabs } from "@/components/shared/RecordDetailTabs";
 import { CommentsSection } from "@/components/shared/CommentsSection";
@@ -16,7 +16,7 @@ import { WOCostsTab } from "@/components/cmms/WOCostsTab";
 import { AssetDetailPanel } from "./AssetDetailPanel";
 import { VehicleDetailPanel } from "./VehicleDetailPanel";
 import { NewWorkOrderDialog } from "./NewWorkOrderDialog";
-import { WO_STATUS_LABELS, WO_PRIORITY_LABELS, ASSET_STATUS_LABELS } from "@/lib/constants";
+import { WO_STATUS_LABELS, WO_PRIORITY_LABELS, ASSET_STATUS_LABELS, ASSET_STATUS_COLORS } from "@/lib/constants";
 import { useAssets, useUpdateAssetStatus } from "@/lib/hooks/use-assets";
 import { useVehicles, useUpdateVehicleStatus } from "@/lib/hooks/use-vehicles";
 import { useWorkOrders, useUpdateWorkOrder, useDeleteWorkOrder } from "@/lib/hooks/use-work-orders";
@@ -324,29 +324,41 @@ function DetailsTab({
           <MetaRow
             label={`${entityLabel} Status`}
             value={
-              <Select
-                value={entityStatus}
-                onValueChange={(v) => {
-                  const s = v as AssetStatus;
-                  setEntityStatus(s);
-                  if (resolvedEntityType === "vehicle") {
-                    updateVehicleStatus({ id: workOrder.assetId!, status: s });
-                  } else {
-                    updateAssetStatus({ id: workOrder.assetId!, status: s });
-                  }
-                }}
-              >
-                <SelectTrigger className="h-8 w-full max-w-[200px] text-xs">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {ASSET_STATUS_OPTIONS.map((opt) => (
-                    <SelectItem key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <button
+                    type="button"
+                    className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-medium transition-colors hover:opacity-80 ${ASSET_STATUS_COLORS[entityStatus] ?? "bg-slate-100 text-slate-600 border-slate-200"}`}
+                  >
+                    {ASSET_STATUS_LABELS[entityStatus] ?? entityStatus}
+                    <ChevronDown className="h-3 w-3 opacity-50" />
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent className="w-40 p-1" align="start">
+                  <div className="flex flex-col">
+                    {ASSET_STATUS_OPTIONS.map((opt) => (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => {
+                          setEntityStatus(opt.value);
+                          if (resolvedEntityType === "vehicle") {
+                            updateVehicleStatus({ id: workOrder.assetId!, status: opt.value });
+                          } else {
+                            updateAssetStatus({ id: workOrder.assetId!, status: opt.value });
+                          }
+                        }}
+                        className={cn(
+                          "rounded-sm px-2 py-1.5 text-left text-xs hover:bg-accent",
+                          entityStatus === opt.value && "bg-accent font-medium"
+                        )}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </PopoverContent>
+              </Popover>
             }
           />
         )}

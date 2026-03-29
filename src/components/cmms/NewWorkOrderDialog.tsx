@@ -20,8 +20,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useAssets } from "@/lib/hooks/use-assets";
-import { useVehicles } from "@/lib/hooks/use-vehicles";
+import { useAssets, useUpdateAssetStatus } from "@/lib/hooks/use-assets";
+import { useVehicles, useUpdateVehicleStatus } from "@/lib/hooks/use-vehicles";
 import { useUsers } from "@/lib/hooks/use-users";
 import { useCreateWorkOrder, useUpdateWorkOrder } from "@/lib/hooks/use-work-orders";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -76,6 +76,8 @@ export function NewWorkOrderDialog({ open, onOpenChange, initialData }: NewWorkO
 
   const createWO = useCreateWorkOrder();
   const updateWO = useUpdateWorkOrder();
+  const { mutate: updateAssetStatus } = useUpdateAssetStatus();
+  const { mutate: updateVehicleStatus } = useUpdateVehicleStatus();
 
   const { data: assets } = useAssets();
   const { data: vehicles } = useVehicles();
@@ -204,7 +206,22 @@ export function NewWorkOrderDialog({ open, onOpenChange, initialData }: NewWorkO
     if (isEditing && initialData) {
       updateWO.mutate(
         { id: initialData.id, ...commonFields, ...buildEntityFields(entityKey) },
-        { onSuccess: () => handleClose() }
+        {
+          onSuccess: () => {
+            // Update linked asset/vehicle status if changed
+            if (newEntityStatus !== "no_change") {
+              const entityFields = buildEntityFields(entityKey);
+              if (entityFields.assetId) {
+                if (entityFields.linkedEntityType === "vehicle") {
+                  updateVehicleStatus({ id: entityFields.assetId, status: newEntityStatus as import("@/types").AssetStatus });
+                } else {
+                  updateAssetStatus({ id: entityFields.assetId, status: newEntityStatus as import("@/types").AssetStatus });
+                }
+              }
+            }
+            handleClose();
+          },
+        }
       );
     } else if (entityKeys.length > 1) {
       // Multi-entity: create parent WO then sub-WOs sequentially
@@ -241,13 +258,25 @@ export function NewWorkOrderDialog({ open, onOpenChange, initialData }: NewWorkO
       );
     } else {
       const workOrderNumber = `WO-${new Date().getFullYear()}-${Date.now().toString().slice(-6)}`;
+      const singleEntityFields = buildEntityFields(entityKeys[0] ?? "none");
       createWO.mutate(
         {
           ...commonFields,
           workOrderNumber,
-          ...buildEntityFields(entityKeys[0] ?? "none"),
+          ...singleEntityFields,
         },
-        { onSuccess: () => handleClose() }
+        {
+          onSuccess: () => {
+            if (newEntityStatus !== "no_change" && singleEntityFields.assetId) {
+              if (singleEntityFields.linkedEntityType === "vehicle") {
+                updateVehicleStatus({ id: singleEntityFields.assetId, status: newEntityStatus as import("@/types").AssetStatus });
+              } else {
+                updateAssetStatus({ id: singleEntityFields.assetId, status: newEntityStatus as import("@/types").AssetStatus });
+              }
+            }
+            handleClose();
+          },
+        }
       );
     }
   }
