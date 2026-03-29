@@ -119,7 +119,7 @@ export function WOHistoryTab({ assetId, recordLabel = "asset" }: WOHistoryTabPro
             role="dialog"
             aria-modal="true"
             aria-label={selectedWO.title}
-            className="pointer-events-auto fixed inset-y-0 right-0 z-[200] flex w-[580px] flex-col overflow-hidden border-l bg-background shadow-xl"
+            className="pointer-events-auto fixed inset-y-0 right-0 z-[200] flex w-full flex-col overflow-hidden border-l bg-background shadow-xl md:w-[580px]"
           >
             <button
               type="button"

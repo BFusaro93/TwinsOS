@@ -389,13 +389,13 @@ export function ProductDetailSheet({ product, open, onOpenChange }: ProductDetai
         </SheetHeader>
 
         <Tabs defaultValue="details" className="flex flex-1 flex-col overflow-hidden">
-          <div className="shrink-0 border-b px-6">
+          <div className="shrink-0 overflow-x-auto border-b px-4 md:px-6">
             <TabsList className="h-10 bg-transparent p-0">
               {["details", "history", "audit trail"].map((v) => (
                 <TabsTrigger
                   key={v}
                   value={v}
-                  className="h-10 rounded-none border-b-2 border-transparent px-4 pb-0 pt-0 text-sm font-medium text-slate-500 data-[state=active]:border-brand-500 data-[state=active]:text-brand-600 data-[state=active]:shadow-none capitalize"
+                  className="h-10 whitespace-nowrap rounded-none border-b-2 border-transparent px-2.5 pb-0 pt-0 text-xs font-medium text-slate-500 md:px-4 md:text-sm data-[state=active]:border-brand-500 data-[state=active]:text-brand-600 data-[state=active]:shadow-none capitalize"
                 >
                   {v}
                 </TabsTrigger>

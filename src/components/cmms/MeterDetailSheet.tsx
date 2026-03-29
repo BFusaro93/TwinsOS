@@ -266,7 +266,7 @@ export function MeterDetailSheet({ meter, open, onOpenChange }: MeterDetailSheet
       role="dialog"
       aria-modal="true"
       aria-label={meter.name}
-      className="pointer-events-auto fixed inset-y-0 right-0 z-[200] flex w-[580px] flex-col overflow-hidden border-l bg-background shadow-xl"
+      className="pointer-events-auto fixed inset-y-0 right-0 z-[200] flex w-full flex-col overflow-hidden border-l bg-background shadow-xl md:w-[580px]"
     >
       {/* Header */}
       <div className="relative shrink-0 border-b px-6 py-4 pr-14">
