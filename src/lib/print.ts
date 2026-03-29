@@ -8,7 +8,9 @@ function openPrintWindow(html: string) {
   win.document.write(html);
   win.document.close();
   win.focus();
-  // Open as preview only — user can print via Ctrl+P / Cmd+P or browser menu
+  // Give the browser time to render CSS, then open the print/save-as-PDF dialog.
+  // Window stays open after printing so the user can re-print or review.
+  setTimeout(() => win.print(), 500);
 }
 
 function formatMoney(cents: number): string {

@@ -44,7 +44,8 @@ export function NewPartDialog({ open, onOpenChange, initialData, onCreated }: Ne
   const [vendorDialogOpen, setVendorDialogOpen] = useState(false);
   const allVendors = [...(vendors ?? []), ...extraVendors];
   const { data: allParts } = useParts();
-  const { partCategories } = useSettingsStore();
+  const { partCategories, locations } = useSettingsStore();
+  const enabledLocations = locations.filter((l) => l.enabled);
   const enabledPartCategories = partCategories.filter((c) => c.enabled);
 
   const [name, setName] = useState("");
@@ -267,12 +268,17 @@ export function NewPartDialog({ open, onOpenChange, initialData, onCreated }: Ne
             {/* Location */}
             <div className="grid gap-1.5">
               <Label htmlFor="part-location">Location</Label>
-              <Input
-                id="part-location"
-                value={location}
-                onChange={(e) => setLocation(e.target.value)}
-                placeholder="e.g. Warehouse A, Shelf 3"
-              />
+              <Select value={location || "none"} onValueChange={(v) => setLocation(v === "none" ? "" : v)}>
+                <SelectTrigger id="part-location">
+                  <SelectValue placeholder="Select location" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No location</SelectItem>
+                  {enabledLocations.map((loc) => (
+                    <SelectItem key={loc.id} value={loc.label}>{loc.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             {/* Vendor */}
