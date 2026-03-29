@@ -132,14 +132,14 @@ function SettingRow({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex items-start justify-between gap-8 py-4">
+    <div className="flex flex-col gap-2 py-4 md:flex-row md:items-start md:justify-between md:gap-8">
       <div className="flex-1">
         <p className="text-sm font-medium text-slate-900">{label}</p>
         {description && (
           <p className="mt-0.5 text-xs text-slate-500">{description}</p>
         )}
       </div>
-      <div className="w-48 shrink-0">{children}</div>
+      <div className="w-full md:w-48 md:shrink-0">{children}</div>
     </div>
   );
 }
@@ -519,7 +519,7 @@ function GeneralTab() {
         <Separator />
         <div className="px-6">
           {/* Logo upload */}
-          <div className="flex items-start justify-between gap-8 py-4">
+          <div className="flex flex-col gap-2 py-4 md:flex-row md:items-start md:justify-between md:gap-8">
             <div className="flex-1">
               <p className="text-sm font-medium text-slate-900">Company Logo</p>
               <p className="mt-0.5 text-xs text-slate-500">
@@ -527,7 +527,7 @@ function GeneralTab() {
                 background.
               </p>
             </div>
-            <div className="flex w-64 shrink-0 flex-col gap-2">
+            <div className="flex w-full flex-col gap-2 md:w-64 md:shrink-0">
               {logoDataUrl ? (
                 <div className="flex items-center gap-3">
                   <div className="flex h-14 w-40 items-center justify-center rounded-md border bg-slate-50 p-2">
@@ -588,12 +588,12 @@ function GeneralTab() {
           </SettingRow>
           <Separator />
           {/* Company address */}
-          <div className="flex items-start justify-between gap-8 py-4">
+          <div className="flex flex-col gap-2 py-4 md:flex-row md:items-start md:justify-between md:gap-8">
             <div className="flex-1">
               <p className="text-sm font-medium text-slate-900">Company Address</p>
               <p className="mt-0.5 text-xs text-slate-500">Printed in the header of purchase orders</p>
             </div>
-            <div className="flex w-64 shrink-0 flex-col gap-2">
+            <div className="flex w-full flex-col gap-2 md:w-64 md:shrink-0">
               <Input
                 placeholder="Street address"
                 value={companyAddress.street}
@@ -1260,7 +1260,7 @@ function ImportExportTab() {
         </div>
         <Separator />
         <div className="p-6">
-          <div className="grid grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
             {EXPORT_TILES.map(({ label, icon }) => (
               <button
                 key={label}
@@ -1283,7 +1283,7 @@ function ImportExportTab() {
         </div>
         <Separator />
         <div className="p-6">
-          <div className="grid grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
             {[
               { label: "Work Orders",  icon: <ClipboardList className="h-6 w-6" />, onImport: (r: Record<string, string>[]) => bulkImportWorkOrders(r), templateColumns: ["title", "description", "priority", "status", "category", "assetName", "assignedToName", "dueDate"], required: ["title"] },
               { label: "Assets",       icon: <Cog className="h-6 w-6" />,           onImport: (r: Record<string, string>[]) => bulkImportAssets(r),     templateColumns: ["name", "assetTag", "equipmentNumber", "assetType", "make", "model", "year", "serialNumber", "location", "status", "purchaseVendorName", "purchaseDate", "purchasePrice", "paymentMethod", "financeInstitution"], required: ["name", "assetTag"] },
@@ -1326,7 +1326,7 @@ function SubscriptionTab() {
     <div className="flex flex-col gap-4">
       {/* Current Plan */}
       <div className="rounded-lg border bg-white shadow-sm">
-        <div className="flex items-start justify-between p-6">
+        <div className="flex flex-col gap-4 p-6 md:flex-row md:items-start md:justify-between">
           <div>
             <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
               Current Plan
@@ -1337,7 +1337,7 @@ function SubscriptionTab() {
               <span className="font-semibold text-slate-700">May 2nd</span>
             </p>
           </div>
-          <div className="flex flex-col items-end gap-1">
+          <div className="flex flex-col items-start gap-1 md:items-end">
             <Button className="bg-brand-500 hover:bg-brand-600">Upgrade</Button>
             <p className="text-xl font-bold text-slate-900">$148.68</p>
             <p className="text-xs text-slate-400">$59 × 3 licenses × 1 month</p>
@@ -1346,10 +1346,10 @@ function SubscriptionTab() {
       </div>
 
       {/* Billing Period + Licenses */}
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         {/* Billing Period */}
         <div className="rounded-lg border bg-white p-5 shadow-sm">
-          <div className="mb-3 flex items-center justify-between">
+          <div className="mb-3 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
               Billing Period
             </p>
@@ -1524,7 +1524,7 @@ export default function SettingsPage() {
 
   return (
     <div className="flex flex-col gap-0">
-      <div className="px-6 pt-6 pb-0">
+      <div className="px-4 pt-4 pb-0 md:px-6 md:pt-6">
         <h1 className="text-xl font-semibold text-slate-900">Settings</h1>
         <p className="mt-1 text-sm text-slate-500">Manage your organization settings</p>
       </div>
@@ -1542,7 +1542,7 @@ export default function SettingsPage() {
             ))}
           </TabsList>
         </div>
-        <div className="p-6">
+        <div className="p-4 md:p-6">
           <TabsContent value="general" className="mt-0">
             <GeneralTab />
           </TabsContent>

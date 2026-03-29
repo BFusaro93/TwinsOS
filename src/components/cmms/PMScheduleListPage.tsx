@@ -6,6 +6,7 @@ import { Plus, CalendarClock } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { MasterDetailLayout } from "@/components/shared/MasterDetailLayout";
 import { FilterBar } from "@/components/shared/FilterBar";
+import { AdvancedSearchDialog } from "@/components/shared/AdvancedSearchDialog";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { PMScheduleListPanel } from "./PMScheduleListPanel";
 import { PMScheduleDetailPanel } from "./PMScheduleDetailPanel";
@@ -34,6 +35,19 @@ export function PMScheduleListPage() {
   const [filterValues, setFilterValues] = useStickyState<Record<string, string | string[]>>("pm-filters", {});
   const [dialogOpen, setDialogOpen] = useState(false);
 
+  const advancedFilters = [
+    { key: "status", placeholder: "All Statuses", options: STATUS_OPTIONS, multi: true as const },
+    { key: "frequency", placeholder: "All Frequencies", options: FREQUENCY_OPTIONS, multi: true as const },
+  ];
+  const activeFilterCount = advancedFilters.filter((f) => {
+    const v = filterValues[f.key];
+    return Array.isArray(v) ? v.length > 0 : !!v;
+  }).length;
+
+  function handleFilterChange(key: string, value: string | string[]) {
+    setFilterValues((prev) => ({ ...prev, [key]: value }));
+  }
+
   const filtered = (schedules ?? []).filter((s) => {
     const q = search.toLowerCase();
     const matchSearch =
@@ -57,24 +71,22 @@ export function PMScheduleListPage() {
   ) : (
     <>
       <div className="border-b p-3">
-        <FilterBar
-          search={search}
-          onSearchChange={setSearch}
-          filters={[
-            { key: "status", placeholder: "All Statuses", options: STATUS_OPTIONS, multi: true },
-            {
-              key: "frequency",
-              placeholder: "All Frequencies",
-              options: FREQUENCY_OPTIONS,
-              multi: true,
-            },
-          ]}
-          filterValues={filterValues}
-          onFilterChange={(key, value) =>
-            setFilterValues((prev) => ({ ...prev, [key]: value }))
-          }
-          searchPlaceholder="Search PM schedules..."
-        />
+        <div className="flex items-center gap-2">
+          <FilterBar
+            search={search}
+            onSearchChange={setSearch}
+            filters={[]}
+            filterValues={filterValues}
+            onFilterChange={handleFilterChange}
+            searchPlaceholder="Search PM schedules..."
+          />
+          <AdvancedSearchDialog
+            filters={advancedFilters}
+            filterValues={filterValues}
+            onFilterChange={handleFilterChange}
+            activeCount={activeFilterCount}
+          />
+        </div>
       </div>
       <PMScheduleListPanel
         schedules={filtered}
