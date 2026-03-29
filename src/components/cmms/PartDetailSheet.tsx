@@ -626,7 +626,7 @@ export function PartDetailSheet({ part, open, onOpenChange }: PartDetailSheetPro
             role="dialog"
             aria-modal="true"
             aria-label={livePart.name}
-            className="pointer-events-auto fixed inset-y-0 right-0 z-[200] flex w-[580px] flex-col overflow-hidden border-l bg-background shadow-xl"
+            className="pointer-events-auto fixed inset-y-0 right-0 z-[200] flex w-full flex-col overflow-hidden border-l bg-background shadow-xl md:w-[580px]"
           >
           {/* Header — pr-12 leaves a clean gap for the absolute X button */}
           <div className="relative shrink-0 border-b px-6 py-4 pr-12">
@@ -739,7 +739,7 @@ export function PartDetailSheet({ part, open, onOpenChange }: PartDetailSheetPro
           <>
             {selectedAsset && createPortal(
               <>
-                <div className="fixed inset-y-0 right-0 z-[210] flex w-[720px] flex-col overflow-y-auto border-l bg-background shadow-xl">
+                <div className="fixed inset-y-0 right-0 z-[210] flex w-full flex-col overflow-y-auto border-l bg-background shadow-xl md:w-[720px]">
                   <button type="button" onClick={() => setAssetSheetId(null)} className="absolute right-4 top-4 z-10 rounded-sm p-0.5 opacity-70 hover:opacity-100">
                     <X className="h-4 w-4" />
                   </button>
@@ -750,7 +750,7 @@ export function PartDetailSheet({ part, open, onOpenChange }: PartDetailSheetPro
             )}
             {selectedVehicle && createPortal(
               <>
-                <div className="fixed inset-y-0 right-0 z-[210] flex w-[720px] flex-col overflow-y-auto border-l bg-background shadow-xl">
+                <div className="fixed inset-y-0 right-0 z-[210] flex w-full flex-col overflow-y-auto border-l bg-background shadow-xl md:w-[720px]">
                   <button type="button" onClick={() => setVehicleSheetId(null)} className="absolute right-4 top-4 z-10 rounded-sm p-0.5 opacity-70 hover:opacity-100">
                     <X className="h-4 w-4" />
                   </button>

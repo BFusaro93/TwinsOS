@@ -257,7 +257,7 @@ export function useBulkImportParts() {
             minimum_stock: minStock,
             vendor_name: r.vendorName?.trim() || null,
             location: r.location?.trim() || null,
-            is_inventory: qoh > 0 || minStock > 0,
+            is_inventory: r.quantityOnHand !== undefined || r.minimumStock !== undefined || r.isInventory === "true" || qoh > 0 || minStock > 0,
             cost_layers: [] as unknown as import("@/types/supabase").Json,
             alternate_vendors: [] as unknown as import("@/types/supabase").Json,
           };

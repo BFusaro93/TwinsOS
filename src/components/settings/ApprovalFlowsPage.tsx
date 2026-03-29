@@ -288,8 +288,8 @@ function FlowCard({ flow }: { flow: ApprovalFlow }) {
                 onCancel={() => setEditingId(null)}
               />
             ) : (
-              <div className="flex items-center gap-3 rounded-lg border border-slate-100 bg-slate-50 p-3">
-                <GripVertical className="h-4 w-4 shrink-0 text-slate-300" />
+              <div className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-100 bg-slate-50 p-3 md:gap-3">
+                <GripVertical className="hidden h-4 w-4 shrink-0 text-slate-300 md:block" />
 
                 {/* Order badge */}
                 <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-500 text-xs font-bold text-white">
@@ -317,7 +317,7 @@ function FlowCard({ flow }: { flow: ApprovalFlow }) {
                 </div>
 
                 {/* Actions */}
-                <div className="flex gap-1">
+                <div className="flex shrink-0 gap-1">
                   <Button
                     size="icon"
                     variant="ghost"

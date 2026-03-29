@@ -1385,7 +1385,7 @@ function SubscriptionTab() {
       </div>
 
       {/* Payment Method + Invoices */}
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         {/* Payment Method */}
         <div className="rounded-lg border bg-white p-5 shadow-sm">
           <div className="mb-4 flex items-center justify-between">
