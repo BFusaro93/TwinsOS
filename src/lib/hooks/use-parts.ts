@@ -263,9 +263,33 @@ export function useBulkImportParts() {
           };
         });
       if (inserts.length === 0) return 0;
-      const { error } = await supabase.from("parts").upsert(inserts, { onConflict: "org_id,part_number" });
-      if (error) throw error;
-      return inserts.length;
+
+      // Insert new parts one-by-one; if a part_number already exists,
+      // update it instead (the partial unique index prevents bulk upsert).
+      let count = 0;
+      for (const row of inserts) {
+        const { error } = await supabase.from("parts").insert(row);
+        if (error?.code === "23505") {
+          // Duplicate — update existing record by part_number
+          const { data: { user } } = await supabase.auth.getUser();
+          const { data: profile } = await supabase.from("profiles").select("org_id").eq("id", user!.id).single();
+          await supabase.from("parts").update({
+            name: row.name,
+            description: row.description,
+            category: row.category,
+            unit_cost: row.unit_cost,
+            quantity_on_hand: row.quantity_on_hand,
+            minimum_stock: row.minimum_stock,
+            vendor_name: row.vendor_name,
+            location: row.location,
+            is_inventory: row.is_inventory,
+          }).eq("part_number", row.part_number).eq("org_id", profile!.org_id).is("deleted_at", null);
+        } else if (error) {
+          throw error;
+        }
+        count++;
+      }
+      return count;
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["parts"] }),
   });
