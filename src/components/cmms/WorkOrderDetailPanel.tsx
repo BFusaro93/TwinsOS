@@ -155,6 +155,7 @@ function DetailsTab({
   onStatusChange,
   onAssetClick,
   onVehicleClick,
+  initialEntityStatus,
   subWorkOrders,
   parentWorkOrder,
   onSubWOClick,
@@ -177,9 +178,11 @@ function DetailsTab({
   onCategoryChange: (categories: string[]) => void;
   users: Array<{ id: string; name: string }>;
   woCategories: Array<{ id: string; label: string; enabled: boolean }>;
+  initialEntityStatus?: AssetStatus;
 }) {
   const [completing, setCompleting] = useState(false);
   const [newEntityStatus, setNewEntityStatus] = useState<AssetStatus | "no_change">("no_change");
+  const [entityStatus, setEntityStatus] = useState<AssetStatus>(initialEntityStatus ?? "active");
 
   const { mutate: updateAssetStatus } = useUpdateAssetStatus();
   const { mutate: updateVehicleStatus } = useUpdateVehicleStatus();
@@ -317,6 +320,36 @@ function DetailsTab({
             );
           })()}
         />
+        {hasLinkedEntity && (
+          <MetaRow
+            label={`${entityLabel} Status`}
+            value={
+              <Select
+                value={entityStatus}
+                onValueChange={(v) => {
+                  const s = v as AssetStatus;
+                  setEntityStatus(s);
+                  if (resolvedEntityType === "vehicle") {
+                    updateVehicleStatus({ id: workOrder.assetId!, status: s });
+                  } else {
+                    updateAssetStatus({ id: workOrder.assetId!, status: s });
+                  }
+                }}
+              >
+                <SelectTrigger className="h-8 w-full max-w-[200px] text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {ASSET_STATUS_OPTIONS.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            }
+          />
+        )}
         <MetaRow
           label="Assigned To"
           value={(() => {
@@ -633,6 +666,7 @@ export function WorkOrderDetailPanel({ workOrder }: WorkOrderDetailPanelProps) {
                 }}
                 onAssetClick={linkedAsset ? () => setAssetSheetOpen(true) : undefined}
                 onVehicleClick={linkedVehicle ? () => setVehicleSheetOpen(true) : undefined}
+                initialEntityStatus={(linkedAsset?.status ?? linkedVehicle?.status ?? "active") as AssetStatus}
                 subWorkOrders={subWorkOrders}
                 parentWorkOrder={parentWorkOrder}
                 onSubWOClick={(id) => setSubWOSheetId(id)}

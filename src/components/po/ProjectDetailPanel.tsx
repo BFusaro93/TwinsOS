@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Pencil, Trash2, Plus } from "lucide-react";
+import { Pencil, Trash2, Plus, ExternalLink, Download } from "lucide-react";
+import { printProject } from "@/lib/print";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { RecordDetailTabs } from "@/components/shared/RecordDetailTabs";
@@ -112,9 +113,12 @@ function MaterialsTab({ project }: { project: Project }) {
   const { data: requisitions } = useRequisitions();
   const { data: purchaseOrders } = usePurchaseOrders();
   const { data: products = [] } = useProducts();
-  // Build the initial list from linked REQ / PO line items
+  // Build the initial list from linked REQ / PO line items.
+  // Skip requisitions that have been converted to a PO (status "ordered"
+  // with a convertedPoId) to avoid showing duplicate materials.
   const persisted: ProjectLineItem[] = [];
   (requisitions ?? []).forEach((req) => {
+    if (req.convertedPoId && req.status === "ordered") return;
     req.lineItems
       .filter((li) => li.projectId === project.id)
       .forEach((li) => {
@@ -304,6 +308,7 @@ function MaterialsTab({ project }: { project: Project }) {
                                 : "border-slate-200 bg-slate-50 text-slate-600"
                             }`}
                           >
+                            <ExternalLink className="mr-1 inline h-3 w-3" />
                             {li.sourceNumber}
                           </Badge>
                         </button>
@@ -517,6 +522,24 @@ export function ProjectDetailPanel({ project }: ProjectDetailPanelProps) {
   const { setSelectedProjectId } = usePOStore();
   const { mutate: deleteProject, isPending: deleting } = useDeleteProject();
   const { mutate: updateProject } = useUpdateProject();
+  const { data: allRequisitions } = useRequisitions();
+  const { data: allPurchaseOrders } = usePurchaseOrders();
+
+  function getPrintMaterials() {
+    const materials: Array<{ productItemName: string; partNumber: string; quantity: number; unitCost: number; sourceNumber: string; sourceType: string }> = [];
+    (allRequisitions ?? []).forEach((req) => {
+      if (req.convertedPoId && req.status === "ordered") return;
+      req.lineItems.filter((li) => li.projectId === project.id).forEach((li) => {
+        materials.push({ productItemName: li.productItemName, partNumber: li.partNumber, quantity: li.quantity, unitCost: li.unitCost, sourceNumber: req.requisitionNumber, sourceType: "requisition" });
+      });
+    });
+    (allPurchaseOrders ?? []).forEach((po) => {
+      po.lineItems.filter((li) => li.projectId === project.id).forEach((li) => {
+        materials.push({ productItemName: li.productItemName, partNumber: li.partNumber, quantity: li.quantity, unitCost: li.unitCost, sourceNumber: po.poNumber, sourceType: "po" });
+      });
+    });
+    return materials;
+  }
 
   // Sync if a different project is selected
   useEffect(() => {
@@ -535,6 +558,10 @@ export function ProjectDetailPanel({ project }: ProjectDetailPanelProps) {
             variant={status === "on_hold" ? "on_hold_project" : status}
             label={PROJECT_STATUS_LABELS[status]}
           />
+          <Button variant="outline" size="sm" className="gap-1.5" onClick={() => printProject(project, getPrintMaterials())}>
+            <Download className="h-3.5 w-3.5" />
+            PDF
+          </Button>
           <EditButton onClick={() => setEditOpen(true)} />
           <Button
             variant="ghost"

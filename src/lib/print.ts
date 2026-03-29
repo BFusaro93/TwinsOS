@@ -1,4 +1,4 @@
-import type { PurchaseOrder } from "@/types";
+import type { PurchaseOrder, Project } from "@/types";
 import type { WorkOrder } from "@/types";
 import { useSettingsStore } from "@/stores/settings-store";
 
@@ -629,4 +629,119 @@ export function printWO(workOrder: WorkOrder, woParts?: Array<{ partName: string
 </html>`;
 
   openPrintWindow(html);
+}
+
+export function printProject(
+  project: Project,
+  materials: Array<{ productItemName: string; partNumber: string; quantity: number; unitCost: number; sourceNumber: string; sourceType: string }>,
+): void {
+  const { orgName, logoDataUrl, companyAddress, brandColor } = useSettingsStore.getState();
+
+  const addressLines = [
+    companyAddress.street,
+    [companyAddress.city, companyAddress.state, companyAddress.zip].filter(Boolean).join(", "),
+    companyAddress.phone,
+  ].filter(Boolean);
+
+  const headerHtml = buildHeaderHtml({
+    logoDataUrl,
+    orgName,
+    addressLines,
+    docTitle: "Project",
+    docNumber: project.name,
+    docDate: formatDateStr(project.startDate),
+  });
+
+  const metaItems: Array<{ label: string; value: string }> = [
+    { label: "Customer", value: project.customerName },
+    { label: "Status", value: formatStatus(project.status) },
+    { label: "Address", value: project.address },
+    { label: "Start Date", value: formatDateStr(project.startDate) },
+  ];
+  if (project.endDate) {
+    metaItems.push({ label: "End Date", value: formatDateStr(project.endDate) });
+  }
+  metaItems.push({ label: "Total Cost", value: formatMoney(project.totalCost) });
+
+  const metaHtml = metaItems
+    .map(
+      (m) => `
+    <div class="meta-item">
+      <span class="meta-label">${escapeHtml(m.label)}</span>
+      <span class="meta-value">${escapeHtml(m.value)}</span>
+    </div>
+  `
+    )
+    .join("");
+
+  const materialsTotal = materials.reduce((s, m) => s + m.quantity * m.unitCost, 0);
+
+  const materialsHtml = materials.length > 0 ? `
+  <div class="section-title">Materials</div>
+  <table>
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Item</th>
+        <th>Part #</th>
+        <th>Source</th>
+        <th class="text-right">Qty</th>
+        <th class="text-right">Unit Cost</th>
+        <th class="text-right">Total</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${materials.map((m, i) => `
+      <tr>
+        <td>${i + 1}</td>
+        <td>${escapeHtml(m.productItemName)}</td>
+        <td>${m.partNumber ? escapeHtml(m.partNumber) : "\u2014"}</td>
+        <td>${escapeHtml(m.sourceNumber)}</td>
+        <td class="text-right">${m.quantity}</td>
+        <td class="text-right">${formatMoney(m.unitCost)}</td>
+        <td class="text-right">${formatMoney(m.quantity * m.unitCost)}</td>
+      </tr>
+      `).join("")}
+    </tbody>
+  </table>
+
+  <div class="totals-wrapper">
+    <div class="totals-box">
+      <div class="totals-row grand">
+        <span class="totals-label">Materials Total</span>
+        <span class="totals-value">${formatMoney(materialsTotal)}</span>
+      </div>
+    </div>
+  </div>
+  ` : "";
+
+  const notesHtml = project.notes
+    ? `<div class="section-title">Notes</div><div class="notes-block">${escapeHtml(project.notes)}</div>`
+    : "";
+
+  const projHtml = `<!DOCTYPE html>
+<html>
+<head>
+  <title>Project: ${escapeHtml(project.name)}</title>
+  <style>${buildStyles(brandColor)}</style>
+</head>
+<body>
+  <div class="accent-bar"></div>
+  ${headerHtml}
+  <hr class="divider"/>
+
+  <div class="section-title">Details</div>
+  <div class="meta-grid">
+    ${metaHtml}
+  </div>
+
+  ${materialsHtml}
+
+  ${notesHtml}
+
+  ${buildFooterHtml()}
+</body>
+</html>`;
+
+  openPrintWindow(projHtml);
 }
