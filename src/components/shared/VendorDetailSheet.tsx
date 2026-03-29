@@ -526,7 +526,7 @@ function POHistoryTab({ vendor }: { vendor: Vendor }) {
 
       {/* PO detail overlay */}
       <Sheet open={!!selectedPO} onOpenChange={(open) => { if (!open) setSelectedPO(null); }}>
-        <SheetContent className="flex w-[580px] flex-col overflow-hidden p-0 sm:max-w-[580px]">
+        <SheetContent className="flex w-full flex-col overflow-hidden p-0 md:w-[580px] md:max-w-[580px]">
           {selectedPO && <PODetailPanel po={selectedPO} />}
         </SheetContent>
       </Sheet>

@@ -606,6 +606,7 @@ export function WorkOrderListPage() {
             />
           }
           hasSelection={!!selectedWO}
+          onBack={() => setSelectedWorkOrderId(null)}
         />
       )}
 
@@ -622,7 +623,7 @@ export function WorkOrderListPage() {
       {/* Detail sheet — used by both table view and upcoming view */}
       <Sheet open={!!sheetWO} onOpenChange={(o) => { if (!o) setSheetWOId(null); }}>
         <SheetContent
-          className="flex w-[580px] flex-col overflow-hidden p-0 sm:max-w-[580px]"
+          className="flex w-full flex-col overflow-hidden p-0 md:w-[580px] md:max-w-[580px]"
         >
           {sheetWO && <WorkOrderDetailPanel workOrder={sheetWO} />}
         </SheetContent>

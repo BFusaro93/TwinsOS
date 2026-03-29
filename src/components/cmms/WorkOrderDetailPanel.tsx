@@ -724,21 +724,21 @@ export function WorkOrderDetailPanel({ workOrder }: WorkOrderDetailPanelProps) {
 
       {/* Asset detail overlay */}
       <Sheet open={assetSheetOpen && !!linkedAsset} onOpenChange={setAssetSheetOpen}>
-        <SheetContent className="flex w-[720px] flex-col overflow-hidden p-0 sm:max-w-[720px]">
+        <SheetContent className="flex w-full flex-col overflow-hidden p-0 md:w-[720px] md:max-w-[720px]">
           {linkedAsset && <AssetDetailPanel asset={linkedAsset} />}
         </SheetContent>
       </Sheet>
 
       {/* Vehicle detail overlay */}
       <Sheet open={vehicleSheetOpen && !!linkedVehicle} onOpenChange={setVehicleSheetOpen}>
-        <SheetContent className="flex w-[580px] flex-col overflow-hidden p-0 sm:max-w-[580px]">
+        <SheetContent className="flex w-full flex-col overflow-hidden p-0 md:w-[580px] md:max-w-[580px]">
           {linkedVehicle && <VehicleDetailPanel vehicle={linkedVehicle} />}
         </SheetContent>
       </Sheet>
 
       {/* Sub work order detail overlay */}
       <Sheet open={!!subWOSheetWorkOrder} onOpenChange={(o) => { if (!o) setSubWOSheetId(null); }}>
-        <SheetContent className="flex w-[580px] flex-col overflow-hidden p-0 sm:max-w-[580px]">
+        <SheetContent className="flex w-full flex-col overflow-hidden p-0 md:w-[580px] md:max-w-[580px]">
           {subWOSheetWorkOrder && (
             <WorkOrderDetailPanel workOrder={subWOSheetWorkOrder} />
           )}
@@ -747,7 +747,7 @@ export function WorkOrderDetailPanel({ workOrder }: WorkOrderDetailPanelProps) {
 
       {/* Parent work order detail overlay */}
       <Sheet open={parentWOSheetOpen && !!parentWorkOrder} onOpenChange={setParentWOSheetOpen}>
-        <SheetContent className="flex w-[580px] flex-col overflow-hidden p-0 sm:max-w-[580px]">
+        <SheetContent className="flex w-full flex-col overflow-hidden p-0 md:w-[580px] md:max-w-[580px]">
           {parentWorkOrder && (
             <WorkOrderDetailPanel workOrder={parentWorkOrder} />
           )}

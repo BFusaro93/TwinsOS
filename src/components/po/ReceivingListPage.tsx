@@ -76,6 +76,7 @@ export function ReceivingListPage() {
           />
         }
         hasSelection={!!selectedReceipt}
+        onBack={() => setSelectedReceiptId(null)}
       />
     </div>
   );

@@ -20,7 +20,7 @@ export function PODetailSheet({ po, open, onOpenChange }: PODetailSheetProps) {
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="flex w-[680px] flex-col overflow-hidden p-0 sm:max-w-[680px]">
+      <SheetContent className="flex w-full flex-col overflow-hidden p-0 md:w-[680px] md:max-w-[680px]">
         <SheetHeader className="sr-only">
           <SheetTitle>{po.poNumber}</SheetTitle>
         </SheetHeader>

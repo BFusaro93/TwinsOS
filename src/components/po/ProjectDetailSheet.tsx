@@ -20,7 +20,7 @@ export function ProjectDetailSheet({ project, open, onOpenChange }: ProjectDetai
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="flex w-[600px] flex-col overflow-hidden p-0 sm:max-w-[600px]">
+      <SheetContent className="flex w-full flex-col overflow-hidden p-0 md:w-[600px] md:max-w-[600px]">
         <SheetHeader className="sr-only">
           <SheetTitle>{project.name}</SheetTitle>
         </SheetHeader>

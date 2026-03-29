@@ -349,7 +349,7 @@ export function ProductDetailSheet({ product, open, onOpenChange }: ProductDetai
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="flex w-[580px] flex-col overflow-hidden p-0 sm:max-w-[580px]">
+      <SheetContent className="flex w-full flex-col overflow-hidden p-0 md:w-[580px] md:max-w-[580px]">
         <SheetHeader className="shrink-0 border-b px-6 py-4 pr-12">
           <div className="flex items-start gap-3">
             <ThumbnailUpload

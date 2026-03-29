@@ -242,6 +242,7 @@ export function ProjectListPage() {
             />
           }
           hasSelection={!!selectedProject}
+          onBack={() => setSelectedProjectId(null)}
         />
       ) : (
         tableView
@@ -250,7 +251,7 @@ export function ProjectListPage() {
       {/* Table-mode detail sheet */}
       <Sheet open={!!sheetProject} onOpenChange={(o) => { if (!o) setSheetProjectId(null); }}>
         <SheetContent
-          className="flex w-[580px] flex-col overflow-hidden p-0 sm:max-w-[580px]"
+          className="flex w-full flex-col overflow-hidden p-0 md:w-[580px] md:max-w-[580px]"
         >
           {sheetProject && <ProjectDetailPanel project={sheetProject} />}
         </SheetContent>

@@ -360,6 +360,7 @@ export function AssetListPage() {
             />
           }
           hasSelection={!!selectedAsset}
+          onBack={() => setSelectedAssetId(null)}
         />
       ) : (
         tableView
@@ -368,7 +369,7 @@ export function AssetListPage() {
       {/* Table-mode detail sheet */}
       <Sheet open={!!sheetAsset} onOpenChange={(o) => { if (!o) setSheetAssetId(null); }}>
         <SheetContent
-          className="flex w-[720px] flex-col overflow-hidden p-0 sm:max-w-[720px]"
+          className="flex w-full flex-col overflow-hidden p-0 md:w-[720px] md:max-w-[720px]"
         >
           {sheetAsset && <AssetDetailPanel asset={sheetAsset} />}
         </SheetContent>

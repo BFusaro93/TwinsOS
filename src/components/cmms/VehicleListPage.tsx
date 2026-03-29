@@ -678,6 +678,7 @@ export function VehicleListPage() {
             />
           }
           hasSelection={!!selectedVehicle}
+          onBack={() => setSelectedVehicleId(null)}
         />
       )}
 
@@ -694,7 +695,7 @@ export function VehicleListPage() {
       {/* Detail sheet — used by table and service views */}
       <Sheet open={!!sheetVehicle} onOpenChange={(o) => { if (!o) setSheetVehicleId(null); }}>
         <SheetContent
-          className="flex w-[580px] flex-col overflow-hidden p-0 sm:max-w-[580px]"
+          className="flex w-full flex-col overflow-hidden p-0 md:w-[580px] md:max-w-[580px]"
         >
           {sheetVehicle && <VehicleDetailPanel vehicle={sheetVehicle} />}
         </SheetContent>

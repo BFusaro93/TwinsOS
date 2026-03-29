@@ -268,6 +268,7 @@ export function RequestListPage() {
             />
           }
           hasSelection={!!selectedRequest}
+          onBack={() => setSelectedRequestId(null)}
         />
       ) : (
         tableView
@@ -276,7 +277,7 @@ export function RequestListPage() {
       {/* Table-mode detail sheet */}
       <Sheet open={!!sheetRequest} onOpenChange={(o) => { if (!o) setSheetRequestId(null); }}>
         <SheetContent
-          className="flex w-[580px] flex-col overflow-hidden p-0 sm:max-w-[580px]"
+          className="flex w-full flex-col overflow-hidden p-0 md:w-[580px] md:max-w-[580px]"
         >
           {sheetRequest && <RequestDetailPanel key={sheetRequest.id} request={sheetRequest} />}
         </SheetContent>

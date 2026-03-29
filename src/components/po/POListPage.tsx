@@ -289,6 +289,7 @@ export function POListPage() {
             />
           }
           hasSelection={!!selectedPO}
+          onBack={() => setSelectedPOId(null)}
         />
       ) : (
         tableView
@@ -297,7 +298,7 @@ export function POListPage() {
       {/* Table-mode detail sheet */}
       <Sheet open={!!sheetPO} onOpenChange={(o) => { if (!o) setSheetPOId(null); }}>
         <SheetContent
-          className="flex w-[580px] flex-col overflow-hidden p-0 sm:max-w-[580px]"
+          className="flex w-full flex-col overflow-hidden p-0 md:w-[580px] md:max-w-[580px]"
         >
           {sheetPO && <PODetailPanel key={sheetPO.id} po={sheetPO} />}
         </SheetContent>

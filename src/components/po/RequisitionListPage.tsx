@@ -267,6 +267,7 @@ export function RequisitionListPage() {
             />
           }
           hasSelection={!!selectedReq}
+          onBack={() => setSelectedRequisitionId(null)}
         />
       ) : (
         tableView
@@ -275,7 +276,7 @@ export function RequisitionListPage() {
       {/* Table-mode detail sheet */}
       <Sheet open={!!sheetReq} onOpenChange={(o) => { if (!o) setSheetReqId(null); }}>
         <SheetContent
-          className="flex w-[580px] flex-col overflow-hidden p-0 sm:max-w-[580px]"
+          className="flex w-full flex-col overflow-hidden p-0 md:w-[580px] md:max-w-[580px]"
         >
           {sheetReq && <RequisitionDetailPanel key={sheetReq.id} requisition={sheetReq} />}
         </SheetContent>

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { usePathname } from "next/navigation";
-import { Menu, Search, UserCog } from "lucide-react";
+import { Menu, PanelLeftClose, Search, UserCog } from "lucide-react";
 import { useUIStore, useCurrentUserStore } from "@/stores";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -88,7 +88,7 @@ function useBreadcrumbs() {
 }
 
 export function TopBar() {
-  const { toggleSidebar } = useUIStore();
+  const { toggleSidebar, setSidebarOpen } = useUIStore();
   const { currentUser, setCurrentUser } = useCurrentUserStore();
   const { data: orgUsers = [] } = useUsers();
   const breadcrumbs = useBreadcrumbs();
@@ -99,13 +99,23 @@ export function TopBar() {
 
   return (
     <header className="flex h-14 shrink-0 items-center gap-4 border-b bg-white px-4">
+      {/* Mobile hamburger — opens sidebar drawer */}
+      <Button
+        variant="ghost"
+        size="icon"
+        onClick={() => setSidebarOpen(true)}
+        className="shrink-0 text-slate-500 md:hidden"
+      >
+        <Menu className="h-5 w-5" />
+      </Button>
+      {/* Desktop collapse toggle */}
       <Button
         variant="ghost"
         size="icon"
         onClick={toggleSidebar}
-        className="shrink-0 text-slate-500"
+        className="hidden shrink-0 text-slate-500 md:inline-flex"
       >
-        <Menu className="h-5 w-5" />
+        <PanelLeftClose className="h-5 w-5" />
       </Button>
 
       {/* Breadcrumbs */}

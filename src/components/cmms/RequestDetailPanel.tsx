@@ -315,7 +315,7 @@ export function RequestDetailPanel({ request }: RequestDetailPanelProps) {
       </AlertDialog>
 
       <Sheet open={woSheetOpen && !!linkedWO} onOpenChange={(o) => { if (!o) setWoSheetOpen(false); }}>
-        <SheetContent className="flex w-[580px] flex-col overflow-hidden p-0 sm:max-w-[580px]">
+        <SheetContent className="flex w-full flex-col overflow-hidden p-0 md:w-[580px] md:max-w-[580px]">
           <SheetHeader className="sr-only">
             <SheetTitle>{linkedWO?.workOrderNumber}</SheetTitle>
           </SheetHeader>
