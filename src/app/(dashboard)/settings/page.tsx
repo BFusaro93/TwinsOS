@@ -14,7 +14,7 @@ import {
   ExternalLink,
   FileText,
   Plus,
-  ShoppingBag,
+  BookOpen,
   ShoppingCart,
   Trash2,
   Truck,
@@ -1217,8 +1217,8 @@ function ImportExportTab() {
     { label: "Parts",           icon: <Cog className="h-6 w-6" /> },
     { label: "Vendors",         icon: <Building2 className="h-6 w-6" /> },
     { label: "Requisitions",    icon: <FileText className="h-6 w-6" /> },
+    { label: "Products",        icon: <BookOpen className="h-6 w-6" /> },
     { label: "Purchase Orders", icon: <ShoppingCart className="h-6 w-6" /> },
-    { label: "Products",        icon: <ShoppingBag className="h-6 w-6" /> },
   ];
 
   return (
@@ -1276,7 +1276,7 @@ function ImportExportTab() {
               { label: "Parts",        icon: <Cog className="h-6 w-6" />,            onImport: (r: Record<string, string>[]) => bulkImportParts(r),      templateColumns: ["name", "partNumber", "description", "category", "unitCost", "quantityOnHand", "minimumStock", "vendorName", "location"], required: ["name", "partNumber"] },
               { label: "Vendors",      icon: <Building2 className="h-6 w-6" />,     onImport: (r: Record<string, string>[]) => bulkImportVendors(r),    templateColumns: ["name", "contactName", "email", "phone", "address", "vendorType", "website", "notes"], required: ["name"] },
               { label: "Requisitions",    icon: <FileText className="h-6 w-6" />,      onImport: (r: Record<string, string>[]) => bulkImportRequisitions(r), templateColumns: ["title", "vendorName", "notes"], required: ["title"] },
-              { label: "Products",        icon: <ShoppingBag className="h-6 w-6" />,  onImport: (r: Record<string, string>[]) => bulkImportProducts(r), templateColumns: ["name", "partNumber", "description", "category", "unitCost", "price", "quantityOnHand", "vendorName", "isInventory"], required: ["name", "partNumber", "category"] },
+              { label: "Products",        icon: <BookOpen className="h-6 w-6" />,     onImport: (r: Record<string, string>[]) => bulkImportProducts(r), templateColumns: ["name", "partNumber", "description", "category", "unitCost", "price", "quantityOnHand", "vendorName", "isInventory"], required: ["name", "partNumber", "category"] },
               { label: "Purchase Orders", icon: <ShoppingCart className="h-6 w-6" />,  onImport: (r: Record<string, string>[]) => bulkImportPurchaseOrders(r), templateColumns: ["vendorName", "poDate", "notes", "invoiceNumber"], required: ["vendorName"] },
             ].map((tile) => (
               <ImportTile
