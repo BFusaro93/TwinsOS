@@ -175,7 +175,7 @@ export function BulkPartCostDialog({
         </div>
 
         {/* Table */}
-        <div className="max-h-[45vh] overflow-y-auto rounded-md border">
+        <div className="max-h-[40dvh] sm:max-h-[45vh] overflow-y-auto rounded-md border">
           <table className="w-full text-sm">
             <thead className="sticky top-0 bg-slate-50">
               <tr className="border-b text-left text-xs text-slate-500">

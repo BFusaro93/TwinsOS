@@ -263,7 +263,7 @@ export function ReceiveGoodsDialog({
         </DialogHeader>
 
         <form onSubmit={handleSubmit}>
-          <div className="max-h-[65vh] overflow-y-auto px-1">
+          <div className="max-h-[60dvh] sm:max-h-[65vh] overflow-y-auto px-1">
             <div className="space-y-5 pb-4">
               {/* Line items table */}
               <div>
@@ -362,7 +362,7 @@ export function ReceiveGoodsDialog({
               </div>
 
               {/* Received by + Notes */}
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="grid gap-1.5">
                   <Label htmlFor="received-by">
                     Received By <span className="text-red-500">*</span>

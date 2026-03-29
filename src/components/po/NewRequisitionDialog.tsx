@@ -386,7 +386,7 @@ export function NewRequisitionDialog({ open, onOpenChange, initialData, prefillD
         </DialogHeader>
 
         <form onSubmit={handleSubmit}>
-          <div className="max-h-[75vh] overflow-y-auto px-1">
+          <div className="max-h-[60dvh] sm:max-h-[75vh] overflow-y-auto px-1">
             <div className="space-y-4 pb-4">
               {/* Title — full width */}
               <div className="grid gap-1.5">
@@ -402,7 +402,7 @@ export function NewRequisitionDialog({ open, onOpenChange, initialData, prefillD
               </div>
 
               {/* Preferred Vendor — half width */}
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="grid gap-1.5">
                   <Label>Vendor{rf.req("vendor")}</Label>
                   <VendorCombobox
@@ -583,7 +583,7 @@ export function NewRequisitionDialog({ open, onOpenChange, initialData, prefillD
                   </div>
 
                   {/* Tax / Shipping */}
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <div className="grid gap-1.5">
                       <Label htmlFor="req-tax-rate">Tax Rate (%)</Label>
                       <Input

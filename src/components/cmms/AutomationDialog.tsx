@@ -266,7 +266,7 @@ export function AutomationDialog({
         </DialogHeader>
 
         <form onSubmit={handleSubmit}>
-          <div className="max-h-[80vh] overflow-y-auto flex flex-col gap-5 px-1">
+          <div className="max-h-[60dvh] sm:max-h-[80vh] overflow-y-auto flex flex-col gap-5 px-1">
             {/* Name */}
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="automation-name">Name</Label>
@@ -334,7 +334,7 @@ export function AutomationDialog({
                       </SelectContent>
                     </Select>
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <div className="flex flex-col gap-1.5">
                       <Label htmlFor="meter-operator">Operator</Label>
                       <Select

@@ -198,7 +198,7 @@ export function NewAssetDialog({ open, onOpenChange, initialData }: NewAssetDial
           </DialogDescription>
         </DialogHeader>
 
-        <div className="max-h-[70vh] overflow-y-auto px-1">
+        <div className="max-h-[60dvh] sm:max-h-[70vh] overflow-y-auto px-1">
           <form onSubmit={handleSubmit} className="flex flex-col gap-4">
             {/* Basic Info */}
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
@@ -217,7 +217,7 @@ export function NewAssetDialog({ open, onOpenChange, initialData }: NewAssetDial
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="grid gap-1.5">
                 <Label htmlFor="asset-tag">
                   Asset Tag <span className="text-red-500">*</span>
@@ -245,7 +245,7 @@ export function NewAssetDialog({ open, onOpenChange, initialData }: NewAssetDial
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="grid gap-1.5">
                 <Label htmlFor="asset-type">
                   Asset Type <span className="text-red-500">*</span>
@@ -287,7 +287,7 @@ export function NewAssetDialog({ open, onOpenChange, initialData }: NewAssetDial
             </p>
 
             {rf.isVisible("make_model") && (
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="grid gap-1.5">
                   <Label htmlFor="asset-make">Make / Model{rf.req("make_model")}</Label>
                   <Input
@@ -310,7 +310,7 @@ export function NewAssetDialog({ open, onOpenChange, initialData }: NewAssetDial
               </div>
             )}
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               {rf.isVisible("year") && (
                 <div className="grid gap-1.5">
                   <Label htmlFor="asset-year">Year{rf.req("year")}</Label>
@@ -339,7 +339,7 @@ export function NewAssetDialog({ open, onOpenChange, initialData }: NewAssetDial
               )}
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="grid gap-1.5">
                 <Label htmlFor="engine-model">Engine Model</Label>
                 <Input
@@ -366,7 +366,7 @@ export function NewAssetDialog({ open, onOpenChange, initialData }: NewAssetDial
               Assignment
             </p>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="grid gap-1.5">
                 <Label htmlFor="asset-division">Division</Label>
                 <Input
@@ -428,7 +428,7 @@ export function NewAssetDialog({ open, onOpenChange, initialData }: NewAssetDial
               </Select>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="grid gap-1.5">
                 <Label htmlFor="purchase-date">Purchase Date</Label>
                 <Input
@@ -453,7 +453,7 @@ export function NewAssetDialog({ open, onOpenChange, initialData }: NewAssetDial
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="grid gap-1.5">
                 <Label htmlFor="payment-method">Payment Method</Label>
                 <Select value={paymentMethod} onValueChange={setPaymentMethod}>

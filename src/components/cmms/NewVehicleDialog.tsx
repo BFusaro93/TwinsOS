@@ -239,7 +239,7 @@ export function NewVehicleDialog({ open, onOpenChange, initialData }: NewVehicle
         </DialogHeader>
 
         <form onSubmit={handleSubmit}>
-        <div className="max-h-[70vh] overflow-y-auto px-1">
+        <div className="max-h-[60dvh] sm:max-h-[70vh] overflow-y-auto px-1">
           <div className="flex flex-col gap-4">
             {/* Basic Info */}
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
@@ -258,7 +258,7 @@ export function NewVehicleDialog({ open, onOpenChange, initialData }: NewVehicle
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="grid gap-1.5">
                 <Label htmlFor="vehicle-asset-tag">
                   Asset Tag <span className="text-red-500">*</span>
@@ -286,7 +286,7 @@ export function NewVehicleDialog({ open, onOpenChange, initialData }: NewVehicle
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="grid gap-1.5">
                 <Label htmlFor="vehicle-type">
                   Asset Type <span className="text-red-500">*</span>
@@ -327,7 +327,7 @@ export function NewVehicleDialog({ open, onOpenChange, initialData }: NewVehicle
               Vehicle Info
             </p>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               {rf.isVisible("license_plate") && (
                 <div className="grid gap-1.5">
                   <Label htmlFor="license-plate">License Plate{rf.req("license_plate")}</Label>
@@ -351,7 +351,7 @@ export function NewVehicleDialog({ open, onOpenChange, initialData }: NewVehicle
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="grid gap-1.5">
                 <Label htmlFor="vehicle-fuel-type">Fuel Type</Label>
                 <Select value={fuelType} onValueChange={setFuelType}>
@@ -380,7 +380,7 @@ export function NewVehicleDialog({ open, onOpenChange, initialData }: NewVehicle
               <p className="mb-1.5 text-xs text-slate-500">
                 Oil Change — set a date, mileage, or both (whichever comes first)
               </p>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div className="grid gap-1.5">
                   <Label htmlFor="next-oil-change-date">Due Date</Label>
                   <Input
@@ -427,7 +427,7 @@ export function NewVehicleDialog({ open, onOpenChange, initialData }: NewVehicle
               Equipment Details
             </p>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               {rf.isVisible("make") && (
                 <div className="grid gap-1.5">
                   <Label htmlFor="vehicle-make">Make{rf.req("make")}</Label>
@@ -453,7 +453,7 @@ export function NewVehicleDialog({ open, onOpenChange, initialData }: NewVehicle
               )}
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               {rf.isVisible("year") && (
                 <div className="grid gap-1.5">
                   <Label htmlFor="vehicle-year">Year{rf.req("year")}</Label>
@@ -485,7 +485,7 @@ export function NewVehicleDialog({ open, onOpenChange, initialData }: NewVehicle
               Assignment
             </p>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="grid gap-1.5">
                 <Label htmlFor="vehicle-division">Division</Label>
                 <Input
@@ -545,7 +545,7 @@ export function NewVehicleDialog({ open, onOpenChange, initialData }: NewVehicle
               </Select>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="grid gap-1.5">
                 <Label htmlFor="vehicle-purchase-date">Purchase Date</Label>
                 <Input
@@ -570,7 +570,7 @@ export function NewVehicleDialog({ open, onOpenChange, initialData }: NewVehicle
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="grid gap-1.5">
                 <Label htmlFor="vehicle-payment-method">Payment Method</Label>
                 <Select value={paymentMethod} onValueChange={setPaymentMethod}>
@@ -601,7 +601,7 @@ export function NewVehicleDialog({ open, onOpenChange, initialData }: NewVehicle
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
               Quick Reference Part #&apos;s
             </p>
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
               <div className="grid gap-1.5">
                 <Label htmlFor="vehicle-air-filter">Air Filter</Label>
                 <Input

@@ -404,7 +404,7 @@ export function NewPODialog({ open, onOpenChange, initialData, prefillData, onCr
         </DialogHeader>
 
         <form onSubmit={handleSubmit}>
-          <div className="max-h-[75vh] overflow-y-auto px-1">
+          <div className="max-h-[60dvh] sm:max-h-[75vh] overflow-y-auto px-1">
             <div className="space-y-4 pb-4">
               {/* Vendor — full width, required */}
               <div className="grid gap-1.5">
@@ -422,7 +422,7 @@ export function NewPODialog({ open, onOpenChange, initialData, prefillData, onCr
               </div>
 
               {/* PO Date + Payment Type + Invoice # — three columns */}
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                 <div className="grid gap-1.5">
                   <Label htmlFor="po-date">PO Date</Label>
                   <Input
@@ -625,7 +625,7 @@ export function NewPODialog({ open, onOpenChange, initialData, prefillData, onCr
                   </div>
 
                   {/* Tax / Shipping */}
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <div className="grid gap-1.5">
                       <Label htmlFor="po-tax-rate">Tax Rate (%)</Label>
                       <Input

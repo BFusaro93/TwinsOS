@@ -160,7 +160,7 @@ export function NewPartDialog({ open, onOpenChange, initialData, onCreated }: Ne
           </DialogDescription>
         </DialogHeader>
 
-        <div className="max-h-[70vh] overflow-y-auto px-1">
+        <div className="max-h-[60dvh] sm:max-h-[70vh] overflow-y-auto px-1">
           <form onSubmit={handleSubmit} className="flex flex-col gap-4">
             {/* Basic Info */}
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
@@ -179,7 +179,7 @@ export function NewPartDialog({ open, onOpenChange, initialData, onCreated }: Ne
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="grid gap-1.5">
                 <Label htmlFor="part-number">
                   Part Number <span className="text-red-500">*</span>
@@ -227,7 +227,7 @@ export function NewPartDialog({ open, onOpenChange, initialData, onCreated }: Ne
             </div>
 
             {isInventory && (
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="grid gap-1.5">
                   <Label htmlFor="qty-on-hand">Qty on Hand</Label>
                   <Input

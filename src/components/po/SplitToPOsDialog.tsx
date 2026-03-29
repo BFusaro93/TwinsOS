@@ -165,7 +165,7 @@ export function SplitToPOsDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="max-h-[60vh] overflow-y-auto">
+        <div className="max-h-[60dvh] sm:max-h-[60vh] overflow-y-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b text-left text-xs text-slate-500">

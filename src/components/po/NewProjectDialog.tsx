@@ -97,9 +97,9 @@ export function NewProjectDialog({ open, onOpenChange, initialData }: NewProject
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             {/* Project Name — full width */}
-            <div className="col-span-2 grid gap-1.5">
+            <div className="sm:sm:col-span-2 grid gap-1.5">
               <Label htmlFor="project-name">
                 Project Name <span className="text-red-500">*</span>
               </Label>
@@ -112,7 +112,7 @@ export function NewProjectDialog({ open, onOpenChange, initialData }: NewProject
             </div>
 
             {/* Customer / Client — full width */}
-            <div className="col-span-2 grid gap-1.5">
+            <div className="sm:col-span-2 grid gap-1.5">
               <Label htmlFor="project-customer">
                 Customer / Client <span className="text-red-500">*</span>
               </Label>
@@ -125,7 +125,7 @@ export function NewProjectDialog({ open, onOpenChange, initialData }: NewProject
             </div>
 
             {/* Address — full width */}
-            <div className="col-span-2 grid gap-1.5">
+            <div className="sm:col-span-2 grid gap-1.5">
               <Label htmlFor="project-address">Address</Label>
               <Input
                 id="project-address"
@@ -176,7 +176,7 @@ export function NewProjectDialog({ open, onOpenChange, initialData }: NewProject
             </div>
 
             {/* Notes — full width */}
-            <div className="col-span-2 grid gap-1.5">
+            <div className="sm:col-span-2 grid gap-1.5">
               <Label htmlFor="project-notes">Notes</Label>
               <Textarea
                 id="project-notes"

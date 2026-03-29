@@ -118,9 +118,9 @@ export function NewVendorDialog({ open, onOpenChange, initialData, onCreated }: 
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             {/* Vendor Name — full width */}
-            <div className="col-span-2 grid gap-1.5">
+            <div className="sm:col-span-2 grid gap-1.5">
               <Label htmlFor="vendor-name">
                 Vendor Name <span className="text-red-500">*</span>
               </Label>
@@ -178,7 +178,7 @@ export function NewVendorDialog({ open, onOpenChange, initialData, onCreated }: 
             </div>
 
             {/* Address — full width */}
-            <div className="col-span-2 grid gap-1.5">
+            <div className="sm:col-span-2 grid gap-1.5">
               <Label htmlFor="vendor-address">Address</Label>
               <Input
                 id="vendor-address"
@@ -189,7 +189,7 @@ export function NewVendorDialog({ open, onOpenChange, initialData, onCreated }: 
             </div>
 
             {/* Notes — full width */}
-            <div className="col-span-2 grid gap-1.5">
+            <div className="sm:col-span-2 grid gap-1.5">
               <Label htmlFor="vendor-notes">Notes</Label>
               <Textarea
                 id="vendor-notes"

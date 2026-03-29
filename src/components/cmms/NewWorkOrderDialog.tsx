@@ -295,7 +295,7 @@ export function NewWorkOrderDialog({ open, onOpenChange, initialData }: NewWorkO
         </DialogHeader>
 
         <form onSubmit={handleSubmit}>
-          <div className="max-h-[72vh] overflow-y-auto px-1">
+          <div className="max-h-[60dvh] sm:max-h-[72vh] overflow-y-auto px-1">
             <div className="flex flex-col gap-4 pb-2">
 
               {/* Title */}
@@ -312,7 +312,7 @@ export function NewWorkOrderDialog({ open, onOpenChange, initialData }: NewWorkO
               </div>
 
               {/* Priority + Type */}
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="grid gap-1.5">
                   <Label htmlFor="wo-priority">
                     Priority{rf.req("priority")}
@@ -441,7 +441,7 @@ export function NewWorkOrderDialog({ open, onOpenChange, initialData }: NewWorkO
               )}
 
               {/* Assigned To + Due Date */}
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 {rf.isVisible("assigned_to") && (
                   <div className="grid gap-1.5">
                     <Label>Assigned To{rf.req("assigned_to")}</Label>
