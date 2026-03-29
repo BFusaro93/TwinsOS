@@ -48,6 +48,7 @@ import { useVendors, useBulkImportVendors } from "@/lib/hooks/use-vendors";
 import { useRequisitions, useBulkImportRequisitions } from "@/lib/hooks/use-requisitions";
 import { usePurchaseOrders, useBulkImportPurchaseOrders } from "@/lib/hooks/use-purchase-orders";
 import { downloadCSV, readCSVFile } from "@/lib/csv";
+import { ImportExportMenu } from "@/components/shared/ImportExportMenu";
 import { formatCurrency } from "@/lib/utils";
 
 // ── Shared helpers ────────────────────────────────────────────────────────────
@@ -971,8 +972,6 @@ function RequiredFieldsTab() {
 // ── ImportExportTab ───────────────────────────────────────────────────────────
 
 function ImportExportTab() {
-  const fileRef = useRef<HTMLInputElement>(null);
-  const [importTarget, setImportTarget] = useState<string | null>(null);
   const [importStatus, setImportStatus] = useState<{ type: "success" | "error"; message: string } | null>(null);
 
   // Data hooks for exports
@@ -991,8 +990,6 @@ function ImportExportTab() {
   const { mutateAsync: bulkImportParts, isPending: importingParts } = useBulkImportParts();
   const { mutateAsync: bulkImportVendors, isPending: importingVendors } = useBulkImportVendors();
   const { mutateAsync: bulkImportRequisitions, isPending: importingReqs } = useBulkImportRequisitions();
-
-  const isImporting = importingWO || importingAssets || importingVehicles || importingParts || importingVendors || importingReqs;
 
   // Export handlers
   function handleExport(label: string) {
@@ -1044,59 +1041,6 @@ function ImportExportTab() {
     }
   }
 
-  // Import handler — picks the right bulk import mutation
-  // Auto-remaps CSV columns to expected camelCase field names
-  async function handleImportFile(file: File) {
-    if (!importTarget) return;
-    setImportStatus(null);
-    try {
-      const rawRows = await readCSVFile(file);
-      if (rawRows.length === 0) {
-        setImportStatus({ type: "error", message: "CSV file is empty or has no data rows." });
-        return;
-      }
-
-      // Determine expected fields per entity type
-      const fieldMap: Record<string, string[]> = {
-        "Work Orders":  ["title", "description", "priority", "status", "category", "assetName", "assignedToName", "dueDate"],
-        "Assets":       ["name", "assetTag", "equipmentNumber", "assetType", "make", "model", "year", "serialNumber", "location", "status", "purchaseVendorName", "purchaseDate", "purchasePrice", "paymentMethod", "financeInstitution"],
-        "Vehicles":     ["name", "assetTag", "make", "model", "year", "licensePlate", "vin", "fuelType", "status", "assignedCrew", "purchaseVendorName", "purchaseDate", "purchasePrice", "paymentMethod", "financeInstitution"],
-        "Parts":        ["name", "partNumber", "description", "category", "unitCost", "quantityOnHand", "minimumStock", "vendorName", "location"],
-        "Vendors":      ["name", "contactName", "email", "phone", "address", "vendorType", "website", "notes"],
-        "Requisitions": ["title", "vendorName", "notes"],
-      };
-      const expectedFields = fieldMap[importTarget] ?? [];
-
-      // Auto-map CSV columns to expected field names
-      const csvCols = Object.keys(rawRows[0]);
-      const { autoMapColumns, remapRows } = await import("@/components/shared/ImportExportMenu");
-      const mapping = autoMapColumns(csvCols, expectedFields);
-      const rows = remapRows(rawRows, mapping);
-
-      let count = 0;
-      switch (importTarget) {
-        case "Work Orders":  count = await bulkImportWorkOrders(rows) ?? 0; break;
-        case "Assets":       count = await bulkImportAssets(rows) ?? 0; break;
-        case "Vehicles":     count = await bulkImportVehicles(rows) ?? 0; break;
-        case "Parts":        count = await bulkImportParts(rows) ?? 0; break;
-        case "Vendors":      count = await bulkImportVendors(rows) ?? 0; break;
-        case "Requisitions": count = await bulkImportRequisitions(rows) ?? 0; break;
-        default: break;
-      }
-      setImportStatus({ type: "success", message: `Successfully imported ${count} ${importTarget.toLowerCase()}.` });
-    } catch (err) {
-      setImportStatus({
-        type: "error",
-        message: err instanceof Error
-          ? err.message
-          : typeof err === "object" && err !== null && "message" in err
-            ? String((err as { message: string }).message)
-            : "Import failed. Please check your CSV format.",
-      });
-    }
-    setImportTarget(null);
-  }
-
   const EXPORT_TILES: { label: string; icon: React.ReactNode }[] = [
     { label: "Work Orders",     icon: <ClipboardList className="h-6 w-6" /> },
     { label: "Assets",          icon: <Cog className="h-6 w-6" /> },
@@ -1106,15 +1050,6 @@ function ImportExportTab() {
     { label: "Requisitions",    icon: <FileText className="h-6 w-6" /> },
     { label: "Purchase Orders", icon: <ShoppingCart className="h-6 w-6" /> },
     { label: "Locations",       icon: <MapPin className="h-6 w-6" /> },
-  ];
-
-  const IMPORT_TILES: { label: string; icon: React.ReactNode }[] = [
-    { label: "Work Orders",  icon: <ClipboardList className="h-6 w-6" /> },
-    { label: "Assets",       icon: <Cog className="h-6 w-6" /> },
-    { label: "Vehicles",     icon: <Truck className="h-6 w-6" /> },
-    { label: "Parts",        icon: <Package className="h-6 w-6" /> },
-    { label: "Vendors",      icon: <Building2 className="h-6 w-6" /> },
-    { label: "Requisitions", icon: <FileText className="h-6 w-6" /> },
   ];
 
   return (
@@ -1132,19 +1067,6 @@ function ImportExportTab() {
           </button>
         </div>
       )}
-
-      {/* Hidden file input for imports */}
-      <input
-        ref={fileRef}
-        type="file"
-        accept=".csv,text/csv"
-        className="hidden"
-        onChange={(e) => {
-          const file = e.target.files?.[0];
-          e.target.value = "";
-          if (file) handleImportFile(file);
-        }}
-      />
 
       {/* Export */}
       <div className="rounded-lg border bg-white shadow-sm">
@@ -1170,32 +1092,63 @@ function ImportExportTab() {
         </div>
       </div>
 
-      {/* Import */}
+      {/* Import — uses ImportExportMenu for each entity so the column mapping dialog shows */}
       <div className="rounded-lg border bg-white shadow-sm">
         <div className="px-6 py-4">
           <h2 className="text-sm font-semibold text-slate-900">Import Data</h2>
-          <p className="mt-0.5 text-xs text-slate-500">Upload a CSV to bulk-import records</p>
+          <p className="mt-0.5 text-xs text-slate-500">Upload a CSV to bulk-import records — each entity has its own column mapping</p>
         </div>
         <Separator />
         <div className="p-6">
-          <div className="grid grid-cols-4 gap-4">
-            {IMPORT_TILES.map(({ label, icon }) => (
-              <button
-                key={label}
-                disabled={isImporting}
-                onClick={() => {
-                  setImportTarget(label);
-                  setImportStatus(null);
-                  fileRef.current?.click();
-                }}
-                className="flex flex-col items-center gap-2 rounded-lg border border-slate-200 p-5 text-slate-500 transition-colors hover:border-brand-300 hover:bg-brand-50 hover:text-brand-600 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {icon}
-                <span className="text-sm">
-                  {isImporting && importTarget === label ? "Importing..." : label}
-                </span>
-              </button>
-            ))}
+          <div className="grid grid-cols-3 gap-4 sm:grid-cols-4 lg:grid-cols-6">
+            <ImportExportMenu
+              entityLabel="Work Orders"
+              onExport={() => handleExport("Work Orders")}
+              onImport={(rows) => bulkImportWorkOrders(rows)}
+              templateColumns={["title", "description", "priority", "status", "category", "assetName", "assignedToName", "dueDate"]}
+              templateFilename="work-orders-template.csv"
+              requiredColumns={["title"]}
+            />
+            <ImportExportMenu
+              entityLabel="Assets"
+              onExport={() => handleExport("Assets")}
+              onImport={(rows) => bulkImportAssets(rows)}
+              templateColumns={["name", "assetTag", "equipmentNumber", "assetType", "make", "model", "year", "serialNumber", "location", "status", "purchaseVendorName", "purchaseDate", "purchasePrice", "paymentMethod", "financeInstitution"]}
+              templateFilename="assets-template.csv"
+              requiredColumns={["name", "assetTag"]}
+            />
+            <ImportExportMenu
+              entityLabel="Vehicles"
+              onExport={() => handleExport("Vehicles")}
+              onImport={(rows) => bulkImportVehicles(rows)}
+              templateColumns={["name", "assetTag", "make", "model", "year", "licensePlate", "vin", "fuelType", "status", "assignedCrew", "purchaseVendorName", "purchaseDate", "purchasePrice", "paymentMethod", "financeInstitution"]}
+              templateFilename="vehicles-template.csv"
+              requiredColumns={["name", "assetTag"]}
+            />
+            <ImportExportMenu
+              entityLabel="Parts"
+              onExport={() => handleExport("Parts")}
+              onImport={(rows) => bulkImportParts(rows)}
+              templateColumns={["name", "partNumber", "description", "category", "unitCost", "quantityOnHand", "minimumStock", "vendorName", "location"]}
+              templateFilename="parts-template.csv"
+              requiredColumns={["name", "partNumber"]}
+            />
+            <ImportExportMenu
+              entityLabel="Vendors"
+              onExport={() => handleExport("Vendors")}
+              onImport={(rows) => bulkImportVendors(rows)}
+              templateColumns={["name", "contactName", "email", "phone", "address", "vendorType", "website", "notes"]}
+              templateFilename="vendors-template.csv"
+              requiredColumns={["name"]}
+            />
+            <ImportExportMenu
+              entityLabel="Requisitions"
+              onExport={() => handleExport("Requisitions")}
+              onImport={(rows) => bulkImportRequisitions(rows)}
+              templateColumns={["title", "vendorName", "notes"]}
+              templateFilename="requisitions-template.csv"
+              requiredColumns={["title"]}
+            />
           </div>
         </div>
       </div>
