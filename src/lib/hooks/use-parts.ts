@@ -250,7 +250,7 @@ export function useBulkImportParts() {
           return {
             name: r.name.trim(),
             part_number: r.partNumber.trim(),
-            description: r.description?.trim() || undefined,
+            description: r.description?.trim() || "",
             category: r.category?.trim() || "mechanical",
             unit_cost: r.unitCost ? Math.round(parseFloat(r.unitCost) * 100) : 0,
             quantity_on_hand: qoh,
