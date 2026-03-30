@@ -96,7 +96,11 @@ export default function LoginPage() {
       </div>
 
       <p className="mt-4 text-center text-xs text-slate-400">
-        Need access? Contact your administrator.
+        Need access?{" "}
+        <a href="/signup" className="text-brand-600 hover:underline">
+          Create a new organization
+        </a>{" "}
+        or contact your administrator.
       </p>
     </div>
   );
