@@ -29,7 +29,7 @@ export function MasterDetailLayout({
       {/* List panel — hidden on mobile when an item is selected */}
       <div
         className={cn(
-          "flex w-full flex-col md:w-[380px] md:shrink-0 md:border-r",
+          "flex w-full flex-col md:w-[440px] md:shrink-0 md:border-r",
           hasSelection && "hidden md:flex"
         )}
       >

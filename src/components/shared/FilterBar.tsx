@@ -171,7 +171,7 @@ export function FilterBar({
         value={search}
         onChange={onSearchChange}
         placeholder={searchPlaceholder}
-        className="w-64"
+        className="min-w-[160px] flex-1"
       />
       {filters.map((filter) => {
         if (filter.multi) {

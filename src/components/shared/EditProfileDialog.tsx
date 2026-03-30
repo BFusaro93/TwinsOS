@@ -105,7 +105,7 @@ export function EditProfileDialog({ open, onOpenChange }: EditProfileDialogProps
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[420px]">
+      <DialogContent className="sm:max-w-[500px]">
         <DialogHeader className="shrink-0">
           <DialogTitle>Edit Profile</DialogTitle>
           <DialogDescription>
@@ -172,7 +172,9 @@ export function EditProfileDialog({ open, onOpenChange }: EditProfileDialogProps
                 <div className="flex gap-2">
                   <Input
                     id="profile-email"
-                    type="email"
+                    type="text"
+                    inputMode="email"
+                    autoComplete="off"
                     value={newEmail}
                     onChange={(e) => setNewEmail(e.target.value)}
                     placeholder="new@example.com"
