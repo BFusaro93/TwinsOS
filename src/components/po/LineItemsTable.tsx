@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Pencil, Trash2 } from "lucide-react";
+import { Pencil, Trash2, Package } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/select";
 import { formatCurrency } from "@/lib/utils";
 import { useProjects } from "@/lib/hooks/use-projects";
+import { useProducts } from "@/lib/hooks/use-products";
 import type { LineItem } from "@/types";
 
 interface LineItemsTableProps {
@@ -51,6 +52,7 @@ export function LineItemsTable({
   useEffect(() => { setItems(lineItems); }, [lineItems]);
 
   const { data: projects = [] } = useProjects();
+  const { data: products = [] } = useProducts();
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({ quantity: "", unitCost: "", projectId: "none" });
@@ -108,20 +110,32 @@ export function LineItemsTable({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {items.map((li) => (
+            {items.map((li) => {
+              const product = products.find((p) => p.id === li.productItemId);
+              const thumbUrl = product?.pictureUrl;
+              return (
               <TableRow key={li.id} className="group text-sm">
-                <TableCell className="font-medium">
-                  {onProductClick ? (
-                    <button
-                      type="button"
-                      onClick={() => onProductClick(li.productItemId)}
-                      className="text-left font-medium text-brand-600 hover:underline"
-                    >
-                      {li.productItemName}
-                    </button>
-                  ) : (
-                    <span className="font-medium">{li.productItemName}</span>
-                  )}
+                <TableCell>
+                  <div className="flex items-center gap-2">
+                    {thumbUrl ? (
+                      <img src={thumbUrl} alt="" className="h-8 w-8 rounded object-cover" />
+                    ) : (
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded bg-slate-100">
+                        <Package className="h-4 w-4 text-slate-400" />
+                      </div>
+                    )}
+                    {onProductClick ? (
+                      <button
+                        type="button"
+                        onClick={() => onProductClick(li.productItemId)}
+                        className="text-left font-medium text-brand-600 hover:underline"
+                      >
+                        {li.productItemName}
+                      </button>
+                    ) : (
+                      <span className="font-medium">{li.productItemName}</span>
+                    )}
+                  </div>
                 </TableCell>
                 <TableCell className="font-mono text-xs text-slate-500">
                   {li.partNumber ?? "—"}
@@ -169,7 +183,8 @@ export function LineItemsTable({
                   </TableCell>
                 )}
               </TableRow>
-            ))}
+              );
+            })}
           </TableBody>
         </Table>
         <div className="flex justify-end border-t bg-slate-50 px-4 py-2">
