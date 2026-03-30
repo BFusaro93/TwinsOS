@@ -67,47 +67,45 @@ export function VendorCombobox({
       >
         <Command>
           <CommandInput placeholder="Search vendors..." />
-          <CommandList className="!max-h-none !overflow-visible">
+          <CommandList className="!max-h-[220px]">
             <CommandEmpty>No vendors found.</CommandEmpty>
-            <div className="max-h-[220px] overflow-y-auto">
-              <CommandGroup>
-                {!required && (
-                  <CommandItem
-                    value="none"
-                    onSelect={() => {
-                      onValueChange("none");
-                      setOpen(false);
-                    }}
-                  >
-                    <Check
-                      className={cn(
-                        "mr-2 h-4 w-4",
-                        value === "none" ? "opacity-100" : "opacity-0"
-                      )}
-                    />
-                    {noneLabel}
-                  </CommandItem>
-                )}
-                {vendors.map((v) => (
-                  <CommandItem
-                    key={v.id}
-                    value={v.name}
-                    onSelect={() => {
-                      onValueChange(v.id);
-                      setOpen(false);
-                    }}
-                  >
-                    <Check
-                      className={cn(
-                        "mr-2 h-4 w-4",
-                        value === v.id ? "opacity-100" : "opacity-0"
-                      )}
-                    />
-                    {v.name}
-                  </CommandItem>
-                ))}
-              </CommandGroup>
-            </div>
+            <CommandGroup>
+              {!required && (
+                <CommandItem
+                  value="none"
+                  onSelect={() => {
+                    onValueChange("none");
+                    setOpen(false);
+                  }}
+                >
+                  <Check
+                    className={cn(
+                      "mr-2 h-4 w-4",
+                      value === "none" ? "opacity-100" : "opacity-0"
+                    )}
+                  />
+                  {noneLabel}
+                </CommandItem>
+              )}
+              {vendors.map((v) => (
+                <CommandItem
+                  key={v.id}
+                  value={v.name}
+                  onSelect={() => {
+                    onValueChange(v.id);
+                    setOpen(false);
+                  }}
+                >
+                  <Check
+                    className={cn(
+                      "mr-2 h-4 w-4",
+                      value === v.id ? "opacity-100" : "opacity-0"
+                    )}
+                  />
+                  {v.name}
+                </CommandItem>
+              ))}
+            </CommandGroup>
           </CommandList>
         </Command>
         {onCreateNew && (

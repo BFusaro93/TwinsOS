@@ -93,13 +93,38 @@ export function CatalogItemCombobox({
           }
         >
           <CommandInput placeholder="Search by name or part #..." />
-          <CommandList className="!max-h-none !overflow-visible">
+          <CommandList className="!max-h-[240px]">
             <CommandEmpty>No items found.</CommandEmpty>
-            <div className="max-h-[240px] overflow-y-auto">
-              {products.length > 0 && (
-                <CommandGroup heading="Products">
-                  {products.map((p) => {
-                    const key = `product:${p.id}`;
+            {products.length > 0 && (
+              <CommandGroup heading="Products">
+                {products.map((p) => {
+                  const key = `product:${p.id}`;
+                  const searchStr = [p.name, p.partNumber, p.category].filter(Boolean).join(" ");
+                  return (
+                    <CommandItem
+                      key={key}
+                      value={searchStr}
+                      onSelect={() => { onValueChange(key); setOpen(false); }}
+                    >
+                      <Check className={cn("mr-2 h-4 w-4 shrink-0", value === key ? "opacity-100" : "opacity-0")} />
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium">{p.name}</p>
+                        {p.partNumber && (
+                          <p className="font-mono text-xs text-slate-400">{p.partNumber}</p>
+                        )}
+                      </div>
+                    </CommandItem>
+                  );
+                })}
+              </CommandGroup>
+            )}
+
+            {parts.length > 0 && (
+              <>
+                <CommandSeparator />
+                <CommandGroup heading="Parts">
+                  {parts.map((p) => {
+                    const key = `part:${p.id}`;
                     const searchStr = [p.name, p.partNumber, p.category].filter(Boolean).join(" ");
                     return (
                       <CommandItem
@@ -118,35 +143,8 @@ export function CatalogItemCombobox({
                     );
                   })}
                 </CommandGroup>
-              )}
-
-              {parts.length > 0 && (
-                <>
-                  <CommandSeparator />
-                  <CommandGroup heading="Parts">
-                    {parts.map((p) => {
-                      const key = `part:${p.id}`;
-                      const searchStr = [p.name, p.partNumber, p.category].filter(Boolean).join(" ");
-                      return (
-                        <CommandItem
-                          key={key}
-                          value={searchStr}
-                          onSelect={() => { onValueChange(key); setOpen(false); }}
-                        >
-                          <Check className={cn("mr-2 h-4 w-4 shrink-0", value === key ? "opacity-100" : "opacity-0")} />
-                          <div className="min-w-0">
-                            <p className="truncate text-sm font-medium">{p.name}</p>
-                            {p.partNumber && (
-                              <p className="font-mono text-xs text-slate-400">{p.partNumber}</p>
-                            )}
-                          </div>
-                        </CommandItem>
-                      );
-                    })}
-                  </CommandGroup>
-                </>
-              )}
-            </div>
+              </>
+            )}
           </CommandList>
         </Command>
         {(onCreateNewProduct || onCreateNewPart) && (
