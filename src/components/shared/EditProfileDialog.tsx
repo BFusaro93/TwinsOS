@@ -113,7 +113,7 @@ export function EditProfileDialog({ open, onOpenChange }: EditProfileDialogProps
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex-1 overflow-y-auto space-y-6 py-1 px-0.5">
+        <div className="space-y-6 py-1 px-1">
 
           {/* ── Display name ── */}
           <div className="space-y-3">

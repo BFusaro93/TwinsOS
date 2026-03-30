@@ -18,7 +18,6 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import type { ProductItem, Part } from "@/types";
 
 interface CatalogItemComboboxProps {
@@ -96,7 +95,7 @@ export function CatalogItemCombobox({
           <CommandInput placeholder="Search by name or part #..." />
           <CommandList className="!max-h-none !overflow-visible">
             <CommandEmpty>No items found.</CommandEmpty>
-            <ScrollArea className="h-[240px]">
+            <div className="max-h-[240px] overflow-y-auto">
               {products.length > 0 && (
                 <CommandGroup heading="Products">
                   {products.map((p) => {
@@ -147,7 +146,7 @@ export function CatalogItemCombobox({
                   </CommandGroup>
                 </>
               )}
-            </ScrollArea>
+            </div>
           </CommandList>
         </Command>
         {(onCreateNewProduct || onCreateNewPart) && (

@@ -17,7 +17,6 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import type { Vendor } from "@/types";
 
 interface VendorComboboxProps {
@@ -70,7 +69,7 @@ export function VendorCombobox({
           <CommandInput placeholder="Search vendors..." />
           <CommandList className="!max-h-none !overflow-visible">
             <CommandEmpty>No vendors found.</CommandEmpty>
-            <ScrollArea className="h-[220px]">
+            <div className="max-h-[220px] overflow-y-auto">
               <CommandGroup>
                 {!required && (
                   <CommandItem
@@ -108,7 +107,7 @@ export function VendorCombobox({
                   </CommandItem>
                 ))}
               </CommandGroup>
-            </ScrollArea>
+            </div>
           </CommandList>
         </Command>
         {onCreateNew && (
