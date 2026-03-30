@@ -218,6 +218,7 @@ export function useUpdateProduct() {
       const syncFields: Record<string, unknown> = {};
       if (input.name !== undefined) syncFields.name = input.name;
       if (input.unitCost !== undefined) syncFields.unit_cost = input.unitCost;
+      if (input.quantityOnHand !== undefined) syncFields.quantity_on_hand = input.quantityOnHand;
       if (input.minimumStock !== undefined) syncFields.minimum_stock = input.minimumStock;
       if (input.partCategory !== undefined) syncFields.category = input.partCategory;
       if (input.pictureUrl !== undefined) syncFields.picture_url = input.pictureUrl;

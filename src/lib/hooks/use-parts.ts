@@ -145,12 +145,20 @@ export function useUpdatePart() {
         .single();
       if (error) throw error;
 
-      // Sync pictureUrl to the linked product if it was updated
-      if (input.pictureUrl !== undefined && data.product_item_id) {
-        await supabase
-          .from("product_items")
-          .update({ picture_url: input.pictureUrl })
-          .eq("id", data.product_item_id);
+      // Sync changed fields to the linked product_items record
+      if (data.product_item_id) {
+        const productSync: Record<string, unknown> = {};
+        if (input.pictureUrl !== undefined) productSync.picture_url = input.pictureUrl;
+        if (input.quantityOnHand !== undefined) productSync.quantity_on_hand = input.quantityOnHand;
+        if (input.minimumStock !== undefined) productSync.minimum_stock = input.minimumStock;
+        if (input.unitCost !== undefined) productSync.unit_cost = input.unitCost;
+        if (input.name !== undefined) productSync.name = input.name;
+        if (Object.keys(productSync).length > 0) {
+          await supabase
+            .from("product_items")
+            .update(productSync)
+            .eq("id", data.product_item_id);
+        }
       }
 
       return mapPart(data);

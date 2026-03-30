@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/dialog";
 import { useParts } from "@/lib/hooks/use-parts";
 import { useVendors } from "@/lib/hooks/use-vendors";
+import { PartDetailSheet } from "@/components/cmms/PartDetailSheet";
 import {
   useWOParts,
   useAddWOPart,
@@ -96,6 +97,8 @@ function PartsSection({ workOrderId }: { workOrderId: string }) {
   const [addOpen, setAddOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [qtyMap, setQtyMap] = useState<Record<string, number>>({});
+  const [selectedPartId, setSelectedPartId] = useState<string | null>(null);
+  const selectedPart = selectedPartId ? allParts.find((p) => p.id === selectedPartId) ?? null : null;
   const [editForm, setEditForm] = useState({ quantity: "", unitCost: "" });
 
   const linkedIds = new Set(items.map((p) => p.partId));
@@ -179,9 +182,28 @@ function PartsSection({ workOrderId }: { workOrderId: string }) {
               </tr>
             </thead>
             <tbody>
-              {items.map((p) => (
+              {items.map((p) => {
+                const fullPart = allParts.find((ap) => ap.id === p.partId);
+                return (
                 <tr key={p.id} className="group border-t border-slate-100 hover:bg-slate-50">
-                  <td className="px-3 py-2 font-medium text-slate-800">{p.partName}</td>
+                  <td className="px-3 py-2">
+                    <div className="flex items-center gap-2">
+                      {fullPart?.pictureUrl ? (
+                        <img src={fullPart.pictureUrl} alt="" className="h-8 w-8 rounded object-cover" />
+                      ) : (
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded bg-slate-100">
+                          <Package className="h-4 w-4 text-slate-400" />
+                        </div>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => setSelectedPartId(p.partId)}
+                        className="text-left font-medium text-brand-600 hover:underline"
+                      >
+                        {p.partName}
+                      </button>
+                    </div>
+                  </td>
                   <td className="px-3 py-2 text-slate-500">{p.partNumber}</td>
                   <td className="px-3 py-2 text-right text-slate-700">{p.quantity}</td>
                   <td className="px-3 py-2 text-right text-slate-700">{formatCurrency(p.unitCost)}</td>
@@ -193,7 +215,8 @@ function PartsSection({ workOrderId }: { workOrderId: string }) {
                     onDelete={() => deletePart({ id: p.id, workOrderId })}
                   />
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
             <tfoot>
               <tr className="border-t border-slate-200 bg-slate-50">
@@ -300,6 +323,12 @@ function PartsSection({ workOrderId }: { workOrderId: string }) {
           </div>
         </DialogContent>
       </Dialog>
+
+      <PartDetailSheet
+        part={selectedPart}
+        open={!!selectedPart}
+        onOpenChange={(o) => { if (!o) setSelectedPartId(null); }}
+      />
     </div>
   );
 }
