@@ -78,7 +78,7 @@ export function NewProductDialog({ open, onOpenChange, initialData, onCreated }:
     }
   }, [open, initialData]);
 
-  const isValid = name.trim() !== "" && category !== "" && vendorId !== "";
+  const isValid = name.trim() !== "" && category !== "";
 
   function handleClose() {
     onOpenChange(false);
@@ -196,7 +196,7 @@ export function NewProductDialog({ open, onOpenChange, initialData, onCreated }:
             {/* Vendor — full width */}
             <div className="col-span-2 grid gap-1.5">
               <Label>
-                Vendor <span className="text-red-500">*</span>
+                Vendor
               </Label>
               <VendorCombobox
                 vendors={allVendors}

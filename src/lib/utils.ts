@@ -20,6 +20,21 @@ export function formatDate(isoString: string): string {
   }).format(new Date(isoString));
 }
 
+export function formatDateTime(isoString: string): string {
+  const d = new Date(isoString);
+  const datePart = new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  }).format(d);
+  const timePart = new Intl.DateTimeFormat("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  }).format(d);
+  return `${datePart} at ${timePart}`;
+}
+
 export function formatDateShort(isoString: string): string {
   return new Intl.DateTimeFormat("en-US", {
     month: "numeric",

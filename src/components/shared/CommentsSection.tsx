@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Send } from "lucide-react";
-import { formatDate, getInitials, getAvatarColor } from "@/lib/utils";
+import { formatDateTime, getInitials, getAvatarColor } from "@/lib/utils";
 import { useComments, useAddComment } from "@/lib/hooks/use-comments";
 import { useCurrentUserStore } from "@/stores";
 import { Button } from "@/components/ui/button";
@@ -56,7 +56,7 @@ export function CommentsSection({ recordType, recordId }: CommentsSectionProps) 
                       {comment.authorName}
                     </span>
                     <span className="text-xs text-slate-400">
-                      {formatDate(comment.createdAt)}
+                      {formatDateTime(comment.createdAt)}
                     </span>
                   </div>
                   <p className="mt-0.5 text-sm text-slate-700">{comment.body}</p>

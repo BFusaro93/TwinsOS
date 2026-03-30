@@ -268,7 +268,11 @@ export function useBulkImportParts() {
       // update it instead (the partial unique index prevents bulk upsert).
       let count = 0;
       for (const row of inserts) {
-        const { error } = await supabase.from("parts").insert(row);
+        const { data: newPart, error } = await supabase
+          .from("parts")
+          .insert(row)
+          .select("id, product_item_id")
+          .single();
         if (error?.code === "23505") {
           // Duplicate — update existing record by part_number
           const { data: { user } } = await supabase.auth.getUser();
@@ -286,12 +290,42 @@ export function useBulkImportParts() {
           }).eq("part_number", row.part_number).eq("org_id", profile!.org_id).is("deleted_at", null);
         } else if (error) {
           throw error;
+        } else if (newPart && !newPart.product_item_id) {
+          // Auto-create a product_items entry so this part appears in the PO catalog
+          const { data: product } = await supabase
+            .from("product_items")
+            .insert({
+              name: row.name,
+              part_number: row.part_number,
+              description: row.description,
+              category: "maintenance_part",
+              unit_cost: row.unit_cost,
+              price: row.unit_cost,
+              vendor_name: row.vendor_name || "",
+              alternate_vendors: [] as unknown as import("@/types/supabase").Json,
+              is_inventory: row.is_inventory,
+              quantity_on_hand: row.quantity_on_hand,
+              minimum_stock: row.minimum_stock,
+              part_category: row.category || null,
+              cost_layers: [] as unknown as import("@/types/supabase").Json,
+            })
+            .select("id")
+            .single();
+          if (product) {
+            await supabase
+              .from("parts")
+              .update({ product_item_id: product.id })
+              .eq("id", newPart.id);
+          }
         }
         count++;
       }
       return count;
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["parts"] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["parts"] });
+      queryClient.invalidateQueries({ queryKey: ["products"] });
+    },
   });
 }
 
