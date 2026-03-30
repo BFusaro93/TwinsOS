@@ -317,17 +317,30 @@ export function NewRequisitionDialog({ open, onOpenChange, initialData, prefillD
         title,
         vendorId: resolvedVendorId,
         vendorName: vendor?.name ?? null,
-        lineItems: lineItems.map((li) => ({
-          id: "",
-          productItemId: li.productItemId.replace(/^(product:|part:)/, ""),
-          productItemName: li.productItemName,
-          partNumber: li.partNumber,
-          quantity: li.quantity,
-          unitCost: Math.round(li.unitCost * 100),
-          totalCost: Math.round(li.quantity * li.unitCost * 100),
-          projectId: li.projectId === "none" ? null : li.projectId,
-          notes: null,
-        })),
+        lineItems: lineItems.map((li) => {
+          // For part-type items, resolve to the part's linked product_item_id
+          // (parts.product_item_id → product_items.id FK).
+          // Using the raw part UUID would fail the FK constraint on requisition_line_items.
+          let resolvedProductItemId: string;
+          if (li.itemType === "part") {
+            const rawId = li.productItemId.replace(/^part:/, "");
+            const part = allParts.find((p) => p.id === rawId);
+            resolvedProductItemId = part?.productItemId ?? "";
+          } else {
+            resolvedProductItemId = li.productItemId.replace(/^product:/, "");
+          }
+          return {
+            id: "",
+            productItemId: resolvedProductItemId,
+            productItemName: li.productItemName,
+            partNumber: li.partNumber,
+            quantity: li.quantity,
+            unitCost: Math.round(li.unitCost * 100),
+            totalCost: Math.round(li.quantity * li.unitCost * 100),
+            projectId: li.projectId === "none" ? null : li.projectId,
+            notes: null,
+          };
+        }),
         subtotal: subtotalCents,
         taxRatePercent: taxRate,
         salesTax: salesTaxCents,
@@ -444,6 +457,7 @@ export function NewRequisitionDialog({ open, onOpenChange, initialData, prefillD
                       Line Items
                     </p>
 
+                    <div className="max-h-[30dvh] overflow-y-auto">
                     <div className="w-full overflow-x-auto">
                       <table className="w-full text-sm">
                         <thead>
@@ -472,7 +486,7 @@ export function NewRequisitionDialog({ open, onOpenChange, initialData, prefillD
                             <tr key={li.id} className={!hasProjectRow ? "border-b" : ""}>
                               <td className="py-1.5 pr-2 align-top">
                                 <CatalogItemCombobox
-                                  products={allProducts}
+                                  products={allProducts.filter((p) => p.category !== "maintenance_part")}
                                   parts={allParts}
                                   value={li.productItemId}
                                   onValueChange={(val) => handleLineItemProductChange(li.id, val)}
@@ -575,6 +589,7 @@ export function NewRequisitionDialog({ open, onOpenChange, initialData, prefillD
                           })}
                         </tbody>
                       </table>
+                    </div>
                     </div>
 
                     <Button
