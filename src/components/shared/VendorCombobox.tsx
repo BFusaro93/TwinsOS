@@ -64,6 +64,7 @@ export function VendorCombobox({
       <PopoverContent
         className="w-[--radix-popover-trigger-width] p-0"
         align="start"
+        onWheel={(e) => e.stopPropagation()}
       >
         <Command>
           <CommandInput placeholder="Search vendors..." />

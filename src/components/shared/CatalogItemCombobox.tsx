@@ -86,6 +86,7 @@ export function CatalogItemCombobox({
       <PopoverContent
         className="w-[320px] p-0"
         align="start"
+        onWheel={(e) => e.stopPropagation()}
       >
         <Command
           filter={(itemValue, search) =>
