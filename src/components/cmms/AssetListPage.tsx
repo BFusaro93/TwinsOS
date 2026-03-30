@@ -30,7 +30,9 @@ import {
 } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAssets, useBulkImportAssets } from "@/lib/hooks/use-assets";
+import { useVehicles } from "@/lib/hooks/use-vehicles";
 import { useCMMSStore } from "@/stores";
+import { useRouter } from "next/navigation";
 import { ASSET_STATUS_LABELS } from "@/lib/constants";
 import { cn, matchesFilter, getInitials, getAvatarColor } from "@/lib/utils";
 import type { Asset } from "@/types";
@@ -57,7 +59,9 @@ const ASSET_COLUMNS: ColumnDef[] = [
 export function AssetListPage() {
   const { data: assets, isLoading } = useAssets();
   const { mutateAsync: bulkImportAssets } = useBulkImportAssets();
-  const { selectedAssetId, setSelectedAssetId } = useCMMSStore();
+  const { data: vehicles } = useVehicles();
+  const { selectedAssetId, setSelectedAssetId, setSelectedVehicleId } = useCMMSStore();
+  const router = useRouter();
   const [search, setSearch] = useState("");
   const [filterValues, setFilterValues] = useStickyState<Record<string, string | string[]>>("asset-filters", {});
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -127,13 +131,31 @@ export function AssetListPage() {
       all.find((a) => a.id === selectedAssetId)) ??
     null;
 
-  function handleBarcodeScan(value: string) {
-    const match = all.find(
+  function handleBarcodeScan(raw: string) {
+    const q = raw.toLowerCase();
+
+    // Search assets first
+    const assetMatch = all.find(
       (a) =>
-        a.barcode?.toLowerCase() === value.toLowerCase() ||
-        a.assetTag.toLowerCase() === value.toLowerCase()
+        a.barcode?.toLowerCase() === q ||
+        a.assetTag.toLowerCase() === q
     );
-    if (match) setSelectedAssetId(match.id);
+    if (assetMatch) {
+      setSelectedAssetId(assetMatch.id);
+      return;
+    }
+
+    // Fall back to vehicles — navigate there and pre-select
+    const vehicleMatch = (vehicles ?? []).find(
+      (v) =>
+        v.barcode?.toLowerCase() === q ||
+        v.assetTag.toLowerCase() === q ||
+        (v.licensePlate ?? "").toLowerCase() === q
+    );
+    if (vehicleMatch) {
+      setSelectedVehicleId(vehicleMatch.id);
+      router.push("/cmms/vehicles");
+    }
   }
 
   function handleFilterChange(key: string, value: string | string[]) {

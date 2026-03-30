@@ -40,7 +40,9 @@ import {
 } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useVehicles, useBulkImportVehicles } from "@/lib/hooks/use-vehicles";
+import { useAssets } from "@/lib/hooks/use-assets";
 import { useCMMSStore } from "@/stores";
+import { useRouter } from "next/navigation";
 import { ASSET_STATUS_LABELS } from "@/lib/constants";
 import { cn, formatDate, matchesFilter } from "@/lib/utils";
 import type { Vehicle } from "@/types";
@@ -344,7 +346,9 @@ function ServiceRemindersView({
 export function VehicleListPage() {
   const { data: vehicles, isLoading } = useVehicles();
   const { mutateAsync: bulkImportVehicles } = useBulkImportVehicles();
-  const { selectedVehicleId, setSelectedVehicleId } = useCMMSStore();
+  const { data: assets } = useAssets();
+  const { selectedVehicleId, setSelectedVehicleId, setSelectedAssetId } = useCMMSStore();
+  const router = useRouter();
   const [search, setSearch] = useState("");
   const [filterValues, setFilterValues] = useStickyState<Record<string, string | string[]>>("vehicle-filters", {});
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -414,14 +418,31 @@ export function VehicleListPage() {
       all.find((v) => v.id === selectedVehicleId)) ??
     null;
 
-  function handleBarcodeScan(value: string) {
-    const match = all.find(
+  function handleBarcodeScan(raw: string) {
+    const q = raw.toLowerCase();
+
+    // Search vehicles first
+    const vehicleMatch = all.find(
       (v) =>
-        v.barcode?.toLowerCase() === value.toLowerCase() ||
-        v.assetTag.toLowerCase() === value.toLowerCase() ||
-        (v.licensePlate ?? "").toLowerCase() === value.toLowerCase()
+        v.barcode?.toLowerCase() === q ||
+        v.assetTag.toLowerCase() === q ||
+        (v.licensePlate ?? "").toLowerCase() === q
     );
-    if (match) setSelectedVehicleId(match.id);
+    if (vehicleMatch) {
+      setSelectedVehicleId(vehicleMatch.id);
+      return;
+    }
+
+    // Fall back to assets — navigate there and pre-select
+    const assetMatch = (assets ?? []).find(
+      (a) =>
+        a.barcode?.toLowerCase() === q ||
+        a.assetTag.toLowerCase() === q
+    );
+    if (assetMatch) {
+      setSelectedAssetId(assetMatch.id);
+      router.push("/cmms/assets");
+    }
   }
 
   function handleFilterChange(key: string, value: string | string[]) {
