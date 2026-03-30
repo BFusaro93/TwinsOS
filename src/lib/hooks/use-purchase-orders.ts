@@ -170,50 +170,258 @@ export function useUpdatePurchaseOrder() {
  * Bulk-inserts purchase orders from a CSV import (header-level only, no line items).
  * Rows missing `poNumber` or `vendorName` are silently skipped.
  */
+/**
+ * Bulk-imports POs from a CSV. Supports two formats:
+ *
+ * 1. **Denormalized (line-level):** Multiple rows per PO, each row is a line item.
+ *    Has columns like "Purchase Order #", "Line Type" (PART / PERCENT_TAXABLE / AMOUNT_TAXABLE),
+ *    "Line Name", "Part Number", "Unit Cost", "Ordered Quantity", etc.
+ *    Tax and shipping are extracted from special line types.
+ *
+ * 2. **Flat (header-only):** One row per PO with vendorName, poDate, status, notes.
+ *    No line items.
+ *
+ * Auto-detects format by checking for a "Line Type" or "lineType" column.
+ */
 export function useBulkImportPurchaseOrders() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (rows: Record<string, string>[]) => {
       const supabase = createClient();
-      const inserts = rows
-        .filter((r) => r.vendorName?.trim())
-        .map((r) => ({
-          po_number: r.poNumber?.trim() || `PO-${Date.now().toString().slice(-6)}-${Math.random().toString(36).slice(2, 5)}`,
-          vendor_name: r.vendorName.trim(),
-          po_date: r.poDate?.trim() || null,
-          invoice_number: r.invoiceNumber?.trim() || null,
-          status: r.status?.trim() || "requested",
-          notes: r.notes?.trim() || null,
-          subtotal: 0,
-          tax_rate_percent: 0,
-          sales_tax: 0,
-          shipping_cost: 0,
-          grand_total: 0,
-        }));
-      if (inserts.length === 0) return 0;
+      if (rows.length === 0) return 0;
 
-      // Insert one-by-one; on duplicate po_number, update the existing row
-      let count = 0;
-      for (const row of inserts) {
-        const { error } = await supabase.from("purchase_orders").insert(row);
-        if (error?.code === "23505") {
-          const { data: { user } } = await supabase.auth.getUser();
-          const { data: profile } = await supabase.from("profiles").select("org_id").eq("id", user!.id).single();
-          await supabase.from("purchase_orders").update({
-            vendor_name: row.vendor_name,
-            po_date: row.po_date,
-            invoice_number: row.invoice_number,
-            notes: row.notes,
-          }).eq("po_number", row.po_number).eq("org_id", profile!.org_id).is("deleted_at", null);
-        } else if (error) {
-          throw error;
-        }
-        count++;
+      // Detect format: denormalized (line-level) vs flat (header-only)
+      const sample = rows[0];
+      const hasLineType = "lineType" in sample || "Line Type" in sample;
+      const hasPONumber = "Purchase Order #" in sample || "poNumber" in sample;
+
+      if (hasLineType && hasPONumber) {
+        return importDenormalized(supabase, rows);
       }
-      return count;
+      return importFlat(supabase, rows);
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["purchase-orders"] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["purchase-orders"] });
+      queryClient.invalidateQueries({ queryKey: ["vendors"] });
+      queryClient.invalidateQueries({ queryKey: ["products"] });
+    },
   });
+}
+
+/** Get a field value from a row, trying both the raw key and a camelCase alias */
+function getField(row: Record<string, string>, ...keys: string[]): string {
+  for (const k of keys) {
+    if (row[k]?.trim()) return row[k].trim();
+  }
+  return "";
+}
+
+function parseDate(raw: string): string | null {
+  if (!raw) return null;
+  const d = new Date(raw);
+  return isNaN(d.getTime()) ? null : d.toISOString();
+}
+
+function mapStatus(raw: string): string {
+  const s = raw.toLowerCase().replace(/[^a-z_]/g, "");
+  if (s === "completed" || s === "complete") return "completed";
+  if (s === "approved") return "approved";
+  if (s === "canceled" || s === "cancelled") return "canceled";
+  if (s === "pending" || s === "pendingapproval") return "pending";
+  if (s === "draft") return "draft";
+  if (s === "ordered") return "ordered";
+  return "completed";
+}
+
+type SupabaseClient = ReturnType<typeof createClient>;
+
+async function importDenormalized(supabase: SupabaseClient, rows: Record<string, string>[]): Promise<number> {
+  // Group rows by PO number
+  const poGroups = new Map<string, Record<string, string>[]>();
+  for (const row of rows) {
+    const poNum = getField(row, "Purchase Order #", "poNumber");
+    if (!poNum) continue;
+    if (!poGroups.has(poNum)) poGroups.set(poNum, []);
+    poGroups.get(poNum)!.push(row);
+  }
+
+  // Get existing vendors for lookup
+  const { data: existingVendors = [] } = await supabase
+    .from("vendors")
+    .select("id, name")
+    .is("deleted_at", null);
+  const vendorMap = new Map((existingVendors ?? []).map((v) => [v.name.toLowerCase(), v.id as string]));
+
+  let count = 0;
+  for (const [poNum, poRows] of poGroups) {
+    const headerRow = poRows[0];
+    const vendorName = getField(headerRow, "Vendor", "vendorName");
+    const status = mapStatus(getField(headerRow, "Status", "status"));
+    const createdOn = parseDate(getField(headerRow, "Created On", "createdAt"));
+    const completedOn = parseDate(getField(headerRow, "Completed On", "completedOn"));
+    const approvedOn = parseDate(getField(headerRow, "Approved On", "approvedOn"));
+    const dueDate = parseDate(getField(headerRow, "Due Date", "dueDate"));
+
+    // Find or create vendor
+    let vendorId: string | null = null;
+    if (vendorName) {
+      vendorId = vendorMap.get(vendorName.toLowerCase()) ?? null;
+      if (!vendorId) {
+        const { data: newVendor } = await supabase
+          .from("vendors")
+          .insert({ name: vendorName, is_active: true })
+          .select("id")
+          .single();
+        if (newVendor) {
+          vendorId = newVendor.id;
+          vendorMap.set(vendorName.toLowerCase(), vendorId);
+        }
+      }
+    }
+
+    // Separate line types
+    const partLines = poRows.filter((r) => getField(r, "Line Type", "lineType") === "PART");
+    const taxLines = poRows.filter((r) => getField(r, "Line Type", "lineType") === "PERCENT_TAXABLE");
+    const shippingLines = poRows.filter((r) => getField(r, "Line Type", "lineType") === "AMOUNT_TAXABLE");
+
+    // Calculate totals
+    const subtotalCents = partLines.reduce((sum, r) => {
+      const cost = parseFloat(getField(r, "Ordered Cost", "orderedCost")) || 0;
+      return sum + Math.round(cost * 100);
+    }, 0);
+
+    // Extract tax rate from tax line name, e.g., "CT Sales Tax (6.35%)"
+    let taxRatePercent = 0;
+    let salesTaxCents = 0;
+    if (taxLines.length > 0) {
+      const taxName = getField(taxLines[0], "Line Name", "lineName");
+      const match = taxName.match(/(\d+\.?\d*)%/);
+      if (match) taxRatePercent = parseFloat(match[1]);
+      const taxCost = parseFloat(getField(taxLines[0], "Ordered Cost", "orderedCost")) || 0;
+      salesTaxCents = Math.round(taxCost * 100);
+    }
+
+    // Extract shipping
+    let shippingCents = 0;
+    for (const sl of shippingLines) {
+      const cost = parseFloat(getField(sl, "Ordered Cost", "orderedCost")) || 0;
+      shippingCents += Math.round(cost * 100);
+    }
+
+    const grandTotalCents = subtotalCents + salesTaxCents + shippingCents;
+
+    // Create the PO
+    const poNumber = `PO-${new Date().getFullYear()}-${poNum}`;
+    const { data: created, error: poErr } = await supabase
+      .from("purchase_orders")
+      .insert({
+        po_number: poNumber,
+        po_date: createdOn,
+        vendor_id: vendorId,
+        vendor_name: vendorName,
+        status,
+        subtotal: subtotalCents,
+        tax_rate_percent: taxRatePercent,
+        sales_tax: salesTaxCents,
+        shipping_cost: shippingCents,
+        grand_total: grandTotalCents,
+      })
+      .select("id")
+      .single();
+
+    if (poErr) {
+      if (poErr.code === "23505") { count++; continue; } // duplicate — skip
+      throw poErr;
+    }
+
+    // Create line items + product catalog entries
+    for (const line of partLines) {
+      const itemName = getField(line, "Line Name", "lineName");
+      const partNumber = getField(line, "Part Number", "partNumber");
+      const unitCostDollars = parseFloat(getField(line, "Unit Cost", "unitCost")) || 0;
+      const unitCostCents = Math.round(unitCostDollars * 100);
+      const quantity = parseInt(getField(line, "Ordered Quantity", "orderedQuantity")) || 1;
+
+      // Find or create product catalog entry
+      let productItemId: string | null = null;
+      if (partNumber) {
+        const { data: existingProduct } = await supabase
+          .from("product_items")
+          .select("id")
+          .eq("part_number", partNumber)
+          .is("deleted_at", null)
+          .limit(1)
+          .maybeSingle();
+
+        if (existingProduct) {
+          productItemId = existingProduct.id;
+        } else {
+          const { data: newProduct } = await supabase
+            .from("product_items")
+            .insert({
+              name: itemName,
+              part_number: partNumber,
+              description: "",
+              category: "maintenance_part",
+              unit_cost: unitCostCents,
+              price: unitCostCents,
+              vendor_id: vendorId,
+              vendor_name: vendorName,
+              is_inventory: false,
+              alternate_vendors: [],
+              cost_layers: [],
+            })
+            .select("id")
+            .single();
+          if (newProduct) productItemId = newProduct.id;
+        }
+      }
+
+      await supabase.from("po_line_items").insert({
+        po_id: created.id,
+        product_item_id: productItemId,
+        product_item_name: itemName,
+        part_number: partNumber,
+        quantity,
+        unit_cost: unitCostCents,
+        total_cost: quantity * unitCostCents,
+      });
+    }
+
+    count++;
+  }
+  return count;
+}
+
+async function importFlat(supabase: SupabaseClient, rows: Record<string, string>[]): Promise<number> {
+  const inserts = rows
+    .filter((r) => r.vendorName?.trim())
+    .map((r) => ({
+      po_number: r.poNumber?.trim() || `PO-${Date.now().toString().slice(-6)}-${Math.random().toString(36).slice(2, 5)}`,
+      vendor_name: r.vendorName.trim(),
+      po_date: r.poDate?.trim() || null,
+      invoice_number: r.invoiceNumber?.trim() || null,
+      status: r.status?.trim() || "requested",
+      notes: r.notes?.trim() || null,
+      subtotal: 0,
+      tax_rate_percent: 0,
+      sales_tax: 0,
+      shipping_cost: 0,
+      grand_total: 0,
+    }));
+  if (inserts.length === 0) return 0;
+
+  let count = 0;
+  for (const row of inserts) {
+    const { error } = await supabase.from("purchase_orders").insert(row);
+    if (error?.code === "23505") {
+      // skip duplicates
+    } else if (error) {
+      throw error;
+    }
+    count++;
+  }
+  return count;
 }
 
 export function useUpdatePurchaseOrderStatus() {

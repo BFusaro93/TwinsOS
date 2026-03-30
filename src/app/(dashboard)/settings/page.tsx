@@ -1292,7 +1292,7 @@ function ImportExportTab() {
               { label: "Vendors",      icon: <Building2 className="h-6 w-6" />,     onImport: (r: Record<string, string>[]) => bulkImportVendors(r),    templateColumns: ["name", "contactName", "email", "phone", "address", "vendorType", "website", "notes"], required: ["name"] },
               { label: "Requisitions",    icon: <FileText className="h-6 w-6" />,      onImport: (r: Record<string, string>[]) => bulkImportRequisitions(r), templateColumns: ["title", "vendorName", "notes"], required: ["title"] },
               { label: "Products",        icon: <BookOpen className="h-6 w-6" />,     onImport: (r: Record<string, string>[]) => bulkImportProducts(r), templateColumns: ["name", "partNumber", "description", "category", "unitCost", "price", "quantityOnHand", "vendorName", "isInventory"], required: ["name", "partNumber", "category"] },
-              { label: "Purchase Orders", icon: <ShoppingCart className="h-6 w-6" />,  onImport: (r: Record<string, string>[]) => bulkImportPurchaseOrders(r), templateColumns: ["vendorName", "poDate", "notes", "invoiceNumber"], required: ["vendorName"] },
+              { label: "Purchase Orders", icon: <ShoppingCart className="h-6 w-6" />,  onImport: (r: Record<string, string>[]) => bulkImportPurchaseOrders(r), templateColumns: ["Purchase Order #", "Vendor", "Status", "Line Type", "Line Name", "Part Number", "Unit Cost", "Ordered Quantity"], required: [] as string[] },
             ].map((tile) => (
               <ImportTile
                 key={tile.label}
