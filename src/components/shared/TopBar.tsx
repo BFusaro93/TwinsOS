@@ -1,10 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { Menu, PanelLeftClose, Search, UserCog } from "lucide-react";
 import { useUIStore, useCurrentUserStore } from "@/stores";
 import { cn } from "@/lib/utils";
+import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -24,6 +25,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { GlobalSearchDialog } from "@/components/shared/GlobalSearchDialog";
 import { NotificationsBell } from "@/components/shared/NotificationsBell";
+import { EditProfileDialog } from "@/components/shared/EditProfileDialog";
 import { useUsers } from "@/lib/hooks/use-users";
 import { useSyncCurrentUser } from "@/lib/hooks/use-current-user";
 
@@ -93,11 +95,15 @@ export function TopBar() {
   const { data: orgUsers = [] } = useUsers();
   const breadcrumbs = useBreadcrumbs();
   const [searchOpen, setSearchOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const router = useRouter();
 
   // Sync the currentUser store with the live Supabase session on mount
   useSyncCurrentUser();
 
   return (
+    <>
+    <EditProfileDialog open={profileOpen} onOpenChange={setProfileOpen} />
     <header className="flex h-14 shrink-0 items-center gap-4 border-b bg-white px-4">
       {/* Mobile hamburger — opens sidebar drawer */}
       <Button
@@ -208,12 +214,22 @@ export function TopBar() {
           </DropdownMenuSub>
 
           <DropdownMenuSeparator />
-          <DropdownMenuItem>Profile</DropdownMenuItem>
-          <DropdownMenuItem>Settings</DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => setProfileOpen(true)}>Profile</DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => router.push("/settings")}>Settings</DropdownMenuItem>
           <DropdownMenuSeparator />
-          <DropdownMenuItem className="text-red-600">Sign out</DropdownMenuItem>
+          <DropdownMenuItem
+            className="text-red-600"
+            onSelect={async () => {
+              const supabase = createClient();
+              await supabase.auth.signOut();
+              router.push("/login");
+            }}
+          >
+            Sign out
+          </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
     </header>
+    </>
   );
 }
