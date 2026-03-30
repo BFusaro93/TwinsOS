@@ -32,9 +32,24 @@ export function useAddComment() {
       body: string;
     }) => {
       const supabase = createClient();
+
+      // Get current user for org_id and author_id
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not authenticated");
+
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("org_id")
+        .eq("id", user.id)
+        .single();
+      if (!profile) throw new Error("Profile not found");
+
       const { data, error } = await supabase
         .from("comments")
         .insert({
+          org_id: profile.org_id,
+          created_by: user.id,
+          author_id: user.id,
           record_type: input.recordType,
           record_id: input.recordId,
           author_name: input.authorName,

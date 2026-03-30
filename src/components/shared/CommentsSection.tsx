@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { Send } from "lucide-react";
 import { formatDate, getInitials, getAvatarColor } from "@/lib/utils";
-import { useComments } from "@/lib/hooks/use-comments";
+import { useComments, useAddComment } from "@/lib/hooks/use-comments";
+import { useCurrentUserStore } from "@/stores";
 import { Button } from "@/components/ui/button";
 import type { CommentRecordType } from "@/types";
 
@@ -14,7 +15,23 @@ interface CommentsSectionProps {
 
 export function CommentsSection({ recordType, recordId }: CommentsSectionProps) {
   const { data: comments, isLoading } = useComments(recordType, recordId);
+  const { mutate: addComment, isPending: sending } = useAddComment();
+  const { currentUser } = useCurrentUserStore();
   const [draft, setDraft] = useState("");
+
+  function handleSend() {
+    const body = draft.trim();
+    if (!body) return;
+    addComment(
+      {
+        recordType,
+        recordId,
+        authorName: currentUser.name || "Unknown",
+        body,
+      },
+      { onSuccess: () => setDraft("") },
+    );
+  }
 
   return (
     <div className="flex flex-col gap-4">
@@ -60,11 +77,17 @@ export function CommentsSection({ recordType, recordId }: CommentsSectionProps) 
           placeholder="Add a comment…"
           rows={2}
           className="flex-1 resize-none text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none"
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              handleSend();
+            }
+          }}
         />
         <Button
           size="sm"
-          disabled={!draft.trim()}
-          onClick={() => setDraft("")}
+          disabled={!draft.trim() || sending}
+          onClick={handleSend}
           className="self-end"
         >
           <Send className="h-3.5 w-3.5" />
