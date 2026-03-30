@@ -399,7 +399,7 @@ export function NewRequisitionDialog({ open, onOpenChange, initialData, prefillD
       }}
     />
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex flex-col overflow-hidden sm:max-w-[680px]">
+      <DialogContent className="flex flex-col sm:max-w-[680px]">
         <DialogHeader className="shrink-0">
           <DialogTitle>{isEditing ? "Edit Requisition" : "New Requisition"}</DialogTitle>
           <DialogDescription>Request materials or services for purchase.</DialogDescription>
