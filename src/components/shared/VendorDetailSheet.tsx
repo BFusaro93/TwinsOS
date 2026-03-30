@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, Search, Trash2 } from "lucide-react";
+import { Plus, Search, Trash2, Check } from "lucide-react";
+import { cn } from "@/lib/utils";
 import {
   Sheet,
   SheetContent,
@@ -26,6 +27,7 @@ import { NewVendorDialog } from "./NewVendorDialog";
 import { getInitials, getAvatarColor, formatDate, formatCurrency } from "@/lib/utils";
 import { usePurchaseOrders } from "@/lib/hooks/use-purchase-orders";
 import { useParts, useUpdatePart } from "@/lib/hooks/use-parts";
+import { useUpdateVendor } from "@/lib/hooks/use-vendors";
 import { useProducts } from "@/lib/hooks/use-products";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { PartDetailSheet } from "@/components/cmms/PartDetailSheet";
@@ -67,8 +69,16 @@ const W9_STATUS_CONFIG: Record<W9Status, { label: string; classes: string }> = {
   },
 };
 
-function DetailsTab({ vendor }: { vendor: Vendor }) {
+function DetailsTab({ vendor, onUpdateNotes }: { vendor: Vendor; onUpdateNotes: (notes: string) => void }) {
   const w9Config = W9_STATUS_CONFIG[vendor.w9Status];
+  const [notes, setNotes] = useState(vendor.notes ?? "");
+  const [notesSaved, setNotesSaved] = useState(false);
+
+  function saveNotes() {
+    onUpdateNotes(notes);
+    setNotesSaved(true);
+    setTimeout(() => setNotesSaved(false), 1500);
+  }
 
   return (
     <div className="p-6 pb-10">
@@ -101,17 +111,28 @@ function DetailsTab({ vendor }: { vendor: Vendor }) {
         />
       </dl>
 
-      {vendor.notes && (
-        <>
-          <Separator className="my-4" />
-          <div className="pb-2">
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
-              Notes
-            </p>
-            <p className="text-sm text-slate-700">{vendor.notes}</p>
-          </div>
-        </>
-      )}
+      <Separator className="my-4" />
+      <div>
+        <div className="mb-2 flex items-center justify-between">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Notes</p>
+          <span
+            className={cn(
+              "flex items-center gap-1 text-xs font-medium text-green-600 transition-opacity duration-300",
+              notesSaved ? "opacity-100" : "opacity-0"
+            )}
+          >
+            <Check className="h-3 w-3" /> Saved
+          </span>
+        </div>
+        <textarea
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          onBlur={saveNotes}
+          placeholder="Add notes about this vendor…"
+          rows={4}
+          className="w-full resize-none rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 placeholder:text-slate-400 focus:border-brand-400 focus:outline-none focus:ring-1 focus:ring-brand-400"
+        />
+      </div>
 
       {/* W9 */}
       <Separator className="my-4" />
@@ -536,6 +557,7 @@ function POHistoryTab({ vendor }: { vendor: Vendor }) {
 
 export function VendorDetailSheet({ vendor, open, onOpenChange }: VendorDetailSheetProps) {
   const [editOpen, setEditOpen] = useState(false);
+  const { mutate: updateVendor } = useUpdateVendor();
 
   if (!vendor) return null;
 
@@ -554,7 +576,7 @@ export function VendorDetailSheet({ vendor, open, onOpenChange }: VendorDetailSh
         className="flex w-full flex-col overflow-hidden p-0 md:w-[580px] md:max-w-[580px]"
       >
         <SheetHeader className="shrink-0 border-b px-6 py-4 pr-12">
-          <div className="flex items-center gap-3">
+          <div className="flex items-start gap-3">
             <div
               className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-sm font-bold text-white ${avatarColor}`}
             >
@@ -592,7 +614,7 @@ export function VendorDetailSheet({ vendor, open, onOpenChange }: VendorDetailSh
             </TabsList>
           </div>
           <TabsContent value="details" className="mt-0 flex-1 overflow-y-auto">
-            <DetailsTab vendor={vendor} />
+            <DetailsTab vendor={vendor} onUpdateNotes={(notes) => updateVendor({ id: vendor.id, notes })} />
           </TabsContent>
           <TabsContent value="parts-products" className="mt-0 flex-1 overflow-y-auto">
             <PartsProductsTab vendor={vendor} />
