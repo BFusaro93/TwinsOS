@@ -45,8 +45,9 @@ interface DraftLineItem {
   partNumber: string;
   quantity: number;
   unitCost: number; // dollars (user input) — converted to cents on save
-  itemType: "product" | "part"; // NEW
-  projectId: string; // NEW — "none" = no project
+  itemType: "product" | "part";
+  category: string;
+  projectId: string; // "none" = no project
 }
 
 const today = new Date().toISOString().split("T")[0];
@@ -84,6 +85,7 @@ function emptyLineItem(): DraftLineItem {
     quantity: 1,
     unitCost: 0,
     itemType: "product",
+    category: "",
     projectId: "none",
   };
 }
@@ -162,8 +164,11 @@ export function NewPODialog({ open, onOpenChange, initialData, prefillData, onCr
       setNotes(initialData.notes ?? "");
       setTaxRatePercent(String(initialData.taxRatePercent));
       setShippingCost(initialData.shippingCost > 0 ? (initialData.shippingCost / 100).toFixed(2) : "");
+    } else if (open && !initialData) {
+      // Sync tax rate from org settings when creating a new PO
+      setTaxRatePercent(String(orgTaxRate ?? 7));
     }
-  }, [open, initialData]);
+  }, [open, initialData, orgTaxRate]);
 
   useEffect(() => {
     if (open && !initialData && prefillData) {
@@ -178,6 +183,7 @@ export function NewPODialog({ open, onOpenChange, initialData, prefillData, onCr
             quantity: item.quantity,
             unitCost: item.unitCost,
             itemType: item.productKey.startsWith("part:") ? "part" : "product",
+            category: "",
             // Per-item project takes priority; fall back to top-level prefillData.projectId
             projectId: item.projectId ?? prefillData.projectId ?? "none",
           }))
@@ -210,7 +216,7 @@ export function NewPODialog({ open, onOpenChange, initialData, prefillData, onCr
     setInvoiceNumber("");
     setNotes("");
     setLineItems([emptyLineItem()]);
-    setTaxRatePercent("7");
+    setTaxRatePercent(String(orgTaxRate ?? 7));
     setShippingCost("");
     setExtraVendors([]);
     setExtraProducts([]);
@@ -246,7 +252,8 @@ export function NewPODialog({ open, onOpenChange, initialData, prefillData, onCr
               partNumber: item?.partNumber ?? "",
               unitCost: prefilledCost,
               itemType,
-              projectId: itemType === "part" ? "none" : li.projectId,
+              category: fullRecord && "category" in fullRecord ? (fullRecord as { category: string }).category : "",
+              projectId: itemType === "part" || (fullRecord && "category" in fullRecord && (fullRecord as { category: string }).category === "maintenance_part") ? "none" : li.projectId,
             }
           : li
       )
@@ -370,7 +377,7 @@ export function NewPODialog({ open, onOpenChange, initialData, prefillData, onCr
           setLineItems((prev) =>
             prev.map((li) =>
               li.id === pendingLineItemId
-                ? { ...li, productItemId: catalogId, productItemName: p.name, partNumber: p.partNumber, unitCost: p.unitCost / 100, itemType: "product" }
+                ? { ...li, productItemId: catalogId, productItemName: p.name, partNumber: p.partNumber, unitCost: p.unitCost / 100, itemType: "product", category: p.category }
                 : li
             )
           );
@@ -388,7 +395,7 @@ export function NewPODialog({ open, onOpenChange, initialData, prefillData, onCr
           setLineItems((prev) =>
             prev.map((li) =>
               li.id === pendingLineItemId
-                ? { ...li, productItemId: catalogId, productItemName: p.name, partNumber: p.partNumber, unitCost: p.unitCost / 100, itemType: "part", projectId: "none" }
+                ? { ...li, productItemId: catalogId, productItemName: p.name, partNumber: p.partNumber, unitCost: p.unitCost / 100, itemType: "part", category: "maintenance_part", projectId: "none" }
                 : li
             )
           );
@@ -501,7 +508,7 @@ export function NewPODialog({ open, onOpenChange, initialData, prefillData, onCr
                         </thead>
                         <tbody>
                           {lineItems.map((li) => {
-                            const hasProjectRow = li.itemType === "product" && !!li.productItemId;
+                            const hasProjectRow = li.itemType === "product" && li.category !== "maintenance_part" && !!li.productItemId;
                             return (
                             <>
                             <tr key={li.id} className={!hasProjectRow ? "border-b" : ""}>
