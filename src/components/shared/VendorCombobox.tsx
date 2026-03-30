@@ -17,6 +17,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import type { Vendor } from "@/types";
 
 interface VendorComboboxProps {
@@ -67,45 +68,47 @@ export function VendorCombobox({
       >
         <Command>
           <CommandInput placeholder="Search vendors..." />
-          <CommandList style={{ maxHeight: "220px", overflowY: "auto" }}>
+          <CommandList className="!max-h-none !overflow-visible">
             <CommandEmpty>No vendors found.</CommandEmpty>
-            <CommandGroup>
-              {!required && (
-                <CommandItem
-                  value="none"
-                  onSelect={() => {
-                    onValueChange("none");
-                    setOpen(false);
-                  }}
-                >
-                  <Check
-                    className={cn(
-                      "mr-2 h-4 w-4",
-                      value === "none" ? "opacity-100" : "opacity-0"
-                    )}
-                  />
-                  {noneLabel}
-                </CommandItem>
-              )}
-              {vendors.map((v) => (
-                <CommandItem
-                  key={v.id}
-                  value={v.name}
-                  onSelect={() => {
-                    onValueChange(v.id);
-                    setOpen(false);
-                  }}
-                >
-                  <Check
-                    className={cn(
-                      "mr-2 h-4 w-4",
-                      value === v.id ? "opacity-100" : "opacity-0"
-                    )}
-                  />
-                  {v.name}
-                </CommandItem>
-              ))}
-            </CommandGroup>
+            <ScrollArea className="h-[220px]">
+              <CommandGroup>
+                {!required && (
+                  <CommandItem
+                    value="none"
+                    onSelect={() => {
+                      onValueChange("none");
+                      setOpen(false);
+                    }}
+                  >
+                    <Check
+                      className={cn(
+                        "mr-2 h-4 w-4",
+                        value === "none" ? "opacity-100" : "opacity-0"
+                      )}
+                    />
+                    {noneLabel}
+                  </CommandItem>
+                )}
+                {vendors.map((v) => (
+                  <CommandItem
+                    key={v.id}
+                    value={v.name}
+                    onSelect={() => {
+                      onValueChange(v.id);
+                      setOpen(false);
+                    }}
+                  >
+                    <Check
+                      className={cn(
+                        "mr-2 h-4 w-4",
+                        value === v.id ? "opacity-100" : "opacity-0"
+                      )}
+                    />
+                    {v.name}
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            </ScrollArea>
           </CommandList>
         </Command>
         {onCreateNew && (
