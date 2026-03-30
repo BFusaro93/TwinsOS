@@ -21,6 +21,16 @@ declare class BarcodeDetector {
   static getSupportedFormats(): Promise<string[]>;
 }
 
+/** Returns the native BarcodeDetector when available (Chrome/Android),
+ *  or the ZXing-based polyfill for Safari / Firefox. */
+async function getBarcodeDetector(): Promise<typeof BarcodeDetector> {
+  if ("BarcodeDetector" in window) {
+    return window.BarcodeDetector as unknown as typeof BarcodeDetector;
+  }
+  const { BarcodeDetector: Polyfill } = await import("barcode-detector");
+  return Polyfill as unknown as typeof BarcodeDetector;
+}
+
 interface BarcodeScanModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -45,7 +55,6 @@ export function BarcodeScanModal({
   const [manualInput, setManualInput] = useState("");
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [detected, setDetected] = useState<string | null>(null);
-  const [detectorSupported, setDetectorSupported] = useState(true);
 
   // ── helpers ──────────────────────────────────────────────────────────────
 
@@ -80,16 +89,11 @@ export function BarcodeScanModal({
   useEffect(() => {
     if (!open || mode !== "camera") return;
 
-    if (!("BarcodeDetector" in window)) {
-      setDetectorSupported(false);
-      setMode("manual");
-      return;
-    }
-
     let cancelled = false;
 
     async function start() {
       try {
+        const DetectorClass = await getBarcodeDetector();
         const stream = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: "environment" },
         });
@@ -103,7 +107,7 @@ export function BarcodeScanModal({
           await videoRef.current.play();
         }
 
-        const detector = new BarcodeDetector({
+        const detector = new DetectorClass({
           formats: [
             "code_128",
             "code_39",
@@ -260,13 +264,6 @@ export function BarcodeScanModal({
                 {cameraError}
               </p>
             )}
-            {!detectorSupported && (
-              <p className="rounded-md bg-slate-50 px-3 py-2 text-xs text-slate-600">
-                Camera scanning is not supported in this browser. Enter the barcode
-                number below, or use a USB / Bluetooth scanner.
-              </p>
-            )}
-
             <div className="flex gap-2">
               <Input
                 placeholder="e.g. SKS-001"
@@ -280,7 +277,7 @@ export function BarcodeScanModal({
               </Button>
             </div>
 
-            {detectorSupported && !cameraError && (
+            {!cameraError && (
               <Button
                 variant="outline"
                 size="sm"
