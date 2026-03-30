@@ -83,14 +83,19 @@ export function CatalogItemCombobox({
           <ChevronsUpDown className={cn("ml-2 shrink-0 opacity-50", isSmall ? "h-3 w-3" : "h-4 w-4")} />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[320px] p-0" align="start">
+      <PopoverContent
+        className="w-[320px] p-0"
+        style={{ maxHeight: "var(--radix-popover-content-available-height)" }}
+        align="start"
+      >
         <Command
+          className="overflow-y-auto"
           filter={(itemValue, search) =>
             itemValue.toLowerCase().includes(search.toLowerCase()) ? 1 : 0
           }
         >
           <CommandInput placeholder="Search by name or part #..." />
-          <CommandList>
+          <CommandList className="max-h-[240px]">
             <CommandEmpty>No items found.</CommandEmpty>
 
             {products.length > 0 && (
