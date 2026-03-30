@@ -64,7 +64,9 @@ export function useCreateRequisition() {
       const supabase = createClient();
 
       const { data: { user } } = await supabase.auth.getUser();
-      const requestedByName = user?.user_metadata?.name ?? user?.email ?? "Unknown";
+      // Prefer profile.name (set during account setup) over auth metadata fallback
+      const { data: profile } = await supabase.from("profiles").select("name").eq("id", user!.id).single();
+      const requestedByName = profile?.name?.trim() || user?.user_metadata?.name || user?.email || "Unknown";
       const requisitionNumber = `REQ-${new Date().getFullYear()}-${Date.now().toString().slice(-6)}`;
 
       const { data: req, error: reqErr } = await supabase

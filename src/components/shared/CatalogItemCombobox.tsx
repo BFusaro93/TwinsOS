@@ -85,11 +85,10 @@ export function CatalogItemCombobox({
       </PopoverTrigger>
       <PopoverContent
         className="w-[320px] p-0"
-        style={{ maxHeight: "var(--radix-popover-content-available-height)" }}
         align="start"
       >
         <Command
-          className="overflow-y-auto"
+          className="h-auto"
           filter={(itemValue, search) =>
             itemValue.toLowerCase().includes(search.toLowerCase()) ? 1 : 0
           }

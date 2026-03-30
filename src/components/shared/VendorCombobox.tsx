@@ -63,10 +63,9 @@ export function VendorCombobox({
       </PopoverTrigger>
       <PopoverContent
         className="w-[--radix-popover-trigger-width] p-0"
-        style={{ maxHeight: "var(--radix-popover-content-available-height)" }}
         align="start"
       >
-        <Command className="overflow-y-auto">
+        <Command className="h-auto">
           <CommandInput placeholder="Search vendors..." />
           <CommandList className="max-h-[240px]">
             <CommandEmpty>No vendors found.</CommandEmpty>
