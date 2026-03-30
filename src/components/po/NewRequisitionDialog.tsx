@@ -399,14 +399,14 @@ export function NewRequisitionDialog({ open, onOpenChange, initialData, prefillD
       }}
     />
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[680px]">
-        <DialogHeader>
+      <DialogContent className="flex flex-col overflow-hidden sm:max-w-[680px]">
+        <DialogHeader className="shrink-0">
           <DialogTitle>{isEditing ? "Edit Requisition" : "New Requisition"}</DialogTitle>
           <DialogDescription>Request materials or services for purchase.</DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit}>
-          <div className="max-h-[60dvh] sm:max-h-[75vh] overflow-y-auto px-1">
+        <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+          <div className="flex-1 overflow-y-auto px-1">
             <div className="space-y-4 pb-4">
               {/* Title — full width */}
               <div className="grid gap-1.5">
@@ -457,10 +457,10 @@ export function NewRequisitionDialog({ open, onOpenChange, initialData, prefillD
                       Line Items
                     </p>
 
-                    <div className="max-h-[30dvh] overflow-y-auto">
+                    <div className="max-h-[35dvh] overflow-y-auto rounded border">
                     <div className="w-full overflow-x-auto">
                       <table className="w-full text-sm">
-                        <thead>
+                        <thead className="sticky top-0 z-10 bg-white">
                           <tr className="border-b text-left text-xs text-slate-500">
                             <th className="pb-1.5 pr-2 font-medium">
                               Item <span className="text-red-500">*</span>
@@ -665,7 +665,7 @@ export function NewRequisitionDialog({ open, onOpenChange, initialData, prefillD
             </div>
           </div>
 
-          <DialogFooter className="pt-2">
+          <DialogFooter className="shrink-0 border-t pt-3">
             <Button type="button" variant="outline" onClick={handleClose}>
               Cancel
             </Button>
