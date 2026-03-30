@@ -84,18 +84,16 @@ export function CatalogItemCombobox({
         </Button>
       </PopoverTrigger>
       <PopoverContent
-        className="w-[320px] flex flex-col overflow-hidden p-0"
-        style={{ maxHeight: "min(300px, var(--radix-popover-available-height, 300px))" }}
+        className="w-[320px] p-0"
         align="start"
       >
         <Command
-          className="flex min-h-0 flex-1 flex-col"
           filter={(itemValue, search) =>
             itemValue.toLowerCase().includes(search.toLowerCase()) ? 1 : 0
           }
         >
-          <CommandInput placeholder="Search by name or part #..." className="shrink-0" />
-          <CommandList className="flex-1 overflow-y-auto">
+          <CommandInput placeholder="Search by name or part #..." />
+          <CommandList style={{ maxHeight: "240px", overflowY: "auto" }}>
             <CommandEmpty>No items found.</CommandEmpty>
 
             {products.length > 0 && (
@@ -151,7 +149,7 @@ export function CatalogItemCombobox({
           </CommandList>
         </Command>
         {(onCreateNewProduct || onCreateNewPart) && (
-          <div className="shrink-0 border-t p-1 flex gap-1">
+          <div className="border-t p-1 flex gap-1">
             {onCreateNewProduct && (
               <button
                 type="button"

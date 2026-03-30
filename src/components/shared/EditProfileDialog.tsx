@@ -105,7 +105,7 @@ export function EditProfileDialog({ open, onOpenChange }: EditProfileDialogProps
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent className="max-w-[560px]">
         <DialogHeader className="shrink-0">
           <DialogTitle>Edit Profile</DialogTitle>
           <DialogDescription>

@@ -62,13 +62,12 @@ export function VendorCombobox({
         </Button>
       </PopoverTrigger>
       <PopoverContent
-        className="w-[--radix-popover-trigger-width] flex flex-col overflow-hidden p-0"
-        style={{ maxHeight: "min(280px, var(--radix-popover-available-height, 280px))" }}
+        className="w-[--radix-popover-trigger-width] p-0"
         align="start"
       >
-        <Command className="flex min-h-0 flex-1 flex-col">
-          <CommandInput placeholder="Search vendors..." className="shrink-0" />
-          <CommandList className="flex-1 overflow-y-auto">
+        <Command>
+          <CommandInput placeholder="Search vendors..." />
+          <CommandList style={{ maxHeight: "220px", overflowY: "auto" }}>
             <CommandEmpty>No vendors found.</CommandEmpty>
             <CommandGroup>
               {!required && (
@@ -110,7 +109,7 @@ export function VendorCombobox({
           </CommandList>
         </Command>
         {onCreateNew && (
-          <div className="shrink-0 border-t p-1">
+          <div className="border-t p-1">
             <button
               type="button"
               className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm text-blue-600 hover:bg-slate-100"
