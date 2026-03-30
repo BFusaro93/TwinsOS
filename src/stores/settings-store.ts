@@ -31,16 +31,21 @@ export interface PartCategoryConfig {
 }
 
 const DEFAULT_PART_CATEGORIES: PartCategoryConfig[] = [
-  { id: "filters",          label: "Filters",          enabled: true, isBuiltIn: true },
-  { id: "belts",            label: "Belts",            enabled: true, isBuiltIn: true },
-  { id: "blades",           label: "Blades",           enabled: true, isBuiltIn: true },
-  { id: "electrical",       label: "Electrical",       enabled: true, isBuiltIn: true },
-  { id: "hardware",         label: "Hardware",         enabled: true, isBuiltIn: true },
-  { id: "lubricants",       label: "Lubricants",       enabled: true, isBuiltIn: true },
-  { id: "tires",            label: "Tires",            enabled: true, isBuiltIn: true },
-  { id: "brake_components", label: "Brake Components", enabled: true, isBuiltIn: true },
-  { id: "hydraulics",       label: "Hydraulics",       enabled: true, isBuiltIn: true },
-  { id: "other",            label: "Other",            enabled: true, isBuiltIn: true },
+  { id: "air_filter",       label: "Air Filter",         enabled: true, isBuiltIn: true },
+  { id: "oil_filter",       label: "Oil Filter",         enabled: true, isBuiltIn: true },
+  { id: "fuel_filter",      label: "Fuel Filter",        enabled: true, isBuiltIn: true },
+  { id: "hydraulic_filter", label: "Hydraulic Filter",   enabled: true, isBuiltIn: true },
+  { id: "belt",             label: "Belt",               enabled: true, isBuiltIn: true },
+  { id: "blade",            label: "Blade",              enabled: true, isBuiltIn: true },
+  { id: "electrical",       label: "Electrical",         enabled: true, isBuiltIn: true },
+  { id: "hardware",         label: "Hardware",           enabled: true, isBuiltIn: true },
+  { id: "lubricants_fluids",label: "Lubricants/Fluids",  enabled: true, isBuiltIn: true },
+  { id: "spark_plug",       label: "Spark Plug",         enabled: true, isBuiltIn: true },
+  { id: "tires",            label: "Tires",              enabled: true, isBuiltIn: true },
+  { id: "brake_component",  label: "Brake Component",    enabled: true, isBuiltIn: true },
+  { id: "hydraulics",       label: "Hydraulics",         enabled: true, isBuiltIn: true },
+  { id: "other",            label: "Other",              enabled: true, isBuiltIn: true },
+  { id: "vehicle_part",     label: "Vehicle Part",       enabled: true, isBuiltIn: true },
 ];
 
 // ── Asset Types ───────────────────────────────────────────────────────────────
@@ -53,15 +58,9 @@ export interface AssetTypeConfig {
 }
 
 const DEFAULT_ASSET_TYPES: AssetTypeConfig[] = [
-  { id: "skid_steer",      label: "Skid Steer",        enabled: true, isBuiltIn: true },
-  { id: "zero_turn_mower", label: "Zero Turn Mower",   enabled: true, isBuiltIn: true },
-  { id: "walk_behind",     label: "Walk Behind Mower", enabled: true, isBuiltIn: true },
-  { id: "trimmer",         label: "Trimmer",           enabled: true, isBuiltIn: true },
-  { id: "blower",          label: "Blower",            enabled: true, isBuiltIn: true },
-  { id: "attachment",      label: "Attachment",        enabled: true, isBuiltIn: true },
-  { id: "vehicle",         label: "Vehicle",           enabled: true, isBuiltIn: true },
-  { id: "trailer",         label: "Trailer",           enabled: true, isBuiltIn: true },
-  { id: "other",           label: "Other",             enabled: true, isBuiltIn: true },
+  { id: "vehicle", label: "Vehicle", enabled: true, isBuiltIn: true },
+  { id: "trailer", label: "Trailer", enabled: true, isBuiltIn: true },
+  { id: "other",   label: "Other",   enabled: true, isBuiltIn: true },
 ];
 
 // ── Fuel Types ────────────────────────────────────────────────────────────────
@@ -90,13 +89,11 @@ export interface LocationConfig {
 }
 
 const DEFAULT_LOCATIONS: LocationConfig[] = [
-  { id: "main_yard",     label: "Main Yard",      enabled: true, isBuiltIn: true },
-  { id: "shop",          label: "Shop",           enabled: true, isBuiltIn: true },
-  { id: "warehouse",     label: "Warehouse",      enabled: true, isBuiltIn: true },
-  { id: "crew1_trailer", label: "Crew 1 Trailer", enabled: true, isBuiltIn: true },
-  { id: "crew2_trailer", label: "Crew 2 Trailer", enabled: true, isBuiltIn: true },
-  { id: "crew3_trailer", label: "Crew 3 Trailer", enabled: true, isBuiltIn: true },
-  { id: "offsite",       label: "Offsite",        enabled: true, isBuiltIn: true },
+  { id: "main_office", label: "Main Office", enabled: true, isBuiltIn: true },
+  { id: "main_yard",   label: "Main Yard",   enabled: true, isBuiltIn: true },
+  { id: "shop",        label: "Shop",        enabled: true, isBuiltIn: true },
+  { id: "warehouse",   label: "Warehouse",   enabled: true, isBuiltIn: true },
+  { id: "offsite",     label: "Offsite",     enabled: true, isBuiltIn: true },
 ];
 
 // ── Vendor Types ──────────────────────────────────────────────────────────────
