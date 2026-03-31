@@ -49,22 +49,10 @@ const AUTOMATION_TEMPLATES: AutomationTemplate[] = [
     action: { type: "create_work_order", title: "PM Service Due", priority: "medium", assignedTo: "" },
   },
   {
-    name: "Work Order Overdue",
-    description: "Notifies the manager as soon as any work order passes its due date.",
-    trigger: { type: "wo_overdue", daysOverdue: 1 },
-    action: { type: "send_notification", recipientRole: "manager", message: "A work order is past its due date and needs attention." },
-  },
-  {
-    name: "New Request Submitted",
-    description: "Notifies the manager whenever a new maintenance request is submitted.",
-    trigger: { type: "request_submitted" },
-    action: { type: "send_notification", recipientRole: "manager", message: "New maintenance request submitted and awaiting review." },
-  },
-  {
-    name: "WO Completed — Notify Requester",
-    description: "Notifies all users when a work order is marked done.",
+    name: "WO Completed — Notify Team",
+    description: "Notifies managers when a work order is marked done.",
     trigger: { type: "wo_status_change", toStatus: "done" },
-    action: { type: "send_notification", recipientRole: "all", message: "A work order has been completed." },
+    action: { type: "send_notification", recipientRole: "manager", message: "A work order has been completed." },
   },
   {
     name: "PO Approved",
