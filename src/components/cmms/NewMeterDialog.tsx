@@ -40,7 +40,6 @@ export function NewMeterDialog({ open, onOpenChange, initialData }: NewMeterDial
   const [entityKey, setEntityKey] = useState("");
   const [source, setSource] = useState<"manual" | "samsara">("manual");
   const [currentReading, setCurrentReading] = useState("");
-  const [pmThreshold, setPmThreshold] = useState("");
 
   const { data: assets } = useAssets();
   const { data: vehicles } = useVehicles();
@@ -59,7 +58,6 @@ export function NewMeterDialog({ open, onOpenChange, initialData }: NewMeterDial
           : ""
       );
       setSource(initialData.source);
-      setPmThreshold("");
     }
   }, [open, initialData, assets, vehicles]);
 
@@ -77,7 +75,6 @@ export function NewMeterDialog({ open, onOpenChange, initialData }: NewMeterDial
     setEntityKey("");
     setSource("manual");
     setCurrentReading("");
-    setPmThreshold("");
   }
 
   function handleSubmit(e: React.FormEvent) {
@@ -199,21 +196,6 @@ export function NewMeterDialog({ open, onOpenChange, initialData }: NewMeterDial
               </div>
             )}
 
-            {/* PM Threshold */}
-            <div className="grid gap-1.5">
-              <Label htmlFor="meter-threshold">PM Threshold (optional)</Label>
-              <Input
-                id="meter-threshold"
-                type="number"
-                min={0}
-                placeholder="e.g. 5000"
-                value={pmThreshold}
-                onChange={(e) => setPmThreshold(e.target.value)}
-              />
-              <p className="text-xs text-slate-500">
-                The reading value at which a preventive maintenance task should trigger.
-              </p>
-            </div>
           </div>
 
           <DialogFooter className="mt-6">

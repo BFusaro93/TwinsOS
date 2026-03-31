@@ -206,6 +206,75 @@ export type Database = {
           },
         ]
       }
+      automations: {
+        Row: {
+          id: string
+          org_id: string
+          name: string
+          enabled: boolean
+          trigger_type: string
+          trigger_config: Json
+          action_type: string
+          action_config: Json
+          last_fired_at: string | null
+          last_fired_value: number | null
+          pending_reset: boolean
+          created_at: string
+          updated_at: string
+          created_by: string | null
+          deleted_at: string | null
+        }
+        Insert: {
+          id?: string
+          org_id: string
+          name: string
+          enabled?: boolean
+          trigger_type: string
+          trigger_config?: Json
+          action_type: string
+          action_config?: Json
+          last_fired_at?: string | null
+          last_fired_value?: number | null
+          pending_reset?: boolean
+          created_at?: string
+          updated_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+        }
+        Update: {
+          id?: string
+          org_id?: string
+          name?: string
+          enabled?: boolean
+          trigger_type?: string
+          trigger_config?: Json
+          action_type?: string
+          action_config?: Json
+          last_fired_at?: string | null
+          last_fired_value?: number | null
+          pending_reset?: boolean
+          created_at?: string
+          updated_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "automations_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "automations_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       integrations: {
         Row: {
           api_key: string | null
@@ -2253,6 +2322,7 @@ export type Database = {
           asset_name: string | null
           assigned_to_id: string | null
           assigned_to_name: string | null
+          automation_id: string | null
           category: string | null
           created_at: string
           created_by: string | null
@@ -2278,6 +2348,7 @@ export type Database = {
           asset_name?: string | null
           assigned_to_id?: string | null
           assigned_to_name?: string | null
+          automation_id?: string | null
           category?: string | null
           created_at?: string
           created_by?: string | null
@@ -2303,6 +2374,7 @@ export type Database = {
           asset_name?: string | null
           assigned_to_id?: string | null
           assigned_to_name?: string | null
+          automation_id?: string | null
           category?: string | null
           created_at?: string
           created_by?: string | null

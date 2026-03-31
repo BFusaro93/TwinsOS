@@ -13,11 +13,17 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
+import { Skeleton } from "@/components/ui/skeleton";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { EditButton } from "@/components/shared/EditButton";
 import { AutomationDialog } from "./AutomationDialog";
 import type { AutomationRule, AutomationTrigger, AutomationAction } from "@/types/automation";
+import {
+  useAutomations,
+  useUpdateAutomation,
+  useDeleteAutomation,
+} from "@/lib/hooks/use-automations";
 
 export type { AutomationRule };
 
@@ -64,69 +70,31 @@ export function formatAction(action: AutomationAction): string {
   }
 }
 
-const INITIAL_RULES: AutomationRule[] = [
-  {
-    id: "auto-001",
-    name: "Low Stock Alert",
-    trigger: { type: "part_low_stock", partName: "any" },
-    action: { type: "create_requisition", notes: "Auto-generated from low stock alert" },
-    isEnabled: true,
-  },
-  {
-    id: "auto-002",
-    name: "PM Due Reminder",
-    trigger: { type: "pm_due", daysAhead: 7 },
-    action: { type: "create_wo_request", title: "PM Service Due", priority: "medium", assignedTo: "Casey Kleinman" },
-    isEnabled: true,
-  },
-  {
-    id: "auto-003",
-    name: "Work Order Overdue",
-    trigger: { type: "wo_overdue", daysOverdue: 1 },
-    action: { type: "send_notification", recipientRole: "manager", message: "A work order is past its due date and needs attention." },
-    isEnabled: true,
-  },
-  {
-    id: "auto-004",
-    name: "Request Auto-Assign",
-    trigger: { type: "request_submitted" },
-    action: { type: "send_notification", recipientRole: "manager", message: "New maintenance request submitted and awaiting review." },
-    isEnabled: false,
-  },
-  {
-    id: "auto-005",
-    name: "Vehicle Mileage Service",
-    trigger: { type: "meter_threshold", meterId: "meter-001", meterLabel: "Odometer — 2022 Ford F-350 #12", operator: ">=", value: 50000 },
-    action: { type: "create_wo_request", title: "Oil Change – 5,000 mi interval", priority: "medium", assignedTo: "Casey Kleinman" },
-    isEnabled: true,
-  },
-];
+function formatDate(value: string | null | undefined): string {
+  if (!value) return "Never";
+  return new Date(value).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
 
 export function AutomationsPage() {
-  const [rules, setRules] = useState<AutomationRule[]>(INITIAL_RULES);
+  const { data: rules = [], isLoading } = useAutomations();
+  const updateAutomation = useUpdateAutomation();
+  const deleteAutomation = useDeleteAutomation();
   const [newOpen, setNewOpen] = useState(false);
   const [editingRule, setEditingRule] = useState<AutomationRule | null>(null);
 
   const enabledCount = rules.filter((r) => r.isEnabled).length;
 
-  function toggleRule(id: string) {
-    setRules((prev) =>
-      prev.map((r) => (r.id === id ? { ...r, isEnabled: !r.isEnabled } : r))
-    );
-  }
-
-  function handleSaveNew(rule: AutomationRule) {
-    setRules((prev) => [...prev, rule]);
-  }
-
-  function handleSaveEdit(rule: AutomationRule) {
-    setRules((prev) => prev.map((r) => (r.id === rule.id ? rule : r)));
-    setEditingRule(null);
+  function toggleRule(id: string, currentEnabled: boolean) {
+    updateAutomation.mutate({ id, enabled: !currentEnabled });
   }
 
   function handleDelete(id: string) {
     if (window.confirm("Delete this automation?")) {
-      setRules((prev) => prev.filter((r) => r.id !== id));
+      deleteAutomation.mutate(id);
     }
   }
 
@@ -136,6 +104,23 @@ export function AutomationsPage() {
       New Automation
     </Button>
   );
+
+  if (isLoading) {
+    return (
+      <div className="flex flex-col gap-4">
+        <PageHeader
+          title="Automations"
+          description="Rule-based workflow automations"
+          action={newAutomationButton}
+        />
+        <div className="flex flex-col gap-2">
+          {[1, 2, 3].map((i) => (
+            <Skeleton key={i} className="h-12 w-full rounded-lg" />
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   if (rules.length === 0) {
     return (
@@ -153,7 +138,7 @@ export function AutomationsPage() {
         <AutomationDialog
           open={newOpen}
           onOpenChange={setNewOpen}
-          onSave={handleSaveNew}
+          onSave={() => {}}
         />
       </div>
     );
@@ -182,6 +167,7 @@ export function AutomationsPage() {
               <TableHead>Name</TableHead>
               <TableHead>Trigger</TableHead>
               <TableHead>Action</TableHead>
+              <TableHead>Last Fired</TableHead>
               <TableHead>Status</TableHead>
               <TableHead />
             </TableRow>
@@ -192,11 +178,12 @@ export function AutomationsPage() {
                 <TableCell className="font-medium">{rule.name}</TableCell>
                 <TableCell className="text-slate-600">{formatTrigger(rule.trigger)}</TableCell>
                 <TableCell className="text-slate-600">{formatAction(rule.action)}</TableCell>
+                <TableCell className="text-slate-500 text-sm">{formatDate(rule.lastFiredAt)}</TableCell>
                 <TableCell>
                   <div className="flex items-center gap-2">
                     <Switch
                       checked={rule.isEnabled}
-                      onCheckedChange={() => toggleRule(rule.id)}
+                      onCheckedChange={() => toggleRule(rule.id, rule.isEnabled)}
                       aria-label={`Toggle ${rule.name}`}
                     />
                     {rule.isEnabled ? (
@@ -239,7 +226,7 @@ export function AutomationsPage() {
       <AutomationDialog
         open={newOpen}
         onOpenChange={setNewOpen}
-        onSave={handleSaveNew}
+        onSave={() => setNewOpen(false)}
       />
 
       <AutomationDialog
@@ -248,7 +235,7 @@ export function AutomationsPage() {
           if (!open) setEditingRule(null);
         }}
         initialData={editingRule}
-        onSave={handleSaveEdit}
+        onSave={() => setEditingRule(null)}
       />
     </div>
   );

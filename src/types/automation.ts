@@ -15,6 +15,7 @@ export interface MeterThresholdTrigger {
   meterLabel: string;    // "{meter.name} — {meter.assetName}" for display
   operator: ">=" | "<=";
   value: number;
+  interval?: number | null;  // auto-advance amount after WO completion
 }
 export interface PartLowStockTrigger {
   type: "part_low_stock";
@@ -88,7 +89,11 @@ export type AutomationAction =
 export interface AutomationRule {
   id: string;
   name: string;
+  enabled: boolean;
+  isEnabled: boolean;  // alias for enabled — kept for backwards compat
   trigger: AutomationTrigger;
   action: AutomationAction;
-  isEnabled: boolean;
+  lastFiredAt: string | null;
+  lastFiredValue: number | null;
+  pendingReset: boolean;
 }

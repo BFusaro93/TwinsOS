@@ -26,6 +26,8 @@ import type {
   ActionType,
 } from "@/types/automation";
 import { useMeters } from "@/lib/hooks/use-meters";
+import { useCreateAutomation, useUpdateAutomation } from "@/lib/hooks/use-automations";
+import { useQueryClient } from "@tanstack/react-query";
 
 interface AutomationDialogProps {
   open: boolean;
@@ -60,7 +62,12 @@ export function AutomationDialog({
   const [woTargetStatus, setWoTargetStatus] = useState<"open" | "in_progress" | "on_hold" | "done">("open");
   const [poTargetStatus, setPoTargetStatus] = useState<"draft" | "pending_approval" | "approved" | "rejected" | "ordered" | "closed">("approved");
 
+  const [intervalValue, setIntervalValue] = useState("");
+
   const { data: meters = [] } = useMeters();
+  const createAutomation = useCreateAutomation();
+  const updateAutomation = useUpdateAutomation();
+  const queryClient = useQueryClient();
 
   // Action type + config
   const [actionType, setActionType] = useState<ActionType>("send_notification");
@@ -85,6 +92,7 @@ export function AutomationDialog({
       setMeterLabel("");
       setMeterOperator(">=");
       setMeterValue("");
+      setIntervalValue("");
       setPartName("any");
       setPmDaysAhead("7");
       setWoDaysOverdue("1");
@@ -113,6 +121,7 @@ export function AutomationDialog({
         setMeterLabel(t.meterLabel);
         setMeterOperator(t.operator);
         setMeterValue(String(t.value));
+        setIntervalValue(t.interval != null ? String(t.interval) : "");
         break;
       case "part_low_stock":
         setPartName(t.partName);
@@ -162,6 +171,7 @@ export function AutomationDialog({
     setMeterLabel("");
     setMeterOperator(">=");
     setMeterValue("");
+    setIntervalValue("");
     setPartName("any");
     setPmDaysAhead("7");
     setWoDaysOverdue("1");
@@ -184,7 +194,14 @@ export function AutomationDialog({
   function buildTrigger(): AutomationRule["trigger"] {
     switch (triggerType) {
       case "meter_threshold":
-        return { type: "meter_threshold", meterId, meterLabel, operator: meterOperator, value: Number(meterValue) };
+        return {
+          type: "meter_threshold",
+          meterId,
+          meterLabel,
+          operator: meterOperator,
+          value: Number(meterValue),
+          interval: intervalValue.trim() !== "" ? Number(intervalValue) : null,
+        };
       case "part_low_stock":
         return { type: "part_low_stock", partName };
       case "pm_due":
@@ -246,16 +263,32 @@ export function AutomationDialog({
     e.preventDefault();
     if (!isValid()) return;
 
-    const rule: AutomationRule = {
-      id: initialData?.id ?? `auto-${Date.now()}`,
-      name: name.trim(),
-      trigger: buildTrigger(),
-      action: buildAction(),
-      isEnabled,
-    };
+    const trigger = buildTrigger();
+    const action = buildAction();
 
-    onSave(rule);
-    onOpenChange(false);
+    if (isEdit && initialData) {
+      updateAutomation.mutate(
+        { id: initialData.id, name: name.trim(), enabled: isEnabled, trigger, action },
+        {
+          onSuccess: (updated) => {
+            queryClient.invalidateQueries({ queryKey: ["automations"] });
+            onSave(updated);
+            onOpenChange(false);
+          },
+        }
+      );
+    } else {
+      createAutomation.mutate(
+        { name: name.trim(), enabled: isEnabled, trigger, action },
+        {
+          onSuccess: (created) => {
+            queryClient.invalidateQueries({ queryKey: ["automations"] });
+            onSave(created);
+            onOpenChange(false);
+          },
+        }
+      );
+    }
   }
 
   return (
@@ -361,6 +394,24 @@ export function AutomationDialog({
                       />
                     </div>
                   </div>
+                  {actionType === "create_wo_request" && (
+                    <div className="flex flex-col gap-1.5">
+                      <Label htmlFor="meter-interval">
+                        Service Interval{" "}
+                        <span className="font-normal text-slate-500">(optional)</span>
+                      </Label>
+                      <Input
+                        id="meter-interval"
+                        type="number"
+                        placeholder="e.g. 5000"
+                        value={intervalValue}
+                        onChange={(e) => setIntervalValue(e.target.value)}
+                      />
+                      <p className="text-xs text-slate-500">
+                        e.g. 5000 — after the triggered WO is marked complete, the threshold automatically advances by this amount.
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -611,8 +662,11 @@ export function AutomationDialog({
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={!isValid()}>
-              {submitLabel}
+            <Button
+              type="submit"
+              disabled={!isValid() || createAutomation.isPending || updateAutomation.isPending}
+            >
+              {createAutomation.isPending || updateAutomation.isPending ? "Saving..." : submitLabel}
             </Button>
           </DialogFooter>
         </form>

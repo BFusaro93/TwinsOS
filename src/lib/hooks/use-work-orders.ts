@@ -77,16 +77,60 @@ export function useCreateWorkOrder() {
 export function useUpdateWorkOrderStatus() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, status }: { id: string; status: WorkOrderStatus }) => {
+    mutationFn: async ({
+      id,
+      status,
+      automationId,
+    }: {
+      id: string;
+      status: WorkOrderStatus;
+      automationId?: string | null;
+    }) => {
       const supabase = createClient();
       const { error } = await supabase.from("work_orders").update({ status }).eq("id", id);
       if (error) throw error;
+
+      // When completing a WO that was triggered by an automation, advance the threshold
+      if (status === "done" && automationId) {
+        const { data: auto } = await supabase
+          .from("automations")
+          .select("*")
+          .eq("id", automationId)
+          .single();
+
+        if (auto && auto.trigger_type === "meter_threshold") {
+          const tc = (auto.trigger_config ?? {}) as Record<string, unknown>;
+          if (tc.interval != null && auto.last_fired_value != null) {
+            const newThreshold =
+              (auto.last_fired_value as number) + (tc.interval as number);
+            await supabase
+              .from("automations")
+              .update({
+                trigger_config: { ...tc, threshold: newThreshold },
+                pending_reset: false,
+                last_fired_at: null,
+                last_fired_value: null,
+                updated_at: new Date().toISOString(),
+              })
+              .eq("id", automationId);
+          } else {
+            await supabase
+              .from("automations")
+              .update({
+                pending_reset: false,
+                updated_at: new Date().toISOString(),
+              })
+              .eq("id", automationId);
+          }
+        }
+      }
     },
     onSuccess: (_, { id, status }) => {
       if (status) patchWOCache(queryClient, id, { status });
       queryClient.invalidateQueries({ queryKey: ["work-orders"] });
       queryClient.invalidateQueries({ queryKey: ["work-orders", id] });
       queryClient.invalidateQueries({ queryKey: ["audit-log", "work_order", id] });
+      queryClient.invalidateQueries({ queryKey: ["automations"] });
     },
   });
 }
