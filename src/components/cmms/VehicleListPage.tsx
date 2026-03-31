@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import React, { useState } from "react";
 import { useStickyState } from "@/lib/hooks/use-sticky-state";
 import {
   ClipboardCheck,
@@ -41,6 +41,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { useVehicles, useBulkImportVehicles } from "@/lib/hooks/use-vehicles";
 import { useAssets } from "@/lib/hooks/use-assets";
+import { useMeters } from "@/lib/hooks/use-meters";
 import { useCMMSStore } from "@/stores";
 import { useRouter } from "next/navigation";
 import { ASSET_STATUS_LABELS } from "@/lib/constants";
@@ -74,21 +75,32 @@ const VEHICLE_COLUMNS: ColumnDef[] = [
 type ServiceBucket = "overdue" | "due-soon" | "ok" | "untracked";
 
 /** Returns the worst-case urgency across ALL reminders for a vehicle. */
-function getVehicleBucket(v: Vehicle): ServiceBucket {
+function getVehicleBucket(v: Vehicle, currentMiles?: number | null): ServiceBucket {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const todayStr  = today.toISOString().split("T")[0];
   const monthOut  = new Date(today.getTime() + 30 * 86400000).toISOString().split("T")[0];
 
-  const tracked = [v.nextOilChangeDue, v.nextInspectionStickerDue].filter(Boolean) as string[];
-  if (tracked.length === 0) return "untracked";
-  if (tracked.some((d) => d < todayStr)) return "overdue";
-  if (tracked.some((d) => d < monthOut)) return "due-soon";
+  const hasDates = !!(v.nextOilChangeDue || v.nextInspectionStickerDue);
+  const hasMileage = v.nextOilChangeMileage != null && currentMiles != null;
+  if (!hasDates && !hasMileage) return "untracked";
+
+  const dateDates = [v.nextOilChangeDue, v.nextInspectionStickerDue].filter(Boolean) as string[];
+  if (dateDates.some((d) => d < todayStr)) return "overdue";
+
+  // Mileage overdue: current odometer at or past the due mileage
+  if (hasMileage && currentMiles! >= v.nextOilChangeMileage!) return "overdue";
+
+  if (dateDates.some((d) => d < monthOut)) return "due-soon";
+
+  // Mileage due-soon: within 500 miles of the threshold
+  if (hasMileage && currentMiles! >= v.nextOilChangeMileage! - 500) return "due-soon";
+
   return "ok";
 }
 
-function dateCell(dateStr: string | null, mileage?: number | null): React.ReactNode {
-  if (!dateStr && !mileage) return <span className="text-slate-300">—</span>;
+function dateCell(dateStr: string | null, dueMileage?: number | null, currentMiles?: number | null): React.ReactNode {
+  if (!dateStr && dueMileage == null) return <span className="text-slate-300">—</span>;
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -112,6 +124,23 @@ function dateCell(dateStr: string | null, mileage?: number | null): React.ReactN
     return null;
   })();
 
+  // Mileage color: compare current odometer against the due mileage threshold
+  const mileageColor = (() => {
+    if (dueMileage == null || currentMiles == null) return "text-slate-500";
+    const remaining = dueMileage - currentMiles;
+    if (remaining <= 0)   return "text-red-600";
+    if (remaining <= 500) return "text-amber-600";
+    return "text-green-700";
+  })();
+
+  const mileageLabel = (() => {
+    if (dueMileage == null || currentMiles == null) return null;
+    const remaining = dueMileage - currentMiles;
+    if (remaining <= 0)   return `${Math.abs(remaining).toLocaleString()} mi overdue`;
+    if (remaining <= 500) return `${remaining.toLocaleString()} mi away`;
+    return null;
+  })();
+
   return (
     <div className="flex flex-col gap-0.5">
       {dateStr && (
@@ -122,8 +151,13 @@ function dateCell(dateStr: string | null, mileage?: number | null): React.ReactN
           )}
         </span>
       )}
-      {mileage != null && (
-        <span className="text-xs text-slate-500">{mileage.toLocaleString()} mi</span>
+      {dueMileage != null && (
+        <span className={cn("text-xs font-medium", mileageColor)}>
+          {dueMileage.toLocaleString()} mi
+          {mileageLabel && (
+            <span className="ml-1 font-normal opacity-75">({mileageLabel})</span>
+          )}
+        </span>
       )}
     </div>
   );
@@ -162,17 +196,20 @@ function ServiceRemindersView({
   vehicles,
   isLoading,
   onRowClick,
+  currentMilesMap,
 }: {
   vehicles: Vehicle[];
   isLoading: boolean;
   onRowClick: (v: Vehicle) => void;
+  currentMilesMap: Map<string, number>;
 }) {
   // Only include vehicles that have at least one reminder set
-  const tracked    = vehicles.filter((v) => getVehicleBucket(v) !== "untracked");
-  const untracked  = vehicles.filter((v) => getVehicleBucket(v) === "untracked");
-  const overdue    = tracked.filter((v) => getVehicleBucket(v) === "overdue");
-  const dueSoon    = tracked.filter((v) => getVehicleBucket(v) === "due-soon");
-  const upToDate   = tracked.filter((v) => getVehicleBucket(v) === "ok");
+  const bucket = (v: Vehicle) => getVehicleBucket(v, currentMilesMap.get(v.id));
+  const tracked    = vehicles.filter((v) => bucket(v) !== "untracked");
+  const untracked  = vehicles.filter((v) => bucket(v) === "untracked");
+  const overdue    = tracked.filter((v) => bucket(v) === "overdue");
+  const dueSoon    = tracked.filter((v) => bucket(v) === "due-soon");
+  const upToDate   = tracked.filter((v) => bucket(v) === "ok");
 
   const overdueCount = overdue.length;
 
@@ -189,6 +226,7 @@ function ServiceRemindersView({
   function VehicleRow({ v }: { v: Vehicle }) {
     const initials = getInitials(v.name);
     const avatarColor = getAvatarColor(v.name);
+    const currentMiles = currentMilesMap.get(v.id) ?? null;
     return (
       <TableRow className="cursor-pointer hover:bg-slate-50" onClick={() => onRowClick(v)}>
         <TableCell>
@@ -219,7 +257,7 @@ function ServiceRemindersView({
         <TableCell className="text-sm text-slate-600">{v.assignedCrew ?? "—"}</TableCell>
         <TableCell>
           {v.nextOilChangeDue || v.nextOilChangeMileage != null
-            ? dateCell(v.nextOilChangeDue, v.nextOilChangeMileage)
+            ? dateCell(v.nextOilChangeDue, v.nextOilChangeMileage, currentMiles)
             : <span className="text-slate-300">—</span>}
         </TableCell>
         <TableCell>
@@ -347,6 +385,21 @@ export function VehicleListPage() {
   const { data: vehicles, isLoading } = useVehicles();
   const { mutateAsync: bulkImportVehicles } = useBulkImportVehicles();
   const { data: assets } = useAssets();
+  const { data: meters } = useMeters();
+
+  // Build vehicleId → current miles from all "miles"/"mi" meters
+  const currentMilesMap = React.useMemo(() => {
+    const map = new Map<string, number>();
+    for (const m of meters ?? []) {
+      if (m.unit?.toLowerCase() === "miles" || m.unit?.toLowerCase() === "mi") {
+        const existing = map.get(m.assetId);
+        if (existing == null || m.currentValue > existing) {
+          map.set(m.assetId, m.currentValue);
+        }
+      }
+    }
+    return map;
+  }, [meters]);
   const { selectedVehicleId, setSelectedVehicleId, setSelectedAssetId } = useCMMSStore();
   const router = useRouter();
   const [search, setSearch] = useState("");
@@ -711,6 +764,7 @@ export function VehicleListPage() {
           vehicles={all}
           isLoading={isLoading}
           onRowClick={(v) => setSheetVehicleId(v.id)}
+          currentMilesMap={currentMilesMap}
         />
       )}
 
