@@ -146,6 +146,11 @@ export function AutomationDialog({
     const a = initialData.action;
     setActionType(a.type);
     switch (a.type) {
+      case "create_work_order":
+        setWoTitle(a.title);
+        setWoPriority(a.priority);
+        setWoAssignedTo(a.assignedTo);
+        break;
       case "create_wo_request":
         setWoTitle(a.title);
         setWoPriority(a.priority);
@@ -219,6 +224,8 @@ export function AutomationDialog({
 
   function buildAction(): AutomationRule["action"] {
     switch (actionType) {
+      case "create_work_order":
+        return { type: "create_work_order", title: woTitle, priority: woPriority, assignedTo: woAssignedTo };
       case "create_wo_request":
         return { type: "create_wo_request", title: woTitle, priority: woPriority, assignedTo: woAssignedTo };
       case "create_requisition":
@@ -245,6 +252,7 @@ export function AutomationDialog({
 
     // Action validation
     switch (actionType) {
+      case "create_work_order":
       case "create_wo_request":
         if (!woTitle.trim()) return false;
         break;
@@ -394,7 +402,7 @@ export function AutomationDialog({
                       />
                     </div>
                   </div>
-                  {actionType === "create_wo_request" && (
+                  {(actionType === "create_work_order" || actionType === "create_wo_request") && (
                     <div className="flex flex-col gap-1.5">
                       <Label htmlFor="meter-interval">
                         Service Interval{" "}
@@ -523,6 +531,7 @@ export function AutomationDialog({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="create_work_order">Create Work Order</SelectItem>
                     <SelectItem value="create_wo_request">Create WO Request</SelectItem>
                     <SelectItem value="create_requisition">Create Requisition</SelectItem>
                     <SelectItem value="send_notification">Send Notification</SelectItem>
@@ -532,6 +541,51 @@ export function AutomationDialog({
               </div>
 
               {/* Action config fields */}
+              {actionType === "create_work_order" && (
+                <div className="flex flex-col gap-3">
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="wo-title">Work Order Title</Label>
+                    <Input
+                      id="wo-title"
+                      placeholder="e.g. Oil Change"
+                      value={woTitle}
+                      onChange={(e) => setWoTitle(e.target.value)}
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="wo-priority">Priority</Label>
+                    <Select
+                      value={woPriority}
+                      onValueChange={(v) =>
+                        setWoPriority(v as "low" | "medium" | "high" | "urgent")
+                      }
+                    >
+                      <SelectTrigger id="wo-priority">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="low">Low</SelectItem>
+                        <SelectItem value="medium">Medium</SelectItem>
+                        <SelectItem value="high">High</SelectItem>
+                        <SelectItem value="urgent">Urgent</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="wo-assigned-to">
+                      Assigned To{" "}
+                      <span className="font-normal text-slate-500">(optional)</span>
+                    </Label>
+                    <Input
+                      id="wo-assigned-to"
+                      placeholder="e.g. Casey Kleinman"
+                      value={woAssignedTo}
+                      onChange={(e) => setWoAssignedTo(e.target.value)}
+                    />
+                  </div>
+                </div>
+              )}
+
               {actionType === "create_wo_request" && (
                 <div className="flex flex-col gap-3">
                   <div className="flex flex-col gap-1.5">

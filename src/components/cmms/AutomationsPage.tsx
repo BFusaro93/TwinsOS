@@ -46,7 +46,7 @@ const AUTOMATION_TEMPLATES: AutomationTemplate[] = [
     name: "PM Due Reminder",
     description: "Creates a work order 7 days before any PM schedule comes due.",
     trigger: { type: "pm_due", daysAhead: 7 },
-    action: { type: "create_wo_request", title: "PM Service Due", priority: "medium", assignedTo: "" },
+    action: { type: "create_work_order", title: "PM Service Due", priority: "medium", assignedTo: "" },
   },
   {
     name: "Work Order Overdue",
@@ -108,8 +108,10 @@ export function formatTrigger(trigger: AutomationTrigger): string {
 
 export function formatAction(action: AutomationAction): string {
   switch (action.type) {
-    case "create_wo_request":
+    case "create_work_order":
       return `Create work order: "${action.title}" — ${action.priority} priority${action.assignedTo ? ` → ${action.assignedTo}` : ""}`;
+    case "create_wo_request":
+      return `Create WO request: "${action.title}" — ${action.priority} priority${action.assignedTo ? ` → ${action.assignedTo}` : ""}`;
     case "create_requisition":
       return `Create purchase requisition${action.notes ? `: ${action.notes}` : ""}`;
     case "send_notification":

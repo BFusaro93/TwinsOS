@@ -53,16 +53,26 @@ export type AutomationTrigger =
 // ─── Actions ─────────────────────────────────────────────────────────────────
 
 export type ActionType =
+  | "create_work_order"
   | "create_wo_request"
   | "create_requisition"
   | "send_notification"
   | "send_email";
 
+/** Creates a Work Order directly (status: open, bypasses approval flow). */
+export interface CreateWorkOrderAction {
+  type: "create_work_order";
+  title: string;
+  priority: "low" | "medium" | "high" | "urgent";
+  assignedTo: string;
+}
+
+/** Creates a Maintenance Request that goes through the approval workflow. */
 export interface CreateWORequestAction {
   type: "create_wo_request";
   title: string;
   priority: "low" | "medium" | "high" | "urgent";
-  assignedTo: string;       // free-text name (optional suggestion)
+  assignedTo: string;
 }
 export interface CreateRequisitionAction {
   type: "create_requisition";
@@ -79,6 +89,7 @@ export interface SendEmailAction {
 }
 
 export type AutomationAction =
+  | CreateWorkOrderAction
   | CreateWORequestAction
   | CreateRequisitionAction
   | SendNotificationAction

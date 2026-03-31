@@ -70,6 +70,14 @@ export function mapAutomation(row: AutomationRow): AutomationRule {
 
   let action: AutomationAction;
   switch (row.action_type as ActionType) {
+    case "create_work_order":
+      action = {
+        type: "create_work_order",
+        title: (ac.title as string) ?? "",
+        priority: ((ac.priority as string) ?? "medium") as "low" | "medium" | "high" | "urgent",
+        assignedTo: (ac.assigned_to as string) ?? "",
+      };
+      break;
     case "create_wo_request":
       action = {
         type: "create_wo_request",
@@ -144,6 +152,12 @@ function serialiseTriggerConfig(trigger: AutomationTrigger): Json {
 
 function serialiseActionConfig(action: AutomationAction): Json {
   switch (action.type) {
+    case "create_work_order":
+      return {
+        title: action.title,
+        priority: action.priority,
+        assigned_to: action.assignedTo,
+      };
     case "create_wo_request":
       return {
         title: action.title,
