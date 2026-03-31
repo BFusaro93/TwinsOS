@@ -41,11 +41,11 @@ export async function POST(request: Request) {
     }
     const { data: profile } = await userClient
       .from("profiles")
-      .select("org_id, role")
+      .select("org_id")
       .eq("id", user.id)
       .single();
-    if (!profile || profile.role !== "admin") {
-      return NextResponse.json({ error: "Admin role required" }, { status: 403 });
+    if (!profile) {
+      return NextResponse.json({ error: "Profile not found" }, { status: 403 });
     }
     callerOrgId = profile.org_id;
   }

@@ -43,6 +43,9 @@ export function useAddMeterReading() {
     onSuccess: (_, input) => {
       queryClient.invalidateQueries({ queryKey: ["meter-readings", input.meterId] });
       queryClient.invalidateQueries({ queryKey: ["meters"] });
+      // Fire-and-forget: check if any automations should trigger for this org
+      // now that the meter value has changed. Errors are non-fatal.
+      fetch("/api/automations/run", { method: "POST" }).catch(() => {});
     },
   });
 }

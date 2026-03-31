@@ -49,11 +49,15 @@ export function AddReadingDialog({ open, onOpenChange, meter }: AddReadingDialog
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!isValid || parsedValue === null) return;
+    // Append T12:00:00 so Postgres stores it as noon local-ish time — a bare
+    // YYYY-MM-DD string is parsed as UTC midnight which shifts back a day in
+    // US timezones when displayed.
+    const readingAtISO = readingDate + "T12:00:00";
     addReading.mutate(
       {
         meterId: meter.id,
         value: parsedValue,
-        readingAt: readingDate,
+        readingAt: readingAtISO,
         source: meter.source,
         recordedByName: null,
       },
