@@ -86,7 +86,7 @@ export function EntityCombobox({
           }}
         >
           <CommandInput placeholder="Search assets and vehicles..." />
-          <CommandList>
+          <CommandList className="!max-h-[220px]">
             <CommandEmpty>No results found.</CommandEmpty>
 
             {!required && (
