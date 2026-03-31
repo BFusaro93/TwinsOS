@@ -13,6 +13,7 @@ import {
   Download,
   ExternalLink,
   FileText,
+  Loader2,
   Plus,
   BookOpen,
   ShoppingCart,
@@ -34,6 +35,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -57,7 +59,7 @@ import { usePurchaseOrders, useBulkImportPurchaseOrders } from "@/lib/hooks/use-
 import { useProducts, useBulkImportProducts } from "@/lib/hooks/use-products";
 import { downloadCSV, readCSVFile } from "@/lib/csv";
 import { autoMapColumns, remapRows } from "@/components/shared/ImportExportMenu";
-import { formatCurrency } from "@/lib/utils";
+import { cn, formatCurrency } from "@/lib/utils";
 
 // ── Shared helpers ────────────────────────────────────────────────────────────
 
@@ -1501,8 +1503,200 @@ function tabLabel(tab: string): string {
     case "costing":        return "Costing";
     case "import_export":  return "Import / Export";
     case "notifications":  return "Notifications";
+    case "integrations":   return "Integrations";
     default:               return tab;
   }
+}
+
+// ── IntegrationsTab ───────────────────────────────────────────────────────────
+
+function IntegrationsTab() {
+  const { data: remoteSettings, refetch } = useOrgSettings();
+  const { mutate: updateOrgSettings, isPending: saving } = useUpdateOrgSettings();
+
+  const [apiKey, setApiKey]       = useState("");
+  const [showKey, setShowKey]     = useState(false);
+  const [syncing, setSyncing]     = useState(false);
+  const [syncResult, setSyncResult] = useState<string | null>(null);
+  const [keySaved, setKeySaved]   = useState(false);
+
+  // Seed the field once remote data loads
+  const seeded = useRef(false);
+  useEffect(() => {
+    if (!remoteSettings || seeded.current) return;
+    seeded.current = true;
+    setApiKey(remoteSettings.samsaraApiKey ?? "");
+  }, [remoteSettings]);
+
+  function handleSaveKey() {
+    updateOrgSettings(
+      { samsaraApiKey: apiKey.trim() || null },
+      {
+        onSuccess: () => {
+          setKeySaved(true);
+          setTimeout(() => setKeySaved(false), 3000);
+        },
+      }
+    );
+  }
+
+  async function handleManualSync() {
+    setSyncing(true);
+    setSyncResult(null);
+    try {
+      const res = await fetch("/api/integrations/samsara/sync", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) {
+        setSyncResult(`Error: ${data.error ?? "Unknown error"}`);
+      } else {
+        const orgResult = data.synced?.[0];
+        if (orgResult) {
+          setSyncResult(
+            `Synced ${orgResult.readings} reading(s) across ${orgResult.matched} vehicle(s) (${orgResult.fetched} from Samsara).`
+          );
+        } else {
+          setSyncResult(data.message ?? "Sync complete.");
+        }
+      }
+      refetch();
+    } catch (err) {
+      setSyncResult(`Network error: ${err}`);
+    } finally {
+      setSyncing(false);
+    }
+  }
+
+  const lastSync   = remoteSettings?.lastSamsaraSyncAt;
+  const lastStatus = remoteSettings?.lastSamsaraSyncStatus;
+
+  return (
+    <div className="max-w-2xl space-y-8">
+      {/* Samsara */}
+      <div className="rounded-xl border bg-white shadow-sm">
+        <div className="flex items-center gap-3 border-b px-6 py-4">
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#f5a623]/10">
+            {/* Samsara brand icon placeholder */}
+            <svg viewBox="0 0 24 24" className="h-5 w-5 fill-[#f5a623]">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z" />
+            </svg>
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-slate-900">Samsara</p>
+            <p className="text-xs text-slate-500">Automatically sync vehicle odometer readings daily at 6 AM ET</p>
+          </div>
+          {lastStatus && (
+            <span className={cn(
+              "ml-auto rounded-full px-2.5 py-0.5 text-xs font-medium",
+              lastStatus === "ok"      && "bg-green-100 text-green-700",
+              lastStatus === "partial" && "bg-amber-100 text-amber-700",
+              lastStatus === "error"   && "bg-red-100 text-red-700",
+            )}>
+              {lastStatus === "ok" ? "Connected" : lastStatus === "partial" ? "Partial" : "Error"}
+            </span>
+          )}
+        </div>
+
+        <div className="space-y-5 px-6 py-5">
+          {/* API key */}
+          <div className="space-y-1.5">
+            <Label htmlFor="samsara-key">API Key</Label>
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <Input
+                  id="samsara-key"
+                  type={showKey ? "text" : "password"}
+                  value={apiKey}
+                  onChange={(e) => setApiKey(e.target.value)}
+                  placeholder="samsara_api_…"
+                  className="pr-10 font-mono text-sm"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowKey((v) => !v)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                >
+                  {showKey ? (
+                    <svg viewBox="0 0 24 24" className="h-4 w-4 fill-none stroke-current stroke-2">
+                      <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
+                      <line x1="1" y1="1" x2="23" y2="23" />
+                    </svg>
+                  ) : (
+                    <svg viewBox="0 0 24 24" className="h-4 w-4 fill-none stroke-current stroke-2">
+                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                      <circle cx="12" cy="12" r="3" />
+                    </svg>
+                  )}
+                </button>
+              </div>
+              <Button
+                size="sm"
+                disabled={saving}
+                onClick={handleSaveKey}
+                className="shrink-0"
+              >
+                {keySaved ? "Saved ✓" : saving ? "Saving…" : "Save"}
+              </Button>
+            </div>
+            <p className="text-xs text-slate-400">
+              Generate a read-only API key in your Samsara dashboard under Settings → API Tokens.
+            </p>
+          </div>
+
+          {/* Vehicle matching note */}
+          <div className="rounded-lg bg-slate-50 px-4 py-3 text-sm text-slate-600">
+            <p className="font-medium text-slate-700">How vehicle matching works</p>
+            <p className="mt-1 text-xs text-slate-500">
+              Samsara vehicles are matched to TwinsOS vehicles by <strong>Samsara Vehicle ID</strong> first,
+              then by <strong>exact name</strong>. Set the Samsara Vehicle ID on a vehicle&apos;s detail page
+              for the most reliable match. A reading is only written if the new odometer value is greater
+              than the current value (odometers don&apos;t go backwards).
+            </p>
+          </div>
+
+          {/* Last sync status */}
+          {lastSync && (
+            <div className="text-xs text-slate-500">
+              Last synced: {new Date(lastSync).toLocaleString()}
+              {lastStatus && (
+                <span className={cn(
+                  "ml-2 font-medium",
+                  lastStatus === "ok"      && "text-green-600",
+                  lastStatus === "partial" && "text-amber-600",
+                  lastStatus === "error"   && "text-red-600",
+                )}>
+                  ({lastStatus})
+                </span>
+              )}
+            </div>
+          )}
+
+          {/* Manual sync */}
+          <div className="flex items-center gap-3 border-t pt-4">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={syncing || !remoteSettings?.samsaraApiKey}
+              onClick={handleManualSync}
+            >
+              {syncing ? (
+                <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Syncing…</>
+              ) : (
+                "Sync Now"
+              )}
+            </Button>
+            {syncResult && (
+              <p className={cn(
+                "text-xs",
+                syncResult.startsWith("Error") ? "text-red-600" : "text-green-700"
+              )}>
+                {syncResult}
+              </p>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 // ── Main SettingsPage component ───────────────────────────────────────────────
@@ -1517,6 +1711,7 @@ export default function SettingsPage() {
     "costing",
     "import_export",
     "notifications",
+    "integrations",
   ] as const;
 
   // Suppress unused import warning for COST_METHOD_LABELS — it is used by CostingTab
@@ -1573,6 +1768,10 @@ export default function SettingsPage() {
 
           <TabsContent value="notifications" className="mt-0">
             <NotificationsPage hideHeader />
+          </TabsContent>
+
+          <TabsContent value="integrations" className="mt-0">
+            <IntegrationsTab />
           </TabsContent>
         </div>
       </Tabs>
