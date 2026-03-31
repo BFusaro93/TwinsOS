@@ -379,7 +379,7 @@ export function AssetListPage() {
             <EmptyState
               icon={HardHat}
               title="Select an asset"
-              description="Choose an asset from the list to view its details, filter part numbers, and maintenance history."
+              description="Choose an asset from the list to view its details, associated parts, meters and maintenance history."
             />
           }
           hasSelection={!!selectedAsset}

@@ -749,7 +749,7 @@ export function VehicleListPage() {
             <EmptyState
               icon={Truck}
               title="Select a vehicle"
-              description="Choose a vehicle from the list to view its details, VIN, Samsara integration, and history."
+              description="Choose a vehicle from the list to view its details, VIN, associated parts, meters and maintenance history."
             />
           }
           hasSelection={!!selectedVehicle}
