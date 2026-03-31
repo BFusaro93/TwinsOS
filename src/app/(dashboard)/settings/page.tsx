@@ -49,6 +49,7 @@ import { useSettingsStore } from "@/stores/settings-store";
 import type { FieldRequirement } from "@/stores/settings-store";
 import { COST_METHOD_LABELS, type CostMethod } from "@/lib/cost-methods";
 import { useOrgSettings, useUpdateOrgSettings } from "@/lib/hooks/use-org-settings";
+import { useIntegration, useUpsertIntegration } from "@/lib/hooks/use-integrations";
 import { useWorkOrders, useBulkImportWorkOrders } from "@/lib/hooks/use-work-orders";
 import { useAssets, useBulkImportAssets } from "@/lib/hooks/use-assets";
 import { useVehicles, useBulkImportVehicles } from "@/lib/hooks/use-vehicles";
@@ -1511,26 +1512,26 @@ function tabLabel(tab: string): string {
 // ── IntegrationsTab ───────────────────────────────────────────────────────────
 
 function IntegrationsTab() {
-  const { data: remoteSettings, refetch } = useOrgSettings();
-  const { mutate: updateOrgSettings, isPending: saving } = useUpdateOrgSettings();
+  const { data: samsara, refetch } = useIntegration("samsara");
+  const { mutate: upsertIntegration, isPending: saving } = useUpsertIntegration();
 
-  const [apiKey, setApiKey]       = useState("");
-  const [showKey, setShowKey]     = useState(false);
-  const [syncing, setSyncing]     = useState(false);
+  const [apiKey, setApiKey]         = useState("");
+  const [showKey, setShowKey]       = useState(false);
+  const [syncing, setSyncing]       = useState(false);
   const [syncResult, setSyncResult] = useState<string | null>(null);
-  const [keySaved, setKeySaved]   = useState(false);
+  const [keySaved, setKeySaved]     = useState(false);
 
   // Seed the field once remote data loads
   const seeded = useRef(false);
   useEffect(() => {
-    if (!remoteSettings || seeded.current) return;
+    if (samsara === undefined || seeded.current) return;
     seeded.current = true;
-    setApiKey(remoteSettings.samsaraApiKey ?? "");
-  }, [remoteSettings]);
+    setApiKey(samsara?.apiKey ?? "");
+  }, [samsara]);
 
   function handleSaveKey() {
-    updateOrgSettings(
-      { samsaraApiKey: apiKey.trim() || null },
+    upsertIntegration(
+      { provider: "samsara", apiKey: apiKey.trim() || null },
       {
         onSuccess: () => {
           setKeySaved(true);
@@ -1566,8 +1567,8 @@ function IntegrationsTab() {
     }
   }
 
-  const lastSync   = remoteSettings?.lastSamsaraSyncAt;
-  const lastStatus = remoteSettings?.lastSamsaraSyncStatus;
+  const lastSync   = samsara?.lastSyncAt;
+  const lastStatus = samsara?.lastSyncStatus;
 
   return (
     <div className="max-w-2xl space-y-8">
@@ -1675,7 +1676,7 @@ function IntegrationsTab() {
             <Button
               variant="outline"
               size="sm"
-              disabled={syncing || !remoteSettings?.samsaraApiKey}
+              disabled={syncing || !samsara?.apiKey}
               onClick={handleManualSync}
             >
               {syncing ? (

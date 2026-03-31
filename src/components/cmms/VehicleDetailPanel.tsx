@@ -329,6 +329,7 @@ function DetailsTab({ vehicle, status }: { vehicle: Vehicle; status: AssetStatus
           <MetaRow label="Fuel Type" value={vehicle.fuelType} />
           <MetaRow label="License Plate" value={vehicle.licensePlate} />
           <MetaRow label="VIN" value={vehicle.vin ? <span className="font-mono text-xs">{vehicle.vin}</span> : null} />
+          <MetaRow label="Samsara ID" value={vehicle.samsaraVehicleId ? <span className="font-mono text-xs">{vehicle.samsaraVehicleId}</span> : null} />
         </dl>
       </div>
 

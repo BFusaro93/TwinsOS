@@ -54,6 +54,7 @@ export function NewVehicleDialog({ open, onOpenChange, initialData }: NewVehicle
   // Vehicle Info
   const [licensePlate, setLicensePlate] = useState("");
   const [vin, setVin] = useState("");
+  const [samsaraVehicleId, setSamsaraVehicleId] = useState("");
   const [fuelType, setFuelType] = useState("none");
 
   // Equipment Details
@@ -117,6 +118,7 @@ export function NewVehicleDialog({ open, onOpenChange, initialData }: NewVehicle
       setNotes(initialData.notes ?? "");
       setLicensePlate(initialData.licensePlate ?? "");
       setVin(initialData.vin ?? "");
+      setSamsaraVehicleId(initialData.samsaraVehicleId ?? "");
       setFuelType(initialData.fuelType ?? "none");
       setNextOilChangeDue(initialData.nextOilChangeDue ?? "");
       setNextOilChangeMileage(initialData.nextOilChangeMileage != null ? String(initialData.nextOilChangeMileage) : "");
@@ -209,7 +211,7 @@ export function NewVehicleDialog({ open, onOpenChange, initialData }: NewVehicle
       notes: notes || null,
       licensePlate: licensePlate || null,
       vin: vin || null,
-      samsaraVehicleId: null,
+      samsaraVehicleId: samsaraVehicleId.trim() || null,
       fuelType: fuelType !== "none" ? fuelType : null,
       nextOilChangeDue: nextOilChangeDue || null,
       nextOilChangeMileage: nextOilChangeMileage ? parseInt(nextOilChangeMileage) : null,
@@ -368,6 +370,25 @@ export function NewVehicleDialog({ open, onOpenChange, initialData }: NewVehicle
                   </SelectContent>
                 </Select>
               </div>
+            </div>
+
+            {/* Integrations */}
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+              Integrations
+            </p>
+            <div className="grid gap-1.5">
+              <Label htmlFor="samsara-vehicle-id">Samsara Vehicle ID</Label>
+              <Input
+                id="samsara-vehicle-id"
+                value={samsaraVehicleId}
+                onChange={(e) => setSamsaraVehicleId(e.target.value)}
+                placeholder="e.g. 281474978122443"
+                className="font-mono text-sm"
+              />
+              <p className="text-xs text-slate-400">
+                Found in Samsara under Fleet → Vehicles → select vehicle → ID in the URL.
+                Used for reliable odometer sync matching.
+              </p>
             </div>
 
             {/* Service Reminders */}

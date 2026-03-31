@@ -120,6 +120,7 @@ export function useUpdateVehicle() {
         ...(input.paymentMethod !== undefined && { payment_method: input.paymentMethod }),
         ...(input.photoUrl !== undefined && { photo_url: input.photoUrl }),
         ...(input.barcode !== undefined && { barcode: input.barcode }),
+        ...(input.samsaraVehicleId !== undefined && { samsara_vehicle_id: input.samsaraVehicleId }),
       }).eq("id", id).select().single();
       if (error) throw error;
       return mapVehicle(data);

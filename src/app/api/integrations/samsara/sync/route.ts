@@ -59,41 +59,43 @@ export async function POST(request: Request) {
 
   // ── Determine which orgs to sync ──────────────────────────────────────────
 
-  let orgsQuery = adminClient
-    .from("organizations")
-    .select("id, samsara_api_key")
-    .not("samsara_api_key", "is", null)
-    .neq("samsara_api_key", "");
+  let integrationsQuery = adminClient
+    .from("integrations")
+    .select("id, org_id, api_key")
+    .eq("provider", "samsara")
+    .eq("enabled", true)
+    .not("api_key", "is", null)
+    .neq("api_key", "");
 
   if (callerOrgId) {
     // Manual trigger — only sync the caller's org.
-    orgsQuery = orgsQuery.eq("id", callerOrgId);
+    integrationsQuery = integrationsQuery.eq("org_id", callerOrgId);
   }
 
-  const { data: orgs, error: orgsErr } = await orgsQuery;
-  if (orgsErr) {
-    return NextResponse.json({ error: orgsErr.message }, { status: 500 });
+  const { data: integrations, error: integrationsErr } = await integrationsQuery;
+  if (integrationsErr) {
+    return NextResponse.json({ error: integrationsErr.message }, { status: 500 });
   }
-  if (!orgs || orgs.length === 0) {
-    return NextResponse.json({ message: "No orgs with Samsara API key configured." });
+  if (!integrations || integrations.length === 0) {
+    return NextResponse.json({ message: "No orgs with Samsara integration configured." });
   }
 
   const results: Record<string, unknown>[] = [];
 
-  for (const org of orgs) {
-    const orgResult = await syncOrg(adminClient, org.id, org.samsara_api_key as string);
-    results.push({ orgId: org.id, ...orgResult });
+  for (const integration of integrations) {
+    const orgResult = await syncOrg(adminClient, integration.org_id as string, integration.api_key as string);
+    results.push({ orgId: integration.org_id, ...orgResult });
 
-    // Record sync timestamp and status on the org.
+    // Record sync timestamp and status on the integration row.
     await adminClient
-      .from("organizations")
+      .from("integrations")
       .update({
-        last_samsara_sync_at: new Date().toISOString(),
-        last_samsara_sync_status: orgResult.errors > 0
+        last_sync_at: new Date().toISOString(),
+        last_sync_status: orgResult.errors > 0
           ? (orgResult.matched > 0 ? "partial" : "error")
           : "ok",
       })
-      .eq("id", org.id);
+      .eq("id", integration.id);
   }
 
   return NextResponse.json({ synced: results });

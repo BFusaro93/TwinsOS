@@ -7,28 +7,33 @@ export type Json =
   | Json[]
 
 export type Database = {
-  // Allows to automatically instantiate createClient with right options
-  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
-  __InternalSupabase: {
-    PostgrestVersion: "14.4"
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
   }
   public: {
     Tables: {
-      app_config: {
-        Row: {
-          key: string
-          value: string
-        }
-        Insert: {
-          key: string
-          value: string
-        }
-        Update: {
-          key?: string
-          value?: string
-        }
-        Relationships: []
-      }
       approval_flow_steps: {
         Row: {
           assigned_user_id: string | null
@@ -201,6 +206,53 @@ export type Database = {
           },
         ]
       }
+      integrations: {
+        Row: {
+          api_key: string | null
+          config: Json
+          created_at: string
+          enabled: boolean
+          id: string
+          last_sync_at: string | null
+          last_sync_status: string | null
+          org_id: string
+          provider: string
+          updated_at: string
+        }
+        Insert: {
+          api_key?: string | null
+          config?: Json
+          created_at?: string
+          enabled?: boolean
+          id?: string
+          last_sync_at?: string | null
+          last_sync_status?: string | null
+          org_id: string
+          provider: string
+          updated_at?: string
+        }
+        Update: {
+          api_key?: string | null
+          config?: Json
+          created_at?: string
+          enabled?: boolean
+          id?: string
+          last_sync_at?: string | null
+          last_sync_status?: string | null
+          org_id?: string
+          provider?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "integrations_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       asset_parts: {
         Row: {
           asset_id: string
@@ -239,6 +291,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "asset_parts_asset_id_fkey"
+            columns: ["asset_id"]
+            isOneToOne: false
+            referencedRelation: "assets"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "asset_parts_created_by_fkey"
             columns: ["created_by"]
@@ -961,6 +1020,13 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "meters_asset_id_fkey"
+            columns: ["asset_id"]
+            isOneToOne: false
+            referencedRelation: "assets"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "meters_created_by_fkey"
             columns: ["created_by"]
             isOneToOne: false
@@ -978,45 +1044,30 @@ export type Database = {
       }
       organizations: {
         Row: {
-          address: Json
-          brand_color: string
-          cost_method: string
           created_at: string
           customizations: Json
           id: string
           name: string
           plan: string
-          portal_enabled: boolean
           slug: string
-          tax_rate_percent: number
           updated_at: string
         }
         Insert: {
-          address?: Json
-          brand_color?: string
-          cost_method?: string
           created_at?: string
           customizations?: Json
           id?: string
           name: string
           plan?: string
-          portal_enabled?: boolean
           slug: string
-          tax_rate_percent?: number
           updated_at?: string
         }
         Update: {
-          address?: Json
-          brand_color?: string
-          cost_method?: string
           created_at?: string
           customizations?: Json
           id?: string
           name?: string
           plan?: string
-          portal_enabled?: boolean
           slug?: string
-          tax_rate_percent?: number
           updated_at?: string
         }
         Relationships: []
@@ -1180,6 +1231,13 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "pm_schedules_asset_id_fkey"
+            columns: ["asset_id"]
+            isOneToOne: false
+            referencedRelation: "assets"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "pm_schedules_created_by_fkey"
             columns: ["created_by"]
             isOneToOne: false
@@ -1283,10 +1341,8 @@ export type Database = {
           description: string
           id: string
           is_inventory: boolean
-          minimum_stock: number
           name: string
           org_id: string
-          part_category: string | null
           part_number: string
           picture_url: string | null
           price: number
@@ -1306,10 +1362,8 @@ export type Database = {
           description?: string
           id?: string
           is_inventory?: boolean
-          minimum_stock?: number
           name: string
           org_id?: string
-          part_category?: string | null
           part_number?: string
           picture_url?: string | null
           price?: number
@@ -1329,10 +1383,8 @@ export type Database = {
           description?: string
           id?: string
           is_inventory?: boolean
-          minimum_stock?: number
           name?: string
           org_id?: string
-          part_category?: string | null
           part_number?: string
           picture_url?: string | null
           price?: number
@@ -1373,10 +1425,8 @@ export type Database = {
           email: string
           id: string
           name: string
-          notification_prefs: Json
           org_id: string
           role: string
-          status: string
           updated_at: string
         }
         Insert: {
@@ -1385,10 +1435,8 @@ export type Database = {
           email: string
           id: string
           name: string
-          notification_prefs?: Json
           org_id: string
           role?: string
-          status?: string
           updated_at?: string
         }
         Update: {
@@ -1397,10 +1445,8 @@ export type Database = {
           email?: string
           id?: string
           name?: string
-          notification_prefs?: Json
           org_id?: string
           role?: string
-          status?: string
           updated_at?: string
         }
         Relationships: [
@@ -1780,7 +1826,6 @@ export type Database = {
       }
       vehicles: {
         Row: {
-          air_filter_part_number: string | null
           asset_tag: string
           asset_type: string
           assigned_crew: string | null
@@ -1789,7 +1834,6 @@ export type Database = {
           created_by: string | null
           deleted_at: string | null
           division: string | null
-          engine_model: string | null
           engine_serial_number: string | null
           equipment_number: string | null
           finance_institution: string | null
@@ -1798,14 +1842,12 @@ export type Database = {
           license_plate: string | null
           location: string | null
           make: string | null
-          manufacturer: string | null
           model: string | null
           name: string
           next_inspection_sticker_due: string | null
           next_oil_change_due: string | null
           next_oil_change_mileage: number | null
           notes: string | null
-          oil_filter_part_number: string | null
           org_id: string
           payment_method: string | null
           photo_url: string | null
@@ -1815,14 +1857,12 @@ export type Database = {
           purchase_vendor_name: string | null
           samsara_vehicle_id: string | null
           serial_number: string | null
-          spark_plug_part_number: string | null
           status: string
           updated_at: string
           vin: string | null
           year: number | null
         }
         Insert: {
-          air_filter_part_number?: string | null
           asset_tag?: string
           asset_type?: string
           assigned_crew?: string | null
@@ -1831,7 +1871,6 @@ export type Database = {
           created_by?: string | null
           deleted_at?: string | null
           division?: string | null
-          engine_model?: string | null
           engine_serial_number?: string | null
           equipment_number?: string | null
           finance_institution?: string | null
@@ -1840,14 +1879,12 @@ export type Database = {
           license_plate?: string | null
           location?: string | null
           make?: string | null
-          manufacturer?: string | null
           model?: string | null
           name: string
           next_inspection_sticker_due?: string | null
           next_oil_change_due?: string | null
           next_oil_change_mileage?: number | null
           notes?: string | null
-          oil_filter_part_number?: string | null
           org_id?: string
           payment_method?: string | null
           photo_url?: string | null
@@ -1857,14 +1894,12 @@ export type Database = {
           purchase_vendor_name?: string | null
           samsara_vehicle_id?: string | null
           serial_number?: string | null
-          spark_plug_part_number?: string | null
           status?: string
           updated_at?: string
           vin?: string | null
           year?: number | null
         }
         Update: {
-          air_filter_part_number?: string | null
           asset_tag?: string
           asset_type?: string
           assigned_crew?: string | null
@@ -1873,7 +1908,6 @@ export type Database = {
           created_by?: string | null
           deleted_at?: string | null
           division?: string | null
-          engine_model?: string | null
           engine_serial_number?: string | null
           equipment_number?: string | null
           finance_institution?: string | null
@@ -1882,14 +1916,12 @@ export type Database = {
           license_plate?: string | null
           location?: string | null
           make?: string | null
-          manufacturer?: string | null
           model?: string | null
           name?: string
           next_inspection_sticker_due?: string | null
           next_oil_change_due?: string | null
           next_oil_change_mileage?: number | null
           notes?: string | null
-          oil_filter_part_number?: string | null
           org_id?: string
           payment_method?: string | null
           photo_url?: string | null
@@ -1899,7 +1931,6 @@ export type Database = {
           purchase_vendor_name?: string | null
           samsara_vehicle_id?: string | null
           serial_number?: string | null
-          spark_plug_part_number?: string | null
           status?: string
           updated_at?: string
           vin?: string | null
@@ -2221,10 +2252,7 @@ export type Database = {
           asset_id: string | null
           asset_name: string | null
           assigned_to_id: string | null
-          assigned_to_ids: Json
           assigned_to_name: string | null
-          assigned_to_names: Json
-          categories: Json
           category: string | null
           created_at: string
           created_by: string | null
@@ -2249,10 +2277,7 @@ export type Database = {
           asset_id?: string | null
           asset_name?: string | null
           assigned_to_id?: string | null
-          assigned_to_ids?: Json
           assigned_to_name?: string | null
-          assigned_to_names?: Json
-          categories?: Json
           category?: string | null
           created_at?: string
           created_by?: string | null
@@ -2277,10 +2302,7 @@ export type Database = {
           asset_id?: string | null
           asset_name?: string | null
           assigned_to_id?: string | null
-          assigned_to_ids?: Json
           assigned_to_name?: string | null
-          assigned_to_names?: Json
-          categories?: Json
           category?: string | null
           created_at?: string
           created_by?: string | null
@@ -2346,14 +2368,14 @@ export type Database = {
     Functions: {
       insert_audit_entry: {
         Args: {
+          p_org_id: string
+          p_record_type: string
+          p_record_id: string
           p_action: string
           p_description: string
-          p_field_changed?: string
-          p_new_value?: string
-          p_old_value?: string
-          p_org_id: string
-          p_record_id: string
-          p_record_type: string
+          p_field_changed?: string | null
+          p_old_value?: string | null
+          p_new_value?: string | null
         }
         Returns: undefined
       }
@@ -2486,7 +2508,11 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {},
   },
 } as const
+
