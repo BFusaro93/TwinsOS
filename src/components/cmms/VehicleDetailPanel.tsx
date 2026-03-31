@@ -23,6 +23,7 @@ import { WOHistoryTab } from "@/components/shared/WOHistoryTab";
 import { AssetMetersTab } from "@/components/shared/AssetMetersTab";
 import { useSettingsStore } from "@/stores/settings-store";
 import { useUpdateVehicle, useUpdateVehicleStatus } from "@/lib/hooks/use-vehicles";
+import { useMeters } from "@/lib/hooks/use-meters";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { NewVehicleDialog } from "@/components/cmms/NewVehicleDialog";
@@ -45,15 +46,33 @@ function MetaRow({ label, value }: { label: string; value: React.ReactNode }) {
 
 type ReminderStatus = "overdue" | "due-soon" | "ok" | "unset";
 
-function getReminderStatus(dateStr: string | null): ReminderStatus {
-  if (!dateStr) return "unset";
+function getReminderStatus(
+  dateStr: string | null,
+  dueMileage?: number | null,
+  currentMiles?: number | null,
+): ReminderStatus {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const due = new Date(dateStr);
-  const diffDays = Math.floor((due.getTime() - today.getTime()) / 86400000);
-  if (diffDays < 0) return "overdue";
-  if (diffDays <= 30) return "due-soon";
-  return "ok";
+
+  const dateStatus: ReminderStatus = (() => {
+    if (!dateStr) return "unset";
+    const diffDays = Math.floor((new Date(dateStr).getTime() - today.getTime()) / 86400000);
+    if (diffDays < 0) return "overdue";
+    if (diffDays <= 30) return "due-soon";
+    return "ok";
+  })();
+
+  const mileStatus: ReminderStatus = (() => {
+    if (dueMileage == null || currentMiles == null) return "unset";
+    const remaining = dueMileage - currentMiles;
+    if (remaining <= 0)   return "overdue";
+    if (remaining <= 500) return "due-soon";
+    return "ok";
+  })();
+
+  // Worst-case wins: overdue > due-soon > ok > unset
+  const rank: Record<ReminderStatus, number> = { overdue: 3, "due-soon": 2, ok: 1, unset: 0 };
+  return rank[dateStatus] >= rank[mileStatus] ? dateStatus : mileStatus;
 }
 
 function daysUntil(dateStr: string): string {
@@ -73,15 +92,17 @@ interface ServiceReminderCardProps {
   dateStr: string | null;
   /** When provided (even if null), the card shows a mileage row and mileage reset input */
   mileage?: number | null;
+  /** Current odometer reading from meters — used to color the mileage row */
+  currentMiles?: number | null;
   onReset: (newDate: string | null, newMileage: number | null) => void;
 }
 
-function ServiceReminderCard({ icon, label, dateStr, mileage, onReset }: ServiceReminderCardProps) {
+function ServiceReminderCard({ icon, label, dateStr, mileage, currentMiles, onReset }: ServiceReminderCardProps) {
   const [resetting, setResetting] = useState(false);
   const [newDate, setNewDate] = useState("");
   const [newMileage, setNewMileage] = useState("");
   const hasMileage = mileage !== undefined; // tracks whether this card supports mileage at all
-  const status = getReminderStatus(dateStr);
+  const status = getReminderStatus(dateStr, mileage, currentMiles);
 
   const colors: Record<ReminderStatus, string> = {
     overdue:    "border-red-200 bg-red-50",
@@ -147,8 +168,27 @@ function ServiceReminderCard({ icon, label, dateStr, mileage, onReset }: Service
             {hasMileage && mileage != null && (
               <div className="flex items-center gap-2">
                 <span className="w-14 text-xs text-slate-400">By mileage:</span>
-                <span className="text-xs font-medium text-slate-700">
+                <span className={cn("text-xs font-medium", (() => {
+                  if (currentMiles == null) return "text-slate-700";
+                  const remaining = mileage - currentMiles;
+                  if (remaining <= 0)   return textColors["overdue"];
+                  if (remaining <= 500) return textColors["due-soon"];
+                  return textColors["ok"];
+                })())}>
+                  <span className={cn("mr-1 inline-block h-1.5 w-1.5 rounded-full align-middle", (() => {
+                    if (currentMiles == null) return "bg-slate-300";
+                    const remaining = mileage - currentMiles;
+                    if (remaining <= 0)   return dotColors["overdue"];
+                    if (remaining <= 500) return dotColors["due-soon"];
+                    return dotColors["ok"];
+                  })())} />
                   {mileage.toLocaleString()} mi
+                  {currentMiles != null && (() => {
+                    const remaining = mileage - currentMiles;
+                    if (remaining <= 0)   return <span className="ml-1 font-normal opacity-75">({Math.abs(remaining).toLocaleString()} mi overdue)</span>;
+                    if (remaining <= 500) return <span className="ml-1 font-normal opacity-75">({remaining.toLocaleString()} mi away)</span>;
+                    return null;
+                  })()}
                 </span>
               </div>
             )}
@@ -236,6 +276,15 @@ function DetailsTab({ vehicle, status }: { vehicle: Vehicle; status: AssetStatus
   const { filterFields } = useSettingsStore();
   const enabledFilters = filterFields.filter((f) => f.enabled);
   const { mutate: updateVehicle } = useUpdateVehicle();
+  const { data: meters } = useMeters();
+
+  // Current odometer: highest-value miles/mi meter for this vehicle
+  const currentMiles = (meters ?? [])
+    .filter((m) =>
+      m.assetId === vehicle.id &&
+      (m.unit?.toLowerCase() === "miles" || m.unit?.toLowerCase() === "mi")
+    )
+    .reduce<number | null>((best, m) => (best == null || m.currentValue > best ? m.currentValue : best), null);
 
   function saveNotes() {
     updateVehicle(
@@ -262,6 +311,7 @@ function DetailsTab({ vehicle, status }: { vehicle: Vehicle; status: AssetStatus
             label="Oil Change"
             dateStr={oilChangeDue}
             mileage={oilChangeMileage}
+            currentMiles={currentMiles}
             onReset={(newDate, newMileage) => {
               setOilChangeDue(newDate);
               setOilChangeMileage(newMileage);
