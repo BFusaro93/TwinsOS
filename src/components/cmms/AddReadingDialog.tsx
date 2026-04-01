@@ -23,7 +23,14 @@ interface AddReadingDialogProps {
 }
 
 function todayISODate(): string {
-  return new Date().toISOString().split("T")[0];
+  // Use local date components (not UTC) so the default date matches the user's
+  // calendar day — new Date().toISOString() returns UTC which rolls to the next
+  // day in US timezones after ~7–8pm ET.
+  const d = new Date();
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
 }
 
 export function AddReadingDialog({ open, onOpenChange, meter }: AddReadingDialogProps) {
