@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { cn, formatDate, getInitials } from "@/lib/utils";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { RecordDetailTabs } from "@/components/shared/RecordDetailTabs";
@@ -183,6 +183,12 @@ function DetailsTab({
   const [completing, setCompleting] = useState(false);
   const [newEntityStatus, setNewEntityStatus] = useState<AssetStatus | "no_change">("no_change");
   const [entityStatus, setEntityStatus] = useState<AssetStatus>(initialEntityStatus ?? "active");
+
+  // Sync entityStatus when the linked asset/vehicle status changes in the cache
+  // (e.g. updated from this same panel or from the vehicle/asset detail panel).
+  useEffect(() => {
+    if (initialEntityStatus) setEntityStatus(initialEntityStatus);
+  }, [initialEntityStatus]);
 
   const { mutate: updateAssetStatus } = useUpdateAssetStatus();
   const { mutate: updateVehicleStatus } = useUpdateVehicleStatus();
