@@ -892,6 +892,7 @@ export type Database = {
         Row: {
           asset_id: string | null
           asset_name: string | null
+          automation_id: string | null
           created_at: string
           created_by: string | null
           deleted_at: string | null
@@ -911,6 +912,7 @@ export type Database = {
         Insert: {
           asset_id?: string | null
           asset_name?: string | null
+          automation_id?: string | null
           created_at?: string
           created_by?: string | null
           deleted_at?: string | null
@@ -930,6 +932,7 @@ export type Database = {
         Update: {
           asset_id?: string | null
           asset_name?: string | null
+          automation_id?: string | null
           created_at?: string
           created_by?: string | null
           deleted_at?: string | null

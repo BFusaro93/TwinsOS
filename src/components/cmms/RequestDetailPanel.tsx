@@ -225,7 +225,7 @@ export function RequestDetailPanel({ request }: RequestDetailPanelProps) {
         pmScheduleId: null,
         isRecurring: false,
         recurrenceFrequency: null,
-        automationId: null,
+        automationId: request.automationId,
       },
       {
         onSuccess: (wo) => {

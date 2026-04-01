@@ -200,4 +200,6 @@ export interface MaintenanceRequest extends BaseRecord {
   requestedByName: string;
   linkedWorkOrderId: string | null;
   linkedWorkOrderNumber: string | null;
+  /** Set when this request was created by an automation rule. Passed to the converted WO to enable threshold advancement on completion. */
+  automationId: string | null;
 }
