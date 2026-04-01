@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import {
   Bell,
@@ -70,7 +70,29 @@ export function NotificationsBell() {
   const { data: requisitions = [] } = useRequisitions();
 
   const [open, setOpen] = useState(false);
-  const [readIds, setReadIds] = useState<Set<string>>(new Set());
+
+  // Persist read notification IDs to localStorage so they survive page refreshes.
+  const [readIds, setReadIdsState] = useState<Set<string>>(() => {
+    if (typeof window === "undefined") return new Set();
+    try {
+      const stored = localStorage.getItem("notif_read_ids");
+      return stored ? new Set<string>(JSON.parse(stored) as string[]) : new Set();
+    } catch {
+      return new Set();
+    }
+  });
+
+  const setReadIds = useCallback((updater: Set<string> | ((prev: Set<string>) => Set<string>)) => {
+    setReadIdsState((prev) => {
+      const next = typeof updater === "function" ? updater(prev) : updater;
+      try {
+        localStorage.setItem("notif_read_ids", JSON.stringify([...next]));
+      } catch {
+        // storage quota exceeded — non-fatal
+      }
+      return next;
+    });
+  }, []);
 
   // Derive notifications from live data
   const notifications = useMemo<AppNotification[]>(() => {
@@ -182,6 +204,20 @@ export function NotificationsBell() {
   function markAllRead() {
     setReadIds(new Set(notifications.map((n) => n.id)));
   }
+
+  // Prune stale IDs monthly to keep localStorage clean (notifications naturally
+  // disappear when their underlying data resolves, but IDs could accumulate).
+  useEffect(() => {
+    const PRUNE_KEY = "notif_pruned_at";
+    const lastPruned = localStorage.getItem(PRUNE_KEY);
+    const monthAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
+    if (!lastPruned || Number(lastPruned) < monthAgo) {
+      const activeIds = new Set(notifications.map((n) => n.id));
+      setReadIds((prev) => new Set([...prev].filter((id) => activeIds.has(id))));
+      localStorage.setItem(PRUNE_KEY, String(Date.now()));
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function handleNotifClick(notif: AppNotification) {
     setReadIds((prev) => new Set([...prev, notif.id]));

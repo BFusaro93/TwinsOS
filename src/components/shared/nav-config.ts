@@ -19,6 +19,7 @@ import {
   Settings,
   HelpCircle,
   Library,
+  ClipboardCheck,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -54,7 +55,7 @@ export const NAV_SECTIONS: NavSection[] = [
   {
     label: "Maintenance",
     items: [
-      { label: "Work Orders", href: "/cmms/work-orders", icon: Wrench },
+      { label: "Work Orders", href: "/cmms/work-orders", icon: ClipboardCheck },
       { label: "Requests", href: "/cmms/requests", icon: Bell },
       { label: "PM Schedules", href: "/cmms/pm-schedules", icon: CalendarClock },
       { label: "Vehicles", href: "/cmms/vehicles", icon: Truck },
