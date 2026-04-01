@@ -48,7 +48,7 @@ export function useAddMeterReading() {
       fetch("/api/automations/run", { method: "POST" })
         .then(() => {
           queryClient.invalidateQueries({ queryKey: ["work-orders"] });
-          queryClient.invalidateQueries({ queryKey: ["maintenance-requests"] });
+          queryClient.invalidateQueries({ queryKey: ["requests"] });
           queryClient.invalidateQueries({ queryKey: ["automations"] });
         })
         .catch(() => {});
