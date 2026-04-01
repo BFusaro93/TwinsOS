@@ -119,13 +119,7 @@ export async function POST(request: Request) {
 
     if (auto.action_type === "create_work_order") {
       // ── Create Work Order directly ──────────────────────────────────────────
-      const { count } = await (adminClient as AdminClient)
-        .from("work_orders")
-        .select("id", { count: "exact", head: true })
-        .eq("org_id", orgId);
-
-      const woCount = (count ?? 0) + 1;
-      const workOrderNumber = `WO${String(woCount).padStart(5, "0")}`;
+      const workOrderNumber = `WO-${new Date().getFullYear()}-${Date.now().toString().slice(-6)}`;
 
       const { data: wo, error: woErr } = await (adminClient as AdminClient)
         .from("work_orders")

@@ -137,7 +137,16 @@ export function useUpdateAssetStatus() {
       const { error } = await supabase.from("assets").update({ status }).eq("id", id);
       if (error) throw error;
     },
-    onSuccess: (_, { id }) => {
+    onMutate: async ({ id, status }) => {
+      await queryClient.cancelQueries({ queryKey: ["assets"] });
+      const previous = queryClient.getQueryData<Asset[]>(["assets"]);
+      patchAssetCache(queryClient, id, { status });
+      return { previous };
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previous) queryClient.setQueryData<Asset[]>(["assets"], context.previous);
+    },
+    onSettled: (_, _err, { id }) => {
       queryClient.invalidateQueries({ queryKey: ["assets"] });
       queryClient.invalidateQueries({ queryKey: ["assets", id] });
     },

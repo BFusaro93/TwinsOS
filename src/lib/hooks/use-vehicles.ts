@@ -154,7 +154,16 @@ export function useUpdateVehicleStatus() {
       const { error } = await supabase.from("vehicles").update({ status }).eq("id", id);
       if (error) throw error;
     },
-    onSuccess: (_, { id }) => {
+    onMutate: async ({ id, status }) => {
+      await queryClient.cancelQueries({ queryKey: ["vehicles"] });
+      const previous = queryClient.getQueryData<Vehicle[]>(["vehicles"]);
+      patchVehicleCache(queryClient, id, { status });
+      return { previous };
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previous) queryClient.setQueryData<Vehicle[]>(["vehicles"], context.previous);
+    },
+    onSettled: (_, _err, { id }) => {
       queryClient.invalidateQueries({ queryKey: ["vehicles"] });
       queryClient.invalidateQueries({ queryKey: ["vehicles", id] });
     },
