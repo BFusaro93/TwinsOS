@@ -430,6 +430,7 @@ export function mapWorkOrder(row: WorkOrderRow): WorkOrder {
     pmScheduleId: row.pm_schedule_id,
     isRecurring: row.is_recurring,
     recurrenceFrequency: row.recurrence_frequency as WorkOrder["recurrenceFrequency"],
+    automationId: row.automation_id ?? null,
   };
 }
 

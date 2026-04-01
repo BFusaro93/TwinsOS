@@ -42,6 +42,8 @@ export interface WorkOrder extends BaseRecord {
    */
   isRecurring: boolean;
   recurrenceFrequency: "daily" | "weekly" | "biweekly" | "monthly" | "quarterly" | "yearly" | null;
+  /** Set when this WO was created by an automation rule. Used to advance the threshold on completion. */
+  automationId: string | null;
 }
 
 export type PaymentMethod = "outright" | "loan" | "lease" | "rental";

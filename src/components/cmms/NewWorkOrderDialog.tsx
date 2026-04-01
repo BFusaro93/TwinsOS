@@ -202,6 +202,7 @@ export function NewWorkOrderDialog({ open, onOpenChange, initialData }: NewWorkO
         : null,
       parentWorkOrderId: null,
       pmScheduleId: null,
+      automationId: null,
     };
     if (isEditing && initialData) {
       updateWO.mutate(

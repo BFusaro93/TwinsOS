@@ -19,7 +19,7 @@ import { NewWorkOrderDialog } from "./NewWorkOrderDialog";
 import { WO_STATUS_LABELS, WO_PRIORITY_LABELS, ASSET_STATUS_LABELS, ASSET_STATUS_COLORS } from "@/lib/constants";
 import { useAssets, useUpdateAssetStatus } from "@/lib/hooks/use-assets";
 import { useVehicles, useUpdateVehicleStatus } from "@/lib/hooks/use-vehicles";
-import { useWorkOrders, useUpdateWorkOrder, useDeleteWorkOrder } from "@/lib/hooks/use-work-orders";
+import { useWorkOrders, useUpdateWorkOrder, useUpdateWorkOrderStatus, useDeleteWorkOrder } from "@/lib/hooks/use-work-orders";
 import { useUsers } from "@/lib/hooks/use-users";
 import { useCMMSStore, useSettingsStore } from "@/stores";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -591,6 +591,7 @@ export function WorkOrderDetailPanel({ workOrder }: WorkOrderDetailPanelProps) {
   const { data: woParts = [] } = useWOParts(workOrder.id);
   const { woCategories } = useSettingsStore();
   const { mutate: updateWO } = useUpdateWorkOrder();
+  const { mutate: updateWOStatus } = useUpdateWorkOrderStatus();
   const linkedAsset =
     workOrder.assetId && workOrder.linkedEntityType !== "vehicle"
       ? (assets.find((a) => a.id === workOrder.assetId) ?? null)
@@ -680,7 +681,7 @@ export function WorkOrderDetailPanel({ workOrder }: WorkOrderDetailPanelProps) {
                 status={status}
                 onStatusChange={(s) => {
                   setStatus(s);
-                  updateWO({ id: workOrder.id, status: s });
+                  updateWOStatus({ id: workOrder.id, status: s, automationId: workOrder.automationId });
                 }}
                 onAssetClick={linkedAsset ? () => setAssetSheetOpen(true) : undefined}
                 onVehicleClick={linkedVehicle ? () => setVehicleSheetOpen(true) : undefined}

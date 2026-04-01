@@ -45,7 +45,13 @@ export function useAddMeterReading() {
       queryClient.invalidateQueries({ queryKey: ["meters"] });
       // Fire-and-forget: check if any automations should trigger for this org
       // now that the meter value has changed. Errors are non-fatal.
-      fetch("/api/automations/run", { method: "POST" }).catch(() => {});
+      fetch("/api/automations/run", { method: "POST" })
+        .then(() => {
+          queryClient.invalidateQueries({ queryKey: ["work-orders"] });
+          queryClient.invalidateQueries({ queryKey: ["maintenance-requests"] });
+          queryClient.invalidateQueries({ queryKey: ["automations"] });
+        })
+        .catch(() => {});
     },
   });
 }

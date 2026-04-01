@@ -100,9 +100,15 @@ export function useUpdateWorkOrderStatus() {
 
         if (auto && auto.trigger_type === "meter_threshold") {
           const tc = (auto.trigger_config ?? {}) as Record<string, unknown>;
-          if (tc.interval != null && auto.last_fired_value != null) {
-            const newThreshold =
-              (auto.last_fired_value as number) + (tc.interval as number);
+          const interval = tc.interval != null ? Number(tc.interval) : null;
+          // Use last_fired_value as the base; fall back to current threshold so
+          // the advancement is always correct even if last_fired_value was cleared.
+          const baseValue = auto.last_fired_value != null
+            ? Number(auto.last_fired_value)
+            : Number(tc.threshold ?? 0);
+
+          if (interval != null) {
+            const newThreshold = baseValue + interval;
             await supabase
               .from("automations")
               .update({
