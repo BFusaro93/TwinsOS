@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Check, ChevronDown, Droplets, FileCheck, RotateCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatCurrency, formatDate } from "@/lib/utils";
@@ -474,6 +474,12 @@ export function VehicleDetailPanel({ vehicle }: VehicleDetailPanelProps) {
   const [editOpen, setEditOpen] = useState(false);
   const [status, setStatus] = useState<AssetStatus>(vehicle.status as AssetStatus);
   const { mutate: updateVehicleStatus } = useUpdateVehicleStatus();
+
+  // Sync local status state when the vehicle prop updates (e.g. status changed
+  // from the Work Order detail panel and the cache invalidates).
+  useEffect(() => {
+    setStatus(vehicle.status as AssetStatus);
+  }, [vehicle.status]);
 
   function handleStatusChange(newStatus: AssetStatus) {
     setStatus(newStatus);

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Check, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatCurrency, formatDate } from "@/lib/utils";
@@ -239,6 +239,12 @@ export function AssetDetailPanel({ asset }: AssetDetailPanelProps) {
   const [editOpen, setEditOpen] = useState(false);
   const [status, setStatus] = useState<AssetStatus>(asset.status as AssetStatus);
   const { mutate: updateAssetStatus } = useUpdateAssetStatus();
+
+  // Sync local status state when the asset prop updates (e.g. status changed
+  // from the Work Order detail panel and the cache invalidates).
+  useEffect(() => {
+    setStatus(asset.status as AssetStatus);
+  }, [asset.status]);
 
   function handleStatusChange(newStatus: AssetStatus) {
     setStatus(newStatus);
