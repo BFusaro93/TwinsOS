@@ -18,6 +18,7 @@ import {
   BarChart3,
   Settings,
   HelpCircle,
+  Library,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -76,6 +77,7 @@ export const NAV_SECTIONS: NavSection[] = [
 { label: "Reports", href: "/settings/reports", icon: BarChart3 },
       { label: "Settings", href: "/settings", icon: Settings, exact: true },
       { label: "Support", href: "/settings/support", icon: HelpCircle },
+      { label: "Docs", href: "/docs", icon: Library },
     ],
   },
 ];
