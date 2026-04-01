@@ -7,6 +7,7 @@ import {
   ChevronDown,
   ChevronUp,
   ClipboardList,
+  ClipboardCheck,
   Cog,
   Copy,
   CreditCard,
@@ -1229,7 +1230,7 @@ function ImportExportTab() {
   }
 
   const EXPORT_TILES: { label: string; icon: React.ReactNode }[] = [
-    { label: "Work Orders",     icon: <ClipboardList className="h-6 w-6" /> },
+    { label: "Work Orders",     icon: <ClipboardCheck className="h-6 w-6" /> },
     { label: "Assets",          icon: <Cog className="h-6 w-6" /> },
     { label: "Vehicles",        icon: <Truck className="h-6 w-6" /> },
     { label: "Parts",           icon: <Cog className="h-6 w-6" /> },
