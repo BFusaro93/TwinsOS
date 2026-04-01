@@ -66,6 +66,7 @@ export function useCreateWorkOrder() {
         pm_schedule_id: input.pmScheduleId,
         is_recurring: input.isRecurring,
         recurrence_frequency: input.recurrenceFrequency,
+        automation_id: input.automationId ?? null,
       }).select().single();
       if (error) throw error;
       return mapWorkOrder(data);
