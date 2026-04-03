@@ -163,6 +163,9 @@ export function useUpdateWorkOrder() {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         ...(input.categories !== undefined && { categories: input.categories as any }),
         ...(input.woType !== undefined && { wo_type: input.woType }),
+        ...(input.assetId !== undefined && { asset_id: input.assetId }),
+        ...(input.assetName !== undefined && { asset_name: input.assetName }),
+        ...(input.linkedEntityType !== undefined && { linked_entity_type: input.linkedEntityType }),
       }).eq("id", id).select().single();
       if (error) throw error;
       return mapWorkOrder(data);

@@ -124,10 +124,10 @@ export function LineItemsTable({
                         <Package className="h-4 w-4 text-slate-400" />
                       </div>
                     )}
-                    {onProductClick ? (
+                    {onProductClick && li.productItemId ? (
                       <button
                         type="button"
-                        onClick={() => onProductClick(li.productItemId)}
+                        onClick={() => onProductClick(li.productItemId!)}
                         className="text-left font-medium text-brand-600 hover:underline"
                       >
                         {li.productItemName}

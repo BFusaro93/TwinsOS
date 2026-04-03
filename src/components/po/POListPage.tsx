@@ -24,7 +24,9 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
-import { usePurchaseOrders } from "@/lib/hooks/use-purchase-orders";
+import { usePurchaseOrders, useBulkImportPurchaseOrders } from "@/lib/hooks/use-purchase-orders";
+import { ImportExportMenu } from "@/components/shared/ImportExportMenu";
+import { exportCSV } from "@/lib/csv";
 import { usePOStore } from "@/stores";
 import { useSort } from "@/lib/hooks/use-sort";
 import { SortableTableHead } from "@/components/shared/SortableTableHead";
@@ -50,6 +52,7 @@ const PO_COLUMNS: ColumnDef[] = [
 
 export function POListPage() {
   const { data: orders, isLoading } = usePurchaseOrders();
+  const { mutateAsync: bulkImportPOs } = useBulkImportPurchaseOrders();
   const { selectedPOId, setSelectedPOId } = usePOStore();
   const [search, setSearch] = useState("");
   const [filterValues, setFilterValues] = useStickyState<Record<string, string | string[]>>("po-filters", {});
@@ -270,6 +273,60 @@ export function POListPage() {
                 <><Minimize2 className="h-3.5 w-3.5" />List view</>
               )}
             </Button>
+            <ImportExportMenu
+              entityLabel="Purchase Orders"
+              templateColumns={[
+                "Purchase Order #",
+                "Vendor",
+                "Line Type",
+                "Line Name",
+                "Part Number",
+                "Unit Cost",
+                "Ordered Quantity",
+              ]}
+              templateFilename="po-import-template.csv"
+              requiredColumns={["Purchase Order #", "Vendor"]}
+              onExport={() =>
+                exportCSV(
+                  (orders ?? []).flatMap((po) => {
+                    const lines = po.lineItems.map((li) => ({
+                      "Purchase Order #": po.poNumber,
+                      Vendor: po.vendorName ?? "",
+                      "Line Type": "PART",
+                      "Line Name": li.productItemName,
+                      "Part Number": li.partNumber ?? "",
+                      "Unit Cost": (li.unitCost / 100).toFixed(2),
+                      "Ordered Quantity": String(li.quantity),
+                    }));
+                    if (po.salesTax > 0) {
+                      lines.push({
+                        "Purchase Order #": po.poNumber,
+                        Vendor: po.vendorName ?? "",
+                        "Line Type": "PERCENT_TAXABLE",
+                        "Line Name": `Sales Tax (${po.taxRatePercent}%)`,
+                        "Part Number": "",
+                        "Unit Cost": (po.salesTax / 100).toFixed(2),
+                        "Ordered Quantity": "1",
+                      });
+                    }
+                    if (po.shippingCost > 0) {
+                      lines.push({
+                        "Purchase Order #": po.poNumber,
+                        Vendor: po.vendorName ?? "",
+                        "Line Type": "AMOUNT_TAXABLE",
+                        "Line Name": "Shipping",
+                        "Part Number": "",
+                        "Unit Cost": (po.shippingCost / 100).toFixed(2),
+                        "Ordered Quantity": "1",
+                      });
+                    }
+                    return lines;
+                  }),
+                  "purchase-orders-export.csv"
+                )
+              }
+              onImport={(rows) => bulkImportPOs(rows)}
+            />
             <Button size="sm" onClick={() => setDialogOpen(true)}>
               <Plus className="mr-1.5 h-4 w-4" />
               New PO

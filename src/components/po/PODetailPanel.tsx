@@ -30,11 +30,13 @@ import { StatusFlowIndicator } from "@/components/shared/StatusFlowIndicator";
 import { ApprovalChain } from "@/components/shared/ApprovalChain";
 import { PO_STATUS_LABELS } from "@/lib/constants";
 import { useProducts } from "@/lib/hooks/use-products";
+import { useVendors } from "@/lib/hooks/use-vendors";
 import { useProjects } from "@/lib/hooks/use-projects";
 import { useSubmitForApproval } from "@/lib/hooks/use-approval-requests";
 import { useUpdatePurchaseOrderStatus, useDeletePurchaseOrder } from "@/lib/hooks/use-purchase-orders";
 import { useCurrentUserStore, usePOStore } from "@/stores";
 import { ProjectDetailSheet } from "./ProjectDetailSheet";
+import { VendorDetailSheet } from "@/components/shared/VendorDetailSheet";
 import { printPO } from "@/lib/print";
 import { Download } from "lucide-react";
 import type { PurchaseOrder, LineItem, POStatus } from "@/types";
@@ -99,7 +101,10 @@ function DetailsTab({
     subtotalForSubmit + Math.round((subtotalForSubmit * po.taxRatePercent) / 100) + po.shippingCost;
 
   const { data: products = [] } = useProducts();
+  const { data: vendors = [] } = useVendors();
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
+  const [vendorSheetOpen, setVendorSheetOpen] = useState(false);
+  const selectedVendor = vendors.find((v) => v.id === po.vendorId) ?? null;
   const selectedProduct = products.find((p) => p.id === selectedProductId) ?? null;
 
   const subtotal = lineItems.reduce((sum, li) => sum + li.quantity * li.unitCost, 0);
@@ -168,7 +173,20 @@ function DetailsTab({
       <Separator />
 
       <dl>
-        <MetaRow label="Vendor" value={po.vendorName} />
+        <MetaRow
+          label="Vendor"
+          value={
+            po.vendorName ? (
+              <button
+                type="button"
+                onClick={() => setVendorSheetOpen(true)}
+                className="text-left font-medium text-brand-600 hover:underline"
+              >
+                {po.vendorName}
+              </button>
+            ) : null
+          }
+        />
         <MetaRow label="Status" value={<StatusBadge variant={status} label={PO_STATUS_LABELS[status]} />} />
         <MetaRow label="Invoice #" value={po.invoiceNumber} />
         <MetaRow
@@ -232,6 +250,12 @@ function DetailsTab({
         onOpenChange={(open) => {
           if (!open) setSelectedProductId(null);
         }}
+      />
+
+      <VendorDetailSheet
+        vendor={selectedVendor}
+        open={vendorSheetOpen && !!selectedVendor}
+        onOpenChange={setVendorSheetOpen}
       />
     </div>
   );

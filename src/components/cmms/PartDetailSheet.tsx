@@ -25,6 +25,7 @@ import { AssetDetailPanel } from "@/components/cmms/AssetDetailPanel";
 import { VehicleDetailPanel } from "@/components/cmms/VehicleDetailPanel";
 import { NewPartDialog } from "@/components/cmms/NewPartDialog";
 import { ManageVendorsDialog } from "@/components/shared/ManageVendorsDialog";
+import { PODetailSheet } from "@/components/po/PODetailSheet";
 
 import { useParts, useUpdatePart } from "@/lib/hooks/use-parts";
 import { usePartOpenWOQty } from "@/lib/hooks/use-wo-costs";
@@ -389,16 +390,22 @@ function DetailsTab({
   );
 }
 
-function HistoryTab({ part, purchaseOrders }: { part: Part; purchaseOrders: ReturnType<typeof usePurchaseOrders>["data"] }) {
+function HistoryTab({ part, purchaseOrders, onPOClick }: { part: Part; purchaseOrders: ReturnType<typeof usePurchaseOrders>["data"]; onPOClick: (poId: string) => void }) {
+  // Match by partNumber OR productItemId so parts linked via catalog still show history
+  const matchesLi = (li: { partNumber: string; productItemId: string }) =>
+    (part.partNumber && li.partNumber === part.partNumber) ||
+    (part.productItemId && li.productItemId === part.productItemId);
+
+  const findLi = (po: { lineItems: { partNumber: string; productItemId: string; unitCost: number; quantity: number }[] }) =>
+    po.lineItems.find(matchesLi)!;
+
   const pos = (purchaseOrders ?? [])
-    .filter((po) =>
-      po.lineItems.some((li) => li.partNumber === part.partNumber)
-    )
+    .filter((po) => po.lineItems.some(matchesLi))
     .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
   // Build price history: one point per PO (take first matching line item's unitCost)
   const priceHistory = pos.map((po) => {
-    const li = po.lineItems.find((l) => l.partNumber === part.partNumber)!;
+    const li = findLi(po);
     return {
       date: new Date(po.createdAt).toLocaleDateString("en-US", {
         month: "short",
@@ -481,11 +488,17 @@ function HistoryTab({ part, purchaseOrders }: { part: Part; purchaseOrders: Retu
               </thead>
               <tbody>
                 {[...pos].reverse().map((po) => {
-                  const li = po.lineItems.find((l) => l.partNumber === part.partNumber)!;
+                  const li = findLi(po);
                   return (
                     <tr key={po.id} className="border-t border-slate-100">
-                      <td className="px-3 py-2 font-mono text-xs font-medium text-slate-800">
-                        {po.poNumber}
+                      <td className="px-3 py-2 font-mono text-xs font-medium">
+                        <button
+                          type="button"
+                          onClick={() => onPOClick(po.id)}
+                          className="text-brand-600 hover:underline"
+                        >
+                          {po.poNumber}
+                        </button>
                       </td>
                       <td className="px-3 py-2 text-slate-500">{formatDate(po.createdAt)}</td>
                       <td className="px-3 py-2 text-right text-slate-700">{li.quantity}</td>
@@ -525,6 +538,7 @@ export function PartDetailSheet({ part, open, onOpenChange }: PartDetailSheetPro
   // Interchangeable part picker state
   const [interchangeablePickerOemId, setInterchangeablePickerOemId] = useState<string | null>(null);
   const [linkSearch, setLinkSearch] = useState("");
+  const [selectedPOId, setSelectedPOId] = useState<string | null>(null);
 
   // Close on Escape key
   useEffect(() => {
@@ -706,7 +720,7 @@ export function PartDetailSheet({ part, open, onOpenChange }: PartDetailSheetPro
               />
             </TabsContent>
             <TabsContent value="history" className="mt-0 min-h-0 flex-1 overflow-y-auto">
-              <HistoryTab part={livePart} purchaseOrders={purchaseOrders} />
+              <HistoryTab part={livePart} purchaseOrders={purchaseOrders} onPOClick={setSelectedPOId} />
             </TabsContent>
             <TabsContent value="audit trail" className="mt-0 min-h-0 flex-1 overflow-y-auto">
               <AuditTrailTab recordType="part" recordId={livePart.id} />
@@ -729,6 +743,13 @@ export function PartDetailSheet({ part, open, onOpenChange }: PartDetailSheetPro
         part={nestedPart}
         open={!!nestedPart}
         onOpenChange={(o) => { if (!o) setNestedPart(null); }}
+      />
+
+      {/* PO detail sheet — opened from history tab */}
+      <PODetailSheet
+        po={(purchaseOrders ?? []).find((p) => p.id === selectedPOId) ?? null}
+        open={!!selectedPOId}
+        onOpenChange={(o) => { if (!o) setSelectedPOId(null); }}
       />
 
       {/* ── Asset / Vehicle detail overlays ── */}

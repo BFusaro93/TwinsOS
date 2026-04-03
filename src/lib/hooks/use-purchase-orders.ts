@@ -377,6 +377,49 @@ async function importDenormalized(supabase: SupabaseClient, rows: Record<string,
         }
       }
 
+      // Sync to CMMS Parts inventory so the part appears in inventory and links back to this PO
+      if (productItemId && partNumber) {
+        const { data: linked } = await supabase
+          .from("parts")
+          .select("id")
+          .eq("product_item_id", productItemId)
+          .is("deleted_at", null)
+          .maybeSingle();
+
+        if (!linked) {
+          // Check for an unlinked part with the same part number
+          const { data: byPN } = await supabase
+            .from("parts")
+            .select("id")
+            .eq("part_number", partNumber)
+            .is("deleted_at", null)
+            .maybeSingle();
+
+          if (byPN) {
+            // Link the existing part to the catalog entry
+            await supabase
+              .from("parts")
+              .update({ product_item_id: productItemId })
+              .eq("id", byPN.id);
+          } else {
+            // Create a new part record
+            await supabase.from("parts").insert({
+              name: itemName,
+              part_number: partNumber,
+              unit_cost: unitCostCents,
+              product_item_id: productItemId,
+              is_inventory: true,
+              quantity_on_hand: 0,
+              minimum_stock: 0,
+              alternate_vendors: [],
+              cost_layers: [],
+              vendor_id: vendorId,
+              vendor_name: vendorName,
+            });
+          }
+        }
+      }
+
       await supabase.from("po_line_items").insert({
         po_id: created.id,
         product_item_id: productItemId,
