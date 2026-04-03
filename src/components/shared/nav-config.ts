@@ -20,7 +20,7 @@ import {
   HelpCircle,
   Library,
   ClipboardCheck,
-  TimerIcon,
+  TrendingUp,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -69,7 +69,7 @@ export const NAV_SECTIONS: NavSection[] = [
   {
     label: "Operations",
     items: [
-      { label: "AvB × Gusto Hours", href: "/operations/avb", icon: TimerIcon },
+      { label: "AvB × Gusto Hours", href: "/operations/avb", icon: TrendingUp },
     ],
   },
   {

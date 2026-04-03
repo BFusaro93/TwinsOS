@@ -2,18 +2,17 @@
 
 import { useState, useCallback, useRef } from "react";
 import {
-  LineChart, Line, BarChart, Bar, XAxis, YAxis,
+  BarChart, Bar, LineChart, Line, XAxis, YAxis,
   CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from "recharts";
-import { Upload, ChevronLeft, ChevronRight, Trash2, Save, Copy, FileText } from "lucide-react";
+import { Upload, Trash2 } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import {
   useAvbWeeks, useUpsertAvbWeek, useDeleteAvbWeek,
-  type AvbWeekData, type GustoData, type DayData,
+  type AvbWeekData, type DayData, type GustoData, type EmpData,
 } from "@/lib/hooks/use-avb-weeks";
 
-// ─── Constants ────────────────────────────────────────────────────────────────
-
+// ── Constants ──────────────────────────────────────────────────────────────────
 const CREW_DEFS = [
   { code: "MAINT1", name: "Maintenance 1" },
   { code: "MAINT2", name: "Maintenance 2" },
@@ -23,43 +22,45 @@ const CREW_DEFS = [
   { code: "FERT1",  name: "Fert / Weed Control" },
   { code: "LNDSCP1",name: "Landscape Construction" },
   { code: "ENH1",   name: "Enhancement 1" },
-];
+] as const;
 
 const ALL_EMP = [
-  { uuid: "87a264e0", name: "Rolando Alvarado",    csvName: "Alvarado, Rolando",                 csvJob: "Maintenance Crew Member" },
-  { uuid: "b54b3f88", name: "Ryan Auger",           csvName: "Auger, Ryan"                                                         },
-  { uuid: "6d5ded40", name: "Otilio Brizuela",      csvName: "Brizuela, Jose",                    csvJob: "Maintenance Crew Leader" },
-  { uuid: "55f28eee", name: "James Brizuela",       csvName: "Brizuela, Jose",                    csvJob: "Maintenance Crew Member" },
-  { uuid: "529bbd5c", name: "Mauricio Cruz",        csvName: "Cruz, Mauricio"                                                       },
-  { uuid: "36a5a673", name: "Julio Escobar",        csvName: "Escobar, Julio"                                                       },
-  { uuid: "695866b9", name: "Tyler Haywood",        csvName: "Haywood, Tyler"                                                       },
-  { uuid: "3540efab", name: "Olvin Hernandez",      csvName: "Hernandez, Olvin"                                                     },
-  { uuid: "38f06eb7", name: "Steve Krikorian II",   csvName: "Krikorian II, Stephen"                                                },
-  { uuid: "41c55955", name: "Nelson Labelle",       csvName: "Labelle, Nelson"                                                      },
-  { uuid: "2f1c79d8", name: "Jose Leiva",           csvName: "Leiva, Jose",                       csvJob: "Maintenance Crew Leader" },
-  { uuid: "9c3e8613", name: "Saul Leiva",           csvName: "Leiva, Saul"                                                          },
-  { uuid: "ad9b1c2e", name: "Eduard Martinez",      csvName: "Martinez Mejia, Eduard"                                               },
-  { uuid: "69b0adca", name: "Marvin Mejia Lopez",   csvName: "Mejia Lopez, Marvin"                                                  },
-  { uuid: "fde97e65", name: "Encarnacion Membrano", csvName: "Membrano Martinez, Encarnacion Cruz"                                  },
-  { uuid: "d3b6869a", name: "Zackery Pervier",      csvName: "Pervier, Zackery"                                                     },
-  { uuid: "32d07880", name: "Luis Pineda",          csvName: "Pineda, Luis"                                                         },
-  { uuid: "f776a380", name: "Wilder Pineda",        csvName: "Pineda, Wilder"                                                       },
-  { uuid: "c25bbf8d", name: "Juan Polanco Molina",  csvName: "Polanco Molina, Juan"                                                 },
-  { uuid: "418e5fac", name: "Esdras Ramos Pacheco", csvName: "Ramos Pacheco, Esdras"                                                },
-  { uuid: "0bfcb8df", name: "Jason Rodriguez",      csvName: "Rodriguez, Jason"                                                     },
-  { uuid: "875c4721", name: "Juan Sanchez",         csvName: "Sanchez, Juan"                                                        },
-  { uuid: "9695004c", name: "Mark Wiggins",         csvName: "Wiggins, Mark"                                                        },
+  { uuid:"87a264e0", name:"Rolando Alvarado",    csvName:"Alvarado, Rolando",                   csvJob:"Maintenance Crew Member" },
+  { uuid:"b54b3f88", name:"Ryan Auger",           csvName:"Auger, Ryan",                         csvJob:"" },
+  { uuid:"6d5ded40", name:"Otilio Brizuela",      csvName:"Brizuela, Jose",                      csvJob:"Maintenance Crew Leader" },
+  { uuid:"55f28eee", name:"James Brizuela",       csvName:"Brizuela, Jose",                      csvJob:"Maintenance Crew Member" },
+  { uuid:"529bbd5c", name:"Mauricio Cruz",        csvName:"Cruz, Mauricio",                      csvJob:"" },
+  { uuid:"36a5a673", name:"Julio Escobar",        csvName:"Escobar, Julio",                      csvJob:"" },
+  { uuid:"695866b9", name:"Tyler Haywood",        csvName:"Haywood, Tyler",                      csvJob:"" },
+  { uuid:"3540efab", name:"Olvin Hernandez",      csvName:"Hernandez, Olvin",                    csvJob:"" },
+  { uuid:"b5ad4fb2", name:"Casey Kleinman",       csvName:"Kleinman, Casey",                     csvJob:"" },
+  { uuid:"38f06eb7", name:"Steve Krikorian II",   csvName:"Krikorian II, Stephen",               csvJob:"" },
+  { uuid:"41c55955", name:"Nelson Labelle",       csvName:"Labelle, Nelson",                     csvJob:"" },
+  { uuid:"2f1c79d8", name:"Jose Leiva",           csvName:"Leiva, Jose",                         csvJob:"Maintenance Crew Leader" },
+  { uuid:"9c3e8613", name:"Saul Leiva",           csvName:"Leiva, Saul",                         csvJob:"" },
+  { uuid:"3c084d9d", name:"Cam MacDonald",        csvName:"MacDonald, Camden",                   csvJob:"" },
+  { uuid:"ad9b1c2e", name:"Eduard Martinez",      csvName:"Martinez Mejia, Eduard",              csvJob:"" },
+  { uuid:"69b0adca", name:"Marvin Mejia Lopez",   csvName:"Mejia Lopez, Marvin",                 csvJob:"" },
+  { uuid:"fde97e65", name:"Encarnacion Membrano", csvName:"Membrano Martinez, Encarnacion Cruz", csvJob:"" },
+  { uuid:"d3b6869a", name:"Zackery Pervier",      csvName:"Pervier, Zackery",                    csvJob:"" },
+  { uuid:"32d07880", name:"Luis Pineda",          csvName:"Pineda, Luis",                        csvJob:"" },
+  { uuid:"f776a380", name:"Wilder Pineda",        csvName:"Pineda, Wilder",                      csvJob:"" },
+  { uuid:"c25bbf8d", name:"Juan Polanco Molina",  csvName:"Polanco Molina, Juan",                csvJob:"" },
+  { uuid:"418e5fac", name:"Esdras Ramos Pacheco", csvName:"Ramos Pacheco, Esdras",               csvJob:"" },
+  { uuid:"0bfcb8df", name:"Jason Rodriguez",      csvName:"Rodriguez, Jason",                    csvJob:"" },
+  { uuid:"875c4721", name:"Juan Sanchez",         csvName:"Sanchez, Juan",                       csvJob:"" },
+  { uuid:"9695004c", name:"Mark Wiggins",         csvName:"Wiggins, Mark",                       csvJob:"" },
 ];
 
-const FIELD_UUIDS = ALL_EMP.map(e => e.uuid);
+const FIELD_UUIDS = ALL_EMP.filter(e => !["b5ad4fb2","3c084d9d"].includes(e.uuid)).map(e => e.uuid);
 
-const DEF_ASSIGN: Record<string, string[]> = {
-  MAINT1: [], MAINT2: ["6d5ded40","529bbd5c","36a5a673"],
-  MAINT3: ["2f1c79d8","9c3e8613","ad9b1c2e","fde97e65","875c4721"],
-  MAINT4: ["32d07880","f776a380","c25bbf8d","87a264e0"],
-  MAINT5: [], FERT1: ["695866b9"],
-  LNDSCP1: ["41c55955","b54b3f88","38f06eb7"],
-  ENH1: ["d3b6869a","418e5fac","0bfcb8df","9695004c"],
+const DEF_ASSIGNMENTS: Record<string, string[]> = {
+  MAINT1:[], MAINT2:["6d5ded40","529bbd5c","36a5a673"],
+  MAINT3:["2f1c79d8","9c3e8613","ad9b1c2e","fde97e65","875c4721"],
+  MAINT4:["32d07880","f776a380","c25bbf8d","87a264e0"],
+  MAINT5:[], FERT1:["695866b9"],
+  LNDSCP1:["41c55955","b54b3f88","38f06eb7"],
+  ENH1:["d3b6869a","418e5fac","0bfcb8df","9695004c"],
 };
 
 const WDAYS = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
@@ -67,702 +68,671 @@ const CREW_COLORS = ["#3b82f6","#22c55e","#ef4444","#f59e0b","#a78bfa","#60ab45"
 
 type Tab = "summary" | "daily" | "history" | "import";
 
-interface ImportState {
-  days: Record<number, DayData>;
-  gusto: GustoData;
-  weekEnd: string;
-  csvParsed: boolean;
-  avbParsedDays: Set<number>;
-}
+// ── Utilities ──────────────────────────────────────────────────────────────────
+const pf = (v: unknown) => parseFloat(String(v ?? "").replace(",","")) || 0;
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+const fmtDate = (s: string) => {
+  if (!s) return "—";
+  return new Date(s + "T12:00:00").toLocaleDateString("en-US", { month:"short", day:"numeric", year:"numeric" });
+};
 
-function pf(v: unknown): number { return parseFloat(String(v ?? "").replace(",","")) || 0; }
-
-function fmtDate(s: string): string {
-  return new Date(s + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-}
-
-function dayKey(ws: string, idx: number): string {
+function dayKey(ws: string, idx: number) {
   const d = new Date(ws + "T12:00:00"); d.setDate(d.getDate() + idx);
   return `${String(d.getMonth()+1).padStart(2,"0")}/${String(d.getDate()).padStart(2,"0")}/${String(d.getFullYear()).slice(2)}`;
 }
 
-function dayLabel(ws: string, idx: number): string {
+function dayIso(ws: string, idx: number) {
   const d = new Date(ws + "T12:00:00"); d.setDate(d.getDate() + idx);
-  return `${WDAYS[idx]} ${d.getMonth()+1}/${d.getDate()}`;
+  return d.toISOString().split("T")[0];
 }
 
-function thisSunday(): string {
-  const d = new Date(), sun = new Date(d);
-  sun.setDate(d.getDate() + (7 - d.getDay()) % 7);
-  return sun.toISOString().split("T")[0];
+function dayLbl(ws: string, idx: number) {
+  const d = new Date(ws + "T12:00:00"); d.setDate(d.getDate() + idx);
+  return WDAYS[idx] + " " + (d.getMonth()+1) + "/" + d.getDate();
 }
 
-function getEmp(uuid: string) { return ALL_EMP.find(e => e.uuid === uuid); }
+const thisSunday = () => {
+  const d = new Date(); d.setDate(d.getDate() + (7-d.getDay())%7);
+  return d.toISOString().split("T")[0];
+};
 
-function matchUuid(csvName: string, job: string): string | null {
-  const ex = ALL_EMP.find(e => e.csvName === csvName && e.csvJob && e.csvJob === job);
-  if (ex) return ex.uuid;
-  const byName = ALL_EMP.filter(e => e.csvName === csvName);
-  if (byName.length === 1) return byName[0].uuid;
-  if (byName.length > 1) return (byName.find(e => !e.csvJob || job.includes(e.csvJob)) ?? byName[0]).uuid;
-  return ALL_EMP.find(e => e.name.toLowerCase().includes(csvName.split(",")[0].toLowerCase()))?.uuid ?? null;
-}
-
-function gDate(s: string): string {
-  const p = s.split("/"), yr = p[2].length === 2 ? "20" + p[2] : p[2];
+function gDate(s: string) {
+  const p = s.split("/"); const yr = p[2].length===2?"20"+p[2]:p[2];
   return `${yr}-${p[0].padStart(2,"0")}-${p[1].padStart(2,"0")}`;
 }
 
-function csvRow(row: string): string[] {
-  const out: string[] = []; let cur = "", q = false;
-  for (const c of row) { if (c === '"') q = !q; else if (c === "," && !q) { out.push(cur.trim()); cur = ""; } else cur += c; }
+function csvRow(row: string) {
+  const out: string[] = []; let cur = ""; let q = false;
+  for (const c of row) { if(c==='"'){q=!q;} else if(c===','&&!q){out.push(cur.trim());cur="";}else cur+=c; }
   out.push(cur.trim()); return out;
 }
 
+function matchUuid(name: string, job: string) {
+  const ex = ALL_EMP.find(e => e.csvName===name && e.csvJob && e.csvJob===job);
+  if (ex) return ex.uuid;
+  const bn = ALL_EMP.filter(e => e.csvName===name);
+  if (bn.length===1) return bn[0].uuid;
+  if (bn.length>1) return (bn.find(e=>!e.csvJob||job.includes(e.csvJob))??bn[0]).uuid;
+  const last = name.split(",")[0].toLowerCase();
+  return ALL_EMP.find(e=>e.name.toLowerCase().includes(last))?.uuid ?? null;
+}
+
+const getEmp = (uuid: string) => ALL_EMP.find(e=>e.uuid===uuid);
+
+function getHrsOnDay(gusto: GustoData, uuid: string, dayIdx: number) {
+  if (!gusto.weekStart) return 0;
+  const dk = dayKey(gusto.weekStart, dayIdx);
+  return gusto.employees[uuid]?.days.find(d=>d.date===dk)?.total ?? 0;
+}
+
+const epColor = (ep: number|null) => ep===null ? "text-slate-400" : ep>=88 ? "text-green-600" : ep>=75 ? "text-amber-500" : "text-red-500";
+const epBadge = (ep: number|null) => ep===null ? "bg-slate-100 text-slate-500" : ep>=88 ? "bg-green-100 text-green-700" : ep>=75 ? "bg-amber-100 text-amber-700" : "bg-red-100 text-red-700";
+
+// ── CSV Parser ────────────────────────────────────────────────────────────────
 function parseGustoCsv(text: string): GustoData {
-  const lines = text.split("\n").map(l => l.trim());
-  const result: GustoData = { weekStart: null, weekEnd: null, employees: {} };
-  const emp = (uuid: string) => { if (!result.employees[uuid]) result.employees[uuid] = { total: 0, regular: 0, ot: 0, days: [] }; return result.employees[uuid]; };
-  for (let i = 0; i < lines.length; i++) {
-    const l = lines[i].replace(/"/g, "");
+  const lines = text.split("\n").map(l=>l.trim());
+  const result: GustoData = { weekStart:null, weekEnd:null, employees:{} };
+  const emp = (uuid: string): EmpData => {
+    if (!result.employees[uuid]) result.employees[uuid] = {total:0,regular:0,ot:0,days:[]};
+    return result.employees[uuid];
+  };
+  for (let i=0; i<lines.length; i++) {
+    const l = lines[i].replace(/"/g,"");
     if (l.startsWith("Date range,")) {
       const pts = l.split(",")[1].split("-");
       result.weekStart = gDate(pts[0].trim()); result.weekEnd = gDate(pts[1].trim());
     }
     if (l.startsWith("Name,Manager")) {
       i++;
-      while (i < lines.length) {
-        const raw = lines[i].replace(/"/g, "");
-        if (!raw || raw.startsWith("Hours for")) { i--; break; }
+      while (i<lines.length) {
+        const raw = lines[i].replace(/"/g,"");
+        if (!raw||raw.startsWith("Hours for")) { i--; break; }
         const c = csvRow(lines[i]);
-        if (c.length >= 3 && c[0] && c[0] !== "Name") {
+        if (c.length>=3&&c[0]&&c[0]!=="Name") {
           const parts = c[0].trim().split(" ");
-          const lastFirst = parts.length > 1 ? parts.slice(1).join(" ") + ", " + parts[0] : c[0];
-          const uuid = matchUuid(lastFirst, c[9] ?? "");
-          if (uuid) { emp(uuid).total += pf(c[2]); emp(uuid).regular += pf(c[3]); emp(uuid).ot += pf(c[4]); }
+          const lf = parts.length>1 ? parts.slice(1).join(" ")+", "+parts[0] : c[0];
+          const uuid = matchUuid(lf, c[9]??"");
+          if (uuid) { emp(uuid).total+=pf(c[2]); emp(uuid).regular+=pf(c[3]); emp(uuid).ot+=pf(c[4]); }
         }
         i++;
       }
     }
     const hm = l.match(/^Hours for (.+)$/);
     if (hm) {
-      i += 2;
-      const daily: GustoData["employees"][string]["days"] = [];
-      while (i < lines.length) {
-        const raw = lines[i].replace(/"/g, "");
-        if (!raw || raw.startsWith("Hours for")) { i--; break; }
+      i+=2; const daily: EmpData["days"]=[];
+      while (i<lines.length) {
+        const raw = lines[i].replace(/"/g,"");
+        if (!raw||raw.startsWith("Hours for")) { i--; break; }
         const c = csvRow(lines[i]);
-        if (c[0]?.match(/\d{2}\/\d{2}\/\d{2}/)) daily.push({ date: c[0], total: pf(c[1]), regular: pf(c[2]), ot: pf(c[3]), mealBreak: pf(c[7]), timeRange: c[11] ?? "", job: c[12] ?? "" });
+        if (c.length>=3&&c[0]?.match(/\d{2}\/\d{2}\/\d{2}/))
+          daily.push({date:c[0],total:pf(c[1]),regular:pf(c[2]),ot:pf(c[3]),mealBreak:pf(c[7]),timeRange:c[11]??"",job:c[12]??""});
         i++;
       }
-      const uuid = matchUuid(hm[1].trim(), daily.find(d => d.job)?.job ?? "");
+      const nm = hm[1].trim();
+      const job = daily.find(d=>d.job)?.job??"";
+      const uuid = matchUuid(nm, job);
       if (uuid) emp(uuid).days = daily;
     }
   }
   return result;
 }
 
-function getHrsOnDayIdx(gusto: GustoData, uuid: string, idx: number): number {
-  if (!gusto.weekStart) return 0;
-  return gusto.employees[uuid]?.days?.find(d => d.date === dayKey(gusto.weekStart!, idx))?.total ?? 0;
+// ── PDF Parser (dynamic pdf.js) ───────────────────────────────────────────────
+async function parseAvbPdf(file: File): Promise<Record<string, {budgeted:number;actual:number;revenue:number}>> {
+  type PdfLib = { GlobalWorkerOptions:{workerSrc:string}; getDocument:(o:{data:ArrayBuffer})=>{promise:Promise<{numPages:number;getPage:(n:number)=>Promise<{getTextContent:()=>Promise<{items:{transform:number[];str:string}[]}>}>}>} };
+  if (!(window as {pdfjsLib?:unknown}).pdfjsLib) {
+    await new Promise<void>((res, rej) => {
+      const s = document.createElement("script");
+      s.src = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
+      s.onload = () => {
+        ((window as {pdfjsLib?:PdfLib}).pdfjsLib!).GlobalWorkerOptions.workerSrc =
+          "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+        res();
+      };
+      s.onerror = rej;
+      document.head.appendChild(s);
+    });
+  }
+  const lib = (window as {pdfjsLib?:PdfLib}).pdfjsLib!;
+  const buf = await file.arrayBuffer();
+  const pdf = await lib.getDocument({data:buf}).promise;
+  let txt = "";
+  for (let p=1; p<=pdf.numPages; p++) {
+    const page = await pdf.getPage(p);
+    const tc = await page.getTextContent();
+    const items = tc.items.map(i=>({x:Math.round(i.transform[4]),y:Math.round(i.transform[5]),str:i.str}));
+    items.sort((a,b)=>b.y-a.y||a.x-b.x);
+    const lm: Record<number,typeof items> = {};
+    items.forEach(it=>{const yk=Math.round(it.y/4)*4; if(!lm[yk])lm[yk]=[]; lm[yk].push(it);});
+    Object.keys(lm).map(Number).sort((a,b)=>b-a).forEach(y=>{
+      lm[y].sort((a,b)=>a.x-b.x); txt+=lm[y].map(i=>i.str).join(" ")+"\n";
+    });
+  }
+  const lines = txt.split("\n");
+  const results: Record<string,{budgeted:number;actual:number;revenue:number}> = {};
+  const SUM = /Sum:.*Sum:.*Sum:/i;
+  const CREW = /^\s*(FERT\d*|LNDSCP\d*|MAINT\d*|ENH\d*)\s*$/i;
+  const NUMS = /([\d,]+\.\d{2,4})/g;
+  const DOLR = /\$([\d,]+\.\d{2})/;
+  for (let i=0; i<lines.length-2; i++) {
+    if (SUM.test(lines[i])) {
+      const cm = CREW.exec(lines[i+1]);
+      if (cm) {
+        const crew = cm[1].toUpperCase();
+        if (results[crew]) continue;
+        const nums = [...lines[i+2].matchAll(NUMS)].map(m=>parseFloat(m[1].replace(",","")));
+        const dm = DOLR.exec(lines[i+2]);
+        if (nums.length>=2) results[crew]={budgeted:nums[0],actual:nums[1],revenue:dm?parseFloat(dm[1].replace(",",""))  :0};
+      }
+    }
+  }
+  return results;
 }
 
-function blankDay(): DayData {
-  return {
-    assignments: Object.fromEntries(CREW_DEFS.map(cr => [cr.code, [...(DEF_ASSIGN[cr.code] ?? [])]])),
-    avb: Object.fromEntries(CREW_DEFS.map(cr => [cr.code, { budgeted: 0, actual: 0, revenue: 0 }])),
-  };
-}
+// ── Default state ─────────────────────────────────────────────────────────────
+const defaultDay = (): DayData => ({
+  assignments: Object.fromEntries(CREW_DEFS.map(cr=>[cr.code,[...(DEF_ASSIGNMENTS[cr.code]??[])]])),
+  avb: Object.fromEntries(CREW_DEFS.map(cr=>[cr.code,{budgeted:0,actual:0,revenue:0}])),
+});
+const defaultWeekData = (): AvbWeekData => ({
+  days: Object.fromEntries(Array.from({length:7},(_,i)=>[i,defaultDay()])),
+  gusto: {weekStart:null,weekEnd:null,employees:{}},
+});
 
-function blankImport(): ImportState {
-  const days: Record<number, DayData> = {};
-  for (let i = 0; i < 7; i++) days[i] = blankDay();
-  return { days, gusto: { weekStart: null, weekEnd: null, employees: {} }, weekEnd: thisSunday(), csvParsed: false, avbParsedDays: new Set() };
-}
-
-// ─── Sub-components ───────────────────────────────────────────────────────────
-
-function Badge({ children, color }: { children: React.ReactNode; color: "green" | "yellow" | "red" | "gray" }) {
-  const cls = { green: "bg-green-100 text-green-700", yellow: "bg-amber-100 text-amber-700", red: "bg-red-100 text-red-700", gray: "bg-slate-100 text-slate-500" }[color];
-  return <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-semibold ${cls}`}>{children}</span>;
-}
-
-function effBadge(eff: number | null) {
-  if (eff === null) return <Badge color="gray">—</Badge>;
-  const p = Math.round(eff * 100);
-  return <Badge color={p >= 88 ? "green" : p >= 75 ? "yellow" : "red"}>{p}%</Badge>;
-}
-
-function KpiCard({ label, value, sub, valueClass }: { label: string; value: string; sub?: string; valueClass?: string }) {
+// ── Sub-components ────────────────────────────────────────────────────────────
+function KpiCard({label,value,sub,cls}:{label:string;value:string;sub?:string;cls?:string}) {
   return (
-    <div className="rounded-xl border bg-white p-4 shadow-sm">
-      <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">{label}</p>
-      <p className={`mt-1 text-3xl font-bold text-slate-900 ${valueClass ?? ""}`}>{value}</p>
-      {sub && <p className="mt-0.5 text-xs text-slate-400">{sub}</p>}
+    <div className="rounded-lg border bg-white p-4 shadow-sm">
+      <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">{label}</p>
+      <p className={`mt-1 text-3xl font-bold ${cls??"text-slate-900"}`}>{value}</p>
+      {sub&&<p className="mt-0.5 text-xs text-slate-400">{sub}</p>}
     </div>
   );
 }
-
-function DayStrip({ labels, active, onSelect, hasData }: { labels: string[]; active: number; onSelect: (i: number) => void; hasData?: Set<number> }) {
-  return (
-    <div className="flex flex-wrap gap-1.5 mb-4">
-      {labels.map((lbl, i) => (
-        <button key={i} onClick={() => onSelect(i)}
-          className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors
-            ${i === active ? "bg-brand-500 text-white" : hasData?.has(i) ? "border border-green-400 bg-green-50 text-green-700" : "border border-slate-200 text-slate-500 hover:bg-slate-50"}`}>
-          {lbl}
-        </button>
-      ))}
-    </div>
-  );
+function Bdg({text,v}:{text:string;v:"green"|"amber"|"red"|"gray"}) {
+  const c={green:"bg-green-100 text-green-700",amber:"bg-amber-100 text-amber-700",red:"bg-red-100 text-red-700",gray:"bg-slate-100 text-slate-500"}[v];
+  return <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${c}`}>{text}</span>;
+}
+function InfoBar({children,warn=false}:{children:React.ReactNode;warn?:boolean}) {
+  const c = warn?"border-amber-400 bg-amber-50 text-amber-800":"border-blue-400 bg-blue-50 text-blue-800";
+  return <div className={`mb-3 rounded-r-md border-l-4 px-3 py-2 text-xs ${c}`}>{children}</div>;
+}
+function Th({children,right=false}:{children:React.ReactNode;right?:boolean}) {
+  return <th className={`px-3 py-2.5 text-xs font-semibold uppercase tracking-wider text-slate-400 ${right?"text-right":"text-left"}`}>{children}</th>;
+}
+function Td({children,right=false,cls=""}:{children:React.ReactNode;right?:boolean;cls?:string}) {
+  return <td className={`px-3 py-3 ${right?"text-right tabular-nums":""} ${cls}`}>{children}</td>;
 }
 
-// ─── Main ─────────────────────────────────────────────────────────────────────
-
+// ── Main Component ────────────────────────────────────────────────────────────
 export function AvbDashboard() {
-  const { data: weeks = [], isLoading } = useAvbWeeks();
-  const upsert = useUpsertAvbWeek();
-  const delWeek = useDeleteAvbWeek();
-
   const [tab, setTab] = useState<Tab>("summary");
-  const [viewWeekOffset, setViewWeekOffset] = useState(0); // 0 = latest
-  const [viewDayIdx, setViewDayIdx] = useState(0);
-  const [importDayIdx, setImportDayIdx] = useState(0);
-  const [imp, setImp] = useState<ImportState>(blankImport);
-  const [saving, setSaving] = useState(false);
+  const [viewDay, setViewDay] = useState(0);
+  const [importDay, setImportDay] = useState(0);
+  const [weekEnd, setWeekEnd] = useState(thisSunday);
+  const [wd, setWd] = useState<AvbWeekData>(defaultWeekData);
+  const [csvSt, setCsvSt] = useState("");
+  const [pdfSt, setPdfSt] = useState<Record<number,string>>({});
+  const [cpFrom, setCpFrom] = useState("");
+  const [cpTo, setCpTo] = useState("");
   const csvRef = useRef<HTMLInputElement>(null);
-  const avbRef = useRef<HTMLInputElement>(null);
+  const pdfRef = useRef<HTMLInputElement>(null);
 
-  const currentWeek = weeks.length ? weeks[weeks.length - 1 - viewWeekOffset] : null;
+  const { data: weeks=[], isLoading } = useAvbWeeks();
+  const upsert = useUpsertAvbWeek();
+  const del = useDeleteAvbWeek();
 
-  // aggregation
-  function crewTotals(w: NonNullable<typeof currentWeek>) {
-    const t: Record<string, { budgeted: number; actual: number; revenue: number; gusto: number; ot: number }> = {};
-    CREW_DEFS.forEach(cr => { t[cr.code] = { budgeted: 0, actual: 0, revenue: 0, gusto: 0, ot: 0 }; });
-    for (let d = 0; d < 7; d++) {
-      const day = w.data.days[d]; if (!day) continue;
-      CREW_DEFS.forEach(cr => {
-        const avb = day.avb?.[cr.code] ?? {};
-        t[cr.code].budgeted += pf(avb.budgeted); t[cr.code].actual += pf(avb.actual); t[cr.code].revenue += pf(avb.revenue);
-        (day.assignments?.[cr.code] ?? []).forEach(uuid => {
-          t[cr.code].gusto += getHrsOnDayIdx(w.data.gusto, uuid, d);
-          const dk = w.data.gusto.weekStart ? dayKey(w.data.gusto.weekStart, d) : null;
-          const de = dk ? w.data.gusto.employees[uuid]?.days?.find(x => x.date === dk) : null;
-          if (de) t[cr.code].ot += de.ot ?? 0;
+  const cur = weeks.length ? weeks[weeks.length-1] : null;
+  const ws = wd.gusto.weekStart;
+
+  // CSV
+  const handleCsv = useCallback((file: File) => {
+    const r = new FileReader();
+    r.onload = ev => {
+      try {
+        const g = parseGustoCsv(ev.target!.result as string);
+        setCsvSt(`✓ ${Object.keys(g.employees).length} employees | ${g.weekStart} → ${g.weekEnd}`);
+        if (g.weekEnd) setWeekEnd(g.weekEnd);
+        setWd(d=>({...d,gusto:g}));
+      } catch(e) { setCsvSt("Error: "+String(e)); }
+    };
+    r.readAsText(file);
+  }, []);
+
+  // PDF
+  const handlePdf = useCallback(async (file: File, di: number) => {
+    setPdfSt(s=>({...s,[di]:"Parsing…"}));
+    try {
+      const crews = await parseAvbPdf(file);
+      const found = Object.keys(crews);
+      if (!found.length) throw new Error("No crew data found");
+      setWd(d=>{
+        const next={...d,days:{...d.days}};
+        const day={...next.days[di],avb:{...next.days[di].avb}};
+        found.forEach(code=>{day.avb[code]={...crews[code]};});
+        next.days[di]=day; return next;
+      });
+      setPdfSt(s=>({...s,[di]:`✓ ${found.join(", ")}`}));
+    } catch(e) { setPdfSt(s=>({...s,[di]:"Error: "+String(e)})); }
+  }, []);
+
+  // Assignment helpers
+  const addToCrew = (di: number, code: string, uuid: string) => setWd(d=>{
+    const next={...d,days:{...d.days}};
+    const day={...next.days[di],assignments:Object.fromEntries(Object.entries(next.days[di].assignments).map(([k,v])=>[k,v.filter(u=>u!==uuid)]))};
+    day.assignments[code]=[...day.assignments[code],uuid];
+    next.days[di]=day; return next;
+  });
+  const rmFromCrew = (di: number, code: string, uuid: string) => setWd(d=>{
+    const next={...d,days:{...d.days}};
+    const day={...next.days[di],assignments:{...next.days[di].assignments}};
+    day.assignments[code]=day.assignments[code].filter(u=>u!==uuid);
+    next.days[di]=day; return next;
+  });
+  const setAvb = (di: number, code: string, field: "budgeted"|"actual"|"revenue", val: string) => setWd(d=>{
+    const next={...d,days:{...d.days}};
+    const day={...next.days[di],avb:{...next.days[di].avb}};
+    day.avb[code]={...day.avb[code],[field]:pf(val)};
+    next.days[di]=day; return next;
+  });
+  const copyAssignments = () => {
+    if (!cpFrom||!cpTo) return;
+    setWd(d=>{
+      const next={...d,days:{...d.days}};
+      next.days[parseInt(cpTo)]={...next.days[parseInt(cpTo)],assignments:JSON.parse(JSON.stringify(next.days[parseInt(cpFrom)].assignments))};
+      return next;
+    });
+  };
+  const saveWeek = async () => {
+    if (!weekEnd) return;
+    await upsert.mutateAsync({weekEnd,data:wd});
+    setTab("summary");
+  };
+
+  // Aggregation
+  function crewTotals(data: AvbWeekData) {
+    const ct: Record<string,{budgeted:number;actual:number;revenue:number;gusto:number;ot:number}> = {};
+    CREW_DEFS.forEach(cr=>{ct[cr.code]={budgeted:0,actual:0,revenue:0,gusto:0,ot:0};});
+    for (let d=0; d<7; d++) {
+      const day=data.days[d]; if(!day) continue;
+      CREW_DEFS.forEach(cr=>{
+        const avb=day.avb[cr.code]??{};
+        ct[cr.code].budgeted+=pf(avb.budgeted);ct[cr.code].actual+=pf(avb.actual);ct[cr.code].revenue+=pf(avb.revenue);
+        (day.assignments[cr.code]??[]).forEach(uuid=>{
+          ct[cr.code].gusto+=getHrsOnDay(data.gusto,uuid,d);
+          if(data.gusto.weekStart){const dk=dayKey(data.gusto.weekStart,d);const de=data.gusto.employees[uuid]?.days.find(x=>x.date===dk);if(de)ct[cr.code].ot+=de.ot;}
         });
       });
     }
-    return t;
+    return ct;
   }
 
-  function weekKpis(w: NonNullable<typeof currentWeek>) {
-    const t = crewTotals(w);
-    let tG = 0, tO = 0, tB = 0;
-    CREW_DEFS.forEach(cr => { tG += t[cr.code].gusto; tO += t[cr.code].actual; tB += t[cr.code].budgeted; });
-    return { tG, tO, tB, eff: tG > 0 ? tO / tG : null, gap: tG > 0 ? tG - tO : null, avbVar: tO - tB };
+  const dayOpts = Array.from({length:7},(_,i)=>(
+    <option key={i} value={i}>{ws?dayLbl(ws,i):WDAYS[i]}</option>
+  ));
+
+  // ── SUMMARY ──────────────────────────────────────────────────────────────────
+  function Summary() {
+    if (!cur) return (
+      <div className="flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-slate-200 py-16 text-center">
+        <Upload className="mb-3 h-8 w-8 text-slate-300" />
+        <p className="text-sm font-medium text-slate-500">No data yet</p>
+        <p className="mt-1 text-xs text-slate-400">Import a week to get started</p>
+        <button onClick={()=>setTab("import")} className="mt-4 rounded-md bg-brand-500 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-600">Import Week</button>
+      </div>
+    );
+    const data=cur.data; const ct=crewTotals(data);
+    const tG=Object.values(ct).reduce((s,t)=>s+t.gusto,0);
+    const tO=Object.values(ct).reduce((s,t)=>s+t.actual,0);
+    const tB=Object.values(ct).reduce((s,t)=>s+t.budgeted,0);
+    const tAvb=tO-tB; const tGap=tG>0?tG-tO:null; const tEff=tG>0?Math.round(tO/tG*100):null;
+    const empCrews: Record<string,Set<string>>={};
+    for(let d=0;d<7;d++){const day=data.days[d];if(!day)continue;CREW_DEFS.forEach(cr=>{(day.assignments[cr.code]??[]).forEach(u=>{if(!empCrews[u])empCrews[u]=new Set();empCrews[u].add(cr.code);});});}
+    return (
+      <div className="flex flex-col gap-6">
+        <div className="rounded-md bg-slate-50 px-4 py-2 text-sm text-slate-500">Week of {fmtDate(cur.weekEnd)}</div>
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
+          <KpiCard label="Gusto Clocked" value={tG>0?tG.toFixed(1):"—"} sub="hrs total" />
+          <KpiCard label="On-Site (AvB)" value={tO>0?tO.toFixed(1):"—"} sub="hrs scheduled" />
+          <KpiCard label="Indirect Gap" value={tGap!==null?(tGap>=0?"+":"")+tGap.toFixed(1):"—"} sub="clocked − on-site" cls={tGap!==null?(Math.abs(tGap)>10?"text-red-600":"text-green-600"):"text-slate-400"} />
+          <KpiCard label="Labor Efficiency" value={tEff!==null?tEff+"%":"—"} sub="on-site ÷ clocked" cls={epColor(tEff)} />
+          <KpiCard label="AvB Variance" value={(tAvb>=0?"+":"")+tAvb.toFixed(1)} sub="actual − budgeted" cls={tAvb>=0?"text-green-600":"text-red-600"} />
+        </div>
+        <div>
+          <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-slate-400">Crew Summary</p>
+          <div className="overflow-hidden rounded-lg border bg-white shadow-sm">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50"><tr>
+                <Th>Crew</Th><Th right>Budgeted</Th><Th right>On-Site</Th><Th right>AvB Var</Th>
+                <Th right>Gusto Clocked</Th><Th right>Indirect Gap</Th><Th right>Efficiency</Th>
+                <Th right>OT Hrs</Th><Th right>Revenue</Th>
+              </tr></thead>
+              <tbody className="divide-y divide-slate-100">
+                {CREW_DEFS.map(cr=>{
+                  const t=ct[cr.code]; const avbV=t.actual-t.budgeted;
+                  const gap=t.gusto>0?t.gusto-t.actual:null; const ep=t.gusto>0?Math.round(t.actual/t.gusto*100):null;
+                  return (<tr key={cr.code} className="hover:bg-slate-50">
+                    <td className="py-3 pl-4 font-medium">{cr.code}<span className="ml-1 text-xs text-slate-400">{cr.name}</span></td>
+                    <Td right>{t.budgeted>0?t.budgeted.toFixed(1):"—"}</Td>
+                    <Td right>{t.actual>0?t.actual.toFixed(1):"—"}</Td>
+                    <Td right>{t.budgeted>0?<span className={avbV>=0?"text-green-600":"text-red-600"}>{avbV>=0?"+":""}{avbV.toFixed(1)}</span>:"—"}</Td>
+                    <Td right>{t.gusto>0?t.gusto.toFixed(1):<span className="text-slate-300">—</span>}</Td>
+                    <Td right>{gap!==null?<span className={Math.abs(gap)>3?"text-red-600":Math.abs(gap)>1?"text-amber-500":"text-green-600"}>{gap>=0?"+":""}{gap.toFixed(1)}</span>:"—"}</Td>
+                    <Td right>{ep!==null?<span className={`${epBadge(ep)} rounded-full px-2 py-0.5 text-xs font-semibold`}>{ep}%</span>:"—"}</Td>
+                    <Td right>{t.ot>0?<span className="text-amber-600">{t.ot.toFixed(1)}</span>:"—"}</Td>
+                    <Td right cls="pr-4">{t.revenue>0?"$"+t.revenue.toLocaleString():"—"}</Td>
+                  </tr>);
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div>
+          <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-slate-400">Employee Summary</p>
+          <div className="overflow-hidden rounded-lg border bg-white shadow-sm">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50"><tr>
+                <Th>Employee</Th><Th>Crews</Th><Th right>Total</Th><Th right>Regular</Th><Th right>OT</Th><Th right>Days</Th><Th>Status</Th>
+              </tr></thead>
+              <tbody className="divide-y divide-slate-100">
+                {ALL_EMP.map(emp=>{
+                  const ed=data.gusto.employees[emp.uuid]; const crew=empCrews[emp.uuid];
+                  if(!ed&&!crew) return null;
+                  const tot=ed?.total??0; const ot=ed?.ot??0; const dw=ed?.days.filter(d=>d.total>0).length??0;
+                  return (<tr key={emp.uuid} className={`hover:bg-slate-50 ${tot===0?"opacity-50":""}`}>
+                    <td className="py-3 pl-4 font-medium">{emp.name}{ot>0&&<span className="ml-2 rounded-full bg-amber-100 px-1.5 py-0.5 text-xs font-semibold text-amber-700">OT {ot.toFixed(1)}h</span>}</td>
+                    <td className="px-3 py-3 text-xs text-slate-400">{[...(crew??new Set())].join(", ")||"—"}</td>
+                    <Td right>{tot>0?tot.toFixed(2):"—"}</Td>
+                    <Td right>{ed?ed.regular.toFixed(2):"—"}</Td>
+                    <Td right>{ot>0?<span className="text-amber-600">{ot.toFixed(2)}</span>:"—"}</Td>
+                    <Td right>{dw>0?dw:"—"}</Td>
+                    <td className="px-3 py-3">{tot===0?<Bdg text="absent" v="gray"/>:ot>0?<Bdg text="OT" v="amber"/>:<Bdg text="ok" v="green"/>}</td>
+                  </tr>);
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    );
   }
 
-  // CSV handler
-  const handleCsv = useCallback((file: File) => {
-    const reader = new FileReader();
-    reader.onload = e => {
-      try {
-        const gusto = parseGustoCsv(e.target!.result as string);
-        setImp(p => ({ ...p, gusto, weekEnd: gusto.weekEnd ?? p.weekEnd, csvParsed: true }));
-      } catch (err) { alert("CSV error: " + String(err)); }
-    };
-    reader.readAsText(file);
-  }, []);
+  // ── DAILY ─────────────────────────────────────────────────────────────────────
+  function Daily() {
+    if (!cur) return <div className="py-16 text-center text-sm text-slate-400">No week loaded.</div>;
+    const data=cur.data; const day=data.days[viewDay]; const ws2=data.gusto.weekStart;
+    return (
+      <div className="flex flex-col gap-5">
+        <div className="flex flex-wrap gap-2">
+          {Array.from({length:7},(_,i)=>(
+            <button key={i} onClick={()=>setViewDay(i)} className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${i===viewDay?"bg-brand-500 text-white":"border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}>
+              {ws2?dayLbl(ws2,i):WDAYS[i]}
+            </button>
+          ))}
+        </div>
+        <p className="text-sm font-semibold text-slate-700">Crew — {ws2?dayLbl(ws2,viewDay):WDAYS[viewDay]}</p>
+        <div className="overflow-hidden rounded-lg border bg-white shadow-sm">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-50"><tr><Th>Crew</Th><Th right>Budgeted</Th><Th right>On-Site</Th><Th right>AvB Var</Th><Th right>Gusto Clocked</Th><Th right>Efficiency</Th><Th right>Revenue</Th></tr></thead>
+            <tbody className="divide-y divide-slate-100">
+              {CREW_DEFS.map(cr=>{
+                const avb=day?.avb[cr.code]??{}; const members=day?.assignments[cr.code]??[];
+                let g=0; members.forEach(u=>{g+=getHrsOnDay(data.gusto,u,viewDay);});
+                const bud=pf(avb.budgeted),act=pf(avb.actual),rev=pf(avb.revenue),avar=act-bud;
+                const ep=g>0?Math.round(act/g*100):null;
+                return (<tr key={cr.code} className="hover:bg-slate-50">
+                  <td className="py-3 pl-4 font-medium">{cr.code}<span className="ml-1 text-xs text-slate-400">{cr.name}</span></td>
+                  <Td right>{bud>0?bud.toFixed(1):"—"}</Td><Td right>{act>0?act.toFixed(1):"—"}</Td>
+                  <Td right>{bud>0?<span className={avar>=0?"text-green-600":"text-red-600"}>{avar>=0?"+":""}{avar.toFixed(1)}</span>:"—"}</Td>
+                  <Td right>{g>0?g.toFixed(1):"—"}</Td>
+                  <Td right>{ep!==null?<span className={`${epBadge(ep)} rounded-full px-2 py-0.5 text-xs font-semibold`}>{ep}%</span>:"—"}</Td>
+                  <Td right cls="pr-4">{rev>0?"$"+rev.toLocaleString():"—"}</Td>
+                </tr>);
+              })}
+            </tbody>
+          </table>
+        </div>
+        <p className="text-sm font-semibold text-slate-700">Employees — {ws2?dayLbl(ws2,viewDay):WDAYS[viewDay]}</p>
+        <div className="overflow-hidden rounded-lg border bg-white shadow-sm">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-50"><tr><Th>Employee</Th><Th>Crew</Th><Th right>Total Hrs</Th><Th right>Regular</Th><Th right>OT</Th><Th right>Clock In</Th><Th right>Clock Out</Th><Th>Status</Th></tr></thead>
+            <tbody className="divide-y divide-slate-100">
+              {CREW_DEFS.flatMap(cr=>(day?.assignments[cr.code]??[]).map(uuid=>{
+                const emp=getEmp(uuid); if(!emp) return null;
+                const hrs=getHrsOnDay(data.gusto,uuid,viewDay);
+                const dk=ws2?dayKey(ws2,viewDay):null;
+                const de=dk?data.gusto.employees[uuid]?.days.find(x=>x.date===dk):null;
+                const ot=de?.ot??0; const [inT,outT]=de?.timeRange?.split(" - ")??["",""];
+                return (<tr key={uuid+cr.code} className={`hover:bg-slate-50 ${hrs===0?"opacity-50":""}`}>
+                  <td className="py-3 pl-4 font-medium">{emp.name}{ot>0&&<span className="ml-2 rounded-full bg-amber-100 px-1.5 py-0.5 text-xs font-semibold text-amber-700">OT</span>}</td>
+                  <td className="px-3 py-3"><span className="rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-600">{cr.code}</span></td>
+                  <Td right>{hrs>0?hrs.toFixed(2):"—"}</Td>
+                  <Td right>{(de?.regular??0)>0?de!.regular.toFixed(2):"—"}</Td>
+                  <Td right>{ot>0?<span className="text-amber-600">{ot.toFixed(2)}</span>:"—"}</Td>
+                  <td className="px-3 py-3 text-right text-xs text-slate-500">{inT||"—"}</td>
+                  <td className="px-3 py-3 text-right text-xs text-slate-500">{outT||"—"}</td>
+                  <td className="px-3 py-3">{hrs===0?<Bdg text="off" v="gray"/>:ot>0?<Bdg text="OT" v="amber"/>:<Bdg text="worked" v="green"/>}</td>
+                </tr>);
+              })).filter(Boolean)}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  }
 
-  // AvB PDF handler
-  const handleAvbPdf = useCallback(async (file: File, dayIdx: number) => {
-    try {
-      const pdfjs = await import("pdfjs-dist");
-      pdfjs.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
-      const buf = await file.arrayBuffer();
-      const pdf = await pdfjs.getDocument({ data: buf }).promise;
-      let fullText = "";
-      for (let p = 1; p <= pdf.numPages; p++) {
-        const page = await pdf.getPage(p);
-        const tc = await page.getTextContent();
-        type TItem = { transform: number[]; str: string };
-        const items = (tc.items as TItem[]).map(i => ({ x: Math.round(i.transform[4]), y: Math.round(i.transform[5]), str: i.str }));
-        items.sort((a, b) => b.y - a.y || a.x - b.x);
-        const lineMap: Record<number, typeof items> = {};
-        items.forEach(it => { const yk = Math.round(it.y / 4) * 4; if (!lineMap[yk]) lineMap[yk] = []; lineMap[yk].push(it); });
-        Object.keys(lineMap).map(Number).sort((a, b) => b - a).forEach(y => {
-          lineMap[y].sort((a, b) => a.x - b.x);
-          fullText += lineMap[y].map(i => i.str).join(" ") + "\n";
-        });
-      }
-      const lines = fullText.split("\n");
-      const parsed: Record<string, { budgeted: number; actual: number; revenue: number }> = {};
-      const SUM = /Sum:.*Sum:.*Sum:/i, CREW = /^\s*(FERT\d*|LNDSCP\d*|MAINT\d*|ENH\d*)\s*$/i;
-      const NUM = /([\d,]+\.\d{2,4})/g, DOL = /\$([\d,]+\.\d{2})/;
-      for (let i = 0; i < lines.length - 2; i++) {
-        if (SUM.test(lines[i])) {
-          const cm = CREW.exec(lines[i + 1]);
-          if (cm && !parsed[cm[1].toUpperCase()]) {
-            const nums = [...lines[i + 2].matchAll(NUM)].map(m => parseFloat(m[1].replace(",","")));
-            const dm = DOL.exec(lines[i + 2]);
-            if (nums.length >= 2) parsed[cm[1].toUpperCase()] = { budgeted: nums[0], actual: nums[1], revenue: dm ? parseFloat(dm[1].replace(",","")) : 0 };
-          }
-        }
-      }
-      if (!Object.keys(parsed).length) { alert("No crew data found in PDF."); return; }
-      setImp(p => {
-        const days = { ...p.days };
-        days[dayIdx] = { ...days[dayIdx], avb: { ...days[dayIdx].avb, ...parsed } };
-        const avbParsedDays = new Set(p.avbParsedDays); avbParsedDays.add(dayIdx);
-        return { ...p, days, avbParsedDays };
+  // ── HISTORY ───────────────────────────────────────────────────────────────────
+  function History() {
+    if (!weeks.length) return <div className="py-16 text-center text-sm text-slate-400">No history yet.</div>;
+    const labels = weeks.map(w=>fmtDate(w.weekEnd));
+    const hrsData = weeks.map((w,i)=>{
+      let tO=0,tG=0;
+      CREW_DEFS.forEach(cr=>{for(let d=0;d<7;d++){tO+=pf(w.data.days[d]?.avb[cr.code]?.actual);(w.data.days[d]?.assignments[cr.code]??[]).forEach(u=>{tG+=getHrsOnDay(w.data.gusto,u,d);});}});
+      return {week:labels[i],"On-site":parseFloat(tO.toFixed(1)),"Gusto":parseFloat(tG.toFixed(1))};
+    });
+    const effData = weeks.map((w,i)=>{
+      const pt: Record<string,number|string>={week:labels[i]};
+      CREW_DEFS.forEach(cr=>{let g=0,o=0;for(let d=0;d<7;d++){o+=pf(w.data.days[d]?.avb[cr.code]?.actual);(w.data.days[d]?.assignments[cr.code]??[]).forEach(u=>{g+=getHrsOnDay(w.data.gusto,u,d);});}if(g>0)pt[cr.code]=parseFloat((o/g*100).toFixed(1));});
+      return pt;
+    });
+    return (
+      <div className="flex flex-col gap-6">
+        <InfoBar>Charts build week over week as you import data.</InfoBar>
+        <div className="rounded-lg border bg-white p-5 shadow-sm">
+          <p className="mb-4 text-sm font-semibold text-slate-700">Labor Efficiency by Crew (%)</p>
+          <ResponsiveContainer width="100%" height={240}>
+            <LineChart data={effData}>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+              <XAxis dataKey="week" tick={{fontSize:11,fill:"#94a3b8"}} axisLine={false} tickLine={false} />
+              <YAxis domain={[0,110]} tick={{fontSize:11,fill:"#94a3b8"}} axisLine={false} tickLine={false} tickFormatter={v=>v+"%"} />
+              <Tooltip formatter={(v:number)=>[v+"%"]} contentStyle={{fontSize:12,borderRadius:8}} />
+              <Legend wrapperStyle={{fontSize:11}} />
+              {CREW_DEFS.map((cr,i)=><Line key={cr.code} type="monotone" dataKey={cr.code} stroke={CREW_COLORS[i]} strokeWidth={2} dot={false} connectNulls />)}
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+        <div className="rounded-lg border bg-white p-5 shadow-sm">
+          <p className="mb-4 text-sm font-semibold text-slate-700">On-Site vs Gusto Clocked</p>
+          <ResponsiveContainer width="100%" height={200}>
+            <BarChart data={hrsData}>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+              <XAxis dataKey="week" tick={{fontSize:11,fill:"#94a3b8"}} axisLine={false} tickLine={false} />
+              <YAxis tick={{fontSize:11,fill:"#94a3b8"}} axisLine={false} tickLine={false} />
+              <Tooltip contentStyle={{fontSize:12,borderRadius:8}} />
+              <Legend wrapperStyle={{fontSize:11}} />
+              <Bar dataKey="On-site" fill="#60ab45" radius={[3,3,0,0]} />
+              <Bar dataKey="Gusto" fill="#3b82f6" radius={[3,3,0,0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+        <div>
+          <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-slate-400">Weekly Log</p>
+          <div className="overflow-hidden rounded-lg border bg-white shadow-sm">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50"><tr><Th>Week</Th><Th right>Budgeted</Th><Th right>On-Site</Th><Th right>Gusto Clocked</Th><Th right>Indirect Gap</Th><Th right>Efficiency</Th><Th>{""}</Th></tr></thead>
+              <tbody className="divide-y divide-slate-100">
+                {[...weeks].reverse().map(w=>{
+                  let tG=0,tO=0,tB=0;
+                  CREW_DEFS.forEach(cr=>{for(let d=0;d<7;d++){tO+=pf(w.data.days[d]?.avb[cr.code]?.actual);tB+=pf(w.data.days[d]?.avb[cr.code]?.budgeted);(w.data.days[d]?.assignments[cr.code]??[]).forEach(u=>{tG+=getHrsOnDay(w.data.gusto,u,d);});}});
+                  const gap=tG>0?tG-tO:null; const ep=tG>0?Math.round(tO/tG*100):null;
+                  return (<tr key={w.weekEnd} className="hover:bg-slate-50">
+                    <td className="py-3 pl-4 font-medium">Week of {fmtDate(w.weekEnd)}</td>
+                    <Td right>{tB.toFixed(1)}</Td><Td right>{tO.toFixed(1)}</Td>
+                    <Td right>{tG>0?tG.toFixed(1):"—"}</Td>
+                    <Td right>{gap!==null?<span className={Math.abs(gap)>10?"text-red-600":"text-green-600"}>{gap>=0?"+":""}{gap.toFixed(1)}</span>:"—"}</Td>
+                    <Td right>{ep!==null?<span className={`${epBadge(ep)} rounded-full px-2 py-0.5 text-xs font-semibold`}>{ep}%</span>:"—"}</Td>
+                    <td className="px-3 py-3 pr-4 text-right">
+                      <button onClick={()=>{if(confirm("Delete week of "+fmtDate(w.weekEnd)+"?"))del.mutate(w.weekEnd);}} className="text-red-400 hover:text-red-600"><Trash2 className="h-4 w-4"/></button>
+                    </td>
+                  </tr>);
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── IMPORT ────────────────────────────────────────────────────────────────────
+  function Import() {
+    const day = wd.days[importDay];
+    const isoDate = ws ? dayIso(ws, importDay) : null;
+    const workedToday = new Set<string>();
+    if (isoDate && ws) {
+      const dk = dayKey(ws, importDay);
+      Object.entries(wd.gusto.employees).forEach(([uuid, ed]) => {
+        if (ed.days.find(d=>d.date===dk&&d.total>0)) workedToday.add(uuid);
       });
-    } catch (e) { alert("PDF error: " + String(e)); }
-  }, []);
+    }
+    const allAssigned = new Set(Object.values(day.assignments).flat());
+    const unassigned = FIELD_UUIDS.filter(u=>!allAssigned.has(u)&&workedToday.has(u));
+    return (
+      <div className="flex flex-col gap-5">
+        {/* Step 1 */}
+        <div className="rounded-lg border bg-white p-5 shadow-sm">
+          <p className="mb-1 text-sm font-semibold text-slate-700">Step 1 — Upload Gusto CSV (whole week)</p>
+          <p className="mb-3 text-xs text-slate-400">Time Tracking → Reports → Hours → Weekly on Thursday → Download CSV</p>
+          <div className="flex items-center gap-3">
+            <button onClick={()=>csvRef.current?.click()} className="flex items-center gap-2 rounded-md border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
+              <Upload className="h-4 w-4"/> Upload CSV
+            </button>
+            {csvSt&&<span className={`text-xs ${csvSt.startsWith("✓")?"text-green-600":"text-red-500"}`}>{csvSt}</span>}
+          </div>
+          <input ref={csvRef} type="file" accept=".csv" className="hidden" onChange={e=>{const f=e.target.files?.[0];if(f)handleCsv(f);}} />
+        </div>
+        {/* Step 2 */}
+        <div className="rounded-lg border bg-white p-5 shadow-sm">
+          <p className="mb-3 text-sm font-semibold text-slate-700">Step 2 — Set Week Ending Date</p>
+          <div className="flex items-center gap-3">
+            <input type="date" value={weekEnd} onChange={e=>setWeekEnd(e.target.value)} className="rounded-md border border-slate-200 px-3 py-1.5 text-sm"/>
+            <button onClick={()=>setWeekEnd(thisSunday())} className="rounded-md border border-slate-200 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50">This Week</button>
+          </div>
+        </div>
+        {/* Step 3 */}
+        <div className="rounded-lg border bg-white p-5 shadow-sm">
+          <p className="mb-1 text-sm font-semibold text-slate-700">Step 3 — Daily Crew Assignments & AvB Data</p>
+          <InfoBar>For each day: upload your AvB PDF (auto-fills crew hours), then assign employees to crews. Assignments can differ day to day.</InfoBar>
+          {/* Copy row */}
+          <div className="mb-4 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+            <span>Copy assignments from</span>
+            <select value={cpFrom} onChange={e=>setCpFrom(e.target.value)} className="rounded border border-slate-200 px-2 py-1 text-xs"><option value="">— day —</option>{dayOpts}</select>
+            <span>to</span>
+            <select value={cpTo} onChange={e=>setCpTo(e.target.value)} className="rounded border border-slate-200 px-2 py-1 text-xs"><option value="">— day —</option>{dayOpts}</select>
+            <button onClick={copyAssignments} className="rounded border border-slate-200 bg-white px-2 py-1 text-xs hover:bg-slate-50">Copy</button>
+          </div>
+          {/* Day strip */}
+          <div className="mb-4 flex flex-wrap gap-2">
+            {Array.from({length:7},(_,i)=>{
+              const hasAvb=CREW_DEFS.some(cr=>(wd.days[i]?.avb[cr.code]?.actual??0)>0);
+              return (<button key={i} onClick={()=>setImportDay(i)} className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${i===importDay?"bg-brand-500 text-white":hasAvb?"border border-green-400 text-green-600 hover:bg-green-50":"border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}>
+                {ws?dayLbl(ws,i):WDAYS[i]}
+              </button>);
+            })}
+          </div>
+          {/* PDF upload for this day */}
+          <div className="mb-4">
+            <p className="mb-1.5 text-xs text-slate-500">Upload AvB PDF for {ws?dayLbl(ws,importDay):WDAYS[importDay]} — auto-fills crew hours</p>
+            <div className="flex items-center gap-3">
+              <button onClick={()=>pdfRef.current?.click()} className="flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50">
+                <Upload className="h-3.5 w-3.5"/> Upload AvB PDF
+              </button>
+              {pdfSt[importDay]&&<span className={`text-xs ${pdfSt[importDay].startsWith("✓")?"text-green-600":pdfSt[importDay]==="Parsing…"?"text-slate-400":"text-red-500"}`}>{pdfSt[importDay]}</span>}
+            </div>
+            <input ref={pdfRef} type="file" accept=".pdf" className="hidden" onChange={e=>{const f=e.target.files?.[0];if(f){handlePdf(f,importDay);e.target.value="";}}} />
+          </div>
+          {unassigned.length>0&&<InfoBar warn>Worked today but not assigned: {unassigned.map(u=>getEmp(u)?.name).join(", ")}</InfoBar>}
+          {/* Crew cards */}
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            {CREW_DEFS.map(cr=>{
+              const members=day.assignments[cr.code]??[]; const avb=day.avb[cr.code]??{budgeted:0,actual:0,revenue:0};
+              return (<div key={cr.code} className="flex flex-col gap-2 rounded-lg border bg-slate-50 p-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-slate-700">{cr.name}</span>
+                  <span className="rounded border bg-white px-1.5 py-0.5 text-[10px] text-slate-400">{cr.code}</span>
+                </div>
+                <div className="flex min-h-[24px] flex-wrap gap-1">
+                  {members.map(uuid=>{const e=getEmp(uuid);if(!e)return null;
+                    const hrs=isoDate&&ws?wd.gusto.employees[uuid]?.days.find(d=>d.date===dayKey(ws,importDay))?.total??null:null;
+                    return (<span key={uuid} className="inline-flex items-center gap-1 rounded border bg-white px-1.5 py-0.5 text-xs">
+                      {e.name.split(" ")[0]}{hrs!==null&&hrs>0&&<span className="text-slate-400">{hrs.toFixed(1)}h</span>}
+                      <button onClick={()=>rmFromCrew(importDay,cr.code,uuid)} className="leading-none text-red-400 hover:text-red-600">×</button>
+                    </span>);
+                  })}
+                  {members.length===0&&<span className="text-[11px] text-slate-400">No members</span>}
+                </div>
+                <select defaultValue="" className="w-full rounded border border-slate-200 bg-white px-2 py-1 text-xs"
+                  onChange={e=>{if(e.target.value){addToCrew(importDay,cr.code,e.target.value);e.target.value="";}}}>
+                  <option value="">Add employee…</option>
+                  {FIELD_UUIDS.filter(u=>!members.includes(u)).map(u=>{const e=getEmp(u);return e?<option key={u} value={u}>{e.name}</option>:null;})}
+                </select>
+                <div className="border-t border-slate-200 pt-2">
+                  <p className="mb-1.5 text-[10px] uppercase tracking-wide text-slate-400">AvB Hours {avb.actual>0&&<span className="text-green-600">✓ auto-filled</span>}</p>
+                  <div className="grid grid-cols-3 gap-1">
+                    {(["budgeted","actual","revenue"] as const).map(f=>(
+                      <div key={f}>
+                        <label className="text-[9px] uppercase text-slate-400">{f==="revenue"?"Revenue $":f}</label>
+                        <input type="number" step="0.5" min="0" value={(avb[f]||"")} placeholder="0"
+                          onChange={e=>setAvb(importDay,cr.code,f,e.target.value)}
+                          className="w-full rounded border border-slate-200 bg-white px-1.5 py-1 text-right text-xs"/>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>);
+            })}
+          </div>
+        </div>
+        <div className="flex gap-3">
+          <button onClick={saveWeek} disabled={upsert.isPending} className="rounded-md bg-brand-500 px-5 py-2 text-sm font-semibold text-white hover:bg-brand-600 disabled:opacity-50">
+            {upsert.isPending?"Saving…":"Save Week → Dashboard"}
+          </button>
+          <button onClick={()=>setTab("summary")} className="rounded-md border border-slate-200 px-5 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50">Cancel</button>
+        </div>
+      </div>
+    );
+  }
 
-  // crew mutations
-  const addToCrewDay = (dayIdx: number, crewCode: string, uuid: string) => {
-    setImp(p => {
-      const days = { ...p.days };
-      // remove from all crews on this day first
-      CREW_DEFS.forEach(cr => {
-        days[dayIdx] = { ...days[dayIdx], assignments: { ...days[dayIdx].assignments, [cr.code]: (days[dayIdx].assignments[cr.code] ?? []).filter(u => u !== uuid) } };
-      });
-      days[dayIdx] = { ...days[dayIdx], assignments: { ...days[dayIdx].assignments, [crewCode]: [...(days[dayIdx].assignments[crewCode] ?? []), uuid] } };
-      return { ...p, days };
-    });
-  };
-
-  const removeFromCrew = (dayIdx: number, crewCode: string, uuid: string) => {
-    setImp(p => {
-      const days = { ...p.days };
-      days[dayIdx] = { ...days[dayIdx], assignments: { ...days[dayIdx].assignments, [crewCode]: (days[dayIdx].assignments[crewCode] ?? []).filter(u => u !== uuid) } };
-      return { ...p, days };
-    });
-  };
-
-  const setAvbField = (dayIdx: number, crewCode: string, field: "budgeted" | "actual" | "revenue", val: number) => {
-    setImp(p => {
-      const days = { ...p.days };
-      days[dayIdx] = { ...days[dayIdx], avb: { ...days[dayIdx].avb, [crewCode]: { ...(days[dayIdx].avb[crewCode] ?? {}), [field]: val } } };
-      return { ...p, days };
-    });
-  };
-
-  const copyDayAssignments = (from: number, to: number) => {
-    setImp(p => {
-      const days = { ...p.days };
-      days[to] = { ...days[to], assignments: JSON.parse(JSON.stringify(p.days[from].assignments)) };
-      return { ...p, days };
-    });
-  };
-
-  const handleSave = async () => {
-    if (!imp.weekEnd) { alert("Set week ending date."); return; }
-    setSaving(true);
-    try {
-      await upsert.mutateAsync({ weekEnd: imp.weekEnd, data: { days: imp.days, gusto: imp.gusto } as AvbWeekData });
-      setImp(blankImport()); setTab("summary"); setViewWeekOffset(0);
-    } catch (e) { alert("Save failed: " + String(e)); }
-    finally { setSaving(false); }
-  };
-
-  // day labels
-  const ws = currentWeek?.data.gusto.weekStart;
-  const viewDayLabels = ws ? WDAYS.map((_, i) => dayLabel(ws, i)) : WDAYS;
-  const impWs = imp.gusto.weekStart;
-  const impDayLabels = impWs ? WDAYS.map((_, i) => dayLabel(impWs, i)) : WDAYS;
-
-  // history chart data
-  const histData = weeks.map(w => {
-    const kpis = weekKpis(w);
-    const t = crewTotals(w);
-    const point: Record<string, number | string> = { week: fmtDate(w.weekEnd), onSite: parseFloat(kpis.tO.toFixed(1)), gusto: parseFloat(kpis.tG.toFixed(1)) };
-    CREW_DEFS.forEach(cr => { const g = t[cr.code].gusto; point[cr.code] = g > 0 ? Math.round(t[cr.code].actual / g * 100) : 0; });
-    return point;
-  });
-
-  const tabBtn = (t: Tab, label: string) => (
-    <button key={t} onClick={() => setTab(t)}
-      className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap
-        ${tab === t ? "border-brand-500 text-brand-600" : "border-transparent text-slate-500 hover:text-slate-700"}`}>
-      {label}
-    </button>
-  );
-
+  // ── Root ──────────────────────────────────────────────────────────────────────
+  const TABS: {key:Tab;label:string}[] = [
+    {key:"summary",label:"Weekly Summary"},{key:"daily",label:"Daily View"},
+    {key:"history",label:"History & Trends"},{key:"import",label:"Import Week"},
+  ];
   return (
     <div className="flex flex-col gap-5">
-      <PageHeader title="AvB × Gusto — Crew Hours" description="Daily on-site hours vs Gusto clocked time by crew"
-        action={
-          <button onClick={() => { setImp(blankImport()); setTab("import"); }}
-            className="flex items-center gap-1.5 rounded-lg bg-brand-500 px-3 py-2 text-sm font-semibold text-white hover:bg-brand-600 transition-colors">
-            <Upload className="h-4 w-4" /> Import Week
-          </button>
-        }
-      />
-
-      <div className="flex gap-0 border-b border-slate-200 overflow-x-auto -mb-1">
-        {tabBtn("summary","Weekly Summary")}{tabBtn("daily","Daily View")}{tabBtn("history","History & Trends")}{tabBtn("import","Import Week")}
+      <PageHeader title="AvB × Gusto — Crew Hours" description="Compare on-site production hours against Gusto clocked hours by crew"
+        action={<button onClick={()=>{setWd(defaultWeekData());setTab("import");}} className="flex items-center gap-2 rounded-md bg-brand-500 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-600"><Upload className="h-4 w-4"/>Import Week</button>} />
+      <div className="flex gap-0 border-b border-slate-200">
+        {TABS.map(t=>(
+          <button key={t.key} onClick={()=>setTab(t.key)} className={`px-4 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px ${tab===t.key?"border-brand-500 text-brand-600":"border-transparent text-slate-500 hover:text-slate-700"}`}>{t.label}</button>
+        ))}
       </div>
-
-      {isLoading && <p className="text-sm text-slate-400">Loading…</p>}
-
-      {/* ── WEEKLY SUMMARY ─────────────────────────────────────────────────────── */}
-      {tab === "summary" && (
-        <div className="flex flex-col gap-5">
-          {!currentWeek ? (
-            <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-700">No weeks imported yet — use "Import Week" to get started.</div>
-          ) : (() => {
-            const kpis = weekKpis(currentWeek);
-            const t = crewTotals(currentWeek);
-            return (<>
-              <div className="flex items-center gap-2">
-                <button onClick={() => setViewWeekOffset(o => Math.min(o + 1, weeks.length - 1))} disabled={viewWeekOffset >= weeks.length - 1} className="rounded border p-1 disabled:opacity-30 hover:bg-slate-100"><ChevronLeft className="h-4 w-4" /></button>
-                <span className="text-sm font-medium text-slate-700">Week of {fmtDate(currentWeek.weekEnd)}</span>
-                <button onClick={() => setViewWeekOffset(o => Math.max(o - 1, 0))} disabled={viewWeekOffset === 0} className="rounded border p-1 disabled:opacity-30 hover:bg-slate-100"><ChevronRight className="h-4 w-4" /></button>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
-                <KpiCard label="Gusto Clocked" value={kpis.tG.toFixed(1)} sub="hrs total" />
-                <KpiCard label="On-Site (AvB)" value={kpis.tO.toFixed(1)} sub="hrs scheduled" />
-                <KpiCard label="Indirect Gap" value={kpis.gap !== null ? (kpis.gap >= 0 ? "+" : "") + kpis.gap.toFixed(1) : "—"} sub="clocked − on-site" valueClass={kpis.gap !== null && Math.abs(kpis.gap) > 10 ? "text-red-600" : "text-green-600"} />
-                <KpiCard label="Labor Efficiency" value={kpis.eff !== null ? Math.round(kpis.eff * 100) + "%" : "—"} sub="on-site ÷ clocked" valueClass={kpis.eff !== null ? kpis.eff >= 0.88 ? "text-green-600" : kpis.eff >= 0.75 ? "text-amber-600" : "text-red-600" : ""} />
-                <KpiCard label="AvB Variance" value={(kpis.avbVar >= 0 ? "+" : "") + kpis.avbVar.toFixed(1)} sub="actual − budgeted" valueClass={kpis.avbVar >= 0 ? "text-green-600" : "text-red-600"} />
-              </div>
-
-              <div className="overflow-x-auto rounded-xl border bg-white shadow-sm">
-                <table className="min-w-full text-sm">
-                  <thead className="bg-slate-50 border-b border-slate-200">
-                    <tr>{["Crew","Budgeted","On-Site","AvB Var","Gusto Clocked","Indirect Gap","Efficiency","OT Hrs","Revenue"].map((h,i) => (
-                      <th key={h} className={`px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-slate-500 whitespace-nowrap ${i > 0 ? "text-right" : ""}`}>{h}</th>
-                    ))}</tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {CREW_DEFS.map(cr => {
-                      const ct = t[cr.code];
-                      const avbVar = ct.actual - ct.budgeted;
-                      const gap = ct.gusto > 0 ? ct.gusto - ct.actual : null;
-                      return (
-                        <tr key={cr.code} className="hover:bg-slate-50">
-                          <td className="px-4 py-3"><span className="font-semibold">{cr.code}</span><span className="ml-2 text-xs text-slate-400">{cr.name}</span></td>
-                          <td className="px-4 py-3 text-right tabular-nums">{ct.budgeted > 0 ? ct.budgeted.toFixed(1) : "—"}</td>
-                          <td className="px-4 py-3 text-right tabular-nums">{ct.actual > 0 ? ct.actual.toFixed(1) : "—"}</td>
-                          <td className="px-4 py-3 text-right">{ct.budgeted > 0 ? <span className={avbVar >= 0 ? "text-green-600" : "text-red-600"}>{avbVar >= 0 ? "+" : ""}{avbVar.toFixed(1)}</span> : "—"}</td>
-                          <td className="px-4 py-3 text-right tabular-nums">{ct.gusto > 0 ? ct.gusto.toFixed(1) : <span className="text-slate-300">—</span>}</td>
-                          <td className="px-4 py-3 text-right">{gap !== null ? <span className={Math.abs(gap) > 3 ? "text-red-600" : Math.abs(gap) > 1 ? "text-amber-600" : "text-green-600"}>{gap >= 0 ? "+" : ""}{gap.toFixed(1)}</span> : "—"}</td>
-                          <td className="px-4 py-3 text-right">{effBadge(ct.gusto > 0 ? ct.actual / ct.gusto : null)}</td>
-                          <td className="px-4 py-3 text-right">{ct.ot > 0 ? <Badge color="yellow">{ct.ot.toFixed(1)}</Badge> : "—"}</td>
-                          <td className="px-4 py-3 text-right tabular-nums">{ct.revenue > 0 ? "$" + ct.revenue.toLocaleString() : "—"}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-
-              <div className="overflow-x-auto rounded-xl border bg-white shadow-sm">
-                <p className="px-4 pt-3 pb-1 text-xs font-semibold uppercase tracking-wider text-slate-400">Employee Summary</p>
-                <table className="min-w-full text-sm">
-                  <thead className="bg-slate-50 border-b border-slate-200">
-                    <tr>{["Employee","Crews","Gusto Total","Regular","OT","Days","Status"].map((h,i) => (
-                      <th key={h} className={`px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-slate-500 ${i > 1 ? "text-right" : ""}`}>{h}</th>
-                    ))}</tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {ALL_EMP.map(emp => {
-                      const ed = currentWeek.data.gusto.employees[emp.uuid];
-                      const crewSet = new Set<string>();
-                      for (let d = 0; d < 7; d++) CREW_DEFS.forEach(cr => { if (currentWeek.data.days[d]?.assignments?.[cr.code]?.includes(emp.uuid)) crewSet.add(cr.code); });
-                      if (!ed && crewSet.size === 0) return null;
-                      const tot = ed?.total ?? 0, ot = ed?.ot ?? 0, dw = ed?.days?.filter(d => d.total > 0).length ?? 0;
-                      return (
-                        <tr key={emp.uuid} className={`hover:bg-slate-50 ${tot === 0 ? "opacity-40" : ""}`}>
-                          <td className="px-4 py-3 font-medium">{emp.name}{ot > 0 && <span className="ml-1.5 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-700">OT {ot.toFixed(1)}h</span>}</td>
-                          <td className="px-4 py-3 text-xs text-slate-400">{[...crewSet].join(", ") || "—"}</td>
-                          <td className="px-4 py-3 text-right tabular-nums">{tot > 0 ? tot.toFixed(2) : "—"}</td>
-                          <td className="px-4 py-3 text-right tabular-nums">{ed ? ed.regular.toFixed(2) : "—"}</td>
-                          <td className="px-4 py-3 text-right">{ot > 0 ? <span className="text-amber-600 font-medium">{ot.toFixed(2)}</span> : "—"}</td>
-                          <td className="px-4 py-3 text-right">{dw > 0 ? dw : "—"}</td>
-                          <td className="px-4 py-3 text-right">{tot === 0 ? <Badge color="gray">absent</Badge> : ot > 0 ? <Badge color="yellow">OT</Badge> : <Badge color="green">ok</Badge>}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </>);
-          })()}
-        </div>
-      )}
-
-      {/* ── DAILY VIEW ──────────────────────────────────────────────────────────── */}
-      {tab === "daily" && (
-        <div>
-          {!currentWeek ? <p className="text-sm text-slate-400">No week loaded.</p> : (
-            <>
-              <DayStrip labels={viewDayLabels} active={viewDayIdx} onSelect={setViewDayIdx} />
-              {(() => {
-                const day = currentWeek.data.days[viewDayIdx];
-                const dk = currentWeek.data.gusto.weekStart ? dayKey(currentWeek.data.gusto.weekStart, viewDayIdx) : null;
-                return (
-                  <div className="flex flex-col gap-4">
-                    <div className="overflow-x-auto rounded-xl border bg-white shadow-sm">
-                      <table className="min-w-full text-sm">
-                        <thead className="bg-slate-50 border-b"><tr>
-                          {["Crew","Budgeted","On-Site","AvB Var","Gusto Clocked","Efficiency","Revenue"].map((h,i) => (
-                            <th key={h} className={`px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-slate-500 ${i > 0 ? "text-right" : ""}`}>{h}</th>
-                          ))}
-                        </tr></thead>
-                        <tbody className="divide-y divide-slate-100">
-                          {CREW_DEFS.map(cr => {
-                            const avb = day?.avb?.[cr.code] ?? { budgeted: 0, actual: 0, revenue: 0 };
-                            const g = (day?.assignments?.[cr.code] ?? []).reduce((s, u) => s + getHrsOnDayIdx(currentWeek.data.gusto, u, viewDayIdx), 0);
-                            const avar = pf(avb.actual) - pf(avb.budgeted);
-                            return (
-                              <tr key={cr.code} className="hover:bg-slate-50">
-                                <td className="px-4 py-3"><span className="font-semibold">{cr.code}</span><span className="ml-2 text-xs text-slate-400">{cr.name}</span></td>
-                                <td className="px-4 py-3 text-right tabular-nums">{pf(avb.budgeted) > 0 ? pf(avb.budgeted).toFixed(1) : "—"}</td>
-                                <td className="px-4 py-3 text-right tabular-nums">{pf(avb.actual) > 0 ? pf(avb.actual).toFixed(1) : "—"}</td>
-                                <td className="px-4 py-3 text-right">{pf(avb.budgeted) > 0 ? <span className={avar >= 0 ? "text-green-600" : "text-red-600"}>{avar >= 0 ? "+" : ""}{avar.toFixed(1)}</span> : "—"}</td>
-                                <td className="px-4 py-3 text-right tabular-nums">{g > 0 ? g.toFixed(1) : "—"}</td>
-                                <td className="px-4 py-3 text-right">{effBadge(g > 0 ? pf(avb.actual) / g : null)}</td>
-                                <td className="px-4 py-3 text-right tabular-nums">{pf(avb.revenue) > 0 ? "$" + pf(avb.revenue).toLocaleString() : "—"}</td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                    <div className="overflow-x-auto rounded-xl border bg-white shadow-sm">
-                      <table className="min-w-full text-sm">
-                        <thead className="bg-slate-50 border-b"><tr>
-                          {["Employee","Crew","Total Hrs","Regular","OT","Clock In","Clock Out","Status"].map((h,i) => (
-                            <th key={h} className={`px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-slate-500 ${i > 1 ? "text-right" : ""}`}>{h}</th>
-                          ))}
-                        </tr></thead>
-                        <tbody className="divide-y divide-slate-100">
-                          {CREW_DEFS.flatMap(cr =>
-                            (day?.assignments?.[cr.code] ?? []).map(uuid => {
-                              const emp = getEmp(uuid); if (!emp) return null;
-                              const hrs = getHrsOnDayIdx(currentWeek.data.gusto, uuid, viewDayIdx);
-                              const de = dk ? currentWeek.data.gusto.employees[uuid]?.days?.find(x => x.date === dk) : null;
-                              const ot = de?.ot ?? 0;
-                              const [inT="", outT=""] = de?.timeRange?.split(" - ") ?? [];
-                              return (
-                                <tr key={uuid+cr.code} className={`hover:bg-slate-50 ${hrs === 0 ? "opacity-40" : ""}`}>
-                                  <td className="px-4 py-3 font-medium">{emp.name}{ot > 0 && <span className="ml-1.5 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-700">OT</span>}</td>
-                                  <td className="px-4 py-3"><Badge color="gray">{cr.code}</Badge></td>
-                                  <td className="px-4 py-3 text-right font-semibold tabular-nums">{hrs > 0 ? hrs.toFixed(2) : "—"}</td>
-                                  <td className="px-4 py-3 text-right tabular-nums">{de?.regular ? de.regular.toFixed(2) : "—"}</td>
-                                  <td className="px-4 py-3 text-right">{ot > 0 ? <span className="text-amber-600 font-medium">{ot.toFixed(2)}</span> : "—"}</td>
-                                  <td className="px-4 py-3 text-right text-xs text-slate-500">{inT || "—"}</td>
-                                  <td className="px-4 py-3 text-right text-xs text-slate-500">{outT || "—"}</td>
-                                  <td className="px-4 py-3 text-right">{hrs === 0 ? <Badge color="gray">off</Badge> : ot > 0 ? <Badge color="yellow">OT</Badge> : <Badge color="green">worked</Badge>}</td>
-                                </tr>
-                              );
-                            })
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                );
-              })()}
-            </>
-          )}
-        </div>
-      )}
-
-      {/* ── HISTORY ─────────────────────────────────────────────────────────────── */}
-      {tab === "history" && (
-        <div className="flex flex-col gap-5">
-          {weeks.length === 0 ? <p className="text-sm text-slate-400">No history yet.</p> : (<>
-            <div className="rounded-xl border bg-white p-5 shadow-sm">
-              <p className="mb-3 text-sm font-semibold text-slate-700">Labor Efficiency by Crew</p>
-              <ResponsiveContainer width="100%" height={240}>
-                <LineChart data={histData} margin={{ left: -20, right: 8, top: 4, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-                  <XAxis dataKey="week" tick={{ fontSize: 11, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
-                  <YAxis tickFormatter={v => v + "%"} domain={[0, 110]} tick={{ fontSize: 11, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
-                  <Tooltip formatter={(v: number) => v + "%"} contentStyle={{ fontSize: 12, borderRadius: 8 }} />
-                  <Legend wrapperStyle={{ fontSize: 11 }} />
-                  {CREW_DEFS.map((cr, i) => <Line key={cr.code} type="monotone" dataKey={cr.code} stroke={CREW_COLORS[i]} strokeWidth={2} dot={false} connectNulls name={cr.code} />)}
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-              <div className="rounded-xl border bg-white p-5 shadow-sm">
-                <p className="mb-3 text-sm font-semibold text-slate-700">On-Site vs Gusto Clocked</p>
-                <ResponsiveContainer width="100%" height={200}>
-                  <BarChart data={histData} margin={{ left: -20, right: 8 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-                    <XAxis dataKey="week" tick={{ fontSize: 11, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
-                    <YAxis tick={{ fontSize: 11, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
-                    <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} />
-                    <Legend wrapperStyle={{ fontSize: 11 }} />
-                    <Bar dataKey="onSite" name="On-site (AvB)" fill="#60ab45" radius={[3,3,0,0]} />
-                    <Bar dataKey="gusto" name="Gusto clocked" fill="#3b82f6" radius={[3,3,0,0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-              <div className="overflow-x-auto rounded-xl border bg-white p-5 shadow-sm">
-                <p className="mb-3 text-sm font-semibold text-slate-700">Weekly Log</p>
-                <table className="min-w-full text-sm">
-                  <thead><tr>{["Week","On-Site","Clocked","Efficiency",""].map((h,i) => (
-                    <th key={i} className={`pb-2 text-xs font-semibold uppercase tracking-wider text-slate-400 ${i > 0 ? "text-right" : ""}`}>{h}</th>
-                  ))}</tr></thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {[...weeks].reverse().map(w => {
-                      const kpis = weekKpis(w);
-                      return (
-                        <tr key={w.weekEnd} className="hover:bg-slate-50">
-                          <td className="py-2 pr-4">{fmtDate(w.weekEnd)}</td>
-                          <td className="py-2 pr-4 text-right tabular-nums">{kpis.tO.toFixed(1)}</td>
-                          <td className="py-2 pr-4 text-right tabular-nums">{kpis.tG.toFixed(1)}</td>
-                          <td className="py-2 pr-4 text-right">{effBadge(kpis.eff)}</td>
-                          <td className="py-2 text-right">
-                            <button onClick={() => { if (confirm("Delete " + fmtDate(w.weekEnd) + "?")) delWeek.mutate(w.weekEnd); }} className="text-red-400 hover:text-red-600 p-1 rounded">
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </>)}
-        </div>
-      )}
-
-      {/* ── IMPORT ──────────────────────────────────────────────────────────────── */}
-      {tab === "import" && (
-        <div className="flex flex-col gap-4 max-w-5xl">
-          {/* Step 1 – Gusto CSV */}
-          <div className="rounded-xl border bg-white p-5 shadow-sm">
-            <p className="mb-1 text-sm font-semibold text-slate-700"><span className="mr-2 inline-flex h-5 w-5 items-center justify-center rounded-full bg-brand-500 text-[10px] font-bold text-white">1</span>Upload Gusto CSV</p>
-            <p className="mb-3 text-xs text-slate-400">Time Tracking → Reports → Hours → Weekly on Thursday → Download CSV</p>
-            <input ref={csvRef} type="file" accept=".csv" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) handleCsv(f); e.target.value = ""; }} />
-            <button onClick={() => csvRef.current?.click()}
-              className={`flex w-full items-center justify-center gap-2 rounded-lg border-2 border-dashed px-4 py-3 text-sm font-medium transition-colors
-                ${imp.csvParsed ? "border-green-400 bg-green-50 text-green-700" : "border-slate-200 text-slate-500 hover:border-brand-400 hover:text-brand-600"}`}>
-              <Upload className="h-4 w-4" />
-              {imp.csvParsed ? `✓ ${Object.keys(imp.gusto.employees).length} employees parsed  |  ${imp.gusto.weekStart} → ${imp.gusto.weekEnd}` : "Click to upload Gusto weekly CSV"}
-            </button>
-          </div>
-
-          {/* Step 2 – Date */}
-          <div className="rounded-xl border bg-white p-5 shadow-sm">
-            <p className="mb-3 text-sm font-semibold text-slate-700"><span className="mr-2 inline-flex h-5 w-5 items-center justify-center rounded-full bg-brand-500 text-[10px] font-bold text-white">2</span>Week Ending Date</p>
-            <div className="flex flex-wrap items-center gap-3">
-              <label className="text-xs uppercase tracking-wider text-slate-500">Week ending (Sunday)</label>
-              <input type="date" value={imp.weekEnd} onChange={e => setImp(p => ({ ...p, weekEnd: e.target.value }))}
-                className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm focus:outline-none focus:border-brand-400" />
-            </div>
-          </div>
-
-          {/* Step 3 – Days */}
-          <div className="rounded-xl border bg-white p-5 shadow-sm">
-            <p className="mb-1 text-sm font-semibold text-slate-700"><span className="mr-2 inline-flex h-5 w-5 items-center justify-center rounded-full bg-brand-500 text-[10px] font-bold text-white">3</span>Daily Crew Assignments &amp; AvB PDFs</p>
-            <p className="mb-3 text-xs text-slate-400">Upload each day&apos;s AvB PDF to auto-fill crew hours, then adjust assignments. Crews can differ day to day.</p>
-
-            {/* Copy row */}
-            <div className="mb-3 flex flex-wrap items-center gap-2 text-xs text-slate-500">
-              <span>Copy assignments from</span>
-              <select id="cfrom" className="rounded border border-slate-200 px-2 py-1 text-xs bg-white">
-                {impDayLabels.map((l,i) => <option key={i} value={i}>{l}</option>)}
-              </select>
-              <span>to</span>
-              <select id="cto" className="rounded border border-slate-200 px-2 py-1 text-xs bg-white">
-                {impDayLabels.map((l,i) => <option key={i} value={i}>{l}</option>)}
-              </select>
-              <button onClick={() => {
-                const f = parseInt((document.getElementById("cfrom") as HTMLSelectElement).value);
-                const t = parseInt((document.getElementById("cto") as HTMLSelectElement).value);
-                copyDayAssignments(f, t);
-              }} className="flex items-center gap-1 rounded border border-slate-200 px-2 py-1 hover:bg-slate-50"><Copy className="h-3 w-3" />Copy</button>
-            </div>
-
-            <DayStrip labels={impDayLabels} active={importDayIdx} onSelect={setImportDayIdx} hasData={imp.avbParsedDays} />
-
-            {/* AvB PDF drop for active day */}
-            <input ref={avbRef} type="file" accept=".pdf" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) handleAvbPdf(f, importDayIdx); e.target.value = ""; }} />
-            <button onClick={() => avbRef.current?.click()}
-              className={`mb-4 flex items-center gap-2 rounded-lg border-2 border-dashed px-4 py-2 text-xs font-medium transition-colors
-                ${imp.avbParsedDays.has(importDayIdx) ? "border-green-400 bg-green-50 text-green-700" : "border-slate-200 text-slate-500 hover:border-brand-400 hover:text-brand-600"}`}>
-              <FileText className="h-3.5 w-3.5" />
-              {imp.avbParsedDays.has(importDayIdx) ? `✓ AvB PDF parsed for ${impDayLabels[importDayIdx]}` : `Upload AvB PDF for ${impDayLabels[importDayIdx]} — auto-fills crew hours`}
-            </button>
-
-            {/* Crew cards */}
-            <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-              {CREW_DEFS.map(cr => {
-                const day = imp.days[importDayIdx];
-                const members = day?.assignments?.[cr.code] ?? [];
-                const avb = day?.avb?.[cr.code] ?? { budgeted: 0, actual: 0, revenue: 0 };
-                const workedUuids = new Set(
-                  imp.gusto.weekStart
-                    ? Object.entries(imp.gusto.employees).filter(([,ed]) => (ed.days?.find(d => d.date === dayKey(imp.gusto.weekStart!, importDayIdx))?.total ?? 0) > 0).map(([u]) => u)
-                    : []
-                );
-                return (
-                  <div key={cr.code} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-                    <div className="mb-2 flex items-center justify-between">
-                      <span className="text-xs font-semibold text-slate-700">{cr.name}</span>
-                      <span className="rounded bg-slate-200 px-1.5 py-0.5 text-[10px] font-medium text-slate-500">{cr.code}</span>
-                    </div>
-                    <div className="mb-2 flex min-h-[22px] flex-wrap gap-1">
-                      {members.map(uuid => {
-                        const e = getEmp(uuid); if (!e) return null;
-                        const hrs = imp.gusto.weekStart ? getHrsOnDayIdx(imp.gusto, uuid, importDayIdx) : null;
-                        return (
-                          <span key={uuid} className="flex items-center gap-0.5 rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[11px]">
-                            {e.name.split(" ")[0]}
-                            {hrs !== null && hrs > 0 && <span className="text-[10px] text-slate-400">{hrs.toFixed(1)}h</span>}
-                            <button onClick={() => removeFromCrew(importDayIdx, cr.code, uuid)} className="ml-0.5 leading-none text-red-400 hover:text-red-600">×</button>
-                          </span>
-                        );
-                      })}
-                      {members.length === 0 && <span className="text-[11px] text-slate-400">No members</span>}
-                    </div>
-                    <select className="mb-2 w-full rounded border border-slate-200 bg-white px-2 py-1 text-[11px]"
-                      value="" onChange={e => { if (e.target.value) addToCrewDay(importDayIdx, cr.code, e.target.value); }}>
-                      <option value="">Add employee…</option>
-                      {FIELD_UUIDS.filter(u => !members.includes(u)).map(u => {
-                        const e = getEmp(u); if (!e) return null;
-                        return <option key={u} value={u}>{e.name}{workedUuids.has(u) ? " ✓" : ""}</option>;
-                      })}
-                    </select>
-                    <div className="grid grid-cols-3 gap-1 border-t border-slate-200 pt-2">
-                      {(["budgeted","actual","revenue"] as const).map(field => (
-                        <div key={field}>
-                          <label className="mb-0.5 block text-[9px] uppercase tracking-wider text-slate-400">{field === "budgeted" ? "Budget" : field === "actual" ? "On-site" : "Revenue"}</label>
-                          <input type="number" step="0.5" min="0"
-                            value={pf(avb[field]) || ""}
-                            placeholder="0"
-                            onChange={e => setAvbField(importDayIdx, cr.code, field, pf(e.target.value))}
-                            className="w-full rounded border border-slate-200 bg-white px-1.5 py-0.5 text-right text-[11px] focus:border-brand-400 focus:outline-none"
-                          />
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          <div className="flex gap-3">
-            <button onClick={handleSave} disabled={saving}
-              className="flex items-center gap-2 rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-brand-600 disabled:opacity-50">
-              <Save className="h-4 w-4" />{saving ? "Saving…" : "Save Week → Dashboard"}
-            </button>
-            <button onClick={() => setTab("summary")} className="rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50">Cancel</button>
-          </div>
-        </div>
-      )}
+      {isLoading?<div className="py-16 text-center text-sm text-slate-400">Loading…</div>:<>
+        {tab==="summary"&&<Summary/>}
+        {tab==="daily"&&<Daily/>}
+        {tab==="history"&&<History/>}
+        {tab==="import"&&<Import/>}
+      </>}
     </div>
   );
 }
