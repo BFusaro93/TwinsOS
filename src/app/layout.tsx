@@ -6,8 +6,8 @@ import "./globals.css";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "TwinsOS",
-  description: "PO + CMMS Operations Platform",
+  title: "Equipt",
+  description: "Work orders, purchasing & asset management",
   viewport: "width=device-width, initial-scale=1, maximum-scale=1",
 };
 

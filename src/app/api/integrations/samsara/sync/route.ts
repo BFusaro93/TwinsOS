@@ -124,7 +124,7 @@ async function syncOrg(
     return { fetched: 0, matched: 0, readings: 0, errors: 1, detail: [`Samsara fetch failed: ${err}`] };
   }
 
-  // 2. Fetch all TwinsOS vehicles for this org.
+  // 2. Fetch all Equipt vehicles for this org.
   const { data: dbVehicles } = await adminClient
     .from("vehicles")
     .select("id, name, asset_tag, samsara_vehicle_id")
@@ -150,7 +150,7 @@ async function syncOrg(
     const miles = parseFloat((meters_value * 0.000621371).toFixed(2));
     const source = obd ? "OBD" : "GPS";
 
-    // Match Samsara vehicle → TwinsOS vehicle (by samsara_vehicle_id first, then name).
+    // Match Samsara vehicle → Equipt vehicle (by samsara_vehicle_id first, then name).
     const dbVehicle = (dbVehicles ?? []).find(
       (v) =>
         (v.samsara_vehicle_id && v.samsara_vehicle_id === sv.id) ||

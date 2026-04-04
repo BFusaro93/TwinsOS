@@ -11,7 +11,7 @@ export default function HomePage() {
         <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-500 shadow-md">
           <Leaf className="h-7 w-7 text-white" />
         </div>
-        <h1 className="text-3xl font-bold tracking-tight text-slate-900">TwinsOS</h1>
+        <h1 className="text-3xl font-bold tracking-tight text-slate-900">Equipt</h1>
         <p className="text-sm text-slate-500">Select a section to get started</p>
       </div>
 

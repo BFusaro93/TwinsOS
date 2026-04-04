@@ -287,7 +287,7 @@ export default function RequestPortalPage() {
         </div>
 
         <p className="mt-4 text-center text-xs text-slate-400">
-          Powered by TwinsOS · {orgName}
+          Powered by Equipt · {orgName}
         </p>
       </div>
     </div>

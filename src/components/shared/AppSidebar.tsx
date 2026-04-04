@@ -44,7 +44,7 @@ export function AppSidebar() {
                 <Leaf className="h-4 w-4 text-white" />
               </div>
               {!sidebarCollapsed && (
-                <span className="truncate text-lg font-bold text-brand-400">TwinsOS</span>
+                <span className="truncate text-lg font-bold text-brand-400">Equipt</span>
               )}
             </>
           )}

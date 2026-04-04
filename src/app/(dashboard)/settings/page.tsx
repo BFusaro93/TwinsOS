@@ -1648,7 +1648,7 @@ function IntegrationsTab() {
           <div className="rounded-lg bg-slate-50 px-4 py-3 text-sm text-slate-600">
             <p className="font-medium text-slate-700">How vehicle matching works</p>
             <p className="mt-1 text-xs text-slate-500">
-              Samsara vehicles are matched to TwinsOS vehicles by <strong>Samsara Vehicle ID</strong> first,
+              Samsara vehicles are matched to Equipt vehicles by <strong>Samsara Vehicle ID</strong> first,
               then by <strong>exact name</strong>. Set the Samsara Vehicle ID on a vehicle&apos;s detail page
               for the most reliable match. A reading is only written if the new odometer value is greater
               than the current value (odometers don&apos;t go backwards).
