@@ -73,7 +73,14 @@ export function useUpsertAvbWeek() {
     mutationFn: async ({ weekEnd, data }: { weekEnd: string; data: AvbWeekData }) => {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
-      const orgId = user?.user_metadata?.org_id as string;
+      if (!user) throw new Error("Not authenticated");
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("org_id")
+        .eq("id", user.id)
+        .single();
+      const orgId = profile?.org_id;
+      if (!orgId) throw new Error("No org found for user");
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await supabase
         .from("avb_weeks")

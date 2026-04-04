@@ -380,8 +380,12 @@ export function AvbDashboard() {
   };
   const saveWeek = async () => {
     if (!weekEnd) return;
-    await upsert.mutateAsync({weekEnd,data:wd});
-    setTab("summary");
+    try {
+      await upsert.mutateAsync({weekEnd,data:wd});
+      setTab("summary");
+    } catch(e) {
+      alert("Save failed: " + String(e));
+    }
   };
 
   // Aggregation
