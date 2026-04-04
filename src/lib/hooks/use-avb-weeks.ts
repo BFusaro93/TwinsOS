@@ -72,9 +72,12 @@ export function useUpsertAvbWeek() {
   return useMutation({
     mutationFn: async ({ weekEnd, data }: { weekEnd: string; data: AvbWeekData }) => {
       const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      const orgId = user?.user_metadata?.org_id as string;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await supabase
         .from("avb_weeks")
-        .upsert({ week_end: weekEnd, data }, { onConflict: "org_id,week_end" });
+        .upsert({ org_id: orgId, week_end: weekEnd, data: data as unknown as never }, { onConflict: "org_id,week_end" });
       if (error) throw error;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["avb-weeks"] }),
