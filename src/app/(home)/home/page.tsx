@@ -38,8 +38,8 @@ export default function HomePage() {
             <Wrench className="h-8 w-8" />
           </div>
           <div className="text-center">
-            <p className="text-lg font-semibold text-slate-900">CMMS System</p>
-            <p className="mt-1 text-sm text-slate-500">Work orders, purchasing &amp; maintenance</p>
+            <p className="text-lg font-semibold text-slate-900">Equipt</p>
+            <p className="mt-1 text-sm text-slate-500">Work orders, purchasing &amp; asset management</p>
           </div>
         </Link>
       </div>
