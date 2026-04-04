@@ -27,8 +27,8 @@ const CREW_DEFS = [
 const ALL_EMP = [
   { uuid:"87a264e0", name:"Rolando Alvarado",    csvName:"Alvarado, Rolando",                   csvJob:"Maintenance Crew Member" },
   { uuid:"b54b3f88", name:"Ryan Auger",           csvName:"Auger, Ryan",                         csvJob:"" },
-  { uuid:"6d5ded40", name:"Otilio Brizuela",      csvName:"Brizuela, Jose",                      csvJob:"Maintenance Crew Leader" },
-  { uuid:"55f28eee", name:"James Brizuela",       csvName:"Brizuela, Jose",                      csvJob:"Maintenance Crew Member" },
+  { uuid:"6d5ded40", name:"Otilio Brizuela",      csvName:"Brizuela, Otilio",                    csvJob:"Maintenance Crew Leader" },
+  { uuid:"55f28eee", name:"James Brizuela",       csvName:"Brizuela, James",                     csvJob:"Maintenance Crew Member" },
   { uuid:"529bbd5c", name:"Mauricio Cruz",        csvName:"Cruz, Mauricio",                      csvJob:"" },
   { uuid:"36a5a673", name:"Julio Escobar",        csvName:"Escobar, Julio",                      csvJob:"" },
   { uuid:"695866b9", name:"Tyler Haywood",        csvName:"Haywood, Tyler",                      csvJob:"" },
