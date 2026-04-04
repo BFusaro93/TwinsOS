@@ -8,6 +8,7 @@ import { WorkOrderDetailPanel } from "@/components/cmms/WorkOrderDetailPanel";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { formatDate } from "@/lib/utils";
 import { WO_STATUS_LABELS, WO_PRIORITY_LABELS } from "@/lib/constants";
+import { OverlayLevelContext, overlayZ, useOverlayLevel } from "@/lib/overlay-level";
 import type { WorkOrder } from "@/types";
 
 interface WOHistoryTabProps {
@@ -19,6 +20,8 @@ export function WOHistoryTab({ assetId, recordLabel = "asset" }: WOHistoryTabPro
   const { data: workOrders, isLoading } = useWorkOrders();
   const [selectedWO, setSelectedWO] = useState<WorkOrder | null>(null);
   const woPortalRef = useRef<HTMLDivElement>(null);
+  const level = useOverlayLevel();
+  const { backdrop: backdropZ, panel: panelZ } = overlayZ(level);
 
   // Close on Escape key
   useEffect(() => {
@@ -114,9 +117,13 @@ export function WOHistoryTab({ assetId, recordLabel = "asset" }: WOHistoryTabPro
       {/* WO detail — rendered via portal to avoid Radix scroll-lock nesting issues */}
       {selectedWO &&
         createPortal(
-          <>
+          <OverlayLevelContext.Provider value={level + 1}>
             <div
-              className="fixed inset-0 z-[199] bg-black/80 data-[state=open]:animate-in data-[state=open]:fade-in-0"
+              className="fixed inset-0 data-[state=open]:animate-in data-[state=open]:fade-in-0"
+              style={{
+                zIndex: backdropZ,
+                backgroundColor: level === 0 ? "rgba(0,0,0,0.8)" : "transparent",
+              }}
               data-state="open"
               onClick={() => setSelectedWO(null)}
             />
@@ -125,7 +132,8 @@ export function WOHistoryTab({ assetId, recordLabel = "asset" }: WOHistoryTabPro
               role="dialog"
               aria-modal="true"
               aria-label={selectedWO.title}
-              className="pointer-events-auto fixed inset-y-0 right-0 z-[200] flex w-full flex-col overflow-hidden border-l bg-background shadow-xl md:w-[580px]"
+              className="pointer-events-auto fixed inset-y-0 right-0 flex w-full flex-col overflow-hidden border-l bg-background shadow-xl md:w-[580px]"
+              style={{ zIndex: panelZ }}
             >
               <button
                 type="button"
@@ -137,7 +145,7 @@ export function WOHistoryTab({ assetId, recordLabel = "asset" }: WOHistoryTabPro
               </button>
               <WorkOrderDetailPanel workOrder={selectedWO} />
             </div>
-          </>,
+          </OverlayLevelContext.Provider>,
           document.body
         )}
     </>
