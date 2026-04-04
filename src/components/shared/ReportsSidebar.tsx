@@ -2,13 +2,33 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { TrendingUp, ArrowLeft, Leaf } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useUIStore } from "@/stores";
 import { useSettingsStore } from "@/stores/settings-store";
-import { NAV_SECTIONS } from "./nav-config";
-import { Leaf, ArrowLeft } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 
-export function AppSidebar() {
+interface ReportsNavItem {
+  label: string;
+  href: string;
+  icon: LucideIcon;
+}
+
+interface ReportsNavSection {
+  label: string;
+  items: ReportsNavItem[];
+}
+
+const REPORTS_NAV: ReportsNavSection[] = [
+  {
+    label: "Dashboards",
+    items: [
+      { label: "AvB × Gusto Hours", href: "/dashboards/avb", icon: TrendingUp },
+    ],
+  },
+];
+
+export function ReportsSidebar() {
   const pathname = usePathname();
   const { sidebarCollapsed } = useUIStore();
   const { logoDataUrl, orgName } = useSettingsStore();
@@ -34,9 +54,7 @@ export function AppSidebar() {
                   sidebarCollapsed ? "h-7 w-7" : "h-8 max-w-[160px]"
                 )}
               />
-              {sidebarCollapsed && (
-                <span className="sr-only">{orgName}</span>
-              )}
+              {sidebarCollapsed && <span className="sr-only">{orgName}</span>}
             </>
           ) : (
             <>
@@ -53,7 +71,7 @@ export function AppSidebar() {
 
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto py-4">
-        {NAV_SECTIONS.map((section) => (
+        {REPORTS_NAV.map((section) => (
           <div key={section.label} className="mb-4">
             {!sidebarCollapsed && (
               <p className="mb-1 px-4 text-[10px] font-semibold uppercase tracking-widest text-slate-400">
@@ -62,10 +80,8 @@ export function AppSidebar() {
             )}
             {section.items.map((item) => {
               const isActive =
-                pathname === item.href ||
-                (!item.exact && item.href !== "/dashboard" && pathname.startsWith(item.href + "/"));
+                pathname === item.href || pathname.startsWith(item.href + "/");
               const Icon = item.icon;
-
               return (
                 <Link
                   key={item.href}
@@ -90,7 +106,7 @@ export function AppSidebar() {
         ))}
       </nav>
 
-      {/* Back to Home */}
+      {/* Back to CMMS */}
       <div className="border-t border-[#2a2a2a] p-3">
         <Link
           href="/home"
@@ -112,9 +128,7 @@ export function AppSidebar() {
             BF
           </div>
           <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium text-slate-200">
-              Brandon Fusaro
-            </p>
+            <p className="truncate text-sm font-medium text-slate-200">Brandon Fusaro</p>
             <p className="truncate text-xs text-slate-400">Admin</p>
           </div>
         </div>

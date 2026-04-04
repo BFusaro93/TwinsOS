@@ -20,7 +20,6 @@ import {
   HelpCircle,
   Library,
   ClipboardCheck,
-  TrendingUp,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -64,12 +63,6 @@ export const NAV_SECTIONS: NavSection[] = [
       { label: "Parts Inventory", href: "/cmms/parts", icon: Cog },
       { label: "Meters", href: "/cmms/meters", icon: Gauge },
       { label: "Automations", href: "/cmms/automations", icon: Zap },
-    ],
-  },
-  {
-    label: "Operations",
-    items: [
-      { label: "AvB × Gusto Hours", href: "/operations/avb", icon: TrendingUp },
     ],
   },
   {

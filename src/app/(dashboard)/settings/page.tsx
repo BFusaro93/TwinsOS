@@ -1706,7 +1706,7 @@ function IntegrationsTab() {
 export default function SettingsPage() {
   const TAB_KEYS = [
     "general",
-    "subscription",
+    // "subscription", — hidden until public rollout (internal only, not included in subscriptions)
     "customizations",
     "required_fields",
     "approval_flows",
