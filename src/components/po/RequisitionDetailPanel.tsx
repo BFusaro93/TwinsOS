@@ -18,6 +18,7 @@ import { SplitToPOsDialog } from "./SplitToPOsDialog";
 import { PODetailSheet } from "./PODetailSheet";
 import { ProductDetailSheet } from "./ProductDetailSheet";
 import { ProjectDetailSheet } from "./ProjectDetailSheet";
+import { PartDetailSheet } from "@/components/cmms/PartDetailSheet";
 import { CatalogItemCombobox } from "@/components/shared/CatalogItemCombobox";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
@@ -79,6 +80,7 @@ function DetailsTab({
   convertedPOs,
   onPoClick,
   onProductClick,
+  onPartClick,
   onProjectClick,
 }: {
   req: Requisition;
@@ -90,6 +92,7 @@ function DetailsTab({
   convertedPOs: PurchaseOrder[];
   onPoClick: () => void;
   onProductClick?: (productId: string) => void;
+  onPartClick?: (partId: string) => void;
   onProjectClick?: (projectId: string) => void;
 }) {
   const [lineItems, setLineItems] = useState<LineItem[]>(req.lineItems);
@@ -126,9 +129,12 @@ function DetailsTab({
     if (!selected) return;
     const qty = Math.max(1, parseInt(addQty) || 1);
     const costCents = addCost ? Math.round(parseFloat(addCost) * 100) : selected.unitCost;
-    const productItemId = selected.key.replace(/^(product:|part:)/, "");
+    const rawId = selected.key.replace(/^(product:|part:)/, "");
+    const productItemId = selected.type === "part" ? "" : rawId;
+    const partId = selected.type === "part" ? rawId : null;
     const newLineItem = {
       productItemId,
+      partId,
       productItemName: selected.name,
       partNumber: selected.partNumber ?? "",
       quantity: qty,
@@ -288,6 +294,7 @@ function DetailsTab({
           editable
           onItemsChange={setLineItems}
           onProductClick={onProductClick}
+          onPartClick={onPartClick}
           onProjectClick={onProjectClick}
         />
       </div>
@@ -425,12 +432,14 @@ export function RequisitionDetailPanel({ requisition }: RequisitionDetailPanelPr
   );
   const [splitOpen, setSplitOpen] = useState(false);
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
+  const [selectedPartId, setSelectedPartId] = useState<string | null>(null);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const { mutate: syncStatus } = useUpdateRequisitionStatus();
   const { mutate: deleteReq, isPending: deleting } = useDeleteRequisition();
 
   const { data: products = [] } = useProducts();
+  const { data: allParts = [] } = useParts();
   const { data: projects = [] } = useProjects();
   const { data: allPOs = [] } = usePurchaseOrders();
 
@@ -440,6 +449,7 @@ export function RequisitionDetailPanel({ requisition }: RequisitionDetailPanelPr
   const convertedPO: PurchaseOrder | null = convertedPOs[0] ?? null;
 
   const selectedProduct = products.find((p) => p.id === selectedProductId) ?? null;
+  const selectedPart = allParts.find((p) => p.id === selectedPartId) ?? null;
   const selectedProject = projects.find((p) => p.id === selectedProjectId) ?? null;
 
   // Build prefill data from the requisition for the PO dialog
@@ -541,6 +551,7 @@ export function RequisitionDetailPanel({ requisition }: RequisitionDetailPanelPr
                 convertedPOs={convertedPOs}
                 onPoClick={() => setPoSheetOpen(true)}
                 onProductClick={(id) => setSelectedProductId(id)}
+                onPartClick={(id) => setSelectedPartId(id)}
                 onProjectClick={(id) => setSelectedProjectId(id)}
               />
             ),
@@ -582,6 +593,13 @@ export function RequisitionDetailPanel({ requisition }: RequisitionDetailPanelPr
           if (!o) setSelectedProductId(null);
         }}
         product={selectedProduct}
+      />
+      <PartDetailSheet
+        part={selectedPart}
+        open={!!selectedPart}
+        onOpenChange={(o) => {
+          if (!o) setSelectedPartId(null);
+        }}
       />
       <ProjectDetailSheet
         open={!!selectedProject}
