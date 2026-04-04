@@ -760,7 +760,7 @@ export function PartDetailSheet({ part, open, onOpenChange }: PartDetailSheetPro
         return createPortal(
           <>
             <div
-              className="fixed inset-0 z-[209] bg-black/80"
+              className="fixed inset-0 z-[209]"
               onClick={() => setSelectedPOId(null)}
             />
             <div className="pointer-events-auto fixed inset-y-0 right-0 z-[210] flex w-full flex-col overflow-hidden border-l bg-background shadow-xl md:w-[680px]">

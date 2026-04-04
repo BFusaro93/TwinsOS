@@ -734,8 +734,7 @@ export function WorkOrderDetailPanel({ workOrder }: WorkOrderDetailPanelProps) {
       {assetSheetOpen && linkedAsset && createPortal(
         <>
           <div
-            className="fixed inset-0 z-[209] bg-black/80 data-[state=open]:animate-in data-[state=open]:fade-in-0"
-            data-state="open"
+            className="fixed inset-0 z-[209]"
             onClick={() => setAssetSheetOpen(false)}
           />
           <div className="pointer-events-auto fixed inset-y-0 right-0 z-[210] flex w-full flex-col overflow-hidden border-l bg-background shadow-xl md:w-[720px]">
@@ -757,8 +756,7 @@ export function WorkOrderDetailPanel({ workOrder }: WorkOrderDetailPanelProps) {
       {vehicleSheetOpen && linkedVehicle && createPortal(
         <>
           <div
-            className="fixed inset-0 z-[209] bg-black/80 data-[state=open]:animate-in data-[state=open]:fade-in-0"
-            data-state="open"
+            className="fixed inset-0 z-[209]"
             onClick={() => setVehicleSheetOpen(false)}
           />
           <div className="pointer-events-auto fixed inset-y-0 right-0 z-[210] flex w-full flex-col overflow-hidden border-l bg-background shadow-xl md:w-[580px]">
@@ -780,8 +778,7 @@ export function WorkOrderDetailPanel({ workOrder }: WorkOrderDetailPanelProps) {
       {subWOSheetWorkOrder && createPortal(
         <>
           <div
-            className="fixed inset-0 z-[209] bg-black/80 data-[state=open]:animate-in data-[state=open]:fade-in-0"
-            data-state="open"
+            className="fixed inset-0 z-[209]"
             onClick={() => setSubWOSheetId(null)}
           />
           <div className="pointer-events-auto fixed inset-y-0 right-0 z-[210] flex w-full flex-col overflow-hidden border-l bg-background shadow-xl md:w-[580px]">
@@ -803,8 +800,7 @@ export function WorkOrderDetailPanel({ workOrder }: WorkOrderDetailPanelProps) {
       {parentWOSheetOpen && parentWorkOrder && createPortal(
         <>
           <div
-            className="fixed inset-0 z-[209] bg-black/80 data-[state=open]:animate-in data-[state=open]:fade-in-0"
-            data-state="open"
+            className="fixed inset-0 z-[209]"
             onClick={() => setParentWOSheetOpen(false)}
           />
           <div className="pointer-events-auto fixed inset-y-0 right-0 z-[210] flex w-full flex-col overflow-hidden border-l bg-background shadow-xl md:w-[580px]">
