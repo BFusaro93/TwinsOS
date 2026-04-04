@@ -2004,6 +2004,41 @@ export type Database = {
           },
         ]
       }
+      safety_weeks: {
+        Row: {
+          created_at: string
+          data: Json
+          id: string
+          org_id: string
+          updated_at: string
+          week_end: string
+        }
+        Insert: {
+          created_at?: string
+          data?: Json
+          id?: string
+          org_id: string
+          updated_at?: string
+          week_end: string
+        }
+        Update: {
+          created_at?: string
+          data?: Json
+          id?: string
+          org_id?: string
+          updated_at?: string
+          week_end?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "safety_weeks_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       vehicles: {
         Row: {
           air_filter_part_number: string | null
@@ -2726,3 +2761,4 @@ export const Constants = {
     Enums: {},
   },
 } as const
+
