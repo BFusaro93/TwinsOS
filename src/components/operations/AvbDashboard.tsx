@@ -55,12 +55,14 @@ const ALL_EMP = [
 const FIELD_UUIDS = ALL_EMP.filter(e => !["b5ad4fb2","3c084d9d"].includes(e.uuid)).map(e => e.uuid);
 
 const DEF_ASSIGNMENTS: Record<string, string[]> = {
-  MAINT1:[], MAINT2:["6d5ded40","529bbd5c","36a5a673"],
-  MAINT3:["2f1c79d8","9c3e8613","ad9b1c2e","fde97e65","875c4721"],
-  MAINT4:["32d07880","f776a380","c25bbf8d","87a264e0"],
-  MAINT5:[], FERT1:["695866b9"],
-  LNDSCP1:["41c55955","b54b3f88","38f06eb7"],
-  ENH1:["d3b6869a","418e5fac","0bfcb8df","9695004c"],
+  MAINT1:["32d07880","87a264e0","fde97e65"],           // Luis, Rolando, Encarnacion
+  MAINT2:["529bbd5c","2f1c79d8","418e5fac"],           // Mauricio, Jose, Esdras
+  MAINT3:["9c3e8613","36a5a673","6d5ded40"],           // Saul, Julio, Otilio
+  MAINT4:["f776a380","3540efab","55f28eee"],           // Wilder, Olvin, James
+  MAINT5:[],
+  FERT1:[],
+  LNDSCP1:["9695004c","d3b6869a","38f06eb7","b54b3f88"], // Mark, Zackery, Steve, Ryan
+  ENH1:["0bfcb8df","69b0adca"],                        // Jason, Marvin
 };
 
 const WDAYS = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
@@ -262,6 +264,39 @@ function Th({children,right=false}:{children:React.ReactNode;right?:boolean}) {
 }
 function Td({children,right=false,cls=""}:{children:React.ReactNode;right?:boolean;cls?:string}) {
   return <td className={`px-3 py-3 ${right?"text-right tabular-nums":""} ${cls}`}>{children}</td>;
+}
+
+// ── AvbNumberInput ────────────────────────────────────────────────────────────
+// Defined at module level so its reference stays stable across AvbDashboard
+// re-renders. Inner function components lose focus after every keystroke because
+// React remounts them when their parent re-renders and the function reference changes.
+function AvbNumberInput({
+  value,
+  onCommit,
+}: {
+  value: number;
+  onCommit: (v: string) => void;
+}) {
+  const [local, setLocal] = useState(value > 0 ? String(value) : "");
+  // Sync from parent only when the committed value actually changes (e.g. auto-fill)
+  const prevValue = useRef(value);
+  if (prevValue.current !== value) {
+    prevValue.current = value;
+    setLocal(value > 0 ? String(value) : "");
+  }
+  return (
+    <input
+      type="number"
+      step="0.5"
+      min="0"
+      value={local}
+      placeholder="0"
+      onChange={e => setLocal(e.target.value)}
+      onBlur={() => onCommit(local)}
+      onWheel={e => e.currentTarget.blur()}
+      className="w-full rounded border border-slate-200 bg-white px-1.5 py-1 text-right text-xs"
+    />
+  );
 }
 
 // ── Main Component ────────────────────────────────────────────────────────────
@@ -692,9 +727,10 @@ export function AvbDashboard() {
                     {(["budgeted","actual","revenue"] as const).map(f=>(
                       <div key={f}>
                         <label className="text-[9px] uppercase text-slate-400">{f==="revenue"?"Revenue $":f}</label>
-                        <input type="number" step="0.5" min="0" value={(avb[f]||"")} placeholder="0"
-                          onChange={e=>setAvb(importDay,cr.code,f,e.target.value)}
-                          className="w-full rounded border border-slate-200 bg-white px-1.5 py-1 text-right text-xs"/>
+                        <AvbNumberInput
+                          value={avb[f]??0}
+                          onCommit={v=>setAvb(importDay,cr.code,f,v)}
+                        />
                       </div>
                     ))}
                   </div>
