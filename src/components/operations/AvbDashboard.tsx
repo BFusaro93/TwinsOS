@@ -5,7 +5,7 @@ import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis,
   CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from "recharts";
-import { Upload, Trash2 } from "lucide-react";
+import { Upload, Trash2, Pencil } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import {
   useAvbWeeks, useUpsertAvbWeek, useDeleteAvbWeek,
@@ -166,8 +166,12 @@ function parseGustoCsv(text: string): GustoData {
         const raw = lines[i].replace(/"/g,"");
         if (!raw||raw.startsWith("Hours for")) { i--; break; }
         const c = csvRow(lines[i]);
-        if (c.length>=3&&c[0]?.match(/\d{2}\/\d{2}\/\d{2}/))
-          daily.push({date:c[0],total:pf(c[1]),regular:pf(c[2]),ot:pf(c[3]),mealBreak:pf(c[7]),timeRange:c[11]??"",job:c[12]??""});
+        if (c.length>=3&&c[0]?.match(/^\d{1,2}\/\d{1,2}\/\d{2}$/)) {
+          // Normalize to zero-padded MM/DD/YY so it matches dayKey() output
+          const [dm,dd,dy]=c[0].split("/");
+          const normDate=dm.padStart(2,"0")+"/"+dd.padStart(2,"0")+"/"+dy;
+          daily.push({date:normDate,total:pf(c[1]),regular:pf(c[2]),ot:pf(c[3]),mealBreak:pf(c[7]),timeRange:c[11]??"",job:c[12]??""});
+        }
         i++;
       }
       const nm = hm[1].trim();
@@ -429,7 +433,13 @@ export function AvbDashboard() {
     for(let d=0;d<7;d++){const day=data.days[d];if(!day)continue;CREW_DEFS.forEach(cr=>{(day.assignments[cr.code]??[]).forEach(u=>{if(!empCrews[u])empCrews[u]=new Set();empCrews[u].add(cr.code);});});}
     return (
       <div className="flex flex-col gap-6">
-        <div className="rounded-md bg-slate-50 px-4 py-2 text-sm text-slate-500">Week of {fmtDate(cur.weekEnd)}</div>
+        <div className="flex items-center justify-between rounded-md bg-slate-50 px-4 py-2 text-sm text-slate-500">
+          <span>Week of {fmtDate(cur.weekEnd)}</span>
+          <button
+            onClick={()=>{setWd(cur.data);setWeekEnd(cur.weekEnd);setImportDay(0);setCsvSt("");setPdfSt({});setTab("import");}}
+            className="flex items-center gap-1.5 text-xs font-medium text-brand-600 hover:underline"
+          ><Pencil className="h-3 w-3"/>Edit Week</button>
+        </div>
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
           <KpiCard label="Gusto Clocked" value={tG>0?tG.toFixed(1):"—"} sub="hrs total" />
           <KpiCard label="On-Site (AvB)" value={tO>0?tO.toFixed(1):"—"} sub="hrs scheduled" />
@@ -621,7 +631,14 @@ export function AvbDashboard() {
                     <Td right>{gap!==null?<span className={Math.abs(gap)>10?"text-red-600":"text-green-600"}>{gap>=0?"+":""}{gap.toFixed(1)}</span>:"—"}</Td>
                     <Td right>{ep!==null?<span className={`${epBadge(ep)} rounded-full px-2 py-0.5 text-xs font-semibold`}>{ep}%</span>:"—"}</Td>
                     <td className="px-3 py-3 pr-4 text-right">
-                      <button onClick={()=>{if(confirm("Delete week of "+fmtDate(w.weekEnd)+"?"))del.mutate(w.weekEnd);}} className="text-red-400 hover:text-red-600"><Trash2 className="h-4 w-4"/></button>
+                      <div className="flex items-center justify-end gap-3">
+                        <button
+                          title="Edit week"
+                          onClick={()=>{setWd(w.data);setWeekEnd(w.weekEnd);setImportDay(0);setCsvSt("");setPdfSt({});setTab("import");}}
+                          className="text-slate-400 hover:text-brand-600"
+                        ><Pencil className="h-4 w-4"/></button>
+                        <button onClick={()=>{if(confirm("Delete week of "+fmtDate(w.weekEnd)+"?"))del.mutate(w.weekEnd);}} className="text-red-400 hover:text-red-600"><Trash2 className="h-4 w-4"/></button>
+                      </div>
                     </td>
                   </tr>);
                 })}
