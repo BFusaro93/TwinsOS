@@ -30,8 +30,10 @@ import { StatusFlowIndicator } from "@/components/shared/StatusFlowIndicator";
 import { ApprovalChain } from "@/components/shared/ApprovalChain";
 import { PO_STATUS_LABELS } from "@/lib/constants";
 import { useProducts } from "@/lib/hooks/use-products";
+import { useParts } from "@/lib/hooks/use-parts";
 import { useVendors } from "@/lib/hooks/use-vendors";
 import { useProjects } from "@/lib/hooks/use-projects";
+import { PartDetailSheet } from "@/components/cmms/PartDetailSheet";
 import { useSubmitForApproval } from "@/lib/hooks/use-approval-requests";
 import { useUpdatePurchaseOrderStatus, useDeletePurchaseOrder } from "@/lib/hooks/use-purchase-orders";
 import { useCurrentUserStore, usePOStore } from "@/stores";
@@ -101,11 +103,14 @@ function DetailsTab({
     subtotalForSubmit + Math.round((subtotalForSubmit * po.taxRatePercent) / 100) + po.shippingCost;
 
   const { data: products = [] } = useProducts();
+  const { data: parts = [] } = useParts();
   const { data: vendors = [] } = useVendors();
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
+  const [selectedPartId, setSelectedPartId] = useState<string | null>(null);
   const [vendorSheetOpen, setVendorSheetOpen] = useState(false);
   const selectedVendor = vendors.find((v) => v.id === po.vendorId) ?? null;
   const selectedProduct = products.find((p) => p.id === selectedProductId) ?? null;
+  const selectedPart = parts.find((p) => p.id === selectedPartId) ?? null;
 
   const subtotal = lineItems.reduce((sum, li) => sum + li.quantity * li.unitCost, 0);
   const salesTax = Math.round(subtotal * po.taxRatePercent / 100);
@@ -216,6 +221,7 @@ function DetailsTab({
           editable
           onItemsChange={setLineItems}
           onProductClick={(id) => setSelectedProductId(id)}
+          onPartClick={(id) => setSelectedPartId(id)}
           onProjectClick={onProjectClick}
         />
       </div>
@@ -249,6 +255,14 @@ function DetailsTab({
         open={!!selectedProduct}
         onOpenChange={(open) => {
           if (!open) setSelectedProductId(null);
+        }}
+      />
+
+      <PartDetailSheet
+        part={selectedPart}
+        open={!!selectedPart}
+        onOpenChange={(open) => {
+          if (!open) setSelectedPartId(null);
         }}
       />
 

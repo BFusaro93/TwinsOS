@@ -87,6 +87,7 @@ export function useCreatePurchaseOrder() {
             po.lineItems.map((li: LineItem) => ({
               po_id: created.id,
               product_item_id: li.productItemId || null,
+              part_id: li.partId ?? null,
               product_item_name: li.productItemName,
               part_number: li.partNumber,
               quantity: li.quantity,

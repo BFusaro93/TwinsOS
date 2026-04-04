@@ -97,6 +97,7 @@ export function useCreateRequisition() {
             input.lineItems.map((li) => ({
               requisition_id: req.id,
               product_item_id: li.productItemId || null,
+              part_id: li.partId ?? null,
               product_item_name: li.productItemName,
               part_number: li.partNumber,
               quantity: li.quantity,
@@ -144,6 +145,7 @@ export function useAddRequisitionLineItem() {
       const { error: lineErr } = await supabase.from("requisition_line_items").insert({
         requisition_id: requisitionId,
         product_item_id: lineItem.productItemId || null,
+        part_id: lineItem.partId ?? null,
         product_item_name: lineItem.productItemName,
         part_number: lineItem.partNumber,
         quantity: lineItem.quantity,

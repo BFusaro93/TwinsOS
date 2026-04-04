@@ -142,6 +142,7 @@ export function mapLineItem(row: ReqLineItemRow | POLineItemRow): LineItem {
   return {
     id: row.id,
     productItemId: row.product_item_id ?? "",
+    partId: row.part_id ?? null,
     productItemName: row.product_item_name,
     partNumber: row.part_number,
     quantity: row.quantity,

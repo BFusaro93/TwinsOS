@@ -37,6 +37,7 @@ interface LineItemsTableProps {
   editable?: boolean;
   onItemsChange?: (items: LineItem[]) => void;
   onProductClick?: (productId: string) => void;
+  onPartClick?: (partId: string) => void;
   onProjectClick?: (projectId: string) => void;
 }
 
@@ -46,6 +47,7 @@ export function LineItemsTable({
   editable = false,
   onItemsChange,
   onProductClick,
+  onPartClick,
   onProjectClick,
 }: LineItemsTableProps) {
   const [items, setItems] = useState<LineItem[]>(lineItems);
@@ -128,6 +130,14 @@ export function LineItemsTable({
                       <button
                         type="button"
                         onClick={() => onProductClick(li.productItemId!)}
+                        className="text-left font-medium text-brand-600 hover:underline"
+                      >
+                        {li.productItemName}
+                      </button>
+                    ) : onPartClick && li.partId ? (
+                      <button
+                        type="button"
+                        onClick={() => onPartClick(li.partId!)}
                         className="text-left font-medium text-brand-600 hover:underline"
                       >
                         {li.productItemName}

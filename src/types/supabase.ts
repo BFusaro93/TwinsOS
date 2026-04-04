@@ -600,6 +600,41 @@ export type Database = {
           },
         ]
       }
+      avb_weeks: {
+        Row: {
+          created_at: string
+          data: Json
+          id: string
+          org_id: string
+          updated_at: string
+          week_end: string
+        }
+        Insert: {
+          created_at?: string
+          data?: Json
+          id?: string
+          org_id: string
+          updated_at?: string
+          week_end: string
+        }
+        Update: {
+          created_at?: string
+          data?: Json
+          id?: string
+          org_id?: string
+          updated_at?: string
+          week_end?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "avb_weeks_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       comments: {
         Row: {
           author_id: string | null
@@ -1372,6 +1407,7 @@ export type Database = {
           id: string
           notes: string | null
           org_id: string
+          part_id: string | null
           part_number: string
           po_id: string
           product_item_id: string | null
@@ -1387,6 +1423,7 @@ export type Database = {
           id?: string
           notes?: string | null
           org_id?: string
+          part_id?: string | null
           part_number?: string
           po_id: string
           product_item_id?: string | null
@@ -1402,6 +1439,7 @@ export type Database = {
           id?: string
           notes?: string | null
           org_id?: string
+          part_id?: string | null
           part_number?: string
           po_id?: string
           product_item_id?: string | null
@@ -1418,6 +1456,13 @@ export type Database = {
             columns: ["org_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "po_line_items_part_id_fkey"
+            columns: ["part_id"]
+            isOneToOne: false
+            referencedRelation: "parts"
             referencedColumns: ["id"]
           },
           {
@@ -1763,6 +1808,7 @@ export type Database = {
           id: string
           notes: string | null
           org_id: string
+          part_id: string | null
           part_number: string
           product_item_id: string | null
           product_item_name: string
@@ -1778,6 +1824,7 @@ export type Database = {
           id?: string
           notes?: string | null
           org_id?: string
+          part_id?: string | null
           part_number?: string
           product_item_id?: string | null
           product_item_name?: string
@@ -1793,6 +1840,7 @@ export type Database = {
           id?: string
           notes?: string | null
           org_id?: string
+          part_id?: string | null
           part_number?: string
           product_item_id?: string | null
           product_item_name?: string
@@ -1809,6 +1857,13 @@ export type Database = {
             columns: ["org_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "requisition_line_items_part_id_fkey"
+            columns: ["part_id"]
+            isOneToOne: false
+            referencedRelation: "parts"
             referencedColumns: ["id"]
           },
           {

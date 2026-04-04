@@ -3,6 +3,7 @@ import { BaseRecord, ApprovalStatus } from "./common";
 export interface LineItem {
   id: string;
   productItemId: string;
+  partId: string | null;
   productItemName: string;
   partNumber: string;
   quantity: number;

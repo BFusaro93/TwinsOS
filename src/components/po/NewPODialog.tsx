@@ -330,16 +330,19 @@ export function NewPODialog({ open, onOpenChange, initialData, prefillData, onCr
         // (parts.product_item_id → product_items.id FK).
         // Using the raw part UUID would fail the FK constraint on po_line_items.
         let resolvedProductItemId: string;
+        let resolvedPartId: string | null = null;
         if (li.itemType === "part") {
           const rawId = li.productItemId.replace(/^part:/, "");
           const part = allParts.find((p) => p.id === rawId);
           resolvedProductItemId = part?.productItemId ?? "";
+          resolvedPartId = rawId || null;
         } else {
           resolvedProductItemId = li.productItemId.replace(/^product:/, "");
         }
         return {
           id: "",
           productItemId: resolvedProductItemId,
+          partId: resolvedPartId,
           productItemName: li.productItemName,
           partNumber: li.partNumber,
           quantity: li.quantity,
