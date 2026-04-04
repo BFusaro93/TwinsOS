@@ -114,23 +114,30 @@ export function WOHistoryTab({ assetId, recordLabel = "asset" }: WOHistoryTabPro
       {/* WO detail — rendered via portal to avoid Radix scroll-lock nesting issues */}
       {selectedWO &&
         createPortal(
-          <div
-            ref={woPortalRef}
-            role="dialog"
-            aria-modal="true"
-            aria-label={selectedWO.title}
-            className="pointer-events-auto fixed inset-y-0 right-0 z-[200] flex w-full flex-col overflow-hidden border-l bg-background shadow-xl md:w-[580px]"
-          >
-            <button
-              type="button"
-              aria-label="Close"
+          <>
+            <div
+              className="fixed inset-0 z-[199] bg-black/80 data-[state=open]:animate-in data-[state=open]:fade-in-0"
+              data-state="open"
               onClick={() => setSelectedWO(null)}
-              className="absolute right-4 top-4 z-10 rounded-sm p-0.5 opacity-70 transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+            />
+            <div
+              ref={woPortalRef}
+              role="dialog"
+              aria-modal="true"
+              aria-label={selectedWO.title}
+              className="pointer-events-auto fixed inset-y-0 right-0 z-[200] flex w-full flex-col overflow-hidden border-l bg-background shadow-xl md:w-[580px]"
             >
-              <X className="h-4 w-4" />
-            </button>
-            <WorkOrderDetailPanel workOrder={selectedWO} />
-          </div>,
+              <button
+                type="button"
+                aria-label="Close"
+                onClick={() => setSelectedWO(null)}
+                className="absolute right-4 top-4 z-10 rounded-sm p-0.5 opacity-70 transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+              >
+                <X className="h-4 w-4" />
+              </button>
+              <WorkOrderDetailPanel workOrder={selectedWO} />
+            </div>
+          </>,
           document.body
         )}
     </>
