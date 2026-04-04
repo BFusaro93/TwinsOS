@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { cn, formatDate, getInitials } from "@/lib/utils";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { RecordDetailTabs } from "@/components/shared/RecordDetailTabs";
@@ -9,7 +10,6 @@ import { AttachmentsSection } from "@/components/shared/AttachmentsSection";
 import { AuditTrailTab } from "@/components/shared/AuditTrailTab";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
-import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { EditButton } from "@/components/shared/EditButton";
 import { StatusFlowIndicator } from "@/components/shared/StatusFlowIndicator";
 import { WOCostsTab } from "@/components/cmms/WOCostsTab";
@@ -27,7 +27,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { ChevronDown } from "lucide-react";
 import { printWO } from "@/lib/print";
 import { useWOParts } from "@/lib/hooks/use-wo-costs";
-import { Download, GitBranch, CheckCircle2, Trash2 } from "lucide-react";
+import { Download, GitBranch, CheckCircle2, Trash2, X } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -730,36 +730,96 @@ export function WorkOrderDetailPanel({ workOrder }: WorkOrderDetailPanelProps) {
       />
 
       {/* Asset detail overlay */}
-      <Sheet open={assetSheetOpen && !!linkedAsset} onOpenChange={setAssetSheetOpen}>
-        <SheetContent className="flex w-full flex-col overflow-hidden p-0 md:w-[720px] md:max-w-[720px]">
-          {linkedAsset && <AssetDetailPanel asset={linkedAsset} />}
-        </SheetContent>
-      </Sheet>
+      {assetSheetOpen && linkedAsset && createPortal(
+        <>
+          <div
+            className="fixed inset-0 z-[209] bg-black/80 data-[state=open]:animate-in data-[state=open]:fade-in-0"
+            data-state="open"
+            onClick={() => setAssetSheetOpen(false)}
+          />
+          <div className="pointer-events-auto fixed inset-y-0 right-0 z-[210] flex w-full flex-col overflow-hidden border-l bg-background shadow-xl md:w-[720px]">
+            <button
+              type="button"
+              aria-label="Close"
+              onClick={() => setAssetSheetOpen(false)}
+              className="absolute right-4 top-4 z-10 rounded-sm p-0.5 opacity-70 transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+            >
+              <X className="h-4 w-4" />
+            </button>
+            <AssetDetailPanel asset={linkedAsset} />
+          </div>
+        </>,
+        document.body
+      )}
 
       {/* Vehicle detail overlay */}
-      <Sheet open={vehicleSheetOpen && !!linkedVehicle} onOpenChange={setVehicleSheetOpen}>
-        <SheetContent className="flex w-full flex-col overflow-hidden p-0 md:w-[580px] md:max-w-[580px]">
-          {linkedVehicle && <VehicleDetailPanel vehicle={linkedVehicle} />}
-        </SheetContent>
-      </Sheet>
+      {vehicleSheetOpen && linkedVehicle && createPortal(
+        <>
+          <div
+            className="fixed inset-0 z-[209] bg-black/80 data-[state=open]:animate-in data-[state=open]:fade-in-0"
+            data-state="open"
+            onClick={() => setVehicleSheetOpen(false)}
+          />
+          <div className="pointer-events-auto fixed inset-y-0 right-0 z-[210] flex w-full flex-col overflow-hidden border-l bg-background shadow-xl md:w-[580px]">
+            <button
+              type="button"
+              aria-label="Close"
+              onClick={() => setVehicleSheetOpen(false)}
+              className="absolute right-4 top-4 z-10 rounded-sm p-0.5 opacity-70 transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+            >
+              <X className="h-4 w-4" />
+            </button>
+            <VehicleDetailPanel vehicle={linkedVehicle} />
+          </div>
+        </>,
+        document.body
+      )}
 
       {/* Sub work order detail overlay */}
-      <Sheet open={!!subWOSheetWorkOrder} onOpenChange={(o) => { if (!o) setSubWOSheetId(null); }}>
-        <SheetContent className="flex w-full flex-col overflow-hidden p-0 md:w-[580px] md:max-w-[580px]">
-          {subWOSheetWorkOrder && (
+      {subWOSheetWorkOrder && createPortal(
+        <>
+          <div
+            className="fixed inset-0 z-[209] bg-black/80 data-[state=open]:animate-in data-[state=open]:fade-in-0"
+            data-state="open"
+            onClick={() => setSubWOSheetId(null)}
+          />
+          <div className="pointer-events-auto fixed inset-y-0 right-0 z-[210] flex w-full flex-col overflow-hidden border-l bg-background shadow-xl md:w-[580px]">
+            <button
+              type="button"
+              aria-label="Close"
+              onClick={() => setSubWOSheetId(null)}
+              className="absolute right-4 top-4 z-10 rounded-sm p-0.5 opacity-70 transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+            >
+              <X className="h-4 w-4" />
+            </button>
             <WorkOrderDetailPanel workOrder={subWOSheetWorkOrder} />
-          )}
-        </SheetContent>
-      </Sheet>
+          </div>
+        </>,
+        document.body
+      )}
 
       {/* Parent work order detail overlay */}
-      <Sheet open={parentWOSheetOpen && !!parentWorkOrder} onOpenChange={setParentWOSheetOpen}>
-        <SheetContent className="flex w-full flex-col overflow-hidden p-0 md:w-[580px] md:max-w-[580px]">
-          {parentWorkOrder && (
+      {parentWOSheetOpen && parentWorkOrder && createPortal(
+        <>
+          <div
+            className="fixed inset-0 z-[209] bg-black/80 data-[state=open]:animate-in data-[state=open]:fade-in-0"
+            data-state="open"
+            onClick={() => setParentWOSheetOpen(false)}
+          />
+          <div className="pointer-events-auto fixed inset-y-0 right-0 z-[210] flex w-full flex-col overflow-hidden border-l bg-background shadow-xl md:w-[580px]">
+            <button
+              type="button"
+              aria-label="Close"
+              onClick={() => setParentWOSheetOpen(false)}
+              className="absolute right-4 top-4 z-10 rounded-sm p-0.5 opacity-70 transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+            >
+              <X className="h-4 w-4" />
+            </button>
             <WorkOrderDetailPanel workOrder={parentWorkOrder} />
-          )}
-        </SheetContent>
-      </Sheet>
+          </div>
+        </>,
+        document.body
+      )}
 
       <NewWorkOrderDialog open={editOpen} onOpenChange={setEditOpen} initialData={workOrder} />
     </div>
