@@ -68,7 +68,7 @@ const DEF_ASSIGNMENTS: Record<string, string[]> = {
 const WDAYS = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
 const CREW_COLORS = ["#3b82f6","#22c55e","#ef4444","#f59e0b","#a78bfa","#60ab45","#06b6d4","#ec4899"];
 
-type Tab = "summary" | "daily" | "history" | "import";
+type Tab = "summary" | "daily" | "history" | "ytd" | "import";
 
 // ── Utilities ──────────────────────────────────────────────────────────────────
 const pf = (v: unknown) => parseFloat(String(v ?? "").replace(",","")) || 0;
@@ -428,7 +428,7 @@ export function AvbDashboard() {
     const tG=Object.values(ct).reduce((s,t)=>s+t.gusto,0);
     const tO=Object.values(ct).reduce((s,t)=>s+t.actual,0);
     const tB=Object.values(ct).reduce((s,t)=>s+t.budgeted,0);
-    const tAvb=tO-tB; const tGap=tG>0?tG-tO:null; const tEff=tG>0?Math.round(tO/tG*100):null;
+    const tAvb=tB-tO; const tGap=tG>0?tG-tO:null; const tEff=tG>0?Math.round(tO/tG*100):null;
     const empCrews: Record<string,Set<string>>={};
     for(let d=0;d<7;d++){const day=data.days[d];if(!day)continue;CREW_DEFS.forEach(cr=>{(day.assignments[cr.code]??[]).forEach(u=>{if(!empCrews[u])empCrews[u]=new Set();empCrews[u].add(cr.code);});});}
     return (
@@ -445,7 +445,7 @@ export function AvbDashboard() {
           <KpiCard label="On-Site (AvB)" value={tO>0?tO.toFixed(1):"—"} sub="hrs scheduled" />
           <KpiCard label="Indirect Gap" value={tGap!==null?(tGap>=0?"+":"")+tGap.toFixed(1):"—"} sub="clocked − on-site" cls={tGap!==null?(Math.abs(tGap)>10?"text-red-600":"text-green-600"):"text-slate-400"} />
           <KpiCard label="Labor Efficiency" value={tEff!==null?tEff+"%":"—"} sub="on-site ÷ clocked" cls={epColor(tEff)} />
-          <KpiCard label="AvB Variance" value={(tAvb>=0?"+":"")+tAvb.toFixed(1)} sub="actual − budgeted" cls={tAvb>=0?"text-green-600":"text-red-600"} />
+          <KpiCard label="AvB Variance" value={(tAvb>=0?"+":"")+tAvb.toFixed(1)} sub="budgeted − actual" cls={tAvb>=0?"text-green-600":"text-red-600"} />
         </div>
         <div>
           <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-slate-400">Crew Summary</p>
@@ -454,11 +454,11 @@ export function AvbDashboard() {
               <thead className="bg-slate-50"><tr>
                 <Th>Crew</Th><Th right>Budgeted</Th><Th right>On-Site</Th><Th right>AvB Var</Th>
                 <Th right>Gusto Clocked</Th><Th right>Indirect Gap</Th><Th right>Efficiency</Th>
-                <Th right>OT Hrs</Th><Th right>Revenue</Th>
+                <Th right>OT Hrs</Th>
               </tr></thead>
               <tbody className="divide-y divide-slate-100">
                 {CREW_DEFS.map(cr=>{
-                  const t=ct[cr.code]; const avbV=t.actual-t.budgeted;
+                  const t=ct[cr.code]; const avbV=t.budgeted-t.actual;
                   const gap=t.gusto>0?t.gusto-t.actual:null; const ep=t.gusto>0?Math.round(t.actual/t.gusto*100):null;
                   return (<tr key={cr.code} className="hover:bg-slate-50">
                     <td className="py-3 pl-4 font-medium">{cr.code}<span className="ml-1 text-xs text-slate-400">{cr.name}</span></td>
@@ -468,8 +468,7 @@ export function AvbDashboard() {
                     <Td right>{t.gusto>0?t.gusto.toFixed(1):<span className="text-slate-300">—</span>}</Td>
                     <Td right>{gap!==null?<span className={Math.abs(gap)>3?"text-red-600":Math.abs(gap)>1?"text-amber-500":"text-green-600"}>{gap>=0?"+":""}{gap.toFixed(1)}</span>:"—"}</Td>
                     <Td right>{ep!==null?<span className={`${epBadge(ep)} rounded-full px-2 py-0.5 text-xs font-semibold`}>{ep}%</span>:"—"}</Td>
-                    <Td right>{t.ot>0?<span className="text-amber-600">{t.ot.toFixed(1)}</span>:"—"}</Td>
-                    <Td right cls="pr-4">{t.revenue>0?"$"+t.revenue.toLocaleString():"—"}</Td>
+                    <Td right cls="pr-4">{t.ot>0?<span className="text-amber-600">{t.ot.toFixed(1)}</span>:"—"}</Td>
                   </tr>);
                 })}
               </tbody>
@@ -522,20 +521,19 @@ export function AvbDashboard() {
         <p className="text-sm font-semibold text-slate-700">Crew — {ws2?dayLbl(ws2,viewDay):WDAYS[viewDay]}</p>
         <div className="overflow-hidden rounded-lg border bg-white shadow-sm">
           <table className="w-full text-sm">
-            <thead className="bg-slate-50"><tr><Th>Crew</Th><Th right>Budgeted</Th><Th right>On-Site</Th><Th right>AvB Var</Th><Th right>Gusto Clocked</Th><Th right>Efficiency</Th><Th right>Revenue</Th></tr></thead>
+            <thead className="bg-slate-50"><tr><Th>Crew</Th><Th right>Budgeted</Th><Th right>On-Site</Th><Th right>AvB Var</Th><Th right>Gusto Clocked</Th><Th right>Efficiency</Th></tr></thead>
             <tbody className="divide-y divide-slate-100">
               {CREW_DEFS.map(cr=>{
                 const avb=day?.avb[cr.code]??{}; const members=day?.assignments[cr.code]??[];
                 let g=0; members.forEach(u=>{g+=getHrsOnDay(data.gusto,u,viewDay);});
-                const bud=pf(avb.budgeted),act=pf(avb.actual),rev=pf(avb.revenue),avar=act-bud;
+                const bud=pf(avb.budgeted),act=pf(avb.actual),avar=bud-act;
                 const ep=g>0?Math.round(act/g*100):null;
                 return (<tr key={cr.code} className="hover:bg-slate-50">
                   <td className="py-3 pl-4 font-medium">{cr.code}<span className="ml-1 text-xs text-slate-400">{cr.name}</span></td>
                   <Td right>{bud>0?bud.toFixed(1):"—"}</Td><Td right>{act>0?act.toFixed(1):"—"}</Td>
                   <Td right>{bud>0?<span className={avar>=0?"text-green-600":"text-red-600"}>{avar>=0?"+":""}{avar.toFixed(1)}</span>:"—"}</Td>
                   <Td right>{g>0?g.toFixed(1):"—"}</Td>
-                  <Td right>{ep!==null?<span className={`${epBadge(ep)} rounded-full px-2 py-0.5 text-xs font-semibold`}>{ep}%</span>:"—"}</Td>
-                  <Td right cls="pr-4">{rev>0?"$"+rev.toLocaleString():"—"}</Td>
+                  <Td right cls="pr-4">{ep!==null?<span className={`${epBadge(ep)} rounded-full px-2 py-0.5 text-xs font-semibold`}>{ep}%</span>:"—"}</Td>
                 </tr>);
               })}
             </tbody>
@@ -770,10 +768,109 @@ export function AvbDashboard() {
     );
   }
 
+  // ── YTD ───────────────────────────────────────────────────────────────────────
+  function Ytd() {
+    if (!weeks.length) return <div className="py-16 text-center text-sm text-slate-400">No history yet.</div>;
+    // Aggregate totals across all weeks
+    let ytdB=0,ytdO=0,ytdG=0,ytdOt=0;
+    const crewYtd: Record<string,{budgeted:number;actual:number;gusto:number;ot:number}> = {};
+    CREW_DEFS.forEach(cr=>{crewYtd[cr.code]={budgeted:0,actual:0,gusto:0,ot:0};});
+    weeks.forEach(w=>{
+      CREW_DEFS.forEach(cr=>{
+        for(let d=0;d<7;d++){
+          const avb=w.data.days[d]?.avb[cr.code]??{};
+          const b=pf(avb.budgeted),a=pf(avb.actual);
+          crewYtd[cr.code].budgeted+=b; crewYtd[cr.code].actual+=a;
+          ytdB+=b; ytdO+=a;
+          (w.data.days[d]?.assignments[cr.code]??[]).forEach(u=>{
+            const g=getHrsOnDay(w.data.gusto,u,d);
+            crewYtd[cr.code].gusto+=g; ytdG+=g;
+            if(w.data.gusto.weekStart){const dk=dayKey(w.data.gusto.weekStart,d);const de=w.data.gusto.employees[u]?.days.find(x=>x.date===dk);if(de){crewYtd[cr.code].ot+=de.ot;ytdOt+=de.ot;}}
+          });
+        }
+      });
+    });
+    const ytdAvb=ytdB-ytdO;
+    const ytdEff=ytdG>0?Math.round(ytdO/ytdG*100):null;
+    const ytdGap=ytdG>0?ytdG-ytdO:null;
+    // Per-week breakdown
+    const weekRows = [...weeks].reverse().map(w=>{
+      let wB=0,wO=0,wG=0;
+      CREW_DEFS.forEach(cr=>{for(let d=0;d<7;d++){wB+=pf(w.data.days[d]?.avb[cr.code]?.budgeted);wO+=pf(w.data.days[d]?.avb[cr.code]?.actual);(w.data.days[d]?.assignments[cr.code]??[]).forEach(u=>{wG+=getHrsOnDay(w.data.gusto,u,d);});}});
+      const wAvb=wB-wO; const wEff=wG>0?Math.round(wO/wG*100):null; const wGap=wG>0?wG-wO:null;
+      return {label:fmtDate(w.weekEnd),wB,wO,wG,wAvb,wEff,wGap};
+    });
+    return (
+      <div className="flex flex-col gap-6">
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
+          <KpiCard label="Total Budgeted" value={ytdB.toFixed(1)} sub={`hrs · ${weeks.length} wks`} />
+          <KpiCard label="Total On-Site" value={ytdO.toFixed(1)} sub="hrs scheduled" />
+          <KpiCard label="AvB Variance" value={(ytdAvb>=0?"+":"")+ytdAvb.toFixed(1)} sub="budgeted − actual" cls={ytdAvb>=0?"text-green-600":"text-red-600"} />
+          <KpiCard label="Labor Efficiency" value={ytdEff!==null?ytdEff+"%":"—"} sub="on-site ÷ clocked" cls={epColor(ytdEff)} />
+          <KpiCard label="Total OT" value={ytdOt>0?ytdOt.toFixed(1):"—"} sub="hrs overtime" cls={ytdOt>0?"text-amber-600":"text-slate-400"} />
+        </div>
+        <div>
+          <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-slate-400">YTD by Crew</p>
+          <div className="overflow-hidden rounded-lg border bg-white shadow-sm">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50"><tr>
+                <Th>Crew</Th><Th right>Budgeted</Th><Th right>On-Site</Th><Th right>AvB Var</Th>
+                <Th right>Gusto Clocked</Th><Th right>Indirect Gap</Th><Th right>Efficiency</Th><Th right>OT Hrs</Th>
+              </tr></thead>
+              <tbody className="divide-y divide-slate-100">
+                {CREW_DEFS.map(cr=>{
+                  const t=crewYtd[cr.code];
+                  const avbV=t.budgeted-t.actual;
+                  const gap=t.gusto>0?t.gusto-t.actual:null;
+                  const ep=t.gusto>0?Math.round(t.actual/t.gusto*100):null;
+                  return (<tr key={cr.code} className="hover:bg-slate-50">
+                    <td className="py-3 pl-4 font-medium">{cr.code}<span className="ml-1 text-xs text-slate-400">{cr.name}</span></td>
+                    <Td right>{t.budgeted>0?t.budgeted.toFixed(1):"—"}</Td>
+                    <Td right>{t.actual>0?t.actual.toFixed(1):"—"}</Td>
+                    <Td right>{t.budgeted>0?<span className={avbV>=0?"text-green-600":"text-red-600"}>{avbV>=0?"+":""}{avbV.toFixed(1)}</span>:"—"}</Td>
+                    <Td right>{t.gusto>0?t.gusto.toFixed(1):"—"}</Td>
+                    <Td right>{gap!==null?<span className={Math.abs(gap)>10?"text-red-600":"text-green-600"}>{gap>=0?"+":""}{gap.toFixed(1)}</span>:"—"}</Td>
+                    <Td right>{ep!==null?<span className={`${epBadge(ep)} rounded-full px-2 py-0.5 text-xs font-semibold`}>{ep}%</span>:"—"}</Td>
+                    <Td right cls="pr-4">{t.ot>0?<span className="text-amber-600">{t.ot.toFixed(1)}</span>:"—"}</Td>
+                  </tr>);
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div>
+          <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-slate-400">Week-by-Week</p>
+          <div className="overflow-hidden rounded-lg border bg-white shadow-sm">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50"><tr>
+                <Th>Week</Th><Th right>Budgeted</Th><Th right>On-Site</Th><Th right>AvB Var</Th>
+                <Th right>Gusto Clocked</Th><Th right>Indirect Gap</Th><Th right>Efficiency</Th>
+              </tr></thead>
+              <tbody className="divide-y divide-slate-100">
+                {weekRows.map(r=>(
+                  <tr key={r.label} className="hover:bg-slate-50">
+                    <td className="py-3 pl-4 font-medium">Week of {r.label}</td>
+                    <Td right>{r.wB.toFixed(1)}</Td>
+                    <Td right>{r.wO.toFixed(1)}</Td>
+                    <Td right>{r.wB>0?<span className={r.wAvb>=0?"text-green-600":"text-red-600"}>{r.wAvb>=0?"+":""}{r.wAvb.toFixed(1)}</span>:"—"}</Td>
+                    <Td right>{r.wG>0?r.wG.toFixed(1):"—"}</Td>
+                    <Td right>{r.wGap!==null?<span className={Math.abs(r.wGap)>10?"text-red-600":"text-green-600"}>{r.wGap>=0?"+":""}{r.wGap.toFixed(1)}</span>:"—"}</Td>
+                    <Td right cls="pr-4">{r.wEff!==null?<span className={`${epBadge(r.wEff)} rounded-full px-2 py-0.5 text-xs font-semibold`}>{r.wEff}%</span>:"—"}</Td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // ── Root ──────────────────────────────────────────────────────────────────────
   const TABS: {key:Tab;label:string}[] = [
     {key:"summary",label:"Weekly Summary"},{key:"daily",label:"Daily View"},
-    {key:"history",label:"History & Trends"},{key:"import",label:"Import Week"},
+    {key:"history",label:"History & Trends"},{key:"ytd",label:"YTD Summary"},
+    {key:"import",label:"Import Week"},
   ];
   return (
     <div className="flex flex-col gap-5">
@@ -788,6 +885,7 @@ export function AvbDashboard() {
         {tab==="summary"&&<Summary/>}
         {tab==="daily"&&<Daily/>}
         {tab==="history"&&<History/>}
+        {tab==="ytd"&&<Ytd/>}
         {tab==="import"&&<Import/>}
       </>}
     </div>
