@@ -23,7 +23,7 @@ const REPORTS_NAV: ReportsNavSection[] = [
   {
     label: "Dashboards",
     items: [
-      { label: "AvB × Gusto Hours", href: "/dashboards/avb", icon: TrendingUp },
+      { label: "Labor Efficiency", href: "/dashboards/avb", icon: TrendingUp },
       { label: "Driver Safety Scores", href: "/dashboards/safety", icon: ShieldCheck },
     ],
   },

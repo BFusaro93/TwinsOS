@@ -874,7 +874,7 @@ export function AvbDashboard() {
   ];
   return (
     <div className="flex flex-col gap-5">
-      <PageHeader title="AvB × Gusto — Crew Hours" description="Compare on-site production hours against Gusto clocked hours by crew"
+      <PageHeader title="Labor Efficiency" description="Compare on-site production hours against Gusto clocked hours by crew"
         action={<button onClick={()=>{setWd(defaultWeekData());setTab("import");}} className="flex items-center gap-2 rounded-md bg-brand-500 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-600"><Upload className="h-4 w-4"/>Import Week</button>} />
       <div className="flex gap-0 border-b border-slate-200">
         {TABS.map(t=>(
