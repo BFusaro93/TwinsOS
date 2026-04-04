@@ -25,7 +25,7 @@ import { AssetDetailPanel } from "@/components/cmms/AssetDetailPanel";
 import { VehicleDetailPanel } from "@/components/cmms/VehicleDetailPanel";
 import { NewPartDialog } from "@/components/cmms/NewPartDialog";
 import { ManageVendorsDialog } from "@/components/shared/ManageVendorsDialog";
-import { PODetailSheet } from "@/components/po/PODetailSheet";
+import { PODetailPanel } from "@/components/po/PODetailPanel";
 
 import { useParts, useUpdatePart } from "@/lib/hooks/use-parts";
 import { usePartOpenWOQty } from "@/lib/hooks/use-wo-costs";
@@ -540,15 +540,21 @@ export function PartDetailSheet({ part, open, onOpenChange }: PartDetailSheetPro
   const [linkSearch, setLinkSearch] = useState("");
   const [selectedPOId, setSelectedPOId] = useState<string | null>(null);
 
-  // Close on Escape key
+  // Close on Escape key — dismiss PO overlay first if it's open
   useEffect(() => {
     if (!open) return;
     function handleKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onOpenChange(false);
+      if (e.key === "Escape") {
+        if (selectedPOId) {
+          setSelectedPOId(null);
+        } else {
+          onOpenChange(false);
+        }
+      }
     }
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  }, [open, onOpenChange]);
+  }, [open, onOpenChange, selectedPOId]);
 
   // Native wheel/touch listeners to prevent react-remove-scroll (used by the
   // outer Radix Sheet) from blocking scroll inside this portal. React synthetic
@@ -745,12 +751,35 @@ export function PartDetailSheet({ part, open, onOpenChange }: PartDetailSheetPro
         onOpenChange={(o) => { if (!o) setNestedPart(null); }}
       />
 
-      {/* PO detail sheet — opened from history tab */}
-      <PODetailSheet
-        po={(purchaseOrders ?? []).find((p) => p.id === selectedPOId) ?? null}
-        open={!!selectedPOId}
-        onOpenChange={(o) => { if (!o) setSelectedPOId(null); }}
-      />
+      {/* PO detail overlay — rendered via portal at z-[209]/z-[210] so it sits
+          in front of this sheet (z-[199]/z-[200]) without a Radix Sheet at z-50
+          appearing behind it */}
+      {selectedPOId && (() => {
+        const selectedPO = (purchaseOrders ?? []).find((p) => p.id === selectedPOId) ?? null;
+        if (!selectedPO) return null;
+        return createPortal(
+          <>
+            <div
+              className="fixed inset-0 z-[209] bg-black/80"
+              onClick={() => setSelectedPOId(null)}
+            />
+            <div className="pointer-events-auto fixed inset-y-0 right-0 z-[210] flex w-full flex-col overflow-hidden border-l bg-background shadow-xl md:w-[680px]">
+              <button
+                type="button"
+                aria-label="Close"
+                onClick={() => setSelectedPOId(null)}
+                className="absolute right-4 top-4 z-10 rounded-sm p-0.5 opacity-70 transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+              >
+                <X className="h-4 w-4" />
+              </button>
+              <div className="flex-1 overflow-y-auto">
+                <PODetailPanel key={selectedPOId} po={selectedPO} />
+              </div>
+            </div>
+          </>,
+          document.body
+        );
+      })()}
 
       {/* ── Asset / Vehicle detail overlays ── */}
       {(() => {
