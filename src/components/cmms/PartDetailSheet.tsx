@@ -34,6 +34,7 @@ import { usePurchaseOrders } from "@/lib/hooks/use-purchase-orders";
 import { useProducts } from "@/lib/hooks/use-products";
 import { useAssets } from "@/lib/hooks/use-assets";
 import { useVehicles } from "@/lib/hooks/use-vehicles";
+import { OverlayLevelContext, overlayZ, useOverlayLevel } from "@/lib/overlay-level";
 import { Plus, Search, ShoppingCart, X } from "lucide-react";
 import {
   Dialog,
@@ -528,6 +529,9 @@ export function PartDetailSheet({ part, open, onOpenChange }: PartDetailSheetPro
   const { data: allAssets = [] } = useAssets();
   const { data: allVehicles = [] } = useVehicles();
   const { mutate: updatePart } = useUpdatePart();
+  const level = useOverlayLevel();
+  const { backdrop: backdropZ, panel: panelZ } = overlayZ(level);
+  const { backdrop: childBackdropZ, panel: childPanelZ } = overlayZ(level + 1);
   const [qtyOnHand, setQtyOnHand] = useState<number | null>(null);
   const [editOpen, setEditOpen] = useState(false);
   const [nestedPart, setNestedPart] = useState<Part | null>(null);
@@ -635,9 +639,13 @@ export function PartDetailSheet({ part, open, onOpenChange }: PartDetailSheetPro
   return (
     <>
       {createPortal(
-        <>
+        <OverlayLevelContext.Provider value={level + 1}>
           <div
-            className="fixed inset-0 z-[199] bg-black/80 data-[state=open]:animate-in data-[state=open]:fade-in-0"
+            className="fixed inset-0 data-[state=open]:animate-in data-[state=open]:fade-in-0"
+            style={{
+              zIndex: backdropZ,
+              backgroundColor: level === 0 ? "rgba(0,0,0,0.8)" : "transparent",
+            }}
             data-state="open"
             onClick={() => onOpenChange(false)}
           />
@@ -646,7 +654,8 @@ export function PartDetailSheet({ part, open, onOpenChange }: PartDetailSheetPro
             role="dialog"
             aria-modal="true"
             aria-label={livePart.name}
-            className="pointer-events-auto fixed inset-y-0 right-0 z-[200] flex w-full flex-col overflow-hidden border-l bg-background shadow-xl md:w-[580px]"
+            className="pointer-events-auto fixed inset-y-0 right-0 flex w-full flex-col overflow-hidden border-l bg-background shadow-xl md:w-[580px]"
+            style={{ zIndex: panelZ }}
           >
           {/* Header — pr-12 leaves a clean gap for the absolute X button */}
           <div className="relative shrink-0 border-b px-6 py-4 pr-12">
@@ -733,7 +742,7 @@ export function PartDetailSheet({ part, open, onOpenChange }: PartDetailSheetPro
             </TabsContent>
           </Tabs>
         </div>
-        </>,
+        </OverlayLevelContext.Provider>,
         document.body
       )}
       <NewPartDialog open={editOpen} onOpenChange={setEditOpen} initialData={livePart} />
@@ -745,25 +754,29 @@ export function PartDetailSheet({ part, open, onOpenChange }: PartDetailSheetPro
         onSave={handleVendorsSave}
       />
       {/* Nested sheet for clicking interchangeable parts */}
-      <PartDetailSheet
-        part={nestedPart}
-        open={!!nestedPart}
-        onOpenChange={(o) => { if (!o) setNestedPart(null); }}
-      />
+      <OverlayLevelContext.Provider value={level + 1}>
+        <PartDetailSheet
+          part={nestedPart}
+          open={!!nestedPart}
+          onOpenChange={(o) => { if (!o) setNestedPart(null); }}
+        />
+      </OverlayLevelContext.Provider>
 
-      {/* PO detail overlay — rendered via portal at z-[209]/z-[210] so it sits
-          in front of this sheet (z-[199]/z-[200]) without a Radix Sheet at z-50
-          appearing behind it */}
+      {/* PO detail overlay — portal so it stacks above this sheet */}
       {selectedPOId && (() => {
         const selectedPO = (purchaseOrders ?? []).find((p) => p.id === selectedPOId) ?? null;
         if (!selectedPO) return null;
         return createPortal(
-          <>
+          <OverlayLevelContext.Provider value={level + 2}>
             <div
-              className="fixed inset-0 z-[209]"
+              className="fixed inset-0"
+              style={{ zIndex: childBackdropZ }}
               onClick={() => setSelectedPOId(null)}
             />
-            <div className="pointer-events-auto fixed inset-y-0 right-0 z-[210] flex w-full flex-col overflow-hidden border-l bg-background shadow-xl md:w-[680px]">
+            <div
+              className="pointer-events-auto fixed inset-y-0 right-0 flex w-full flex-col overflow-hidden border-l bg-background shadow-xl md:w-[680px]"
+              style={{ zIndex: childPanelZ }}
+            >
               <button
                 type="button"
                 aria-label="Close"
@@ -776,7 +789,7 @@ export function PartDetailSheet({ part, open, onOpenChange }: PartDetailSheetPro
                 <PODetailPanel key={selectedPOId} po={selectedPO} />
               </div>
             </div>
-          </>,
+          </OverlayLevelContext.Provider>,
           document.body
         );
       })()}
@@ -788,25 +801,31 @@ export function PartDetailSheet({ part, open, onOpenChange }: PartDetailSheetPro
         return (
           <>
             {selectedAsset && createPortal(
-              <>
-                <div className="fixed inset-y-0 right-0 z-[210] flex w-full flex-col overflow-y-auto border-l bg-background shadow-xl md:w-[720px]">
+              <OverlayLevelContext.Provider value={level + 2}>
+                <div
+                  className="fixed inset-y-0 right-0 flex w-full flex-col overflow-y-auto border-l bg-background shadow-xl md:w-[720px]"
+                  style={{ zIndex: childPanelZ }}
+                >
                   <button type="button" onClick={() => setAssetSheetId(null)} className="absolute right-4 top-4 z-10 rounded-sm p-0.5 opacity-70 hover:opacity-100">
                     <X className="h-4 w-4" />
                   </button>
                   <AssetDetailPanel asset={selectedAsset} />
                 </div>
-              </>,
+              </OverlayLevelContext.Provider>,
               document.body
             )}
             {selectedVehicle && createPortal(
-              <>
-                <div className="fixed inset-y-0 right-0 z-[210] flex w-full flex-col overflow-y-auto border-l bg-background shadow-xl md:w-[720px]">
+              <OverlayLevelContext.Provider value={level + 2}>
+                <div
+                  className="fixed inset-y-0 right-0 flex w-full flex-col overflow-y-auto border-l bg-background shadow-xl md:w-[720px]"
+                  style={{ zIndex: childPanelZ }}
+                >
                   <button type="button" onClick={() => setVehicleSheetId(null)} className="absolute right-4 top-4 z-10 rounded-sm p-0.5 opacity-70 hover:opacity-100">
                     <X className="h-4 w-4" />
                   </button>
                   <VehicleDetailPanel vehicle={selectedVehicle} />
                 </div>
-              </>,
+              </OverlayLevelContext.Provider>,
               document.body
             )}
           </>

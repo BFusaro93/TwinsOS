@@ -27,6 +27,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { ChevronDown } from "lucide-react";
 import { printWO } from "@/lib/print";
 import { useWOParts } from "@/lib/hooks/use-wo-costs";
+import { OverlayLevelContext, overlayZ, useOverlayLevel } from "@/lib/overlay-level";
 import { Download, GitBranch, CheckCircle2, Trash2, X } from "lucide-react";
 import {
   AlertDialog,
@@ -582,6 +583,8 @@ export function WorkOrderDetailPanel({ workOrder }: WorkOrderDetailPanelProps) {
   const [parentWOSheetOpen, setParentWOSheetOpen] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [status, setStatus] = useState<WorkOrderStatus>(workOrder.status);
+  const level = useOverlayLevel();
+  const { backdrop: backdropZ, panel: panelZ } = overlayZ(level);
   const { data: assets = [] } = useAssets();
   const { data: vehicles = [] } = useVehicles();
   const { data: allWorkOrders = [] } = useWorkOrders();
@@ -731,12 +734,16 @@ export function WorkOrderDetailPanel({ workOrder }: WorkOrderDetailPanelProps) {
 
       {/* Asset detail overlay */}
       {assetSheetOpen && linkedAsset && createPortal(
-        <>
+        <OverlayLevelContext.Provider value={level + 1}>
           <div
-            className="fixed inset-0 z-[209]"
+            className="fixed inset-0"
+            style={{ zIndex: backdropZ }}
             onClick={() => setAssetSheetOpen(false)}
           />
-          <div className="pointer-events-auto fixed inset-y-0 right-0 z-[210] flex w-full flex-col overflow-hidden border-l bg-background shadow-xl md:w-[720px]">
+          <div
+            className="pointer-events-auto fixed inset-y-0 right-0 flex w-full flex-col overflow-hidden border-l bg-background shadow-xl md:w-[720px]"
+            style={{ zIndex: panelZ }}
+          >
             <button
               type="button"
               aria-label="Close"
@@ -747,18 +754,22 @@ export function WorkOrderDetailPanel({ workOrder }: WorkOrderDetailPanelProps) {
             </button>
             <AssetDetailPanel asset={linkedAsset} />
           </div>
-        </>,
+        </OverlayLevelContext.Provider>,
         document.body
       )}
 
       {/* Vehicle detail overlay */}
       {vehicleSheetOpen && linkedVehicle && createPortal(
-        <>
+        <OverlayLevelContext.Provider value={level + 1}>
           <div
-            className="fixed inset-0 z-[209]"
+            className="fixed inset-0"
+            style={{ zIndex: backdropZ }}
             onClick={() => setVehicleSheetOpen(false)}
           />
-          <div className="pointer-events-auto fixed inset-y-0 right-0 z-[210] flex w-full flex-col overflow-hidden border-l bg-background shadow-xl md:w-[580px]">
+          <div
+            className="pointer-events-auto fixed inset-y-0 right-0 flex w-full flex-col overflow-hidden border-l bg-background shadow-xl md:w-[580px]"
+            style={{ zIndex: panelZ }}
+          >
             <button
               type="button"
               aria-label="Close"
@@ -769,18 +780,22 @@ export function WorkOrderDetailPanel({ workOrder }: WorkOrderDetailPanelProps) {
             </button>
             <VehicleDetailPanel vehicle={linkedVehicle} />
           </div>
-        </>,
+        </OverlayLevelContext.Provider>,
         document.body
       )}
 
       {/* Sub work order detail overlay */}
       {subWOSheetWorkOrder && createPortal(
-        <>
+        <OverlayLevelContext.Provider value={level + 1}>
           <div
-            className="fixed inset-0 z-[209]"
+            className="fixed inset-0"
+            style={{ zIndex: backdropZ }}
             onClick={() => setSubWOSheetId(null)}
           />
-          <div className="pointer-events-auto fixed inset-y-0 right-0 z-[210] flex w-full flex-col overflow-hidden border-l bg-background shadow-xl md:w-[580px]">
+          <div
+            className="pointer-events-auto fixed inset-y-0 right-0 flex w-full flex-col overflow-hidden border-l bg-background shadow-xl md:w-[580px]"
+            style={{ zIndex: panelZ }}
+          >
             <button
               type="button"
               aria-label="Close"
@@ -791,18 +806,22 @@ export function WorkOrderDetailPanel({ workOrder }: WorkOrderDetailPanelProps) {
             </button>
             <WorkOrderDetailPanel workOrder={subWOSheetWorkOrder} />
           </div>
-        </>,
+        </OverlayLevelContext.Provider>,
         document.body
       )}
 
       {/* Parent work order detail overlay */}
       {parentWOSheetOpen && parentWorkOrder && createPortal(
-        <>
+        <OverlayLevelContext.Provider value={level + 1}>
           <div
-            className="fixed inset-0 z-[209]"
+            className="fixed inset-0"
+            style={{ zIndex: backdropZ }}
             onClick={() => setParentWOSheetOpen(false)}
           />
-          <div className="pointer-events-auto fixed inset-y-0 right-0 z-[210] flex w-full flex-col overflow-hidden border-l bg-background shadow-xl md:w-[580px]">
+          <div
+            className="pointer-events-auto fixed inset-y-0 right-0 flex w-full flex-col overflow-hidden border-l bg-background shadow-xl md:w-[580px]"
+            style={{ zIndex: panelZ }}
+          >
             <button
               type="button"
               aria-label="Close"
@@ -813,7 +832,7 @@ export function WorkOrderDetailPanel({ workOrder }: WorkOrderDetailPanelProps) {
             </button>
             <WorkOrderDetailPanel workOrder={parentWorkOrder} />
           </div>
-        </>,
+        </OverlayLevelContext.Provider>,
         document.body
       )}
 
