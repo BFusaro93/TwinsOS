@@ -174,7 +174,7 @@ function parseGustoCsv(text: string): GustoData {
         }
         i++;
       }
-      const nm = hm[1].trim();
+      const nm = hm[1].trim().replace(/,+$/, "").trim();
       const job = daily.find(d=>d.job)?.job??"";
       const uuid = matchUuid(nm, job);
       if (uuid) emp(uuid).days = daily;
