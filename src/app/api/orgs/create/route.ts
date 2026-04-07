@@ -30,9 +30,17 @@ export async function POST(request: Request) {
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   );
 
+  // Generate a URL-safe slug from the company name and append a random suffix
+  // to avoid collisions on the UNIQUE constraint.
+  const baseSlug = companyName
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
+  const slug = `${baseSlug}-${Math.random().toString(36).slice(2, 7)}`;
+
   const { data: org, error: orgErr } = await adminClient
     .from("organizations")
-    .insert({ name: companyName })
+    .insert({ name: companyName, slug })
     .select("id")
     .single();
 
