@@ -503,14 +503,28 @@ export function AvbDashboard() {
               </tr></thead>
               <tbody className="divide-y divide-slate-100">
                 {ALL_EMP.map(emp=>{
-                  const ed=data.gusto.employees[emp.uuid]; const crew=empCrews[emp.uuid];
-                  if(!ed&&!crew) return null;
-                  const tot=ed?.total??0; const ot=ed?.ot??0; const dw=ed?.days.filter(d=>d.total>0).length??0;
+                  // Build hours by summing getHrsOnDay across all 7 days — consistent
+                  // with how crewTotals works and reliable after JSON round-trip from DB
+                  let tot=0, ot=0, dw=0;
+                  for(let d=0;d<7;d++){
+                    const dayHrs=getHrsOnDay(data.gusto,emp.uuid,d);
+                    tot+=dayHrs;
+                    if(dayHrs>0) dw++;
+                    if(data.gusto.weekStart){
+                      const dk=dayKey(data.gusto.weekStart,d);
+                      const de=data.gusto.employees[emp.uuid]?.days.find(x=>x.date===dk);
+                      if(de) ot+=de.ot;
+                    }
+                  }
+                  const crew=empCrews[emp.uuid];
+                  // Show row if assigned to any crew this week OR has clocked hours
+                  if(!crew&&tot===0) return null;
+                  const reg=tot>ot?tot-ot:0;
                   return (<tr key={emp.uuid} className={`hover:bg-slate-50 ${tot===0?"opacity-50":""}`}>
                     <td className="py-3 pl-4 font-medium">{emp.name}{ot>0&&<span className="ml-2 rounded-full bg-amber-100 px-1.5 py-0.5 text-xs font-semibold text-amber-700">OT {ot.toFixed(1)}h</span>}</td>
                     <td className="px-3 py-3 text-xs text-slate-400">{[...(crew??new Set())].join(", ")||"—"}</td>
                     <Td right>{tot>0?tot.toFixed(2):"—"}</Td>
-                    <Td right>{ed?ed.regular.toFixed(2):"—"}</Td>
+                    <Td right>{tot>0?reg.toFixed(2):"—"}</Td>
                     <Td right>{ot>0?<span className="text-amber-600">{ot.toFixed(2)}</span>:"—"}</Td>
                     <Td right>{dw>0?dw:"—"}</Td>
                     <td className="px-3 py-3">{tot===0?<Bdg text="absent" v="gray"/>:ot>0?<Bdg text="OT" v="amber"/>:<Bdg text="ok" v="green"/>}</td>
