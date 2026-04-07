@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { BarChart2, Wrench, Leaf } from "lucide-react";
+import { BarChart2, Wrench, Leaf, FileText } from "lucide-react";
 
 export default function HomePage() {
   return (
@@ -16,7 +16,7 @@ export default function HomePage() {
       </div>
 
       {/* Selector boxes */}
-      <div className="grid w-full max-w-xl grid-cols-1 gap-5 sm:grid-cols-2">
+      <div className="grid w-full max-w-2xl grid-cols-1 gap-5 sm:grid-cols-3">
         <Link
           href="/dashboards/avb"
           className="group flex flex-col items-center gap-5 rounded-2xl border-2 border-slate-200 bg-white p-10 shadow-sm transition-all duration-150 hover:border-brand-400 hover:shadow-lg"
@@ -42,6 +42,21 @@ export default function HomePage() {
             <p className="mt-1 text-sm text-slate-500">Work orders, purchasing &amp; asset management</p>
           </div>
         </Link>
+
+        <a
+          href="https://claude.ai/artifacts/latest/d640bf7c-8328-40e7-8255-f780f6055a19"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="group flex flex-col items-center gap-5 rounded-2xl border-2 border-slate-200 bg-white p-10 shadow-sm transition-all duration-150 hover:border-brand-400 hover:shadow-lg"
+        >
+          <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-brand-50 text-brand-500 transition-colors group-hover:bg-brand-100">
+            <FileText className="h-8 w-8" />
+          </div>
+          <div className="text-center">
+            <p className="text-lg font-semibold text-slate-900">Estimate Writer</p>
+            <p className="mt-1 text-sm text-slate-500">Generate estimate text &amp; language</p>
+          </div>
+        </a>
       </div>
     </div>
   );
