@@ -5,7 +5,7 @@ import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis,
   CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from "recharts";
-import { Upload, Trash2, Pencil } from "lucide-react";
+import { Upload, Trash2, Pencil, AlertTriangle } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import {
   useAvbWeeks, useUpsertAvbWeek, useDeleteAvbWeek,
@@ -374,6 +374,25 @@ export function AvbDashboard() {
     day.avb[code]={...day.avb[code],[field]:pf(val)};
     next.days[di]=day; return next;
   });
+  // Manual hours override — sets/replaces an employee's hours for a specific day
+  const setEmpHours = (uuid: string, di: number, total: number, regular: number, ot: number) => {
+    setWd(d => {
+      const dk = d.gusto.weekStart ? dayKey(d.gusto.weekStart, di) : null;
+      if (!dk) return d;
+      const next = { ...d, gusto: { ...d.gusto, employees: { ...d.gusto.employees } } };
+      const existing = next.gusto.employees[uuid] ?? { total: 0, regular: 0, ot: 0, days: [] };
+      const otherDays = existing.days.filter(x => x.date !== dk);
+      const updatedDays = total > 0 || regular > 0 || ot > 0
+        ? [...otherDays, { date: dk, total, regular, ot, mealBreak: 0, timeRange: "", job: "" }]
+        : otherDays;
+      const newTotal    = updatedDays.reduce((s, x) => s + x.total, 0);
+      const newRegular  = updatedDays.reduce((s, x) => s + x.regular, 0);
+      const newOt       = updatedDays.reduce((s, x) => s + x.ot, 0);
+      next.gusto.employees[uuid] = { ...existing, total: newTotal, regular: newRegular, ot: newOt, days: updatedDays };
+      return next;
+    });
+  };
+
   const copyAssignments = () => {
     if (!cpFrom||!cpTo) return;
     setWd(d=>{
@@ -758,6 +777,81 @@ export function AvbDashboard() {
             })}
           </div>
         </div>
+        {/* Manual hours override */}
+        {(() => {
+          const assignedUuids = [...new Set(Object.values(day.assignments).flat())];
+          if (!assignedUuids.length) return null;
+          return (
+            <div className="rounded-lg border bg-white p-5 shadow-sm">
+              <p className="mb-1 text-sm font-semibold text-slate-700">Manual Hours Override</p>
+              <p className="mb-4 text-xs text-slate-400">
+                Edit hours for any employee whose time didn&apos;t come over from the CSV for{" "}
+                <span className="font-medium">{ws ? dayLbl(ws, importDay) : WDAYS[importDay]}</span>.
+              </p>
+              <div className="overflow-hidden rounded-lg border">
+                <table className="w-full text-sm">
+                  <thead className="bg-slate-50">
+                    <tr>
+                      <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-400">Employee</th>
+                      <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-400">Crew</th>
+                      <th className="w-24 px-3 py-2.5 text-right text-xs font-semibold uppercase tracking-wider text-slate-400">Total Hrs</th>
+                      <th className="w-24 px-3 py-2.5 text-right text-xs font-semibold uppercase tracking-wider text-slate-400">Regular</th>
+                      <th className="w-24 px-3 py-2.5 text-right text-xs font-semibold uppercase tracking-wider text-slate-400">OT</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {assignedUuids.map(uuid => {
+                      const emp = getEmp(uuid); if (!emp) return null;
+                      const crewCode = Object.entries(day.assignments).find(([, v]) => v.includes(uuid))?.[0] ?? "—";
+                      const dk = ws ? dayKey(ws, importDay) : null;
+                      const de = dk ? wd.gusto.employees[uuid]?.days.find(x => x.date === dk) : null;
+                      const total   = de?.total    ?? 0;
+                      const regular = de?.regular  ?? 0;
+                      const ot      = de?.ot       ?? 0;
+                      const missing = total === 0;
+                      return (
+                        <tr key={uuid} className={`hover:bg-slate-50 ${missing ? "bg-amber-50" : ""}`}>
+                          <td className="px-3 py-2.5 font-medium">
+                            <div className="flex items-center gap-1.5">
+                              {missing && <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-500" />}
+                              <span>{emp.name}</span>
+                              {missing && <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700">no hours</span>}
+                            </div>
+                          </td>
+                          <td className="px-3 py-2.5">
+                            <span className="rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-600">{crewCode}</span>
+                          </td>
+                          <td className="px-3 py-2.5">
+                            <AvbNumberInput
+                              value={total}
+                              onCommit={v => {
+                                const t = pf(v);
+                                const r = regular || t;
+                                setEmpHours(uuid, importDay, t, r > t ? t : r, ot);
+                              }}
+                            />
+                          </td>
+                          <td className="px-3 py-2.5">
+                            <AvbNumberInput
+                              value={regular}
+                              onCommit={v => setEmpHours(uuid, importDay, total, pf(v), ot)}
+                            />
+                          </td>
+                          <td className="px-3 py-2.5">
+                            <AvbNumberInput
+                              value={ot}
+                              onCommit={v => setEmpHours(uuid, importDay, total, regular, pf(v))}
+                            />
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          );
+        })()}
         <div className="flex gap-3">
           <button onClick={saveWeek} disabled={upsert.isPending} className="rounded-md bg-brand-500 px-5 py-2 text-sm font-semibold text-white hover:bg-brand-600 disabled:opacity-50">
             {upsert.isPending?"Saving…":"Save Week → Dashboard"}
