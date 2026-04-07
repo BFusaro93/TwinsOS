@@ -16,7 +16,7 @@ export default function HomePage() {
       </div>
 
       {/* Selector boxes */}
-      <div className="grid w-full max-w-2xl grid-cols-1 gap-5 sm:grid-cols-3">
+      <div className="grid w-full max-w-5xl grid-cols-1 gap-5 sm:grid-cols-3">
         <Link
           href="/dashboards/avb"
           className="group flex flex-col items-center gap-5 rounded-2xl border-2 border-slate-200 bg-white p-10 shadow-sm transition-all duration-150 hover:border-brand-400 hover:shadow-lg"
