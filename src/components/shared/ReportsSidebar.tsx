@@ -50,11 +50,11 @@ export function ReportsSidebar() {
               <img
                 src={logoDataUrl}
                 alt={orgName}
-                className={cn(
-                  "object-contain",
-                  sidebarCollapsed ? "h-7 w-7" : "h-8 max-w-[160px]"
-                )}
+                className="h-7 w-7 shrink-0 rounded-md object-contain"
               />
+              {!sidebarCollapsed && (
+                <span className="truncate text-lg font-bold text-brand-400">Equipt</span>
+              )}
               {sidebarCollapsed && <span className="sr-only">{orgName}</span>}
             </>
           ) : (
