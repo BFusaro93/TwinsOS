@@ -92,7 +92,7 @@ function DetailsTab({ schedule }: { schedule: PMSchedule }) {
             <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
               Instructions
             </p>
-            <p className="text-sm text-slate-700">{schedule.description}</p>
+            <p className="whitespace-pre-wrap text-sm text-slate-700">{schedule.description}</p>
           </div>
         </>
       )}
