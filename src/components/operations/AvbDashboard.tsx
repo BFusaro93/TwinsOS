@@ -910,11 +910,12 @@ export function AvbDashboard() {
     });
     return (
       <div className="flex flex-col gap-6">
-        <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
-          <KpiCard label="Total Budgeted" value={ytdB.toFixed(1)} sub={`hrs · ${weeks.length} wks`} />
-          <KpiCard label="Total On-Site" value={ytdO.toFixed(1)} sub="hrs scheduled" />
-          <KpiCard label="AvB Variance" value={(ytdAvb>=0?"+":"")+ytdAvb.toFixed(1)} sub="budgeted − actual" cls={ytdAvb>=0?"text-green-600":"text-red-600"} />
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-6">
+          <KpiCard label="Gusto Clocked" value={ytdG>0?ytdG.toFixed(1):"—"} sub={`hrs · ${weeks.length} wks`} />
+          <KpiCard label="On-Site (AvB)" value={ytdO>0?ytdO.toFixed(1):"—"} sub="hrs scheduled" />
+          <KpiCard label="Indirect Gap" value={ytdGap!==null?(ytdGap>=0?"+":"")+ytdGap.toFixed(1):"—"} sub="clocked − on-site" cls={ytdGap!==null?(Math.abs(ytdGap)>10?"text-red-600":"text-green-600"):"text-slate-400"} />
           <KpiCard label="Labor Efficiency" value={ytdEff!==null?ytdEff+"%":"—"} sub="on-site ÷ clocked" cls={epColor(ytdEff)} />
+          <KpiCard label="AvB Variance" value={(ytdAvb>=0?"+":"")+ytdAvb.toFixed(1)} sub="budgeted − actual" cls={ytdAvb>=0?"text-green-600":"text-red-600"} />
           <KpiCard label="Total OT" value={ytdOt>0?ytdOt.toFixed(1):"—"} sub="hrs overtime" cls={ytdOt>0?"text-amber-600":"text-slate-400"} />
         </div>
         <div>
