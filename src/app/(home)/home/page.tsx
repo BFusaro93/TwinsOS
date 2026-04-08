@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { BarChart2, Wrench, Leaf, FileText, Truck, Users, ExternalLink } from "lucide-react";
+import { BarChart2, Wrench, Leaf, FileText, Truck, Users, ExternalLink, ClipboardList } from "lucide-react";
 
 const INTERNAL_BOX =
   "group flex flex-col items-center gap-5 rounded-2xl border-2 border-slate-200 bg-white p-10 shadow-sm transition-all duration-150 hover:border-brand-400 hover:shadow-lg";
@@ -62,13 +62,13 @@ export default function HomePage() {
       {/* External app shortcuts */}
       <div className="mt-5 grid w-full max-w-5xl grid-cols-1 gap-5 sm:grid-cols-3">
         <a
-          href="https://launcher.myapps.microsoft.com/api/signin/e2368acf-feb0-4ce9-bea1-8377def427c6?tenantId=c32bfd53-52c9-4186-989f-1985ff7eb8ae"
+          href="https://my.serviceautopilot.com/UserLogin.aspx"
           target="_blank"
           rel="noopener noreferrer"
           className={EXTERNAL_BOX}
         >
           <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-100 text-slate-500 transition-colors group-hover:bg-slate-200">
-            <BarChart2 className="h-6 w-6" />
+            <ClipboardList className="h-6 w-6" />
           </div>
           <div className="text-center">
             <div className="flex items-center justify-center gap-1.5">
