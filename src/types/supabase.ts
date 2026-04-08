@@ -699,6 +699,24 @@ export type Database = {
           },
         ]
       }
+      crm_reports: {
+        Row: {
+          html_content: string
+          id: string
+          updated_at: string | null
+        }
+        Insert: {
+          html_content: string
+          id?: string
+          updated_at?: string | null
+        }
+        Update: {
+          html_content?: string
+          id?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       goods_receipt_lines: {
         Row: {
           created_at: string
@@ -2761,4 +2779,3 @@ export const Constants = {
     Enums: {},
   },
 } as const
-
