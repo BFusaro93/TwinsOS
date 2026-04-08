@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { TrendingUp, ArrowLeft, Leaf, ShieldCheck } from "lucide-react";
+import { TrendingUp, ArrowLeft, Leaf, ShieldCheck, FileText } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useUIStore } from "@/stores";
 import { useSettingsStore } from "@/stores/settings-store";
@@ -25,6 +25,7 @@ const REPORTS_NAV: ReportsNavSection[] = [
     items: [
       { label: "Labor Efficiency", href: "/dashboards/avb", icon: TrendingUp },
       { label: "Driver Safety Scores", href: "/dashboards/safety", icon: ShieldCheck },
+      { label: "CRM Report", href: "/dashboards/crm", icon: FileText },
     ],
   },
 ];
