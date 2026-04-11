@@ -5,7 +5,7 @@ import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis,
   CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from "recharts";
-import { Upload, Trash2, Pencil } from "lucide-react";
+import { Upload, Trash2, Pencil, AlertTriangle } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import {
   useAvbWeeks, useUpsertAvbWeek, useDeleteAvbWeek,
@@ -374,6 +374,25 @@ export function AvbDashboard() {
     day.avb[code]={...day.avb[code],[field]:pf(val)};
     next.days[di]=day; return next;
   });
+  // Manual hours override — sets/replaces an employee's hours for a specific day
+  const setEmpHours = (uuid: string, di: number, total: number, regular: number, ot: number) => {
+    setWd(d => {
+      const dk = d.gusto.weekStart ? dayKey(d.gusto.weekStart, di) : null;
+      if (!dk) return d;
+      const next = { ...d, gusto: { ...d.gusto, employees: { ...d.gusto.employees } } };
+      const existing = next.gusto.employees[uuid] ?? { total: 0, regular: 0, ot: 0, days: [] };
+      const otherDays = existing.days.filter(x => x.date !== dk);
+      const updatedDays = total > 0 || regular > 0 || ot > 0
+        ? [...otherDays, { date: dk, total, regular, ot, mealBreak: 0, timeRange: "", job: "" }]
+        : otherDays;
+      const newTotal    = updatedDays.reduce((s, x) => s + x.total, 0);
+      const newRegular  = updatedDays.reduce((s, x) => s + x.regular, 0);
+      const newOt       = updatedDays.reduce((s, x) => s + x.ot, 0);
+      next.gusto.employees[uuid] = { ...existing, total: newTotal, regular: newRegular, ot: newOt, days: updatedDays };
+      return next;
+    });
+  };
+
   const copyAssignments = () => {
     if (!cpFrom||!cpTo) return;
     setWd(d=>{
@@ -484,14 +503,28 @@ export function AvbDashboard() {
               </tr></thead>
               <tbody className="divide-y divide-slate-100">
                 {ALL_EMP.map(emp=>{
-                  const ed=data.gusto.employees[emp.uuid]; const crew=empCrews[emp.uuid];
-                  if(!ed&&!crew) return null;
-                  const tot=ed?.total??0; const ot=ed?.ot??0; const dw=ed?.days.filter(d=>d.total>0).length??0;
+                  // Build hours by summing getHrsOnDay across all 7 days — consistent
+                  // with how crewTotals works and reliable after JSON round-trip from DB
+                  let tot=0, ot=0, dw=0;
+                  for(let d=0;d<7;d++){
+                    const dayHrs=getHrsOnDay(data.gusto,emp.uuid,d);
+                    tot+=dayHrs;
+                    if(dayHrs>0) dw++;
+                    if(data.gusto.weekStart){
+                      const dk=dayKey(data.gusto.weekStart,d);
+                      const de=data.gusto.employees[emp.uuid]?.days.find(x=>x.date===dk);
+                      if(de) ot+=de.ot;
+                    }
+                  }
+                  const crew=empCrews[emp.uuid];
+                  // Show row if assigned to any crew this week OR has clocked hours
+                  if(!crew&&tot===0) return null;
+                  const reg=tot>ot?tot-ot:0;
                   return (<tr key={emp.uuid} className={`hover:bg-slate-50 ${tot===0?"opacity-50":""}`}>
                     <td className="py-3 pl-4 font-medium">{emp.name}{ot>0&&<span className="ml-2 rounded-full bg-amber-100 px-1.5 py-0.5 text-xs font-semibold text-amber-700">OT {ot.toFixed(1)}h</span>}</td>
                     <td className="px-3 py-3 text-xs text-slate-400">{[...(crew??new Set())].join(", ")||"—"}</td>
                     <Td right>{tot>0?tot.toFixed(2):"—"}</Td>
-                    <Td right>{ed?ed.regular.toFixed(2):"—"}</Td>
+                    <Td right>{tot>0?reg.toFixed(2):"—"}</Td>
                     <Td right>{ot>0?<span className="text-amber-600">{ot.toFixed(2)}</span>:"—"}</Td>
                     <Td right>{dw>0?dw:"—"}</Td>
                     <td className="px-3 py-3">{tot===0?<Bdg text="absent" v="gray"/>:ot>0?<Bdg text="OT" v="amber"/>:<Bdg text="ok" v="green"/>}</td>
@@ -758,6 +791,81 @@ export function AvbDashboard() {
             })}
           </div>
         </div>
+        {/* Manual hours override */}
+        {(() => {
+          const assignedUuids = [...new Set(Object.values(day.assignments).flat())];
+          if (!assignedUuids.length) return null;
+          return (
+            <div className="rounded-lg border bg-white p-5 shadow-sm">
+              <p className="mb-1 text-sm font-semibold text-slate-700">Manual Hours Override</p>
+              <p className="mb-4 text-xs text-slate-400">
+                Edit hours for any employee whose time didn&apos;t come over from the CSV for{" "}
+                <span className="font-medium">{ws ? dayLbl(ws, importDay) : WDAYS[importDay]}</span>.
+              </p>
+              <div className="overflow-hidden rounded-lg border">
+                <table className="w-full text-sm">
+                  <thead className="bg-slate-50">
+                    <tr>
+                      <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-400">Employee</th>
+                      <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-400">Crew</th>
+                      <th className="w-24 px-3 py-2.5 text-right text-xs font-semibold uppercase tracking-wider text-slate-400">Total Hrs</th>
+                      <th className="w-24 px-3 py-2.5 text-right text-xs font-semibold uppercase tracking-wider text-slate-400">Regular</th>
+                      <th className="w-24 px-3 py-2.5 text-right text-xs font-semibold uppercase tracking-wider text-slate-400">OT</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {assignedUuids.map(uuid => {
+                      const emp = getEmp(uuid); if (!emp) return null;
+                      const crewCode = Object.entries(day.assignments).find(([, v]) => v.includes(uuid))?.[0] ?? "—";
+                      const dk = ws ? dayKey(ws, importDay) : null;
+                      const de = dk ? wd.gusto.employees[uuid]?.days.find(x => x.date === dk) : null;
+                      const total   = de?.total    ?? 0;
+                      const regular = de?.regular  ?? 0;
+                      const ot      = de?.ot       ?? 0;
+                      const missing = total === 0;
+                      return (
+                        <tr key={uuid} className={`hover:bg-slate-50 ${missing ? "bg-amber-50" : ""}`}>
+                          <td className="px-3 py-2.5 font-medium">
+                            <div className="flex items-center gap-1.5">
+                              {missing && <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-500" />}
+                              <span>{emp.name}</span>
+                              {missing && <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700">no hours</span>}
+                            </div>
+                          </td>
+                          <td className="px-3 py-2.5">
+                            <span className="rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-600">{crewCode}</span>
+                          </td>
+                          <td className="px-3 py-2.5">
+                            <AvbNumberInput
+                              value={total}
+                              onCommit={v => {
+                                const t = pf(v);
+                                const r = regular || t;
+                                setEmpHours(uuid, importDay, t, r > t ? t : r, ot);
+                              }}
+                            />
+                          </td>
+                          <td className="px-3 py-2.5">
+                            <AvbNumberInput
+                              value={regular}
+                              onCommit={v => setEmpHours(uuid, importDay, total, pf(v), ot)}
+                            />
+                          </td>
+                          <td className="px-3 py-2.5">
+                            <AvbNumberInput
+                              value={ot}
+                              onCommit={v => setEmpHours(uuid, importDay, total, regular, pf(v))}
+                            />
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          );
+        })()}
         <div className="flex gap-3">
           <button onClick={saveWeek} disabled={upsert.isPending} className="rounded-md bg-brand-500 px-5 py-2 text-sm font-semibold text-white hover:bg-brand-600 disabled:opacity-50">
             {upsert.isPending?"Saving…":"Save Week → Dashboard"}
@@ -802,11 +910,12 @@ export function AvbDashboard() {
     });
     return (
       <div className="flex flex-col gap-6">
-        <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
-          <KpiCard label="Total Budgeted" value={ytdB.toFixed(1)} sub={`hrs · ${weeks.length} wks`} />
-          <KpiCard label="Total On-Site" value={ytdO.toFixed(1)} sub="hrs scheduled" />
-          <KpiCard label="AvB Variance" value={(ytdAvb>=0?"+":"")+ytdAvb.toFixed(1)} sub="budgeted − actual" cls={ytdAvb>=0?"text-green-600":"text-red-600"} />
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-6">
+          <KpiCard label="Gusto Clocked" value={ytdG>0?ytdG.toFixed(1):"—"} sub={`hrs · ${weeks.length} wks`} />
+          <KpiCard label="On-Site (AvB)" value={ytdO>0?ytdO.toFixed(1):"—"} sub="hrs scheduled" />
+          <KpiCard label="Indirect Gap" value={ytdGap!==null?(ytdGap>=0?"+":"")+ytdGap.toFixed(1):"—"} sub="clocked − on-site" cls={ytdGap!==null?(Math.abs(ytdGap)>10?"text-red-600":"text-green-600"):"text-slate-400"} />
           <KpiCard label="Labor Efficiency" value={ytdEff!==null?ytdEff+"%":"—"} sub="on-site ÷ clocked" cls={epColor(ytdEff)} />
+          <KpiCard label="AvB Variance" value={(ytdAvb>=0?"+":"")+ytdAvb.toFixed(1)} sub="budgeted − actual" cls={ytdAvb>=0?"text-green-600":"text-red-600"} />
           <KpiCard label="Total OT" value={ytdOt>0?ytdOt.toFixed(1):"—"} sub="hrs overtime" cls={ytdOt>0?"text-amber-600":"text-slate-400"} />
         </div>
         <div>

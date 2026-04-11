@@ -158,7 +158,7 @@ function DetailsTab({
             <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
               Description
             </p>
-            <p className="text-sm text-slate-700">{request.description}</p>
+            <p className="whitespace-pre-wrap text-sm text-slate-700">{request.description}</p>
           </div>
         </>
       )}

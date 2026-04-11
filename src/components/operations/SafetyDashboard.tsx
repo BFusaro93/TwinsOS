@@ -1,10 +1,10 @@
 "use client";
 
 import { useState, useRef, useCallback } from "react";
-import { Upload, Pencil, Trash2, ShieldCheck, AlertTriangle } from "lucide-react";
+import { Upload, Pencil, Trash2, ShieldCheck, AlertTriangle, FileSpreadsheet } from "lucide-react";
 import {
   ResponsiveContainer,
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell, LabelList,
   LineChart, Line, Legend,
 } from "recharts";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -51,7 +51,20 @@ function fmtDate(iso: string): string {
   return `${months[parseInt(m) - 1]} ${parseInt(d)}, ${y}`;
 }
 function shortName(name: string): string {
-  return name.replace("Truck ", "#");
+  return name.replace("Truck #", "#");
+}
+
+function parseLabelFromFilename(filename: string): { label: string; weekEnd: string } | null {
+  const match = filename.match(/(\w{3})_(\d{1,2})_(\d{4})_-_(\w{3})_(\d{1,2})_(\d{4})/);
+  if (!match) return null;
+  const [, m1, d1, , m2, d2, y2] = match;
+  const months: Record<string, string> = {
+    Jan:"01", Feb:"02", Mar:"03", Apr:"04", May:"05", Jun:"06",
+    Jul:"07", Aug:"08", Sep:"09", Oct:"10", Nov:"11", Dec:"12",
+  };
+  const label = `${m1} ${parseInt(d1)} – ${m2} ${parseInt(d2)}`;
+  const weekEnd = `${y2}-${months[m2] ?? "01"}-${String(d2).padStart(2, "0")}`;
+  return { label, weekEnd };
 }
 
 // ── XLSX parser (loads xlsx from CDN on first use) ────────────────────────────
@@ -169,6 +182,7 @@ export function SafetyDashboard() {
   const [manEvents, setManEvents] = useState("0");
 
   const fileRef = useRef<HTMLInputElement>(null);
+  const [isDragging, setIsDragging] = useState(false);
 
   const { data: weeks = [], isLoading } = useSafetyWeeks();
   const upsert = useUpsertSafetyWeek();
@@ -188,6 +202,11 @@ export function SafetyDashboard() {
       if (!drivers.length) throw new Error("No driver rows found in file");
       setUploadedDrivers(drivers);
       setXlsxSt(`✓ ${drivers.length} drivers found`);
+      const parsed = parseLabelFromFilename(file.name);
+      if (parsed) {
+        setImportLabel(prev => prev || parsed.label);
+        setImportWeekEnd(prev => prev || parsed.weekEnd);
+      }
     } catch (e) {
       setXlsxSt("Error: " + String(e));
     }
@@ -435,6 +454,7 @@ export function SafetyDashboard() {
                   {scoreBarData.map((d, i) => (
                     <Cell key={i} fill={scoreColor(d.score)} />
                   ))}
+                  <LabelList dataKey="score" position="insideRight" style={{ fill: "#fff", fontSize: 11, fontWeight: 700 }} />
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
@@ -570,7 +590,7 @@ export function SafetyDashboard() {
               <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-500">Week Label</label>
               <input
                 type="text"
-                placeholder="e.g. Mar 22–29"
+                placeholder="e.g. Mar 29 – Apr 5  (auto-detected if left blank)"
                 value={importLabel}
                 onChange={e => setImportLabel(e.target.value)}
                 className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
@@ -603,13 +623,17 @@ export function SafetyDashboard() {
           <div className="rounded-lg border bg-white p-5 shadow-sm">
             <p className="mb-1 text-sm font-semibold text-slate-700">Upload Samsara Weekly Vehicle Safety Report</p>
             <p className="mb-4 text-xs text-slate-400">Samsara → Reports → Vehicle Safety → Weekly → Export Excel (.xlsx)</p>
-            <button
+            <div
               onClick={() => fileRef.current?.click()}
-              className="flex items-center gap-2 rounded-md border-2 border-dashed border-slate-200 bg-slate-50 px-6 py-8 text-sm text-slate-500 hover:border-brand-400 hover:bg-brand-50 hover:text-brand-600 w-full justify-center transition-colors"
+              onDragOver={e => { e.preventDefault(); setIsDragging(true); }}
+              onDragLeave={() => setIsDragging(false)}
+              onDrop={e => { e.preventDefault(); setIsDragging(false); const f = e.dataTransfer.files?.[0]; if (f) handleFile(f); }}
+              className={`flex cursor-pointer flex-col items-center justify-center gap-2 rounded-md border-2 border-dashed px-6 py-10 transition-colors ${isDragging ? "border-brand-400 bg-brand-50 text-brand-600" : "border-slate-200 bg-slate-50 text-slate-500 hover:border-brand-400 hover:bg-brand-50 hover:text-brand-600"}`}
             >
-              <Upload className="h-5 w-5" />
-              <span>Drop Samsara .xlsx here, or click to browse</span>
-            </button>
+              <FileSpreadsheet className="h-10 w-10 opacity-60" />
+              <span className="text-sm font-medium">Drop your Samsara Excel file here</span>
+              <span className="text-xs text-slate-400">or click to browse — accepts the weekly Vehicle Safety Report .xlsx</span>
+            </div>
             <input
               ref={fileRef}
               type="file"
@@ -798,9 +822,9 @@ export function SafetyDashboard() {
         <div className="py-16 text-center text-sm text-slate-400">Loading…</div>
       ) : (
         <>
-          {tab === "overview" && <Overview />}
-          {tab === "history" && <History />}
-          {tab === "import" && <Import />}
+          {tab === "overview" && Overview()}
+          {tab === "history" && History()}
+          {tab === "import" && Import()}
         </>
       )}
     </div>

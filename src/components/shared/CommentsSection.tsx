@@ -59,7 +59,7 @@ export function CommentsSection({ recordType, recordId }: CommentsSectionProps) 
                       {formatDateTime(comment.createdAt)}
                     </span>
                   </div>
-                  <p className="mt-0.5 text-sm text-slate-700">{comment.body}</p>
+                  <p className="mt-0.5 whitespace-pre-wrap text-sm text-slate-700">{comment.body}</p>
                 </div>
               </li>
             );
