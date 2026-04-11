@@ -1,5 +1,3 @@
-"use client";
-
 /**
  * parse-financial-pdf.ts
  *
