@@ -1,15 +1,15 @@
 "use client";
 
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useRef, Fragment } from "react";
 import {
   BarChart, Bar, LineChart, Line, AreaChart, Area,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   ResponsiveContainer, ReferenceLine, Cell,
 } from "recharts";
 import {
-  DollarSign, TrendingUp, TrendingDown, Minus,
+  DollarSign, TrendingUp, TrendingDown,
   PlusCircle, Pencil, Trash2, ChevronDown, ChevronUp,
-  Upload, AlertCircle, CheckCircle2, Calendar, X,
+  Upload, AlertCircle, CheckCircle2, Calendar,
 } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import {
@@ -1167,11 +1167,11 @@ function BudgetTab({ actuals, budgets }: { actuals: FinancialPeriodRecord[]; bud
             <tr className="border-b border-slate-100 bg-slate-50/50">
               <th className="px-4 py-2 text-left text-slate-500" />
               {metrics.map((m) => (
-                <>
-                  <th key={`${m.key}-a`} className="px-3 py-2 text-right text-slate-500 border-l border-slate-100">Actual</th>
-                  <th key={`${m.key}-b`} className="px-3 py-2 text-right text-slate-500">Budget</th>
-                  <th key={`${m.key}-v`} className="px-3 py-2 text-right text-slate-500">Var %</th>
-                </>
+                <Fragment key={m.key}>
+                  <th className="px-3 py-2 text-right text-slate-500 border-l border-slate-100">Actual</th>
+                  <th className="px-3 py-2 text-right text-slate-500">Budget</th>
+                  <th className="px-3 py-2 text-right text-slate-500">Var %</th>
+                </Fragment>
               ))}
             </tr>
           </thead>
@@ -1187,17 +1187,17 @@ function BudgetTab({ actuals, budgets }: { actuals: FinancialPeriodRecord[]; bud
                     const bv = getVal(b, met.key);
                     const vp = bv !== 0 ? ((av - bv) / Math.abs(bv)) * 100 : 0;
                     return (
-                      <>
-                        <td key={`${m}-${met.key}-a`} className="px-3 py-2.5 text-right tabular-nums text-slate-700 font-medium border-l border-slate-50">
+                      <Fragment key={met.key}>
+                        <td className="px-3 py-2.5 text-right tabular-nums text-slate-700 font-medium border-l border-slate-50">
                           {a ? fmt(av) : "—"}
                         </td>
-                        <td key={`${m}-${met.key}-b`} className="px-3 py-2.5 text-right tabular-nums text-slate-400">
+                        <td className="px-3 py-2.5 text-right tabular-nums text-slate-400">
                           {b ? fmt(bv) : "—"}
                         </td>
-                        <td key={`${m}-${met.key}-v`} className={`px-3 py-2.5 text-right tabular-nums text-xs ${a && b ? (vp >= 0 ? "text-emerald-600" : "text-red-500") : "text-slate-300"}`}>
+                        <td className={`px-3 py-2.5 text-right tabular-nums text-xs ${a && b ? (vp >= 0 ? "text-emerald-600" : "text-red-500") : "text-slate-300"}`}>
                           {a && b ? fmtPct(vp) : "—"}
                         </td>
-                      </>
+                      </Fragment>
                     );
                   })}
                 </tr>
