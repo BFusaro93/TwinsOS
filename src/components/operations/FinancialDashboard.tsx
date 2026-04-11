@@ -1046,6 +1046,9 @@ function CashFlowTab({ records }: { records: FinancialPeriodRecord[] }) {
 // ── Budget Tab ────────────────────────────────────────────────────────────────
 
 function BudgetTab({ actuals, budgets }: { actuals: FinancialPeriodRecord[]; budgets: FinancialPeriodRecord[] }) {
+  // ── All hooks must come before any early returns (Rules of Hooks) ──────────
+  const [selectedMetric, setSelectedMetric] = useState("revenue");
+
   if (!budgets.length) {
     return (
       <div className="flex flex-col items-center justify-center py-24 text-center text-slate-400">
@@ -1081,8 +1084,6 @@ function BudgetTab({ actuals, budgets }: { actuals: FinancialPeriodRecord[]; bud
       default: return 0;
     }
   };
-
-  const [selectedMetric, setSelectedMetric] = useState("revenue");
 
   const chartData = months.map((m) => {
     const a = actuals.find((r) => r.periodMonth === m);
