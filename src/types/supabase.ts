@@ -699,6 +699,59 @@ export type Database = {
           },
         ]
       }
+      crm_reports: {
+        Row: {
+          html_content: string
+          id: string
+          updated_at: string | null
+        }
+        Insert: {
+          html_content: string
+          id?: string
+          updated_at?: string | null
+        }
+        Update: {
+          html_content?: string
+          id?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      financial_periods: {
+        Row: {
+          created_at: string
+          data: Json
+          id: string
+          org_id: string
+          period_month: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          data?: Json
+          id?: string
+          org_id: string
+          period_month: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          data?: Json
+          id?: string
+          org_id?: string
+          period_month?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "financial_periods_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       goods_receipt_lines: {
         Row: {
           created_at: string
@@ -2761,4 +2814,3 @@ export const Constants = {
     Enums: {},
   },
 } as const
-
