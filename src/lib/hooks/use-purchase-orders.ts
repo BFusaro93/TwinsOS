@@ -219,6 +219,23 @@ function getField(row: Record<string, string>, ...keys: string[]): string {
 
 function parseDate(raw: string): string | null {
   if (!raw) return null;
+
+  // Handle M/D/YY HH:MM format from QuickBooks exports (e.g. "4/9/26 14:09")
+  // JavaScript's Date constructor treats 2-digit years as year 26 AD, not 2026.
+  const shortYearFull = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2})\s+(\d{1,2}):(\d{2})$/);
+  if (shortYearFull) {
+    const [, mo, dy, yr, hr, mn] = shortYearFull;
+    return new Date(2000 + parseInt(yr), parseInt(mo) - 1, parseInt(dy), parseInt(hr), parseInt(mn)).toISOString();
+  }
+
+  // Handle M/D/YY (date only, no time)
+  const shortYearDate = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2})$/);
+  if (shortYearDate) {
+    const [, mo, dy, yr] = shortYearDate;
+    return new Date(2000 + parseInt(yr), parseInt(mo) - 1, parseInt(dy)).toISOString();
+  }
+
+  // Fallback for ISO / long-year formats
   const d = new Date(raw);
   return isNaN(d.getTime()) ? null : d.toISOString();
 }
@@ -311,8 +328,9 @@ async function importDenormalized(supabase: SupabaseClient, rows: Record<string,
 
     const grandTotalCents = subtotalCents + salesTaxCents + shippingCents;
 
-    // Create the PO
-    const poNumber = `PO-${new Date().getFullYear()}-${poNum}`;
+    // Create the PO — derive year from the CSV's Created On date, not today
+    const poYear = createdOn ? new Date(createdOn).getFullYear() : new Date().getFullYear();
+    const poNumber = `PO-${poYear}-${poNum}`;
     const { data: created, error: poErr } = await supabase
       .from("purchase_orders")
       .insert({
