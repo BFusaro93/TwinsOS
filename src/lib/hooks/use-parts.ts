@@ -66,6 +66,7 @@ export function useCreatePart() {
           alternate_vendors: input.alternateVendors as unknown as import("@/types/supabase").Json,
           parent_part_id: input.parentPartId,
           is_inventory: input.isInventory,
+          location: input.location ?? null,
           picture_url: input.pictureUrl,
           product_item_id: input.productItemId,
           cost_layers: input.costLayers as unknown as import("@/types/supabase").Json,

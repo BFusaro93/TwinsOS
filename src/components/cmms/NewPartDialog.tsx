@@ -161,7 +161,7 @@ export function NewPartDialog({ open, onOpenChange, initialData, onCreated }: Ne
         </DialogHeader>
 
         <div className="max-h-[60dvh] sm:max-h-[70vh] overflow-y-auto px-1">
-          <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          <form id="new-part-form" onSubmit={handleSubmit} className="flex flex-col gap-4">
             {/* Basic Info */}
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
               Basic Info
@@ -349,8 +349,8 @@ export function NewPartDialog({ open, onOpenChange, initialData, onCreated }: Ne
           </Button>
           <Button
             type="submit"
+            form="new-part-form"
             disabled={!isValid || saving}
-            onClick={handleSubmit}
           >
             {saving ? "Saving..." : isEditing ? "Save Changes" : "Create Part"}
           </Button>
