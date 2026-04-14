@@ -103,7 +103,7 @@ export function PartsPage() {
     const stockFilter = filterValues.stock;
     // Non-inventory parts have no meaningful stock status — exclude them when
     // a stock filter is active rather than misrepresenting their qty.
-    const isLowStock = p.isInventory && p.quantityOnHand <= p.minimumStock;
+    const isLowStock = p.isInventory && p.minimumStock > 0 && p.quantityOnHand <= p.minimumStock;
     const matchStock = !stockFilter || (
       Array.isArray(stockFilter)
         ? stockFilter.length === 0 || (p.isInventory && stockFilter.some(s => (s === "low_stock" && isLowStock) || (s === "in_stock" && !isLowStock)))
@@ -114,7 +114,7 @@ export function PartsPage() {
     return matchSearch && matchStock && matchCategory && matchVendor;
   });
 
-  const lowStockCount = all.filter((p) => p.isInventory && p.quantityOnHand <= p.minimumStock).length;
+  const lowStockCount = all.filter((p) => p.isInventory && p.minimumStock > 0 && p.quantityOnHand <= p.minimumStock).length;
   const totalQty = all.filter((p) => p.isInventory).reduce((sum, p) => sum + p.quantityOnHand, 0);
 
   function handleRowClick(part: Part) {
@@ -234,7 +234,7 @@ export function PartsPage() {
 
             {!isLoading &&
               filtered.map((part) => {
-                const isLowStock = part.isInventory && part.quantityOnHand <= part.minimumStock;
+                const isLowStock = part.isInventory && part.minimumStock > 0 && part.quantityOnHand <= part.minimumStock;
                 return (
                   <TableRow
                     key={part.id}
