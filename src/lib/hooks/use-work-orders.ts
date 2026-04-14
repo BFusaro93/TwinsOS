@@ -196,30 +196,75 @@ function normaliseWOPriority(raw: string): string {
  * Bulk-inserts work orders from a CSV import.
  * Rows missing `title` are silently skipped.
  */
+/** Parse M/D/YY or M/D/YY HH:MM date strings from QuickBooks CSV exports. */
+function parseCsvDate(raw: string): string | null {
+  if (!raw?.trim()) return null;
+  // M/D/YY HH:MM  (e.g. "4/9/26 14:09")
+  const m1 = raw.trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{2})\s+(\d{1,2}):(\d{2})$/);
+  if (m1) {
+    const [, mo, dy, yr, hr, mn] = m1;
+    return new Date(2000 + parseInt(yr), parseInt(mo) - 1, parseInt(dy), parseInt(hr), parseInt(mn)).toISOString().slice(0, 10);
+  }
+  // M/D/YY (date only)
+  const m2 = raw.trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{2})$/);
+  if (m2) {
+    const [, mo, dy, yr] = m2;
+    return new Date(2000 + parseInt(yr), parseInt(mo) - 1, parseInt(dy)).toISOString().slice(0, 10);
+  }
+  // M/D/YYYY or other long-year formats
+  const d = new Date(raw);
+  if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10);
+  return null;
+}
+
 export function useBulkImportWorkOrders() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (rows: Record<string, string>[]) => {
       const supabase = createClient();
-      const inserts = rows
-        .filter((r) => r.title?.trim())
-        .map((r) => ({
+      const valid = rows.filter((r) => r.title?.trim());
+      if (valid.length === 0) return 0;
+
+      // Pre-fetch assets and vehicles to enable name-based auto-linking
+      const [{ data: assets }, { data: vehicles }] = await Promise.all([
+        supabase.from("assets").select("id, name").is("deleted_at", null),
+        supabase.from("vehicles").select("id, name").is("deleted_at", null),
+      ]);
+      const assetMap = new Map((assets ?? []).map((a) => [a.name.toLowerCase(), a.id as string]));
+      const vehicleMap = new Map((vehicles ?? []).map((v) => [v.name.toLowerCase(), v.id as string]));
+
+      let count = 0;
+      for (const r of valid) {
+        const assetNameRaw = r.assetName?.trim() || null;
+        const assetKey = assetNameRaw?.toLowerCase() ?? "";
+
+        // Resolve FK: check assets first, then vehicles
+        let assetId: string | null = null;
+        let linkedEntityType: string | null = null;
+        if (assetKey) {
+          const aid = assetMap.get(assetKey);
+          if (aid) { assetId = aid; linkedEntityType = "asset"; }
+          else {
+            const vid = vehicleMap.get(assetKey);
+            if (vid) { assetId = vid; linkedEntityType = "vehicle"; }
+          }
+        }
+
+        const row = {
           title: r.title.trim(),
           description: r.description?.trim() || null,
           status: normaliseWOStatus(r.status ?? ""),
           priority: normaliseWOPriority(r.priority ?? ""),
           wo_type: r.woType?.trim() || null,
-          asset_name: r.assetName?.trim() || null,
+          asset_id: assetId,
+          asset_name: assetNameRaw,
+          linked_entity_type: linkedEntityType,
           assigned_to_name: r.assignedToName?.trim() || null,
-          due_date: r.dueDate?.trim() || null,
+          due_date: parseCsvDate(r.dueDate ?? ""),
           category: r.category?.trim() || null,
           work_order_number: r.workOrderNumber?.trim() || `WO-${Date.now().toString().slice(-6)}-${Math.random().toString(36).slice(2, 5)}`,
-        }));
-      if (inserts.length === 0) return 0;
+        };
 
-      // Insert one-by-one; on duplicate work_order_number, update the existing row
-      let count = 0;
-      for (const row of inserts) {
         const { error } = await supabase.from("work_orders").insert(row);
         if (error?.code === "23505") {
           const { data: { user } } = await supabase.auth.getUser();
@@ -230,7 +275,9 @@ export function useBulkImportWorkOrders() {
             status: row.status,
             priority: row.priority,
             wo_type: row.wo_type,
+            asset_id: row.asset_id,
             asset_name: row.asset_name,
+            linked_entity_type: row.linked_entity_type,
             assigned_to_name: row.assigned_to_name,
             due_date: row.due_date,
             category: row.category,

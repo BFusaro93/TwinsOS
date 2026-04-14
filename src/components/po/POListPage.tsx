@@ -278,6 +278,11 @@ export function POListPage() {
               templateColumns={[
                 "Purchase Order #",
                 "Vendor",
+                "Status",
+                "Created On",
+                "Approved On",
+                "Completed On",
+                "Due Date",
                 "Line Type",
                 "Line Name",
                 "Part Number",
