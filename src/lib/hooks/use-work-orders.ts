@@ -250,6 +250,7 @@ export function useBulkImportWorkOrders() {
           }
         }
 
+        const parsedCreatedAt = parseCsvDate(r.createdAt ?? "");
         const row = {
           title: r.title.trim(),
           description: r.description?.trim() || null,
@@ -263,6 +264,7 @@ export function useBulkImportWorkOrders() {
           due_date: parseCsvDate(r.dueDate ?? ""),
           category: r.category?.trim() || null,
           work_order_number: r.workOrderNumber?.trim() || `WO-${Date.now().toString().slice(-6)}-${Math.random().toString(36).slice(2, 5)}`,
+          ...(parsedCreatedAt && { created_at: new Date(parsedCreatedAt).toISOString() }),
         };
 
         const { error } = await supabase.from("work_orders").insert(row);

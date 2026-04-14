@@ -288,6 +288,7 @@ export function POListPage() {
                 "Part Number",
                 "Unit Cost",
                 "Ordered Quantity",
+                "Ordered Cost",
               ]}
               templateFilename="po-import-template.csv"
               requiredColumns={["Purchase Order #", "Vendor"]}
