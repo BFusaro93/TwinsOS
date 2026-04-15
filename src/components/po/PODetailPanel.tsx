@@ -80,12 +80,14 @@ function DetailsTab({
   onStatusChange,
   onSendToReceiving,
   onProjectClick,
+  onPOClick,
 }: {
   po: PurchaseOrder;
   status: POStatus;
   onStatusChange: (s: POStatus) => void;
   onSendToReceiving: () => void;
   onProjectClick?: (projectId: string) => void;
+  onPOClick?: (poId: string) => void;
 }) {
   const [lineItems, setLineItems] = useState<LineItem[]>(po.lineItems);
   const { currentUser } = useCurrentUserStore();
@@ -257,6 +259,10 @@ function DetailsTab({
         onOpenChange={(open) => {
           if (!open) setSelectedProductId(null);
         }}
+        onPOClick={(poId) => {
+          setSelectedProductId(null);
+          onPOClick?.(poId);
+        }}
       />
 
       <PartDetailSheet
@@ -397,6 +403,7 @@ export function PODetailPanel({ po }: PODetailPanelProps) {
                 onStatusChange={setStatus}
                 onSendToReceiving={() => setReceiveOpen(true)}
                 onProjectClick={(id) => setSelectedProjectId(id)}
+                onPOClick={(poId) => setSelectedPOId(poId)}
               />
             ),
           },
