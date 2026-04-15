@@ -30,9 +30,10 @@ import { useProducts } from "@/lib/hooks/use-products";
 import type { Part } from "@/types";
 
 const STOCK_FILTER_OPTIONS = [
-  { value: "out_of_stock", label: "Out of Stock" },
-  { value: "low_stock", label: "Low Stock" },
-  { value: "in_stock", label: "In Stock" },
+  { value: "oos_critical", label: "OOS (has min)" },
+  { value: "oos_no_min",   label: "OOS (no min)" },
+  { value: "low_stock",    label: "Low Stock" },
+  { value: "in_stock",     label: "In Stock" },
 ];
 
 const PARTS_COLUMNS: ColumnDef[] = [
@@ -104,18 +105,22 @@ export function PartsPage() {
     const stockFilter = filterValues.stock;
     // Non-inventory parts have no meaningful stock status — exclude them when
     // a stock filter is active rather than misrepresenting their qty.
-    const isOutOfStock = p.isInventory && p.quantityOnHand === 0;
-    const isLowStock   = p.isInventory && !isOutOfStock && p.minimumStock > 0 && p.quantityOnHand <= p.minimumStock;
-    const isInStock    = p.isInventory && !isOutOfStock && !isLowStock;
+    const isOOSCritical = p.isInventory && p.quantityOnHand === 0 && p.minimumStock > 0;
+    const isOOSNoMin    = p.isInventory && p.quantityOnHand === 0 && p.minimumStock === 0;
+    const isOutOfStock  = isOOSCritical || isOOSNoMin;
+    const isLowStock    = p.isInventory && !isOutOfStock && p.minimumStock > 0 && p.quantityOnHand <= p.minimumStock;
+    const isInStock     = p.isInventory && !isOutOfStock && !isLowStock;
     const matchStock = !stockFilter || (
       Array.isArray(stockFilter)
         ? stockFilter.length === 0 || (p.isInventory && stockFilter.some(s =>
-            (s === "out_of_stock" && isOutOfStock) ||
-            (s === "low_stock"   && isLowStock)    ||
-            (s === "in_stock"    && isInStock)))
+            (s === "oos_critical" && isOOSCritical) ||
+            (s === "oos_no_min"   && isOOSNoMin)    ||
+            (s === "low_stock"    && isLowStock)     ||
+            (s === "in_stock"     && isInStock)))
         : stockFilter === "all" || (p.isInventory && (
-            (stockFilter === "out_of_stock" && isOutOfStock) ||
-            (stockFilter === "low_stock"    && isLowStock)   ||
+            (stockFilter === "oos_critical" && isOOSCritical) ||
+            (stockFilter === "oos_no_min"   && isOOSNoMin)    ||
+            (stockFilter === "low_stock"    && isLowStock)     ||
             (stockFilter === "in_stock"     && isInStock)))
     );
     const matchCategory = matchesFilter(p.category, filterValues.category);
@@ -124,6 +129,7 @@ export function PartsPage() {
   });
 
   const lowStockCount = all.filter((p) => p.isInventory && p.quantityOnHand > 0 && p.minimumStock > 0 && p.quantityOnHand <= p.minimumStock).length;
+  const oosCriticalCount = all.filter((p) => p.isInventory && p.quantityOnHand === 0 && p.minimumStock > 0).length;
   const totalQty = all.filter((p) => p.isInventory).reduce((sum, p) => sum + p.quantityOnHand, 0);
 
   function handleRowClick(part: Part) {
@@ -243,8 +249,10 @@ export function PartsPage() {
 
             {!isLoading &&
               filtered.map((part) => {
-                const isOutOfStock = part.isInventory && part.quantityOnHand === 0;
-                const isLowStock   = part.isInventory && !isOutOfStock && part.minimumStock > 0 && part.quantityOnHand <= part.minimumStock;
+                const isOOSCritical = part.isInventory && part.quantityOnHand === 0 && part.minimumStock > 0;
+                const isOOSNoMin    = part.isInventory && part.quantityOnHand === 0 && part.minimumStock === 0;
+                const isOutOfStock  = isOOSCritical || isOOSNoMin;
+                const isLowStock    = part.isInventory && !isOutOfStock && part.minimumStock > 0 && part.quantityOnHand <= part.minimumStock;
                 return (
                   <TableRow
                     key={part.id}
@@ -318,12 +326,19 @@ export function PartsPage() {
                           >
                             Not Tracked
                           </Badge>
-                        ) : isOutOfStock ? (
+                        ) : isOOSCritical ? (
+                          <Badge
+                            variant="outline"
+                            className="border-red-200 bg-red-50 text-red-700"
+                          >
+                            OOS
+                          </Badge>
+                        ) : isOOSNoMin ? (
                           <Badge
                             variant="outline"
                             className="border-orange-200 bg-orange-50 text-orange-700"
                           >
-                            Out of Stock
+                            OOS
                           </Badge>
                         ) : isLowStock ? (
                           <Badge
