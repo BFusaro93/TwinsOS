@@ -736,7 +736,7 @@ export function WorkOrderDetailPanel({ workOrder }: WorkOrderDetailPanelProps) {
       {assetSheetOpen && linkedAsset && createPortal(
         <OverlayLevelContext.Provider value={level + 1}>
           <div
-            className="fixed inset-0"
+            className="fixed inset-0 bg-black/40"
             style={{ zIndex: backdropZ }}
             onClick={() => setAssetSheetOpen(false)}
           />
@@ -762,7 +762,7 @@ export function WorkOrderDetailPanel({ workOrder }: WorkOrderDetailPanelProps) {
       {vehicleSheetOpen && linkedVehicle && createPortal(
         <OverlayLevelContext.Provider value={level + 1}>
           <div
-            className="fixed inset-0"
+            className="fixed inset-0 bg-black/40"
             style={{ zIndex: backdropZ }}
             onClick={() => setVehicleSheetOpen(false)}
           />
@@ -788,7 +788,7 @@ export function WorkOrderDetailPanel({ workOrder }: WorkOrderDetailPanelProps) {
       {subWOSheetWorkOrder && createPortal(
         <OverlayLevelContext.Provider value={level + 1}>
           <div
-            className="fixed inset-0"
+            className="fixed inset-0 bg-black/40"
             style={{ zIndex: backdropZ }}
             onClick={() => setSubWOSheetId(null)}
           />
@@ -814,7 +814,7 @@ export function WorkOrderDetailPanel({ workOrder }: WorkOrderDetailPanelProps) {
       {parentWOSheetOpen && parentWorkOrder && createPortal(
         <OverlayLevelContext.Provider value={level + 1}>
           <div
-            className="fixed inset-0"
+            className="fixed inset-0 bg-black/40"
             style={{ zIndex: backdropZ }}
             onClick={() => setParentWOSheetOpen(false)}
           />
