@@ -49,6 +49,7 @@ interface ProductDetailSheetProps {
   product: ProductItem | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onPOClick?: (poId: string) => void;
 }
 
 function DetailRow({ label, value }: { label: string; value: React.ReactNode }) {
@@ -183,9 +184,11 @@ function DetailsTab({
 function HistoryTab({
   product,
   purchaseOrders,
+  onPOClick,
 }: {
   product: ProductItem;
   purchaseOrders: ReturnType<typeof usePurchaseOrders>["data"];
+  onPOClick?: (poId: string) => void;
 }) {
   const pos = (purchaseOrders ?? [])
     .filter((po) => po.lineItems.some((li) => li.productItemId === product.id))
@@ -277,8 +280,18 @@ function HistoryTab({
                   const li = po.lineItems.find((l) => l.productItemId === product.id)!;
                   return (
                     <tr key={po.id} className="border-t border-slate-100">
-                      <td className="px-3 py-2 font-mono text-xs font-medium text-slate-800">
-                        {po.poNumber}
+                      <td className="px-3 py-2 font-mono text-xs font-medium">
+                        {onPOClick ? (
+                          <button
+                            type="button"
+                            onClick={() => onPOClick(po.id)}
+                            className="text-brand-600 hover:underline"
+                          >
+                            {po.poNumber}
+                          </button>
+                        ) : (
+                          <span className="text-slate-800">{po.poNumber}</span>
+                        )}
                       </td>
                       <td className="px-3 py-2 text-slate-500">{formatDate(po.createdAt)}</td>
                       <td className="px-3 py-2 text-right text-slate-700">{li.quantity}</td>
@@ -300,7 +313,7 @@ function HistoryTab({
   );
 }
 
-export function ProductDetailSheet({ product, open, onOpenChange }: ProductDetailSheetProps) {
+export function ProductDetailSheet({ product, open, onOpenChange, onPOClick }: ProductDetailSheetProps) {
   const { data: requisitions } = useRequisitions();
   const { data: purchaseOrders } = usePurchaseOrders();
   const [qtyOnHand, setQtyOnHand] = useState<number | null>(null);
@@ -412,7 +425,7 @@ export function ProductDetailSheet({ product, open, onOpenChange }: ProductDetai
             />
           </TabsContent>
           <TabsContent value="history" className="mt-0 flex-1 overflow-y-auto">
-            <HistoryTab product={product} purchaseOrders={purchaseOrders} />
+            <HistoryTab product={product} purchaseOrders={purchaseOrders} onPOClick={onPOClick} />
           </TabsContent>
           <TabsContent value="audit trail" className="mt-0 flex-1 overflow-y-auto">
             <AuditTrailTab recordType="product" recordId={product.id} />
