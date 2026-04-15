@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
+import { useStickyState } from "@/lib/hooks/use-sticky-state";
 import { useUsers, useInviteUser, useUpdateUserRole, useDeactivateUser } from "@/lib/hooks/use-users";
 import type { OrgUser } from "@/types";
 import { Check, Plus, Trash2, UserPlus } from "lucide-react";
@@ -24,6 +25,8 @@ import {
   Select,
   SelectContent,
   SelectItem,
+  SelectLabel,
+  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -183,12 +186,14 @@ interface InviteUserDialogProps {
   onOpenChange: (open: boolean) => void;
   onInvite: (name: string, email: string, role: OrgUser["role"]) => Promise<void>;
   submitting?: boolean;
+  customRoles?: CustomRole[];
 }
 
-function InviteUserDialog({ open, onOpenChange, onInvite, submitting = false }: InviteUserDialogProps) {
+function InviteUserDialog({ open, onOpenChange, onInvite, submitting = false, customRoles = [] }: InviteUserDialogProps) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
-  const [role, setRole] = useState<OrgUser["role"] | "">("");
+  // Value is either a system role key or a custom role id (prefixed "custom-")
+  const [role, setRole] = useState("");
 
   function reset() {
     setName("");
@@ -199,7 +204,10 @@ function InviteUserDialog({ open, onOpenChange, onInvite, submitting = false }: 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!name.trim() || !email.trim() || !role) return;
-    await onInvite(name.trim(), email.trim(), role as OrgUser["role"]);
+    // Resolve custom role id → its baseRole for the DB
+    const customMatch = customRoles.find((cr) => cr.id === role);
+    const resolvedRole = (customMatch ? customMatch.baseRole : role) as OrgUser["role"];
+    await onInvite(name.trim(), email.trim(), resolvedRole);
     reset();
     onOpenChange(false);
   }
@@ -241,17 +249,30 @@ function InviteUserDialog({ open, onOpenChange, onInvite, submitting = false }: 
           </div>
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="invite-role">Role</Label>
-            <Select value={role} onValueChange={(v) => setRole(v as OrgUser["role"])}>
+            <Select value={role} onValueChange={setRole}>
               <SelectTrigger id="invite-role">
                 <SelectValue placeholder="Select a role" />
               </SelectTrigger>
               <SelectContent>
+                <SelectLabel>System Roles</SelectLabel>
                 <SelectItem value="admin">Admin</SelectItem>
                 <SelectItem value="manager">Manager</SelectItem>
                 <SelectItem value="purchaser">Purchaser</SelectItem>
                 <SelectItem value="technician">Technician</SelectItem>
                 <SelectItem value="viewer">Viewer</SelectItem>
                 <SelectItem value="requestor">Requestor</SelectItem>
+                {customRoles.length > 0 && (
+                  <>
+                    <SelectSeparator />
+                    <SelectLabel>Custom Roles</SelectLabel>
+                    {customRoles.map((cr) => (
+                      <SelectItem key={cr.id} value={cr.id}>
+                        {cr.name}
+                        <span className="ml-1.5 text-xs text-slate-400">({cr.baseRole})</span>
+                      </SelectItem>
+                    ))}
+                  </>
+                )}
               </SelectContent>
             </Select>
           </div>
@@ -296,7 +317,8 @@ export function UsersPage() {
   );
 
   const [inviteOpen, setInviteOpen] = useState(false);
-  const [customRoles, setCustomRoles] = useState<CustomRole[]>([]);
+  // Persist custom roles across page refreshes
+  const [customRoles, setCustomRoles] = useStickyState<CustomRole[]>("custom-roles", []);
   const [customRoleOpen, setCustomRoleOpen] = useState(false);
   const [newRoleName, setNewRoleName] = useState("");
   const [newRoleDesc, setNewRoleDesc] = useState("");
@@ -402,20 +424,35 @@ export function UsersPage() {
                     <TableCell>
                       <Select
                         value={user.role}
-                        onValueChange={(v) =>
-                          handleRoleChange(user.id, v as OrgUser["role"])
-                        }
+                        onValueChange={(v) => {
+                          // Resolve custom role id → baseRole before saving
+                          const cr = customRoles.find((r) => r.id === v);
+                          handleRoleChange(user.id, (cr ? cr.baseRole : v) as OrgUser["role"]);
+                        }}
                       >
                         <SelectTrigger className="h-8 w-36 text-xs">
                           <SelectValue>{ROLE_LABELS[user.role]}</SelectValue>
                         </SelectTrigger>
                         <SelectContent>
+                          <SelectLabel>System Roles</SelectLabel>
                           <SelectItem value="admin">Admin</SelectItem>
                           <SelectItem value="manager">Manager</SelectItem>
                           <SelectItem value="purchaser">Purchaser</SelectItem>
                           <SelectItem value="technician">Technician</SelectItem>
                           <SelectItem value="viewer">Viewer</SelectItem>
                           <SelectItem value="requestor">Requestor</SelectItem>
+                          {customRoles.length > 0 && (
+                            <>
+                              <SelectSeparator />
+                              <SelectLabel>Custom Roles</SelectLabel>
+                              {customRoles.map((cr) => (
+                                <SelectItem key={cr.id} value={cr.id}>
+                                  {cr.name}
+                                  <span className="ml-1.5 text-xs text-slate-400">({cr.baseRole})</span>
+                                </SelectItem>
+                              ))}
+                            </>
+                          )}
                         </SelectContent>
                       </Select>
                     </TableCell>
@@ -520,6 +557,7 @@ export function UsersPage() {
         onOpenChange={setInviteOpen}
         onInvite={handleInvite}
         submitting={inviting}
+        customRoles={customRoles}
       />
 
       <Dialog open={customRoleOpen} onOpenChange={setCustomRoleOpen}>
