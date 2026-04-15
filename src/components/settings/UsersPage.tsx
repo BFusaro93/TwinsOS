@@ -1,17 +1,15 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
-import { useStickyState } from "@/lib/hooks/use-sticky-state";
+import { useState, useMemo } from "react";
 import { useUsers, useInviteUser, useUpdateUserRole, useDeactivateUser } from "@/lib/hooks/use-users";
 import type { OrgUser } from "@/types";
-import { Check, Plus, Trash2, UserPlus } from "lucide-react";
+import { Check, Trash2, UserPlus } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { StatCard } from "@/components/shared/StatCard";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Table,
@@ -25,8 +23,6 @@ import {
   Select,
   SelectContent,
   SelectItem,
-  SelectLabel,
-  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -37,15 +33,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Checkbox } from "@/components/ui/checkbox";
-
-interface CustomRole {
-  id: string;
-  name: string;
-  description: string;
-  baseRole: "admin" | "manager" | "purchaser" | "technician" | "viewer" | "requestor";
-  permissions: string[];
-}
 
 const AVATAR_COLORS = [
   "bg-violet-500", "bg-blue-500", "bg-emerald-500", "bg-amber-500",
@@ -143,10 +130,6 @@ const ROLES = [
   },
 ];
 
-const ALL_PERMISSIONS: string[] = Array.from(
-  new Set(ROLES.flatMap((r) => r.permissions))
-);
-
 function statusBadgeClass(status: OrgUser["status"]): string {
   switch (status) {
     case "active":
@@ -186,14 +169,12 @@ interface InviteUserDialogProps {
   onOpenChange: (open: boolean) => void;
   onInvite: (name: string, email: string, role: OrgUser["role"]) => Promise<void>;
   submitting?: boolean;
-  customRoles?: CustomRole[];
 }
 
-function InviteUserDialog({ open, onOpenChange, onInvite, submitting = false, customRoles = [] }: InviteUserDialogProps) {
+function InviteUserDialog({ open, onOpenChange, onInvite, submitting = false }: InviteUserDialogProps) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
-  // Value is either a system role key or a custom role id (prefixed "custom-")
-  const [role, setRole] = useState("");
+  const [role, setRole] = useState<OrgUser["role"] | "">("");
 
   function reset() {
     setName("");
@@ -204,10 +185,7 @@ function InviteUserDialog({ open, onOpenChange, onInvite, submitting = false, cu
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!name.trim() || !email.trim() || !role) return;
-    // Resolve custom role id → its baseRole for the DB
-    const customMatch = customRoles.find((cr) => cr.id === role);
-    const resolvedRole = (customMatch ? customMatch.baseRole : role) as OrgUser["role"];
-    await onInvite(name.trim(), email.trim(), resolvedRole);
+    await onInvite(name.trim(), email.trim(), role as OrgUser["role"]);
     reset();
     onOpenChange(false);
   }
@@ -249,30 +227,17 @@ function InviteUserDialog({ open, onOpenChange, onInvite, submitting = false, cu
           </div>
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="invite-role">Role</Label>
-            <Select value={role} onValueChange={setRole}>
+            <Select value={role} onValueChange={(v) => setRole(v as OrgUser["role"])}>
               <SelectTrigger id="invite-role">
                 <SelectValue placeholder="Select a role" />
               </SelectTrigger>
               <SelectContent>
-                <SelectLabel>System Roles</SelectLabel>
                 <SelectItem value="admin">Admin</SelectItem>
                 <SelectItem value="manager">Manager</SelectItem>
                 <SelectItem value="purchaser">Purchaser</SelectItem>
                 <SelectItem value="technician">Technician</SelectItem>
                 <SelectItem value="viewer">Viewer</SelectItem>
                 <SelectItem value="requestor">Requestor</SelectItem>
-                {customRoles.length > 0 && (
-                  <>
-                    <SelectSeparator />
-                    <SelectLabel>Custom Roles</SelectLabel>
-                    {customRoles.map((cr) => (
-                      <SelectItem key={cr.id} value={cr.id}>
-                        {cr.name}
-                        <span className="ml-1.5 text-xs text-slate-400">({cr.baseRole})</span>
-                      </SelectItem>
-                    ))}
-                  </>
-                )}
               </SelectContent>
             </Select>
           </div>
@@ -317,20 +282,6 @@ export function UsersPage() {
   );
 
   const [inviteOpen, setInviteOpen] = useState(false);
-  // Persist custom roles across page refreshes
-  const [customRoles, setCustomRoles] = useStickyState<CustomRole[]>("custom-roles", []);
-  const [customRoleOpen, setCustomRoleOpen] = useState(false);
-  const [newRoleName, setNewRoleName] = useState("");
-  const [newRoleDesc, setNewRoleDesc] = useState("");
-  const [newRoleBase, setNewRoleBase] = useState<CustomRole["baseRole"]>("technician");
-  const [selectedPermissions, setSelectedPermissions] = useState<Set<string>>(new Set());
-
-  useEffect(() => {
-    if (customRoleOpen) {
-      const basePerms = ROLES.find((r) => r.key === newRoleBase)?.permissions ?? [];
-      setSelectedPermissions(new Set(basePerms));
-    }
-  }, [customRoleOpen]);
 
   const totalUsers = users.length;
   const activeUsers = users.filter((u) => u.status === "active").length;
@@ -379,14 +330,12 @@ export function UsersPage() {
 
         {/* Users tab */}
         <TabsContent value="users" className="mt-6 flex flex-col gap-6">
-          {/* Stats row */}
           <div className="grid grid-cols-3 gap-4">
             <StatCard title="Total Users" value={totalUsers} />
             <StatCard title="Active Users" value={activeUsers} />
             <StatCard title="Pending Invites" value={pendingInvites} />
           </div>
 
-          {/* Users table */}
           <div className="overflow-hidden rounded-lg border bg-white shadow-sm">
             <Table>
               <TableHeader>
@@ -401,7 +350,6 @@ export function UsersPage() {
               <TableBody>
                 {users.map((user) => (
                   <TableRow key={user.id}>
-                    {/* User column */}
                     <TableCell>
                       <div className="flex items-center gap-3">
                         <div
@@ -410,54 +358,31 @@ export function UsersPage() {
                           {(user as { avatarInitials: string }).avatarInitials}
                         </div>
                         <div className="min-w-0">
-                          <p className="truncate text-sm font-medium text-slate-900">
-                            {user.name}
-                          </p>
-                          <p className="truncate text-xs text-slate-500">
-                            {user.email}
-                          </p>
+                          <p className="truncate text-sm font-medium text-slate-900">{user.name}</p>
+                          <p className="truncate text-xs text-slate-500">{user.email}</p>
                         </div>
                       </div>
                     </TableCell>
 
-                    {/* Role column — inline Select */}
                     <TableCell>
                       <Select
                         value={user.role}
-                        onValueChange={(v) => {
-                          // Resolve custom role id → baseRole before saving
-                          const cr = customRoles.find((r) => r.id === v);
-                          handleRoleChange(user.id, (cr ? cr.baseRole : v) as OrgUser["role"]);
-                        }}
+                        onValueChange={(v) => handleRoleChange(user.id, v as OrgUser["role"])}
                       >
                         <SelectTrigger className="h-8 w-36 text-xs">
                           <SelectValue>{ROLE_LABELS[user.role]}</SelectValue>
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectLabel>System Roles</SelectLabel>
                           <SelectItem value="admin">Admin</SelectItem>
                           <SelectItem value="manager">Manager</SelectItem>
                           <SelectItem value="purchaser">Purchaser</SelectItem>
                           <SelectItem value="technician">Technician</SelectItem>
                           <SelectItem value="viewer">Viewer</SelectItem>
                           <SelectItem value="requestor">Requestor</SelectItem>
-                          {customRoles.length > 0 && (
-                            <>
-                              <SelectSeparator />
-                              <SelectLabel>Custom Roles</SelectLabel>
-                              {customRoles.map((cr) => (
-                                <SelectItem key={cr.id} value={cr.id}>
-                                  {cr.name}
-                                  <span className="ml-1.5 text-xs text-slate-400">({cr.baseRole})</span>
-                                </SelectItem>
-                              ))}
-                            </>
-                          )}
                         </SelectContent>
                       </Select>
                     </TableCell>
 
-                    {/* Status badge */}
                     <TableCell>
                       <Badge
                         variant="outline"
@@ -467,12 +392,10 @@ export function UsersPage() {
                       </Badge>
                     </TableCell>
 
-                    {/* Joined date */}
                     <TableCell className="text-sm text-slate-500">
                       {formatDate((user as { joinedAt: string }).joinedAt)}
                     </TableCell>
 
-                    {/* Actions */}
                     <TableCell>
                       {user.status !== "inactive" && (
                         <Button
@@ -496,13 +419,7 @@ export function UsersPage() {
         {/* Roles tab */}
         <TabsContent value="roles" className="mt-6">
           <div className="flex flex-col gap-4">
-            <div className="flex items-center justify-between mb-4">
-              <p className="text-sm text-slate-500">System-defined roles cannot be edited. Create a custom role to tailor permissions for your team.</p>
-              <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setCustomRoleOpen(true)}>
-                <Plus className="h-4 w-4" />
-                New Custom Role
-              </Button>
-            </div>
+            <p className="text-sm text-slate-500">System-defined roles control what each team member can access and do in the platform.</p>
             {ROLES.map((role) => (
               <div key={role.key} className="rounded-lg border bg-white p-5 shadow-sm">
                 <div className="flex items-center gap-3 mb-3">
@@ -522,32 +439,6 @@ export function UsersPage() {
                 </ul>
               </div>
             ))}
-            {customRoles.map((role) => (
-              <div key={role.id} className="rounded-lg border bg-white p-5 shadow-sm">
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-3">
-                    <h3 className="font-semibold text-slate-900">{role.name}</h3>
-                    <Badge variant="outline" className="font-mono text-xs">custom</Badge>
-                    <Badge variant="outline" className="text-xs text-slate-500">based on {role.baseRole}</Badge>
-                  </div>
-                  <button
-                    onClick={() => setCustomRoles(prev => prev.filter(r => r.id !== role.id))}
-                    className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-500"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                </div>
-                <p className="text-sm text-slate-600 mb-3">{role.description || "No description provided."}</p>
-                <ul className="space-y-1">
-                  {role.permissions.map((p) => (
-                    <li key={p} className="flex items-start gap-2 text-sm text-slate-600">
-                      <Check className="h-4 w-4 shrink-0 text-brand-500 mt-0.5" />
-                      {p}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
           </div>
         </TabsContent>
       </Tabs>
@@ -557,93 +448,7 @@ export function UsersPage() {
         onOpenChange={setInviteOpen}
         onInvite={handleInvite}
         submitting={inviting}
-        customRoles={customRoles}
       />
-
-      <Dialog open={customRoleOpen} onOpenChange={setCustomRoleOpen}>
-        <DialogContent className="sm:max-w-[480px]">
-          <DialogHeader>
-            <DialogTitle>New Custom Role</DialogTitle>
-          </DialogHeader>
-          <div className="flex flex-col gap-4">
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="role-name">Role Name <span className="text-red-500">*</span></Label>
-              <Input id="role-name" placeholder="e.g. Field Supervisor" value={newRoleName} onChange={e => setNewRoleName(e.target.value)} />
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="role-desc">Description</Label>
-              <Textarea id="role-desc" placeholder="Describe what this role can do" rows={2} value={newRoleDesc} onChange={e => setNewRoleDesc(e.target.value)} />
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="role-base">Based On <span className="text-red-500">*</span></Label>
-              <Select
-                value={newRoleBase}
-                onValueChange={(v) => {
-                  const base = v as CustomRole["baseRole"];
-                  setNewRoleBase(base);
-                  const basePerms = ROLES.find((r) => r.key === base)?.permissions ?? [];
-                  setSelectedPermissions(new Set(basePerms));
-                }}
-              >
-                <SelectTrigger id="role-base"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="admin">Admin</SelectItem>
-                  <SelectItem value="manager">Manager</SelectItem>
-                  <SelectItem value="purchaser">Purchaser</SelectItem>
-                  <SelectItem value="technician">Technician</SelectItem>
-                  <SelectItem value="viewer">Viewer</SelectItem>
-                  <SelectItem value="requestor">Requestor</SelectItem>
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-slate-500">The custom role inherits all permissions from the selected base role.</p>
-            </div>
-            <div className="flex flex-col gap-2">
-              <Label>Permissions</Label>
-              <p className="text-xs text-slate-500">Check or uncheck individual permissions. Selecting a base role above pre-fills these.</p>
-              <div className="max-h-48 overflow-y-auto rounded-md border border-slate-200 bg-slate-50 p-3 flex flex-col gap-2">
-                {ALL_PERMISSIONS.map((perm) => (
-                  <label key={perm} className="flex items-start gap-2 cursor-pointer">
-                    <Checkbox
-                      checked={selectedPermissions.has(perm)}
-                      onCheckedChange={(checked) => {
-                        setSelectedPermissions((prev) => {
-                          const next = new Set(prev);
-                          if (checked) next.add(perm); else next.delete(perm);
-                          return next;
-                        });
-                      }}
-                      className="mt-0.5 shrink-0"
-                    />
-                    <span className="text-sm text-slate-700">{perm}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setCustomRoleOpen(false)}>Cancel</Button>
-            <Button
-              disabled={!newRoleName.trim()}
-              onClick={() => {
-                setCustomRoles(prev => [...prev, {
-                  id: `custom-${Date.now()}`,
-                  name: newRoleName.trim(),
-                  description: newRoleDesc.trim(),
-                  baseRole: newRoleBase,
-                  permissions: Array.from(selectedPermissions),
-                }]);
-                setNewRoleName("");
-                setNewRoleDesc("");
-                setNewRoleBase("technician");
-                setSelectedPermissions(new Set());
-                setCustomRoleOpen(false);
-              }}
-            >
-              Create Role
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
