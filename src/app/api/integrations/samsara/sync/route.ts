@@ -172,8 +172,28 @@ async function syncOrg(
     );
 
     if (vehicleMeters.length === 0) {
-      detail.push(`Vehicle "${dbVehicle.name}" matched but has no miles meter — skipping`);
-      continue;
+      // Auto-create a miles meter for this vehicle so the user doesn't have to.
+      const { data: newMeter, error: meterErr } = await adminClient
+        .from("meters")
+        .insert({
+          org_id: orgId,
+          asset_id: dbVehicle.id,
+          asset_type: "vehicle",
+          name: "Odometer",
+          unit: "miles",
+          current_value: 0,
+        })
+        .select("id, unit, current_value")
+        .single();
+
+      if (meterErr || !newMeter) {
+        detail.push(`Vehicle "${dbVehicle.name}" matched but failed to create miles meter: ${meterErr?.message}`);
+        errors++;
+        continue;
+      }
+
+      detail.push(`Vehicle "${dbVehicle.name}" — auto-created Odometer meter`);
+      vehicleMeters.push(newMeter);
     }
 
     for (const meter of vehicleMeters) {
