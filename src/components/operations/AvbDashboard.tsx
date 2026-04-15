@@ -21,7 +21,7 @@ const CREW_DEFS = [
   { code: "MAINT5", name: "Maintenance 5" },
   { code: "FERT1",  name: "Fert / Weed Control" },
   { code: "LNDSCP1",name: "Landscape Construction" },
-  { code: "ENH1",   name: "Enhancement 1" },
+  { code: "ENHANCE1", name: "Enhancement 1" },
 ] as const;
 
 const ALL_EMP = [
@@ -50,19 +50,20 @@ const ALL_EMP = [
   { uuid:"0bfcb8df", name:"Jason Rodriguez",      csvName:"Rodriguez, Jason",                    csvJob:"" },
   { uuid:"875c4721", name:"Juan Sanchez",         csvName:"Sanchez, Juan",                       csvJob:"" },
   { uuid:"9695004c", name:"Mark Wiggins",         csvName:"Wiggins, Mark",                       csvJob:"" },
+  { uuid:"c7e2a14b", name:"Osbaldo Navarro",      csvName:"Navarro, Osbaldo",                    csvJob:"" },
 ];
 
 const FIELD_UUIDS = ALL_EMP.filter(e => !["b5ad4fb2","3c084d9d"].includes(e.uuid)).map(e => e.uuid);
 
 const DEF_ASSIGNMENTS: Record<string, string[]> = {
   MAINT1:["32d07880","87a264e0","fde97e65"],           // Luis, Rolando, Encarnacion
-  MAINT2:["529bbd5c","2f1c79d8","418e5fac"],           // Mauricio, Jose, Esdras
+  MAINT2:["529bbd5c","2f1c79d8","418e5fac","c7e2a14b"], // Mauricio, Jose, Esdras, Osbaldo
   MAINT3:["9c3e8613","36a5a673","6d5ded40"],           // Saul, Julio, Otilio
   MAINT4:["f776a380","3540efab","55f28eee"],           // Wilder, Olvin, James
   MAINT5:[],
-  FERT1:[],
+  FERT1:["695866b9"],                                  // Tyler
   LNDSCP1:["9695004c","d3b6869a","38f06eb7","b54b3f88"], // Mark, Zackery, Steve, Ryan
-  ENH1:["0bfcb8df","69b0adca"],                        // Jason, Marvin
+  ENHANCE1:["0bfcb8df","69b0adca"],                    // Jason, Marvin
 };
 
 const WDAYS = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];

@@ -278,11 +278,17 @@ export function POListPage() {
               templateColumns={[
                 "Purchase Order #",
                 "Vendor",
+                "Status",
+                "Created On",
+                "Approved On",
+                "Completed On",
+                "Due Date",
                 "Line Type",
                 "Line Name",
                 "Part Number",
                 "Unit Cost",
                 "Ordered Quantity",
+                "Ordered Cost",
               ]}
               templateFilename="po-import-template.csv"
               requiredColumns={["Purchase Order #", "Vendor"]}

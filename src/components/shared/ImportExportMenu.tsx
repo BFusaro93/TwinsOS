@@ -73,6 +73,7 @@ const COMMON_ALIASES: Record<string, string[]> = {
   woType:          ["wotype", "wo type", "type", "workordertype"],
   assetName:       ["assetname", "asset name", "asset"],
   assignedToName:  ["assignedtoname", "assigned to", "assignee", "assigned"],
+  createdAt:       ["createdat", "created at", "created on", "createdon", "date created"],
   dueDate:         ["duedate", "due date", "due"],
   poDate:          ["podate", "po date"],
   invoiceNumber:   ["invoicenumber", "invoice number", "invoice", "invoice#"],
