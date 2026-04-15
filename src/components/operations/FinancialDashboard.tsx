@@ -12,6 +12,7 @@ import {
   Upload, AlertCircle, CheckCircle2, Calendar,
 } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
+import { useCurrentUserStore } from "@/stores";
 import {
   useActualPeriods,
   useBudgetPeriods,
@@ -1338,7 +1339,18 @@ function EntryTab({ actuals, budgets }: { actuals: FinancialPeriodRecord[]; budg
 // ── Main Component ────────────────────────────────────────────────────────────
 
 export function FinancialDashboard() {
+  const { currentUser } = useCurrentUserStore();
   const [tab, setTab] = useState<Tab>("overview");
+
+  if (currentUser.role !== "admin") {
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-3 text-slate-500">
+        <DollarSign className="h-10 w-10 text-slate-300" />
+        <p className="text-sm font-medium">Access restricted</p>
+        <p className="text-xs text-slate-400">The Financial dashboard is only available to administrators.</p>
+      </div>
+    );
+  }
   const { data: actuals = [], isLoading: loadingActuals } = useActualPeriods();
   const { data: budgets = [], isLoading: loadingBudgets } = useBudgetPeriods();
 
