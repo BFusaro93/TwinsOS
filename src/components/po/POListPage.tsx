@@ -120,7 +120,7 @@ export function POListPage() {
     return matchSearch && matchStatus && matchVendor && matchPayment;
   });
 
-  const { sortKey, sortDir, toggle, sorted } = useSort(filtered, "createdAt", "desc");
+  const { sortKey, sortDir, toggle, sorted } = useSort(filtered, "poDate", "desc");
 
   const selectedPO =
     (filtered.find((po) => po.id === selectedPOId) ??

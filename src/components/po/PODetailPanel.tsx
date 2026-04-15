@@ -204,7 +204,8 @@ function DetailsTab({
               : "—"
           }
         />
-        <MetaRow label="Created" value={formatDate(po.createdAt)} />
+        <MetaRow label="PO Date" value={po.poDate ? formatDate(po.poDate) : "—"} />
+        <MetaRow label="Imported" value={formatDate(po.createdAt)} />
         <MetaRow label="Updated" value={formatDate(po.updatedAt)} />
         {po.notes && <MetaRow label="Notes" value={po.notes} />}
       </dl>
