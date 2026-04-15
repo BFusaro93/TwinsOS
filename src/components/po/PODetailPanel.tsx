@@ -35,8 +35,9 @@ import { useVendors } from "@/lib/hooks/use-vendors";
 import { useProjects } from "@/lib/hooks/use-projects";
 import { PartDetailSheet } from "@/components/cmms/PartDetailSheet";
 import { useSubmitForApproval } from "@/lib/hooks/use-approval-requests";
-import { useUpdatePurchaseOrderStatus, useDeletePurchaseOrder } from "@/lib/hooks/use-purchase-orders";
+import { usePurchaseOrders, useUpdatePurchaseOrderStatus, useDeletePurchaseOrder } from "@/lib/hooks/use-purchase-orders";
 import { useCurrentUserStore, usePOStore } from "@/stores";
+import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { ProjectDetailSheet } from "./ProjectDetailSheet";
 import { VendorDetailSheet } from "@/components/shared/VendorDetailSheet";
 import { printPO } from "@/lib/print";
@@ -80,14 +81,12 @@ function DetailsTab({
   onStatusChange,
   onSendToReceiving,
   onProjectClick,
-  onPOClick,
 }: {
   po: PurchaseOrder;
   status: POStatus;
   onStatusChange: (s: POStatus) => void;
   onSendToReceiving: () => void;
   onProjectClick?: (projectId: string) => void;
-  onPOClick?: (poId: string) => void;
 }) {
   const [lineItems, setLineItems] = useState<LineItem[]>(po.lineItems);
   const { currentUser } = useCurrentUserStore();
@@ -107,12 +106,15 @@ function DetailsTab({
   const { data: products = [] } = useProducts();
   const { data: parts = [] } = useParts();
   const { data: vendors = [] } = useVendors();
+  const { data: allPOs = [] } = usePurchaseOrders();
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
   const [selectedPartId, setSelectedPartId] = useState<string | null>(null);
   const [vendorSheetOpen, setVendorSheetOpen] = useState(false);
+  const [overlayPOId, setOverlayPOId] = useState<string | null>(null);
   const selectedVendor = vendors.find((v) => v.id === po.vendorId) ?? null;
   const selectedProduct = products.find((p) => p.id === selectedProductId) ?? null;
   const selectedPart = parts.find((p) => p.id === selectedPartId) ?? null;
+  const overlayPO = allPOs.find((p) => p.id === overlayPOId) ?? null;
 
   const subtotal = lineItems.reduce((sum, li) => sum + li.quantity * li.unitCost, 0);
   const salesTax = Math.round(subtotal * po.taxRatePercent / 100);
@@ -259,11 +261,15 @@ function DetailsTab({
         onOpenChange={(open) => {
           if (!open) setSelectedProductId(null);
         }}
-        onPOClick={(poId) => {
-          setSelectedProductId(null);
-          onPOClick?.(poId);
-        }}
+        onPOClick={(poId) => setOverlayPOId(poId)}
       />
+
+      {/* PO overlay — opened when clicking a PO # in the product history tab */}
+      <Sheet open={!!overlayPO} onOpenChange={(o) => { if (!o) setOverlayPOId(null); }}>
+        <SheetContent className="flex w-full flex-col overflow-hidden p-0 md:w-[580px] md:max-w-[580px]">
+          {overlayPO && <PODetailPanel key={overlayPO.id} po={overlayPO} />}
+        </SheetContent>
+      </Sheet>
 
       <PartDetailSheet
         part={selectedPart}
@@ -403,7 +409,6 @@ export function PODetailPanel({ po }: PODetailPanelProps) {
                 onStatusChange={setStatus}
                 onSendToReceiving={() => setReceiveOpen(true)}
                 onProjectClick={(id) => setSelectedProjectId(id)}
-                onPOClick={(poId) => setSelectedPOId(poId)}
               />
             ),
           },
