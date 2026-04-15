@@ -76,6 +76,9 @@ const ROLES = [
     description: "Operational oversight across purchasing and maintenance.",
     permissions: [
       "Approve and reject requisitions and POs within their limit",
+      "Create and submit purchase requisitions",
+      "Create and send purchase orders",
+      "Receive goods and update inventory",
       "Create and manage work orders",
       "View and edit all assets and vehicles",
       "Access vendor and product catalog",
