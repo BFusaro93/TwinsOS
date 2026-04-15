@@ -1341,6 +1341,10 @@ function EntryTab({ actuals, budgets }: { actuals: FinancialPeriodRecord[]; budg
 export function FinancialDashboard() {
   const { currentUser } = useCurrentUserStore();
   const [tab, setTab] = useState<Tab>("overview");
+  // Hooks must be called unconditionally (Rules of Hooks) — fetch happens for
+  // all renders; non-admins see the access-restricted screen before any data is used.
+  const { data: actuals = [], isLoading: loadingActuals } = useActualPeriods();
+  const { data: budgets = [], isLoading: loadingBudgets } = useBudgetPeriods();
 
   if (currentUser.role !== "admin") {
     return (
@@ -1351,8 +1355,6 @@ export function FinancialDashboard() {
       </div>
     );
   }
-  const { data: actuals = [], isLoading: loadingActuals } = useActualPeriods();
-  const { data: budgets = [], isLoading: loadingBudgets } = useBudgetPeriods();
 
   const isLoading = loadingActuals || loadingBudgets;
 
