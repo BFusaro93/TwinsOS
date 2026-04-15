@@ -30,6 +30,7 @@ import { useProducts } from "@/lib/hooks/use-products";
 import type { Part } from "@/types";
 
 const STOCK_FILTER_OPTIONS = [
+  { value: "out_of_stock", label: "Out of Stock" },
   { value: "low_stock", label: "Low Stock" },
   { value: "in_stock", label: "In Stock" },
 ];
@@ -103,18 +104,26 @@ export function PartsPage() {
     const stockFilter = filterValues.stock;
     // Non-inventory parts have no meaningful stock status — exclude them when
     // a stock filter is active rather than misrepresenting their qty.
-    const isLowStock = p.isInventory && p.minimumStock > 0 && p.quantityOnHand <= p.minimumStock;
+    const isOutOfStock = p.isInventory && p.quantityOnHand === 0;
+    const isLowStock   = p.isInventory && !isOutOfStock && p.minimumStock > 0 && p.quantityOnHand <= p.minimumStock;
+    const isInStock    = p.isInventory && !isOutOfStock && !isLowStock;
     const matchStock = !stockFilter || (
       Array.isArray(stockFilter)
-        ? stockFilter.length === 0 || (p.isInventory && stockFilter.some(s => (s === "low_stock" && isLowStock) || (s === "in_stock" && !isLowStock)))
-        : stockFilter === "all" || (p.isInventory && ((stockFilter === "low_stock" && isLowStock) || (stockFilter === "in_stock" && !isLowStock)))
+        ? stockFilter.length === 0 || (p.isInventory && stockFilter.some(s =>
+            (s === "out_of_stock" && isOutOfStock) ||
+            (s === "low_stock"   && isLowStock)    ||
+            (s === "in_stock"    && isInStock)))
+        : stockFilter === "all" || (p.isInventory && (
+            (stockFilter === "out_of_stock" && isOutOfStock) ||
+            (stockFilter === "low_stock"    && isLowStock)   ||
+            (stockFilter === "in_stock"     && isInStock)))
     );
     const matchCategory = matchesFilter(p.category, filterValues.category);
     const matchVendor = matchesFilter(p.vendorName ?? "", filterValues.vendor);
     return matchSearch && matchStock && matchCategory && matchVendor;
   });
 
-  const lowStockCount = all.filter((p) => p.isInventory && p.minimumStock > 0 && p.quantityOnHand <= p.minimumStock).length;
+  const lowStockCount = all.filter((p) => p.isInventory && p.quantityOnHand > 0 && p.minimumStock > 0 && p.quantityOnHand <= p.minimumStock).length;
   const totalQty = all.filter((p) => p.isInventory).reduce((sum, p) => sum + p.quantityOnHand, 0);
 
   function handleRowClick(part: Part) {
@@ -234,7 +243,8 @@ export function PartsPage() {
 
             {!isLoading &&
               filtered.map((part) => {
-                const isLowStock = part.isInventory && part.minimumStock > 0 && part.quantityOnHand <= part.minimumStock;
+                const isOutOfStock = part.isInventory && part.quantityOnHand === 0;
+                const isLowStock   = part.isInventory && !isOutOfStock && part.minimumStock > 0 && part.quantityOnHand <= part.minimumStock;
                 return (
                   <TableRow
                     key={part.id}
@@ -307,6 +317,13 @@ export function PartsPage() {
                             className="border-slate-200 bg-slate-50 text-slate-500"
                           >
                             Not Tracked
+                          </Badge>
+                        ) : isOutOfStock ? (
+                          <Badge
+                            variant="outline"
+                            className="border-orange-200 bg-orange-50 text-orange-700"
+                          >
+                            Out of Stock
                           </Badge>
                         ) : isLowStock ? (
                           <Badge
