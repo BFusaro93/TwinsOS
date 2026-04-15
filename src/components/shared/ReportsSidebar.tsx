@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { TrendingUp, ArrowLeft, Leaf, ShieldCheck, DollarSign, FileText } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useUIStore } from "@/stores";
+import { useUIStore, useCurrentUserStore } from "@/stores";
 import { useSettingsStore } from "@/stores/settings-store";
 import type { LucideIcon } from "lucide-react";
 
@@ -35,6 +35,8 @@ export function ReportsSidebar() {
   const pathname = usePathname();
   const { sidebarCollapsed } = useUIStore();
   const { logoDataUrl, orgName } = useSettingsStore();
+  const { currentUser } = useCurrentUserStore();
+  const isAdmin = currentUser.role === "admin";
 
   return (
     <aside
@@ -81,7 +83,7 @@ export function ReportsSidebar() {
                 {section.label}
               </p>
             )}
-            {section.items.map((item) => {
+            {section.items.filter((item) => item.href !== "/dashboards/financials" || isAdmin).map((item) => {
               const isActive =
                 pathname === item.href || pathname.startsWith(item.href + "/");
               const Icon = item.icon;

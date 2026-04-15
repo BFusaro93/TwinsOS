@@ -183,35 +183,37 @@ export function TopBar() {
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
 
-          {/* Switch user for demo/prototype */}
-          <DropdownMenuSub>
-            <DropdownMenuSubTrigger>
-              <UserCog className="mr-2 h-4 w-4 text-slate-400" />
-              <span>Switch User</span>
-            </DropdownMenuSubTrigger>
-            <DropdownMenuSubContent className="w-56">
-              <DropdownMenuLabel className="text-xs font-normal text-slate-400">
-                Simulate a different role
-              </DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuRadioGroup
-                value={currentUser.id}
-                onValueChange={(id) => {
-                  const user = orgUsers.find((u) => u.id === id);
-                  if (user) setCurrentUser(user);
-                }}
-              >
-                {orgUsers.map((u) => (
-                  <DropdownMenuRadioItem key={u.id} value={u.id}>
-                    <div className="flex flex-col">
-                      <span className="text-sm font-medium">{u.name}</span>
-                      <span className="text-xs text-slate-400 capitalize">{u.role}</span>
-                    </div>
-                  </DropdownMenuRadioItem>
-                ))}
-              </DropdownMenuRadioGroup>
-            </DropdownMenuSubContent>
-          </DropdownMenuSub>
+          {/* Switch user — admin only */}
+          {currentUser.role === "admin" && (
+            <DropdownMenuSub>
+              <DropdownMenuSubTrigger>
+                <UserCog className="mr-2 h-4 w-4 text-slate-400" />
+                <span>Switch User</span>
+              </DropdownMenuSubTrigger>
+              <DropdownMenuSubContent className="w-56">
+                <DropdownMenuLabel className="text-xs font-normal text-slate-400">
+                  Simulate a different role
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuRadioGroup
+                  value={currentUser.id}
+                  onValueChange={(id) => {
+                    const user = orgUsers.find((u) => u.id === id);
+                    if (user) setCurrentUser(user);
+                  }}
+                >
+                  {orgUsers.map((u) => (
+                    <DropdownMenuRadioItem key={u.id} value={u.id}>
+                      <div className="flex flex-col">
+                        <span className="text-sm font-medium">{u.name}</span>
+                        <span className="text-xs text-slate-400 capitalize">{u.role}</span>
+                      </div>
+                    </DropdownMenuRadioItem>
+                  ))}
+                </DropdownMenuRadioGroup>
+              </DropdownMenuSubContent>
+            </DropdownMenuSub>
+          )}
 
           <DropdownMenuSeparator />
           <DropdownMenuItem onSelect={() => setProfileOpen(true)}>Profile</DropdownMenuItem>
