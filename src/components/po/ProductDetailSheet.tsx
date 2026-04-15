@@ -285,7 +285,7 @@ function HistoryTab({
                           <button
                             type="button"
                             onClick={() => onPOClick(po.id)}
-                            className="text-brand-600 hover:underline"
+                            className="font-medium text-brand-600 hover:text-brand-700 hover:underline"
                           >
                             {po.poNumber}
                           </button>
