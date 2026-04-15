@@ -178,7 +178,6 @@ async function syncOrg(
         .insert({
           org_id: orgId,
           asset_id: dbVehicle.id,
-          asset_type: "vehicle",
           name: "Odometer",
           unit: "miles",
           current_value: 0,
