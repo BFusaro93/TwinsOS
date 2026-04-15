@@ -183,7 +183,7 @@ async function syncOrg(
           unit: "miles",
           current_value: 0,
         })
-        .select("id, unit, current_value")
+        .select("id, asset_id, unit, current_value")
         .single();
 
       if (meterErr || !newMeter) {
