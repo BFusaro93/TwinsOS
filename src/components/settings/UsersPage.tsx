@@ -189,19 +189,26 @@ function InviteUserDialog({ open, onOpenChange, onInvite, submitting = false }: 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<OrgUser["role"] | "">("");
+  const [inviteError, setInviteError] = useState<string | null>(null);
 
   function reset() {
     setName("");
     setEmail("");
     setRole("");
+    setInviteError(null);
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!name.trim() || !email.trim() || !role) return;
-    await onInvite(name.trim(), email.trim(), role as OrgUser["role"]);
-    reset();
-    onOpenChange(false);
+    setInviteError(null);
+    try {
+      await onInvite(name.trim(), email.trim(), role as OrgUser["role"]);
+      reset();
+      onOpenChange(false);
+    } catch (err) {
+      setInviteError(err instanceof Error ? err.message : "Failed to send invite. Please try again.");
+    }
   }
 
   function handleOpenChange(val: boolean) {
@@ -255,6 +262,11 @@ function InviteUserDialog({ open, onOpenChange, onInvite, submitting = false }: 
               </SelectContent>
             </Select>
           </div>
+          {inviteError && (
+            <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700 border border-red-200">
+              {inviteError}
+            </p>
+          )}
           <DialogFooter className="pt-2">
             <Button
               type="button"
