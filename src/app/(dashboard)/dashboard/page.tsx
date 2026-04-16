@@ -91,7 +91,7 @@ export default function DashboardPage() {
       .filter(
         (po) =>
           !["canceled", "draft"].includes(po.status) &&
-          po.createdAt.slice(0, 10) >= mtdStart
+          (po.poDate ?? po.createdAt).slice(0, 10) >= mtdStart
       )
       .reduce((sum, po) => sum + po.grandTotal, 0);
     return { openRequisitions, pendingApproval, openPOs, totalSpendMTD };
