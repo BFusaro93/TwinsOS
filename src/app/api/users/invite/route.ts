@@ -50,6 +50,8 @@ export async function POST(request: Request) {
   );
 
   // 3. Generate a one-time invite link — bypasses Supabase's SMTP entirely.
+  //    redirect_to sends the user to the set-password page after clicking.
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://twins-os.vercel.app";
   const { data: linkData, error: linkErr } = await adminClient.auth.admin.generateLink({
     type: "invite",
     email,
@@ -59,6 +61,7 @@ export async function POST(request: Request) {
         name,
         role,
       },
+      redirectTo: `${siteUrl}/reset-password`,
     },
   });
   if (linkErr || !linkData) {

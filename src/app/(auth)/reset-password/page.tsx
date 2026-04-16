@@ -21,11 +21,12 @@ function ResetPasswordForm() {
   const [invalidLink, setInvalidLink] = useState(false);
 
   // Exchange the token_hash from the email link for a live session.
+  // Handles both password reset (type=recovery) and new user invites (type=invite).
   useEffect(() => {
     const tokenHash = searchParams.get("token_hash");
     const type = searchParams.get("type");
 
-    if (!tokenHash || type !== "recovery") {
+    if (!tokenHash || (type !== "recovery" && type !== "invite")) {
       setInvalidLink(true);
       setVerifying(false);
       return;
@@ -33,10 +34,10 @@ function ResetPasswordForm() {
 
     const supabase = createClient();
     supabase.auth
-      .verifyOtp({ token_hash: tokenHash, type: "recovery" })
+      .verifyOtp({ token_hash: tokenHash, type: type as "recovery" | "invite" })
       .then(({ error: verifyError }) => {
         if (verifyError) {
-          setError("This reset link has expired or is invalid. Please request a new one.");
+          setError("This link has expired or is invalid. Please ask your admin to send a new invite.");
           setInvalidLink(true);
         }
         setVerifying(false);
@@ -144,8 +145,8 @@ export default function ResetPasswordPage() {
         <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-brand-500">
           <Leaf className="h-6 w-6 text-white" />
         </div>
-        <h1 className="text-2xl font-bold text-slate-900">Set New Password</h1>
-        <p className="text-sm text-slate-500">Choose a new password for your account</p>
+        <h1 className="text-2xl font-bold text-slate-900">Set Your Password</h1>
+        <p className="text-sm text-slate-500">Choose a password to activate your account</p>
       </div>
 
       <Suspense fallback={
