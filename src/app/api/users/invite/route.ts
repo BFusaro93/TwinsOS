@@ -49,31 +49,52 @@ export async function POST(request: Request) {
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   );
 
-  // 3. Generate a one-time invite link — bypasses Supabase's SMTP entirely.
-  //    We build the URL directly from the hashed_token so the user lands
-  //    on /reset-password without needing Supabase's redirect allowlist.
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://twins-os.vercel.app";
-  const { data: linkData, error: linkErr } = await adminClient.auth.admin.generateLink({
+
+  // 3. Generate a one-time link. If the user was already invited (orphaned
+  //    auth record from a previous attempt), fall back to a recovery link
+  //    which lets them set their password on the same /reset-password page.
+  let linkData: Awaited<ReturnType<typeof adminClient.auth.admin.generateLink>>["data"];
+  let linkType: "invite" | "recovery" = "invite";
+
+  const firstTry = await adminClient.auth.admin.generateLink({
     type: "invite",
     email,
-    options: {
-      data: {
-        org_id: callerProfile.org_id,
-        name,
-        role,
-      },
-    },
+    options: { data: { org_id: callerProfile.org_id, name, role } },
   });
-  if (linkErr || !linkData) {
-    console.error("generateLink error:", linkErr);
-    return NextResponse.json({ error: linkErr?.message || "Failed to generate invite link" }, { status: 500 });
+
+  if (firstTry.error) {
+    const msg = firstTry.error.message ?? "";
+    if (msg.toLowerCase().includes("already been registered") || msg.toLowerCase().includes("already registered")) {
+      // User exists — send a recovery (set-password) link instead.
+      linkType = "recovery";
+      const secondTry = await adminClient.auth.admin.generateLink({
+        type: "recovery",
+        email,
+        options: { data: { org_id: callerProfile.org_id, name, role } },
+      });
+      if (secondTry.error || !secondTry.data) {
+        console.error("generateLink (recovery) error:", secondTry.error);
+        return NextResponse.json({ error: secondTry.error?.message || "Failed to generate invite link" }, { status: 500 });
+      }
+      linkData = secondTry.data;
+    } else {
+      console.error("generateLink error:", firstTry.error);
+      return NextResponse.json({ error: firstTry.error.message || "Failed to generate invite link" }, { status: 500 });
+    }
+  } else {
+    linkData = firstTry.data;
   }
 
-  // Build the invite URL directly — points to our set-password page with
-  // the hashed token. Bypasses Supabase's redirect allowlist entirely.
+  if (!linkData) {
+    return NextResponse.json({ error: "Failed to generate invite link" }, { status: 500 });
+  }
+
+  // Build the URL directly so the user lands on /reset-password without
+  // needing Supabase's redirect allowlist.
   const hashedToken = linkData.properties?.hashed_token;
   const inviteUrl = hashedToken
-    ? `${siteUrl}/reset-password?token_hash=${hashedToken}&type=invite`
+    ? `${siteUrl}/reset-password?token_hash=${hashedToken}&type=${linkType}`
     : linkData.properties?.action_link ?? "";
 
   // 4. Send the invite email via Resend's HTTP API (not SMTP).
