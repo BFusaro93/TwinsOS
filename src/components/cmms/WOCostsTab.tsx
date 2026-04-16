@@ -212,7 +212,7 @@ function PartsSection({ workOrderId }: { workOrderId: string }) {
                   </td>
                   <RowActions
                     onEdit={() => openEdit(p)}
-                    onDelete={() => deletePart({ id: p.id, workOrderId })}
+                    onDelete={() => deletePart({ id: p.id, workOrderId, partId: p.partId || null, quantity: p.quantity })}
                   />
                 </tr>
                 );

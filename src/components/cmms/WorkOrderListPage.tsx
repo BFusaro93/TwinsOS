@@ -393,7 +393,13 @@ export function WorkOrderListPage() {
     return matchSearch && matchStatus && matchPriority && matchType && matchRecurring && matchAsset && matchAssignee && matchCategory;
   });
 
-  const { sortKey, sortDir, toggle, sorted } = useSort(filtered, "createdAt", "desc");
+  const PRIORITY_ORDER = { critical: 0, high: 1, medium: 2, low: 3 };
+  const { sortKey, sortDir, toggle, sorted } = useSort(
+    filtered,
+    "priority",
+    "asc",
+    { priority: PRIORITY_ORDER },
+  );
 
   const selectedWO =
     (filtered.find((wo) => wo.id === selectedWorkOrderId) ??
@@ -433,7 +439,7 @@ export function WorkOrderListPage() {
         <div className="flex items-center gap-2">{searchAndFilters}</div>
       </div>
       <WorkOrderListPanel
-        workOrders={filtered}
+        workOrders={sorted}
         selectedId={selectedWorkOrderId}
         onSelect={setSelectedWorkOrderId}
       />

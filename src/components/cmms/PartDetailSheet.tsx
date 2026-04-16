@@ -402,18 +402,19 @@ function HistoryTab({ part, purchaseOrders, onPOClick }: { part: Part; purchaseO
 
   const pos = (purchaseOrders ?? [])
     .filter((po) => po.lineItems.some(matchesLi))
-    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+    .sort((a, b) => new Date(a.poDate ?? a.createdAt).getTime() - new Date(b.poDate ?? b.createdAt).getTime());
 
   // Build price history: one point per PO (take first matching line item's unitCost)
   const priceHistory = pos.map((po) => {
     const li = findLi(po);
+    const dateStr = po.poDate ?? po.createdAt;
     return {
-      date: new Date(po.createdAt).toLocaleDateString("en-US", {
+      date: new Date(dateStr).toLocaleDateString("en-US", {
         month: "short",
         year: "2-digit",
       }),
       unitCost: li.unitCost / 100, // convert cents to dollars for display
-      fullDate: po.createdAt,
+      fullDate: dateStr,
     };
   });
 
@@ -501,7 +502,7 @@ function HistoryTab({ part, purchaseOrders, onPOClick }: { part: Part; purchaseO
                           {po.poNumber}
                         </button>
                       </td>
-                      <td className="px-3 py-2 text-slate-500">{formatDate(po.createdAt)}</td>
+                      <td className="px-3 py-2 text-slate-500">{formatDate(po.poDate ?? po.createdAt)}</td>
                       <td className="px-3 py-2 text-right text-slate-700">{li.quantity}</td>
                       <td className="px-3 py-2 text-right font-medium text-slate-900">
                         {formatCurrency(li.unitCost)}
@@ -618,8 +619,8 @@ export function PartDetailSheet({ part, open, onOpenChange }: PartDetailSheetPro
     ) ?? null;
   const linkedProductName = linkedProduct?.name ?? null;
 
-  const activeReqStatuses = new Set(["draft", "pending_approval", "approved"]);
-  const activePoStatuses = new Set(["requested", "pending", "approved", "partially_fulfilled"]);
+  const activeReqStatuses = new Set(["pending_approval", "approved"]);
+  const activePoStatuses = new Set(["requested", "pending", "approved", "ordered", "partially_fulfilled"]);
 
   const onOrderQty =
     (requisitions ?? [])

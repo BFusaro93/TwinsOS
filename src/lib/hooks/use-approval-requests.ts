@@ -127,6 +127,15 @@ export function useSubmitForApproval() {
       if (newRequests.length > 0) {
         const { error } = await supabase.from("approval_requests").insert(newRequests);
         if (error) throw error;
+
+        // Fire approval notification emails (best-effort — don't block on failure)
+        fetch("/api/approval-requests/notify", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ entityId, entityType }),
+        }).catch(() => {
+          // Non-fatal — the approval request was created; email is best-effort
+        });
       }
 
       return { entityType };

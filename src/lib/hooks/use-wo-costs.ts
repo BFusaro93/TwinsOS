@@ -79,10 +79,21 @@ export function useAddWOPart() {
         .select()
         .single();
       if (error) throw error;
+
+      // Deduct from inventory when a linked part is added to a WO
+      if (input.partId) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (supabase.rpc as any)("adjust_part_quantity", {
+          p_part_id: input.partId,
+          p_delta: -input.quantity,
+        });
+      }
+
       return mapWOPart(data);
     },
     onSuccess: (_, { workOrderId }) => {
       queryClient.invalidateQueries({ queryKey: ["wo-parts", workOrderId] });
+      queryClient.invalidateQueries({ queryKey: ["parts"] });
     },
   });
 }
@@ -102,14 +113,35 @@ export function useUpdateWOPart() {
       unitCost: number;
     }) => {
       const supabase = createClient();
+
+      // Fetch old quantity and partId before updating so we can adjust inventory
+      const { data: existing } = await supabase
+        .from("wo_parts")
+        .select("quantity, part_id")
+        .eq("id", id)
+        .single();
+
       const { error } = await supabase
         .from("wo_parts")
         .update({ quantity, unit_cost: unitCost })
         .eq("id", id);
       if (error) throw error;
+
+      // Adjust inventory by the delta (positive = used more, negative = used less)
+      if (existing?.part_id) {
+        const delta = existing.quantity - quantity; // restore old, deduct new
+        if (delta !== 0) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          await (supabase.rpc as any)("adjust_part_quantity", {
+            p_part_id: existing.part_id,
+            p_delta: delta,
+          });
+        }
+      }
     },
     onSuccess: (_, { workOrderId }) => {
       queryClient.invalidateQueries({ queryKey: ["wo-parts", workOrderId] });
+      queryClient.invalidateQueries({ queryKey: ["parts"] });
     },
   });
 }
@@ -117,17 +149,38 @@ export function useUpdateWOPart() {
 export function useDeleteWOPart() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, workOrderId }: { id: string; workOrderId: string }) => {
+    mutationFn: async ({
+      id,
+      workOrderId,
+      partId,
+      quantity,
+    }: {
+      id: string;
+      workOrderId: string;
+      partId: string | null;
+      quantity: number;
+    }) => {
       const supabase = createClient();
       const { error } = await supabase
         .from("wo_parts")
         .update({ deleted_at: new Date().toISOString() })
         .eq("id", id);
       if (error) throw error;
+
+      // Restore inventory when a part is removed from a WO
+      if (partId) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (supabase.rpc as any)("adjust_part_quantity", {
+          p_part_id: partId,
+          p_delta: quantity,
+        });
+      }
+
       return workOrderId;
     },
     onSuccess: (workOrderId) => {
       queryClient.invalidateQueries({ queryKey: ["wo-parts", workOrderId] });
+      queryClient.invalidateQueries({ queryKey: ["parts"] });
     },
   });
 }

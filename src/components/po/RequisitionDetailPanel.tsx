@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Plus, ExternalLink, Trash2 } from "lucide-react";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { StatusBadge } from "@/components/shared/StatusBadge";
@@ -452,16 +452,25 @@ export function RequisitionDetailPanel({ requisition }: RequisitionDetailPanelPr
   const selectedPart = allParts.find((p) => p.id === selectedPartId) ?? null;
   const selectedProject = projects.find((p) => p.id === selectedProjectId) ?? null;
 
-  // Build prefill data from the requisition for the PO dialog
-  const poPrefill = {
+  // Build prefill data from the requisition for the PO dialog.
+  // Memoized so the NewPODialog prefill useEffect only fires when the
+  // requisition data actually changes (not on every parent re-render).
+  const poPrefill = useMemo(() => ({
     vendorId: requisition.vendorId ?? undefined,
     requisitionId: requisition.id,
     items: requisition.lineItems.map((li) => {
-      // Normalize: mock data stores bare IDs ("prod-001"); combobox needs "product:<id>"
-      const productKey =
-        li.productItemId.startsWith("product:") || li.productItemId.startsWith("part:")
-          ? li.productItemId
-          : `product:${li.productItemId}`;
+      // Resolve the combobox key: "product:<id>" or "part:<id>"
+      // Priority: already-prefixed > partId (maintenance part) > productItemId (catalog item)
+      let productKey: string;
+      if (li.productItemId.startsWith("product:") || li.productItemId.startsWith("part:")) {
+        productKey = li.productItemId;
+      } else if (li.partId) {
+        productKey = `part:${li.partId}`;
+      } else if (li.productItemId) {
+        productKey = `product:${li.productItemId}`;
+      } else {
+        productKey = "";
+      }
       return {
         productKey,
         productName: li.productItemName,
@@ -471,7 +480,8 @@ export function RequisitionDetailPanel({ requisition }: RequisitionDetailPanelPr
         projectId: li.projectId ?? null,
       };
     }),
-  };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [requisition.id, requisition.vendorId, requisition.lineItems]);
 
   function handleConverted(po: PurchaseOrder) {
     const newStatus: ApprovalStatus = "ordered";

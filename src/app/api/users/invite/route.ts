@@ -71,7 +71,6 @@ export async function POST(request: Request) {
       const secondTry = await adminClient.auth.admin.generateLink({
         type: "recovery",
         email,
-        options: { data: { org_id: callerProfile.org_id, name, role } },
       });
       if (secondTry.error || !secondTry.data) {
         console.error("generateLink (recovery) error:", secondTry.error);

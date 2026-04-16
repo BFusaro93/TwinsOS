@@ -345,8 +345,8 @@ export function ProductDetailSheet({ product, open, onOpenChange, onPOClick }: P
     });
   }
 
-  const activeReqStatuses = new Set(["draft", "pending_approval", "approved"]);
-  const activePoStatuses = new Set(["requested", "pending", "approved", "partially_fulfilled"]);
+  const activeReqStatuses = new Set(["pending_approval", "approved"]);
+  const activePoStatuses = new Set(["requested", "pending", "approved", "ordered", "partially_fulfilled"]);
 
   const onOrderQty =
     (requisitions ?? [])

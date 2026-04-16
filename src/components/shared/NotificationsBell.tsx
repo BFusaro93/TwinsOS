@@ -22,6 +22,7 @@ import { useParts } from "@/lib/hooks/use-parts";
 import { useWorkOrders } from "@/lib/hooks/use-work-orders";
 import { usePMSchedules } from "@/lib/hooks/use-pm-schedules";
 import { useRequisitions } from "@/lib/hooks/use-requisitions";
+import { usePurchaseOrders } from "@/lib/hooks/use-purchase-orders";
 import type { AppNotification } from "@/types/notification";
 
 function timeAgo(isoString: string): string {
@@ -61,13 +62,14 @@ function NotifIcon({ type }: { type: AppNotification["type"] }) {
 
 export function NotificationsBell() {
   const router = useRouter();
-  const { setSelectedRequisitionId } = usePOStore();
+  const { setSelectedRequisitionId, setSelectedPOId } = usePOStore();
   const { setSelectedWorkOrderId, setSelectedPMScheduleId } = useCMMSStore();
 
   const { data: parts = [] } = useParts();
   const { data: workOrders = [] } = useWorkOrders();
   const { data: pmSchedules = [] } = usePMSchedules();
   const { data: requisitions = [] } = useRequisitions();
+  const { data: purchaseOrders = [] } = usePurchaseOrders();
 
   const [open, setOpen] = useState(false);
 
@@ -117,6 +119,24 @@ export function NotificationsBell() {
           entityId: r.id,
           entityType: "requisition",
           createdAt: r.updatedAt,
+          readAt: readIds.has(id) ? new Date().toISOString() : null,
+        });
+      });
+
+    // Pending-approval purchase orders
+    purchaseOrders
+      .filter((po) => po.status === "pending")
+      .forEach((po) => {
+        const id = `po-approval-${po.id}`;
+        items.push({
+          id,
+          type: "approval_required",
+          title: "PO Approval Required",
+          body: `${po.poNumber} needs your approval${po.vendorName ? ` — ${po.vendorName}` : ""}.`,
+          href: "/po/orders",
+          entityId: po.id,
+          entityType: "purchase_order",
+          createdAt: po.updatedAt,
           readAt: readIds.has(id) ? new Date().toISOString() : null,
         });
       });
@@ -197,7 +217,7 @@ export function NotificationsBell() {
       }
       return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
     });
-  }, [parts, workOrders, pmSchedules, requisitions, readIds]);
+  }, [parts, workOrders, pmSchedules, requisitions, purchaseOrders, readIds]);
 
   const unreadCount = notifications.filter((n) => n.readAt === null).length;
 
@@ -227,6 +247,9 @@ export function NotificationsBell() {
       switch (notif.entityType) {
         case "requisition":
           setSelectedRequisitionId(notif.entityId);
+          break;
+        case "purchase_order":
+          setSelectedPOId(notif.entityId);
           break;
         case "work_order":
           setSelectedWorkOrderId(notif.entityId);
