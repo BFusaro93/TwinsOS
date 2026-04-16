@@ -13,11 +13,18 @@ export function formatCurrency(cents: number): string {
 }
 
 export function formatDate(isoString: string): string {
+  // Date-only strings (YYYY-MM-DD) must be parsed as local time.
+  // new Date("2025-04-15") treats it as UTC midnight, which shifts the display
+  // date by one day in negative-offset timezones. Appending T00:00:00 forces
+  // the JavaScript engine to use the local timezone instead.
+  const normalized = /^\d{4}-\d{2}-\d{2}$/.test(isoString)
+    ? `${isoString}T00:00:00`
+    : isoString;
   return new Intl.DateTimeFormat("en-US", {
     month: "short",
     day: "numeric",
     year: "numeric",
-  }).format(new Date(isoString));
+  }).format(new Date(normalized));
 }
 
 export function formatDateTime(isoString: string): string {
@@ -81,7 +88,9 @@ export function calculateNextDueDate(
   frequency: "daily" | "weekly" | "monthly" | "quarterly" | "annual"
 ): string | null {
   if (!lastCompletedDate) return null;
-  const base = new Date(lastCompletedDate);
+  // Parse YYYY-MM-DD as local time (not UTC) to avoid timezone off-by-one.
+  const [y, m, d] = lastCompletedDate.split("-").map(Number);
+  const base = new Date(y, m - 1, d);
   switch (frequency) {
     case "daily":
       base.setDate(base.getDate() + 1);

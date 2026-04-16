@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { formatDate, calculateNextDueDate } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { RecordDetailTabs } from "@/components/shared/RecordDetailTabs";
 import { AuditTrailTab } from "@/components/shared/AuditTrailTab";
 import { WOHistoryTab } from "@/components/shared/WOHistoryTab";
@@ -10,6 +11,19 @@ import { Separator } from "@/components/ui/separator";
 import { EditButton } from "@/components/shared/EditButton";
 import { PM_FREQUENCY_LABELS } from "@/lib/constants";
 import { NewPMScheduleDialog } from "./NewPMScheduleDialog";
+import { useDeletePMSchedule } from "@/lib/hooks/use-pm-schedules";
+import { useCMMSStore } from "@/stores";
+import { Trash2 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import type { PMSchedule } from "@/types";
 
 interface PMScheduleDetailPanelProps {
@@ -110,6 +124,9 @@ function HistoryTab({ schedule }: { schedule: PMSchedule }) {
 
 export function PMScheduleDetailPanel({ schedule }: PMScheduleDetailPanelProps) {
   const [editOpen, setEditOpen] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const { mutate: deletePMSchedule, isPending: deleting } = useDeletePMSchedule();
+  const { setSelectedPMScheduleId } = useCMMSStore();
 
   return (
     <div className="flex h-full flex-col">
@@ -119,18 +136,56 @@ export function PMScheduleDetailPanel({ schedule }: PMScheduleDetailPanelProps) 
           <h2 className="text-base font-semibold text-slate-900">{schedule.title}</h2>
           <p className="text-sm text-slate-500">{schedule.assetName}</p>
         </div>
-        <Badge
-          variant="outline"
-          className={
-            schedule.isActive
-              ? "border-green-200 bg-green-100 text-green-700"
-              : "border-slate-200 bg-slate-100 text-slate-500"
-          }
-        >
-          {schedule.isActive ? "Active" : "Inactive"}
-        </Badge>
-        <EditButton onClick={() => setEditOpen(true)} />
+        <div className="flex items-center gap-2">
+          <Badge
+            variant="outline"
+            className={
+              schedule.isActive
+                ? "border-green-200 bg-green-100 text-green-700"
+                : "border-slate-200 bg-slate-100 text-slate-500"
+            }
+          >
+            {schedule.isActive ? "Active" : "Inactive"}
+          </Badge>
+          <EditButton onClick={() => setEditOpen(true)} />
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 text-slate-400 hover:bg-red-50 hover:text-red-500"
+            onClick={() => setDeleteConfirmOpen(true)}
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        </div>
       </div>
+
+      <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete PM Schedule</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete <strong>{schedule.title}</strong>? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 hover:bg-red-700 focus:ring-red-500"
+              disabled={deleting}
+              onClick={() =>
+                deletePMSchedule(schedule.id, {
+                  onSuccess: () => {
+                    setDeleteConfirmOpen(false);
+                    setSelectedPMScheduleId(null);
+                  },
+                })
+              }
+            >
+              {deleting ? "Deleting…" : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <RecordDetailTabs
         tabs={[
