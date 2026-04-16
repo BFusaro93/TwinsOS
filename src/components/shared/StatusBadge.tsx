@@ -10,12 +10,12 @@ const statusBadgeVariants = cva("border font-medium text-xs", {
       pending_approval: "border-yellow-200 bg-yellow-100 text-yellow-800",
       approved: "border-green-200 bg-green-100 text-green-800",
       rejected: "border-red-200 bg-red-100 text-red-800",
-      ordered: "border-blue-200 bg-blue-100 text-blue-800",
+      ordered: "border-blue-200 bg-blue-100 text-blue-800",       // in-flight
       closed: "border-slate-300 bg-slate-200 text-slate-600",
       // PO Status
       requested: "border-slate-200 bg-slate-100 text-slate-700",
       pending: "border-yellow-200 bg-yellow-100 text-yellow-800",
-      completed: "border-blue-200 bg-blue-100 text-blue-800",
+      completed: "border-emerald-200 bg-emerald-100 text-emerald-800", // done
       canceled: "border-slate-300 bg-slate-200 text-slate-500",
       partially_fulfilled: "border-orange-200 bg-orange-100 text-orange-800",
       // Work Order Status
