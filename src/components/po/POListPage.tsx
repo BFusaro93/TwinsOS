@@ -368,7 +368,11 @@ export function POListPage() {
         </SheetContent>
       </Sheet>
 
-      <NewPODialog open={dialogOpen} onOpenChange={setDialogOpen} />
+      <NewPODialog
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        onCreated={(po) => setSelectedPOId(po.id)}
+      />
     </div>
   );
 }

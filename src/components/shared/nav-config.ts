@@ -27,7 +27,8 @@ export interface NavItem {
   label: string;
   href: string;
   icon: LucideIcon;
-  exact?: boolean; // when true, only highlight on exact pathname match
+  exact?: boolean;    // when true, only highlight on exact pathname match
+  adminOnly?: boolean; // when true, only visible to users with role "admin"
 }
 
 export interface NavSection {
@@ -74,7 +75,7 @@ export const NAV_SECTIONS: NavSection[] = [
   {
     label: "Administration",
     items: [
-      { label: "Users", href: "/settings/users", icon: Users },
+      { label: "Users", href: "/settings/users", icon: Users, adminOnly: true },
 { label: "Reports", href: "/settings/reports", icon: BarChart3 },
       { label: "Settings", href: "/settings", icon: Settings, exact: true },
       { label: "Support", href: "/settings/support", icon: HelpCircle },

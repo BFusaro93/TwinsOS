@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useStickyState } from "@/lib/hooks/use-sticky-state";
 import { useSearchParams } from "next/navigation";
 import { Plus, Package, Cog, ShoppingCart } from "lucide-react";
@@ -55,13 +55,17 @@ export function PartsPage() {
   const [selectedPart, setSelectedPart] = useState<Part | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   const searchParams = useSearchParams();
+  // Track which deep-link openId we've already handled so a background
+  // parts refetch doesn't re-open the sheet unexpectedly.
+  const handledOpenId = useRef<string | null>(null);
 
   // Auto-open a part when arriving from a notification deep-link (?open=<partId>)
   useEffect(() => {
     const openId = searchParams.get("open");
-    if (openId && parts) {
+    if (openId && parts && handledOpenId.current !== openId) {
       const target = parts.find((p) => p.id === openId);
       if (target) {
+        handledOpenId.current = openId;
         setSelectedPart(target);
         setSheetOpen(true);
       }

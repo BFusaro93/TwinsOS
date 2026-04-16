@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { useUIStore } from "@/stores";
+import { useUIStore, useCurrentUserStore } from "@/stores";
 import { useSettingsStore } from "@/stores/settings-store";
 import { NAV_SECTIONS } from "./nav-config";
 import { Leaf, ArrowLeft } from "lucide-react";
@@ -12,6 +12,8 @@ export function AppSidebar() {
   const pathname = usePathname();
   const { sidebarCollapsed } = useUIStore();
   const { logoDataUrl, orgName } = useSettingsStore();
+  const { currentUser } = useCurrentUserStore();
+  const isAdmin = currentUser.role === "admin";
 
   return (
     <aside
@@ -60,7 +62,7 @@ export function AppSidebar() {
                 {section.label}
               </p>
             )}
-            {section.items.map((item) => {
+            {section.items.filter((item) => !item.adminOnly || isAdmin).map((item) => {
               const isActive =
                 pathname === item.href ||
                 (!item.exact && item.href !== "/dashboard" && pathname.startsWith(item.href + "/"));

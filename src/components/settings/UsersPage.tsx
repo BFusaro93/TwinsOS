@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from "react";
 import { useUsers, useInviteUser, useUpdateUserRole, useDeactivateUser } from "@/lib/hooks/use-users";
+import { useCurrentUserStore } from "@/stores";
 import type { OrgUser } from "@/types";
 import { Check, Trash2, UserPlus } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -291,6 +292,8 @@ function InviteUserDialog({ open, onOpenChange, onInvite, submitting = false }: 
 // ---------------------------------------------------------------------------
 
 export function UsersPage() {
+  const { currentUser } = useCurrentUserStore();
+  const isAdmin = currentUser.role === "admin";
   const { data: rawUsers = [], isLoading } = useUsers();
   const { mutate: inviteUser, isPending: inviting } = useInviteUser();
   const { mutate: updateRole } = useUpdateUserRole();
@@ -341,10 +344,12 @@ export function UsersPage() {
         title="Users & Roles"
         description="Manage team members and their permissions"
         action={
-          <Button size="sm" onClick={() => setInviteOpen(true)}>
-            <UserPlus className="mr-1.5 h-4 w-4" />
-            Invite User
-          </Button>
+          isAdmin ? (
+            <Button size="sm" onClick={() => setInviteOpen(true)}>
+              <UserPlus className="mr-1.5 h-4 w-4" />
+              Invite User
+            </Button>
+          ) : undefined
         }
       />
 
