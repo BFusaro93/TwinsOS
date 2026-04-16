@@ -61,7 +61,9 @@ export async function POST(request: Request) {
     }
   );
   if (inviteErr) {
-    return NextResponse.json({ error: inviteErr.message }, { status: 500 });
+    const errMsg = inviteErr.message || (inviteErr as { code?: string }).code || JSON.stringify(inviteErr);
+    console.error("inviteUserByEmail error:", inviteErr);
+    return NextResponse.json({ error: errMsg || "Failed to send invite email" }, { status: 500 });
   }
 
   // 4. The handle_new_user trigger creates the profile row automatically.
