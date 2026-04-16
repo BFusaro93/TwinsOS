@@ -50,7 +50,8 @@ export async function POST(request: Request) {
   );
 
   // 3. Generate a one-time invite link — bypasses Supabase's SMTP entirely.
-  //    redirect_to sends the user to the set-password page after clicking.
+  //    We build the URL directly from the hashed_token so the user lands
+  //    on /reset-password without needing Supabase's redirect allowlist.
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://twins-os.vercel.app";
   const { data: linkData, error: linkErr } = await adminClient.auth.admin.generateLink({
     type: "invite",
@@ -61,7 +62,6 @@ export async function POST(request: Request) {
         name,
         role,
       },
-      redirectTo: `${siteUrl}/reset-password`,
     },
   });
   if (linkErr || !linkData) {
@@ -69,9 +69,15 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: linkErr?.message || "Failed to generate invite link" }, { status: 500 });
   }
 
+  // Build the invite URL directly — points to our set-password page with
+  // the hashed token. Bypasses Supabase's redirect allowlist entirely.
+  const hashedToken = linkData.properties?.hashed_token;
+  const inviteUrl = hashedToken
+    ? `${siteUrl}/reset-password?token_hash=${hashedToken}&type=invite`
+    : linkData.properties?.action_link ?? "";
+
   // 4. Send the invite email via Resend's HTTP API (not SMTP).
   const resend = new Resend(process.env.RESEND_API_KEY!);
-  const inviteUrl = linkData.properties?.action_link ?? "";
 
   const { error: emailErr } = await resend.emails.send({
     from: "Twins Lawn Service <noreply@twinslawnservice.com>",
