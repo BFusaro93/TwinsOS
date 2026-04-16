@@ -636,7 +636,11 @@ export function WorkOrderListPage() {
         </SheetContent>
       </Sheet>
 
-      <NewWorkOrderDialog open={dialogOpen} onOpenChange={setDialogOpen} />
+      <NewWorkOrderDialog
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        onCreated={(wo) => setSelectedWorkOrderId(wo.id)}
+      />
     </div>
   );
 }

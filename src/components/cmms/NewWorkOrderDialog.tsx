@@ -38,6 +38,7 @@ interface NewWorkOrderDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   initialData?: WorkOrder | null;
+  onCreated?: (wo: WorkOrder) => void;
 }
 
 // Combined option representing either an asset or vehicle
@@ -56,7 +57,7 @@ const ASSET_STATUS_OPTIONS: Array<{ value: string; label: string }> = [
   { value: "disposed", label: ASSET_STATUS_LABELS.disposed },
 ];
 
-export function NewWorkOrderDialog({ open, onOpenChange, initialData }: NewWorkOrderDialogProps) {
+export function NewWorkOrderDialog({ open, onOpenChange, initialData, onCreated }: NewWorkOrderDialogProps) {
   const isEditing = !!initialData;
 
   const [title, setTitle] = useState("");
@@ -254,6 +255,7 @@ export function NewWorkOrderDialog({ open, onOpenChange, initialData }: NewWorkO
               });
             }
             handleClose();
+            onCreated?.(parent);
           },
         }
       );
@@ -267,7 +269,7 @@ export function NewWorkOrderDialog({ open, onOpenChange, initialData }: NewWorkO
           ...singleEntityFields,
         },
         {
-          onSuccess: () => {
+          onSuccess: (created) => {
             if (newEntityStatus !== "no_change" && singleEntityFields.assetId) {
               if (singleEntityFields.linkedEntityType === "vehicle") {
                 updateVehicleStatus({ id: singleEntityFields.assetId, status: newEntityStatus as import("@/types").AssetStatus });
@@ -276,6 +278,7 @@ export function NewWorkOrderDialog({ open, onOpenChange, initialData }: NewWorkO
               }
             }
             handleClose();
+            onCreated?.(created);
           },
         }
       );
