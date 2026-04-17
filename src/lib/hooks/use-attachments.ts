@@ -36,11 +36,15 @@ export function useUploadAttachment(recordType: AttachmentRecordType, recordId: 
         .eq("id", user?.id ?? "")
         .single();
 
-      // Upload file to Supabase Storage
+      // Upload file to Supabase Storage.
+      // Read into ArrayBuffer first to avoid Safari "Load failed" errors when
+      // the File handle comes from iCloud Drive or a sandboxed file picker.
+      const buffer = await file.arrayBuffer();
+      const blob = new Blob([buffer], { type: file.type });
       const storagePath = `${recordType}/${recordId}/${Date.now()}-${file.name}`;
       const { error: uploadError } = await supabase.storage
         .from("attachments")
-        .upload(storagePath, file, { upsert: false });
+        .upload(storagePath, blob, { upsert: false, contentType: file.type });
       if (uploadError) throw uploadError;
 
       // Insert attachment record
