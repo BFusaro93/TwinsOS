@@ -44,6 +44,7 @@ import type {
   WOPart,
   WOLaborEntry,
   WOVendorCharge,
+  PMPart,
 } from "@/types/cmms";
 import type { GoodsReceipt, GoodsReceiptLine } from "@/types/receiving";
 import type { Attachment, AttachmentRecordType } from "@/types/attachment";
@@ -689,5 +690,24 @@ export function mapWOVendorCharge(row: WOVendorChargeRow): WOVendorCharge {
     vendorName: row.vendor_name,
     description: row.description,
     cost: row.cost,
+  };
+}
+
+// pm_schedule_parts — table not yet in generated types; use loose row type until `supabase gen types` is re-run
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function mapPMPart(row: Record<string, any>): PMPart {
+  return {
+    id: row.id,
+    orgId: row.org_id,
+    createdBy: row.created_by ?? "",
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    deletedAt: row.deleted_at,
+    pmScheduleId: row.pm_schedule_id,
+    partId: row.part_id ?? "",
+    partName: row.part_name,
+    partNumber: row.part_number,
+    quantity: row.quantity,
+    unitCost: row.unit_cost,
   };
 }

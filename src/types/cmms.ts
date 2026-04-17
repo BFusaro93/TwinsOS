@@ -170,6 +170,15 @@ export interface WOPart extends BaseRecord {
   unitCost: number; // cents
 }
 
+export interface PMPart extends BaseRecord {
+  pmScheduleId: string;
+  partId: string;
+  partName: string;
+  partNumber: string;
+  quantity: number;
+  unitCost: number; // cents
+}
+
 export interface WOLaborEntry extends BaseRecord {
   workOrderId: string;
   technicianName: string;

@@ -11,6 +11,7 @@ import { Separator } from "@/components/ui/separator";
 import { EditButton } from "@/components/shared/EditButton";
 import { PM_FREQUENCY_LABELS } from "@/lib/constants";
 import { NewPMScheduleDialog } from "./NewPMScheduleDialog";
+import { PMPartsTab } from "./PMPartsTab";
 import { useDeletePMSchedule } from "@/lib/hooks/use-pm-schedules";
 import { useCMMSStore } from "@/stores";
 import { Trash2 } from "lucide-react";
@@ -193,6 +194,11 @@ export function PMScheduleDetailPanel({ schedule }: PMScheduleDetailPanelProps) 
             value: "details",
             label: "Details",
             content: <DetailsTab schedule={schedule} />,
+          },
+          {
+            value: "parts",
+            label: "Parts",
+            content: <PMPartsTab pmScheduleId={schedule.id} />,
           },
           {
             value: "wo-history",
