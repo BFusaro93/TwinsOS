@@ -105,6 +105,7 @@ export function useUpdateAsset() {
         ...(input.financeInstitution !== undefined && { finance_institution: input.financeInstitution }),
         ...(input.photoUrl !== undefined && { photo_url: input.photoUrl }),
         ...(input.barcode !== undefined && { barcode: input.barcode }),
+        ...(input.parentAssetId !== undefined && { parent_asset_id: input.parentAssetId }),
       }).eq("id", id).select().single();
       if (error) throw error;
       return mapAsset(data);

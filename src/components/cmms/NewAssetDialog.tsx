@@ -33,9 +33,11 @@ interface NewAssetDialogProps {
   initialData?: Asset | null;
   /** When "duplicate", pre-fills from initialData but always creates a new asset. */
   mode?: "edit" | "duplicate";
+  /** Pre-select a parent asset when creating a new sub-asset from a parent's detail panel. */
+  presetParentId?: string;
 }
 
-export function NewAssetDialog({ open, onOpenChange, initialData, mode = "edit" }: NewAssetDialogProps) {
+export function NewAssetDialog({ open, onOpenChange, initialData, mode = "edit", presetParentId }: NewAssetDialogProps) {
   const isDuplicate = mode === "duplicate";
   const isEditing = !!initialData && !isDuplicate;
   const { data: vendors } = useVendors();
@@ -65,6 +67,7 @@ export function NewAssetDialog({ open, onOpenChange, initialData, mode = "edit" 
   const [division, setDivision] = useState("");
   const [assignedCrew, setAssignedCrew] = useState("");
   const [location, setLocation] = useState("");
+  const [parentAssetId, setParentAssetId] = useState<string>("");
 
   // Purchase Info
   const [purchaseVendorId, setPurchaseVendorId] = useState("");
@@ -96,13 +99,17 @@ export function NewAssetDialog({ open, onOpenChange, initialData, mode = "edit" 
       setDivision(initialData.division ?? "");
       setAssignedCrew(initialData.assignedCrew ?? "");
       setLocation(initialData.location ?? "none");
+      setParentAssetId(initialData.parentAssetId ?? "");
       setPurchaseVendorId(isDuplicate ? "" : (initialData.purchaseVendorId ?? ""));
       setPurchaseDate(isDuplicate ? "" : (initialData.purchaseDate ?? ""));
       setPurchasePrice(isDuplicate ? "" : (initialData.purchasePrice ? (initialData.purchasePrice / 100).toFixed(2) : ""));
       setPaymentMethod(isDuplicate ? "" : (initialData.paymentMethod ?? ""));
       setNotes(initialData.notes ?? "");
+    } else if (open && !initialData && presetParentId) {
+      // Blank form for a new sub-asset — just pre-select the parent
+      setParentAssetId(presetParentId);
     }
-  }, [open, initialData, isDuplicate]);
+  }, [open, initialData, isDuplicate, presetParentId]);
 
   // Asset tag uniqueness: check across all assets AND vehicles, excluding self when editing
   const existingTags = new Set([
@@ -144,6 +151,7 @@ export function NewAssetDialog({ open, onOpenChange, initialData, mode = "edit" 
     setDivision("");
     setAssignedCrew("");
     setLocation("none");
+    setParentAssetId("");
     setPurchaseVendorId("");
     setPurchaseDate("");
     setPurchasePrice("");
@@ -174,7 +182,7 @@ export function NewAssetDialog({ open, onOpenChange, initialData, mode = "edit" 
       division: division || null,
       assignedCrew: assignedCrew || null,
       barcode: null,
-      parentAssetId: null,
+      parentAssetId: parentAssetId || null,
       location: location !== "none" ? location : null,
       purchaseVendorId: purchaseVendorId || null,
       purchaseVendorName: vendor?.name ?? null,
@@ -198,11 +206,13 @@ export function NewAssetDialog({ open, onOpenChange, initialData, mode = "edit" 
       <DialogContent className="sm:max-w-[600px]">
         <DialogHeader>
           <DialogTitle>
-            {isEditing ? "Edit Asset" : isDuplicate ? "Duplicate Asset" : "New Asset"}
+            {isEditing ? "Edit Asset" : isDuplicate ? "Duplicate Asset" : presetParentId ? "New Sub-Asset" : "New Asset"}
           </DialogTitle>
           <DialogDescription>
             {isDuplicate
               ? "A copy of this asset has been pre-filled. Update the unique fields before saving."
+              : presetParentId
+              ? "Create a new asset linked to this parent."
               : "Register a new piece of equipment in the asset registry."}
           </DialogDescription>
         </DialogHeader>
@@ -375,6 +385,28 @@ export function NewAssetDialog({ open, onOpenChange, initialData, mode = "edit" 
               Assignment
             </p>
 
+            {/* Parent Asset picker — exclude self when editing */}
+            <div className="grid gap-1.5">
+              <Label htmlFor="parent-asset">Parent Asset</Label>
+              <Select value={parentAssetId || "none"} onValueChange={(v) => setParentAssetId(v === "none" ? "" : v)}>
+                <SelectTrigger id="parent-asset">
+                  <SelectValue placeholder="None (top-level asset)" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">None (top-level asset)</SelectItem>
+                  {(allAssets ?? [])
+                    .filter((a) => a.id !== initialData?.id && a.deletedAt === null)
+                    .sort((a, b) => a.name.localeCompare(b.name))
+                    .map((a) => (
+                      <SelectItem key={a.id} value={a.id}>
+                        {a.name}
+                        {a.assetTag ? ` · ${a.assetTag}` : ""}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            </div>
+
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="grid gap-1.5">
                 <Label htmlFor="asset-division">Division</Label>
@@ -506,7 +538,7 @@ export function NewAssetDialog({ open, onOpenChange, initialData, mode = "edit" 
             disabled={!isValid || saving}
             onClick={handleSubmit}
           >
-            {saving ? "Saving..." : isEditing ? "Save Changes" : isDuplicate ? "Create Copy" : "Create Asset"}
+            {saving ? "Saving..." : isEditing ? "Save Changes" : isDuplicate ? "Create Copy" : presetParentId ? "Create Sub-Asset" : "Create Asset"}
           </Button>
         </DialogFooter>
       </DialogContent>

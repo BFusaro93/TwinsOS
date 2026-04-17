@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Check, ChevronDown, Copy } from "lucide-react";
+import { Check, ChevronDown, Copy, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { StatusBadge } from "@/components/shared/StatusBadge";
@@ -191,40 +191,49 @@ function FilesTab({ asset }: { asset: Asset }) {
   );
 }
 
-function SubAssetsTab({ asset }: { asset: Asset }) {
+function SubAssetsTab({ asset, onAddSubAsset }: { asset: Asset; onAddSubAsset: () => void }) {
   const { data: allAssets } = useAssets();
   const subAssets = (allAssets ?? []).filter((a) => a.parentAssetId === asset.id);
 
-  if (subAssets.length === 0) {
-    return (
-      <div className="p-6">
-        <p className="text-sm text-slate-400">No sub-assets linked to this asset.</p>
-      </div>
-    );
-  }
-
   return (
     <div className="flex flex-col gap-3 p-6">
-      {subAssets.map((sub) => (
-        <div
-          key={sub.id}
-          className="flex items-center justify-between rounded-md border border-slate-100 bg-slate-50 px-4 py-3"
-        >
-          <div>
-            <p className="text-sm font-medium text-slate-900">{sub.name}</p>
-            <p className="text-xs text-slate-500">
-              {[sub.make, sub.model].filter(Boolean).join(" ")}
-              {sub.assetTag && (
-                <span className="ml-2 font-mono text-slate-400">{sub.assetTag}</span>
-              )}
-            </p>
-          </div>
-          <StatusBadge
-            variant={sub.status as Parameters<typeof StatusBadge>[0]["variant"]}
-            label={ASSET_STATUS_LABELS[sub.status] ?? sub.status}
-          />
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+          Sub-assets
+          <span className="ml-1.5 font-normal normal-case text-slate-300">({subAssets.length})</span>
+        </p>
+        <Button size="sm" variant="outline" onClick={onAddSubAsset}>
+          <Plus className="mr-1.5 h-3.5 w-3.5" />
+          Add Sub-Asset
+        </Button>
+      </div>
+
+      {subAssets.length === 0 ? (
+        <div className="flex h-20 items-center justify-center rounded-md border border-dashed">
+          <p className="text-sm text-slate-400">No sub-assets linked to this asset.</p>
         </div>
-      ))}
+      ) : (
+        subAssets.map((sub) => (
+          <div
+            key={sub.id}
+            className="flex items-center justify-between rounded-md border border-slate-100 bg-slate-50 px-4 py-3"
+          >
+            <div>
+              <p className="text-sm font-medium text-slate-900">{sub.name}</p>
+              <p className="text-xs text-slate-500">
+                {[sub.make, sub.model].filter(Boolean).join(" ")}
+                {sub.assetTag && (
+                  <span className="ml-2 font-mono text-slate-400">{sub.assetTag}</span>
+                )}
+              </p>
+            </div>
+            <StatusBadge
+              variant={sub.status as Parameters<typeof StatusBadge>[0]["variant"]}
+              label={ASSET_STATUS_LABELS[sub.status] ?? sub.status}
+            />
+          </div>
+        ))
+      )}
     </div>
   );
 }
@@ -238,6 +247,7 @@ const ASSET_STATUS_OPTIONS = Object.entries(ASSET_STATUS_LABELS) as [AssetStatus
 export function AssetDetailPanel({ asset }: AssetDetailPanelProps) {
   const [editOpen, setEditOpen] = useState(false);
   const [duplicateOpen, setDuplicateOpen] = useState(false);
+  const [subAssetOpen, setSubAssetOpen] = useState(false);
   const [status, setStatus] = useState<AssetStatus>(asset.status as AssetStatus);
   const { mutate: updateAssetStatus } = useUpdateAssetStatus();
 
@@ -325,7 +335,7 @@ export function AssetDetailPanel({ asset }: AssetDetailPanelProps) {
           {
             value: "sub-assets",
             label: "Sub-assets",
-            content: <SubAssetsTab asset={asset} />,
+            content: <SubAssetsTab asset={asset} onAddSubAsset={() => setSubAssetOpen(true)} />,
           },
           {
             value: "files",
@@ -341,6 +351,12 @@ export function AssetDetailPanel({ asset }: AssetDetailPanelProps) {
       />
       <NewAssetDialog open={editOpen} onOpenChange={setEditOpen} initialData={asset} />
       <NewAssetDialog open={duplicateOpen} onOpenChange={setDuplicateOpen} initialData={asset} mode="duplicate" />
+      {/* Sub-asset dialog: blank create form with parent pre-selected */}
+      <NewAssetDialog
+        open={subAssetOpen}
+        onOpenChange={setSubAssetOpen}
+        presetParentId={asset.id}
+      />
     </div>
   );
 }
