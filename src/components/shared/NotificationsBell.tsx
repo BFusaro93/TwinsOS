@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import {
   Bell,
@@ -23,6 +23,7 @@ import { useWorkOrders } from "@/lib/hooks/use-work-orders";
 import { usePMSchedules } from "@/lib/hooks/use-pm-schedules";
 import { useRequisitions } from "@/lib/hooks/use-requisitions";
 import { usePurchaseOrders } from "@/lib/hooks/use-purchase-orders";
+import { useNotificationReads } from "@/lib/hooks/use-notification-reads";
 import type { AppNotification } from "@/types/notification";
 
 function timeAgo(isoString: string): string {
@@ -73,28 +74,24 @@ export function NotificationsBell() {
 
   const [open, setOpen] = useState(false);
 
-  // Persist read notification IDs to localStorage so they survive page refreshes.
-  const [readIds, setReadIdsState] = useState<Set<string>>(() => {
-    if (typeof window === "undefined") return new Set();
-    try {
-      const stored = localStorage.getItem("notif_read_ids");
-      return stored ? new Set<string>(JSON.parse(stored) as string[]) : new Set();
-    } catch {
-      return new Set();
-    }
-  });
-
-  const setReadIds = useCallback((updater: Set<string> | ((prev: Set<string>) => Set<string>)) => {
-    setReadIdsState((prev) => {
-      const next = typeof updater === "function" ? updater(prev) : updater;
-      try {
-        localStorage.setItem("notif_read_ids", JSON.stringify([...next]));
-      } catch {
-        // storage quota exceeded — non-fatal
-      }
-      return next;
-    });
-  }, []);
+  // Derive notification IDs first so we can pass them to the reads hook for pruning
+  // (readIds is seeded from localStorage immediately, then merged with DB rows)
+  const { readIds, markRead, markAllRead: markAllReadIds } = useNotificationReads(
+    useMemo(() => {
+      // We only need the IDs list for pruning — compute cheaply without full objects
+      const todayIso = new Date().toISOString().slice(0, 10);
+      const weekFromNow = new Date();
+      weekFromNow.setDate(weekFromNow.getDate() + 7);
+      const weekFromNowIso = weekFromNow.toISOString().slice(0, 10);
+      return [
+        ...requisitions.filter((r) => r.status === "pending_approval").map((r) => `req-approval-${r.id}`),
+        ...purchaseOrders.filter((po) => po.status === "pending").map((po) => `po-approval-${po.id}`),
+        ...workOrders.filter((wo) => wo.status !== "done" && wo.dueDate !== null && wo.dueDate.slice(0, 10) < todayIso).map((wo) => `wo-overdue-${wo.id}`),
+        ...parts.filter((p) => p.deletedAt === null && p.minimumStock !== null && p.quantityOnHand <= p.minimumStock).map((p) => `low-stock-${p.id}`),
+        ...pmSchedules.filter((pm) => pm.isActive && pm.nextDueDate.slice(0, 10) <= weekFromNowIso).map((pm) => `pm-due-${pm.id}`),
+      ];
+    }, [requisitions, purchaseOrders, workOrders, parts, pmSchedules])
+  );
 
   // Derive notifications from live data
   const notifications = useMemo<AppNotification[]>(() => {
@@ -222,25 +219,11 @@ export function NotificationsBell() {
   const unreadCount = notifications.filter((n) => n.readAt === null).length;
 
   function markAllRead() {
-    setReadIds(new Set(notifications.map((n) => n.id)));
+    markAllReadIds(notifications.map((n) => n.id));
   }
 
-  // Prune stale IDs monthly to keep localStorage clean (notifications naturally
-  // disappear when their underlying data resolves, but IDs could accumulate).
-  useEffect(() => {
-    const PRUNE_KEY = "notif_pruned_at";
-    const lastPruned = localStorage.getItem(PRUNE_KEY);
-    const monthAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
-    if (!lastPruned || Number(lastPruned) < monthAgo) {
-      const activeIds = new Set(notifications.map((n) => n.id));
-      setReadIds((prev) => new Set([...prev].filter((id) => activeIds.has(id))));
-      localStorage.setItem(PRUNE_KEY, String(Date.now()));
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   function handleNotifClick(notif: AppNotification) {
-    setReadIds((prev) => new Set([...prev, notif.id]));
+    markRead(notif.id);
     setOpen(false);
 
     if (notif.entityId) {
