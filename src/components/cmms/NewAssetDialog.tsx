@@ -86,7 +86,7 @@ export function NewAssetDialog({ open, onOpenChange, initialData, mode = "edit" 
       setAssetTag(isDuplicate ? "" : initialData.assetTag);
       setEquipmentNumber(isDuplicate ? "" : (initialData.equipmentNumber ?? ""));
       setAssetType(initialData.assetType);
-      setStatus("active");
+      setStatus(isDuplicate ? "active" : initialData.status);
       setMake(initialData.make ?? "");
       setModel(initialData.model ?? "");
       setYear(initialData.year ? String(initialData.year) : "");
