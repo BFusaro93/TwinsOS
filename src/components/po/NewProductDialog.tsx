@@ -322,7 +322,11 @@ export function NewProductDialog({ open, onOpenChange, initialData, onCreated }:
 
           {saveError && (
             <p className="text-sm text-red-600">
-              {saveError instanceof Error ? saveError.message : "Failed to save. Please try again."}
+              {saveError instanceof Error
+                ? saveError.message
+                : typeof saveError === "object" && saveError !== null && "message" in saveError
+                  ? String((saveError as { message: unknown }).message)
+                  : "Failed to save. Please try again."}
             </p>
           )}
 
