@@ -136,13 +136,14 @@ export function PMPartsTab({ pmScheduleId }: PMPartsTabProps) {
       </div>
 
       <p className="text-xs text-slate-400">
-        Parts listed here are the expected materials for each maintenance run of this schedule.
+        Use this tab for parts that are <span className="font-medium text-slate-500">shared across all assets</span> in this schedule (e.g. a lubricant used on every machine). For parts that are unique to a specific asset, add them under the <span className="font-medium text-slate-500">Assets tab</span> by expanding that asset's row.
       </p>
 
       {/* Table */}
       {items.length === 0 ? (
-        <div className="flex h-24 items-center justify-center rounded-md border border-dashed">
-          <p className="text-sm text-slate-400">No parts added yet.</p>
+        <div className="flex flex-col items-center gap-1.5 rounded-md border border-dashed py-8 text-center">
+          <p className="text-sm text-slate-400">No shared parts added yet.</p>
+          <p className="text-xs text-slate-300">For asset-specific parts, use the Assets tab.</p>
         </div>
       ) : (
         <div className="overflow-hidden rounded-md border">
