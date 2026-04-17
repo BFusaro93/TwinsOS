@@ -136,7 +136,7 @@ export function PMPartsTab({ pmScheduleId }: PMPartsTabProps) {
       </div>
 
       <p className="text-xs text-slate-400">
-        Use this tab for parts that are <span className="font-medium text-slate-500">shared across all assets</span> in this schedule (e.g. a lubricant used on every machine). For parts that are unique to a specific asset, add them under the <span className="font-medium text-slate-500">Assets tab</span> by expanding that asset's row.
+        Use this tab for parts that are <span className="font-medium text-slate-500">shared across all assets</span> in this schedule (e.g. a lubricant used on every machine). For parts that are unique to a specific asset, add them under the <span className="font-medium text-slate-500">Assets tab</span> by expanding that asset&apos;s row.
       </p>
 
       {/* Table */}
