@@ -15,16 +15,22 @@ interface SamsaraVehicleStat {
 }
 
 /**
- * POST /api/integrations/samsara/sync
+ * GET  /api/integrations/samsara/sync  — called by Vercel Cron (GET only)
+ * POST /api/integrations/samsara/sync  — called by the Settings UI manual trigger
  *
- * Two callers:
- *  1. Vercel Cron — passes Authorization: Bearer {CRON_SECRET} (set automatically
- *     by Vercel when CRON_SECRET env var is configured).
- *  2. Settings UI manual trigger — authenticated admin session (no cron secret needed).
- *
- * Returns a JSON summary of vehicles matched and readings written.
+ * Auth:
+ *  Cron  — Vercel passes Authorization: Bearer {CRON_SECRET} automatically.
+ *  Manual — authenticated admin session cookie (no cron secret needed).
  */
+export async function GET(request: Request) {
+  return handleSync(request);
+}
+
 export async function POST(request: Request) {
+  return handleSync(request);
+}
+
+async function handleSync(request: Request) {
   const adminClient = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
