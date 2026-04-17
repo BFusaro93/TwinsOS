@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Check, ChevronDown } from "lucide-react";
+import { Check, ChevronDown, Copy } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { StatusBadge } from "@/components/shared/StatusBadge";
@@ -237,6 +237,7 @@ const ASSET_STATUS_OPTIONS = Object.entries(ASSET_STATUS_LABELS) as [AssetStatus
 
 export function AssetDetailPanel({ asset }: AssetDetailPanelProps) {
   const [editOpen, setEditOpen] = useState(false);
+  const [duplicateOpen, setDuplicateOpen] = useState(false);
   const [status, setStatus] = useState<AssetStatus>(asset.status as AssetStatus);
   const { mutate: updateAssetStatus } = useUpdateAssetStatus();
 
@@ -287,6 +288,14 @@ export function AssetDetailPanel({ asset }: AssetDetailPanelProps) {
               ))}
             </DropdownMenuContent>
           </DropdownMenu>
+          <button
+            type="button"
+            onClick={() => setDuplicateOpen(true)}
+            title="Duplicate asset"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-500 shadow-sm hover:bg-slate-50 hover:text-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
+          >
+            <Copy className="h-4 w-4" />
+          </button>
           <EditButton onClick={() => setEditOpen(true)} />
         </div>
       </div>
@@ -331,6 +340,7 @@ export function AssetDetailPanel({ asset }: AssetDetailPanelProps) {
         ]}
       />
       <NewAssetDialog open={editOpen} onOpenChange={setEditOpen} initialData={asset} />
+      <NewAssetDialog open={duplicateOpen} onOpenChange={setDuplicateOpen} initialData={asset} mode="duplicate" />
     </div>
   );
 }

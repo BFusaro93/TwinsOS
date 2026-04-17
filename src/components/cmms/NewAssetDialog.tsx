@@ -31,10 +31,13 @@ interface NewAssetDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   initialData?: Asset | null;
+  /** When "duplicate", pre-fills from initialData but always creates a new asset. */
+  mode?: "edit" | "duplicate";
 }
 
-export function NewAssetDialog({ open, onOpenChange, initialData }: NewAssetDialogProps) {
-  const isEditing = !!initialData;
+export function NewAssetDialog({ open, onOpenChange, initialData, mode = "edit" }: NewAssetDialogProps) {
+  const isDuplicate = mode === "duplicate";
+  const isEditing = !!initialData && !isDuplicate;
   const { data: vendors } = useVendors();
   const { data: allAssets } = useAssets();
   const { data: allVehicles } = useVehicles();
@@ -77,27 +80,29 @@ export function NewAssetDialog({ open, onOpenChange, initialData }: NewAssetDial
 
   useEffect(() => {
     if (open && initialData) {
-      setName(initialData.name);
-      setAssetTag(initialData.assetTag);
-      setEquipmentNumber(initialData.equipmentNumber ?? "");
+      // When duplicating, copy most fields but clear identity-unique ones so the
+      // user must explicitly set them before saving.
+      setName(isDuplicate ? `Copy of ${initialData.name}` : initialData.name);
+      setAssetTag(isDuplicate ? "" : initialData.assetTag);
+      setEquipmentNumber(isDuplicate ? "" : (initialData.equipmentNumber ?? ""));
       setAssetType(initialData.assetType);
-      setStatus(initialData.status);
+      setStatus("active");
       setMake(initialData.make ?? "");
       setModel(initialData.model ?? "");
       setYear(initialData.year ? String(initialData.year) : "");
-      setSerialNumber(initialData.serialNumber ?? "");
+      setSerialNumber(isDuplicate ? "" : (initialData.serialNumber ?? ""));
       setEngineModel(initialData.engineModel ?? "");
-      setEngineSerialNumber(initialData.engineSerialNumber ?? "");
+      setEngineSerialNumber(isDuplicate ? "" : (initialData.engineSerialNumber ?? ""));
       setDivision(initialData.division ?? "");
       setAssignedCrew(initialData.assignedCrew ?? "");
       setLocation(initialData.location ?? "none");
-      setPurchaseVendorId(initialData.purchaseVendorId ?? "");
-      setPurchaseDate(initialData.purchaseDate ?? "");
-      setPurchasePrice(initialData.purchasePrice ? (initialData.purchasePrice / 100).toFixed(2) : "");
-      setPaymentMethod(initialData.paymentMethod ?? "");
+      setPurchaseVendorId(isDuplicate ? "" : (initialData.purchaseVendorId ?? ""));
+      setPurchaseDate(isDuplicate ? "" : (initialData.purchaseDate ?? ""));
+      setPurchasePrice(isDuplicate ? "" : (initialData.purchasePrice ? (initialData.purchasePrice / 100).toFixed(2) : ""));
+      setPaymentMethod(isDuplicate ? "" : (initialData.paymentMethod ?? ""));
       setNotes(initialData.notes ?? "");
     }
-  }, [open, initialData]);
+  }, [open, initialData, isDuplicate]);
 
   // Asset tag uniqueness: check across all assets AND vehicles, excluding self when editing
   const existingTags = new Set([
@@ -192,9 +197,13 @@ export function NewAssetDialog({ open, onOpenChange, initialData }: NewAssetDial
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[600px]">
         <DialogHeader>
-          <DialogTitle>{isEditing ? "Edit Asset" : "New Asset"}</DialogTitle>
+          <DialogTitle>
+            {isEditing ? "Edit Asset" : isDuplicate ? "Duplicate Asset" : "New Asset"}
+          </DialogTitle>
           <DialogDescription>
-            Register a new piece of equipment in the asset registry.
+            {isDuplicate
+              ? "A copy of this asset has been pre-filled. Update the unique fields before saving."
+              : "Register a new piece of equipment in the asset registry."}
           </DialogDescription>
         </DialogHeader>
 
@@ -497,7 +506,7 @@ export function NewAssetDialog({ open, onOpenChange, initialData }: NewAssetDial
             disabled={!isValid || saving}
             onClick={handleSubmit}
           >
-            {saving ? "Saving..." : isEditing ? "Save Changes" : "Create Asset"}
+            {saving ? "Saving..." : isEditing ? "Save Changes" : isDuplicate ? "Create Copy" : "Create Asset"}
           </Button>
         </DialogFooter>
       </DialogContent>
