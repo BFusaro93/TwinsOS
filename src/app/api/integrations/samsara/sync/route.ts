@@ -15,6 +15,16 @@ interface SamsaraVehicleStat {
 }
 
 /**
+ * GET /api/integrations/samsara/sync
+ *
+ * Called by Vercel Cron (which sends GET, not POST).
+ * Vercel automatically attaches Authorization: Bearer {CRON_SECRET}.
+ */
+export async function GET(request: Request) {
+  return handleSync(request);
+}
+
+/**
  * POST /api/integrations/samsara/sync
  *
  * Two callers:
@@ -25,6 +35,10 @@ interface SamsaraVehicleStat {
  * Returns a JSON summary of vehicles matched and readings written.
  */
 export async function POST(request: Request) {
+  return handleSync(request);
+}
+
+async function handleSync(request: Request) {
   const adminClient = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
