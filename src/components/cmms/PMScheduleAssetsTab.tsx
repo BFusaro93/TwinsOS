@@ -78,7 +78,7 @@ function PartDialog({ open, onOpenChange, pmScheduleAssetId, editing }: PartDial
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[480px]">
+      <DialogContent className="flex max-h-[90vh] flex-col sm:max-w-[520px]">
         <DialogHeader>
           <DialogTitle>{editing ? "Edit Part" : "Add Part"}</DialogTitle>
           <DialogDescription>
@@ -86,7 +86,7 @@ function PartDialog({ open, onOpenChange, pmScheduleAssetId, editing }: PartDial
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex flex-col gap-3">
+        <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto">
           {!editing && (
             <div className="flex flex-col gap-2">
               <Input
@@ -95,7 +95,7 @@ function PartDialog({ open, onOpenChange, pmScheduleAssetId, editing }: PartDial
                 onChange={(e) => setSearch(e.target.value)}
                 autoFocus
               />
-              <div className="max-h-48 overflow-y-auto rounded border">
+              <div className="max-h-56 overflow-y-auto rounded border">
                 {filtered.length === 0 ? (
                   <p className="p-3 text-center text-sm text-slate-400">No parts found</p>
                 ) : (
@@ -146,18 +146,19 @@ function PartDialog({ open, onOpenChange, pmScheduleAssetId, editing }: PartDial
             </div>
           </div>
 
-          <div className="flex justify-end gap-2 pt-1">
-            <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>
-              Cancel
-            </Button>
-            <Button
-              size="sm"
-              disabled={!canSave || addPart.isPending || updatePart.isPending}
-              onClick={handleSave}
-            >
-              {addPart.isPending || updatePart.isPending ? "Saving…" : editing ? "Save" : "Add Part"}
-            </Button>
-          </div>
+        </div>
+
+        <div className="flex justify-end gap-2 border-t pt-4">
+          <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button
+            size="sm"
+            disabled={!canSave || addPart.isPending || updatePart.isPending}
+            onClick={handleSave}
+          >
+            {addPart.isPending || updatePart.isPending ? "Saving…" : editing ? "Save" : "Add Part"}
+          </Button>
         </div>
       </DialogContent>
     </Dialog>
