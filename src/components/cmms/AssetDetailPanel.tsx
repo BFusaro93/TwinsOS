@@ -7,6 +7,7 @@ import { formatCurrency, formatDate } from "@/lib/utils";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { RecordDetailTabs } from "@/components/shared/RecordDetailTabs";
 import { AuditTrailTab } from "@/components/shared/AuditTrailTab";
+import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import {
   DropdownMenu,
