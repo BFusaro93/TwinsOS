@@ -59,6 +59,7 @@ export const WO_STATUS_LABELS: Record<WorkOrderStatus, string> = {
   on_hold: "On Hold",
   in_progress: "In Progress",
   done: "Done",
+  skipped: "Skipped",
 };
 
 export const WO_STATUS_COLORS: Record<WorkOrderStatus, string> = {
@@ -66,6 +67,7 @@ export const WO_STATUS_COLORS: Record<WorkOrderStatus, string> = {
   on_hold: "bg-yellow-100 text-yellow-700 border-yellow-200",
   in_progress: "bg-brand-100 text-brand-800 border-brand-200",
   done: "bg-green-100 text-green-800 border-green-200",
+  skipped: "bg-slate-100 text-slate-500 border-slate-200",
 };
 
 // ─── Work Order Priority ──────────────────────────────────────────────────────
