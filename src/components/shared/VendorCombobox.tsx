@@ -50,6 +50,7 @@ export function VendorCombobox({
       <PopoverTrigger asChild>
         <Button
           id={id}
+          type="button"
           variant="outline"
           role="combobox"
           aria-expanded={open}

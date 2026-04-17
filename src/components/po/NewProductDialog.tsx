@@ -94,6 +94,8 @@ export function NewProductDialog({ open, onOpenChange, initialData, onCreated }:
     setMinimumStock("0");
     setPartCategory("none");
     setExtraVendors([]);
+    createProduct.reset();
+    updateProduct.reset();
   }
 
   function handleSubmit(e: React.FormEvent) {
@@ -133,6 +135,7 @@ export function NewProductDialog({ open, onOpenChange, initialData, onCreated }:
   }
 
   const saving = createProduct.isPending || updateProduct.isPending;
+  const saveError = createProduct.error ?? updateProduct.error;
 
   return (
     <>
@@ -316,6 +319,12 @@ export function NewProductDialog({ open, onOpenChange, initialData, onCreated }:
               </div>
             )}
           </div>
+
+          {saveError && (
+            <p className="text-sm text-red-600">
+              {saveError instanceof Error ? saveError.message : "Failed to save. Please try again."}
+            </p>
+          )}
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={handleClose}>
