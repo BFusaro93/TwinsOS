@@ -1454,6 +1454,111 @@ export type Database = {
           },
         ]
       }
+      pm_schedule_assets: {
+        Row: {
+          id: string
+          org_id: string
+          pm_schedule_id: string
+          asset_id: string
+          asset_name: string
+          created_at: string
+          updated_at: string
+          deleted_at: string | null
+        }
+        Insert: {
+          id?: string
+          org_id?: string
+          pm_schedule_id: string
+          asset_id: string
+          asset_name?: string
+          created_at?: string
+          updated_at?: string
+          deleted_at?: string | null
+        }
+        Update: {
+          id?: string
+          org_id?: string
+          pm_schedule_id?: string
+          asset_id?: string
+          asset_name?: string
+          created_at?: string
+          updated_at?: string
+          deleted_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pm_schedule_assets_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pm_schedule_assets_pm_schedule_id_fkey"
+            columns: ["pm_schedule_id"]
+            isOneToOne: false
+            referencedRelation: "pm_schedules"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pm_schedule_asset_parts: {
+        Row: {
+          id: string
+          org_id: string
+          pm_schedule_asset_id: string
+          part_id: string | null
+          part_name: string
+          part_number: string
+          quantity: number
+          unit_cost: number
+          created_at: string
+          updated_at: string
+          deleted_at: string | null
+        }
+        Insert: {
+          id?: string
+          org_id?: string
+          pm_schedule_asset_id: string
+          part_id?: string | null
+          part_name?: string
+          part_number?: string
+          quantity?: number
+          unit_cost?: number
+          created_at?: string
+          updated_at?: string
+          deleted_at?: string | null
+        }
+        Update: {
+          id?: string
+          org_id?: string
+          pm_schedule_asset_id?: string
+          part_id?: string | null
+          part_name?: string
+          part_number?: string
+          quantity?: number
+          unit_cost?: number
+          created_at?: string
+          updated_at?: string
+          deleted_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pm_schedule_asset_parts_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pm_schedule_asset_parts_pm_schedule_asset_id_fkey"
+            columns: ["pm_schedule_asset_id"]
+            isOneToOne: false
+            referencedRelation: "pm_schedule_assets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       po_line_items: {
         Row: {
           created_at: string

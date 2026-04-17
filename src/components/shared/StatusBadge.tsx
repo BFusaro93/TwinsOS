@@ -23,6 +23,7 @@ const statusBadgeVariants = cva("border font-medium text-xs", {
       on_hold: "border-yellow-200 bg-yellow-100 text-yellow-700",
       in_progress: "border-brand-200 bg-brand-100 text-brand-800",
       done: "border-green-200 bg-green-100 text-green-800",
+      skipped: "border-slate-200 bg-slate-100 text-slate-500",
       // Priority
       low: "border-slate-200 bg-slate-100 text-slate-600",
       medium: "border-yellow-200 bg-yellow-100 text-yellow-700",

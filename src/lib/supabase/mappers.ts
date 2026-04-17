@@ -44,6 +44,8 @@ import type {
   WOPart,
   WOLaborEntry,
   WOVendorCharge,
+  PMScheduleAsset,
+  PMScheduleAssetPart,
 } from "@/types/cmms";
 import type { GoodsReceipt, GoodsReceiptLine } from "@/types/receiving";
 import type { Attachment, AttachmentRecordType } from "@/types/attachment";
@@ -446,13 +448,48 @@ export function mapPMSchedule(row: PMScheduleRow): PMSchedule {
     updatedAt: row.updated_at,
     deletedAt: row.deleted_at,
     title: row.title,
-    assetId: row.asset_id ?? "",
+    assetId: row.asset_id ?? null,
     assetName: row.asset_name,
     frequency: row.frequency as PMSchedule["frequency"],
     nextDueDate: row.next_due_date,
     lastCompletedDate: row.last_completed_date,
     isActive: row.is_active,
     description: row.description,
+  };
+}
+
+type PMScheduleAssetRow = Database["public"]["Tables"]["pm_schedule_assets"]["Row"];
+
+export function mapPMScheduleAsset(row: PMScheduleAssetRow): PMScheduleAsset {
+  return {
+    id: row.id,
+    orgId: row.org_id,
+    createdBy: "",
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    deletedAt: row.deleted_at,
+    pmScheduleId: row.pm_schedule_id,
+    assetId: row.asset_id,
+    assetName: row.asset_name,
+  };
+}
+
+type PMScheduleAssetPartRow = Database["public"]["Tables"]["pm_schedule_asset_parts"]["Row"];
+
+export function mapPMScheduleAssetPart(row: PMScheduleAssetPartRow): PMScheduleAssetPart {
+  return {
+    id: row.id,
+    orgId: row.org_id,
+    createdBy: "",
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    deletedAt: row.deleted_at,
+    pmScheduleAssetId: row.pm_schedule_asset_id,
+    partId: row.part_id,
+    partName: row.part_name,
+    partNumber: row.part_number,
+    quantity: row.quantity,
+    unitCost: row.unit_cost,
   };
 }
 

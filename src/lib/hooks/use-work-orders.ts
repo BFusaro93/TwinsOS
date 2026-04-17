@@ -179,7 +179,7 @@ export function useUpdateWorkOrder() {
   });
 }
 
-const VALID_WO_STATUSES = new Set(["open", "on_hold", "in_progress", "done"]);
+const VALID_WO_STATUSES = new Set(["open", "on_hold", "in_progress", "done", "skipped"]);
 const VALID_WO_PRIORITIES = new Set(["low", "medium", "high", "critical"]);
 
 function normaliseWOStatus(raw: string): string {
@@ -292,6 +292,25 @@ export function useBulkImportWorkOrders() {
       return count;
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["work-orders"] }),
+  });
+}
+
+/** Returns all direct children of the given parent WO id. */
+export function useSubWorkOrders(parentWorkOrderId: string | null) {
+  return useQuery({
+    queryKey: ["work-orders", "sub", parentWorkOrderId],
+    queryFn: async () => {
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from("work_orders")
+        .select("*")
+        .eq("parent_work_order_id", parentWorkOrderId!)
+        .is("deleted_at", null)
+        .order("created_at", { ascending: true });
+      if (error) throw error;
+      return data.map(mapWorkOrder);
+    },
+    enabled: !!parentWorkOrderId,
   });
 }
 

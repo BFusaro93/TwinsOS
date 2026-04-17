@@ -78,6 +78,7 @@ const WO_FLOW_STEPS = [
 const WO_STATUS_INDEX: Record<string, number> = {
   open: 0,
   on_hold: 0,
+  skipped: 0,
   in_progress: 1,
   done: 2,
 };
@@ -180,10 +181,18 @@ function DetailsTab({
   users: Array<{ id: string; name: string }>;
   woCategories: Array<{ id: string; label: string; enabled: boolean }>;
   initialEntityStatus?: AssetStatus;
-}) {
+})
+ {
   const [completing, setCompleting] = useState(false);
   const [newEntityStatus, setNewEntityStatus] = useState<AssetStatus | "no_change">("no_change");
   const [entityStatus, setEntityStatus] = useState<AssetStatus>(initialEntityStatus ?? "active");
+
+  // For parent WOs: can only complete when all sub-WOs are done or skipped
+  const isParentWO = subWorkOrders.length > 0;
+  const allSubsDoneOrSkipped =
+    !isParentWO ||
+    subWorkOrders.every((sub) => sub.status === "done" || sub.status === "skipped");
+  const isSubWO = !!parentWorkOrder;
 
   // Sync entityStatus when the linked asset/vehicle status changes in the cache
   // (e.g. updated from this same panel or from the vehicle/asset detail panel).
@@ -272,17 +281,55 @@ function DetailsTab({
             {status === "open" && (<>
               <Button size="sm" onClick={() => onStatusChange("in_progress")}>Start Work</Button>
               <Button size="sm" variant="outline" onClick={() => onStatusChange("on_hold")}>Put On Hold</Button>
+              {isSubWO && (
+                <Button size="sm" variant="outline" className="text-slate-500" onClick={() => onStatusChange("skipped")}>
+                  Skip
+                </Button>
+              )}
             </>)}
             {status === "in_progress" && (<>
-              <Button size="sm" onClick={() => setCompleting(true)}>Mark Complete</Button>
+              <Button
+                size="sm"
+                onClick={() => setCompleting(true)}
+                disabled={isParentWO && !allSubsDoneOrSkipped}
+                title={isParentWO && !allSubsDoneOrSkipped ? "All sub-work orders must be done or skipped first" : undefined}
+              >
+                Mark Complete
+              </Button>
               <Button size="sm" variant="outline" onClick={() => onStatusChange("on_hold")}>Put On Hold</Button>
+              {isSubWO && (
+                <Button size="sm" variant="outline" className="text-slate-500" onClick={() => onStatusChange("skipped")}>
+                  Skip
+                </Button>
+              )}
             </>)}
             {status === "on_hold" && (<>
               <Button size="sm" onClick={() => onStatusChange("in_progress")}>Resume Work</Button>
-              <Button size="sm" variant="outline" onClick={() => setCompleting(true)}>Mark Complete</Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setCompleting(true)}
+                disabled={isParentWO && !allSubsDoneOrSkipped}
+                title={isParentWO && !allSubsDoneOrSkipped ? "All sub-work orders must be done or skipped first" : undefined}
+              >
+                Mark Complete
+              </Button>
+              {isSubWO && (
+                <Button size="sm" variant="outline" className="text-slate-500" onClick={() => onStatusChange("skipped")}>
+                  Skip
+                </Button>
+              )}
             </>)}
             {status === "done" && (
               <Button size="sm" variant="outline" onClick={() => onStatusChange("open")}>Reopen</Button>
+            )}
+            {status === "skipped" && (
+              <Button size="sm" variant="outline" onClick={() => onStatusChange("open")}>Reopen</Button>
+            )}
+            {isParentWO && !allSubsDoneOrSkipped && status !== "done" && (
+              <p className="mt-1 w-full text-xs text-amber-600">
+                {subWorkOrders.filter((s) => s.status !== "done" && s.status !== "skipped").length} sub-work order(s) still pending
+              </p>
             )}
           </div>
         )}

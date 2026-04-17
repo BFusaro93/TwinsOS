@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
@@ -24,83 +25,169 @@ import { useAssets } from "@/lib/hooks/use-assets";
 import { useVehicles } from "@/lib/hooks/use-vehicles";
 import { EntityCombobox } from "@/components/shared/EntityCombobox";
 import { useCreatePMSchedule, useUpdatePMSchedule } from "@/lib/hooks/use-pm-schedules";
+import { useAddPMScheduleAsset, usePMScheduleAssets, useRemovePMScheduleAsset } from "@/lib/hooks/use-pm-schedule-assets";
+import { X } from "lucide-react";
 import type { PMSchedule } from "@/types";
 
 interface NewPMScheduleDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   initialData?: PMSchedule | null;
+  onCreated?: (id: string) => void;
 }
 
-export function NewPMScheduleDialog({ open, onOpenChange, initialData }: NewPMScheduleDialogProps) {
+interface SelectedAsset {
+  key: string;   // "asset:<id>" | "vehicle:<id>"
+  id: string;
+  name: string;
+}
+
+export function NewPMScheduleDialog({ open, onOpenChange, initialData, onCreated }: NewPMScheduleDialogProps) {
   const isEditing = !!initialData;
   const [title, setTitle] = useState("");
-  // "asset:<id>" | "vehicle:<id>" | ""
-  const [entityKey, setEntityKey] = useState("");
   const [frequency, setFrequency] = useState("");
   const [nextDueDate, setNextDueDate] = useState("");
   const [description, setDescription] = useState("");
 
+  // Multi-asset selection
+  const [selectedAssets, setSelectedAssets] = useState<SelectedAsset[]>([]);
+  const [pickerKey, setPickerKey] = useState("");   // currently-selected value in the combobox
+
   const { data: assets } = useAssets();
   const { data: vehicles } = useVehicles();
+
+  // When editing, load existing linked assets from the join table
+  const { data: existingAssets } = usePMScheduleAssets(initialData?.id ?? "");
+
   const createPMSchedule = useCreatePMSchedule();
   const updatePMSchedule = useUpdatePMSchedule();
+  const addAsset = useAddPMScheduleAsset();
+  const removeAsset = useRemovePMScheduleAsset();
 
   useEffect(() => {
     if (open && initialData) {
       setTitle(initialData.title);
-      // PM schedules only stored assetId — default to asset prefix when editing
-      setEntityKey(initialData.assetId ? `asset:${initialData.assetId}` : "");
       setFrequency(initialData.frequency);
       setNextDueDate(initialData.nextDueDate ?? "");
       setDescription(initialData.description ?? "");
     }
+    if (!open) {
+      // Reset on close
+      setTitle("");
+      setFrequency("");
+      setNextDueDate("");
+      setDescription("");
+      setSelectedAssets([]);
+      setPickerKey("");
+    }
   }, [open, initialData]);
 
-  const isValid = title.trim() && entityKey && entityKey !== "none" && frequency && nextDueDate;
+  // Populate selectedAssets from join table when editing
+  useEffect(() => {
+    if (isEditing && existingAssets && existingAssets.length > 0) {
+      setSelectedAssets(
+        existingAssets.map((ea) => ({
+          key: `asset:${ea.assetId}`,
+          id: ea.assetId,
+          name: ea.assetName,
+        }))
+      );
+    }
+  }, [isEditing, existingAssets]);
 
-  function handleClose() {
-    onOpenChange(false);
-    setTitle("");
-    setEntityKey("");
-    setFrequency("");
-    setNextDueDate("");
-    setDescription("");
+  const isValid = title.trim() && frequency && nextDueDate && selectedAssets.length > 0;
+
+  function resolveEntityName(key: string): string {
+    const [, id] = key.split(":");
+    return (
+      (assets ?? []).find((a) => a.id === id)?.name ??
+      (vehicles ?? []).find((v) => v.id === id)?.name ??
+      ""
+    );
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  function handleAddAsset(key: string) {
+    if (!key || key === "none") return;
+    const [, id] = key.split(":");
+    if (selectedAssets.some((a) => a.id === id)) return; // already added
+    const name = resolveEntityName(key);
+    setSelectedAssets((prev) => [...prev, { key, id, name }]);
+    setPickerKey(""); // reset picker
+  }
+
+  function handleRemoveAsset(id: string) {
+    setSelectedAssets((prev) => prev.filter((a) => a.id !== id));
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!isValid) return;
-    const [entityType, entityId] = entityKey.split(":");
-    const asset = (assets ?? []).find((a) => a.id === entityId);
-    const vehicle = (vehicles ?? []).find((v) => v.id === entityId);
-    const entityName = asset?.name ?? vehicle?.name ?? "";
+
     const payload = {
       title,
-      assetId: entityId,
-      assetName: entityName,
+      assetId: null,
+      assetName: selectedAssets.map((a) => a.name).join(", "),
       frequency: frequency as PMSchedule["frequency"],
       nextDueDate,
       lastCompletedDate: null,
       isActive: true,
       description: description || null,
     };
-    void entityType; // used to resolve name above; PM schedule only stores assetId
+
     if (isEditing && initialData) {
-      updatePMSchedule.mutate({ id: initialData.id, ...payload }, { onSuccess: () => handleClose() });
+      // Update schedule metadata
+      await updatePMSchedule.mutateAsync({ id: initialData.id, ...payload });
+
+      // Diff assets: remove those that were deselected, add new ones
+      const existingIds = new Set((existingAssets ?? []).map((ea) => ea.assetId));
+      const selectedIds = new Set(selectedAssets.map((a) => a.id));
+
+      // Remove deselected
+      for (const ea of existingAssets ?? []) {
+        if (!selectedIds.has(ea.assetId)) {
+          await removeAsset.mutateAsync({ id: ea.id, pmScheduleId: initialData.id });
+        }
+      }
+      // Add new
+      for (const sa of selectedAssets) {
+        if (!existingIds.has(sa.id)) {
+          await addAsset.mutateAsync({
+            pmScheduleId: initialData.id,
+            assetId: sa.id,
+            assetName: sa.name,
+          });
+        }
+      }
+      onOpenChange(false);
     } else {
-      createPMSchedule.mutate(payload, { onSuccess: () => handleClose() });
+      // Create schedule, then add all assets
+      const created = await createPMSchedule.mutateAsync(payload);
+      for (const sa of selectedAssets) {
+        await addAsset.mutateAsync({
+          pmScheduleId: created.id,
+          assetId: sa.id,
+          assetName: sa.name,
+        });
+      }
+      onCreated?.(created.id);
+      onOpenChange(false);
     }
   }
-  const saving = createPMSchedule.isPending || updatePMSchedule.isPending;
+
+  const saving =
+    createPMSchedule.isPending ||
+    updatePMSchedule.isPending ||
+    addAsset.isPending ||
+    removeAsset.isPending;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[560px]">
+      <DialogContent className="sm:max-w-[580px]">
         <DialogHeader>
           <DialogTitle>{isEditing ? "Edit PM Schedule" : "New PM Schedule"}</DialogTitle>
           <DialogDescription>
-            Set up a recurring preventive maintenance schedule for an asset or vehicle.
+            Set up a recurring preventive maintenance schedule. Add all assets or vehicles that
+            receive the same service — each one gets its own sub-work order when generated.
           </DialogDescription>
         </DialogHeader>
 
@@ -113,25 +200,55 @@ export function NewPMScheduleDialog({ open, onOpenChange, initialData }: NewPMSc
               </Label>
               <Input
                 id="pm-title"
-                placeholder="e.g. Monthly Oil Change"
+                placeholder="e.g. Weekly Mower Service"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
               />
             </div>
 
-            {/* Asset / Vehicle */}
+            {/* Multi-Asset Selector */}
             <div className="grid gap-1.5">
               <Label>
-                Asset / Vehicle <span className="text-red-500">*</span>
+                Assets / Vehicles <span className="text-red-500">*</span>
               </Label>
+
+              {/* Selected asset badges */}
+              {selectedAssets.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {selectedAssets.map((a) => (
+                    <Badge
+                      key={a.id}
+                      variant="secondary"
+                      className="flex items-center gap-1 pr-1 text-xs"
+                    >
+                      {a.name}
+                      <button
+                        type="button"
+                        className="ml-0.5 rounded hover:bg-slate-300"
+                        onClick={() => handleRemoveAsset(a.id)}
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </Badge>
+                  ))}
+                </div>
+              )}
+
+              {/* Picker — resets to placeholder after each selection */}
               <EntityCombobox
                 assets={assets ?? []}
                 vehicles={vehicles ?? []}
-                value={entityKey || "none"}
-                onValueChange={(val) => setEntityKey(val === "none" ? "" : val)}
-                noneLabel="Select asset or vehicle"
-                required
+                value={pickerKey || "none"}
+                onValueChange={(val) => {
+                  if (val !== "none") handleAddAsset(val);
+                }}
+                noneLabel={selectedAssets.length > 0 ? "Add another asset…" : "Select asset or vehicle"}
               />
+              {selectedAssets.length === 0 && (
+                <p className="text-xs text-slate-500">
+                  Select one or more assets. Each gets its own sub-work order when WOs are generated.
+                </p>
+              )}
             </div>
 
             {/* Frequency + Next Due Date */}
@@ -173,6 +290,7 @@ export function NewPMScheduleDialog({ open, onOpenChange, initialData }: NewPMSc
               <Textarea
                 id="pm-description"
                 rows={3}
+                placeholder="Describe the maintenance tasks for all assets in this schedule…"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
               />
@@ -180,11 +298,11 @@ export function NewPMScheduleDialog({ open, onOpenChange, initialData }: NewPMSc
           </div>
 
           <DialogFooter className="mt-6">
-            <Button type="button" variant="outline" onClick={handleClose}>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
             <Button type="submit" disabled={!isValid || saving}>
-              {saving ? "Saving..." : isEditing ? "Save Changes" : "Create Schedule"}
+              {saving ? "Saving…" : isEditing ? "Save Changes" : "Create Schedule"}
             </Button>
           </DialogFooter>
         </form>

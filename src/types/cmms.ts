@@ -1,7 +1,7 @@
 import { BaseRecord } from "./common";
 import type { CostLayer } from "@/lib/cost-methods";
 
-export type WorkOrderStatus = "open" | "on_hold" | "in_progress" | "done";
+export type WorkOrderStatus = "open" | "on_hold" | "in_progress" | "done" | "skipped";
 export type WorkOrderPriority = "low" | "medium" | "high" | "critical";
 
 export interface WorkOrder extends BaseRecord {
@@ -132,9 +132,27 @@ export interface Part extends BaseRecord {
   costLayers: CostLayer[];
 }
 
+/** A single asset/vehicle entry within a PM schedule. */
+export interface PMScheduleAsset extends BaseRecord {
+  pmScheduleId: string;
+  assetId: string;
+  assetName: string;
+}
+
+/** A parts template entry scoped to one asset within a PM schedule. */
+export interface PMScheduleAssetPart extends BaseRecord {
+  pmScheduleAssetId: string;
+  partId: string | null;
+  partName: string;
+  partNumber: string;
+  quantity: number;
+  unitCost: number; // cents
+}
+
 export interface PMSchedule extends BaseRecord {
   title: string;
-  assetId: string;
+  /** Nullable — multi-asset schedules use the pm_schedule_assets join table. */
+  assetId: string | null;
   assetName: string;
   frequency: "daily" | "weekly" | "monthly" | "quarterly" | "annual";
   nextDueDate: string;
