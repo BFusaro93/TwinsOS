@@ -64,7 +64,7 @@ export function AttachmentsSection({ recordType, recordId }: AttachmentsSectionP
 
       {upload.isError && (
         <p className="text-xs text-red-500">
-          Upload failed — make sure the &quot;attachments&quot; storage bucket exists in Supabase.
+          Upload failed — {upload.error instanceof Error ? upload.error.message : String(upload.error)}
         </p>
       )}
 
