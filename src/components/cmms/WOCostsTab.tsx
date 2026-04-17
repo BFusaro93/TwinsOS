@@ -263,7 +263,18 @@ function PartsSection({ workOrderId }: { workOrderId: string }) {
                       <div className="flex-1">
                         <p className="text-sm font-medium text-slate-800">{part.name}</p>
                         <p className="text-xs text-slate-500">
-                          {part.partNumber} · {formatCurrency(part.unitCost)} each
+                          {part.partNumber && <>{part.partNumber} · </>}
+                          {formatCurrency(part.unitCost)} each
+                          {" · "}
+                          <span className={
+                            part.quantityOnHand === 0
+                              ? "font-medium text-red-500"
+                              : part.minimumStock !== null && part.quantityOnHand <= part.minimumStock
+                                ? "font-medium text-amber-500"
+                                : "text-slate-400"
+                          }>
+                            {part.quantityOnHand} in stock
+                          </span>
                         </p>
                       </div>
                       <div className="flex items-center gap-2">
