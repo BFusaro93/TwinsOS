@@ -16,6 +16,7 @@ import { useCurrentUserStore } from "@/stores";
 import {
   useActualPeriods,
   useBudgetPeriods,
+  useYtdActualPeriods,
   useUpsertFinancialPeriod,
   useDeleteFinancialPeriod,
   totalOpex,
@@ -368,22 +369,27 @@ function EntryForm({ initial, defaultRecordType = "actual", onCancel }: EntryFor
         </div>
         <div>
           <label className="mb-1 block text-xs font-medium text-slate-600">Record Type</label>
-          <div className="flex gap-2">
-            {(["actual", "budget"] as RecordType[]).map((rt) => (
+          <div className="flex gap-2 flex-wrap">
+            {(["actual", "budget", "ytd_actual"] as RecordType[]).map((rt) => (
               <button
                 key={rt}
                 type="button"
                 onClick={() => setRecordType(rt)}
-                className={`rounded-md px-3 py-2 text-sm font-medium capitalize transition-colors ${
+                className={`rounded-md px-3 py-2 text-sm font-medium transition-colors ${
                   recordType === rt
                     ? "bg-brand-500 text-white"
                     : "border border-slate-300 text-slate-600 hover:bg-slate-50"
                 }`}
               >
-                {rt}
+                {rt === "ytd_actual" ? "YTD Actual" : rt.charAt(0).toUpperCase() + rt.slice(1)}
               </button>
             ))}
           </div>
+          {recordType === "ytd_actual" && (
+            <p className="mt-1.5 text-[11px] text-amber-600">
+              YTD Actual — enter the cumulative year-to-date column from your QBO report. The period month should be the last month included (e.g., March for Jan–Mar YTD). These figures will be used directly in the YTD tab instead of summing monthly actuals.
+            </p>
+          )}
         </div>
       </div>
 
@@ -790,7 +796,7 @@ function PlTab({ records }: { records: FinancialPeriodRecord[] }) {
 
 // ── YTD Tab ───────────────────────────────────────────────────────────────────
 
-function YtdTab({ actuals, budgets }: { actuals: FinancialPeriodRecord[]; budgets: FinancialPeriodRecord[] }) {
+function YtdTab({ actuals, budgets, ytdActuals }: { actuals: FinancialPeriodRecord[]; budgets: FinancialPeriodRecord[]; ytdActuals: FinancialPeriodRecord[] }) {
   // Get available years
   const years = useMemo(() => {
     const ys = [...new Set(actuals.map((r) => yearOf(r.periodMonth)))].sort((a, b) => b - a);
@@ -801,9 +807,22 @@ function YtdTab({ actuals, budgets }: { actuals: FinancialPeriodRecord[]; budget
 
   const ytdRecords = actuals.filter((r) => yearOf(r.periodMonth) === year);
   const budgetYtdRecords = budgets.filter((r) => yearOf(r.periodMonth) === year);
-  const ytd = sumData(ytdRecords);
-  const budgetYtd = sumData(budgetYtdRecords);
   const hasBudget = budgetYtdRecords.length > 0;
+
+  // Prefer QBO YTD record (most recent for the year) over summing monthlies.
+  // Reclassifications between months can cause sumData() to drift from the true
+  // QBO YTD column — the ytd_actual record stores the QBO figure directly.
+  const ytdActualRecord = useMemo(
+    () =>
+      ytdActuals
+        .filter((r) => yearOf(r.periodMonth) === year)
+        .sort((a, b) => b.periodMonth.localeCompare(a.periodMonth))[0],
+    [ytdActuals, year]
+  );
+  const ytd = ytdActualRecord ? ytdActualRecord.data : sumData(ytdRecords);
+  const usingQboYtd = !!ytdActualRecord;
+
+  const budgetYtd = sumData(budgetYtdRecords);
 
   const ytdNoi = computeNOI(ytd);
   const ytdEbitda = computeEbitda(ytd);
@@ -838,6 +857,15 @@ function YtdTab({ actuals, budgets }: { actuals: FinancialPeriodRecord[]; budget
           {years.map((y) => <option key={y} value={y}>{y} YTD</option>)}
         </select>
         <span className="text-xs text-slate-400">{ytdRecords.length} month{ytdRecords.length !== 1 ? "s" : ""} on record</span>
+        {usingQboYtd ? (
+          <span className="ml-2 rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-medium text-emerald-700">
+            ✓ QBO YTD column · {monthLabelLong(ytdActualRecord!.periodMonth)}
+          </span>
+        ) : (
+          <span className="ml-2 rounded-full bg-amber-50 px-2.5 py-0.5 text-[11px] font-medium text-amber-700">
+            ⚠ Summing monthly actuals — enter a YTD Actual record for exact QBO figures
+          </span>
+        )}
       </div>
 
       {/* YTD KPI cards */}
@@ -1214,15 +1242,15 @@ function BudgetTab({ actuals, budgets }: { actuals: FinancialPeriodRecord[]; bud
 
 // ── Data Entry Tab ────────────────────────────────────────────────────────────
 
-function EntryTab({ actuals, budgets }: { actuals: FinancialPeriodRecord[]; budgets: FinancialPeriodRecord[] }) {
+function EntryTab({ actuals, budgets, ytdActuals }: { actuals: FinancialPeriodRecord[]; budgets: FinancialPeriodRecord[]; ytdActuals: FinancialPeriodRecord[] }) {
   const [adding, setAdding] = useState(false);
   const [addingType, setAddingType] = useState<RecordType>("actual");
   const [editing, setEditing] = useState<FinancialPeriodRecord | null>(null);
   const deletePeriod = useDeleteFinancialPeriod();
 
   const all = useMemo(
-    () => [...actuals, ...budgets].sort((a, b) => b.periodMonth.localeCompare(a.periodMonth)),
-    [actuals, budgets]
+    () => [...actuals, ...budgets, ...ytdActuals].sort((a, b) => b.periodMonth.localeCompare(a.periodMonth)),
+    [actuals, budgets, ytdActuals]
   );
 
   if (editing) {
@@ -1240,7 +1268,7 @@ function EntryTab({ actuals, budgets }: { actuals: FinancialPeriodRecord[]; budg
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-end gap-2">
+      <div className="flex justify-end gap-2 flex-wrap">
         <button
           type="button"
           onClick={() => { setAddingType("budget"); setAdding(true); }}
@@ -1248,6 +1276,14 @@ function EntryTab({ actuals, budgets }: { actuals: FinancialPeriodRecord[]; budg
         >
           <PlusCircle className="h-4 w-4" />
           Add Budget
+        </button>
+        <button
+          type="button"
+          onClick={() => { setAddingType("ytd_actual"); setAdding(true); }}
+          className="flex items-center gap-2 rounded-md border border-amber-400 px-4 py-2 text-sm font-medium text-amber-700 hover:bg-amber-50"
+        >
+          <PlusCircle className="h-4 w-4" />
+          Add YTD Actual
         </button>
         <button
           type="button"
@@ -1290,9 +1326,11 @@ function EntryTab({ actuals, budgets }: { actuals: FinancialPeriodRecord[]; budg
                     <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
                       r.recordType === "actual"
                         ? "bg-emerald-50 text-emerald-700"
-                        : "bg-blue-50 text-blue-700"
+                        : r.recordType === "ytd_actual"
+                          ? "bg-amber-50 text-amber-700"
+                          : "bg-blue-50 text-blue-700"
                     }`}>
-                      {r.recordType}
+                      {r.recordType === "ytd_actual" ? "YTD Actual" : r.recordType}
                     </span>
                   </td>
                   <td className="px-4 py-2.5 text-right tabular-nums text-slate-600">{fmt(r.data.revenue)}</td>
@@ -1345,6 +1383,7 @@ export function FinancialDashboard() {
   // all renders; non-admins see the access-restricted screen before any data is used.
   const { data: actuals = [], isLoading: loadingActuals } = useActualPeriods();
   const { data: budgets = [], isLoading: loadingBudgets } = useBudgetPeriods();
+  const { data: ytdActuals = [], isLoading: loadingYtdActuals } = useYtdActualPeriods();
 
   if (currentUser.role !== "admin") {
     return (
@@ -1356,7 +1395,7 @@ export function FinancialDashboard() {
     );
   }
 
-  const isLoading = loadingActuals || loadingBudgets;
+  const isLoading = loadingActuals || loadingBudgets || loadingYtdActuals;
 
   const latestMonth = actuals[actuals.length - 1];
   const latestLabel = latestMonth ? monthLabelLong(latestMonth.periodMonth) : null;
@@ -1399,10 +1438,10 @@ export function FinancialDashboard() {
         <>
           {tab === "overview" && <OverviewTab actuals={actuals} budgets={budgets} />}
           {tab === "pl" && <PlTab records={actuals} />}
-          {tab === "ytd" && <YtdTab actuals={actuals} budgets={budgets} />}
+          {tab === "ytd" && <YtdTab actuals={actuals} budgets={budgets} ytdActuals={ytdActuals} />}
           {tab === "cashflow" && <CashFlowTab records={actuals} />}
           {tab === "budget" && <BudgetTab actuals={actuals} budgets={budgets} />}
-          {tab === "entry" && <EntryTab actuals={actuals} budgets={budgets} />}
+          {tab === "entry" && <EntryTab actuals={actuals} budgets={budgets} ytdActuals={ytdActuals} />}
         </>
       )}
     </div>
