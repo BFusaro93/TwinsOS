@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/client";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
-export type RecordType = "actual" | "budget";
+export type RecordType = "actual" | "budget" | "ytd_actual";
 
 export interface FinancialPeriodRecord {
   id: string;
@@ -160,6 +160,10 @@ export function useActualPeriods() {
 
 export function useBudgetPeriods() {
   return useFinancialPeriods("budget");
+}
+
+export function useYtdActualPeriods() {
+  return useFinancialPeriods("ytd_actual");
 }
 
 export function useUpsertFinancialPeriod() {
