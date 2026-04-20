@@ -147,13 +147,21 @@ export function ReceiveGoodsDialog({
       // Bare product ID (strip prefix if present)
       const rawId = poLineItem.productItemId?.replace(/^product:/, "") ?? "";
 
-      const matchedProduct = products.find(
-        (p) => p.id === rawId || p.partNumber === line.partNumber
-      );
+      // Match product with strict priority:
+      // 1. By UUID (most reliable — set when items are added via the app)
+      // 2. By part number (CSV-imported items that have a part #)
+      // 3. By exact name (last resort for items with no part # and no productItemId)
+      // Never fall back to empty-string part number matching — it would match the
+      // wrong product whenever two items both lack a part number.
+      const matchedProduct =
+        (rawId ? products.find((p) => p.id === rawId) : null) ??
+        (line.partNumber ? products.find((p) => p.partNumber === line.partNumber) : null) ??
+        (line.productItemName ? products.find((p) => p.name === line.productItemName) : null);
 
       if (matchedProduct?.category === "maintenance_part") {
         // Also update the Parts inventory record if one is linked
-        const linkedPart = parts.find((pt) => pt.productItemId === matchedProduct.id || pt.partNumber === line.partNumber);
+        const linkedPart = parts.find((pt) => pt.productItemId === matchedProduct.id) ??
+          (line.partNumber ? parts.find((pt) => pt.partNumber === line.partNumber) : null);
         if (linkedPart) {
           receivePartLayer({
             partId: linkedPart.id,
