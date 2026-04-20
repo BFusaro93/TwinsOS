@@ -99,9 +99,10 @@ function DetailsTab({
   const { mutate: updateLineItemDB } = useUpdatePOLineItem();
   const { mutate: deleteLineItemDB } = useDeletePOLineItem();
 
-  /** Compute updated PO totals from a new items array */
+  /** Compute updated PO totals from a new items array. All values are rounded to
+   *  whole cents so they satisfy the integer columns in purchase_orders. */
   function totals(newItems: LineItem[]) {
-    const subtotal = newItems.reduce((s, li) => s + li.quantity * li.unitCost, 0);
+    const subtotal = Math.round(newItems.reduce((s, li) => s + li.quantity * li.unitCost, 0));
     const salesTax = Math.round(subtotal * po.taxRatePercent / 100);
     const grandTotal = subtotal + salesTax + po.shippingCost;
     return { subtotal, salesTax, grandTotal };

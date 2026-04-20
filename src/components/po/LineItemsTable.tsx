@@ -105,7 +105,7 @@ export function LineItemsTable({
       partNumber: product.partNumber ?? "",
       quantity,
       unitCost,
-      totalCost: quantity * unitCost,
+      totalCost: Math.round(quantity * unitCost),
       projectId,
       notes: null,
     };
@@ -136,11 +136,11 @@ export function LineItemsTable({
     const quantity = Math.max(0.01, parseFloat(editForm.quantity) || 0.01);
     const unitCost = Math.round(parseFloat(editForm.unitCost) * 100) || 0;
     const projectId = editForm.projectId === "none" ? null : editForm.projectId;
-    const next = items.map((li) =>
-      li.id === editingId
-        ? { ...li, quantity, unitCost: unitCost || li.unitCost, totalCost: quantity * (unitCost || li.unitCost), projectId }
-        : li
-    );
+    const next = items.map((li) => {
+      if (li.id !== editingId) return li;
+      const cost = unitCost || li.unitCost;
+      return { ...li, quantity, unitCost: cost, totalCost: Math.round(quantity * cost), projectId };
+    });
     applyChange(next);
     const edited = next.find((li) => li.id === editingId);
     if (edited) onItemEdited?.(edited, next);
