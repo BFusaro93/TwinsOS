@@ -130,7 +130,8 @@ export default function DashboardPage() {
     purchaseOrders
       .filter((po) => !["canceled", "draft"].includes(po.status))
       .forEach((po) => {
-        const mk = po.createdAt.slice(0, 7); // "YYYY-MM"
+        // Use poDate (actual PO date) if set, fall back to createdAt — matches Spend MTD logic
+        const mk = (po.poDate ?? po.createdAt).slice(0, 7); // "YYYY-MM"
         if (mk in spendByMonth) spendByMonth[mk] += po.grandTotal;
       });
 

@@ -44,7 +44,7 @@ export async function updateSession(request: NextRequest) {
     pathname.startsWith("/reset-password") || // invite & password-reset links
     pathname.startsWith("/confirm") || // email confirmation / auth token handler
     pathname.startsWith("/request") || // public maintenance request portal
-    pathname.startsWith("/api/orgs/create") || // public org creation endpoint
+    pathname.startsWith("/api/") || // all API routes handle their own auth
     pathname === "/";
 
   if (!user && !isPublicRoute) {
