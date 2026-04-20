@@ -4,6 +4,21 @@ import { createClient } from "@/lib/supabase/client";
 import { mapPurchaseOrder } from "@/lib/supabase/mappers";
 import type { PurchaseOrder, POStatus, LineItem } from "@/types";
 
+/** Safely convert any thrown value (including Supabase PostgrestError) to a readable string. */
+function serializeError(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  if (typeof err === "object" && err !== null) {
+    const e = err as Record<string, unknown>;
+    const parts: string[] = [];
+    if (e.message) parts.push(String(e.message));
+    if (e.code)    parts.push(`code=${e.code}`);
+    if (e.details) parts.push(`details=${e.details}`);
+    if (e.hint)    parts.push(`hint=${e.hint}`);
+    return parts.length ? parts.join(" | ") : JSON.stringify(err);
+  }
+  return String(err);
+}
+
 // Helper: immediately update a PO in every cached list
 export function patchPOCache(queryClient: ReturnType<typeof useQueryClient>, id: string, patch: Partial<PurchaseOrder>) {
   queryClient.setQueryData<PurchaseOrder[]>(["purchase-orders"], (old) =>
@@ -590,8 +605,7 @@ export function useAddPOLineItem() {
       if (poErr) throw poErr;
     },
     onError: (err) => {
-      const msg = err instanceof Error ? err.message : String(err);
-      toast.error(`Failed to add line item: ${msg}`);
+      toast.error(`Failed to add line item: ${serializeError(err)}`);
     },
     onSettled: () => queryClient.invalidateQueries({ queryKey: ["purchase-orders"] }),
   });
@@ -675,8 +689,8 @@ export function useUpdatePOLineItem() {
       if (context?.previous) {
         queryClient.setQueryData<PurchaseOrder[]>(["purchase-orders"], context.previous);
       }
-      // Surface the error so the user knows the save failed
-      const msg = err instanceof Error ? err.message : String(err);
+      // Surface the error — Supabase throws PostgrestError objects (not Error instances)
+      const msg = serializeError(err);
       toast.error(`Failed to save line item: ${msg}`);
     },
     // Always refetch from DB after the mutation settles to confirm the true state.
