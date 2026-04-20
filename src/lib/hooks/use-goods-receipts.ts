@@ -4,6 +4,14 @@ import { createClient } from "@/lib/supabase/client";
 import { mapGoodsReceipt } from "@/lib/supabase/mappers";
 import type { GoodsReceipt, GoodsReceiptLine } from "@/types/receiving";
 
+function errMsg(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  if (typeof err === "object" && err !== null && "message" in err) {
+    return String((err as { message: unknown }).message);
+  }
+  return String(err);
+}
+
 export type GoodsReceiptLineUpdate = {
   id: string;
   productItemName: string;
@@ -102,9 +110,7 @@ export function useCreateGoodsReceipt() {
       queryClient.invalidateQueries({ queryKey: ["audit-log"] });
     },
     onError: (err) => {
-      const e = err as Record<string, unknown>;
-      const msg = (e?.message as string) ?? JSON.stringify(err);
-      toast.error(`Failed to record receipt: ${msg}`);
+      toast.error(`Failed to record receipt: ${errMsg(err)}`);
     },
   });
 }
@@ -207,9 +213,7 @@ export function useUpdateGoodsReceipt() {
       queryClient.invalidateQueries({ queryKey: ["audit-log", "receiving", id] });
     },
     onError: (err) => {
-      const e = err as Record<string, unknown>;
-      const msg = (e?.message as string) ?? JSON.stringify(err);
-      toast.error(`Failed to update receipt: ${msg}`);
+      toast.error(`Failed to update receipt: ${errMsg(err)}`);
     },
   });
 }
