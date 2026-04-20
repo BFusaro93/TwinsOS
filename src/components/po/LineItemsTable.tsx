@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Pencil, Trash2, Package } from "lucide-react";
+import { Pencil, Trash2, Package, Plus } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -58,6 +58,37 @@ export function LineItemsTable({
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({ quantity: "", unitCost: "", projectId: "none" });
+
+  // Add line item dialog state
+  const [addOpen, setAddOpen] = useState(false);
+  const [addForm, setAddForm] = useState({ productId: "", quantity: "1", unitCost: "", projectId: "none" });
+
+  function openAdd() {
+    setAddForm({ productId: "", quantity: "1", unitCost: "", projectId: "none" });
+    setAddOpen(true);
+  }
+
+  function saveAdd() {
+    const product = products.find((p) => p.id === addForm.productId);
+    if (!product) return;
+    const quantity = Math.max(1, parseInt(addForm.quantity, 10) || 1);
+    const unitCost = Math.round(parseFloat(addForm.unitCost) * 100) || 0;
+    const projectId = addForm.projectId === "none" ? null : addForm.projectId;
+    const newItem: LineItem = {
+      id: crypto.randomUUID(),
+      productItemId: product.id,
+      partId: null,
+      productItemName: product.name,
+      partNumber: product.partNumber ?? "",
+      quantity,
+      unitCost,
+      totalCost: quantity * unitCost,
+      projectId,
+      notes: null,
+    };
+    applyChange([...items, newItem]);
+    setAddOpen(false);
+  }
 
   const editingItem = editingId ? items.find((li) => li.id === editingId) ?? null : null;
 
@@ -197,7 +228,17 @@ export function LineItemsTable({
             })}
           </TableBody>
         </Table>
-        <div className="flex justify-end border-t bg-slate-50 px-4 py-2">
+        <div className="flex items-center justify-between border-t bg-slate-50 px-4 py-2">
+          {editable ? (
+            <button
+              type="button"
+              onClick={openAdd}
+              className="flex items-center gap-1.5 rounded px-2 py-1 text-xs font-medium text-brand-600 hover:bg-brand-50 hover:text-brand-700 transition-colors"
+            >
+              <Plus className="h-3 w-3" />
+              Add Line Item
+            </button>
+          ) : <span />}
           <span className="text-sm font-semibold text-slate-900">
             Total: {formatCurrency(grandTotal)}
           </span>
@@ -257,6 +298,90 @@ export function LineItemsTable({
                 </div>
               )}
               <Button onClick={saveEdit} className="mt-1">Save Changes</Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* Add Line Item dialog */}
+      {editable && (
+        <Dialog open={addOpen} onOpenChange={(o) => { if (!o) setAddOpen(false); }}>
+          <DialogContent className="sm:max-w-sm">
+            <DialogHeader>
+              <DialogTitle>Add Line Item</DialogTitle>
+              <DialogDescription>Select a product and enter quantity and unit cost.</DialogDescription>
+            </DialogHeader>
+            <div className="flex flex-col gap-3">
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-medium text-slate-600">Product</label>
+                <Select
+                  value={addForm.productId}
+                  onValueChange={(val) => {
+                    const product = products.find((p) => p.id === val);
+                    setAddForm((f) => ({
+                      ...f,
+                      productId: val,
+                        unitCost: product?.unitCost != null
+                        ? (product.unitCost / 100).toFixed(2)
+                        : f.unitCost,
+                    }));
+                  }}
+                >
+                  <SelectTrigger className="text-sm">
+                    <SelectValue placeholder="Select product…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {products.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>
+                        {p.name}{p.partNumber ? ` — ${p.partNumber}` : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex gap-3">
+                <div className="flex flex-1 flex-col gap-1">
+                  <label className="text-xs font-medium text-slate-600">Quantity</label>
+                  <Input
+                    type="number"
+                    min={1}
+                    value={addForm.quantity}
+                    onChange={(e) => setAddForm((f) => ({ ...f, quantity: e.target.value }))}
+                  />
+                </div>
+                <div className="flex flex-1 flex-col gap-1">
+                  <label className="text-xs font-medium text-slate-600">Unit Cost ($)</label>
+                  <Input
+                    type="number"
+                    min={0}
+                    step={0.01}
+                    value={addForm.unitCost}
+                    onChange={(e) => setAddForm((f) => ({ ...f, unitCost: e.target.value }))}
+                  />
+                </div>
+              </div>
+              {showProject && projects.length > 0 && (
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-medium text-slate-600">Project</label>
+                  <Select
+                    value={addForm.projectId}
+                    onValueChange={(val) => setAddForm((f) => ({ ...f, projectId: val }))}
+                  >
+                    <SelectTrigger className="text-sm">
+                      <SelectValue placeholder="No project" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">No project</SelectItem>
+                      {projects.map((p) => (
+                        <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+              <Button onClick={saveAdd} disabled={!addForm.productId} className="mt-1">
+                Add to PO
+              </Button>
             </div>
           </DialogContent>
         </Dialog>

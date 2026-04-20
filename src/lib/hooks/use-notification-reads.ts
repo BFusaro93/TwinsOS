@@ -70,9 +70,15 @@ export function useNotificationReads(activeNotifIds: string[]) {
     return () => { cancelled = true; };
   }, []);
 
-  // Prune stale IDs monthly to keep localStorage + DB clean
+  // Prune stale IDs monthly to keep localStorage + DB clean.
+  // IMPORTANT: wait for both dbLoaded AND activeNotifIds to be populated.
+  // If we prune while activeNotifIds is still [] (data queries still loading),
+  // we'd wipe every read ID from localStorage and Supabase — causing all
+  // notifications to appear unread on every new session.
   useEffect(() => {
     if (!dbLoaded) return;
+    if (activeNotifIds.length === 0) return; // notification data still loading — skip
+
     const lastPruned = localStorage.getItem(LS_PRUNE_KEY);
     const monthAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
     if (lastPruned && Number(lastPruned) >= monthAgo) return;
@@ -87,18 +93,16 @@ export function useNotificationReads(activeNotifIds: string[]) {
     });
 
     // Prune DB rows whose notification IDs are no longer active
-    if (activeNotifIds.length > 0) {
-      const supabase = createClient();
-      supabase
-        .from("notification_reads")
-        .delete()
-        .not("notif_id", "in", `(${activeNotifIds.map((id) => `"${id}"`).join(",")})`)
-        .then(() => {});
-    }
+    const supabase = createClient();
+    supabase
+      .from("notification_reads")
+      .delete()
+      .not("notif_id", "in", `(${activeNotifIds.map((id) => `"${id}"`).join(",")})`)
+      .then(() => {});
 
     localStorage.setItem(LS_PRUNE_KEY, String(Date.now()));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dbLoaded]);
+  }, [dbLoaded, activeNotifIds.length]); // re-evaluate when data finishes loading
 
   /** Mark a single notification as read. */
   const markRead = useCallback((notifId: string) => {

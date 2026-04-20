@@ -157,7 +157,7 @@ function MaterialsTab({ project }: { project: Project }) {
 
   // Lift to state so edits / deletes are reflected live
   const [items, setItems] = useState<ProjectLineItem[]>([]);
-  useEffect(() => { setItems(persisted); }, [requisitions, purchaseOrders]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { setItems(persisted); }, [requisitions, purchaseOrders, project.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Edit dialog
   const [editingId, setEditingId] = useState<string | null>(null);
