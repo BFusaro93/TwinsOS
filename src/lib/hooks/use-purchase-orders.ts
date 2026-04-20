@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import { mapPurchaseOrder } from "@/lib/supabase/mappers";
 import type { PurchaseOrder, POStatus, LineItem } from "@/types";
@@ -588,6 +589,10 @@ export function useAddPOLineItem() {
       if (lineErr) throw lineErr;
       if (poErr) throw poErr;
     },
+    onError: (err) => {
+      const msg = err instanceof Error ? err.message : String(err);
+      toast.error(`Failed to add line item: ${msg}`);
+    },
     onSettled: () => queryClient.invalidateQueries({ queryKey: ["purchase-orders"] }),
   });
 }
@@ -610,18 +615,32 @@ export function useUpdatePOLineItem() {
       grandTotal: number;
     }) => {
       const supabase = createClient();
-      const [{ error: lineErr }, { error: poErr }] = await Promise.all([
-        supabase.from("po_line_items").update({
-          quantity: item.quantity,
-          unit_cost: item.unitCost,
-          total_cost: item.totalCost,
-          project_id: item.projectId ?? null,
-          notes: item.notes ?? null,
-        }).eq("id", item.id),
-        supabase.from("purchase_orders").update({ subtotal, sales_tax: salesTax, grand_total: grandTotal }).eq("id", poId),
+      const [{ data: lineData, error: lineErr }, { error: poErr }] = await Promise.all([
+        supabase
+          .from("po_line_items")
+          .update({
+            quantity: item.quantity,
+            unit_cost: item.unitCost,
+            total_cost: item.totalCost,
+            project_id: item.projectId ?? null,
+            notes: item.notes ?? null,
+          })
+          .eq("id", item.id)
+          .select(),          // needed to detect silent 0-row updates
+        supabase
+          .from("purchase_orders")
+          .update({ subtotal, sales_tax: salesTax, grand_total: grandTotal })
+          .eq("id", poId),
       ]);
       if (lineErr) throw lineErr;
       if (poErr) throw poErr;
+      // If the update silently matched 0 rows the row either doesn't exist or RLS
+      // filtered it out — surface this as an explicit error so onError can roll back.
+      if (!lineData || lineData.length === 0) {
+        throw new Error(
+          `Line item ${item.id} was not updated — it may not exist or you may not have permission.`
+        );
+      }
     },
     // Optimistically update the cache immediately so that:
     // 1. Any background refetch (window focus, etc.) doesn't overwrite the edit
@@ -651,10 +670,14 @@ export function useUpdatePOLineItem() {
       );
       return { previous };
     },
-    onError: (_err, _vars, context) => {
+    onError: (err, _vars, context) => {
+      // Roll back the optimistic update
       if (context?.previous) {
         queryClient.setQueryData<PurchaseOrder[]>(["purchase-orders"], context.previous);
       }
+      // Surface the error so the user knows the save failed
+      const msg = err instanceof Error ? err.message : String(err);
+      toast.error(`Failed to save line item: ${msg}`);
     },
     // Always refetch from DB after the mutation settles to confirm the true state.
     onSettled: () => queryClient.invalidateQueries({ queryKey: ["purchase-orders"] }),
