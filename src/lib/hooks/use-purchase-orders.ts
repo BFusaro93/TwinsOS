@@ -570,6 +570,8 @@ export function useAddPOLineItem() {
       const supabase = createClient();
       const [{ error: lineErr }, { error: poErr }] = await Promise.all([
         supabase.from("po_line_items").insert({
+          id: item.id,          // anchor DB row to the client-generated UUID so edits
+          // can target the row immediately without waiting for a refetch
           po_id: poId,
           product_item_id: item.productItemId || null,
           part_id: item.partId ?? null,
@@ -586,7 +588,7 @@ export function useAddPOLineItem() {
       if (lineErr) throw lineErr;
       if (poErr) throw poErr;
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["purchase-orders"] }),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ["purchase-orders"] }),
   });
 }
 
@@ -621,7 +623,41 @@ export function useUpdatePOLineItem() {
       if (lineErr) throw lineErr;
       if (poErr) throw poErr;
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["purchase-orders"] }),
+    // Optimistically update the cache immediately so that:
+    // 1. Any background refetch (window focus, etc.) doesn't overwrite the edit
+    //    before the DB write completes.
+    // 2. Navigating away and back shows the edited value from cache (not old DB data).
+    // On error, roll back to the previous cache snapshot.
+    onMutate: async ({ poId, item, subtotal, salesTax, grandTotal }) => {
+      // Cancel any in-flight refetches so they don't overwrite the optimistic update
+      await queryClient.cancelQueries({ queryKey: ["purchase-orders"] });
+      const previous = queryClient.getQueryData<PurchaseOrder[]>(["purchase-orders"]);
+      queryClient.setQueryData<PurchaseOrder[]>(["purchase-orders"], (old) =>
+        old?.map((po) =>
+          po.id === poId
+            ? {
+                ...po,
+                subtotal,
+                salesTax,
+                grandTotal,
+                lineItems: po.lineItems.map((li) =>
+                  li.id === item.id
+                    ? { ...li, quantity: item.quantity, unitCost: item.unitCost, totalCost: item.totalCost, projectId: item.projectId }
+                    : li
+                ),
+              }
+            : po
+        ) ?? []
+      );
+      return { previous };
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData<PurchaseOrder[]>(["purchase-orders"], context.previous);
+      }
+    },
+    // Always refetch from DB after the mutation settles to confirm the true state.
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ["purchase-orders"] }),
   });
 }
 
@@ -650,7 +686,7 @@ export function useDeletePOLineItem() {
       if (lineErr) throw lineErr;
       if (poErr) throw poErr;
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["purchase-orders"] }),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ["purchase-orders"] }),
   });
 }
 
