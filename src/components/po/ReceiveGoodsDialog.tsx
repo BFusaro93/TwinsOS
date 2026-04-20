@@ -112,10 +112,10 @@ export function ReceiveGoodsDialog({
     );
   }
 
-  const subtotal = lines.reduce(
+  const subtotal = Math.round(lines.reduce(
     (sum, l) => sum + l.quantityReceived * l.unitCost,
     0
-  );
+  ));
   const salesTax = Math.round(subtotal * (po.taxRatePercent / 100));
   const grandTotal = subtotal + salesTax + po.shippingCost;
 

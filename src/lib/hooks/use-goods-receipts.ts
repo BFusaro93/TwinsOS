@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import { mapGoodsReceipt } from "@/lib/supabase/mappers";
 import type { GoodsReceipt, GoodsReceiptLine } from "@/types/receiving";
@@ -100,6 +101,11 @@ export function useCreateGoodsReceipt() {
       queryClient.invalidateQueries({ queryKey: ["goods-receipts"] });
       queryClient.invalidateQueries({ queryKey: ["audit-log"] });
     },
+    onError: (err) => {
+      const e = err as Record<string, unknown>;
+      const msg = (e?.message as string) ?? JSON.stringify(err);
+      toast.error(`Failed to record receipt: ${msg}`);
+    },
   });
 }
 
@@ -154,7 +160,7 @@ export function useUpdateGoodsReceipt() {
       if (currentReceipt) {
         const taxRate = currentReceipt.tax_rate_percent as number;
         const shippingCost = currentReceipt.shipping_cost as number;
-        const newSubtotal = input.lines.reduce((sum, l) => sum + l.quantityReceived * l.unitCost, 0);
+        const newSubtotal = Math.round(input.lines.reduce((sum, l) => sum + l.quantityReceived * l.unitCost, 0));
         const newSalesTax = Math.round(newSubtotal * (taxRate / 100));
         const newGrandTotal = newSubtotal + newSalesTax + shippingCost;
 
@@ -199,6 +205,11 @@ export function useUpdateGoodsReceipt() {
       queryClient.invalidateQueries({ queryKey: ["goods-receipts"] });
       queryClient.invalidateQueries({ queryKey: ["goods-receipts", id] });
       queryClient.invalidateQueries({ queryKey: ["audit-log", "receiving", id] });
+    },
+    onError: (err) => {
+      const e = err as Record<string, unknown>;
+      const msg = (e?.message as string) ?? JSON.stringify(err);
+      toast.error(`Failed to update receipt: ${msg}`);
     },
   });
 }
