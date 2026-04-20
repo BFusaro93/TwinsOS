@@ -248,7 +248,17 @@ function MaterialsTab({ project }: { project: Project }) {
     }
   }
 
-  const total = items.reduce((sum, li) => sum + li.quantity * li.unitCost, 0);
+  // Build a tax-rate lookup keyed by source document id
+  const taxRateBySourceId = new Map<string, number>();
+  (purchaseOrders ?? []).forEach((po) => taxRateBySourceId.set(po.id, po.taxRatePercent));
+  (requisitions ?? []).forEach((req) => taxRateBySourceId.set(req.id, req.taxRatePercent));
+
+  const subtotal = items.reduce((sum, li) => sum + li.quantity * li.unitCost, 0);
+  const totalTax = items.reduce((sum, li) => {
+    const rate = taxRateBySourceId.get(li.sourceId) ?? 0;
+    return sum + Math.round(li.quantity * li.unitCost * rate / 100);
+  }, 0);
+  const total = subtotal + totalTax;
 
   return (
     <div className="flex flex-col gap-4 p-6">
@@ -338,7 +348,17 @@ function MaterialsTab({ project }: { project: Project }) {
           </div>
 
           <div className="rounded-md bg-slate-50 p-3 text-sm">
-            <div className="flex justify-between font-semibold text-slate-900">
+            <div className="flex justify-between py-1 text-slate-600">
+              <span>Subtotal</span>
+              <span>{formatCurrency(subtotal)}</span>
+            </div>
+            {totalTax > 0 && (
+              <div className="flex justify-between py-1 text-slate-600">
+                <span>Sales Tax</span>
+                <span>{formatCurrency(totalTax)}</span>
+              </div>
+            )}
+            <div className="flex justify-between border-t pt-1 font-semibold text-slate-900">
               <span>Materials Total</span>
               <span>{formatCurrency(total)}</span>
             </div>
