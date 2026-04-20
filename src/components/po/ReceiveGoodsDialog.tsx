@@ -309,13 +309,14 @@ export function ReceiveGoodsDialog({
                             <Input
                               type="number"
                               min={0}
+                              step={0.01}
                               max={line.quantityOrdered}
                               className="h-8 w-20 text-right text-xs"
                               value={line.quantityReceived}
                               onChange={(e) =>
                                 handleQtyChange(
                                   line.lineItemId,
-                                  parseInt(e.target.value) || 0
+                                  parseFloat(e.target.value) || 0
                                 )
                               }
                             />

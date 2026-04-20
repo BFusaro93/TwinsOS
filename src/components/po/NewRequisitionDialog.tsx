@@ -501,13 +501,14 @@ export function NewRequisitionDialog({ open, onOpenChange, initialData, prefillD
                               <td className="py-1.5 pr-2 align-top">
                                 <Input
                                   type="number"
-                                  min={1}
+                                  min={0.01}
+                                  step={0.01}
                                   className="h-8 w-20 text-xs"
                                   value={li.quantity}
                                   onChange={(e) =>
                                     handleLineItemQtyChange(
                                       li.id,
-                                      Math.max(1, parseInt(e.target.value) || 1)
+                                      Math.max(0.01, parseFloat(e.target.value) || 0.01)
                                     )
                                   }
                                 />

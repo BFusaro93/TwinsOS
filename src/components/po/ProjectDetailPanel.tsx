@@ -172,7 +172,7 @@ function MaterialsTab({ project }: { project: Project }) {
 
   function saveEdit() {
     if (!editingId) return;
-    const quantity = Math.max(1, parseInt(editForm.quantity, 10) || 1);
+    const quantity = Math.max(0.01, parseFloat(editForm.quantity) || 0.01);
     const unitCost = Math.round(parseFloat(editForm.unitCost) * 100) || 0;
     setItems((prev) =>
       prev.map((li) =>
@@ -418,7 +418,7 @@ function MaterialsTab({ project }: { project: Project }) {
             <div className="flex gap-3">
               <div className="flex flex-1 flex-col gap-1">
                 <label className="text-xs font-medium text-slate-600">Quantity</label>
-                <Input type="number" min={1} value={editForm.quantity} onChange={(e) => setEditForm((f) => ({ ...f, quantity: e.target.value }))} autoFocus />
+                <Input type="number" min={0.01} step={0.01} value={editForm.quantity} onChange={(e) => setEditForm((f) => ({ ...f, quantity: e.target.value }))} autoFocus />
               </div>
               <div className="flex flex-1 flex-col gap-1">
                 <label className="text-xs font-medium text-slate-600">Unit Cost ($)</label>

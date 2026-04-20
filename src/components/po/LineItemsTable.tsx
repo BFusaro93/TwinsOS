@@ -94,7 +94,7 @@ export function LineItemsTable({
   function saveAdd() {
     const product = products.find((p) => p.id === addForm.productId);
     if (!product) return;
-    const quantity = Math.max(1, parseInt(addForm.quantity, 10) || 1);
+    const quantity = Math.max(0.01, parseFloat(addForm.quantity) || 0.01);
     const unitCost = Math.round(parseFloat(addForm.unitCost) * 100) || 0;
     const projectId = addForm.projectId === "none" ? null : addForm.projectId;
     const newItem: LineItem = {
@@ -133,7 +133,7 @@ export function LineItemsTable({
 
   function saveEdit() {
     if (!editingId) return;
-    const quantity = Math.max(1, parseInt(editForm.quantity, 10) || 1);
+    const quantity = Math.max(0.01, parseFloat(editForm.quantity) || 0.01);
     const unitCost = Math.round(parseFloat(editForm.unitCost) * 100) || 0;
     const projectId = editForm.projectId === "none" ? null : editForm.projectId;
     const next = items.map((li) =>
@@ -289,7 +289,8 @@ export function LineItemsTable({
                   <label className="text-xs font-medium text-slate-600">Quantity</label>
                   <Input
                     type="number"
-                    min={1}
+                    min={0.01}
+                    step={0.01}
                     value={editForm.quantity}
                     onChange={(e) => setEditForm((f) => ({ ...f, quantity: e.target.value }))}
                     autoFocus
@@ -404,7 +405,8 @@ export function LineItemsTable({
                   <label className="text-xs font-medium text-slate-600">Quantity</label>
                   <Input
                     type="number"
-                    min={1}
+                    min={0.01}
+                    step={0.01}
                     value={addForm.quantity}
                     onChange={(e) => setAddForm((f) => ({ ...f, quantity: e.target.value }))}
                   />
