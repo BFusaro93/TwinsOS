@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Pencil, Trash2, Package, Plus } from "lucide-react";
+import { Pencil, Trash2, Package, Plus, ChevronsUpDown, Check } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -26,9 +26,22 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, cn } from "@/lib/utils";
 import { useProjects } from "@/lib/hooks/use-projects";
 import { useProducts } from "@/lib/hooks/use-products";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import type { LineItem } from "@/types";
 
 interface LineItemsTableProps {
@@ -62,6 +75,7 @@ export function LineItemsTable({
   // Add line item dialog state
   const [addOpen, setAddOpen] = useState(false);
   const [addForm, setAddForm] = useState({ productId: "", quantity: "1", unitCost: "", projectId: "none" });
+  const [productComboOpen, setProductComboOpen] = useState(false);
 
   function openAdd() {
     setAddForm({ productId: "", quantity: "1", unitCost: "", projectId: "none" });
@@ -314,30 +328,62 @@ export function LineItemsTable({
             <div className="flex flex-col gap-3">
               <div className="flex flex-col gap-1">
                 <label className="text-xs font-medium text-slate-600">Product</label>
-                <Select
-                  value={addForm.productId}
-                  onValueChange={(val) => {
-                    const product = products.find((p) => p.id === val);
-                    setAddForm((f) => ({
-                      ...f,
-                      productId: val,
-                        unitCost: product?.unitCost != null
-                        ? (product.unitCost / 100).toFixed(2)
-                        : f.unitCost,
-                    }));
-                  }}
-                >
-                  <SelectTrigger className="text-sm">
-                    <SelectValue placeholder="Select product…" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {products.map((p) => (
-                      <SelectItem key={p.id} value={p.id}>
-                        {p.name}{p.partNumber ? ` — ${p.partNumber}` : ""}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Popover open={productComboOpen} onOpenChange={setProductComboOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={productComboOpen}
+                      className="w-full justify-between font-normal text-sm"
+                    >
+                      <span className={cn("truncate", !addForm.productId && "text-muted-foreground")}>
+                        {addForm.productId
+                          ? products.find((p) => p.id === addForm.productId)?.name ?? "Select product…"
+                          : "Select product…"}
+                      </span>
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[320px] p-0" align="start" onWheel={(e) => e.stopPropagation()}>
+                    <Command filter={(itemValue, search) =>
+                      itemValue.toLowerCase().includes(search.toLowerCase()) ? 1 : 0
+                    }>
+                      <CommandInput placeholder="Search by name or part #…" />
+                      <CommandList className="!max-h-[220px]">
+                        <CommandEmpty>No products found.</CommandEmpty>
+                        <CommandGroup>
+                          {products.map((p) => {
+                            const searchStr = [p.name, p.partNumber].filter(Boolean).join(" ");
+                            return (
+                              <CommandItem
+                                key={p.id}
+                                value={searchStr}
+                                onSelect={() => {
+                                  setAddForm((f) => ({
+                                    ...f,
+                                    productId: p.id,
+                                    unitCost: p.unitCost != null
+                                      ? (p.unitCost / 100).toFixed(2)
+                                      : f.unitCost,
+                                  }));
+                                  setProductComboOpen(false);
+                                }}
+                              >
+                                <Check className={cn("mr-2 h-4 w-4 shrink-0", addForm.productId === p.id ? "opacity-100" : "opacity-0")} />
+                                <div className="min-w-0">
+                                  <p className="truncate text-sm font-medium">{p.name}</p>
+                                  {p.partNumber && (
+                                    <p className="font-mono text-xs text-slate-400">{p.partNumber}</p>
+                                  )}
+                                </div>
+                              </CommandItem>
+                            );
+                          })}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
               </div>
               <div className="flex gap-3">
                 <div className="flex flex-1 flex-col gap-1">
