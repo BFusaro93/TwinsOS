@@ -49,6 +49,12 @@ interface LineItemsTableProps {
   showProject?: boolean;
   editable?: boolean;
   onItemsChange?: (items: LineItem[]) => void;
+  /** Called after a new item is added, with the added item and the full updated list. */
+  onItemAdded?: (item: LineItem, updatedItems: LineItem[]) => void;
+  /** Called after an item is edited, with the updated item and the full updated list. */
+  onItemEdited?: (item: LineItem, updatedItems: LineItem[]) => void;
+  /** Called after an item is deleted, with the deleted id and the full updated list. */
+  onItemDeleted?: (id: string, updatedItems: LineItem[]) => void;
   onProductClick?: (productId: string) => void;
   onPartClick?: (partId: string) => void;
   onProjectClick?: (projectId: string) => void;
@@ -59,6 +65,9 @@ export function LineItemsTable({
   showProject = false,
   editable = false,
   onItemsChange,
+  onItemAdded,
+  onItemEdited,
+  onItemDeleted,
   onProductClick,
   onPartClick,
   onProjectClick,
@@ -100,7 +109,9 @@ export function LineItemsTable({
       projectId,
       notes: null,
     };
-    applyChange([...items, newItem]);
+    const next = [...items, newItem];
+    applyChange(next);
+    onItemAdded?.(newItem, next);
     setAddOpen(false);
   }
 
@@ -125,18 +136,21 @@ export function LineItemsTable({
     const quantity = Math.max(1, parseInt(editForm.quantity, 10) || 1);
     const unitCost = Math.round(parseFloat(editForm.unitCost) * 100) || 0;
     const projectId = editForm.projectId === "none" ? null : editForm.projectId;
-    applyChange(
-      items.map((li) =>
-        li.id === editingId
-          ? { ...li, quantity, unitCost: unitCost || li.unitCost, totalCost: quantity * (unitCost || li.unitCost), projectId }
-          : li
-      )
+    const next = items.map((li) =>
+      li.id === editingId
+        ? { ...li, quantity, unitCost: unitCost || li.unitCost, totalCost: quantity * (unitCost || li.unitCost), projectId }
+        : li
     );
+    applyChange(next);
+    const edited = next.find((li) => li.id === editingId);
+    if (edited) onItemEdited?.(edited, next);
     setEditingId(null);
   }
 
   function deleteItem(id: string) {
-    applyChange(items.filter((li) => li.id !== id));
+    const next = items.filter((li) => li.id !== id);
+    applyChange(next);
+    onItemDeleted?.(id, next);
   }
 
   const grandTotal = items.reduce((sum, li) => sum + li.quantity * li.unitCost, 0);

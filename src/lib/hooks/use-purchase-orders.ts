@@ -548,6 +548,112 @@ export function useUpdatePurchaseOrderStatus() {
   });
 }
 
+// ── PO Line Item mutations ────────────────────────────────────────────────────
+
+/** Inserts a new line item row and syncs the PO totals. */
+export function useAddPOLineItem() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      poId,
+      item,
+      subtotal,
+      salesTax,
+      grandTotal,
+    }: {
+      poId: string;
+      item: LineItem;
+      subtotal: number;
+      salesTax: number;
+      grandTotal: number;
+    }) => {
+      const supabase = createClient();
+      const [{ error: lineErr }, { error: poErr }] = await Promise.all([
+        supabase.from("po_line_items").insert({
+          po_id: poId,
+          product_item_id: item.productItemId || null,
+          part_id: item.partId ?? null,
+          product_item_name: item.productItemName,
+          part_number: item.partNumber,
+          quantity: item.quantity,
+          unit_cost: item.unitCost,
+          total_cost: item.totalCost,
+          project_id: item.projectId ?? null,
+          notes: item.notes ?? null,
+        }),
+        supabase.from("purchase_orders").update({ subtotal, sales_tax: salesTax, grand_total: grandTotal }).eq("id", poId),
+      ]);
+      if (lineErr) throw lineErr;
+      if (poErr) throw poErr;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["purchase-orders"] }),
+  });
+}
+
+/** Updates quantity, unit cost, and project on an existing line item, and syncs PO totals. */
+export function useUpdatePOLineItem() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      poId,
+      item,
+      subtotal,
+      salesTax,
+      grandTotal,
+    }: {
+      poId: string;
+      item: LineItem;
+      subtotal: number;
+      salesTax: number;
+      grandTotal: number;
+    }) => {
+      const supabase = createClient();
+      const [{ error: lineErr }, { error: poErr }] = await Promise.all([
+        supabase.from("po_line_items").update({
+          quantity: item.quantity,
+          unit_cost: item.unitCost,
+          total_cost: item.totalCost,
+          project_id: item.projectId ?? null,
+          notes: item.notes ?? null,
+        }).eq("id", item.id),
+        supabase.from("purchase_orders").update({ subtotal, sales_tax: salesTax, grand_total: grandTotal }).eq("id", poId),
+      ]);
+      if (lineErr) throw lineErr;
+      if (poErr) throw poErr;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["purchase-orders"] }),
+  });
+}
+
+/** Hard-deletes a line item row and syncs the PO totals. */
+export function useDeletePOLineItem() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      poId,
+      lineItemId,
+      subtotal,
+      salesTax,
+      grandTotal,
+    }: {
+      poId: string;
+      lineItemId: string;
+      subtotal: number;
+      salesTax: number;
+      grandTotal: number;
+    }) => {
+      const supabase = createClient();
+      const [{ error: lineErr }, { error: poErr }] = await Promise.all([
+        supabase.from("po_line_items").delete().eq("id", lineItemId),
+        supabase.from("purchase_orders").update({ subtotal, sales_tax: salesTax, grand_total: grandTotal }).eq("id", poId),
+      ]);
+      if (lineErr) throw lineErr;
+      if (poErr) throw poErr;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["purchase-orders"] }),
+  });
+}
+
 export function useDeletePurchaseOrder() {
   const queryClient = useQueryClient();
   return useMutation({

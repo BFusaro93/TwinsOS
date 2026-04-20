@@ -35,7 +35,7 @@ import { useVendors } from "@/lib/hooks/use-vendors";
 import { useProjects } from "@/lib/hooks/use-projects";
 import { PartDetailSheet } from "@/components/cmms/PartDetailSheet";
 import { useSubmitForApproval } from "@/lib/hooks/use-approval-requests";
-import { usePurchaseOrders, useUpdatePurchaseOrderStatus, useDeletePurchaseOrder } from "@/lib/hooks/use-purchase-orders";
+import { usePurchaseOrders, useUpdatePurchaseOrderStatus, useDeletePurchaseOrder, useAddPOLineItem, useUpdatePOLineItem, useDeletePOLineItem } from "@/lib/hooks/use-purchase-orders";
 import { useCurrentUserStore, usePOStore } from "@/stores";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { ProjectDetailSheet } from "./ProjectDetailSheet";
@@ -89,9 +89,23 @@ function DetailsTab({
   onProjectClick?: (projectId: string) => void;
 }) {
   const [lineItems, setLineItems] = useState<LineItem[]>(po.lineItems);
+  // Keep local state in sync when the server refreshes po.lineItems (e.g. after a mutation)
+  useEffect(() => { setLineItems(po.lineItems); }, [po.lineItems]);
+
   const { currentUser } = useCurrentUserStore();
   const { mutate: submitForApproval, isPending: submitting } = useSubmitForApproval();
   const { mutate: syncStatus } = useUpdatePurchaseOrderStatus();
+  const { mutate: addLineItemDB } = useAddPOLineItem();
+  const { mutate: updateLineItemDB } = useUpdatePOLineItem();
+  const { mutate: deleteLineItemDB } = useDeletePOLineItem();
+
+  /** Compute updated PO totals from a new items array */
+  function totals(newItems: LineItem[]) {
+    const subtotal = newItems.reduce((s, li) => s + li.quantity * li.unitCost, 0);
+    const salesTax = Math.round(subtotal * po.taxRatePercent / 100);
+    const grandTotal = subtotal + salesTax + po.shippingCost;
+    return { subtotal, salesTax, grandTotal };
+  }
 
   // Write status change to shared store so the list panel stays in sync
   function handleStatusChange(s: POStatus) {
@@ -225,6 +239,18 @@ function DetailsTab({
           showProject
           editable
           onItemsChange={setLineItems}
+          onItemAdded={(item, newItems) => {
+            const { subtotal, salesTax, grandTotal } = totals(newItems);
+            addLineItemDB({ poId: po.id, item, subtotal, salesTax, grandTotal });
+          }}
+          onItemEdited={(item, newItems) => {
+            const { subtotal, salesTax, grandTotal } = totals(newItems);
+            updateLineItemDB({ poId: po.id, item, subtotal, salesTax, grandTotal });
+          }}
+          onItemDeleted={(id, newItems) => {
+            const { subtotal, salesTax, grandTotal } = totals(newItems);
+            deleteLineItemDB({ poId: po.id, lineItemId: id, subtotal, salesTax, grandTotal });
+          }}
           onProductClick={(id) => setSelectedProductId(id)}
           onPartClick={(id) => setSelectedPartId(id)}
           onProjectClick={onProjectClick}
