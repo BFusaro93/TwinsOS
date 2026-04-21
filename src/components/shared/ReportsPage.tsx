@@ -21,6 +21,7 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { usePurchaseOrders } from "@/lib/hooks/use-purchase-orders";
 import { useWorkOrders } from "@/lib/hooks/use-work-orders";
 import { useParts } from "@/lib/hooks/use-parts";
+import { useProducts } from "@/lib/hooks/use-products";
 import { formatCurrency } from "@/lib/utils";
 import type { PurchaseOrder } from "@/types";
 import type { WorkOrder, Part } from "@/types/cmms";
@@ -52,12 +53,33 @@ function SkeletonCard() {
 // ─── Spend Tab ────────────────────────────────────────────────────────────────
 
 function SpendTab({ purchaseOrders, isLoading }: { purchaseOrders: PurchaseOrder[]; isLoading: boolean }) {
+  const { data: products = [] } = useProducts();
+
+  // Build product category lookup — spend charts show maintenance_part only
+  const productCategoryMap = useMemo(() => {
+    const map = new Map<string, string>();
+    products.forEach((p) => map.set(p.id, p.category));
+    return map;
+  }, [products]);
+
+  // Sum only maintenance_part line item costs across all non-canceled/draft POs
   const totalSpend = useMemo(
-    () => purchaseOrders.reduce((sum, po) => sum + po.grandTotal, 0),
-    [purchaseOrders]
+    () => purchaseOrders.reduce((sum, po) => {
+      return sum + po.lineItems
+        .filter((li) => productCategoryMap.get(li.productItemId) === "maintenance_part")
+        .reduce((s, li) => s + li.quantity * li.unitCost, 0);
+    }, 0),
+    [purchaseOrders, productCategoryMap]
   );
 
-  const avgPOValue = purchaseOrders.length > 0 ? totalSpend / purchaseOrders.length : 0;
+  const partsPoCount = useMemo(
+    () => purchaseOrders.filter((po) =>
+      po.lineItems.some((li) => productCategoryMap.get(li.productItemId) === "maintenance_part")
+    ).length,
+    [purchaseOrders, productCategoryMap]
+  );
+
+  const avgPOValue = partsPoCount > 0 ? totalSpend / partsPoCount : 0;
 
   const openPOs = purchaseOrders.filter(
     (po) =>
@@ -66,7 +88,7 @@ function SpendTab({ purchaseOrders, isLoading }: { purchaseOrders: PurchaseOrder
       po.status === "approved"
   );
 
-  // Monthly spend — last 6 months
+  // Monthly parts spend — last 6 months (maintenance_part line items only)
   const monthlySpend = useMemo(() => {
     const today = new Date();
     const months: { label: string; key: string; spend: number }[] = [];
@@ -79,22 +101,28 @@ function SpendTab({ purchaseOrders, isLoading }: { purchaseOrders: PurchaseOrder
     purchaseOrders.forEach((po) => {
       const poKey = po.createdAt.slice(0, 7);
       const bucket = months.find((m) => m.key === poKey);
-      if (bucket) bucket.spend += po.grandTotal;
+      if (!bucket) return;
+      po.lineItems
+        .filter((li) => productCategoryMap.get(li.productItemId) === "maintenance_part")
+        .forEach((li) => { bucket.spend += li.quantity * li.unitCost; });
     });
     return months.map((m) => ({ month: m.label, spend: m.spend / 100 }));
-  }, [purchaseOrders]);
+  }, [purchaseOrders, productCategoryMap]);
 
-  // Spend by vendor — top 5
+  // Spend by vendor — top 5 (maintenance_part only)
   const vendorSpend = useMemo(() => {
     const map: Record<string, number> = {};
     purchaseOrders.forEach((po) => {
-      map[po.vendorName] = (map[po.vendorName] ?? 0) + po.grandTotal;
+      const partsTotal = po.lineItems
+        .filter((li) => productCategoryMap.get(li.productItemId) === "maintenance_part")
+        .reduce((s, li) => s + li.quantity * li.unitCost, 0);
+      if (partsTotal > 0) map[po.vendorName] = (map[po.vendorName] ?? 0) + partsTotal;
     });
     return Object.entries(map)
       .map(([vendor, total]) => ({ vendor, spend: total / 100 }))
       .sort((a, b) => b.spend - a.spend)
       .slice(0, 5);
-  }, [purchaseOrders]);
+  }, [purchaseOrders, productCategoryMap]);
 
   if (isLoading) {
     return (
@@ -111,8 +139,8 @@ function SpendTab({ purchaseOrders, isLoading }: { purchaseOrders: PurchaseOrder
     <div className="flex flex-col gap-6">
       {/* Stat cards */}
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <StatCard label="Total PO Spend" value={formatCurrency(totalSpend)} />
-        <StatCard label="Avg PO Value" value={formatCurrency(avgPOValue)} />
+        <StatCard label="Total Parts Spend" value={formatCurrency(totalSpend)} />
+        <StatCard label="Avg Parts PO Value" value={formatCurrency(avgPOValue)} />
         <StatCard label="Total POs" value={purchaseOrders.length} />
         <StatCard label="Open POs" value={openPOs.length} />
       </div>
@@ -120,7 +148,7 @@ function SpendTab({ purchaseOrders, isLoading }: { purchaseOrders: PurchaseOrder
       {/* Monthly spend trend */}
       <div className="rounded-lg border bg-white shadow-sm p-6">
         <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-4">
-          Monthly Spend Trend (Last 6 Months)
+          Parts Spend Trend (Last 6 Months)
         </p>
         <ResponsiveContainer width="100%" height={240}>
           <AreaChart data={monthlySpend} margin={{ top: 4, right: 16, left: 8, bottom: 0 }}>
@@ -159,7 +187,7 @@ function SpendTab({ purchaseOrders, isLoading }: { purchaseOrders: PurchaseOrder
       {/* Spend by vendor */}
       <div className="rounded-lg border bg-white shadow-sm p-6">
         <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-4">
-          Top 5 Vendors by Spend
+          Top 5 Vendors by Parts Spend
         </p>
         <ResponsiveContainer width="100%" height={240}>
           <BarChart

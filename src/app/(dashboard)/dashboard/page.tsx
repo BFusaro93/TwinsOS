@@ -30,6 +30,7 @@ import { usePurchaseOrders } from "@/lib/hooks/use-purchase-orders";
 import { useWorkOrders } from "@/lib/hooks/use-work-orders";
 import { useAssets } from "@/lib/hooks/use-assets";
 import { usePMSchedules } from "@/lib/hooks/use-pm-schedules";
+import { useProducts } from "@/lib/hooks/use-products";
 import { useRecentActivityFeed } from "@/lib/hooks/use-audit-log";
 import { formatCurrency, getInitials, getAvatarColor, relativeTime } from "@/lib/utils";
 
@@ -75,7 +76,15 @@ export default function DashboardPage() {
   const { data: workOrders = [] } = useWorkOrders();
   const { data: assets = [] } = useAssets();
   const { data: pmSchedules = [] } = usePMSchedules();
+  const { data: products = [] } = useProducts();
   const { data: activityFeed = [] } = useRecentActivityFeed(8);
+
+  // Build a lookup of productItemId → category so spend charts can filter to maintenance_part only
+  const productCategoryMap = useMemo(() => {
+    const map = new Map<string, string>();
+    products.forEach((p) => map.set(p.id, p.category));
+    return map;
+  }, [products]);
 
   // ── Purchasing KPIs ─────────────────────────────────────────────────────────
   const poKPIs = useMemo(() => {
@@ -87,13 +96,18 @@ export default function DashboardPage() {
     const openPOs = purchaseOrders.filter(
       (po) => !["closed", "canceled", "completed"].includes(po.status)
     ).length;
+    // Only count maintenance_part line items — excludes project/stocked materials and delivery charges
     const totalSpendMTD = purchaseOrders
       .filter(
         (po) =>
           !["canceled", "draft"].includes(po.status) &&
           (po.poDate ?? po.createdAt).slice(0, 10) >= mtdStart
       )
-      .reduce((sum, po) => sum + po.grandTotal, 0);
+      .reduce((sum, po) => {
+        return sum + po.lineItems
+          .filter((li) => productCategoryMap.get(li.productItemId) === "maintenance_part")
+          .reduce((s, li) => s + li.quantity * li.unitCost, 0);
+      }, 0);
     return { openRequisitions, pendingApproval, openPOs, totalSpendMTD };
   }, [requisitions, purchaseOrders, today]);
 
@@ -117,7 +131,7 @@ export default function DashboardPage() {
     return { openWorkOrders, highPriority, overdueWOs, pmComplianceRate, assetsInService };
   }, [workOrders, pmSchedules, assets, todayIso]);
 
-  // ── Monthly Spend (last 6 calendar months) ──────────────────────────────────
+  // ── Monthly Parts Spend (last 6 calendar months — maintenance_part line items only) ───────────
   const monthlySpend = useMemo(() => {
     const months: { key: string; label: string }[] = [];
     for (let i = 5; i >= 0; i--) {
@@ -130,13 +144,15 @@ export default function DashboardPage() {
     purchaseOrders
       .filter((po) => !["canceled", "draft"].includes(po.status))
       .forEach((po) => {
-        // Use poDate (actual PO date) if set, fall back to createdAt — matches Spend MTD logic
         const mk = (po.poDate ?? po.createdAt).slice(0, 7); // "YYYY-MM"
-        if (mk in spendByMonth) spendByMonth[mk] += po.grandTotal;
+        if (!(mk in spendByMonth)) return;
+        po.lineItems
+          .filter((li) => productCategoryMap.get(li.productItemId) === "maintenance_part")
+          .forEach((li) => { spendByMonth[mk] += li.quantity * li.unitCost; });
       });
 
     return months.map(({ key, label }) => ({ month: label, spend: spendByMonth[key] }));
-  }, [purchaseOrders, today]);
+  }, [purchaseOrders, productCategoryMap, today]);
 
   // ── WO Trend (last 7 calendar weeks) ────────────────────────────────────────
   const woTrend = useMemo(() => {
@@ -181,7 +197,7 @@ export default function DashboardPage() {
           <StatCard title="Open Requisitions" value={poKPIs.openRequisitions} icon={FileText} href="/po/requisitions" />
           <StatCard title="Pending Approval" value={poKPIs.pendingApproval} icon={Clock} href="/po/requisitions" />
           <StatCard title="Open Purchase Orders" value={poKPIs.openPOs} icon={ShoppingCart} href="/po/orders" />
-          <StatCard title="Spend MTD" value={formatCurrency(poKPIs.totalSpendMTD)} icon={DollarSign} href="/po/orders" />
+          <StatCard title="Parts Spend MTD" value={formatCurrency(poKPIs.totalSpendMTD)} icon={DollarSign} href="/po/orders" />
         </div>
       </section>
 
@@ -209,7 +225,7 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         {/* Monthly Spend */}
         <div className="col-span-1 rounded-lg border bg-white p-5 shadow-sm lg:col-span-1">
-          <p className="mb-4 text-sm font-semibold text-slate-700">Monthly Spend</p>
+          <p className="mb-4 text-sm font-semibold text-slate-700">Monthly Parts Spend</p>
           <ResponsiveContainer width="100%" height={200}>
             <BarChart data={monthlySpend} margin={{ top: 0, right: 4, left: -20, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />

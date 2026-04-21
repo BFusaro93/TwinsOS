@@ -10,6 +10,7 @@ import {
   FileText,
   Box,
   Building2,
+  Leaf,
 } from "lucide-react";
 import {
   CommandDialog,
@@ -27,6 +28,7 @@ import { useVehicles } from "@/lib/hooks/use-vehicles";
 import { useRequisitions } from "@/lib/hooks/use-requisitions";
 import { usePurchaseOrders } from "@/lib/hooks/use-purchase-orders";
 import { useParts } from "@/lib/hooks/use-parts";
+import { useProducts } from "@/lib/hooks/use-products";
 import { useVendors } from "@/lib/hooks/use-vendors";
 import { usePOStore, useCMMSStore } from "@/stores";
 import {
@@ -65,7 +67,13 @@ export function GlobalSearchDialog({ open, onOpenChange }: GlobalSearchDialogPro
   const { data: requisitions = [] } = useRequisitions();
   const { data: purchaseOrders = [] } = usePurchaseOrders();
   const { data: parts = [] } = useParts();
+  const { data: allProducts = [] } = useProducts();
   const { data: vendors = [] } = useVendors();
+
+  // Only surface stocked and project materials in search (maintenance_parts are already in Parts)
+  const catalogProducts = allProducts.filter(
+    (p) => p.category === "stocked_material" || p.category === "project_material"
+  );
 
   // Cmd+K shortcut
   useEffect(() => {
@@ -197,7 +205,31 @@ export function GlobalSearchDialog({ open, onOpenChange }: GlobalSearchDialogPro
           </CommandGroup>
         )}
 
-        {(parts.length > 0 && requisitions.length > 0) && <CommandSeparator />}
+        {(parts.length > 0 && catalogProducts.length > 0) && <CommandSeparator />}
+
+        {catalogProducts.length > 0 && (
+          <CommandGroup heading="Products">
+            {catalogProducts.map((product) => (
+              <CommandItem
+                key={product.id}
+                value={`${product.name} ${product.partNumber ?? ""} ${product.category === "stocked_material" ? "stocked material" : "project material"} product`}
+                onSelect={() => go("/po/products")}
+                className="flex items-center gap-3"
+              >
+                <Leaf className="h-4 w-4 shrink-0 text-slate-400" />
+                <div className="flex min-w-0 flex-1 flex-col">
+                  <span className="truncate text-sm font-medium">{product.name}</span>
+                  <span className="truncate text-xs text-slate-400">
+                    {product.category === "stocked_material" ? "Stocked Material" : "Project Material"}
+                    {product.vendorName ? ` · ${product.vendorName}` : ""}
+                  </span>
+                </div>
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        )}
+
+        {(catalogProducts.length > 0 && requisitions.length > 0) && <CommandSeparator />}
 
         {requisitions.length > 0 && (
           <CommandGroup heading="Requisitions">
