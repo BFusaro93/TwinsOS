@@ -281,7 +281,9 @@ export function useBulkImportProducts() {
             description: r.description?.trim() || undefined,
             category,
             unit_cost: r.unitCost ? Math.round(parseFloat(r.unitCost) * 100) : 0,
-            price: r.unitCost ? Math.round(parseFloat(r.unitCost) * 100) : 0,
+            price: r.salePrice
+              ? Math.round(parseFloat(r.salePrice) * 100)
+              : r.unitCost ? Math.round(parseFloat(r.unitCost) * 100) : 0,
             vendor_name: r.vendorName?.trim() || undefined,
             is_inventory: isInventory,
             quantity_on_hand: qoh,
