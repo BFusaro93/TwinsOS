@@ -99,7 +99,7 @@ function SpendTab({ purchaseOrders, isLoading }: { purchaseOrders: PurchaseOrder
       months.push({ label, key, spend: 0 });
     }
     purchaseOrders.forEach((po) => {
-      const poKey = po.createdAt.slice(0, 7);
+      const poKey = (po.poDate ?? po.createdAt).slice(0, 7); // use actual PO date, not record creation date
       const bucket = months.find((m) => m.key === poKey);
       if (!bucket) return;
       po.lineItems
