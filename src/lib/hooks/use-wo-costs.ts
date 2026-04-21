@@ -54,6 +54,27 @@ export function useWOParts(workOrderId: string) {
   });
 }
 
+/**
+ * After adjust_part_quantity updates parts.quantity_on_hand, mirror the new
+ * value to the linked product_items row so the Products page stays in sync.
+ */
+async function syncPartQtyToProduct(
+  supabase: ReturnType<typeof createClient>,
+  partId: string
+) {
+  const { data: part } = await supabase
+    .from("parts")
+    .select("quantity_on_hand, product_item_id")
+    .eq("id", partId)
+    .single();
+  if (part?.product_item_id) {
+    await supabase
+      .from("product_items")
+      .update({ quantity_on_hand: part.quantity_on_hand })
+      .eq("id", part.product_item_id);
+  }
+}
+
 export function useAddWOPart() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -87,6 +108,7 @@ export function useAddWOPart() {
           p_part_id: input.partId,
           p_delta: -input.quantity,
         });
+        await syncPartQtyToProduct(supabase, input.partId);
       }
 
       return mapWOPart(data);
@@ -94,6 +116,7 @@ export function useAddWOPart() {
     onSuccess: (_, { workOrderId }) => {
       queryClient.invalidateQueries({ queryKey: ["wo-parts", workOrderId] });
       queryClient.invalidateQueries({ queryKey: ["parts"] });
+      queryClient.invalidateQueries({ queryKey: ["products"] });
     },
   });
 }
@@ -136,12 +159,14 @@ export function useUpdateWOPart() {
             p_part_id: existing.part_id,
             p_delta: delta,
           });
+          await syncPartQtyToProduct(supabase, existing.part_id);
         }
       }
     },
     onSuccess: (_, { workOrderId }) => {
       queryClient.invalidateQueries({ queryKey: ["wo-parts", workOrderId] });
       queryClient.invalidateQueries({ queryKey: ["parts"] });
+      queryClient.invalidateQueries({ queryKey: ["products"] });
     },
   });
 }
@@ -174,6 +199,7 @@ export function useDeleteWOPart() {
           p_part_id: partId,
           p_delta: quantity,
         });
+        await syncPartQtyToProduct(supabase, partId);
       }
 
       return workOrderId;
@@ -181,6 +207,7 @@ export function useDeleteWOPart() {
     onSuccess: (workOrderId) => {
       queryClient.invalidateQueries({ queryKey: ["wo-parts", workOrderId] });
       queryClient.invalidateQueries({ queryKey: ["parts"] });
+      queryClient.invalidateQueries({ queryKey: ["products"] });
     },
   });
 }

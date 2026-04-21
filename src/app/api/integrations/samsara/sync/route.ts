@@ -117,15 +117,23 @@ async function syncOrg(
   const detail: string[] = [];
   let errors = 0;
 
-  // 1. Fetch Samsara vehicle stats.
+  // 1. Fetch Samsara vehicle stats — follow pagination cursors until exhausted.
   let samsaraVehicles: SamsaraVehicleStat[] = [];
   try {
-    const res = await fetch(SAMSARA_STATS_URL, {
-      headers: { Authorization: `Bearer ${samsaraApiKey}`, Accept: "application/json" },
-    });
-    if (!res.ok) throw new Error(`Samsara API ${res.status}: ${res.statusText}`);
-    const body = await res.json();
-    samsaraVehicles = body.data ?? [];
+    let cursor: string | null = null;
+    do {
+      const pageUrl: string = cursor
+        ? `${SAMSARA_STATS_URL}&after=${encodeURIComponent(cursor)}`
+        : SAMSARA_STATS_URL;
+      const pageRes: Response = await fetch(pageUrl, {
+        headers: { Authorization: `Bearer ${samsaraApiKey}`, Accept: "application/json" },
+      });
+      if (!pageRes.ok) throw new Error(`Samsara API ${pageRes.status}: ${pageRes.statusText}`);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const pageBody: any = await pageRes.json();
+      samsaraVehicles = samsaraVehicles.concat(pageBody.data ?? []);
+      cursor = pageBody.pagination?.hasNextPage ? (pageBody.pagination.endCursor ?? null) : null;
+    } while (cursor);
   } catch (err) {
     return { fetched: 0, matched: 0, readings: 0, errors: 1, detail: [`Samsara fetch failed: ${err}`] };
   }

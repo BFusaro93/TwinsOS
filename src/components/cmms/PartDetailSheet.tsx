@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { createClient } from "@/lib/supabase/client";
 import { createPortal } from "react-dom";
 import {
   LineChart,
@@ -35,7 +37,7 @@ import { useProducts } from "@/lib/hooks/use-products";
 import { useAssets } from "@/lib/hooks/use-assets";
 import { useVehicles } from "@/lib/hooks/use-vehicles";
 import { OverlayLevelContext, overlayZ, useOverlayLevel } from "@/lib/overlay-level";
-import { Plus, Search, ShoppingCart, X } from "lucide-react";
+import { Plus, Search, ShoppingCart, Wrench, X } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -392,7 +394,30 @@ function DetailsTab({
 }
 
 function HistoryTab({ part, purchaseOrders, onPOClick }: { part: Part; purchaseOrders: ReturnType<typeof usePurchaseOrders>["data"]; onPOClick: (poId: string) => void }) {
-  // Match by partNumber OR productItemId so parts linked via catalog still show history
+  // ── WO usage history ──────────────────────────────────────────────────────
+  const { data: woHistory = [] } = useQuery({
+    queryKey: ["part-wo-history", part.id],
+    queryFn: async () => {
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from("wo_parts")
+        .select("id, quantity, unit_cost, created_at, work_orders(work_order_number, title, status, created_at)")
+        .eq("part_id", part.id)
+        .is("deleted_at", null)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as Array<{
+        id: string;
+        quantity: number;
+        unit_cost: number;
+        created_at: string;
+        work_orders: { work_order_number: string; title: string; status: string; created_at: string } | null;
+      }>;
+    },
+    enabled: !!part.id,
+  });
+
+  // ── PO purchase history ───────────────────────────────────────────────────
   const matchesLi = (li: { partNumber: string; productItemId: string }) =>
     (part.partNumber && li.partNumber === part.partNumber) ||
     (part.productItemId && li.productItemId === part.productItemId);
@@ -418,15 +443,17 @@ function HistoryTab({ part, purchaseOrders, onPOClick }: { part: Part; purchaseO
     };
   });
 
+  const hasAnyHistory = pos.length > 0 || woHistory.length > 0;
+
   return (
     <div className="p-6">
-      {pos.length === 0 ? (
+      {!hasAnyHistory ? (
         <div className="flex h-48 items-center justify-center">
-          <p className="text-sm text-slate-400">No purchase history found for this part.</p>
+          <p className="text-sm text-slate-400">No history found for this part.</p>
         </div>
       ) : (
         <>
-          {/* Price trend chart */}
+          {/* Price trend chart — only shown when there are 2+ PO data points */}
           {priceHistory.length > 1 && (
             <div className="mb-6">
               <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">
@@ -473,49 +500,104 @@ function HistoryTab({ part, purchaseOrders, onPOClick }: { part: Part; purchaseO
             </div>
           )}
 
-          {/* PO table */}
-          <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">
-            Purchase Orders
-          </p>
-          <div className="overflow-hidden rounded-md border">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-slate-50">
-                  <th className="px-3 py-2 text-left text-xs font-medium text-slate-500">PO #</th>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-slate-500">Date</th>
-                  <th className="px-3 py-2 text-right text-xs font-medium text-slate-500">Qty</th>
-                  <th className="px-3 py-2 text-right text-xs font-medium text-slate-500">Unit Cost</th>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-slate-500">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {[...pos].reverse().map((po) => {
-                  const li = findLi(po);
-                  return (
-                    <tr key={po.id} className="border-t border-slate-100">
-                      <td className="px-3 py-2 font-mono text-xs font-medium">
-                        <button
-                          type="button"
-                          onClick={() => onPOClick(po.id)}
-                          className="text-brand-600 hover:underline"
-                        >
-                          {po.poNumber}
-                        </button>
-                      </td>
-                      <td className="px-3 py-2 text-slate-500">{formatDate(po.poDate ?? po.createdAt)}</td>
-                      <td className="px-3 py-2 text-right text-slate-700">{li.quantity}</td>
-                      <td className="px-3 py-2 text-right font-medium text-slate-900">
-                        {formatCurrency(li.unitCost)}
-                      </td>
-                      <td className="px-3 py-2">
-                        <StatusBadge variant={po.status} label={po.status.replace(/_/g, " ")} />
-                      </td>
+          {/* Work Order usage table */}
+          {woHistory.length > 0 && (
+            <div className="mb-6">
+              <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                Work Order Usage
+              </p>
+              <div className="overflow-hidden rounded-md border">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-slate-50">
+                      <th className="px-3 py-2 text-left text-xs font-medium text-slate-500">WO #</th>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-slate-500">Title</th>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-slate-500">Date Used</th>
+                      <th className="px-3 py-2 text-right text-xs font-medium text-slate-500">Qty</th>
+                      <th className="px-3 py-2 text-right text-xs font-medium text-slate-500">Unit Cost</th>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-slate-500">Status</th>
                     </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                  </thead>
+                  <tbody>
+                    {woHistory.map((row) => (
+                      <tr key={row.id} className="border-t border-slate-100">
+                        <td className="px-3 py-2 font-mono text-xs font-medium">
+                          <span className="flex items-center gap-1.5 text-slate-700">
+                            <Wrench className="h-3 w-3 text-slate-400" />
+                            {row.work_orders?.work_order_number ?? "—"}
+                          </span>
+                        </td>
+                        <td className="max-w-[160px] truncate px-3 py-2 text-slate-600">
+                          {row.work_orders?.title ?? "—"}
+                        </td>
+                        <td className="px-3 py-2 text-slate-500">{formatDate(row.created_at)}</td>
+                        <td className="px-3 py-2 text-right text-slate-700">{row.quantity}</td>
+                        <td className="px-3 py-2 text-right font-medium text-slate-900">
+                          {row.unit_cost > 0 ? formatCurrency(row.unit_cost) : "—"}
+                        </td>
+                        <td className="px-3 py-2">
+                          {row.work_orders?.status && (
+                            <StatusBadge
+                              variant={row.work_orders.status as Parameters<typeof StatusBadge>[0]["variant"]}
+                              label={row.work_orders.status.replace(/_/g, " ")}
+                            />
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* PO table */}
+          {pos.length > 0 && (
+            <>
+              <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                Purchase Orders
+              </p>
+              <div className="overflow-hidden rounded-md border">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-slate-50">
+                      <th className="px-3 py-2 text-left text-xs font-medium text-slate-500">PO #</th>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-slate-500">Date</th>
+                      <th className="px-3 py-2 text-right text-xs font-medium text-slate-500">Qty</th>
+                      <th className="px-3 py-2 text-right text-xs font-medium text-slate-500">Unit Cost</th>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-slate-500">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[...pos].reverse().map((po) => {
+                      const li = findLi(po);
+                      return (
+                        <tr key={po.id} className="border-t border-slate-100">
+                          <td className="px-3 py-2 font-mono text-xs font-medium">
+                            <button
+                              type="button"
+                              onClick={() => onPOClick(po.id)}
+                              className="text-brand-600 hover:underline"
+                            >
+                              {po.poNumber}
+                            </button>
+                          </td>
+                          <td className="px-3 py-2 text-slate-500">{formatDate(po.poDate ?? po.createdAt)}</td>
+                          <td className="px-3 py-2 text-right text-slate-700">{li.quantity}</td>
+                          <td className="px-3 py-2 text-right font-medium text-slate-900">
+                            {formatCurrency(li.unitCost)}
+                          </td>
+                          <td className="px-3 py-2">
+                            <StatusBadge variant={po.status} label={po.status.replace(/_/g, " ")} />
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
         </>
       )}
     </div>

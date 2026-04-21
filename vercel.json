@@ -7,7 +7,7 @@
   "crons": [
     {
       "path": "/api/integrations/samsara/sync",
-      "schedule": "0 10 * * *"
+      "schedule": "0 */6 * * *"
     },
     {
       "path": "/api/automations/run",

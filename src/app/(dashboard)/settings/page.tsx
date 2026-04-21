@@ -807,19 +807,92 @@ function CustomizationsTab() {
     setFilterFieldLabel,
     addFilterField,
     removeFilterField,
-    requiredFields,
   } = useSettingsStore();
   const { mutate: updateOrgSettings, isPending: savingCustomizations } = useUpdateOrgSettings();
 
+  // Auto-save status
+  const [saveStatus, setSaveStatus] = useState<"idle" | "saved" | "error">("idle");
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Reads fresh state from Zustand (synchronous) and persists to DB.
+  // Always called via debouncedPersist so rapid edits coalesce into one write.
+  function persistCustomizations() {
+    const s = useSettingsStore.getState();
+    setSaveError(null);
+    updateOrgSettings(
+      {
+        customizations: {
+          woCategories: s.woCategories,
+          partCategories: s.partCategories,
+          assetTypes: s.assetTypes,
+          fuelTypes: s.fuelTypes,
+          locations: s.locations,
+          vendorTypes: s.vendorTypes,
+          filterFields: s.filterFields,
+          requiredFields: s.requiredFields,
+        },
+      },
+      {
+        onSuccess: () => {
+          setSaveStatus("saved");
+          setTimeout(() => setSaveStatus("idle"), 2500);
+        },
+        onError: (err) => {
+          setSaveStatus("error");
+          setSaveError(err instanceof Error ? err.message : "Failed to save. Please try again.");
+        },
+      }
+    );
+  }
+
+  function debouncedPersist() {
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(persistCustomizations, 800);
+  }
+
+  // Wraps a store action so that after it runs, we schedule a debounced save.
+  // Zustand state updates are synchronous, so getState() in persistCustomizations
+  // will always see the latest accumulated state.
+  function act<T extends unknown[]>(storeFn: (...args: T) => void): (...args: T) => void {
+    return (...args: T) => {
+      storeFn(...args);
+      debouncedPersist();
+    };
+  }
+
   return (
     <div className="rounded-lg border bg-white shadow-sm">
+      {/* Auto-save status bar */}
+      <div className="flex items-center justify-end gap-2 border-b px-6 py-3 text-xs">
+        {savingCustomizations && (
+          <span className="flex items-center gap-1.5 text-slate-400">
+            <Loader2 className="h-3 w-3 animate-spin" />
+            Saving…
+          </span>
+        )}
+        {!savingCustomizations && saveStatus === "saved" && (
+          <span className="flex items-center gap-1 text-emerald-600">
+            <Check className="h-3 w-3" /> Saved
+          </span>
+        )}
+        {!savingCustomizations && saveStatus === "error" && (
+          <span className="text-red-500">
+            {saveError ?? "Save failed — please retry"}
+          </span>
+        )}
+        {!savingCustomizations && saveStatus === "idle" && (
+          <span className="text-slate-400">Changes save automatically</span>
+        )}
+      </div>
+
       <AccordionSection title="Locations" count={locations.length} defaultOpen={true}>
         <CategoryListEditor
           items={locations}
-          onToggle={setLocationEnabled}
-          onRename={setLocationLabel}
-          onAdd={addLocation}
-          onRemove={removeLocation}
+          onToggle={act(setLocationEnabled)}
+          onRename={act(setLocationLabel)}
+          onAdd={act(addLocation)}
+          onRemove={act(removeLocation)}
           addPlaceholder="e.g. New York, NJ"
         />
       </AccordionSection>
@@ -827,10 +900,10 @@ function CustomizationsTab() {
       <AccordionSection title="Part Categories" count={partCategories.length}>
         <CategoryListEditor
           items={partCategories}
-          onToggle={setPartCategoryEnabled}
-          onRename={setPartCategoryLabel}
-          onAdd={addPartCategory}
-          onRemove={removePartCategory}
+          onToggle={act(setPartCategoryEnabled)}
+          onRename={act(setPartCategoryLabel)}
+          onAdd={act(addPartCategory)}
+          onRemove={act(removePartCategory)}
           addPlaceholder="e.g. Seals & Gaskets"
         />
       </AccordionSection>
@@ -838,10 +911,10 @@ function CustomizationsTab() {
       <AccordionSection title="Work Order Categories" count={woCategories.length}>
         <CategoryListEditor
           items={woCategories}
-          onToggle={setWOCategoryEnabled}
-          onRename={setWOCategoryLabel}
-          onAdd={addWOCategory}
-          onRemove={removeWOCategory}
+          onToggle={act(setWOCategoryEnabled)}
+          onRename={act(setWOCategoryLabel)}
+          onAdd={act(addWOCategory)}
+          onRemove={act(removeWOCategory)}
           addPlaceholder="e.g. Welding"
         />
       </AccordionSection>
@@ -849,10 +922,10 @@ function CustomizationsTab() {
       <AccordionSection title="Asset Types" count={assetTypes.length}>
         <CategoryListEditor
           items={assetTypes}
-          onToggle={setAssetTypeEnabled}
-          onRename={setAssetTypeLabel}
-          onAdd={addAssetType}
-          onRemove={removeAssetType}
+          onToggle={act(setAssetTypeEnabled)}
+          onRename={act(setAssetTypeLabel)}
+          onAdd={act(addAssetType)}
+          onRemove={act(removeAssetType)}
           addPlaceholder="e.g. Chainsaw"
         />
       </AccordionSection>
@@ -860,10 +933,10 @@ function CustomizationsTab() {
       <AccordionSection title="Fuel Types" count={fuelTypes.length}>
         <CategoryListEditor
           items={fuelTypes}
-          onToggle={setFuelTypeEnabled}
-          onRename={setFuelTypeLabel}
-          onAdd={addFuelType}
-          onRemove={removeFuelType}
+          onToggle={act(setFuelTypeEnabled)}
+          onRename={act(setFuelTypeLabel)}
+          onAdd={act(addFuelType)}
+          onRemove={act(removeFuelType)}
           addPlaceholder="e.g. Propane"
         />
       </AccordionSection>
@@ -871,10 +944,10 @@ function CustomizationsTab() {
       <AccordionSection title="Vendor Types" count={vendorTypes.length}>
         <CategoryListEditor
           items={vendorTypes}
-          onToggle={setVendorTypeEnabled}
-          onRename={setVendorTypeLabel}
-          onAdd={addVendorType}
-          onRemove={removeVendorType}
+          onToggle={act(setVendorTypeEnabled)}
+          onRename={act(setVendorTypeLabel)}
+          onAdd={act(addVendorType)}
+          onRemove={act(removeVendorType)}
           addPlaceholder="e.g. Subcontractor"
         />
       </AccordionSection>
@@ -882,36 +955,13 @@ function CustomizationsTab() {
       <AccordionSection title="Quick Reference Part # Fields" count={filterFields.length}>
         <CategoryListEditor
           items={filterFields}
-          onToggle={setFilterFieldEnabled}
-          onRename={setFilterFieldLabel}
-          onAdd={addFilterField}
-          onRemove={removeFilterField}
+          onToggle={act(setFilterFieldEnabled)}
+          onRename={act(setFilterFieldLabel)}
+          onAdd={act(addFilterField)}
+          onRemove={act(removeFilterField)}
           addPlaceholder="e.g. Hydraulic Filter"
         />
       </AccordionSection>
-
-      <div className="flex justify-end px-6 py-4">
-        <Button
-          size="sm"
-          disabled={savingCustomizations}
-          onClick={() =>
-            updateOrgSettings({
-              customizations: {
-                woCategories,
-                partCategories,
-                assetTypes,
-                fuelTypes,
-                locations,
-                vendorTypes,
-                filterFields,
-                requiredFields,
-              },
-            })
-          }
-        >
-          {savingCustomizations ? "Saving…" : "Save Customizations"}
-        </Button>
-      </div>
     </div>
   );
 }
@@ -1553,9 +1603,11 @@ function IntegrationsTab() {
       } else {
         const orgResult = data.synced?.[0];
         if (orgResult) {
-          setSyncResult(
-            `Synced ${orgResult.readings} reading(s) across ${orgResult.matched} vehicle(s) (${orgResult.fetched} from Samsara).`
-          );
+          const summary = `Synced ${orgResult.readings} reading(s) across ${orgResult.matched} vehicle(s) (${orgResult.fetched} fetched from Samsara).`;
+          const details = (orgResult.detail as string[] | undefined)?.length
+            ? "\n" + (orgResult.detail as string[]).join("\n")
+            : "";
+          setSyncResult(summary + details);
         } else {
           setSyncResult(data.message ?? "Sync complete.");
         }
@@ -1687,12 +1739,12 @@ function IntegrationsTab() {
               )}
             </Button>
             {syncResult && (
-              <p className={cn(
-                "text-xs",
-                syncResult.startsWith("Error") ? "text-red-600" : "text-green-700"
+              <pre className={cn(
+                "max-h-48 overflow-y-auto whitespace-pre-wrap rounded-md border p-3 text-xs leading-relaxed",
+                syncResult.startsWith("Error") ? "border-red-200 bg-red-50 text-red-600" : "border-slate-200 bg-slate-50 text-slate-700"
               )}>
                 {syncResult}
-              </p>
+              </pre>
             )}
           </div>
         </div>
