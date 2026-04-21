@@ -48,6 +48,7 @@ interface DraftLineItem {
   itemType: "product" | "part";
   category: string;
   projectId: string; // "none" = no project
+  taxable: boolean;
 }
 
 const today = new Date().toISOString().split("T")[0];
@@ -87,6 +88,7 @@ function emptyLineItem(): DraftLineItem {
     itemType: "product",
     category: "",
     projectId: "none",
+    taxable: true,
   };
 }
 
@@ -186,6 +188,7 @@ export function NewPODialog({ open, onOpenChange, initialData, prefillData, onCr
             category: "",
             // Per-item project takes priority; fall back to top-level prefillData.projectId
             projectId: item.projectId ?? prefillData.projectId ?? "none",
+            taxable: true,
           }))
         );
       }
@@ -203,8 +206,11 @@ export function NewPODialog({ open, onOpenChange, initialData, prefillData, onCr
     (sum, li) => sum + li.quantity * li.unitCost,
     0
   );
+  const taxableSubtotalDollars = lineItems
+    .filter((li) => li.taxable)
+    .reduce((sum, li) => sum + li.quantity * li.unitCost, 0);
   const taxRate = parseFloat(taxRatePercent) || 0;
-  const taxDollars = subtotalDollars * (taxRate / 100);
+  const taxDollars = taxableSubtotalDollars * (taxRate / 100);
   const shippingDollars = parseFloat(shippingCost) || 0;
   const grandTotalDollars = subtotalDollars + taxDollars + shippingDollars;
 
@@ -312,7 +318,10 @@ export function NewPODialog({ open, onOpenChange, initialData, prefillData, onCr
     const subtotalCents = Math.round(
       lineItems.reduce((sum, li) => sum + li.quantity * li.unitCost, 0) * 100
     );
-    const salesTaxCents = Math.round(subtotalCents * (taxRate / 100));
+    const taxableSubtotalCents = Math.round(
+      lineItems.filter((li) => li.taxable).reduce((sum, li) => sum + li.quantity * li.unitCost, 0) * 100
+    );
+    const salesTaxCents = Math.round(taxableSubtotalCents * (taxRate / 100));
     const now = new Date().toISOString();
 
     // Generate PO number: PO-{year}-{6-digit timestamp suffix}
@@ -350,6 +359,7 @@ export function NewPODialog({ open, onOpenChange, initialData, prefillData, onCr
           totalCost: Math.round(li.quantity * li.unitCost * 100),
           projectId: li.projectId === "none" ? null : li.projectId,
           notes: null,
+          taxable: li.taxable,
         };
       }),
       subtotal: subtotalCents,
@@ -520,6 +530,7 @@ export function NewPODialog({ open, onOpenChange, initialData, prefillData, onCr
                               )}
                             </th>
                             <th className="w-24 pb-1.5 pr-2 text-right font-medium">Total</th>
+                            <th className="w-16 pb-1.5 pr-2 text-center font-medium" title="Taxable">Tax?</th>
                             <th className="w-8 pb-1.5" />
                           </tr>
                         </thead>
@@ -585,6 +596,21 @@ export function NewPODialog({ open, onOpenChange, initialData, prefillData, onCr
                               </td>
                               <td className="py-1.5 pr-2 align-top text-right text-xs tabular-nums">
                                 {formatCurrency(Math.round(li.quantity * li.unitCost * 100))}
+                              </td>
+                              <td className="py-1.5 pr-2 align-middle text-center">
+                                <input
+                                  type="checkbox"
+                                  className="h-4 w-4 cursor-pointer accent-brand-600"
+                                  checked={li.taxable}
+                                  onChange={(e) =>
+                                    setLineItems((prev) =>
+                                      prev.map((x) =>
+                                        x.id === li.id ? { ...x, taxable: e.target.checked } : x
+                                      )
+                                    )
+                                  }
+                                  title={li.taxable ? "Taxable" : "Non-taxable"}
+                                />
                               </td>
                               <td className="py-1.5 align-top">
                                 <Button

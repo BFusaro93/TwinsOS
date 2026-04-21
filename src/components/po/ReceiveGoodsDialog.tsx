@@ -116,7 +116,15 @@ export function ReceiveGoodsDialog({
     (sum, l) => sum + l.quantityReceived * l.unitCost,
     0
   ));
-  const salesTax = Math.round(subtotal * (po.taxRatePercent / 100));
+  const taxableSubtotal = Math.round(lines
+    .filter((l) => {
+      // Find the original PO line to check taxable flag (defaults to true)
+      const poLine = po.lineItems.find((li) => li.id === l.lineItemId);
+      return poLine?.taxable !== false;
+    })
+    .reduce((sum, l) => sum + l.quantityReceived * l.unitCost, 0)
+  );
+  const salesTax = Math.round(taxableSubtotal * (po.taxRatePercent / 100));
   const grandTotal = subtotal + salesTax + po.shippingCost;
 
   const allFullyReceived = lines.every(

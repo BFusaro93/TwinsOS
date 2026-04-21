@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Pencil, Trash2, Package, Plus, ChevronsUpDown, Check } from "lucide-react";
+import { Pencil, Trash2, Package, Plus, ChevronsUpDown, Check, Ban } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -79,15 +79,15 @@ export function LineItemsTable({
   const { data: products = [] } = useProducts();
 
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState({ quantity: "", unitCost: "", projectId: "none" });
+  const [editForm, setEditForm] = useState({ quantity: "", unitCost: "", projectId: "none", taxable: true });
 
   // Add line item dialog state
   const [addOpen, setAddOpen] = useState(false);
-  const [addForm, setAddForm] = useState({ productId: "", quantity: "1", unitCost: "", projectId: "none" });
+  const [addForm, setAddForm] = useState({ productId: "", quantity: "1", unitCost: "", projectId: "none", taxable: true });
   const [productComboOpen, setProductComboOpen] = useState(false);
 
   function openAdd() {
-    setAddForm({ productId: "", quantity: "1", unitCost: "", projectId: "none" });
+    setAddForm({ productId: "", quantity: "1", unitCost: "", projectId: "none", taxable: true });
     setAddOpen(true);
   }
 
@@ -108,6 +108,7 @@ export function LineItemsTable({
       totalCost: Math.round(quantity * unitCost),
       projectId,
       notes: null,
+      taxable: addForm.taxable,
     };
     const next = [...items, newItem];
     applyChange(next);
@@ -128,6 +129,7 @@ export function LineItemsTable({
       quantity: String(li.quantity),
       unitCost: (li.unitCost / 100).toFixed(2),
       projectId: li.projectId ?? "none",
+      taxable: li.taxable !== false,
     });
   }
 
@@ -139,7 +141,7 @@ export function LineItemsTable({
     const next = items.map((li) => {
       if (li.id !== editingId) return li;
       const cost = unitCost || li.unitCost;
-      return { ...li, quantity, unitCost: cost, totalCost: Math.round(quantity * cost), projectId };
+      return { ...li, quantity, unitCost: cost, totalCost: Math.round(quantity * cost), projectId, taxable: editForm.taxable };
     });
     applyChange(next);
     const edited = next.find((li) => li.id === editingId);
@@ -185,6 +187,7 @@ export function LineItemsTable({
                         <Package className="h-4 w-4 text-slate-400" />
                       </div>
                     )}
+                    <div className="flex flex-col gap-0.5">
                     {onProductClick && li.productItemId ? (
                       <button
                         type="button"
@@ -204,6 +207,13 @@ export function LineItemsTable({
                     ) : (
                       <span className="font-medium">{li.productItemName}</span>
                     )}
+                    {li.taxable === false && (
+                      <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-slate-400">
+                        <Ban className="h-2.5 w-2.5" />
+                        Non-taxable
+                      </span>
+                    )}
+                    </div>
                   </div>
                 </TableCell>
                 <TableCell className="font-mono text-xs text-slate-500">
@@ -326,6 +336,15 @@ export function LineItemsTable({
                   </Select>
                 </div>
               )}
+              <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 cursor-pointer accent-brand-600"
+                  checked={editForm.taxable}
+                  onChange={(e) => setEditForm((f) => ({ ...f, taxable: e.target.checked }))}
+                />
+                Taxable
+              </label>
               <Button onClick={saveEdit} className="mt-1">Save Changes</Button>
             </div>
           </DialogContent>
@@ -441,6 +460,15 @@ export function LineItemsTable({
                   </Select>
                 </div>
               )}
+              <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 cursor-pointer accent-brand-600"
+                  checked={addForm.taxable}
+                  onChange={(e) => setAddForm((f) => ({ ...f, taxable: e.target.checked }))}
+                />
+                Taxable
+              </label>
               <Button onClick={saveAdd} disabled={!addForm.productId} className="mt-1">
                 Add to PO
               </Button>

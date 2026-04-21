@@ -11,6 +11,8 @@ export interface LineItem {
   totalCost: number; // cents
   projectId: string | null;
   notes: string | null;
+  /** Whether this line item is subject to sales tax. Defaults to true. */
+  taxable: boolean;
 }
 
 export interface Requisition extends BaseRecord {

@@ -142,6 +142,7 @@ function DetailsTab({
       totalCost: qty * costCents,
       projectId: addProjectId === "none" ? null : addProjectId,
       notes: null,
+      taxable: true,
     };
     const newSubtotal = lineItems.reduce((s, li) => s + li.quantity * li.unitCost, 0) + qty * costCents;
     const newSalesTax = Math.round((newSubtotal * req.taxRatePercent) / 100);

@@ -342,6 +342,7 @@ export function NewRequisitionDialog({ open, onOpenChange, initialData, prefillD
             totalCost: Math.round(li.quantity * li.unitCost * 100),
             projectId: li.projectId === "none" ? null : li.projectId,
             notes: null,
+            taxable: true,
           };
         }),
         subtotal: subtotalCents,

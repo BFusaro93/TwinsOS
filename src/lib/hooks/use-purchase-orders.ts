@@ -111,6 +111,7 @@ export function useCreatePurchaseOrder() {
               total_cost: li.totalCost,
               project_id: li.projectId ?? null,
               notes: li.notes ?? null,
+              taxable: li.taxable,
             }))
           );
         if (lineErr) throw lineErr;
@@ -598,6 +599,7 @@ export function useAddPOLineItem() {
           total_cost: item.totalCost,
           project_id: item.projectId ?? null,
           notes: item.notes ?? null,
+          taxable: item.taxable,
         }),
         supabase.from("purchase_orders").update({ subtotal, sales_tax: salesTax, grand_total: grandTotal }).eq("id", poId),
       ]);
@@ -638,6 +640,7 @@ export function useUpdatePOLineItem() {
             total_cost: item.totalCost,
             project_id: item.projectId ?? null,
             notes: item.notes ?? null,
+            taxable: item.taxable,
           })
           .eq("id", item.id)
           .select(),          // needed to detect silent 0-row updates
@@ -675,7 +678,7 @@ export function useUpdatePOLineItem() {
                 grandTotal,
                 lineItems: po.lineItems.map((li) =>
                   li.id === item.id
-                    ? { ...li, quantity: item.quantity, unitCost: item.unitCost, totalCost: item.totalCost, projectId: item.projectId }
+                    ? { ...li, quantity: item.quantity, unitCost: item.unitCost, totalCost: item.totalCost, projectId: item.projectId, taxable: item.taxable }
                     : li
                 ),
               }

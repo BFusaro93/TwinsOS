@@ -153,6 +153,9 @@ export function mapLineItem(row: ReqLineItemRow | POLineItemRow): LineItem {
     totalCost: row.total_cost,
     projectId: row.project_id,
     notes: row.notes,
+    // `taxable` is on po_line_items only; req line items are always taxable.
+    // Cast via unknown because generated types predate this column.
+    taxable: (row as unknown as Record<string, unknown>).taxable !== false,
   };
 }
 
