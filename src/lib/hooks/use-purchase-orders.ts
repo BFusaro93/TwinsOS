@@ -701,7 +701,10 @@ export function useUpdatePOLineItem() {
   });
 }
 
-/** Hard-deletes a line item row and syncs the PO totals. */
+/** Hard-deletes a line item row and syncs the PO totals.
+ *  Unlinks any goods_receipt_lines that reference this line item before
+ *  deleting — otherwise the FK constraint silently blocks the delete and
+ *  the item reappears after the next refetch. */
 export function useDeletePOLineItem() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -719,12 +722,45 @@ export function useDeletePOLineItem() {
       grandTotal: number;
     }) => {
       const supabase = createClient();
+
+      // Unlink receipt lines first — the FK on goods_receipt_lines.po_line_item_id
+      // would block the delete if we skip this step.
+      const { error: unlinkErr } = await supabase
+        .from("goods_receipt_lines")
+        .update({ po_line_item_id: null })
+        .eq("po_line_item_id", lineItemId);
+      if (unlinkErr) throw unlinkErr;
+
       const [{ error: lineErr }, { error: poErr }] = await Promise.all([
         supabase.from("po_line_items").delete().eq("id", lineItemId),
         supabase.from("purchase_orders").update({ subtotal, sales_tax: salesTax, grand_total: grandTotal }).eq("id", poId),
       ]);
       if (lineErr) throw lineErr;
       if (poErr) throw poErr;
+    },
+    onMutate: async ({ poId, lineItemId, subtotal, salesTax, grandTotal }) => {
+      await queryClient.cancelQueries({ queryKey: ["purchase-orders"] });
+      const previous = queryClient.getQueryData<PurchaseOrder[]>(["purchase-orders"]);
+      queryClient.setQueryData<PurchaseOrder[]>(["purchase-orders"], (old) =>
+        old?.map((po) =>
+          po.id === poId
+            ? {
+                ...po,
+                subtotal,
+                salesTax,
+                grandTotal,
+                lineItems: po.lineItems.filter((li) => li.id !== lineItemId),
+              }
+            : po
+        ) ?? []
+      );
+      return { previous };
+    },
+    onError: (err, _vars, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData<PurchaseOrder[]>(["purchase-orders"], context.previous);
+      }
+      toast.error(`Failed to delete line item: ${serializeError(err)}`);
     },
     onSettled: () => queryClient.invalidateQueries({ queryKey: ["purchase-orders"] }),
   });
