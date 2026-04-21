@@ -443,10 +443,12 @@ function DetailsTab({
   project,
   status,
   onStatusChange,
+  computedTotalCost,
 }: {
   project: Project;
   status: ProjectStatus;
   onStatusChange: (s: ProjectStatus) => void;
+  computedTotalCost: number;
 }) {
   return (
     <div className="flex flex-col gap-5 p-6">
@@ -508,7 +510,7 @@ function DetailsTab({
           label="End Date"
           value={project.endDate ? formatDate(project.endDate) : "TBD"}
         />
-        <MetaRow label="Total Cost" value={formatCurrency(project.totalCost)} />
+        <MetaRow label="Total Cost" value={formatCurrency(computedTotalCost)} />
         {project.notes && <MetaRow label="Notes" value={project.notes} />}
       </dl>
     </div>
@@ -550,6 +552,37 @@ export function ProjectDetailPanel({ project }: ProjectDetailPanelProps) {
   const { mutate: updateProject } = useUpdateProject();
   const { data: allRequisitions } = useRequisitions();
   const { data: allPurchaseOrders } = usePurchaseOrders();
+
+  // Compute project total cost dynamically from linked line items (mirrors MaterialsTab logic).
+  // projects.total_cost in the DB is never written to, so we derive it here instead.
+  const computedTotalCost = (() => {
+    const taxRateBySourceId = new Map<string, number>();
+    (allPurchaseOrders ?? []).forEach((po) => taxRateBySourceId.set(po.id, po.taxRatePercent));
+    (allRequisitions ?? []).forEach((req) => taxRateBySourceId.set(req.id, req.taxRatePercent));
+
+    let subtotal = 0;
+    let tax = 0;
+
+    (allRequisitions ?? []).forEach((req) => {
+      if (req.convertedPoId && req.status === "ordered") return;
+      req.lineItems.filter((li) => li.projectId === project.id).forEach((li) => {
+        subtotal += li.quantity * li.unitCost;
+        const rate = taxRateBySourceId.get(req.id) ?? 0;
+        tax += Math.round(li.quantity * li.unitCost * rate / 100);
+      });
+    });
+    (allPurchaseOrders ?? []).forEach((po) => {
+      po.lineItems.filter((li) => li.projectId === project.id).forEach((li) => {
+        subtotal += li.quantity * li.unitCost;
+        if (li.taxable !== false) {
+          const rate = taxRateBySourceId.get(po.id) ?? 0;
+          tax += Math.round(li.quantity * li.unitCost * rate / 100);
+        }
+      });
+    });
+
+    return subtotal + tax;
+  })();
 
   function getPrintMaterials() {
     const materials: Array<{ productItemName: string; partNumber: string; quantity: number; unitCost: number; sourceNumber: string; sourceType: string }> = [];
@@ -609,6 +642,7 @@ export function ProjectDetailPanel({ project }: ProjectDetailPanelProps) {
               <DetailsTab
                 project={project}
                 status={status}
+                computedTotalCost={computedTotalCost}
                 onStatusChange={(s) => {
                   setStatus(s);
                   updateProject({ id: project.id, status: s });
