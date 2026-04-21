@@ -107,6 +107,8 @@ interface ProjectLineItem {
   quantity: number;
   unitCost: number;
   totalCost: number;
+  /** Mirrors po_line_items.taxable — false for items like pallet deposits or delivery. Defaults to true for REQ line items and direct adds. */
+  taxable: boolean;
 }
 
 function MaterialsTab({ project }: { project: Project }) {
@@ -133,6 +135,7 @@ function MaterialsTab({ project }: { project: Project }) {
           quantity: li.quantity,
           unitCost: li.unitCost,
           totalCost: li.totalCost,
+          taxable: true, // REQ line items are always taxable
         });
       });
   });
@@ -151,6 +154,7 @@ function MaterialsTab({ project }: { project: Project }) {
           quantity: li.quantity,
           unitCost: li.unitCost,
           totalCost: li.totalCost,
+          taxable: li.taxable !== false, // respect per-line taxable flag
         });
       });
   });
@@ -225,6 +229,7 @@ function MaterialsTab({ project }: { project: Project }) {
         quantity: i.quantity,
         unitCost: Math.round(i.unitCost * 100),
         totalCost: Math.round(i.quantity * i.unitCost * 100),
+        taxable: true,
       }));
 
     if (destination.type === "direct") {
@@ -255,6 +260,7 @@ function MaterialsTab({ project }: { project: Project }) {
 
   const subtotal = items.reduce((sum, li) => sum + li.quantity * li.unitCost, 0);
   const totalTax = items.reduce((sum, li) => {
+    if (li.taxable === false) return sum; // non-taxable items (deposits, delivery, etc.)
     const rate = taxRateBySourceId.get(li.sourceId) ?? 0;
     return sum + Math.round(li.quantity * li.unitCost * rate / 100);
   }, 0);
