@@ -20,7 +20,6 @@ import {
   HelpCircle,
   Library,
   ClipboardCheck,
-  Calculator,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -42,7 +41,6 @@ export const NAV_SECTIONS: NavSection[] = [
     label: "Overview",
     items: [
       { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-      { label: "Job Costing", href: "/dashboards/job-costing", icon: Calculator },
     ],
   },
   {
