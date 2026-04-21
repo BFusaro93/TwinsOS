@@ -194,7 +194,7 @@ export function LineItemsTable({
                         onClick={() => onProductClick(li.productItemId!)}
                         className="text-left font-medium text-brand-600 hover:underline"
                       >
-                        {li.productItemName}
+                        {product?.name ?? li.productItemName}
                       </button>
                     ) : onPartClick && li.partId ? (
                       <button
@@ -202,10 +202,10 @@ export function LineItemsTable({
                         onClick={() => onPartClick(li.partId!)}
                         className="text-left font-medium text-brand-600 hover:underline"
                       >
-                        {li.productItemName}
+                        {product?.name ?? li.productItemName}
                       </button>
                     ) : (
-                      <span className="font-medium">{li.productItemName}</span>
+                      <span className="font-medium">{product?.name ?? li.productItemName}</span>
                     )}
                     {li.taxable === false && (
                       <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-slate-400">

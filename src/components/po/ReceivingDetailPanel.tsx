@@ -46,13 +46,19 @@ const RECEIVING_FLOW_STEPS = [
   { label: "Inventory Updated" },
 ];
 
+/** Precomputed per-receipt-line product info resolved via the linked PO. */
+type LineProductInfo = { productId: string; liveName: string };
+
 function DetailsTab({
   receipt,
+  lineProductMap,
   onProductClick,
   onPOClick,
 }: {
   receipt: GoodsReceipt;
-  onProductClick: (partNumber: string) => void;
+  /** Maps receipt line id → resolved product info (UUID + live catalog name). */
+  lineProductMap: Map<string, LineProductInfo>;
+  onProductClick: (productId: string) => void;
   onPOClick: () => void;
 }) {
   const hasMaintParts = receipt.lines.some((l) => l.isMaintPart);
@@ -117,16 +123,23 @@ function DetailsTab({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {receipt.lines.map((line) => (
+              {receipt.lines.map((line) => {
+                const productInfo = lineProductMap.get(line.id);
+                const displayName = productInfo?.liveName ?? line.productItemName;
+                return (
                 <TableRow key={line.id} className="text-sm">
                   <TableCell className="font-medium">
-                    <button
-                      type="button"
-                      onClick={() => onProductClick(line.partNumber)}
-                      className="text-left font-medium text-brand-600 hover:underline"
-                    >
-                      {line.productItemName}
-                    </button>
+                    {productInfo ? (
+                      <button
+                        type="button"
+                        onClick={() => onProductClick(productInfo.productId)}
+                        className="text-left font-medium text-brand-600 hover:underline"
+                      >
+                        {displayName}
+                      </button>
+                    ) : (
+                      <span>{displayName}</span>
+                    )}
                   </TableCell>
                   <TableCell className="font-mono text-xs text-slate-500">
                     {line.partNumber}
@@ -153,7 +166,8 @@ function DetailsTab({
                     )}
                   </TableCell>
                 </TableRow>
-              ))}
+                );
+              })}
             </TableBody>
           </Table>
         </div>
@@ -212,7 +226,7 @@ function FilesTab({ receipt }: { receipt: GoodsReceipt }) {
 
 export function ReceivingDetailPanel({ receipt }: ReceivingDetailPanelProps) {
   const [editOpen, setEditOpen] = useState(false);
-  const [selectedPartNumber, setSelectedPartNumber] = useState<string | null>(null);
+  const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
   const [poSheetOpen, setPoSheetOpen] = useState(false);
   const { data: products = [] } = useProducts();
   const { data: purchaseOrders = [] } = usePurchaseOrders();
@@ -220,11 +234,25 @@ export function ReceivingDetailPanel({ receipt }: ReceivingDetailPanelProps) {
   const syncPOStatus = useUpdatePurchaseOrderStatus();
 
   const selectedProduct =
-    selectedPartNumber
-      ? (products.find((p) => p.partNumber === selectedPartNumber) ?? null)
+    selectedProductId
+      ? (products.find((p) => p.id === selectedProductId) ?? null)
       : null;
 
   const linkedPO = purchaseOrders.find((po) => po.id === receipt.purchaseOrderId) ?? null;
+
+  // Precompute receipt lineId → { productId (UUID), liveName } via the linked PO's line items.
+  // This resolves by UUID (not part number), so renames in the catalog are always reflected.
+  const lineProductMap = new Map<string, LineProductInfo>();
+  for (const receiptLine of receipt.lines) {
+    const poLine = linkedPO?.lineItems.find((li) => li.id === receiptLine.lineItemId);
+    if (poLine?.productItemId) {
+      const catalogProduct = products.find((p) => p.id === poLine.productItemId);
+      lineProductMap.set(receiptLine.id, {
+        productId: poLine.productItemId,
+        liveName: catalogProduct?.name ?? receiptLine.productItemName,
+      });
+    }
+  }
 
   function handleReceiptEdit(currentReceiptAllFull: boolean) {
     if (!linkedPO) return;
@@ -259,7 +287,8 @@ export function ReceivingDetailPanel({ receipt }: ReceivingDetailPanelProps) {
             content: (
               <DetailsTab
                 receipt={receipt}
-                onProductClick={(partNumber) => setSelectedPartNumber(partNumber)}
+                lineProductMap={lineProductMap}
+                onProductClick={(productId) => setSelectedProductId(productId)}
                 onPOClick={() => setPoSheetOpen(true)}
               />
             ),
@@ -277,7 +306,7 @@ export function ReceivingDetailPanel({ receipt }: ReceivingDetailPanelProps) {
       <ProductDetailSheet
         open={!!selectedProduct}
         onOpenChange={(o) => {
-          if (!o) setSelectedPartNumber(null);
+          if (!o) setSelectedProductId(null);
         }}
         product={selectedProduct}
       />
