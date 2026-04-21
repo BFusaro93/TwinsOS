@@ -79,9 +79,19 @@ export function addCostLayer(
 }
 
 /**
- * After adding a layer, recompute the WAC value to store back on the record.
- * For FIFO, the `unitCost` field is left unchanged; FIFO is computed dynamically
- * from layers each time.
+ * After adding a receipt layer, determine the unit_cost value to store back on
+ * the catalog record.
+ *
+ * The stored unit_cost serves two purposes:
+ *   1. Display — what the Products page shows as the current price.
+ *   2. Pre-fill for manual mode — what getCatalogCost() returns when method === "manual".
+ *
+ * Rules:
+ *   - WAC  → store the weighted average across all live layers.
+ *   - FIFO → store the most recently received price (display only; pre-fill is
+ *             computed dynamically from layers by getCatalogCost).
+ *   - manual → store the most recently received price so the catalog always
+ *               reflects the last price paid (users can still override manually).
  */
 export function computeNewUnitCost(
   layers: CostLayer[],
@@ -89,5 +99,7 @@ export function computeNewUnitCost(
   currentUnitCost: number
 ): number {
   if (method === "wac") return computeWAC(layers, currentUnitCost);
-  return currentUnitCost; // manual or fifo: don't touch the catalog field
+  // manual / fifo: update to the last received price so the catalog stays current.
+  const lastLayer = layers[layers.length - 1];
+  return lastLayer?.unitCost ?? currentUnitCost;
 }
