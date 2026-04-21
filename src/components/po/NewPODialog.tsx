@@ -676,66 +676,74 @@ export function NewPODialog({ open, onOpenChange, initialData, prefillData, onCr
                     </Button>
                   </div>
 
-                  {/* Tax / Shipping */}
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    <div className="grid gap-1.5">
-                      <Label htmlFor="po-tax-rate">Tax Rate (%)</Label>
-                      <Input
-                        id="po-tax-rate"
-                        type="number"
-                        step="0.01"
-                        min={0}
-                        value={taxRatePercent}
-                        onChange={(e) => setTaxRatePercent(e.target.value)}
-                      />
-                    </div>
-                    {rf.isVisible("shipping_cost") && (
-                      <div className="grid gap-1.5">
-                        <Label htmlFor="po-shipping">Shipping / Other ($){rf.req("shipping_cost")}</Label>
-                        <Input
-                          id="po-shipping"
-                          type="number"
-                          step="0.01"
-                          min={0}
-                          placeholder="0.00"
-                          value={shippingCost}
-                          onChange={(e) => setShippingCost(e.target.value)}
-                        />
-                      </div>
-                    )}
-                  </div>
+                </>
+              )}
 
-                  {/* Totals Summary */}
+              {/* Tax / Shipping — shown in both create and edit mode */}
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div className="grid gap-1.5">
+                  <Label htmlFor="po-tax-rate">Tax Rate (%)</Label>
+                  <Input
+                    id="po-tax-rate"
+                    type="number"
+                    step="0.01"
+                    min={0}
+                    value={taxRatePercent}
+                    onChange={(e) => setTaxRatePercent(e.target.value)}
+                  />
+                </div>
+                {rf.isVisible("shipping_cost") && (
+                  <div className="grid gap-1.5">
+                    <Label htmlFor="po-shipping">Shipping / Other ($){rf.req("shipping_cost")}</Label>
+                    <Input
+                      id="po-shipping"
+                      type="number"
+                      step="0.01"
+                      min={0}
+                      placeholder="0.00"
+                      value={shippingCost}
+                      onChange={(e) => setShippingCost(e.target.value)}
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* Totals Summary — shown in both create and edit mode */}
+              {(() => {
+                // In edit mode the line items aren't editable here, so use the
+                // existing subtotal from the DB; in create mode derive from draft lines.
+                const subtotalCents = isEditing
+                  ? (initialData?.subtotal ?? 0)
+                  : Math.round(subtotalDollars * 100);
+                const taxableSubtotalCents = isEditing
+                  ? subtotalCents   // existing PO: we don't know per-line taxability here, use full subtotal as approximation
+                  : Math.round(taxableSubtotalDollars * 100);
+                const taxCents = Math.round(taxableSubtotalCents * (taxRate / 100));
+                const shippingCents = Math.round(shippingDollars * 100);
+                const grandTotalCents = subtotalCents + taxCents + shippingCents;
+                return (
                   <div className="rounded-md bg-slate-50 p-3 space-y-1 text-sm">
                     <div className="flex justify-between text-slate-600">
                       <span>Subtotal</span>
-                      <span className="tabular-nums">
-                        {formatCurrency(Math.round(subtotalDollars * 100))}
-                      </span>
+                      <span className="tabular-nums">{formatCurrency(subtotalCents)}</span>
                     </div>
                     <div className="flex justify-between text-slate-600">
                       <span>Tax ({taxRate}%)</span>
-                      <span className="tabular-nums">
-                        {formatCurrency(Math.round(taxDollars * 100))}
-                      </span>
+                      <span className="tabular-nums">{formatCurrency(taxCents)}</span>
                     </div>
                     {shippingDollars > 0 && (
                       <div className="flex justify-between text-slate-600">
                         <span>Shipping / Other</span>
-                        <span className="tabular-nums">
-                          {formatCurrency(Math.round(shippingDollars * 100))}
-                        </span>
+                        <span className="tabular-nums">{formatCurrency(shippingCents)}</span>
                       </div>
                     )}
                     <div className="flex justify-between border-t pt-1 font-semibold text-slate-900">
                       <span>Grand Total</span>
-                      <span className="tabular-nums">
-                        {formatCurrency(Math.round(grandTotalDollars * 100))}
-                      </span>
+                      <span className="tabular-nums">{formatCurrency(grandTotalCents)}</span>
                     </div>
                   </div>
-                </>
-              )}
+                );
+              })()}
             </div>
           </div>
 
