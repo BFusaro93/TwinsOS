@@ -42,6 +42,7 @@ export const NAV_SECTIONS: NavSection[] = [
     label: "Overview",
     items: [
       { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+      { label: "Job Costing", href: "/dashboards/job-costing", icon: Calculator },
     ],
   },
   {
@@ -71,12 +72,6 @@ export const NAV_SECTIONS: NavSection[] = [
     label: "Shared",
     items: [
       { label: "Vendors", href: "/vendors", icon: Building2 },
-    ],
-  },
-  {
-    label: "Operations",
-    items: [
-      { label: "Job Costing", href: "/operations/job-costing", icon: Calculator },
     ],
   },
   {
