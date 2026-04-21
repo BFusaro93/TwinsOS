@@ -26,6 +26,7 @@ import { BulkPriceUpdateDialog } from "./BulkPriceUpdateDialog";
 import { Button } from "@/components/ui/button";
 import { formatCurrency } from "@/lib/utils";
 import { PRODUCT_CATEGORY_LABELS } from "@/lib/constants";
+import { toast } from "sonner";
 import { useProducts, useBulkImportProducts } from "@/lib/hooks/use-products";
 import type { ProductItem } from "@/types";
 
@@ -109,7 +110,7 @@ export function ProductsPage() {
               entityLabel="Products"
               templateColumns={["name", "partNumber", "description", "category", "unitCost", "isInventory", "quantityOnHand", "vendorName"]}
               templateFilename="products-template.csv"
-              requiredColumns={["name", "partNumber", "category"]}
+              requiredColumns={["name", "category"]}
               onExport={() =>
                 exportCSV(
                   all.map((p) => ({
@@ -125,7 +126,16 @@ export function ProductsPage() {
                   "products-export.csv"
                 )
               }
-              onImport={(rows) => bulkImportProducts(rows)}
+              onImport={async (rows) => {
+                const { inserted, skipped } = await bulkImportProducts(rows);
+                if (skipped > 0) {
+                  toast.warning(
+                    `Imported ${inserted} product${inserted !== 1 ? "s" : ""}. ${skipped} row${skipped !== 1 ? "s" : ""} skipped (missing name or unrecognised category).`
+                  );
+                } else {
+                  toast.success(`Successfully imported ${inserted} product${inserted !== 1 ? "s" : ""}.`);
+                }
+              }}
             />
             <Button size="sm" variant="outline" onClick={() => setBulkPriceOpen(true)}>
               Update Prices

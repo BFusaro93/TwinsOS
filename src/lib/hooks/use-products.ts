@@ -240,31 +240,46 @@ export function useUpdateProduct() {
   });
 }
 
-const VALID_PRODUCT_CATEGORIES = new Set(["maintenance_part", "stocked_material", "project_material"]);
+/** Normalise a raw category string from a CSV to one of the three valid slugs,
+ *  accepting common variations in casing, spacing, and phrasing. Returns null
+ *  if the value can't be resolved to a known category. */
+function normalizeProductCategory(raw: string): string | null {
+  const s = raw.trim().toLowerCase().replace(/[\s-]+/g, "_");
+  if (["maintenance_part", "maintenance_parts", "maint_part", "maint", "part", "parts"].includes(s))
+    return "maintenance_part";
+  if (["stocked_material", "stocked_materials", "stocked", "stock", "material", "materials", "supply", "supplies"].includes(s))
+    return "stocked_material";
+  if (["project_material", "project_materials", "project", "job_material", "job_materials", "job"].includes(s))
+    return "project_material";
+  return null;
+}
 
 /**
  * Bulk-inserts product catalog items from a CSV import.
- * Rows missing `name`, `partNumber`, or an unrecognised `category` are skipped.
+ * Only `name` is strictly required; `partNumber` is optional (many products have none).
+ * Rows with an unrecognisable category are skipped.
  * `unitCost` is a dollar decimal string stored as cents.
+ * Returns { inserted, skipped } so callers can surface an accurate count.
  */
 export function useBulkImportProducts() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (rows: Record<string, string>[]) => {
       const supabase = createClient();
+
+      let skipped = 0;
       const inserts = rows
-        .filter((r) => {
-          const cat = r.category?.trim().toLowerCase().replace(/\s+/g, "_");
-          return r.name?.trim() && r.partNumber?.trim() && VALID_PRODUCT_CATEGORIES.has(cat);
-        })
         .map((r) => {
+          const name = r.name?.trim();
+          const category = normalizeProductCategory(r.category ?? "");
+          if (!name || !category) { skipped++; return null; }
           const qoh = parseInt(r.quantityOnHand) || 0;
           const isInventory = r.isInventory?.trim().toLowerCase() === "yes" || qoh > 0;
           return {
-            name: r.name.trim(),
-            part_number: r.partNumber.trim(),
+            name,
+            part_number: r.partNumber?.trim() || "",
             description: r.description?.trim() || undefined,
-            category: r.category.trim().toLowerCase().replace(/\s+/g, "_"),
+            category,
             unit_cost: r.unitCost ? Math.round(parseFloat(r.unitCost) * 100) : 0,
             price: r.unitCost ? Math.round(parseFloat(r.unitCost) * 100) : 0,
             vendor_name: r.vendorName?.trim() || undefined,
@@ -273,16 +288,21 @@ export function useBulkImportProducts() {
             cost_layers: [] as unknown as import("@/types/supabase").Json,
             alternate_vendors: [] as unknown as import("@/types/supabase").Json,
           };
-        });
-      if (inserts.length === 0) return 0;
+        })
+        .filter((r): r is NonNullable<typeof r> => r !== null);
 
-      // Insert one-by-one; on duplicate part_number, update the existing row
-      let count = 0;
+      if (inserts.length === 0) return { inserted: 0, skipped };
+
+      // Insert one-by-one so we can handle duplicate part_number upserts gracefully.
+      // Products without a part_number are always inserted fresh (no natural dedup key).
+      let inserted = 0;
+      const { data: { user } } = await supabase.auth.getUser();
+      const { data: profile } = await supabase.from("profiles").select("org_id").eq("id", user!.id).single();
+
       for (const row of inserts) {
         const { error } = await supabase.from("product_items").insert(row);
-        if (error?.code === "23505") {
-          const { data: { user } } = await supabase.auth.getUser();
-          const { data: profile } = await supabase.from("profiles").select("org_id").eq("id", user!.id).single();
+        if (error?.code === "23505" && row.part_number) {
+          // Duplicate part_number — update the existing record instead
           await supabase.from("product_items").update({
             name: row.name,
             description: row.description,
@@ -296,9 +316,9 @@ export function useBulkImportProducts() {
         } else if (error) {
           throw error;
         }
-        count++;
+        inserted++;
       }
-      return count;
+      return { inserted, skipped };
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["products"] }),
   });
