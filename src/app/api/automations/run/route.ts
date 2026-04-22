@@ -7,7 +7,8 @@ import type { Database } from "@/types/supabase";
 type AdminClient = ReturnType<typeof createClient<any>>;
 
 /**
- * POST /api/automations/run
+ * GET  /api/automations/run — called by Vercel Cron (GET only)
+ * POST /api/automations/run — called by admin manual trigger from the UI
  *
  * Execution engine for automation rules.
  * Two callers:
@@ -16,7 +17,15 @@ type AdminClient = ReturnType<typeof createClient<any>>;
  *
  * Executes: trigger_type=meter_threshold with any supported action_type
  */
+export async function GET(request: Request) {
+  return handleRun(request);
+}
+
 export async function POST(request: Request) {
+  return handleRun(request);
+}
+
+async function handleRun(request: Request) {
   const adminClient = createClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
