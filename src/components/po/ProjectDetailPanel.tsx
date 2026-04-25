@@ -118,6 +118,12 @@ function MaterialsTab({ project }: { project: Project }) {
   // Build the initial list from linked REQ / PO line items.
   // Skip requisitions that have been converted to a PO (status "ordered"
   // with a convertedPoId) to avoid showing duplicate materials.
+  // Live name lookup: product_item_name on line items is a snapshot from creation time.
+  // Use the current catalog name when available so renames are reflected immediately.
+  const productNameById = new Map(products.map((p) => [p.id, p.name]));
+  const resolveName = (productItemId: string | null, fallback: string) =>
+    (productItemId && productNameById.get(productItemId)) || fallback;
+
   const persisted: ProjectLineItem[] = [];
   (requisitions ?? []).forEach((req) => {
     if (req.convertedPoId && req.status === "ordered") return;
@@ -130,7 +136,7 @@ function MaterialsTab({ project }: { project: Project }) {
           sourceNumber: req.requisitionNumber,
           sourceType: "requisition",
           productItemId: li.productItemId ?? "",
-          productItemName: li.productItemName,
+          productItemName: resolveName(li.productItemId, li.productItemName),
           partNumber: li.partNumber,
           quantity: li.quantity,
           unitCost: li.unitCost,
@@ -149,7 +155,7 @@ function MaterialsTab({ project }: { project: Project }) {
           sourceNumber: po.poNumber,
           sourceType: "po",
           productItemId: li.productItemId ?? "",
-          productItemName: li.productItemName,
+          productItemName: resolveName(li.productItemId, li.productItemName),
           partNumber: li.partNumber,
           quantity: li.quantity,
           unitCost: li.unitCost,
