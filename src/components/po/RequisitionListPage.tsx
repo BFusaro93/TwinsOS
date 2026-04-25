@@ -283,7 +283,11 @@ export function RequisitionListPage() {
         </SheetContent>
       </Sheet>
 
-      <NewRequisitionDialog open={dialogOpen} onOpenChange={setDialogOpen} />
+      <NewRequisitionDialog
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        onCreated={(req) => setSelectedRequisitionId(req.id)}
+      />
     </div>
   );
 }

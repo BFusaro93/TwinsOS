@@ -74,6 +74,7 @@ interface NewRequisitionDialogProps {
   onOpenChange: (open: boolean) => void;
   initialData?: Requisition | null;
   prefillData?: PrefillData | null;
+  onCreated?: (req: Requisition) => void;
 }
 
 function emptyLineItem(): DraftLineItem {
@@ -98,7 +99,7 @@ type CatalogOption = {
   type: "product" | "part";
 };
 
-export function NewRequisitionDialog({ open, onOpenChange, initialData, prefillData }: NewRequisitionDialogProps) {
+export function NewRequisitionDialog({ open, onOpenChange, initialData, prefillData, onCreated }: NewRequisitionDialogProps) {
   const { data: products } = useProducts();
   const { data: vendors } = useVendors();
   const { data: parts = [] } = useParts();
@@ -352,7 +353,12 @@ export function NewRequisitionDialog({ open, onOpenChange, initialData, prefillD
         grandTotal: subtotalCents + salesTaxCents + shippingCents,
         notes: notes || null,
       },
-      { onSuccess: () => handleClose() }
+      {
+        onSuccess: (req) => {
+          handleClose();
+          onCreated?.(req);
+        },
+      }
     );
   }
 
