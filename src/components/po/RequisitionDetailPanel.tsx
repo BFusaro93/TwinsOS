@@ -295,8 +295,32 @@ function DetailsTab({
           lineItems={lineItems}
           showProject
           editable
-          hideAddButton
           onItemsChange={setLineItems}
+          onItemAdded={(newItem, updatedItems) => {
+            // LineItemsTable already updated local state via onItemsChange.
+            // Persist to DB without re-adding to state in onSuccess.
+            const newSubtotal = updatedItems.reduce((s, li) => s + li.quantity * li.unitCost, 0);
+            const newSalesTax = Math.round((newSubtotal * req.taxRatePercent) / 100);
+            const newGrandTotal = newSubtotal + newSalesTax + req.shippingCost;
+            persistLineItem({
+              requisitionId: req.id,
+              lineItem: {
+                productItemId: newItem.productItemId,
+                partId: newItem.partId ?? null,
+                productItemName: newItem.productItemName,
+                partNumber: newItem.partNumber ?? "",
+                quantity: newItem.quantity,
+                unitCost: newItem.unitCost,
+                totalCost: newItem.totalCost,
+                projectId: newItem.projectId ?? null,
+                notes: newItem.notes ?? null,
+                taxable: newItem.taxable !== false,
+              },
+              newSubtotal,
+              newSalesTax,
+              newGrandTotal,
+            });
+          }}
           onItemEdited={(editedItem, updatedItems) => {
             // Persist the edit to the DB and recalculate totals
             const newSubtotal = updatedItems.reduce((s, li) => s + li.quantity * li.unitCost, 0);
