@@ -127,7 +127,7 @@ export function SplitToPOsDialog({
           poNumber: `PO-${new Date().getFullYear()}-${String(base).slice(-6)}-${i + 1}`,
           poDate: now.split("T")[0],
           invoiceNumber: null,
-          status: "pending",
+          status: "requested",
           vendorId: group.vendorId === "none" ? "" : group.vendorId,
           vendorName: group.vendorId === "none" ? "Unassigned" : group.vendorName,
           lineItems,

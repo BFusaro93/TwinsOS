@@ -192,8 +192,8 @@ function DetailsTab({
             <Button size="sm" onClick={onSendToReceiving}>Send to Receiving</Button>
             <Button size="sm" variant="outline" onClick={() => handleStatusChange("completed")}>Mark Complete</Button>
           </>)}
-          {(status === "rejected" || status === "canceled") && (
-            <Button size="sm" variant="outline" onClick={() => handleStatusChange("requested")}>Reopen</Button>
+          {(status === "rejected" || status === "canceled" || status === "pending") && (
+            <Button size="sm" variant="outline" onClick={() => handleStatusChange("requested")}>Reset to Requested</Button>
           )}
         </div>
       </div>

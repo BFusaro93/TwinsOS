@@ -358,7 +358,13 @@ export function ApprovalChain({ entityId, onApproved, onRejected }: ApprovalChai
     );
   }
 
-  if (requests.length === 0) return null;
+  if (requests.length === 0) {
+    return (
+      <p className="rounded-md bg-slate-50 px-3 py-2 text-xs text-slate-500">
+        No approval flow is configured for this type. An admin can manually advance the status.
+      </p>
+    );
+  }
 
   const groups = groupByStep(requests);
 
