@@ -1,7 +1,14 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import { mapRequisition } from "@/lib/supabase/mappers";
 import type { ApprovalStatus, LineItem, Requisition } from "@/types";
+
+function serializeError(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  if (err && typeof err === "object" && "message" in err) return String((err as { message: unknown }).message);
+  return String(err);
+}
 
 export function patchReqCache(queryClient: ReturnType<typeof useQueryClient>, id: string, patch: Partial<Requisition>) {
   queryClient.setQueryData<Requisition[]>(["requisitions"], (old) =>
@@ -160,6 +167,9 @@ export function useAddRequisitionLineItem() {
         .update({ subtotal: newSubtotal, sales_tax: newSalesTax, grand_total: newGrandTotal })
         .eq("id", requisitionId);
       if (reqErr) throw reqErr;
+    },
+    onError: (err) => {
+      toast.error(`Failed to add line item: ${serializeError(err)}`);
     },
     onSuccess: (_, { requisitionId }) => {
       queryClient.invalidateQueries({ queryKey: ["requisitions"] });
@@ -352,6 +362,9 @@ export function useUpdateRequisitionLineItem() {
         .eq("id", requisitionId);
       if (reqErr) throw reqErr;
     },
+    onError: (err) => {
+      toast.error(`Failed to save line item: ${serializeError(err)}`);
+    },
     onSuccess: (_, { requisitionId }) => {
       queryClient.invalidateQueries({ queryKey: ["requisitions"] });
       queryClient.invalidateQueries({ queryKey: ["requisitions", requisitionId] });
@@ -387,6 +400,9 @@ export function useDeleteRequisitionLineItem() {
         .update({ subtotal: newSubtotal, sales_tax: newSalesTax, grand_total: newGrandTotal })
         .eq("id", requisitionId);
       if (reqErr) throw reqErr;
+    },
+    onError: (err) => {
+      toast.error(`Failed to delete line item: ${serializeError(err)}`);
     },
     onSuccess: (_, { requisitionId }) => {
       queryClient.invalidateQueries({ queryKey: ["requisitions"] });
