@@ -53,7 +53,7 @@ import { useParts } from "@/lib/hooks/use-parts";
 import { useProjects } from "@/lib/hooks/use-projects";
 import { usePurchaseOrders } from "@/lib/hooks/use-purchase-orders";
 import { useSubmitForApproval } from "@/lib/hooks/use-approval-requests";
-import { useUpdateRequisitionStatus, useAddRequisitionLineItem, useDeleteRequisition } from "@/lib/hooks/use-requisitions";
+import { useUpdateRequisitionStatus, useAddRequisitionLineItem, useUpdateRequisitionLineItem, useDeleteRequisitionLineItem, useDeleteRequisition } from "@/lib/hooks/use-requisitions";
 import { useCurrentUserStore } from "@/stores";
 import type { Requisition, LineItem, ApprovalStatus, PurchaseOrder } from "@/types";
 
@@ -108,6 +108,8 @@ function DetailsTab({
   const { mutate: submitForApproval, isPending: submitting } = useSubmitForApproval();
   const { mutate: syncStatus } = useUpdateRequisitionStatus();
   const { mutate: persistLineItem, isPending: addingItem } = useAddRequisitionLineItem();
+  const { mutate: persistLineItemUpdate } = useUpdateRequisitionLineItem();
+  const { mutate: persistLineItemDelete } = useDeleteRequisitionLineItem();
 
   // Write status change to shared store so the list panel stays in sync
   function handleStatusChange(s: ApprovalStatus) {
@@ -293,7 +295,37 @@ function DetailsTab({
           lineItems={lineItems}
           showProject
           editable
+          hideAddButton
           onItemsChange={setLineItems}
+          onItemEdited={(editedItem, updatedItems) => {
+            // Persist the edit to the DB and recalculate totals
+            const newSubtotal = updatedItems.reduce((s, li) => s + li.quantity * li.unitCost, 0);
+            const newSalesTax = Math.round((newSubtotal * req.taxRatePercent) / 100);
+            const newGrandTotal = newSubtotal + newSalesTax + req.shippingCost;
+            persistLineItemUpdate({
+              lineItemId: editedItem.id,
+              requisitionId: req.id,
+              quantity: editedItem.quantity,
+              unitCost: editedItem.unitCost,
+              projectId: editedItem.projectId ?? null,
+              newSubtotal,
+              newSalesTax,
+              newGrandTotal,
+            });
+          }}
+          onItemDeleted={(deletedId, updatedItems) => {
+            // Persist the delete to the DB and recalculate totals
+            const newSubtotal = updatedItems.reduce((s, li) => s + li.quantity * li.unitCost, 0);
+            const newSalesTax = Math.round((newSubtotal * req.taxRatePercent) / 100);
+            const newGrandTotal = newSubtotal + newSalesTax + req.shippingCost;
+            persistLineItemDelete({
+              lineItemId: deletedId,
+              requisitionId: req.id,
+              newSubtotal,
+              newSalesTax,
+              newGrandTotal,
+            });
+          }}
           onProductClick={onProductClick}
           onPartClick={onPartClick}
           onProjectClick={onProjectClick}

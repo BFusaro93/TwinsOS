@@ -312,6 +312,89 @@ export function useUpdateRequisitionStatus() {
   });
 }
 
+/** Updates a single line item on an existing requisition and recalculates totals. */
+export function useUpdateRequisitionLineItem() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      lineItemId,
+      requisitionId,
+      quantity,
+      unitCost,
+      projectId,
+      newSubtotal,
+      newSalesTax,
+      newGrandTotal,
+    }: {
+      lineItemId: string;
+      requisitionId: string;
+      quantity: number;
+      unitCost: number;
+      projectId: string | null;
+      newSubtotal: number;
+      newSalesTax: number;
+      newGrandTotal: number;
+    }) => {
+      const supabase = createClient();
+      const { error: lineErr } = await supabase
+        .from("requisition_line_items")
+        .update({
+          quantity,
+          unit_cost: unitCost,
+          total_cost: Math.round(quantity * unitCost),
+          project_id: projectId,
+        })
+        .eq("id", lineItemId);
+      if (lineErr) throw lineErr;
+      const { error: reqErr } = await supabase
+        .from("requisitions")
+        .update({ subtotal: newSubtotal, sales_tax: newSalesTax, grand_total: newGrandTotal })
+        .eq("id", requisitionId);
+      if (reqErr) throw reqErr;
+    },
+    onSuccess: (_, { requisitionId }) => {
+      queryClient.invalidateQueries({ queryKey: ["requisitions"] });
+      queryClient.invalidateQueries({ queryKey: ["requisitions", requisitionId] });
+    },
+  });
+}
+
+/** Hard-deletes a single line item from an existing requisition and recalculates totals. */
+export function useDeleteRequisitionLineItem() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      lineItemId,
+      requisitionId,
+      newSubtotal,
+      newSalesTax,
+      newGrandTotal,
+    }: {
+      lineItemId: string;
+      requisitionId: string;
+      newSubtotal: number;
+      newSalesTax: number;
+      newGrandTotal: number;
+    }) => {
+      const supabase = createClient();
+      const { error: lineErr } = await supabase
+        .from("requisition_line_items")
+        .delete()
+        .eq("id", lineItemId);
+      if (lineErr) throw lineErr;
+      const { error: reqErr } = await supabase
+        .from("requisitions")
+        .update({ subtotal: newSubtotal, sales_tax: newSalesTax, grand_total: newGrandTotal })
+        .eq("id", requisitionId);
+      if (reqErr) throw reqErr;
+    },
+    onSuccess: (_, { requisitionId }) => {
+      queryClient.invalidateQueries({ queryKey: ["requisitions"] });
+      queryClient.invalidateQueries({ queryKey: ["requisitions", requisitionId] });
+    },
+  });
+}
+
 export function useDeleteRequisition() {
   const queryClient = useQueryClient();
   return useMutation({

@@ -48,6 +48,9 @@ interface LineItemsTableProps {
   lineItems: LineItem[];
   showProject?: boolean;
   editable?: boolean;
+  /** When true, hides the built-in "Add Line Item" button at the bottom of the table.
+   *  Use this when the parent provides its own add flow (e.g. RequisitionDetailPanel). */
+  hideAddButton?: boolean;
   onItemsChange?: (items: LineItem[]) => void;
   /** Called after a new item is added, with the added item and the full updated list. */
   onItemAdded?: (item: LineItem, updatedItems: LineItem[]) => void;
@@ -64,6 +67,7 @@ export function LineItemsTable({
   lineItems,
   showProject = false,
   editable = false,
+  hideAddButton = false,
   onItemsChange,
   onItemAdded,
   onItemEdited,
@@ -267,7 +271,7 @@ export function LineItemsTable({
           </TableBody>
         </Table>
         <div className="flex items-center justify-between border-t bg-slate-50 px-4 py-2">
-          {editable ? (
+          {editable && !hideAddButton ? (
             <button
               type="button"
               onClick={openAdd}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Fragment } from "react";
 import type { PurchaseOrder } from "@/types";
 import {
   Dialog,
@@ -538,8 +538,8 @@ export function NewPODialog({ open, onOpenChange, initialData, prefillData, onCr
                           {lineItems.map((li) => {
                             const hasProjectRow = li.itemType === "product" && li.category !== "maintenance_part" && !!li.productItemId;
                             return (
-                            <>
-                            <tr key={li.id} className={!hasProjectRow ? "border-b" : ""}>
+                            <Fragment key={li.id}>
+                            <tr className={!hasProjectRow ? "border-b" : ""}>
                               <td className="py-1.5 pr-2 align-top">
                                 <CatalogItemCombobox
                                   products={allProducts.filter((p) => p.category !== "maintenance_part")}
@@ -625,7 +625,7 @@ export function NewPODialog({ open, onOpenChange, initialData, prefillData, onCr
                               </td>
                             </tr>
                             {hasProjectRow && (
-                              <tr key={`${li.id}-project`} className="border-b">
+                              <tr className="border-b">
                                 <td className="pb-1.5 pr-2" />
                                 <td colSpan={3} className="pb-1.5 pr-2">
                                   <Select
@@ -656,7 +656,7 @@ export function NewPODialog({ open, onOpenChange, initialData, prefillData, onCr
                                 <td />
                               </tr>
                             )}
-                            </>
+                            </Fragment>
                             );
                           })}
                         </tbody>
