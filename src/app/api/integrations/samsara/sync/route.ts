@@ -210,9 +210,10 @@ async function syncOrg(
     }
 
     for (const meter of vehicleMeters) {
-      // Only write if the new reading is greater (odometers don't go backwards).
-      if (miles <= (meter.current_value ?? 0)) {
-        detail.push(`Vehicle "${dbVehicle.name}" reading ${miles} mi not greater than current ${meter.current_value} mi — skipped`);
+      // Skip only if the reading has gone backwards (odometers never decrease).
+      // Equal values are logged so we have a daily record even with no movement.
+      if (miles < (meter.current_value ?? 0)) {
+        detail.push(`Vehicle "${dbVehicle.name}" reading ${miles} mi is less than current ${meter.current_value} mi — skipped`);
         continue;
       }
 
@@ -233,11 +234,13 @@ async function syncOrg(
         continue;
       }
 
-      // Update meter current value.
-      await adminClient
-        .from("meters")
-        .update({ current_value: miles, last_reading_at: readingAt })
-        .eq("id", meter.id);
+      // Update current_value only when mileage actually increased.
+      if (miles > (meter.current_value ?? 0)) {
+        await adminClient
+          .from("meters")
+          .update({ current_value: miles, last_reading_at: readingAt })
+          .eq("id", meter.id);
+      }
 
       readings++;
       detail.push(`✓ "${dbVehicle.name}" → ${miles} mi (${source})`);
