@@ -16,7 +16,8 @@ export interface AppNotification {
     | "wo_overdue"
     | "low_stock"
     | "pm_due"
-    | "wo_status_changed";
+    | "wo_status_changed"
+    | "wo_comment";
   title: string;
   body: string;
   href: string;

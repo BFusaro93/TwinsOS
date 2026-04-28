@@ -13,6 +13,7 @@ import {
   Package,
   CalendarClock,
   Activity,
+  MessageSquare,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -57,7 +58,9 @@ function NotifIcon({ type }: { type: AppNotification["type"] }) {
     case "pm_due":
       return <CalendarClock className={cn(cls, "text-violet-500")} />;
     case "wo_status_changed":
-      return <Activity className={cn(cls, "text-slate-400")} />;
+      return <Activity className={cn(cls, "text-blue-500")} />;
+    case "wo_comment":
+      return <MessageSquare className={cn(cls, "text-slate-400")} />;
     default:
       return <Bell className={cn(cls, "text-slate-400")} />;
   }
@@ -89,9 +92,9 @@ export function NotificationsBell() {
       .from("notifications")
       .select("id, type, title, message, entity_id, entity_type, created_at")
       .eq("user_id", currentUser.id)
-      .eq("type", "wo_comment")
+      .in("type", ["wo_comment", "wo_status_changed"])
       .order("created_at", { ascending: false })
-      .limit(30)
+      .limit(50)
       .then(({ data }) => { if (data) setDbNotifications(data); });
   }, [currentUser.id]);
 
@@ -251,13 +254,14 @@ export function NotificationsBell() {
         });
       });
 
-    // WO comment notifications (from the DB notifications table)
+    // Persisted DB notifications (wo_comment, wo_status_changed)
     dbNotifications.forEach((n) => {
       const id = `db-notif-${n.id}`;
+      const notifType = (n.type === "wo_status_changed" ? "wo_status_changed" : "wo_comment") as AppNotification["type"];
       items.push({
         id,
-        type: "wo_status_changed" as AppNotification["type"], // reuse Activity icon
-        title: n.title ?? "New Comment",
+        type: notifType,
+        title: n.title ?? (notifType === "wo_status_changed" ? "Status Changed" : "New Comment"),
         body: n.message,
         href: "/cmms/work-orders",
         entityId: n.entity_id,

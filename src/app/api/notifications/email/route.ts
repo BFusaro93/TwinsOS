@@ -52,8 +52,8 @@ const ADMIN_PREF_KEY: Record<NotifType, string | null> = {
 // Maps event type → in-app pref key (used when inserting notifications rows)
 const INAPP_PREF_KEY: Record<NotifType, string | null> = {
   wo_created:              null,
-  wo_assigned:             null,   // in-app is derived client-side for assigned
-  wo_status_changed:       null,   // same
+  wo_assigned:             null,              // in-app is derived client-side for assigned
+  wo_status_changed:       "inAppWorkOrderStatusChanged",
   wo_comment:              "inAppWorkOrderComment",
   approved:                null,
   rejected:                null,
@@ -181,16 +181,32 @@ export async function POST(request: Request) {
       if (inAppEligible.length > 0) {
         const woNum   = (entity.work_order_number ?? "") as string;
         const woTitle = (entity.title ?? "") as string;
-        const commentBody = extra.commentBody ?? "";
+
+        let inAppType: string;
+        let inAppTitle: string;
+        let inAppMessage: string;
+
+        if (notifType === "wo_comment") {
+          const commentBody = extra.commentBody ?? "";
+          inAppType    = "wo_comment";
+          inAppTitle   = "New Comment";
+          inAppMessage = `${callerProfile.name ?? "Someone"} commented on ${woNum}${woTitle ? ` — ${woTitle}` : ""}${commentBody ? `: "${commentBody.slice(0, 80)}${commentBody.length > 80 ? "…" : ""}"` : ""}`;
+        } else {
+          // wo_status_changed
+          const rawStatus = (extra.newStatus ?? (entity.status as string) ?? "").replace(/_/g, " ");
+          inAppType    = "wo_status_changed";
+          inAppTitle   = "Status Changed";
+          inAppMessage = `${callerProfile.name ?? "Someone"} changed ${woNum}${woTitle ? ` — ${woTitle}` : ""} to ${rawStatus}`;
+        }
 
         const inAppRows = inAppEligible.map((uid: string) => ({
           org_id:      callerProfile.org_id as string,
           user_id:     uid,
-          type:        "wo_comment",
+          type:        inAppType,
           entity_id:   entityId,
           entity_type: entityType,
-          title:       "New Comment",
-          message:     `${callerProfile.name ?? "Someone"} commented on ${woNum}${woTitle ? ` — ${woTitle}` : ""}${commentBody ? `: "${commentBody.slice(0, 80)}${commentBody.length > 80 ? "…" : ""}"` : ""}`,
+          title:       inAppTitle,
+          message:     inAppMessage,
           read:        false,
         }));
 

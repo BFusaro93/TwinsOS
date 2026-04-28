@@ -146,11 +146,11 @@ export function useUpdateWorkOrderStatus() {
       queryClient.invalidateQueries({ queryKey: ["work-orders", id] });
       queryClient.invalidateQueries({ queryKey: ["audit-log", "work_order", id] });
       queryClient.invalidateQueries({ queryKey: ["automations"] });
-      // Fire WO-status-changed email to assigned users (best-effort)
+      // Fire WO-status-changed email + in-app notification to assigned users (best-effort)
       fetch("/api/notifications/email", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: "wo_status_changed", entityId: id, entityType: "work_order" }),
+        body: JSON.stringify({ type: "wo_status_changed", entityId: id, entityType: "work_order", extra: { newStatus: status } }),
       }).catch(() => {});
     },
   });
