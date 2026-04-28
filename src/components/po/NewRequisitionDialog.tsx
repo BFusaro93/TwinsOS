@@ -512,6 +512,7 @@ export function NewRequisitionDialog({ open, onOpenChange, initialData, prefillD
                                   step={0.01}
                                   className="h-8 w-20 text-xs"
                                   value={li.quantity}
+                                  onFocus={(e) => e.target.select()}
                                   onChange={(e) =>
                                     handleLineItemQtyChange(
                                       li.id,
@@ -527,6 +528,7 @@ export function NewRequisitionDialog({ open, onOpenChange, initialData, prefillD
                                   min={0}
                                   className="h-8 w-28 text-xs"
                                   value={li.unitCost}
+                                  onFocus={(e) => e.target.select()}
                                   onChange={(e) =>
                                     handleLineItemUnitCostChange(
                                       li.id,
