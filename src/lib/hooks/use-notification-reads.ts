@@ -38,9 +38,18 @@ export function useNotificationReads(activeNotifIds: string[]) {
   // Cache the authenticated user ID so we can include it in upserts (required by generated types)
   const userIdRef = useRef<string | null>(null);
 
-  // On mount: get user ID, fetch DB rows, and merge into local state
+  // On mount: get user ID, fetch DB rows, and merge into local state.
+  // Also set the prune timestamp if it has never been set — this prevents
+  // the prune from running immediately on a new device (e.g. phone) and
+  // deleting the DB reads we just fetched before they can be applied.
   useEffect(() => {
     let cancelled = false;
+
+    // Prevent first-ever-device prune from running right away
+    if (!localStorage.getItem(LS_PRUNE_KEY)) {
+      localStorage.setItem(LS_PRUNE_KEY, String(Date.now()));
+    }
+
     async function fetchFromDb() {
       const supabase = createClient();
 

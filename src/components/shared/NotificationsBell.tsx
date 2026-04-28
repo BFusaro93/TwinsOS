@@ -119,7 +119,7 @@ export function NotificationsBell() {
         ...maintenanceRequests.filter((mr) => mr.status === "open").map((mr) => `maint-req-${mr.id}`),
         ...dbNotifications.map((n) => `db-notif-${n.id}`),
       ];
-    }, [requisitions, purchaseOrders, workOrders, parts, pmSchedules])
+    }, [requisitions, purchaseOrders, workOrders, parts, pmSchedules, maintenanceRequests, dbNotifications, currentUser.id])
   );
 
   // Derive notifications from live data
