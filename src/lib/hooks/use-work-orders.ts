@@ -71,7 +71,17 @@ export function useCreateWorkOrder() {
       if (error) throw error;
       return mapWorkOrder(data);
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["work-orders"] }),
+    onSuccess: (wo) => {
+      queryClient.invalidateQueries({ queryKey: ["work-orders"] });
+      // Fire WO-assigned email to assigned users (best-effort)
+      if ((wo.assignedToIds ?? []).length > 0) {
+        fetch("/api/notifications/email", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ type: "wo_assigned", entityId: wo.id, entityType: "work_order" }),
+        }).catch(() => {});
+      }
+    },
   });
 }
 
@@ -138,6 +148,12 @@ export function useUpdateWorkOrderStatus() {
       queryClient.invalidateQueries({ queryKey: ["work-orders", id] });
       queryClient.invalidateQueries({ queryKey: ["audit-log", "work_order", id] });
       queryClient.invalidateQueries({ queryKey: ["automations"] });
+      // Fire WO-status-changed email to assigned users (best-effort)
+      fetch("/api/notifications/email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "wo_status_changed", entityId: id, entityType: "work_order" }),
+      }).catch(() => {});
     },
   });
 }

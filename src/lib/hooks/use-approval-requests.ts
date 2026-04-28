@@ -296,6 +296,13 @@ export function useDecideApproval(entityId: string) {
         } else {
           patchPOCache(queryClient, entityId, { status: newEntityStatus as PurchaseOrder["status"] });
         }
+        // Fire approved/rejected email to the submitter (best-effort)
+        const emailType = newEntityStatus === "approved" ? "approved" : "rejected";
+        fetch("/api/notifications/email", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ type: emailType, entityId, entityType }),
+        }).catch(() => {});
       }
     },
     onError: (_err, _vars, context) => {

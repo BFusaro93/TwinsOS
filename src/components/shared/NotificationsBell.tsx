@@ -17,12 +17,13 @@ import {
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
-import { usePOStore, useCMMSStore } from "@/stores";
+import { usePOStore, useCMMSStore, useCurrentUserStore } from "@/stores";
 import { useParts } from "@/lib/hooks/use-parts";
 import { useWorkOrders } from "@/lib/hooks/use-work-orders";
 import { usePMSchedules } from "@/lib/hooks/use-pm-schedules";
 import { useRequisitions } from "@/lib/hooks/use-requisitions";
 import { usePurchaseOrders } from "@/lib/hooks/use-purchase-orders";
+import { useRequests } from "@/lib/hooks/use-requests";
 import { useNotificationReads } from "@/lib/hooks/use-notification-reads";
 import type { AppNotification } from "@/types/notification";
 
@@ -66,11 +67,13 @@ export function NotificationsBell() {
   const { setSelectedRequisitionId, setSelectedPOId } = usePOStore();
   const { setSelectedWorkOrderId, setSelectedPMScheduleId } = useCMMSStore();
 
+  const { currentUser } = useCurrentUserStore();
   const { data: parts = [] } = useParts();
   const { data: workOrders = [] } = useWorkOrders();
   const { data: pmSchedules = [] } = usePMSchedules();
   const { data: requisitions = [] } = useRequisitions();
   const { data: purchaseOrders = [] } = usePurchaseOrders();
+  const { data: maintenanceRequests = [] } = useRequests();
 
   const [open, setOpen] = useState(false);
 
@@ -87,8 +90,10 @@ export function NotificationsBell() {
         ...requisitions.filter((r) => r.status === "pending_approval").map((r) => `req-approval-${r.id}`),
         ...purchaseOrders.filter((po) => po.status === "pending").map((po) => `po-approval-${po.id}`),
         ...workOrders.filter((wo) => wo.status !== "done" && wo.dueDate !== null && wo.dueDate.slice(0, 10) < todayIso).map((wo) => `wo-overdue-${wo.id}`),
+        ...workOrders.filter((wo) => wo.status !== "done" && (wo.assignedToIds ?? []).includes(currentUser.id)).map((wo) => `wo-assigned-${wo.id}`),
         ...parts.filter((p) => p.deletedAt === null && p.minimumStock !== null && p.quantityOnHand <= p.minimumStock).map((p) => `low-stock-${p.id}`),
         ...pmSchedules.filter((pm) => pm.isActive && pm.nextDueDate.slice(0, 10) <= weekFromNowIso).map((pm) => `pm-due-${pm.id}`),
+        ...maintenanceRequests.filter((mr) => mr.status === "open").map((mr) => `maint-req-${mr.id}`),
       ];
     }, [requisitions, purchaseOrders, workOrders, parts, pmSchedules])
   );
@@ -134,6 +139,24 @@ export function NotificationsBell() {
           entityId: po.id,
           entityType: "purchase_order",
           createdAt: po.updatedAt,
+          readAt: readIds.has(id) ? new Date().toISOString() : null,
+        });
+      });
+
+    // Work orders assigned to the current user
+    workOrders
+      .filter((wo) => wo.status !== "done" && (wo.assignedToIds ?? []).includes(currentUser.id))
+      .forEach((wo) => {
+        const id = `wo-assigned-${wo.id}`;
+        items.push({
+          id,
+          type: "wo_assigned",
+          title: "Work Order Assigned",
+          body: `${wo.workOrderNumber} — ${wo.title}${wo.assetName ? ` (${wo.assetName})` : ""}.`,
+          href: "/cmms/work-orders",
+          entityId: wo.id,
+          entityType: "work_order",
+          createdAt: wo.updatedAt,
           readAt: readIds.has(id) ? new Date().toISOString() : null,
         });
       });
@@ -207,6 +230,26 @@ export function NotificationsBell() {
         });
       });
 
+    // Open maintenance requests (admins and managers only)
+    if (currentUser.role === "admin" || currentUser.role === "manager") {
+      maintenanceRequests
+        .filter((mr) => mr.status === "open")
+        .forEach((mr) => {
+          const id = `maint-req-${mr.id}`;
+          items.push({
+            id,
+            type: "wo_assigned" as AppNotification["type"], // reuse icon; no dedicated mr type
+            title: "New Maintenance Request",
+            body: `${mr.requestNumber} — ${mr.title}${mr.assetName ? ` (${mr.assetName})` : ""}.`,
+            href: "/cmms/work-orders",
+            entityId: mr.id,
+            entityType: null,
+            createdAt: mr.createdAt,
+            readAt: readIds.has(id) ? new Date().toISOString() : null,
+          });
+        });
+    }
+
     // Sort unread first, then by most recent
     return items.sort((a, b) => {
       if ((a.readAt === null) !== (b.readAt === null)) {
@@ -214,7 +257,7 @@ export function NotificationsBell() {
       }
       return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
     });
-  }, [parts, workOrders, pmSchedules, requisitions, purchaseOrders, readIds]);
+  }, [parts, workOrders, pmSchedules, requisitions, purchaseOrders, maintenanceRequests, currentUser, readIds]);
 
   const unreadCount = notifications.filter((n) => n.readAt === null).length;
 

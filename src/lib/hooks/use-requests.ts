@@ -71,7 +71,15 @@ export function useCreateRequest() {
       if (error) throw error;
       return mapMaintenanceRequest(data);
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["requests"] }),
+    onSuccess: (mr) => {
+      queryClient.invalidateQueries({ queryKey: ["requests"] });
+      // Notify admins/managers about new maintenance request (best-effort)
+      fetch("/api/notifications/email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "new_maintenance_request", entityId: mr.id, entityType: "maintenance_request" }),
+      }).catch(() => {});
+    },
   });
 }
 
