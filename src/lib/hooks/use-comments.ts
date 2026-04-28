@@ -60,8 +60,21 @@ export function useAddComment() {
       if (error) throw error;
       return mapComment(data);
     },
-    onSuccess: (_, { recordType, recordId }) => {
+    onSuccess: (comment, { recordType, recordId }) => {
       queryClient.invalidateQueries({ queryKey: ["comments", recordType, recordId] });
+      // Fire email + in-app notifications for work order comments (best-effort)
+      if (recordType === "work_order") {
+        fetch("/api/notifications/email", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            type: "wo_comment",
+            entityId: recordId,
+            entityType: "work_order",
+            extra: { commentBody: comment.body },
+          }),
+        }).catch(() => {});
+      }
     },
   });
 }

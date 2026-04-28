@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Check } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Switch } from "@/components/ui/switch";
+import { useCurrentUserStore } from "@/stores";
 import {
   useNotificationPrefs,
   useUpdateNotificationPrefs,
@@ -46,6 +47,8 @@ interface NotificationsPageProps {
 }
 
 export function NotificationsPage({ hideHeader = false }: NotificationsPageProps) {
+  const { currentUser } = useCurrentUserStore();
+  const isAdmin = currentUser.role === "admin";
   const { data: remotePrefs, isLoading } = useNotificationPrefs();
   const { mutate: updatePrefs } = useUpdateNotificationPrefs();
 
@@ -122,6 +125,9 @@ export function NotificationsPage({ hideHeader = false }: NotificationsPageProps
           <SettingRow label="Work Order Overdue" description="When a work order passes its due date">
             <Switch checked={prefs.emailWorkOrderOverdue} onCheckedChange={() => toggle("emailWorkOrderOverdue")} />
           </SettingRow>
+          <SettingRow label="Work Order Comment" description="When someone comments on a work order you're assigned to">
+            <Switch checked={prefs.emailWorkOrderComment} onCheckedChange={() => toggle("emailWorkOrderComment")} />
+          </SettingRow>
           <SettingRow label="Requisition Approved" description="When your purchase requisition is approved">
             <Switch checked={prefs.emailRequisitionApproved} onCheckedChange={() => toggle("emailRequisitionApproved")} />
           </SettingRow>
@@ -143,6 +149,22 @@ export function NotificationsPage({ hideHeader = false }: NotificationsPageProps
           <SettingRow label="New Maintenance Request" description="When a new maintenance request is submitted">
             <Switch checked={prefs.emailNewMaintenanceRequest} onCheckedChange={() => toggle("emailNewMaintenanceRequest")} />
           </SettingRow>
+          {isAdmin && (
+            <>
+              <div className="pb-1 pt-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Admin — All Work Orders</p>
+              </div>
+              <SettingRow label="Any WO Created" description="When any work order is created in the org">
+                <Switch checked={prefs.emailAdminWoCreated} onCheckedChange={() => toggle("emailAdminWoCreated")} />
+              </SettingRow>
+              <SettingRow label="Any WO Status Changed" description="When any work order's status changes">
+                <Switch checked={prefs.emailAdminWoStatusChanged} onCheckedChange={() => toggle("emailAdminWoStatusChanged")} />
+              </SettingRow>
+              <SettingRow label="Any WO Comment Added" description="When anyone comments on any work order">
+                <Switch checked={prefs.emailAdminWoComment} onCheckedChange={() => toggle("emailAdminWoComment")} />
+              </SettingRow>
+            </>
+          )}
         </div>
       </div>
 
@@ -165,6 +187,9 @@ export function NotificationsPage({ hideHeader = false }: NotificationsPageProps
           </SettingRow>
           <SettingRow label="Work Order Overdue" description="When a work order passes its due date">
             <Switch checked={prefs.inAppWorkOrderOverdue} onCheckedChange={() => toggle("inAppWorkOrderOverdue")} />
+          </SettingRow>
+          <SettingRow label="Work Order Comment" description="When someone comments on a work order you're assigned to">
+            <Switch checked={prefs.inAppWorkOrderComment} onCheckedChange={() => toggle("inAppWorkOrderComment")} />
           </SettingRow>
           <SettingRow label="Requisition Approved" description="When your purchase requisition is approved">
             <Switch checked={prefs.inAppRequisitionApproved} onCheckedChange={() => toggle("inAppRequisitionApproved")} />

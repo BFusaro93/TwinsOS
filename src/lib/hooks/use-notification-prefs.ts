@@ -2,10 +2,11 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 
 export interface NotificationPrefs {
-  // Email
+  // Email — personal events
   emailWorkOrderAssigned: boolean;
   emailWorkOrderStatusChanged: boolean;
   emailWorkOrderOverdue: boolean;
+  emailWorkOrderComment: boolean;
   emailRequisitionApproved: boolean;
   emailRequisitionRejected: boolean;
   emailApprovalRequired: boolean;
@@ -13,10 +14,15 @@ export interface NotificationPrefs {
   emailLowStockAlert: boolean;
   emailPmScheduleDue: boolean;
   emailNewMaintenanceRequest: boolean;
-  // In-app
+  // Email — admin: any WO events (shown only to admins in Settings)
+  emailAdminWoCreated: boolean;
+  emailAdminWoStatusChanged: boolean;
+  emailAdminWoComment: boolean;
+  // In-app — personal events
   inAppWorkOrderAssigned: boolean;
   inAppWorkOrderStatusChanged: boolean;
   inAppWorkOrderOverdue: boolean;
+  inAppWorkOrderComment: boolean;
   inAppRequisitionApproved: boolean;
   inAppRequisitionRejected: boolean;
   inAppApprovalRequired: boolean;
@@ -30,6 +36,7 @@ export const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = {
   emailWorkOrderAssigned: true,
   emailWorkOrderStatusChanged: true,
   emailWorkOrderOverdue: true,
+  emailWorkOrderComment: true,
   emailRequisitionApproved: true,
   emailRequisitionRejected: true,
   emailApprovalRequired: true,
@@ -37,9 +44,13 @@ export const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = {
   emailLowStockAlert: true,
   emailPmScheduleDue: false,
   emailNewMaintenanceRequest: false,
+  emailAdminWoCreated: false,
+  emailAdminWoStatusChanged: false,
+  emailAdminWoComment: false,
   inAppWorkOrderAssigned: true,
   inAppWorkOrderStatusChanged: true,
   inAppWorkOrderOverdue: true,
+  inAppWorkOrderComment: true,
   inAppRequisitionApproved: true,
   inAppRequisitionRejected: true,
   inAppApprovalRequired: true,

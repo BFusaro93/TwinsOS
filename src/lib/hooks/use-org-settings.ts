@@ -111,5 +111,9 @@ export function useUpdateOrgSettings() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["org-settings"] });
     },
+    onError: (err) => {
+      // Surface to browser console so devs can see save failures even without a UI handler
+      console.error("[useUpdateOrgSettings] save failed:", err);
+    },
   });
 }

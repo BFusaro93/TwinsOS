@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   Bell,
@@ -25,6 +25,7 @@ import { useRequisitions } from "@/lib/hooks/use-requisitions";
 import { usePurchaseOrders } from "@/lib/hooks/use-purchase-orders";
 import { useRequests } from "@/lib/hooks/use-requests";
 import { useNotificationReads } from "@/lib/hooks/use-notification-reads";
+import { createClient } from "@/lib/supabase/client";
 import type { AppNotification } from "@/types/notification";
 
 function timeAgo(isoString: string): string {
@@ -75,6 +76,25 @@ export function NotificationsBell() {
   const { data: purchaseOrders = [] } = usePurchaseOrders();
   const { data: maintenanceRequests = [] } = useRequests();
 
+  // Fetch persisted notifications (wo_comment type) from the DB
+  const [dbNotifications, setDbNotifications] = useState<Array<{
+    id: string; type: string | null; title: string | null;
+    message: string; entity_id: string | null; entity_type: string | null; created_at: string;
+  }>>([]);
+
+  useEffect(() => {
+    if (!currentUser.id) return;
+    const supabase = createClient();
+    supabase
+      .from("notifications")
+      .select("id, type, title, message, entity_id, entity_type, created_at")
+      .eq("user_id", currentUser.id)
+      .eq("type", "wo_comment")
+      .order("created_at", { ascending: false })
+      .limit(30)
+      .then(({ data }) => { if (data) setDbNotifications(data); });
+  }, [currentUser.id]);
+
   const [open, setOpen] = useState(false);
 
   // Derive notification IDs first so we can pass them to the reads hook for pruning
@@ -94,6 +114,7 @@ export function NotificationsBell() {
         ...parts.filter((p) => p.deletedAt === null && p.minimumStock !== null && p.quantityOnHand <= p.minimumStock).map((p) => `low-stock-${p.id}`),
         ...pmSchedules.filter((pm) => pm.isActive && pm.nextDueDate.slice(0, 10) <= weekFromNowIso).map((pm) => `pm-due-${pm.id}`),
         ...maintenanceRequests.filter((mr) => mr.status === "open").map((mr) => `maint-req-${mr.id}`),
+        ...dbNotifications.map((n) => `db-notif-${n.id}`),
       ];
     }, [requisitions, purchaseOrders, workOrders, parts, pmSchedules])
   );
@@ -230,6 +251,22 @@ export function NotificationsBell() {
         });
       });
 
+    // WO comment notifications (from the DB notifications table)
+    dbNotifications.forEach((n) => {
+      const id = `db-notif-${n.id}`;
+      items.push({
+        id,
+        type: "wo_status_changed" as AppNotification["type"], // reuse Activity icon
+        title: n.title ?? "New Comment",
+        body: n.message,
+        href: "/cmms/work-orders",
+        entityId: n.entity_id,
+        entityType: n.entity_type as AppNotification["entityType"],
+        createdAt: n.created_at,
+        readAt: readIds.has(id) ? new Date().toISOString() : null,
+      });
+    });
+
     // Open maintenance requests (admins and managers only)
     if (currentUser.role === "admin" || currentUser.role === "manager") {
       maintenanceRequests
@@ -257,7 +294,7 @@ export function NotificationsBell() {
       }
       return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
     });
-  }, [parts, workOrders, pmSchedules, requisitions, purchaseOrders, maintenanceRequests, currentUser, readIds]);
+  }, [parts, workOrders, pmSchedules, requisitions, purchaseOrders, maintenanceRequests, dbNotifications, currentUser, readIds]);
 
   const unreadCount = notifications.filter((n) => n.readAt === null).length;
 

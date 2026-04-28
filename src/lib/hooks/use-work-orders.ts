@@ -73,14 +73,12 @@ export function useCreateWorkOrder() {
     },
     onSuccess: (wo) => {
       queryClient.invalidateQueries({ queryKey: ["work-orders"] });
-      // Fire WO-assigned email to assigned users (best-effort)
-      if ((wo.assignedToIds ?? []).length > 0) {
-        fetch("/api/notifications/email", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ type: "wo_assigned", entityId: wo.id, entityType: "work_order" }),
-        }).catch(() => {});
-      }
+      // Fire emails: assigned users get wo_assigned; admins who opted in get wo_created (best-effort)
+      fetch("/api/notifications/email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "wo_assigned", entityId: wo.id, entityType: "work_order" }),
+      }).catch(() => {});
     },
   });
 }
