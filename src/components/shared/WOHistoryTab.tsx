@@ -2,10 +2,12 @@
 
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { X } from "lucide-react";
+import { Plus, X } from "lucide-react";
 import { useWorkOrders } from "@/lib/hooks/use-work-orders";
 import { WorkOrderDetailPanel } from "@/components/cmms/WorkOrderDetailPanel";
+import { NewWorkOrderDialog } from "@/components/cmms/NewWorkOrderDialog";
 import { StatusBadge } from "@/components/shared/StatusBadge";
+import { Button } from "@/components/ui/button";
 import { formatDate } from "@/lib/utils";
 import { WO_STATUS_LABELS, WO_PRIORITY_LABELS } from "@/lib/constants";
 import { OverlayLevelContext, overlayZ, useOverlayLevel } from "@/lib/overlay-level";
@@ -13,15 +15,21 @@ import type { WorkOrder } from "@/types";
 
 interface WOHistoryTabProps {
   assetId: string;
+  /** "asset" | "vehicle" — determines the entity key prefix passed to the new WO dialog */
   recordLabel?: string;
 }
 
 export function WOHistoryTab({ assetId, recordLabel = "asset" }: WOHistoryTabProps) {
   const { data: workOrders, isLoading } = useWorkOrders();
   const [selectedWO, setSelectedWO] = useState<WorkOrder | null>(null);
+  const [newWOOpen, setNewWOOpen] = useState(false);
   const woPortalRef = useRef<HTMLDivElement>(null);
   const level = useOverlayLevel();
   const { backdrop: backdropZ, panel: panelZ } = overlayZ(level);
+
+  // Build the entity key for pre-selecting this asset/vehicle in the new WO dialog
+  const entityType = recordLabel === "vehicle" ? "vehicle" : "asset";
+  const defaultEntityKey = `${entityType}:${assetId}`;
 
   // Close on Escape key
   useEffect(() => {
@@ -62,8 +70,17 @@ export function WOHistoryTab({ assetId, recordLabel = "asset" }: WOHistoryTabPro
 
   if (assetWOs.length === 0) {
     return (
-      <div className="flex h-40 items-center justify-center">
+      <div className="flex h-40 flex-col items-center justify-center gap-3">
         <p className="text-sm text-slate-400">No work orders found for this {recordLabel}.</p>
+        <Button size="sm" className="gap-1.5 text-xs" onClick={() => setNewWOOpen(true)}>
+          <Plus className="h-3.5 w-3.5" />
+          New Work Order
+        </Button>
+        <NewWorkOrderDialog
+          open={newWOOpen}
+          onOpenChange={setNewWOOpen}
+          defaultEntityKey={defaultEntityKey}
+        />
       </div>
     );
   }
@@ -71,6 +88,15 @@ export function WOHistoryTab({ assetId, recordLabel = "asset" }: WOHistoryTabPro
   return (
     <>
       <div className="p-6">
+        <div className="mb-3 flex items-center justify-between">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+            {assetWOs.length} work order{assetWOs.length !== 1 ? "s" : ""}
+          </p>
+          <Button size="sm" className="gap-1.5 text-xs" onClick={() => setNewWOOpen(true)}>
+            <Plus className="h-3.5 w-3.5" />
+            New Work Order
+          </Button>
+        </div>
         <div className="overflow-hidden rounded-md border">
           <table className="w-full text-sm">
             <thead>
@@ -113,6 +139,13 @@ export function WOHistoryTab({ assetId, recordLabel = "asset" }: WOHistoryTabPro
           </table>
         </div>
       </div>
+
+      {/* New WO dialog — entity pre-selected */}
+      <NewWorkOrderDialog
+        open={newWOOpen}
+        onOpenChange={setNewWOOpen}
+        defaultEntityKey={defaultEntityKey}
+      />
 
       {/* WO detail — rendered via portal to avoid Radix scroll-lock nesting issues */}
       {selectedWO &&

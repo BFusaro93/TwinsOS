@@ -39,6 +39,8 @@ interface NewWorkOrderDialogProps {
   onOpenChange: (open: boolean) => void;
   initialData?: WorkOrder | null;
   onCreated?: (wo: WorkOrder) => void;
+  /** Pre-select an entity in create mode: "asset:<id>" | "vehicle:<id>" */
+  defaultEntityKey?: string;
 }
 
 // Combined option representing either an asset or vehicle
@@ -57,7 +59,7 @@ const ASSET_STATUS_OPTIONS: Array<{ value: string; label: string }> = [
   { value: "disposed", label: ASSET_STATUS_LABELS.disposed },
 ];
 
-export function NewWorkOrderDialog({ open, onOpenChange, initialData, onCreated }: NewWorkOrderDialogProps) {
+export function NewWorkOrderDialog({ open, onOpenChange, initialData, onCreated, defaultEntityKey }: NewWorkOrderDialogProps) {
   const isEditing = !!initialData;
 
   const [title, setTitle] = useState("");
@@ -65,7 +67,7 @@ export function NewWorkOrderDialog({ open, onOpenChange, initialData, onCreated 
   const [woType, setWoType] = useState("none");
   const [categoryIds, setCategoryIds] = useState<string[]>([]);
   const [entityKey, setEntityKey] = useState("none"); // used in edit mode: "asset:<id>" | "vehicle:<id>" | "none"
-  const [entityKeys, setEntityKeys] = useState<string[]>([]); // used in create mode (multi-select)
+  const [entityKeys, setEntityKeys] = useState<string[]>(() => defaultEntityKey ? [defaultEntityKey] : []); // used in create mode (multi-select)
   const [startDate, setStartDate] = useState("");
   const [dueDate, setDueDate] = useState("");
   // Assigned to — multi-select user IDs
@@ -157,7 +159,7 @@ export function NewWorkOrderDialog({ open, onOpenChange, initialData, onCreated 
     setWoType("none");
     setCategoryIds([]);
     setEntityKey("none");
-    setEntityKeys([]);
+    setEntityKeys(defaultEntityKey ? [defaultEntityKey] : []);
     setStartDate("");
     setDueDate("");
     setAssignedToIds([]);
