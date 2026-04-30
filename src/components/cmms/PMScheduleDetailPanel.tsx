@@ -130,6 +130,14 @@ export function PMScheduleDetailPanel({ schedule }: PMScheduleDetailPanelProps) 
   const { data: scheduleAssets } = usePMScheduleAssets(schedule.id);
   const hasAssets = (scheduleAssets?.length ?? 0) > 0;
 
+  // Check if WOs were already generated today for this schedule
+  const { data: allWorkOrders } = useWorkOrders();
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const todaysWO = allWorkOrders?.find(
+    (wo) => wo.pmScheduleId === schedule.id && wo.createdAt.slice(0, 10) === todayStr
+  ) ?? null;
+  const alreadyGeneratedToday = todaysWO !== null;
+
   async function handleGenerateWOs() {
     setGenerating(true);
     setGenerateError(null);
@@ -178,12 +186,18 @@ export function PMScheduleDetailPanel({ schedule }: PMScheduleDetailPanelProps) 
             size="sm"
             variant="outline"
             className="gap-1.5 text-xs"
-            disabled={!hasAssets || generating}
+            disabled={!hasAssets || generating || alreadyGeneratedToday}
             onClick={handleGenerateWOs}
-            title={hasAssets ? "Generate a parent WO + sub-WOs for each asset" : "Add assets to this schedule first"}
+            title={
+              !hasAssets
+                ? "Add assets to this schedule first"
+                : alreadyGeneratedToday
+                ? `Already generated today (${todaysWO?.workOrderNumber})`
+                : "Generate a parent WO + sub-WOs for each asset"
+            }
           >
             <Play className="h-3.5 w-3.5" />
-            {generating ? "Generating…" : "Generate WOs"}
+            {generating ? "Generating…" : alreadyGeneratedToday ? "Generated Today" : "Generate WOs"}
           </Button>
 
           <EditButton onClick={() => setEditOpen(true)} />

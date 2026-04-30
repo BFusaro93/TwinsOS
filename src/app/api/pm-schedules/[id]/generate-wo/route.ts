@@ -49,7 +49,27 @@ export async function POST(
     return NextResponse.json({ error: "PM schedule not found" }, { status: 404 });
   }
 
-  // ── 2. Fetch linked assets ────────────────────────────────────────────────
+  // ── 2. Duplicate guard — block if WOs were already generated today ─────────
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const { data: recentWOs } = await adminClient
+    .from("work_orders")
+    .select("id, work_order_number, created_at")
+    .eq("pm_schedule_id", scheduleId)
+    .eq("org_id", profile.org_id)
+    .is("deleted_at", null)
+    .gte("created_at", todayStart.toISOString())
+    .limit(1);
+
+  if (recentWOs && recentWOs.length > 0) {
+    const existing = recentWOs[0];
+    return NextResponse.json(
+      { error: `Work orders were already generated today (${existing.work_order_number}). To generate again, delete the existing batch first.` },
+      { status: 409 }
+    );
+  }
+
+  // ── 3. Fetch linked assets ────────────────────────────────────────────────
   const { data: scheduleAssets } = await adminClient
     .from("pm_schedule_assets")
     .select("*")
@@ -200,7 +220,7 @@ export async function POST(
     primaryWOId = parentWO.id;
   }
 
-  // ── 6. Advance next_due_date on the PM schedule ───────────────────────────
+  // ── 5. Advance next_due_date on the PM schedule ───────────────────────────
   const nextDue = advanceDate(schedule.next_due_date, schedule.frequency);
   await adminClient
     .from("pm_schedules")
