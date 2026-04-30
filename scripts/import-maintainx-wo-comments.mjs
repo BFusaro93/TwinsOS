@@ -2,9 +2,10 @@
  * import-maintainx-wo-comments.mjs
  *
  * Fetches all MaintainX work order comments, matches each MX WO to an
- * Equipt WO by normalized title, resolves author names via the MX users
- * API, and inserts rows into the polymorphic `comments` table
- * (record_type = 'work_order').
+ * Equipt WO via the numeric middle segment of work_order_number
+ * (e.g. "WO-054424-2ak" → MaintainX WO id 54424), resolves author names
+ * via the MX users API, and inserts rows into the polymorphic `comments`
+ * table (record_type = 'work_order').
  *
  * Safe to re-run — deduplicates by (record_id, body, created_at).
  *
@@ -15,7 +16,9 @@
  *   ORG_ID=619de9bb-... \
  *   node scripts/import-maintainx-wo-comments.mjs
  *
- * Optional: DRY_RUN=true
+ * Optional:
+ *   DRY_RUN=true          — print what would be inserted without writing
+ *   MX_WO_IDS=54424,55241 — only process these MaintainX WO IDs (comma-separated)
  */
 
 import { createClient } from "@supabase/supabase-js";
@@ -25,6 +28,9 @@ const SUPABASE_URL         = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
 const ORG_ID               = process.env.ORG_ID;
 const DRY_RUN              = process.env.DRY_RUN === "true";
+const MX_WO_IDS_FILTER     = process.env.MX_WO_IDS
+  ? new Set(process.env.MX_WO_IDS.split(",").map((s) => parseInt(s.trim(), 10)))
+  : null;
 const MX_BASE              = "https://api.getmaintainx.com/v1";
 
 if (!MX_TOKEN || !SUPABASE_URL || !SUPABASE_SERVICE_KEY || !ORG_ID) {
@@ -33,10 +39,6 @@ if (!MX_TOKEN || !SUPABASE_URL || !SUPABASE_SERVICE_KEY || !ORG_ID) {
 }
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
-
-function normalize(s) {
-  return (s ?? "").toLowerCase().trim().replace(/\s+/g, " ");
-}
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -70,9 +72,19 @@ async function fetchAllPages(listKey, path) {
   return items;
 }
 
+/**
+ * Extract the MaintainX WO number from an Equipt work_order_number.
+ * Format: "WO-054424-2ak" → 54424
+ */
+function extractMxId(woNumber) {
+  const match = woNumber?.match(/^WO-0*(\d+)-/);
+  return match ? parseInt(match[1], 10) : null;
+}
+
 async function run() {
-  console.log(`\n💬  MaintainX → Equipt WO comments import`);
+  console.log(`\n💬  MaintainX → Equipt WO comments import (ID-based matching)`);
   if (DRY_RUN) console.log("🧪  DRY RUN — no writes\n");
+  if (MX_WO_IDS_FILTER) console.log(`🔍  Filtering to MX WO IDs: ${[...MX_WO_IDS_FILTER].join(", ")}\n`);
 
   // ── 1. Fetch MX users → name map ─────────────────────────────────────────
   console.log("📥  Fetching MaintainX users…");
@@ -82,27 +94,43 @@ async function run() {
   );
   console.log(`    ${mxUsers.length} users loaded\n`);
 
-  // ── 2. Fetch all MX WOs ───────────────────────────────────────────────────
-  console.log("📥  Fetching MaintainX work orders…");
-  const mxWOs = await fetchAllPages("workOrders", "/workorders?limit=100");
+  // ── 2. Fetch all MX WOs (or just the filtered set) ───────────────────────
+  let mxWOs;
+  if (MX_WO_IDS_FILTER) {
+    console.log("📥  Fetching specific MaintainX work orders…");
+    mxWOs = [];
+    for (const mxId of MX_WO_IDS_FILTER) {
+      try {
+        const data = await mxGet(`/workorders/${mxId}`);
+        const wo = data.workOrder ?? data;
+        if (wo?.id) mxWOs.push(wo);
+        await sleep(DELAY_MS);
+      } catch (e) {
+        console.log(`  ⚠️  Failed to fetch MX WO ${mxId}: ${e.message}`);
+      }
+    }
+  } else {
+    console.log("📥  Fetching all MaintainX work orders…");
+    mxWOs = await fetchAllPages("workOrders", "/workorders?limit=100");
+  }
   console.log(`    ${mxWOs.length} WOs found\n`);
 
-  // ── 3. Load Equipt WOs → build title lookup ───────────────────────────────
+  // ── 3. Load Equipt WOs → build MX-ID lookup ──────────────────────────────
   console.log("📥  Loading Equipt work orders…");
   const { data: equipWOs, error: woErr } = await supabase
     .from("work_orders")
-    .select("id, title, asset_name")
+    .select("id, title, asset_name, work_order_number")
     .eq("org_id", ORG_ID)
     .is("deleted_at", null);
   if (woErr) { console.error("Failed:", woErr.message); process.exit(1); }
 
-  const equipWOsByTitle = new Map();
+  // Map: mxNumericId → Equipt WO row
+  const equipWOsByMxId = new Map();
   for (const wo of equipWOs) {
-    const key = normalize(wo.title);
-    if (!equipWOsByTitle.has(key)) equipWOsByTitle.set(key, []);
-    equipWOsByTitle.get(key).push(wo);
+    const mxId = extractMxId(wo.work_order_number);
+    if (mxId != null) equipWOsByMxId.set(mxId, wo);
   }
-  console.log(`    ${equipWOs.length} WOs loaded\n`);
+  console.log(`    ${equipWOs.length} WOs loaded (${equipWOsByMxId.size} with MX IDs)\n`);
 
   // ── 4. Load existing comments to avoid duplicates ─────────────────────────
   console.log("📥  Loading existing WO comments…");
@@ -124,31 +152,24 @@ async function run() {
   let noWOMatch = 0, noComments = 0, alreadyLinked = 0, wosFetched = 0;
 
   for (let i = 0; i < mxWOs.length; i++) {
-    const mxWO = mxWOs[i];
-    const titleKey = normalize(mxWO.title ?? "");
+    const mxWO   = mxWOs[i];
+    const mxId   = typeof mxWO.id === "number" ? mxWO.id : parseInt(mxWO.id, 10);
+    const equipWO = equipWOsByMxId.get(mxId);
 
-    // Match to Equipt WO
-    const candidates = equipWOsByTitle.get(titleKey) ?? [];
-    let equipWO = null;
-    if (candidates.length === 0) {
+    if (!equipWO) {
       noWOMatch++;
+      if ((i + 1) % 50 === 0) console.log(`    … ${i + 1}/${mxWOs.length} WOs processed`);
       await sleep(DELAY_MS);
       continue;
-    } else if (candidates.length === 1) {
-      equipWO = candidates[0];
-    } else {
-      // Narrow by asset name using the MX WO's asset — fetch detail for assetId
-      // For simplicity, just take the first candidate (title match is usually sufficient)
-      equipWO = candidates[0];
     }
 
-    // Fetch comments
+    // Fetch comments for this MX WO
     let comments = [];
     try {
-      const data = await mxGet(`/workorders/${mxWO.id}/comments`);
+      const data = await mxGet(`/workorders/${mxId}/comments`);
       comments = data.comments ?? [];
     } catch (e) {
-      console.log(`  ⚠️  Failed to fetch comments for MX WO ${mxWO.id}: ${e.message}`);
+      console.log(`  ⚠️  Failed to fetch comments for MX WO ${mxId}: ${e.message}`);
       await sleep(DELAY_MS);
       continue;
     }
@@ -163,10 +184,10 @@ async function run() {
     }
 
     for (const c of comments) {
-      const body      = (c.content ?? "").trim();
-      const createdAt = c.createdAt ?? new Date().toISOString();
+      const body       = (c.content ?? "").trim();
+      const createdAt  = c.createdAt ?? new Date().toISOString();
       const authorName = mxUserNames.get(c.authorId) ?? `MaintainX User ${c.authorId}`;
-      const key = `${equipWO.id}|${body}|${createdAt}`;
+      const key        = `${equipWO.id}|${body}|${createdAt}`;
 
       if (existingSet.has(key)) {
         alreadyLinked++;
@@ -184,7 +205,7 @@ async function run() {
       });
       existingSet.add(key);
 
-      console.log(`  ✓  "${mxWO.title?.slice(0, 30)}"  by ${authorName}: "${body.slice(0, 50).replace(/\n/g, " ")}…"`);
+      console.log(`  ✓  [MX ${mxId}] "${(mxWO.title ?? "").slice(0, 30)}" (${equipWO.asset_name ?? ""})  by ${authorName}: "${body.slice(0, 60).replace(/\n/g, " ")}"`);
     }
   }
 

@@ -565,6 +565,10 @@ function DetailsTab({
           />
         )}
         <MetaRow
+          label="Scheduled Date"
+          value={workOrder.startDate ? formatDate(workOrder.startDate) : null}
+        />
+        <MetaRow
           label="Due Date"
           value={workOrder.dueDate ? formatDate(workOrder.dueDate) : null}
         />

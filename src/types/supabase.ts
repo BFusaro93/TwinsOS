@@ -1679,6 +1679,7 @@ export type Database = {
           product_item_name: string
           project_id: string | null
           quantity: number
+          taxable: boolean
           total_cost: number
           unit_cost: number
           updated_at: string
@@ -1695,6 +1696,7 @@ export type Database = {
           product_item_name?: string
           project_id?: string | null
           quantity?: number
+          taxable?: boolean
           total_cost?: number
           unit_cost?: number
           updated_at?: string
@@ -1711,6 +1713,7 @@ export type Database = {
           product_item_name?: string
           project_id?: string | null
           quantity?: number
+          taxable?: boolean
           total_cost?: number
           unit_cost?: number
           updated_at?: string
@@ -2766,6 +2769,7 @@ export type Database = {
           pm_schedule_id: string | null
           priority: string
           recurrence_frequency: string | null
+          start_date: string | null
           status: string
           title: string
           updated_at: string
@@ -2795,6 +2799,7 @@ export type Database = {
           pm_schedule_id?: string | null
           priority?: string
           recurrence_frequency?: string | null
+          start_date?: string | null
           status?: string
           title: string
           updated_at?: string
@@ -2824,6 +2829,7 @@ export type Database = {
           pm_schedule_id?: string | null
           priority?: string
           recurrence_frequency?: string | null
+          start_date?: string | null
           status?: string
           title?: string
           updated_at?: string

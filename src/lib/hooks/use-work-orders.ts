@@ -57,6 +57,7 @@ export function useCreateWorkOrder() {
         assigned_to_ids: (input.assignedToIds ?? []) as any,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         assigned_to_names: (input.assignedToNames ?? []) as any,
+        start_date: input.startDate ?? null,
         due_date: input.dueDate,
         category: input.category,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -172,6 +173,7 @@ export function useUpdateWorkOrder() {
         ...(input.assignedToIds !== undefined && { assigned_to_ids: input.assignedToIds as any }),
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         ...(input.assignedToNames !== undefined && { assigned_to_names: input.assignedToNames as any }),
+        ...(input.startDate !== undefined && { start_date: input.startDate }),
         ...(input.dueDate !== undefined && { due_date: input.dueDate }),
         ...(input.category !== undefined && { category: input.category }),
         // eslint-disable-next-line @typescript-eslint/no-explicit-any

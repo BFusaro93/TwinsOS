@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useStickyState } from "@/lib/hooks/use-sticky-state";
 import {
   CalendarClock,
+  CalendarDays,
   Maximize2,
   Minimize2,
   Plus,
@@ -336,9 +337,13 @@ export function WorkOrderListPage() {
   const [viewMode, setViewMode] = useState<"list" | "table" | "upcoming">("list");
   const [sheetWOId, setSheetWOId] = useState<string | null>(null);
   const [visibleKeys, setVisibleKeys] = useState<string[]>(WO_COLUMNS.map((c) => c.key));
+  const [showFuture, setShowFuture] = useStickyState<boolean>("wo-show-future", false);
 
   const col = (key: string) => visibleKeys.includes(key);
   const all = workOrders ?? [];
+
+  // Today's date string (YYYY-MM-DD) for future WO filtering
+  const todayDateStr = new Date().toISOString().split("T")[0];
   const sheetWO = sheetWOId ? (all.find((wo) => wo.id === sheetWOId) ?? null) : null;
 
   // Derive filter options from live data
@@ -373,7 +378,16 @@ export function WorkOrderListPage() {
     setFilterValues((prev) => ({ ...prev, [key]: value }));
   }
 
+  // Count future WOs (startDate > today, non-done/skipped) that would be hidden
+  const hiddenFutureCount = all.filter(
+    (wo) => wo.startDate && wo.startDate > todayDateStr && wo.status !== "done" && wo.status !== "skipped"
+  ).length;
+
   const filtered = all.filter((wo) => {
+    // Hide future WOs unless the toggle is on (done/skipped are always shown)
+    if (!showFuture && wo.startDate && wo.startDate > todayDateStr && wo.status !== "done" && wo.status !== "skipped") {
+      return false;
+    }
     const q = search.toLowerCase();
     const matchSearch =
       !q ||
@@ -423,6 +437,21 @@ export function WorkOrderListPage() {
         onFilterChange={(key, value) => handleFilterChange(key, value)}
         activeCount={activeFilterCount}
       />
+      {/* Future WO toggle — only shown when there are scheduled WOs */}
+      {hiddenFutureCount > 0 || showFuture ? (
+        <Button
+          variant={showFuture ? "default" : "outline"}
+          size="sm"
+          className={cn(
+            "h-8 gap-1.5 text-xs whitespace-nowrap",
+            !showFuture && "border-slate-300 text-slate-600"
+          )}
+          onClick={() => setShowFuture((v) => !v)}
+        >
+          <CalendarDays className="h-3.5 w-3.5" />
+          {showFuture ? "Hide future" : `${hiddenFutureCount} scheduled`}
+        </Button>
+      ) : null}
     </>
   );
 

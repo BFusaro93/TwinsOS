@@ -9,7 +9,7 @@ import { WO_STATUS_LABELS, WO_PRIORITY_LABELS } from "@/lib/constants";
 import { useUsers } from "@/lib/hooks/use-users";
 import { useUpdateWorkOrder } from "@/lib/hooks/use-work-orders";
 import { useSettingsStore } from "@/stores";
-import { ChevronDown, GitBranch } from "lucide-react";
+import { CalendarDays, ChevronDown, GitBranch } from "lucide-react";
 import type { WorkOrder } from "@/types";
 
 interface WorkOrderListPanelProps {
@@ -125,6 +125,8 @@ export function WorkOrderListPanel({ workOrders, selectedId, onSelect }: WorkOrd
         const label = wo.assetName ?? wo.title;
         const initials = getInitials(label);
         const avatarColor = getAvatarColor(label);
+        const todayStr = new Date().toISOString().split("T")[0];
+        const isFutureWO = !!wo.startDate && wo.startDate > todayStr && wo.status !== "done" && wo.status !== "skipped";
 
         return (
           <button
@@ -158,9 +160,15 @@ export function WorkOrderListPanel({ workOrders, selectedId, onSelect }: WorkOrd
                 )}
               </div>
               <p className="mt-0.5 truncate text-xs text-slate-600">{wo.title}</p>
-              <div className="mt-1 flex items-center gap-1.5">
+              <div className="mt-1 flex flex-wrap items-center gap-1.5">
                 <StatusBadge variant={wo.status} label={WO_STATUS_LABELS[wo.status]} />
                 <StatusBadge variant={wo.priority} label={WO_PRIORITY_LABELS[wo.priority]} />
+                {isFutureWO && (
+                  <span className="inline-flex items-center gap-0.5 rounded-full border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">
+                    <CalendarDays className="h-2.5 w-2.5" />
+                    Scheduled {formatDate(wo.startDate!)}
+                  </span>
+                )}
                 {childCountMap.has(wo.id) && (
                   <span className="inline-flex items-center gap-0.5 rounded-full border border-indigo-200 bg-indigo-50 px-1.5 py-0.5 text-[10px] font-medium text-indigo-700">
                     <GitBranch className="h-2.5 w-2.5" />

@@ -66,6 +66,7 @@ export function NewWorkOrderDialog({ open, onOpenChange, initialData, onCreated 
   const [categoryIds, setCategoryIds] = useState<string[]>([]);
   const [entityKey, setEntityKey] = useState("none"); // used in edit mode: "asset:<id>" | "vehicle:<id>" | "none"
   const [entityKeys, setEntityKeys] = useState<string[]>([]); // used in create mode (multi-select)
+  const [startDate, setStartDate] = useState("");
   const [dueDate, setDueDate] = useState("");
   // Assigned to — multi-select user IDs
   const [assignedToIds, setAssignedToIds] = useState<string[]>([]);
@@ -128,6 +129,7 @@ export function NewWorkOrderDialog({ open, onOpenChange, initialData, onCreated 
       } else {
         setEntityKey("none");
       }
+      setStartDate(initialData.startDate ?? "");
       setDueDate(initialData.dueDate ?? "");
       // Assigned to — load multi-assignee IDs
       setAssignedToIds(
@@ -156,6 +158,7 @@ export function NewWorkOrderDialog({ open, onOpenChange, initialData, onCreated 
     setCategoryIds([]);
     setEntityKey("none");
     setEntityKeys([]);
+    setStartDate("");
     setDueDate("");
     setAssignedToIds([]);
     setNewEntityStatus("no_change");
@@ -196,6 +199,7 @@ export function NewWorkOrderDialog({ open, onOpenChange, initialData, onCreated 
       assignedToName: (users ?? []).find((u) => u.id === assignedToIds[0])?.name ?? null,
       assignedToIds: assignedToIds,
       assignedToNames: resolvedNames,
+      startDate: startDate || null,
       dueDate: dueDate || null,
       isRecurring: recurrenceFrequency !== "none",
       recurrenceFrequency: recurrenceFrequency !== "none"
@@ -443,6 +447,20 @@ export function NewWorkOrderDialog({ open, onOpenChange, initialData, onCreated 
                   </Select>
                 </div>
               )}
+
+              {/* Start Date */}
+              <div className="grid gap-1.5">
+                <Label htmlFor="wo-start-date">
+                  Scheduled Date
+                  <span className="ml-1.5 text-xs font-normal text-slate-400">(optional — hides WO until this date)</span>
+                </Label>
+                <Input
+                  id="wo-start-date"
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                />
+              </div>
 
               {/* Assigned To + Due Date */}
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

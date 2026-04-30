@@ -21,6 +21,7 @@ export interface WorkOrder extends BaseRecord {
   assignedToIds: string[];
   /** All assigned user display names (multi-assignee). First entry matches assignedToName. */
   assignedToNames: string[];
+  startDate: string | null;
   dueDate: string | null;
   category: string | null;
   /** All assigned category IDs (multi-category). First entry matches category. */

@@ -217,6 +217,7 @@ export function RequestDetailPanel({ request }: RequestDetailPanelProps) {
         assignedToName: null,
         assignedToIds: [],
         assignedToNames: [],
+        startDate: null,
         dueDate: null,
         category: null,
         categories: [],
