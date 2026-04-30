@@ -264,12 +264,16 @@ export async function POST(request: Request) {
       const num   = (entity.work_order_number ?? "Work Order") as string;
       const title = (entity.title ?? "") as string;
       const link  = `${SITE_URL}/dashboard/cmms/work-orders`;
-      const verb  = notifType === "wo_created" ? "created" : "assigned you to";
-      const subjectVerb = notifType === "wo_created" ? "created" : "assigned";
+      // Admin broadcast recipients are watching all WOs — they weren't personally assigned,
+      // so use "created" language regardless of whether it's a wo_assigned event.
+      const isCreatedContext = notifType === "wo_created" || isAdminBroadcast;
+      const verb        = isCreatedContext ? "created" : "assigned you to";
+      const subjectVerb = isCreatedContext ? "created" : "assigned";
+      const heading     = isCreatedContext ? "Work Order Created" : "Work Order Assigned";
       return {
         subject: `Work order ${subjectVerb}: ${num}`,
         html: `<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px 24px">
-          <h2 style="margin:0 0 8px;font-size:20px;color:#0f172a">Work Order ${notifType === "wo_created" ? "Created" : "Assigned"}</h2>
+          <h2 style="margin:0 0 8px;font-size:20px;color:#0f172a">${heading}</h2>
           ${adminNote}<p style="margin:0 0 4px;color:#475569">${hi}</p>
           <p style="margin:0 0 24px;color:#475569">${callerName} ${verb} <strong>${num}${title ? ` — ${title}` : ""}</strong>.</p>
           <a href="${link}" style="display:inline-block;padding:12px 24px;background:#16a34a;color:#fff;text-decoration:none;border-radius:6px;font-weight:600">View Work Order</a>
