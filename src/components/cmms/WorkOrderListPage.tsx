@@ -429,7 +429,7 @@ export function WorkOrderListPage() {
         filters={[]}
         filterValues={filterValues}
         onFilterChange={handleFilterChange}
-        searchPlaceholder="Search work orders..."
+        searchPlaceholder="Search WOs..."
       />
       <AdvancedSearchDialog
         filters={advancedFilters}
