@@ -1186,7 +1186,7 @@ function Settings({ dbEmployees, onUpsert, isUpserting, onSeedRoster, isSeeding 
       )}
 
       {dbEmployees && dbEmployees.length === 0 && (
-        <p className="py-8 text-center text-sm text-slate-400 italic">No employees yet — use "Load Default Roster" to get started or add employees manually.</p>
+        <p className="py-8 text-center text-sm text-slate-400 italic">No employees yet — use &ldquo;Load Default Roster&rdquo; to get started or add employees manually.</p>
       )}
     </div>
   );
