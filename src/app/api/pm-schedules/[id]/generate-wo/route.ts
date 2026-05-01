@@ -49,22 +49,23 @@ export async function POST(
     return NextResponse.json({ error: "PM schedule not found" }, { status: 404 });
   }
 
-  // ── 2. Duplicate guard — block if WOs were already generated today ─────────
-  const todayStart = new Date();
-  todayStart.setHours(0, 0, 0, 0);
-  const { data: recentWOs } = await adminClient
+  // ── 2. Duplicate guard — block if any open WOs from this schedule exist ─────
+  // Checks across all dates, not just today, so generating a new batch while
+  // the previous week's is still open is prevented.
+  const { data: openWOs } = await adminClient
     .from("work_orders")
     .select("id, work_order_number, created_at")
     .eq("pm_schedule_id", scheduleId)
     .eq("org_id", profile.org_id)
     .is("deleted_at", null)
-    .gte("created_at", todayStart.toISOString())
+    .not("status", "in", '("done","skipped")')
+    .is("parent_work_order_id", null)  // parent WOs only to avoid counting sub-WOs
     .limit(1);
 
-  if (recentWOs && recentWOs.length > 0) {
-    const existing = recentWOs[0];
+  if (openWOs && openWOs.length > 0) {
+    const existing = openWOs[0];
     return NextResponse.json(
-      { error: `Work orders were already generated today (${existing.work_order_number}). To generate again, delete the existing batch first.` },
+      { error: `There are already open work orders for this schedule (${existing.work_order_number}). Complete or close the existing batch before generating a new one.` },
       { status: 409 }
     );
   }

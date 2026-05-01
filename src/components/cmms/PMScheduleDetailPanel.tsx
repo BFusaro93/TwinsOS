@@ -130,13 +130,18 @@ export function PMScheduleDetailPanel({ schedule }: PMScheduleDetailPanelProps) 
   const { data: scheduleAssets } = usePMScheduleAssets(schedule.id);
   const hasAssets = (scheduleAssets?.length ?? 0) > 0;
 
-  // Check if WOs were already generated today for this schedule
+  // Check if any open (non-done, non-skipped) WOs already exist for this schedule.
+  // If so, block generation until they're completed or deleted.
   const { data: allWorkOrders } = useWorkOrders();
-  const todayStr = new Date().toISOString().slice(0, 10);
-  const todaysWO = allWorkOrders?.find(
-    (wo) => wo.pmScheduleId === schedule.id && wo.createdAt.slice(0, 10) === todayStr
+  const openBatchWO = allWorkOrders?.find(
+    (wo) =>
+      wo.pmScheduleId === schedule.id &&
+      wo.parentWorkOrderId === null &&     // parent / single-asset WOs only
+      wo.status !== "done" &&
+      wo.status !== "skipped" &&
+      wo.deletedAt === null
   ) ?? null;
-  const alreadyGeneratedToday = todaysWO !== null;
+  const alreadyGeneratedToday = openBatchWO !== null; // name kept for JSX compat below
 
   async function handleGenerateWOs() {
     setGenerating(true);
@@ -192,12 +197,12 @@ export function PMScheduleDetailPanel({ schedule }: PMScheduleDetailPanelProps) 
               !hasAssets
                 ? "Add assets to this schedule first"
                 : alreadyGeneratedToday
-                ? `Already generated today (${todaysWO?.workOrderNumber})`
+                ? `Open WOs already exist (${openBatchWO?.workOrderNumber}) — complete or close them first`
                 : "Generate a parent WO + sub-WOs for each asset"
             }
           >
             <Play className="h-3.5 w-3.5" />
-            {generating ? "Generating…" : alreadyGeneratedToday ? "Generated Today" : "Generate WOs"}
+            {generating ? "Generating…" : alreadyGeneratedToday ? "WOs Open" : "Generate WOs"}
           </Button>
 
           <EditButton onClick={() => setEditOpen(true)} />
