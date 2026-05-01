@@ -186,11 +186,19 @@ export function useUpdateWorkOrder() {
       if (error) throw error;
       return mapWorkOrder(data);
     },
-    onSuccess: (data, { id }) => {
+    onSuccess: (data, { id, assignedToIds, assignedToId }) => {
       if (data) patchWOCache(queryClient, id, data);
       queryClient.invalidateQueries({ queryKey: ["work-orders"] });
       queryClient.invalidateQueries({ queryKey: ["work-orders", id] });
       queryClient.invalidateQueries({ queryKey: ["audit-log", "work_order", id] });
+      // Fire assignment email when assignees are changed on an existing WO (best-effort)
+      if (assignedToIds !== undefined || assignedToId !== undefined) {
+        fetch("/api/notifications/email", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ type: "wo_assigned", entityId: id, entityType: "work_order" }),
+        }).catch(() => {});
+      }
     },
   });
 }
