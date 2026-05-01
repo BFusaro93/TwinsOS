@@ -1,16 +1,20 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useMemo } from "react";
 import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis,
   CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from "recharts";
-import { Upload, Trash2, Pencil, AlertTriangle } from "lucide-react";
+import { Upload, Trash2, Pencil, AlertTriangle, Plus, X } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import {
   useAvbWeeks, useUpsertAvbWeek, useDeleteAvbWeek,
   type AvbWeekData, type GustoData, type EmpData,
 } from "@/lib/hooks/use-avb-weeks";
+import {
+  useAvbEmployees, useUpsertAvbEmployee,
+  type AvbEmployee, type UpsertEmpPayload,
+} from "@/lib/hooks/use-avb-employees";
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 const CREW_DEFS = [
@@ -24,6 +28,7 @@ const CREW_DEFS = [
   { code: "ENHANCE1", name: "Enhancement 1" },
 ] as const;
 
+// Seed roster — used as fallback while DB loads and for "Load Default Roster" action
 const ALL_EMP = [
   { uuid:"87a264e0", name:"Rolando Alvarado",    csvName:"Alvarado, Rolando",                   csvJob:"Maintenance Crew Member" },
   { uuid:"b54b3f88", name:"Ryan Auger",           csvName:"Auger, Ryan",                         csvJob:"" },
@@ -54,24 +59,24 @@ const ALL_EMP = [
   { uuid:"c7e2a14b", name:"Osbaldo Navarro",      csvName:"Navarro, Osbaldo",                    csvJob:"" },
 ];
 
-// Casey Kleinman (b5ad4fb2) and Cam MacDonald (3c084d9d) are non-field/office — excluded from crew lists
-const FIELD_UUIDS = ALL_EMP.filter(e => !["b5ad4fb2","3c084d9d"].includes(e.uuid)).map(e => e.uuid);
+// Non-field (office) employee uuids — excluded from crew lists in seed data
+const NON_FIELD_UUIDS = new Set(["b5ad4fb2","3c084d9d"]);
 
 const DEF_ASSIGNMENTS: Record<string, string[]> = {
-  MAINT1:   ["32d07880","87a264e0","fde97e65"],              // Luis, Rolando, Encarnacion
-  MAINT2:   ["529bbd5c","2f1c79d8","418e5fac","c7e2a14b"],   // Mauricio, Jose, Esdras, Osbaldo
-  MAINT3:   ["9c3e8613","36a5a673","6d5ded40"],              // Saul, Julio, Otilio
-  MAINT4:   ["f776a380","3540efab","55f28eee"],              // Wilder, Olvin, James
+  MAINT1:   ["32d07880","87a264e0","fde97e65"],
+  MAINT2:   ["529bbd5c","2f1c79d8","418e5fac","c7e2a14b"],
+  MAINT3:   ["9c3e8613","36a5a673","6d5ded40"],
+  MAINT4:   ["f776a380","3540efab","55f28eee"],
   MAINT5:   [],
-  FERT1:    ["695866b9"],                                    // Tyler
-  LNDSCP1:  ["9695004c","d3b6869a","38f06eb7","b54b3f88"],   // Mark, Zackery, Steve, Ryan
-  ENHANCE1: ["0bfcb8df","69b0adca","e4f5a6b7"],              // Jason, Marvin, Daniel
+  FERT1:    ["695866b9"],
+  LNDSCP1:  ["9695004c","d3b6869a","38f06eb7","b54b3f88"],
+  ENHANCE1: ["0bfcb8df","69b0adca","e4f5a6b7"],
 };
 
 const WDAYS = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
 const CREW_COLORS = ["#3b82f6","#22c55e","#ef4444","#f59e0b","#a78bfa","#60ab45","#06b6d4","#ec4899"];
 
-type Tab = "summary" | "daily" | "history" | "ytd" | "import";
+type Tab = "summary" | "daily" | "history" | "ytd" | "import" | "settings";
 type AvbField = "budgeted" | "actual" | "revenue";
 type AvbWeek = { weekEnd: string; data: AvbWeekData };
 
@@ -114,17 +119,20 @@ function csvRow(row: string) {
   out.push(cur.trim()); return out;
 }
 
-function matchUuid(name: string, job: string) {
-  const ex = ALL_EMP.find(e => e.csvName===name && e.csvJob && e.csvJob===job);
+/** Find an employee's uuid by matching their Gusto CSV name + job title. */
+function matchUuid(name: string, job: string, employees: AvbEmployee[]): string | null {
+  const ex = employees.find(e => e.csvName===name && e.csvJob && e.csvJob===job);
   if (ex) return ex.uuid;
-  const bn = ALL_EMP.filter(e => e.csvName===name);
+  const bn = employees.filter(e => e.csvName===name);
   if (bn.length===1) return bn[0].uuid;
   if (bn.length>1) return (bn.find(e=>!e.csvJob||job.includes(e.csvJob))??bn[0]).uuid;
   const last = name.split(",")[0].toLowerCase();
-  return ALL_EMP.find(e=>e.name.toLowerCase().includes(last))?.uuid ?? null;
+  return employees.find(e=>e.name.toLowerCase().includes(last))?.uuid ?? null;
 }
 
-const getEmp = (uuid: string) => ALL_EMP.find(e=>e.uuid===uuid);
+function getEmp(uuid: string, employees: AvbEmployee[]): AvbEmployee | undefined {
+  return employees.find(e => e.uuid === uuid);
+}
 
 function getHrsOnDay(gusto: GustoData, uuid: string, dayIdx: number) {
   if (!gusto.weekStart) return 0;
@@ -136,7 +144,7 @@ const epColor = (ep: number|null) => ep===null ? "text-slate-400" : ep>=88 ? "te
 const epBadge = (ep: number|null) => ep===null ? "bg-slate-100 text-slate-500" : ep>=88 ? "bg-green-100 text-green-700" : ep>=75 ? "bg-amber-100 text-amber-700" : "bg-red-100 text-red-700";
 
 // ── CSV Parser ────────────────────────────────────────────────────────────────
-function parseGustoCsv(text: string): GustoData {
+function parseGustoCsv(text: string, employees: AvbEmployee[]): GustoData {
   const lines = text.split("\n").map(l=>l.trim());
   const result: GustoData = { weekStart:null, weekEnd:null, employees:{} };
   const emp = (uuid: string): EmpData => {
@@ -158,7 +166,7 @@ function parseGustoCsv(text: string): GustoData {
         if (c.length>=3&&c[0]&&c[0]!=="Name") {
           const parts = c[0].trim().split(" ");
           const lf = parts.length>1 ? parts.slice(1).join(" ")+", "+parts[0] : c[0];
-          const uuid = matchUuid(lf, c[9]??"");
+          const uuid = matchUuid(lf, c[9]??"", employees);
           if (uuid) { emp(uuid).total+=pf(c[2]); emp(uuid).regular+=pf(c[3]); emp(uuid).ot+=pf(c[4]); }
         }
         i++;
@@ -172,7 +180,6 @@ function parseGustoCsv(text: string): GustoData {
         if (!raw||raw.startsWith("Hours for")) { i--; break; }
         const c = csvRow(lines[i]);
         if (c.length>=3&&c[0]?.match(/^\d{1,2}\/\d{1,2}\/\d{2}$/)) {
-          // Normalize to zero-padded MM/DD/YY so it matches dayKey() output
           const [dm,dd,dy]=c[0].split("/");
           const normDate=dm.padStart(2,"0")+"/"+dd.padStart(2,"0")+"/"+dy;
           daily.push({date:normDate,total:pf(c[1]),regular:pf(c[2]),ot:pf(c[3]),mealBreak:pf(c[7]),timeRange:c[11]??"",job:c[12]??""});
@@ -181,7 +188,7 @@ function parseGustoCsv(text: string): GustoData {
       }
       const nm = hm[1].trim().replace(/,+$/, "").trim();
       const job = daily.find(d=>d.job)?.job??"";
-      const uuid = matchUuid(nm, job);
+      const uuid = matchUuid(nm, job, employees);
       if (uuid) emp(uuid).days = daily;
     }
   }
@@ -241,17 +248,17 @@ async function parseAvbPdf(file: File): Promise<Record<string, {budgeted:number;
 }
 
 // ── Default state ─────────────────────────────────────────────────────────────
-const defaultDay = () => ({
-  assignments: Object.fromEntries(CREW_DEFS.map(cr=>[cr.code,[...(DEF_ASSIGNMENTS[cr.code]??[])]])),
-  avb: Object.fromEntries(CREW_DEFS.map(cr=>[cr.code,{budgeted:0,actual:0,revenue:0}])),
-});
-const defaultWeekData = (): AvbWeekData => ({
-  days: Object.fromEntries(Array.from({length:7},(_,i)=>[i,defaultDay()])),
-  gusto: {weekStart:null,weekEnd:null,employees:{}},
-});
+function defaultWeekData(defAssignments: Record<string, string[]>): AvbWeekData {
+  return {
+    days: Object.fromEntries(Array.from({length:7},(_,i)=>[i,{
+      assignments: Object.fromEntries(CREW_DEFS.map(cr=>[cr.code,[...(defAssignments[cr.code]??[])]])),
+      avb: Object.fromEntries(CREW_DEFS.map(cr=>[cr.code,{budgeted:0,actual:0,revenue:0}])),
+    }])),
+    gusto: {weekStart:null,weekEnd:null,employees:{}},
+  };
+}
 
 // ── Aggregation ───────────────────────────────────────────────────────────────
-// Module-level so both Summary and other tabs can use it without re-creating it.
 function crewTotals(data: AvbWeekData) {
   const ct: Record<string,{budgeted:number;actual:number;revenue:number;gusto:number;ot:number}> = {};
   CREW_DEFS.forEach(cr=>{ct[cr.code]={budgeted:0,actual:0,revenue:0,gusto:0,ot:0};});
@@ -306,7 +313,6 @@ function AvbNumberInput({
   onCommit: (v: string) => void;
 }) {
   const [local, setLocal] = useState(value > 0 ? String(value) : "");
-  // Sync from parent only when the committed value actually changes (e.g. auto-fill from PDF)
   const prevValue = useRef(value);
   if (prevValue.current !== value) {
     prevValue.current = value;
@@ -328,13 +334,13 @@ function AvbNumberInput({
 }
 
 // ── Summary Tab ───────────────────────────────────────────────────────────────
-// Module-level component — stable identity across AvbDashboard re-renders.
 interface SummaryProps {
   cur: AvbWeek | null;
+  employees: AvbEmployee[];
   onEditWeek: (w: AvbWeek) => void;
   onImportNew: () => void;
 }
-function Summary({ cur, onEditWeek, onImportNew }: SummaryProps) {
+function Summary({ cur, employees, onEditWeek, onImportNew }: SummaryProps) {
   if (!cur) return (
     <div className="flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-slate-200 py-16 text-center">
       <Upload className="mb-3 h-8 w-8 text-slate-300" />
@@ -402,9 +408,7 @@ function Summary({ cur, onEditWeek, onImportNew }: SummaryProps) {
               <Th>Employee</Th><Th>Crews</Th><Th right>Total</Th><Th right>Regular</Th><Th right>OT</Th><Th right>Days</Th><Th>Status</Th>
             </tr></thead>
             <tbody className="divide-y divide-slate-100">
-              {ALL_EMP.map(emp=>{
-                // Build hours by summing getHrsOnDay across all 7 days — consistent
-                // with how crewTotals works and reliable after JSON round-trip from DB
+              {employees.map(emp=>{
                 let tot=0, ot=0, dw=0;
                 for(let d=0;d<7;d++){
                   const dayHrs=getHrsOnDay(data.gusto,emp.uuid,d);
@@ -417,7 +421,6 @@ function Summary({ cur, onEditWeek, onImportNew }: SummaryProps) {
                   }
                 }
                 const crew=empCrews[emp.uuid];
-                // Show row if assigned to any crew this week OR has clocked hours
                 if(!crew&&tot===0) return null;
                 const reg=tot>ot?tot-ot:0;
                 return (<tr key={emp.uuid} className={`hover:bg-slate-50 ${tot===0?"opacity-50":""}`}>
@@ -439,13 +442,13 @@ function Summary({ cur, onEditWeek, onImportNew }: SummaryProps) {
 }
 
 // ── Daily Tab ─────────────────────────────────────────────────────────────────
-// Module-level component — stable identity across AvbDashboard re-renders.
 interface DailyProps {
   cur: AvbWeek | null;
+  employees: AvbEmployee[];
   viewDay: number;
   setViewDay: (n: number) => void;
 }
-function Daily({ cur, viewDay, setViewDay }: DailyProps) {
+function Daily({ cur, employees, viewDay, setViewDay }: DailyProps) {
   if (!cur) return <div className="py-16 text-center text-sm text-slate-400">No week loaded.</div>;
   const data=cur.data; const day=data.days[viewDay]; const ws2=data.gusto.weekStart;
   return (
@@ -484,7 +487,7 @@ function Daily({ cur, viewDay, setViewDay }: DailyProps) {
           <thead className="bg-slate-50"><tr><Th>Employee</Th><Th>Crew</Th><Th right>Total Hrs</Th><Th right>Regular</Th><Th right>OT</Th><Th right>Clock In</Th><Th right>Clock Out</Th><Th>Status</Th></tr></thead>
           <tbody className="divide-y divide-slate-100">
             {CREW_DEFS.flatMap(cr=>(day?.assignments[cr.code]??[]).map(uuid=>{
-              const emp=getEmp(uuid); if(!emp) return null;
+              const emp=getEmp(uuid, employees); if(!emp) return null;
               const hrs=getHrsOnDay(data.gusto,uuid,viewDay);
               const dk=ws2?dayKey(ws2,viewDay):null;
               const de=dk?data.gusto.employees[uuid]?.days.find(x=>x.date===dk):null;
@@ -508,7 +511,6 @@ function Daily({ cur, viewDay, setViewDay }: DailyProps) {
 }
 
 // ── History Tab ───────────────────────────────────────────────────────────────
-// Module-level component — stable identity across AvbDashboard re-renders.
 interface HistoryProps {
   weeks: AvbWeek[];
   onEditWeek: (w: AvbWeek) => void;
@@ -575,11 +577,7 @@ function History({ weeks, onEditWeek, onDeleteWeek }: HistoryProps) {
                   <Td right>{ep!==null?<span className={`${epBadge(ep)} rounded-full px-2 py-0.5 text-xs font-semibold`}>{ep}%</span>:"—"}</Td>
                   <td className="px-3 py-3 pr-4 text-right">
                     <div className="flex items-center justify-end gap-3">
-                      <button
-                        title="Edit week"
-                        onClick={()=>onEditWeek(w)}
-                        className="text-slate-400 hover:text-brand-600"
-                      ><Pencil className="h-4 w-4"/></button>
+                      <button title="Edit week" onClick={()=>onEditWeek(w)} className="text-slate-400 hover:text-brand-600"><Pencil className="h-4 w-4"/></button>
                       <button onClick={()=>{if(confirm("Delete week of "+fmtDate(w.weekEnd)+"?"))onDeleteWeek(w.weekEnd);}} className="text-red-400 hover:text-red-600"><Trash2 className="h-4 w-4"/></button>
                     </div>
                   </td>
@@ -594,12 +592,10 @@ function History({ weeks, onEditWeek, onDeleteWeek }: HistoryProps) {
 }
 
 // ── Import Tab ────────────────────────────────────────────────────────────────
-// Module-level component — stable identity across AvbDashboard re-renders.
-// This is the critical fix for the tab-focus bug: previously defined inside
-// AvbDashboard, which caused React to unmount+remount it on every setWd call,
-// destroying any focused input mid-keystroke or on Tab navigation.
 interface ImportProps {
   wd: AvbWeekData;
+  employees: AvbEmployee[];
+  fieldUuids: string[];
   importDay: number;
   setImportDay: (n: number) => void;
   weekEnd: string;
@@ -624,7 +620,7 @@ interface ImportProps {
   onCancel: () => void;
 }
 function Import({
-  wd, importDay, setImportDay, weekEnd, setWeekEnd,
+  wd, employees, fieldUuids, importDay, setImportDay, weekEnd, setWeekEnd,
   csvSt, pdfSt, cpFrom, setCpFrom, cpTo, setCpTo,
   csvRef, pdfRef, onCsvFile, onPdfFile, onCopyAssignments,
   onSave, isSaving, onSetAvb, onAddToCrew, onRmFromCrew,
@@ -641,7 +637,7 @@ function Import({
     });
   }
   const allAssigned = new Set(Object.values(day.assignments).flat());
-  const unassigned = FIELD_UUIDS.filter(u=>!allAssigned.has(u)&&workedToday.has(u));
+  const unassigned = fieldUuids.filter(u=>!allAssigned.has(u)&&workedToday.has(u));
 
   const dayOpts = Array.from({length:7},(_,i)=>(
     <option key={i} value={i}>{ws?dayLbl(ws,i):WDAYS[i]}</option>
@@ -701,7 +697,7 @@ function Import({
           </div>
           <input ref={pdfRef} type="file" accept=".pdf" className="hidden" onChange={e=>{const f=e.target.files?.[0];if(f){onPdfFile(f,importDay);e.target.value="";}}} />
         </div>
-        {unassigned.length>0&&<InfoBar warn>Worked today but not assigned: {unassigned.map(u=>getEmp(u)?.name).join(", ")}</InfoBar>}
+        {unassigned.length>0&&<InfoBar warn>Worked today but not assigned: {unassigned.map(u=>getEmp(u, employees)?.name).join(", ")}</InfoBar>}
         {/* Crew cards */}
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           {CREW_DEFS.map(cr=>{
@@ -712,7 +708,7 @@ function Import({
                 <span className="rounded border bg-white px-1.5 py-0.5 text-[10px] text-slate-400">{cr.code}</span>
               </div>
               <div className="flex min-h-[24px] flex-wrap gap-1">
-                {members.map(uuid=>{const e=getEmp(uuid);if(!e)return null;
+                {members.map(uuid=>{const e=getEmp(uuid, employees);if(!e)return null;
                   const hrs=isoDate&&ws?wd.gusto.employees[uuid]?.days.find(d=>d.date===dayKey(ws,importDay))?.total??null:null;
                   return (<span key={uuid} className="inline-flex items-center gap-1 rounded border bg-white px-1.5 py-0.5 text-xs">
                     {e.name.split(" ")[0]}{hrs!==null&&hrs>0&&<span className="text-slate-400">{hrs.toFixed(1)}h</span>}
@@ -724,7 +720,7 @@ function Import({
               <select defaultValue="" className="w-full rounded border border-slate-200 bg-white px-2 py-1 text-xs"
                 onChange={e=>{if(e.target.value){onAddToCrew(importDay,cr.code,e.target.value);e.target.value="";}}}>
                 <option value="">Add employee…</option>
-                {FIELD_UUIDS.filter(u=>!members.includes(u)).map(u=>{const e=getEmp(u);return e?<option key={u} value={u}>{e.name}</option>:null;})}
+                {fieldUuids.filter(u=>!members.includes(u)).map(u=>{const e=getEmp(u, employees);return e?<option key={u} value={u}>{e.name}</option>:null;})}
               </select>
               <div className="border-t border-slate-200 pt-2">
                 <p className="mb-1.5 text-[10px] uppercase tracking-wide text-slate-400">AvB Hours {avb.actual>0&&<span className="text-green-600">✓ auto-filled</span>}</p>
@@ -768,7 +764,7 @@ function Import({
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {assignedUuids.map(uuid => {
-                    const emp = getEmp(uuid); if (!emp) return null;
+                    const emp = getEmp(uuid, employees); if (!emp) return null;
                     const crewCode = Object.entries(day.assignments).find(([, v]) => v.includes(uuid))?.[0] ?? "—";
                     const dk = ws ? dayKey(ws, importDay) : null;
                     const de = dk ? wd.gusto.employees[uuid]?.days.find(x => x.date === dk) : null;
@@ -830,13 +826,11 @@ function Import({
 }
 
 // ── YTD Tab ───────────────────────────────────────────────────────────────────
-// Module-level component — stable identity across AvbDashboard re-renders.
 interface YtdProps {
   weeks: AvbWeek[];
 }
 function Ytd({ weeks }: YtdProps) {
   if (!weeks.length) return <div className="py-16 text-center text-sm text-slate-400">No history yet.</div>;
-  // Aggregate totals across all weeks
   let ytdB=0,ytdO=0,ytdG=0,ytdOt=0;
   const crewYtd: Record<string,{budgeted:number;actual:number;gusto:number;ot:number}> = {};
   CREW_DEFS.forEach(cr=>{crewYtd[cr.code]={budgeted:0,actual:0,gusto:0,ot:0};});
@@ -858,7 +852,6 @@ function Ytd({ weeks }: YtdProps) {
   const ytdAvb=ytdB-ytdO;
   const ytdEff=ytdG>0?Math.round(ytdO/ytdG*100):null;
   const ytdGap=ytdG>0?ytdG-ytdO:null;
-  // Per-week breakdown
   const weekRows = [...weeks].reverse().map(w=>{
     let wB=0,wO=0,wG=0;
     CREW_DEFS.forEach(cr=>{for(let d=0;d<7;d++){wB+=pf(w.data.days[d]?.avb[cr.code]?.budgeted);wO+=pf(w.data.days[d]?.avb[cr.code]?.actual);(w.data.days[d]?.assignments[cr.code]??[]).forEach(u=>{wG+=getHrsOnDay(w.data.gusto,u,d);});}});
@@ -932,23 +925,329 @@ function Ytd({ weeks }: YtdProps) {
   );
 }
 
+// ── Settings Tab ──────────────────────────────────────────────────────────────
+interface EmpFormState {
+  uuid: string;
+  name: string;
+  csvName: string;
+  csvJob: string;
+  defaultCrew: string;
+  isField: boolean;
+}
+
+interface SettingsProps {
+  dbEmployees: AvbEmployee[] | undefined;
+  onUpsert: (emp: UpsertEmpPayload) => void;
+  isUpserting: boolean;
+  onSeedRoster: () => Promise<void>;
+  isSeeding: boolean;
+}
+
+function Settings({ dbEmployees, onUpsert, isUpserting, onSeedRoster, isSeeding }: SettingsProps) {
+  const blank: EmpFormState = { uuid: "", name: "", csvName: "", csvJob: "", defaultCrew: "", isField: true };
+  const [editId, setEditId] = useState<string | null>(null); // null = adding new
+  const [form, setForm] = useState<EmpFormState | null>(null); // null = form hidden
+
+  function openAdd() {
+    setEditId(null);
+    setForm({ ...blank });
+  }
+  function openEdit(emp: AvbEmployee) {
+    setEditId(emp.id);
+    setForm({ uuid: emp.uuid, name: emp.name, csvName: emp.csvName, csvJob: emp.csvJob, defaultCrew: emp.defaultCrew, isField: emp.isField });
+  }
+  function closeForm() { setForm(null); setEditId(null); }
+
+  function saveForm() {
+    if (!form || !form.name.trim()) return;
+    const uuid = form.uuid || Math.random().toString(36).slice(2, 10);
+    onUpsert({
+      ...(editId ? { id: editId } : {}),
+      uuid,
+      name: form.name.trim(),
+      csvName: form.csvName.trim(),
+      csvJob: form.csvJob.trim(),
+      defaultCrew: form.defaultCrew,
+      isField: form.isField,
+      isActive: true,
+    });
+    closeForm();
+  }
+
+  function setActive(emp: AvbEmployee, isActive: boolean) {
+    onUpsert({ id: emp.id, uuid: emp.uuid, name: emp.name, csvName: emp.csvName, csvJob: emp.csvJob, defaultCrew: emp.defaultCrew, isField: emp.isField, isActive });
+  }
+
+  const notSeeded = dbEmployees !== undefined && dbEmployees.length === 0;
+  const active = (dbEmployees ?? []).filter(e => e.isActive);
+  const inactive = (dbEmployees ?? []).filter(e => !e.isActive);
+
+  return (
+    <div className="flex flex-col gap-5">
+      {/* Seed banner — shown only when DB has no employees at all */}
+      {notSeeded && (
+        <div className="flex items-center gap-4 rounded-lg border border-amber-200 bg-amber-50 p-4">
+          <div className="flex-1">
+            <p className="text-sm font-semibold text-amber-800">No team roster yet</p>
+            <p className="mt-0.5 text-xs text-amber-700">Load the default roster to instantly populate all current employees with their default crew assignments. You can edit or remove anyone afterward.</p>
+          </div>
+          <button
+            onClick={onSeedRoster}
+            disabled={isSeeding}
+            className="shrink-0 rounded-md bg-amber-600 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-700 disabled:opacity-60"
+          >
+            {isSeeding ? "Loading…" : "Load Default Roster"}
+          </button>
+        </div>
+      )}
+
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-sm font-semibold text-slate-800">Team Roster</p>
+          <p className="text-xs text-slate-400">{active.length} active · {inactive.length} inactive</p>
+        </div>
+        <div className="flex gap-2">
+          {!notSeeded && dbEmployees && dbEmployees.length > 0 && (
+            <button
+              onClick={onSeedRoster}
+              disabled={isSeeding}
+              title="Re-sync default roster (won't overwrite manual edits)"
+              className="rounded-md border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-60"
+            >
+              {isSeeding ? "Syncing…" : "Sync Default Roster"}
+            </button>
+          )}
+          <button
+            onClick={openAdd}
+            className="flex items-center gap-1.5 rounded-md bg-brand-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand-600"
+          >
+            <Plus className="h-3.5 w-3.5" /> Add Employee
+          </button>
+        </div>
+      </div>
+
+      {/* Add / Edit form */}
+      {form && (
+        <div className="rounded-lg border border-brand-200 bg-brand-50 p-4 shadow-sm">
+          <div className="mb-3 flex items-center justify-between">
+            <p className="text-sm font-semibold text-brand-700">{editId ? "Edit Employee" : "New Employee"}</p>
+            <button onClick={closeForm} className="text-slate-400 hover:text-slate-600"><X className="h-4 w-4" /></button>
+          </div>
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
+            <div>
+              <label className="mb-1 block text-xs font-medium text-slate-600">Display Name *</label>
+              <input
+                type="text"
+                value={form.name}
+                onChange={e => setForm(f => f ? { ...f, name: e.target.value } : f)}
+                placeholder="e.g. John Smith"
+                className="w-full rounded-md border border-slate-200 px-3 py-1.5 text-sm"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-slate-600">CSV Name (Gusto format)</label>
+              <input
+                type="text"
+                value={form.csvName}
+                onChange={e => setForm(f => f ? { ...f, csvName: e.target.value } : f)}
+                placeholder="e.g. Smith, John"
+                className="w-full rounded-md border border-slate-200 px-3 py-1.5 text-sm"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-slate-600">CSV Job Title</label>
+              <input
+                type="text"
+                value={form.csvJob}
+                onChange={e => setForm(f => f ? { ...f, csvJob: e.target.value } : f)}
+                placeholder="e.g. Maintenance Crew Member"
+                className="w-full rounded-md border border-slate-200 px-3 py-1.5 text-sm"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-slate-600">Default Crew</label>
+              <select
+                value={form.defaultCrew}
+                onChange={e => setForm(f => f ? { ...f, defaultCrew: e.target.value } : f)}
+                className="w-full rounded-md border border-slate-200 px-3 py-1.5 text-sm"
+              >
+                <option value="">— None —</option>
+                {CREW_DEFS.map(cr => (
+                  <option key={cr.code} value={cr.code}>{cr.code} — {cr.name}</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex items-end pb-1.5">
+              <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={form.isField}
+                  onChange={e => setForm(f => f ? { ...f, isField: e.target.checked } : f)}
+                  className="h-4 w-4 rounded border-slate-300"
+                />
+                Field employee (assigned to crews)
+              </label>
+            </div>
+          </div>
+          <div className="mt-4 flex gap-2">
+            <button
+              onClick={saveForm}
+              disabled={isUpserting || !form.name.trim()}
+              className="rounded-md bg-brand-500 px-4 py-1.5 text-sm font-semibold text-white hover:bg-brand-600 disabled:opacity-50"
+            >
+              {isUpserting ? "Saving…" : editId ? "Save Changes" : "Add Employee"}
+            </button>
+            <button onClick={closeForm} className="rounded-md border border-slate-200 px-4 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50">Cancel</button>
+          </div>
+        </div>
+      )}
+
+      {/* Active employees table */}
+      {active.length > 0 && (
+        <div className="overflow-hidden rounded-lg border bg-white shadow-sm">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-50">
+              <tr>
+                <Th>Name</Th>
+                <Th>CSV Name</Th>
+                <Th>CSV Job</Th>
+                <Th>Default Crew</Th>
+                <Th>Field</Th>
+                <Th>{""}</Th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {active.map(emp => (
+                <tr key={emp.id} className="hover:bg-slate-50">
+                  <td className="px-3 py-2.5 font-medium text-slate-800">{emp.name}</td>
+                  <td className="px-3 py-2.5 font-mono text-xs text-slate-500">{emp.csvName || "—"}</td>
+                  <td className="px-3 py-2.5 text-xs text-slate-500">{emp.csvJob || "—"}</td>
+                  <td className="px-3 py-2.5">
+                    {emp.defaultCrew
+                      ? <span className="rounded bg-brand-100 px-1.5 py-0.5 text-xs font-semibold text-brand-700">{emp.defaultCrew}</span>
+                      : <span className="text-xs text-slate-400">—</span>}
+                  </td>
+                  <td className="px-3 py-2.5">
+                    <span className={`text-xs ${emp.isField ? "text-green-600" : "text-slate-400"}`}>
+                      {emp.isField ? "✓" : "—"}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2.5 pr-4">
+                    <div className="flex items-center justify-end gap-3">
+                      <button
+                        onClick={() => openEdit(emp)}
+                        title="Edit"
+                        className="text-slate-400 hover:text-brand-600"
+                      ><Pencil className="h-3.5 w-3.5" /></button>
+                      <button
+                        onClick={() => { if (confirm(`Deactivate ${emp.name}? They'll be removed from crew lists but historical data is preserved.`)) setActive(emp, false); }}
+                        title="Deactivate"
+                        className="text-slate-400 hover:text-red-500"
+                        disabled={isUpserting}
+                      ><X className="h-3.5 w-3.5" /></button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Inactive employees (collapsed section) */}
+      {inactive.length > 0 && (
+        <details className="group rounded-lg border bg-white shadow-sm">
+          <summary className="cursor-pointer list-none px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-400 hover:text-slate-600">
+            {inactive.length} inactive / departed employee{inactive.length !== 1 ? "s" : ""}
+            <span className="ml-1 text-slate-300 group-open:hidden">▸</span>
+            <span className="ml-1 hidden text-slate-300 group-open:inline">▾</span>
+          </summary>
+          <div className="border-t">
+            <table className="w-full text-sm">
+              <tbody className="divide-y divide-slate-100">
+                {inactive.map(emp => (
+                  <tr key={emp.id} className="opacity-60 hover:bg-slate-50 hover:opacity-100">
+                    <td className="px-3 py-2.5 font-medium text-slate-600">{emp.name}</td>
+                    <td className="px-3 py-2.5 text-xs text-slate-400">{emp.defaultCrew || "—"}</td>
+                    <td className="px-3 py-2.5 pr-4 text-right">
+                      <button
+                        onClick={() => setActive(emp, true)}
+                        disabled={isUpserting}
+                        className="text-xs font-medium text-brand-600 hover:underline disabled:opacity-50"
+                      >Reactivate</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </details>
+      )}
+
+      {dbEmployees && dbEmployees.length === 0 && (
+        <p className="py-8 text-center text-sm text-slate-400 italic">No employees yet — use "Load Default Roster" to get started or add employees manually.</p>
+      )}
+    </div>
+  );
+}
+
 // ── Main Component ────────────────────────────────────────────────────────────
 export function AvbDashboard() {
   const [tab, setTab] = useState<Tab>("summary");
   const [viewDay, setViewDay] = useState(0);
   const [importDay, setImportDay] = useState(0);
   const [weekEnd, setWeekEnd] = useState(thisSunday);
-  const [wd, setWd] = useState<AvbWeekData>(defaultWeekData);
+  const [wd, setWd] = useState<AvbWeekData>(() => defaultWeekData({}));
   const [csvSt, setCsvSt] = useState("");
   const [pdfSt, setPdfSt] = useState<Record<number,string>>({});
   const [cpFrom, setCpFrom] = useState("");
   const [cpTo, setCpTo] = useState("");
+  const [isSeeding, setIsSeeding] = useState(false);
   const csvRef = useRef<HTMLInputElement>(null);
   const pdfRef = useRef<HTMLInputElement>(null);
 
   const { data: weeks=[], isLoading } = useAvbWeeks();
   const upsert = useUpsertAvbWeek();
   const del = useDeleteAvbWeek();
+
+  const { data: dbEmployees } = useAvbEmployees();
+  const upsertEmployee = useUpsertAvbEmployee();
+
+  // Build the fallback roster from hardcoded ALL_EMP (used while DB is loading or empty)
+  const fallbackEmployees = useMemo<AvbEmployee[]>(() =>
+    ALL_EMP.map(e => ({
+      id: e.uuid,
+      uuid: e.uuid,
+      name: e.name,
+      csvName: e.csvName,
+      csvJob: e.csvJob,
+      defaultCrew: Object.entries(DEF_ASSIGNMENTS).find(([, v]) => v.includes(e.uuid))?.[0] ?? "",
+      isField: !NON_FIELD_UUIDS.has(e.uuid),
+      isActive: true,
+    })),
+    []
+  );
+
+  // Active employees for operational use: use DB data once seeded, fallback to hardcoded while loading
+  const allEmp = useMemo<AvbEmployee[]>(() => {
+    if (!dbEmployees) return fallbackEmployees;           // still loading
+    if (dbEmployees.length === 0) return fallbackEmployees; // not seeded yet — show fallback
+    return dbEmployees.filter(e => e.isActive);
+  }, [dbEmployees, fallbackEmployees]);
+
+  const fieldUuids = useMemo(() => allEmp.filter(e => e.isField).map(e => e.uuid), [allEmp]);
+
+  // Compute default crew assignments from DB employee defaultCrew fields
+  const defAssignments = useMemo<Record<string, string[]>>(() => {
+    const result: Record<string, string[]> = Object.fromEntries(CREW_DEFS.map(cr => [cr.code, []]));
+    allEmp.filter(e => e.isField).forEach(emp => {
+      if (emp.defaultCrew && emp.defaultCrew in result) {
+        result[emp.defaultCrew].push(emp.uuid);
+      }
+    });
+    return result;
+  }, [allEmp]);
 
   const cur = weeks.length ? weeks[weeks.length-1] : null;
 
@@ -957,14 +1256,14 @@ export function AvbDashboard() {
     const r = new FileReader();
     r.onload = ev => {
       try {
-        const g = parseGustoCsv(ev.target!.result as string);
+        const g = parseGustoCsv(ev.target!.result as string, allEmp);
         setCsvSt(`✓ ${Object.keys(g.employees).length} employees | ${g.weekStart} → ${g.weekEnd}`);
         if (g.weekEnd) setWeekEnd(g.weekEnd);
         setWd(d=>({...d,gusto:g}));
       } catch(e) { setCsvSt("Error: "+String(e)); }
     };
     r.readAsText(file);
-  }, []);
+  }, [allEmp]);
 
   // PDF
   const handlePdf = useCallback(async (file: File, di: number) => {
@@ -983,7 +1282,7 @@ export function AvbDashboard() {
     } catch(e) { setPdfSt(s=>({...s,[di]:"Error: "+String(e)})); }
   }, []);
 
-  // Assignment helpers — useCallback so references are stable when passed as props
+  // Assignment helpers
   const addToCrew = useCallback((di: number, code: string, uuid: string) => setWd(d=>{
     const next={...d,days:{...d.days}};
     const day={...next.days[di],assignments:Object.fromEntries(Object.entries(next.days[di].assignments).map(([k,v])=>[k,v.filter(u=>u!==uuid)]))};
@@ -1052,40 +1351,72 @@ export function AvbDashboard() {
   }, []);
 
   const handleImportNew = useCallback(() => {
-    setWd(defaultWeekData());
+    setWd(defaultWeekData(defAssignments));
     setTab("import");
-  }, []);
+  }, [defAssignments]);
 
   const handleDeleteWeek = useCallback((we: string) => {
     del.mutate(we);
   }, [del]);
 
+  const handleUpsertEmployee = useCallback((emp: UpsertEmpPayload) => {
+    upsertEmployee.mutate(emp);
+  }, [upsertEmployee]);
+
+  const handleSeedRoster = useCallback(async () => {
+    setIsSeeding(true);
+    try {
+      await Promise.all(ALL_EMP.map(emp => {
+        const defCrew = Object.entries(DEF_ASSIGNMENTS).find(([, v]) => v.includes(emp.uuid))?.[0] ?? "";
+        return upsertEmployee.mutateAsync({
+          uuid: emp.uuid,
+          name: emp.name,
+          csvName: emp.csvName,
+          csvJob: emp.csvJob,
+          defaultCrew: defCrew,
+          isField: !NON_FIELD_UUIDS.has(emp.uuid),
+          isActive: true,
+        });
+      }));
+    } finally {
+      setIsSeeding(false);
+    }
+  }, [upsertEmployee]);
+
   const TABS: {key:Tab;label:string}[] = [
-    {key:"summary",label:"Weekly Summary"},{key:"daily",label:"Daily View"},
-    {key:"history",label:"History & Trends"},{key:"ytd",label:"YTD Summary"},
-    {key:"import",label:"Import Week"},
+    {key:"summary",  label:"Weekly Summary"},
+    {key:"daily",    label:"Daily View"},
+    {key:"history",  label:"History & Trends"},
+    {key:"ytd",      label:"YTD Summary"},
+    {key:"import",   label:"Import Week"},
+    {key:"settings", label:"Team Settings"},
   ];
 
   return (
     <div className="flex flex-col gap-5">
-      <PageHeader title="Labor Efficiency" description="Compare on-site production hours against Gusto clocked hours by crew"
-        action={<button onClick={handleImportNew} className="flex items-center gap-2 rounded-md bg-brand-500 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-600"><Upload className="h-4 w-4"/>Import Week</button>} />
-      <div className="flex gap-0 border-b border-slate-200">
+      <PageHeader
+        title="Labor Efficiency"
+        description="Compare on-site production hours against Gusto clocked hours by crew"
+        action={<button onClick={handleImportNew} className="flex items-center gap-2 rounded-md bg-brand-500 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-600"><Upload className="h-4 w-4"/>Import Week</button>}
+      />
+      <div className="flex gap-0 overflow-x-auto border-b border-slate-200">
         {TABS.map(t=>(
-          <button key={t.key} onClick={()=>setTab(t.key)} className={`px-4 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px ${tab===t.key?"border-brand-500 text-brand-600":"border-transparent text-slate-500 hover:text-slate-700"}`}>{t.label}</button>
+          <button key={t.key} onClick={()=>setTab(t.key)} className={`shrink-0 px-4 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px ${tab===t.key?"border-brand-500 text-brand-600":"border-transparent text-slate-500 hover:text-slate-700"}`}>{t.label}</button>
         ))}
       </div>
       {isLoading ? (
         <div className="py-16 text-center text-sm text-slate-400">Loading…</div>
       ) : (
         <>
-          {tab==="summary"  && <Summary cur={cur} onEditWeek={handleEditWeek} onImportNew={handleImportNew} />}
-          {tab==="daily"    && <Daily cur={cur} viewDay={viewDay} setViewDay={setViewDay} />}
+          {tab==="summary"  && <Summary cur={cur} employees={allEmp} onEditWeek={handleEditWeek} onImportNew={handleImportNew} />}
+          {tab==="daily"    && <Daily cur={cur} employees={allEmp} viewDay={viewDay} setViewDay={setViewDay} />}
           {tab==="history"  && <History weeks={weeks} onEditWeek={handleEditWeek} onDeleteWeek={handleDeleteWeek} />}
           {tab==="ytd"      && <Ytd weeks={weeks} />}
           {tab==="import"   && (
             <Import
               wd={wd}
+              employees={allEmp}
+              fieldUuids={fieldUuids}
               importDay={importDay}
               setImportDay={setImportDay}
               weekEnd={weekEnd}
@@ -1108,6 +1439,15 @@ export function AvbDashboard() {
               onRmFromCrew={rmFromCrew}
               onSetEmpHours={setEmpHours}
               onCancel={()=>setTab("summary")}
+            />
+          )}
+          {tab==="settings" && (
+            <Settings
+              dbEmployees={dbEmployees}
+              onUpsert={handleUpsertEmployee}
+              isUpserting={upsertEmployee.isPending}
+              onSeedRoster={handleSeedRoster}
+              isSeeding={isSeeding}
             />
           )}
         </>

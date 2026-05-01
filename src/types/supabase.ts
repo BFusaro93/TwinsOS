@@ -600,6 +600,59 @@ export type Database = {
           },
         ]
       }
+      avb_employees: {
+        Row: {
+          created_at: string
+          csv_job: string
+          csv_name: string
+          default_crew: string
+          deleted_at: string | null
+          id: string
+          is_active: boolean
+          is_field: boolean
+          name: string
+          org_id: string
+          updated_at: string
+          uuid: string
+        }
+        Insert: {
+          created_at?: string
+          csv_job?: string
+          csv_name?: string
+          default_crew?: string
+          deleted_at?: string | null
+          id?: string
+          is_active?: boolean
+          is_field?: boolean
+          name: string
+          org_id: string
+          updated_at?: string
+          uuid: string
+        }
+        Update: {
+          created_at?: string
+          csv_job?: string
+          csv_name?: string
+          default_crew?: string
+          deleted_at?: string | null
+          id?: string
+          is_active?: boolean
+          is_field?: boolean
+          name?: string
+          org_id?: string
+          updated_at?: string
+          uuid?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "avb_employees_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       avb_weeks: {
         Row: {
           created_at: string
