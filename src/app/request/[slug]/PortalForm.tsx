@@ -41,10 +41,8 @@ interface PortalFormProps {
   orgName: string;
   brandColor: string;
   portalEnabled: boolean;
-  /** Asset type labels from org settings (e.g. ["Vehicle", "Trailer", "Other"]) */
-  assetTypes: string[];
-  /** WO category labels from org settings (e.g. ["Engine", "Electrical", ...]) */
-  woCategories: string[];
+    assetTypes?: string[];
+  woCategories?: string[];
 }
 
 interface SubmitResult {
@@ -60,16 +58,12 @@ export function PortalForm({
   orgName,
   brandColor,
   portalEnabled,
-  assetTypes,
-  woCategories,
 }: PortalFormProps) {
   const [name, setName]                     = useState("");
   const [title, setTitle]                   = useState("");
   const [description, setDescription]       = useState("");
   const [priority, setPriority]             = useState<WorkOrderPriority>("medium");
   const [equipment, setEquipment]           = useState("");
-  const [equipmentType, setEquipmentType]   = useState("");
-  const [repairCategory, setRepairCategory] = useState("");
   const [hasRepairTag, setHasRepairTag]     = useState<"yes" | "no" | "">("");
   const [errors, setErrors]                 = useState<Record<string, string>>({});
   const [isPending, setIsPending]           = useState(false);
@@ -100,10 +94,8 @@ export function PortalForm({
           title:         title.trim(),
           description:   description.trim(),
           priority,
-          equipment:     equipment.trim() || undefined,
-          equipmentType: equipmentType || undefined,
-          repairCategory: repairCategory || undefined,
-          hasRepairTag:  hasRepairTag === "yes" ? true : hasRepairTag === "no" ? false : undefined,
+          equipment:    equipment.trim() || undefined,
+          hasRepairTag: hasRepairTag === "yes" ? true : hasRepairTag === "no" ? false : undefined,
         }),
       });
       const json = await res.json();
@@ -122,7 +114,6 @@ export function PortalForm({
   function resetForm() {
     setName(""); setTitle(""); setDescription("");
     setPriority("medium"); setEquipment("");
-    setEquipmentType(""); setRepairCategory("");
     setHasRepairTag(""); setErrors({});
     setSubmitted(null); setServerError(null);
   }
@@ -264,7 +255,7 @@ export function PortalForm({
                 {errors.description && <p className="text-xs text-red-500">{errors.description}</p>}
               </div>
 
-              {/* Equipment + type */}
+              {/* Equipment + priority */}
               <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
                 <div className="flex flex-col gap-1.5">
                   <Label htmlFor="equipment" className="text-sm font-medium">
@@ -277,47 +268,6 @@ export function PortalForm({
                     onChange={(e) => setEquipment(e.target.value)}
                   />
                 </div>
-
-                {assetTypes.length > 0 && (
-                  <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="equipment-type" className="text-sm font-medium">
-                      Equipment Type <span className="text-xs font-normal text-slate-400">(optional)</span>
-                    </Label>
-                    <Select value={equipmentType || "none"} onValueChange={(v) => setEquipmentType(v === "none" ? "" : v)}>
-                      <SelectTrigger id="equipment-type">
-                        <SelectValue placeholder="Select type…" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">— Select —</SelectItem>
-                        {assetTypes.map((t) => (
-                          <SelectItem key={t} value={t}>{t}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
-              </div>
-
-              {/* Repair category + priority */}
-              <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-                {woCategories.length > 0 && (
-                  <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="repair-category" className="text-sm font-medium">
-                      Repair Category <span className="text-xs font-normal text-slate-400">(optional)</span>
-                    </Label>
-                    <Select value={repairCategory || "none"} onValueChange={(v) => setRepairCategory(v === "none" ? "" : v)}>
-                      <SelectTrigger id="repair-category">
-                        <SelectValue placeholder="Select category…" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">— Select —</SelectItem>
-                        {woCategories.map((c) => (
-                          <SelectItem key={c} value={c}>{c}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
 
                 <div className="flex flex-col gap-1.5">
                   <Label htmlFor="priority" className="text-sm font-medium">Priority / Urgency</Label>
