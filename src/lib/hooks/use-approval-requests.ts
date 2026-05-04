@@ -139,6 +139,20 @@ export function useSubmitForApproval() {
         const { error } = await supabase.from("approval_requests").insert(newRequests);
         if (error) throw error;
 
+        // If every step was skipped (threshold not met, admin bypass, or both),
+        // there is nobody left to approve — auto-advance the entity to "approved"
+        // right now rather than leaving it stuck in pending forever.
+        const allSkipped = newRequests.every((r) => r.status === "skipped");
+        if (allSkipped) {
+          const autoApproveTable = entityType === "requisition" ? "requisitions" : "purchase_orders";
+          const { error: autoErr } = await supabase
+            .from(autoApproveTable)
+            .update({ status: "approved" })
+            .eq("id", entityId);
+          if (autoErr) throw autoErr;
+          return { entityType, autoApproved: true };
+        }
+
         // Fire approval notification emails (best-effort — don't block on failure)
         fetch("/api/approval-requests/notify", {
           method: "POST",
@@ -149,7 +163,7 @@ export function useSubmitForApproval() {
         });
       }
 
-      return { entityType };
+      return { entityType, autoApproved: false };
     },
     onMutate: async ({ entityId, entityType }) => {
       // Block Realtime invalidations for the entire mutation lifecycle
@@ -170,8 +184,23 @@ export function useSubmitForApproval() {
 
       return { previousReqs, previousPOs };
     },
-    onSuccess: (_result, { entityId }) => {
+    onSuccess: (result, { entityId, entityType }) => {
       queryClient.invalidateQueries({ queryKey: ["approval-requests", entityId] });
+      // If auto-approved (all steps skipped), patch the entity cache immediately
+      // so the UI reflects "approved" without waiting for the invalidation refetch.
+      if (result?.autoApproved) {
+        if (entityType === "requisition") {
+          patchReqCache(queryClient, entityId, { status: "approved" as Requisition["status"] });
+        } else {
+          patchPOCache(queryClient, entityId, { status: "approved" as PurchaseOrder["status"] });
+        }
+        // Notify the submitter that their PO/req was auto-approved (best-effort)
+        fetch("/api/notifications/email", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ type: "approved", entityId, entityType }),
+        }).catch(() => {});
+      }
     },
     onError: (_err, _vars, context) => {
       if (context?.previousReqs) {
