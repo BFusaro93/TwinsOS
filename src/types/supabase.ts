@@ -1366,6 +1366,7 @@ export type Database = {
       parts: {
         Row: {
           alternate_vendors: Json
+          categories: string[]
           category: string
           cost_layers: Json
           created_at: string
@@ -1390,6 +1391,7 @@ export type Database = {
         }
         Insert: {
           alternate_vendors?: Json
+          categories?: string[]
           category?: string
           cost_layers?: Json
           created_at?: string
@@ -1414,6 +1416,7 @@ export type Database = {
         }
         Update: {
           alternate_vendors?: Json
+          categories?: string[]
           category?: string
           cost_layers?: Json
           created_at?: string

@@ -89,8 +89,10 @@ export function PartsPage() {
       .map((p) => p.partNumber)
   );
 
-  // Derive filter options dynamically from loaded data
-  const categoryOptions = Array.from(new Set(all.map((p) => p.category)))
+  // Derive filter options dynamically from loaded data (flatten multi-category arrays)
+  const categoryOptions = Array.from(
+    new Set(all.flatMap((p) => (p.categories?.length ? p.categories : p.category ? [p.category] : [])))
+  )
     .sort()
     .map((c) => ({ value: c, label: c }));
 
@@ -104,7 +106,7 @@ export function PartsPage() {
       !q ||
       p.name.toLowerCase().includes(q) ||
       p.partNumber.toLowerCase().includes(q) ||
-      p.category.toLowerCase().includes(q) ||
+      (p.categories?.length ? p.categories : p.category ? [p.category] : []).some((c) => c.toLowerCase().includes(q)) ||
       (p.vendorName ?? "").toLowerCase().includes(q);
     const stockFilter = filterValues.stock;
     // Non-inventory parts have no meaningful stock status — exclude them when
@@ -127,7 +129,11 @@ export function PartsPage() {
             (stockFilter === "low_stock"    && isLowStock)     ||
             (stockFilter === "in_stock"     && isInStock)))
     );
-    const matchCategory = matchesFilter(p.category, filterValues.category);
+    const partCats = p.categories?.length ? p.categories : p.category ? [p.category] : [];
+    const matchCategory = !filterValues.category ||
+      (Array.isArray(filterValues.category)
+        ? filterValues.category.length === 0 || filterValues.category.some((fc) => partCats.includes(fc as string))
+        : partCats.includes(filterValues.category as string));
     const matchVendor = matchesFilter(p.vendorName ?? "", filterValues.vendor);
     return matchSearch && matchStock && matchCategory && matchVendor;
   });
@@ -159,7 +165,7 @@ export function PartsPage() {
                     name: p.name,
                     partNumber: p.partNumber,
                     description: p.description ?? "",
-                    category: p.category,
+                    category: (p.categories?.length ? p.categories : p.category ? [p.category] : []).join("|"),
                     unitCost: (p.unitCost / 100).toFixed(2),
                     quantityOnHand: p.quantityOnHand,
                     minimumStock: p.minimumStock,
@@ -293,7 +299,9 @@ export function PartsPage() {
                       </TableCell>
                     )}
                     {col("category") && (
-                      <TableCell className="text-slate-600">{part.category}</TableCell>
+                      <TableCell className="text-slate-600">
+                        {(part.categories?.length ? part.categories : part.category ? [part.category] : []).join(", ") || "—"}
+                      </TableCell>
                     )}
                     {col("vendor") && (
                       <TableCell className="text-slate-600">{part.vendorName}</TableCell>

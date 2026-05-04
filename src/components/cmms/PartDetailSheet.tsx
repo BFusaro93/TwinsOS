@@ -180,7 +180,7 @@ function DetailsTab({
       {/* Details */}
       <dl>
         <MetaRow label="Part #" value={part.partNumber} />
-        <MetaRow label="Category" value={part.category} />
+        <MetaRow label={part.categories?.length > 1 ? "Categories" : "Category"} value={(part.categories?.length ? part.categories : part.category ? [part.category] : []).join(", ") || "—"} />
         <MetaRow label="Unit Cost" value={formatCurrency(part.unitCost)} />
         {part.location && <MetaRow label="Location" value={part.location} />}
       </dl>
@@ -757,10 +757,12 @@ export function PartDetailSheet({ part, open, onOpenChange }: PartDetailSheetPro
                   </h2>
                   <EditButton onClick={() => setEditOpen(true)} />
                 </div>
-                <div className="mt-1 flex items-center gap-2">
-                  <span className="rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600 capitalize">
-                    {livePart.category}
-                  </span>
+                <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                  {(livePart.categories?.length ? livePart.categories : livePart.category ? [livePart.category] : []).map((cat) => (
+                    <span key={cat} className="rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600 capitalize">
+                      {cat}
+                    </span>
+                  ))}
                 </div>
               </div>
             </div>

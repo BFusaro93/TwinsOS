@@ -22,6 +22,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Badge } from "@/components/ui/badge";
+import { ChevronDown, Check } from "lucide-react";
 import { useVendors } from "@/lib/hooks/use-vendors";
 import { useParts, useCreatePart, useUpdatePart } from "@/lib/hooks/use-parts";
 import { useSettingsStore } from "@/stores/settings-store";
@@ -50,7 +57,7 @@ export function NewPartDialog({ open, onOpenChange, initialData, onCreated }: Ne
 
   const [name, setName] = useState("");
   const [partNumber, setPartNumber] = useState("");
-  const [category, setCategory] = useState("none");
+  const [categories, setCategories] = useState<string[]>([]);
   const [quantityOnHand, setQuantityOnHand] = useState("0");
   const [minimumStock, setMinimumStock] = useState("0");
   const [unitCost, setUnitCost] = useState("");
@@ -72,7 +79,7 @@ export function NewPartDialog({ open, onOpenChange, initialData, onCreated }: Ne
     if (open && initialData) {
       setName(initialData.name);
       setPartNumber(initialData.partNumber);
-      setCategory(initialData.category || "none");
+      setCategories(initialData.categories?.length ? initialData.categories : initialData.category ? [initialData.category] : []);
       setQuantityOnHand(String(initialData.quantityOnHand));
       setMinimumStock(String(initialData.minimumStock));
       setUnitCost((initialData.unitCost / 100).toFixed(2));
@@ -90,7 +97,7 @@ export function NewPartDialog({ open, onOpenChange, initialData, onCreated }: Ne
     onOpenChange(false);
     setName("");
     setPartNumber("");
-    setCategory("none");
+    setCategories([]);
     setQuantityOnHand("0");
     setMinimumStock("0");
     setUnitCost("");
@@ -109,7 +116,8 @@ export function NewPartDialog({ open, onOpenChange, initialData, onCreated }: Ne
       name,
       partNumber,
       description,
-      category: category === "none" ? "" : category,
+      categories,
+      category: categories[0] ?? "",
       quantityOnHand: parseInt(quantityOnHand) || 0,
       minimumStock: parseInt(minimumStock) || 0,
       unitCost: Math.round((parseFloat(unitCost) || 0) * 100),
@@ -193,20 +201,52 @@ export function NewPartDialog({ open, onOpenChange, initialData, onCreated }: Ne
               </div>
 
               <div className="grid gap-1.5">
-                <Label htmlFor="part-category">Category</Label>
-                <Select value={category} onValueChange={setCategory}>
-                  <SelectTrigger id="part-category">
-                    <SelectValue placeholder="Select category" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">No category</SelectItem>
-                    {enabledPartCategories.map((c) => (
-                      <SelectItem key={c.id} value={c.label}>
-                        {c.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Label>Categories</Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      className="flex min-h-9 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                    >
+                      <span className="flex flex-wrap gap-1">
+                        {categories.length === 0 ? (
+                          <span className="text-muted-foreground">Select categories…</span>
+                        ) : (
+                          categories.map((c) => (
+                            <Badge key={c} variant="secondary" className="text-xs font-normal">
+                              {c}
+                            </Badge>
+                          ))
+                        )}
+                      </span>
+                      <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-64 p-1" align="start">
+                    <div className="max-h-60 overflow-y-auto">
+                      {enabledPartCategories.map((c) => {
+                        const selected = categories.includes(c.label);
+                        return (
+                          <button
+                            key={c.id}
+                            type="button"
+                            className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-accent"
+                            onClick={() =>
+                              setCategories((prev) =>
+                                selected ? prev.filter((x) => x !== c.label) : [...prev, c.label]
+                              )
+                            }
+                          >
+                            <div className={`flex h-4 w-4 items-center justify-center rounded border ${selected ? "border-primary bg-primary" : "border-muted-foreground"}`}>
+                              {selected && <Check className="h-3 w-3 text-primary-foreground" />}
+                            </div>
+                            {c.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </PopoverContent>
+                </Popover>
               </div>
             </div>
 

@@ -217,7 +217,7 @@ export function AssetPartsTab({ assetId, recordLabel = "asset" }: AssetPartsTabP
                       <div className="flex-1">
                         <p className="text-sm font-medium text-slate-800">{part.name}</p>
                         <p className="text-xs text-slate-500">
-                          {part.partNumber} &middot; {part.category}
+                          {part.partNumber}{((part.categories?.length ? part.categories : part.category ? [part.category] : []).length > 0) && <> &middot; {(part.categories?.length ? part.categories : [part.category]).join(", ")}</>}
                         </p>
                       </div>
                       <span className="text-xs text-slate-400">

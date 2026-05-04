@@ -294,6 +294,9 @@ export function mapPart(row: PartRow): Part {
     name: row.name,
     partNumber: row.part_number,
     description: row.description,
+    // `categories` is the source of truth for multi-category support.
+    // Fall back to wrapping the legacy `category` string for pre-migration rows.
+    categories: (row.categories as string[])?.length ? (row.categories as string[]) : row.category ? [row.category] : [],
     category: row.category,
     quantityOnHand: row.quantity_on_hand,
     minimumStock: row.minimum_stock,

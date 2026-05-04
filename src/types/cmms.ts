@@ -111,7 +111,10 @@ export interface Part extends BaseRecord {
   name: string;
   partNumber: string;
   description: string;
+  /** Primary category (first element of categories, kept for compat). Use `categories` for display. */
   category: string;
+  /** All selected categories — the source of truth for multi-category parts. */
+  categories: string[];
   quantityOnHand: number;
   minimumStock: number;
   unitCost: number; // cents — cost we pay from vendor
