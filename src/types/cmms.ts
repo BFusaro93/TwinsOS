@@ -233,4 +233,10 @@ export interface MaintenanceRequest extends BaseRecord {
   linkedWorkOrderNumber: string | null;
   /** Set when this request was created by an automation rule. Passed to the converted WO to enable threshold advancement on completion. */
   automationId: string | null;
+  /** Type of equipment (e.g. "Vehicle", "Mower", "Trailer") */
+  equipmentType: string | null;
+  /** General repair/maintenance category (e.g. "Engine", "Hydraulics") */
+  repairCategory: string | null;
+  /** Whether the submitter placed a repair tag on the item */
+  hasRepairTag: boolean | null;
 }

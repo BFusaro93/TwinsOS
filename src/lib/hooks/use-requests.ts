@@ -47,6 +47,9 @@ export function useCreateRequest() {
       requestedByName: string;
       assetId?: string | null;
       assetName?: string;
+      equipmentType?: string;
+      repairCategory?: string;
+      hasRepairTag?: boolean;
     }) => {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
@@ -65,6 +68,9 @@ export function useCreateRequest() {
           requested_by_name: input.requestedByName,
           linked_work_order_id: null,
           linked_work_order_number: null,
+          equipment_type: input.equipmentType?.trim() || null,
+          repair_category: input.repairCategory?.trim() || null,
+          has_repair_tag: input.hasRepairTag ?? null,
         })
         .select()
         .single();

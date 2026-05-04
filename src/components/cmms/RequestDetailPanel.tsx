@@ -133,6 +133,11 @@ function DetailsTab({
         />
         <MetaRow label="Submitted By" value={request.requestedByName} />
         <MetaRow label="Asset" value={request.assetName} />
+        {request.equipmentType && <MetaRow label="Equipment Type" value={request.equipmentType} />}
+        {request.repairCategory && <MetaRow label="Repair Category" value={request.repairCategory} />}
+        {request.hasRepairTag != null && (
+          <MetaRow label="Repair Tag Placed" value={request.hasRepairTag ? "Yes" : "No"} />
+        )}
         <MetaRow label="Submitted" value={formatDate(request.createdAt)} />
         {request.linkedWorkOrderNumber && (
           <MetaRow

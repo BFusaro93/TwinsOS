@@ -1029,11 +1029,14 @@ export type Database = {
           created_by: string | null
           deleted_at: string | null
           description: string | null
+          equipment_type: string | null
+          has_repair_tag: boolean | null
           id: string
           linked_work_order_id: string | null
           linked_work_order_number: string | null
           org_id: string
           priority: string
+          repair_category: string | null
           request_number: string
           requested_by_id: string | null
           requested_by_name: string
@@ -1049,11 +1052,14 @@ export type Database = {
           created_by?: string | null
           deleted_at?: string | null
           description?: string | null
+          equipment_type?: string | null
+          has_repair_tag?: boolean | null
           id?: string
           linked_work_order_id?: string | null
           linked_work_order_number?: string | null
           org_id?: string
           priority?: string
+          repair_category?: string | null
           request_number: string
           requested_by_id?: string | null
           requested_by_name?: string
@@ -1069,11 +1075,14 @@ export type Database = {
           created_by?: string | null
           deleted_at?: string | null
           description?: string | null
+          equipment_type?: string | null
+          has_repair_tag?: boolean | null
           id?: string
           linked_work_order_id?: string | null
           linked_work_order_number?: string | null
           org_id?: string
           priority?: string
+          repair_category?: string | null
           request_number?: string
           requested_by_id?: string | null
           requested_by_name?: string

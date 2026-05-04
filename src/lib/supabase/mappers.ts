@@ -623,6 +623,9 @@ export function mapMaintenanceRequest(row: MaintenanceRequestRow): MaintenanceRe
     linkedWorkOrderNumber: row.linked_work_order_number,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     automationId: (row as any).automation_id ?? null,
+    equipmentType: row.equipment_type ?? null,
+    repairCategory: row.repair_category ?? null,
+    hasRepairTag: row.has_repair_tag ?? null,
   };
 }
 

@@ -42,12 +42,15 @@ export default function RequestPortalPage() {
   const { orgName, logoDataUrl, brandColor, portalEnabled } = useSettingsStore();
   const { mutate: createRequest, isPending, isSuccess, data: submitted } = useCreateRequest();
 
-  const [name, setName]               = useState("");
-  const [title, setTitle]             = useState("");
-  const [description, setDescription] = useState("");
-  const [priority, setPriority]       = useState<WorkOrderPriority>("medium");
-  const [equipment, setEquipment]     = useState("");
-  const [errors, setErrors]           = useState<Record<string, string>>({});
+  const [name, setName]                     = useState("");
+  const [title, setTitle]                   = useState("");
+  const [description, setDescription]       = useState("");
+  const [priority, setPriority]             = useState<WorkOrderPriority>("medium");
+  const [equipment, setEquipment]           = useState("");
+  const [equipmentType, setEquipmentType]   = useState("");
+  const [repairCategory, setRepairCategory] = useState("");
+  const [hasRepairTag, setHasRepairTag]     = useState<"yes" | "no" | "">("");
+  const [errors, setErrors]                 = useState<Record<string, string>>({});
 
   function validate() {
     const e: Record<string, string> = {};
@@ -67,6 +70,9 @@ export default function RequestPortalPage() {
       priority,
       requestedByName:   name.trim(),
       assetName:         equipment.trim() || undefined,
+      equipmentType:     equipmentType.trim() || undefined,
+      repairCategory:    repairCategory.trim() || undefined,
+      hasRepairTag:      hasRepairTag === "yes" ? true : hasRepairTag === "no" ? false : undefined,
     });
   }
 
@@ -130,6 +136,9 @@ export default function RequestPortalPage() {
               setDescription("");
               setPriority("medium");
               setEquipment("");
+              setEquipmentType("");
+              setRepairCategory("");
+              setHasRepairTag("");
               setErrors({});
               // Reset by navigating — TanStack Query mutation state resets on next mount
               window.location.reload();
@@ -226,14 +235,60 @@ export default function RequestPortalPage() {
                 {errors.description && <p className="text-xs text-red-500">{errors.description}</p>}
               </div>
 
-              {/* Two-col row: priority + equipment */}
+              {/* Two-col row: equipment + equipment type */}
               <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
                 <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="priority" className="text-sm font-medium">Priority</Label>
-                  <Select
-                    value={priority}
-                    onValueChange={(v) => setPriority(v as WorkOrderPriority)}
-                  >
+                  <Label htmlFor="equipment" className="text-sm font-medium">
+                    Equipment / Asset <span className="font-normal text-slate-400">(optional)</span>
+                  </Label>
+                  <Input
+                    id="equipment"
+                    placeholder="e.g. Toro Z-Master #3, Truck #12"
+                    value={equipment}
+                    onChange={(e) => setEquipment(e.target.value)}
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="equipment-type" className="text-sm font-medium">
+                    Type of Equipment <span className="font-normal text-slate-400">(optional)</span>
+                  </Label>
+                  <Select value={equipmentType || "none"} onValueChange={(v) => setEquipmentType(v === "none" ? "" : v)}>
+                    <SelectTrigger id="equipment-type">
+                      <SelectValue placeholder="Select type…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">— Select —</SelectItem>
+                      {["Vehicle", "Mower / ZTR", "Trailer", "Skid Steer", "Excavator", "Hand Tool", "Irrigation", "Other"].map((t) => (
+                        <SelectItem key={t} value={t}>{t}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {/* Two-col row: repair category + priority */}
+              <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="repair-category" className="text-sm font-medium">
+                    Repair Category <span className="font-normal text-slate-400">(optional)</span>
+                  </Label>
+                  <Select value={repairCategory || "none"} onValueChange={(v) => setRepairCategory(v === "none" ? "" : v)}>
+                    <SelectTrigger id="repair-category">
+                      <SelectValue placeholder="Select category…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">— Select —</SelectItem>
+                      {["Engine", "Hydraulics", "Electrical", "Blades / Cutting Deck", "Tires / Wheels", "Body / Frame", "Brakes", "Belts", "Filters / Fluids", "Operator Controls", "Other"].map((c) => (
+                        <SelectItem key={c} value={c}>{c}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="priority" className="text-sm font-medium">Priority / Urgency</Label>
+                  <Select value={priority} onValueChange={(v) => setPriority(v as WorkOrderPriority)}>
                     <SelectTrigger id="priority">
                       <SelectValue />
                     </SelectTrigger>
@@ -249,18 +304,29 @@ export default function RequestPortalPage() {
                     </SelectContent>
                   </Select>
                 </div>
+              </div>
 
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="equipment" className="text-sm font-medium">
-                    Equipment / Asset{" "}
-                    <span className="font-normal text-slate-400">(optional)</span>
-                  </Label>
-                  <Input
-                    id="equipment"
-                    placeholder="e.g. Toro Z-Master #3, Truck #12"
-                    value={equipment}
-                    onChange={(e) => setEquipment(e.target.value)}
-                  />
+              {/* Repair tag */}
+              <div className="flex flex-col gap-1.5">
+                <Label className="text-sm font-medium">
+                  Did you put a repair tag on the item?
+                </Label>
+                <div className="flex gap-3">
+                  {(["yes", "no"] as const).map((v) => (
+                    <button
+                      key={v}
+                      type="button"
+                      onClick={() => setHasRepairTag(v)}
+                      className={`flex-1 rounded-md border py-2 text-sm font-medium transition-colors ${
+                        hasRepairTag === v
+                          ? "border-transparent text-white"
+                          : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                      }`}
+                      style={hasRepairTag === v ? { backgroundColor: brandColor } : {}}
+                    >
+                      {v === "yes" ? "Yes" : "No"}
+                    </button>
+                  ))}
                 </div>
               </div>
 
