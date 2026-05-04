@@ -5,6 +5,7 @@ import type { CompanyAddress } from "@/stores/settings-store";
 
 export interface OrgSettingsData {
   id: string;
+  slug: string;
   name: string;
   brandColor: string;
   address: CompanyAddress;
@@ -28,6 +29,7 @@ function mapOrgSettings(row: Record<string, unknown>): OrgSettingsData {
   const addr = (row.address as Partial<CompanyAddress>) ?? {};
   return {
     id: row.id as string,
+    slug: (row.slug as string) ?? "",
     name: row.name as string,
     brandColor: (row.brand_color as string) ?? "#60ab45",
     address: {
@@ -60,7 +62,7 @@ export function useOrgSettings() {
 
       const { data, error } = await supabase
         .from("organizations")
-        .select("id, name, brand_color, address, tax_rate_percent, cost_method, portal_enabled, customizations")
+        .select("id, slug, name, brand_color, address, tax_rate_percent, cost_method, portal_enabled, customizations")
         .eq("id", profile.org_id)
         .single();
       if (error) throw error;

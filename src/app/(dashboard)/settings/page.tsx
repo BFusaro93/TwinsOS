@@ -724,7 +724,7 @@ function GeneralTab() {
             <div className="flex items-center gap-2">
               <div className="flex h-8 flex-1 min-w-0 items-center rounded-md border bg-slate-50 px-3">
                 <span className="truncate text-xs text-slate-600 font-mono">
-                  {typeof window !== "undefined" ? window.location.origin : "https://yourapp.com"}/request
+                  {typeof window !== "undefined" ? window.location.origin : "https://yourapp.com"}/request/{remoteSettings?.slug ?? ""}
                 </span>
               </div>
               <Button
@@ -732,7 +732,7 @@ function GeneralTab() {
                 variant="outline"
                 className="h-8 shrink-0 gap-1.5 text-xs"
                 onClick={() => {
-                  const url = `${window.location.origin}/request`;
+                  const url = `${window.location.origin}/request/${remoteSettings?.slug ?? ""}`;
                   navigator.clipboard.writeText(url).then(() => {
                     setCopied(true);
                     setTimeout(() => setCopied(false), 2000);
