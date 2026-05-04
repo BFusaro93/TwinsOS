@@ -222,8 +222,13 @@ export function NewPartDialog({ open, onOpenChange, initialData, onCreated }: Ne
                       <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                     </button>
                   </PopoverTrigger>
-                  <PopoverContent className="w-64 max-h-64 overflow-y-auto p-1" align="start">
-                    <div>
+                  <PopoverContent className="w-64 p-1" align="start">
+                    {/* onWheel stop-propagation prevents the dialog's own scroll
+                        container from stealing wheel events away from this list */}
+                    <div
+                      className="max-h-56 overflow-y-auto"
+                      onWheel={(e) => e.stopPropagation()}
+                    >
                       {enabledPartCategories.map((c) => {
                         const selected = categories.includes(c.label);
                         return (
