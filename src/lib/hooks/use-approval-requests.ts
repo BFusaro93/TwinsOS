@@ -41,12 +41,13 @@ export function useSubmitForApproval() {
 
       const { data: profile } = await supabase
         .from("profiles")
-        .select("org_id")
+        .select("org_id, role")
         .eq("id", user.id)
         .single();
       if (!profile) throw new Error("Profile not found");
 
       const orgId = profile.org_id;
+      const submitterRole = profile.role as string | null;
 
       // ── Update entity status to pending atomically in this mutation ──────────
       // This must happen before the component callback tries to do it separately,
@@ -93,8 +94,18 @@ export function useSubmitForApproval() {
         approver_name: string; approver_role: string; status: string;
       }> = [];
 
+      // Roles that admins outrank — steps requiring these roles are auto-skipped
+      // when the submitter is an admin, since admins have full authority.
+      const ADMIN_OUTRANKS = new Set(["manager"]);
+      const submitterIsAdmin = submitterRole === "admin";
+
       for (const step of steps) {
         const isRequired = step.threshold_cents === 0 || grandTotalCents >= step.threshold_cents;
+
+        // Admin submitters bypass any step whose required role is below admin
+        // (e.g. "manager"). The step is still recorded but immediately skipped.
+        const adminBypass = submitterIsAdmin && ADMIN_OUTRANKS.has(step.required_role);
+        const effectiveStatus = (!isRequired || adminBypass) ? "skipped" : "pending";
 
         if (step.assigned_user_id) {
           const approver = orgUsers?.find((u) => u.id === step.assigned_user_id);
@@ -104,7 +115,7 @@ export function useSubmitForApproval() {
             approver_id: step.assigned_user_id,
             approver_name: approver?.name ?? "Unknown",
             approver_role: step.required_role,
-            status: isRequired ? "pending" : "skipped",
+            status: effectiveStatus,
           });
         } else {
           const approvers = orgUsers?.filter((u) => u.role === step.required_role) ?? [];
@@ -118,7 +129,7 @@ export function useSubmitForApproval() {
               flow_step_id: step.id, order: step.order,
               approver_id: approver.id, approver_name: approver.name,
               approver_role: step.required_role,
-              status: isRequired ? "pending" : "skipped",
+              status: effectiveStatus,
             });
           }
         }
