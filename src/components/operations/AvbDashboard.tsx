@@ -1418,6 +1418,18 @@ export function AvbDashboard() {
 
   const cur = weeks.length ? weeks[weeks.length-1] : null;
 
+  // Keep wd in sync with defAssignments/crewDefs as long as no Gusto CSV has
+  // been uploaded yet (weekStart null = fresh/blank import state). This makes
+  // the Step 3 crew cards always reflect the current Settings assignments, and
+  // ensures the "Import Week" tab button shows the right defaults even if the
+  // user navigated there without clicking the action button.
+  useEffect(() => {
+    setWd(prev => {
+      if (prev.gusto.weekStart !== null) return prev; // mid-import — don't overwrite
+      return defaultWeekData(defAssignments, crewDefs);
+    });
+  }, [defAssignments, crewDefs]);
+
   // CSV
   const handleCsv = useCallback((file: File) => {
     const r = new FileReader();
@@ -1518,7 +1530,12 @@ export function AvbDashboard() {
   }, []);
 
   const handleImportNew = useCallback(() => {
+    // Reset wd to a fresh week (clears any in-progress gusto data so the
+    // useEffect above re-applies current defAssignments).
     setWd(defaultWeekData(defAssignments, crewDefs));
+    setImportDay(0);
+    setCsvSt("");
+    setPdfSt({});
     setTab("import");
   }, [defAssignments, crewDefs]);
 
