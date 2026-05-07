@@ -229,6 +229,27 @@ export function NewPartDialog({ open, onOpenChange, initialData, onCreated }: Ne
                       className="max-h-56 overflow-y-auto"
                       onWheel={(e) => e.stopPropagation()}
                     >
+                      {/* Categories currently on this part but not in settings —
+                          show them first so they can always be unchecked */}
+                      {categories
+                        .filter((c) => !enabledPartCategories.some((p) => p.label === c))
+                        .map((c) => (
+                          <button
+                            key={`custom-${c}`}
+                            type="button"
+                            className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-accent"
+                            onClick={() =>
+                              setCategories((prev) => prev.filter((x) => x !== c))
+                            }
+                          >
+                            <div className="flex h-4 w-4 items-center justify-center rounded border border-primary bg-primary">
+                              <Check className="h-3 w-3 text-primary-foreground" />
+                            </div>
+                            <span className="flex-1 text-left">{c}</span>
+                            <span className="text-xs text-muted-foreground">custom</span>
+                          </button>
+                        ))}
+                      {/* Standard categories from settings */}
                       {enabledPartCategories.map((c) => {
                         const selected = categories.includes(c.label);
                         return (
