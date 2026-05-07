@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef, useMemo } from "react";
+import { useState, useCallback, useRef, useMemo, useEffect } from "react";
 import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis,
   CartesianGrid, Tooltip, Legend, ResponsiveContainer,
@@ -1367,6 +1367,18 @@ export function AvbDashboard() {
     if (!dbCrews) return DEFAULT_CREW_DEFS;           // still loading
     if (dbCrews.length === 0) return DEFAULT_CREW_DEFS; // not seeded yet
     return dbCrews.filter(c => c.isActive);
+  }, [dbCrews]);
+
+  // Auto-seed default crews the first time DB confirms org has none saved.
+  // Without this, the fallback shows defaults visually but they aren't in DB,
+  // so adding a single crew would make all the others disappear.
+  const hasAutoSeededCrews = useRef(false);
+  useEffect(() => {
+    if (dbCrews !== undefined && dbCrews.length === 0 && !hasAutoSeededCrews.current) {
+      hasAutoSeededCrews.current = true;
+      DEFAULT_CREW_DEFS.forEach((c, i) => upsertCrew.mutate({ code: c.code, name: c.name, sortOrder: i }));
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dbCrews]);
 
   // Build the fallback roster from hardcoded ALL_EMP (used while DB is loading or empty)
