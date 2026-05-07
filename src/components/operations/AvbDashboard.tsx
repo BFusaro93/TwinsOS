@@ -15,9 +15,17 @@ import {
   useAvbEmployees, useUpsertAvbEmployee,
   type AvbEmployee, type UpsertEmpPayload,
 } from "@/lib/hooks/use-avb-employees";
+import {
+  useAvbCrews, useUpsertAvbCrew, useDeleteAvbCrew,
+  type UpsertCrewPayload,
+} from "@/lib/hooks/use-avb-crews";
+
+// ── Types ─────────────────────────────────────────────────────────────────────
+type CrewDef = { code: string; name: string };
 
 // ── Constants ──────────────────────────────────────────────────────────────────
-const CREW_DEFS = [
+/** Hard-coded fallback — used while DB loads or when org has no saved crews yet. */
+const DEFAULT_CREW_DEFS: CrewDef[] = [
   { code: "MAINT1",   name: "Maintenance 1" },
   { code: "MAINT2",   name: "Maintenance 2" },
   { code: "MAINT3",   name: "Maintenance 3" },
@@ -26,7 +34,7 @@ const CREW_DEFS = [
   { code: "FERT1",    name: "Fert / Weed Control" },
   { code: "LNDSCP1",  name: "Landscape Construction" },
   { code: "ENHANCE1", name: "Enhancement 1" },
-] as const;
+];
 
 // Seed roster — used as fallback while DB loads and for "Load Default Roster" action
 const ALL_EMP = [
@@ -248,23 +256,23 @@ async function parseAvbPdf(file: File): Promise<Record<string, {budgeted:number;
 }
 
 // ── Default state ─────────────────────────────────────────────────────────────
-function defaultWeekData(defAssignments: Record<string, string[]>): AvbWeekData {
+function defaultWeekData(defAssignments: Record<string, string[]>, crewDefs: CrewDef[]): AvbWeekData {
   return {
     days: Object.fromEntries(Array.from({length:7},(_,i)=>[i,{
-      assignments: Object.fromEntries(CREW_DEFS.map(cr=>[cr.code,[...(defAssignments[cr.code]??[])]])),
-      avb: Object.fromEntries(CREW_DEFS.map(cr=>[cr.code,{budgeted:0,actual:0,revenue:0}])),
+      assignments: Object.fromEntries(crewDefs.map(cr=>[cr.code,[...(defAssignments[cr.code]??[])]])),
+      avb: Object.fromEntries(crewDefs.map(cr=>[cr.code,{budgeted:0,actual:0,revenue:0}])),
     }])),
     gusto: {weekStart:null,weekEnd:null,employees:{}},
   };
 }
 
 // ── Aggregation ───────────────────────────────────────────────────────────────
-function crewTotals(data: AvbWeekData) {
+function crewTotals(data: AvbWeekData, crewDefs: CrewDef[]) {
   const ct: Record<string,{budgeted:number;actual:number;revenue:number;gusto:number;ot:number}> = {};
-  CREW_DEFS.forEach(cr=>{ct[cr.code]={budgeted:0,actual:0,revenue:0,gusto:0,ot:0};});
+  crewDefs.forEach(cr=>{ct[cr.code]={budgeted:0,actual:0,revenue:0,gusto:0,ot:0};});
   for (let d=0; d<7; d++) {
     const day=data.days[d]; if(!day) continue;
-    CREW_DEFS.forEach(cr=>{
+    crewDefs.forEach(cr=>{
       const avb=day.avb[cr.code]??{};
       ct[cr.code].budgeted+=pf(avb.budgeted);ct[cr.code].actual+=pf(avb.actual);ct[cr.code].revenue+=pf(avb.revenue);
       (day.assignments[cr.code]??[]).forEach(uuid=>{
@@ -337,10 +345,11 @@ function AvbNumberInput({
 interface SummaryProps {
   cur: AvbWeek | null;
   employees: AvbEmployee[];
+  crewDefs: CrewDef[];
   onEditWeek: (w: AvbWeek) => void;
   onImportNew: () => void;
 }
-function Summary({ cur, employees, onEditWeek, onImportNew }: SummaryProps) {
+function Summary({ cur, employees, crewDefs, onEditWeek, onImportNew }: SummaryProps) {
   if (!cur) return (
     <div className="flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-slate-200 py-16 text-center">
       <Upload className="mb-3 h-8 w-8 text-slate-300" />
@@ -349,13 +358,13 @@ function Summary({ cur, employees, onEditWeek, onImportNew }: SummaryProps) {
       <button onClick={onImportNew} className="mt-4 rounded-md bg-brand-500 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-600">Import Week</button>
     </div>
   );
-  const data=cur.data; const ct=crewTotals(data);
+  const data=cur.data; const ct=crewTotals(data, crewDefs);
   const tG=Object.values(ct).reduce((s,t)=>s+t.gusto,0);
   const tO=Object.values(ct).reduce((s,t)=>s+t.actual,0);
   const tB=Object.values(ct).reduce((s,t)=>s+t.budgeted,0);
   const tAvb=tB-tO; const tGap=tG>0?tG-tO:null; const tEff=tG>0?Math.round(tO/tG*100):null;
   const empCrews: Record<string,Set<string>>={};
-  for(let d=0;d<7;d++){const day=data.days[d];if(!day)continue;CREW_DEFS.forEach(cr=>{(day.assignments[cr.code]??[]).forEach(u=>{if(!empCrews[u])empCrews[u]=new Set();empCrews[u].add(cr.code);});});}
+  for(let d=0;d<7;d++){const day=data.days[d];if(!day)continue;crewDefs.forEach(cr=>{(day.assignments[cr.code]??[]).forEach(u=>{if(!empCrews[u])empCrews[u]=new Set();empCrews[u].add(cr.code);});});}
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between rounded-md bg-slate-50 px-4 py-2 text-sm text-slate-500">
@@ -382,7 +391,7 @@ function Summary({ cur, employees, onEditWeek, onImportNew }: SummaryProps) {
               <Th right>OT Hrs</Th>
             </tr></thead>
             <tbody className="divide-y divide-slate-100">
-              {CREW_DEFS.map(cr=>{
+              {crewDefs.map(cr=>{
                 const t=ct[cr.code]; const avbV=t.budgeted-t.actual;
                 const gap=t.gusto>0?t.gusto-t.actual:null; const ep=t.gusto>0?Math.round(t.actual/t.gusto*100):null;
                 return (<tr key={cr.code} className="hover:bg-slate-50">
@@ -445,10 +454,11 @@ function Summary({ cur, employees, onEditWeek, onImportNew }: SummaryProps) {
 interface DailyProps {
   cur: AvbWeek | null;
   employees: AvbEmployee[];
+  crewDefs: CrewDef[];
   viewDay: number;
   setViewDay: (n: number) => void;
 }
-function Daily({ cur, employees, viewDay, setViewDay }: DailyProps) {
+function Daily({ cur, employees, crewDefs, viewDay, setViewDay }: DailyProps) {
   if (!cur) return <div className="py-16 text-center text-sm text-slate-400">No week loaded.</div>;
   const data=cur.data; const day=data.days[viewDay]; const ws2=data.gusto.weekStart;
   return (
@@ -465,7 +475,7 @@ function Daily({ cur, employees, viewDay, setViewDay }: DailyProps) {
         <table className="w-full text-sm">
           <thead className="bg-slate-50"><tr><Th>Crew</Th><Th right>Budgeted</Th><Th right>On-Site</Th><Th right>AvB Var</Th><Th right>Gusto Clocked</Th><Th right>Efficiency</Th></tr></thead>
           <tbody className="divide-y divide-slate-100">
-            {CREW_DEFS.map(cr=>{
+            {crewDefs.map(cr=>{
               const avb=day?.avb[cr.code]??{}; const members=day?.assignments[cr.code]??[];
               let g=0; members.forEach(u=>{g+=getHrsOnDay(data.gusto,u,viewDay);});
               const bud=pf(avb.budgeted),act=pf(avb.actual),avar=bud-act;
@@ -486,7 +496,7 @@ function Daily({ cur, employees, viewDay, setViewDay }: DailyProps) {
         <table className="w-full text-sm">
           <thead className="bg-slate-50"><tr><Th>Employee</Th><Th>Crew</Th><Th right>Total Hrs</Th><Th right>Regular</Th><Th right>OT</Th><Th right>Clock In</Th><Th right>Clock Out</Th><Th>Status</Th></tr></thead>
           <tbody className="divide-y divide-slate-100">
-            {CREW_DEFS.flatMap(cr=>(day?.assignments[cr.code]??[]).map(uuid=>{
+            {crewDefs.flatMap(cr=>(day?.assignments[cr.code]??[]).map(uuid=>{
               const emp=getEmp(uuid, employees); if(!emp) return null;
               const hrs=getHrsOnDay(data.gusto,uuid,viewDay);
               const dk=ws2?dayKey(ws2,viewDay):null;
@@ -513,20 +523,21 @@ function Daily({ cur, employees, viewDay, setViewDay }: DailyProps) {
 // ── History Tab ───────────────────────────────────────────────────────────────
 interface HistoryProps {
   weeks: AvbWeek[];
+  crewDefs: CrewDef[];
   onEditWeek: (w: AvbWeek) => void;
   onDeleteWeek: (weekEnd: string) => void;
 }
-function History({ weeks, onEditWeek, onDeleteWeek }: HistoryProps) {
+function History({ weeks, crewDefs, onEditWeek, onDeleteWeek }: HistoryProps) {
   if (!weeks.length) return <div className="py-16 text-center text-sm text-slate-400">No history yet.</div>;
   const labels = weeks.map(w=>fmtDate(w.weekEnd));
   const hrsData = weeks.map((w,i)=>{
     let tO=0,tG=0;
-    CREW_DEFS.forEach(cr=>{for(let d=0;d<7;d++){tO+=pf(w.data.days[d]?.avb[cr.code]?.actual);(w.data.days[d]?.assignments[cr.code]??[]).forEach(u=>{tG+=getHrsOnDay(w.data.gusto,u,d);});}});
+    crewDefs.forEach(cr=>{for(let d=0;d<7;d++){tO+=pf(w.data.days[d]?.avb[cr.code]?.actual);(w.data.days[d]?.assignments[cr.code]??[]).forEach(u=>{tG+=getHrsOnDay(w.data.gusto,u,d);});}});
     return {week:labels[i],"On-site":parseFloat(tO.toFixed(1)),"Gusto":parseFloat(tG.toFixed(1))};
   });
   const effData = weeks.map((w,i)=>{
     const pt: Record<string,number|string>={week:labels[i]};
-    CREW_DEFS.forEach(cr=>{let g=0,o=0;for(let d=0;d<7;d++){o+=pf(w.data.days[d]?.avb[cr.code]?.actual);(w.data.days[d]?.assignments[cr.code]??[]).forEach(u=>{g+=getHrsOnDay(w.data.gusto,u,d);});}if(g>0)pt[cr.code]=parseFloat((o/g*100).toFixed(1));});
+    crewDefs.forEach(cr=>{let g=0,o=0;for(let d=0;d<7;d++){o+=pf(w.data.days[d]?.avb[cr.code]?.actual);(w.data.days[d]?.assignments[cr.code]??[]).forEach(u=>{g+=getHrsOnDay(w.data.gusto,u,d);});}if(g>0)pt[cr.code]=parseFloat((o/g*100).toFixed(1));});
     return pt;
   });
   return (
@@ -541,7 +552,7 @@ function History({ weeks, onEditWeek, onDeleteWeek }: HistoryProps) {
             <YAxis domain={[0,110]} tick={{fontSize:11,fill:"#94a3b8"}} axisLine={false} tickLine={false} tickFormatter={v=>v+"%"} />
             <Tooltip formatter={(v:number)=>[v+"%"]} contentStyle={{fontSize:12,borderRadius:8}} />
             <Legend wrapperStyle={{fontSize:11}} />
-            {CREW_DEFS.map((cr,i)=><Line key={cr.code} type="monotone" dataKey={cr.code} stroke={CREW_COLORS[i]} strokeWidth={2} dot={false} connectNulls />)}
+            {crewDefs.map((cr,i)=><Line key={cr.code} type="monotone" dataKey={cr.code} stroke={CREW_COLORS[i%CREW_COLORS.length]} strokeWidth={2} dot={false} connectNulls />)}
           </LineChart>
         </ResponsiveContainer>
       </div>
@@ -567,7 +578,7 @@ function History({ weeks, onEditWeek, onDeleteWeek }: HistoryProps) {
             <tbody className="divide-y divide-slate-100">
               {[...weeks].reverse().map(w=>{
                 let tG=0,tO=0,tB=0;
-                CREW_DEFS.forEach(cr=>{for(let d=0;d<7;d++){tO+=pf(w.data.days[d]?.avb[cr.code]?.actual);tB+=pf(w.data.days[d]?.avb[cr.code]?.budgeted);(w.data.days[d]?.assignments[cr.code]??[]).forEach(u=>{tG+=getHrsOnDay(w.data.gusto,u,d);});}});
+                crewDefs.forEach(cr=>{for(let d=0;d<7;d++){tO+=pf(w.data.days[d]?.avb[cr.code]?.actual);tB+=pf(w.data.days[d]?.avb[cr.code]?.budgeted);(w.data.days[d]?.assignments[cr.code]??[]).forEach(u=>{tG+=getHrsOnDay(w.data.gusto,u,d);});}});
                 const gap=tG>0?tG-tO:null; const ep=tG>0?Math.round(tO/tG*100):null;
                 return (<tr key={w.weekEnd} className="hover:bg-slate-50">
                   <td className="py-3 pl-4 font-medium">Week of {fmtDate(w.weekEnd)}</td>
@@ -595,6 +606,7 @@ function History({ weeks, onEditWeek, onDeleteWeek }: HistoryProps) {
 interface ImportProps {
   wd: AvbWeekData;
   employees: AvbEmployee[];
+  crewDefs: CrewDef[];
   fieldUuids: string[];
   importDay: number;
   setImportDay: (n: number) => void;
@@ -620,7 +632,7 @@ interface ImportProps {
   onCancel: () => void;
 }
 function Import({
-  wd, employees, fieldUuids, importDay, setImportDay, weekEnd, setWeekEnd,
+  wd, employees, crewDefs, fieldUuids, importDay, setImportDay, weekEnd, setWeekEnd,
   csvSt, pdfSt, cpFrom, setCpFrom, cpTo, setCpTo,
   csvRef, pdfRef, onCsvFile, onPdfFile, onCopyAssignments,
   onSave, isSaving, onSetAvb, onAddToCrew, onRmFromCrew,
@@ -680,7 +692,7 @@ function Import({
         {/* Day strip */}
         <div className="mb-4 flex flex-wrap gap-2">
           {Array.from({length:7},(_,i)=>{
-            const hasAvb=CREW_DEFS.some(cr=>(wd.days[i]?.avb[cr.code]?.actual??0)>0);
+            const hasAvb=crewDefs.some(cr=>(wd.days[i]?.avb[cr.code]?.actual??0)>0);
             return (<button key={i} onClick={()=>setImportDay(i)} className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${i===importDay?"bg-brand-500 text-white":hasAvb?"border border-green-400 text-green-600 hover:bg-green-50":"border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}>
               {ws?dayLbl(ws,i):WDAYS[i]}
             </button>);
@@ -700,7 +712,7 @@ function Import({
         {unassigned.length>0&&<InfoBar warn>Worked today but not assigned: {unassigned.map(u=>getEmp(u, employees)?.name).join(", ")}</InfoBar>}
         {/* Crew cards */}
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          {CREW_DEFS.map(cr=>{
+          {crewDefs.map(cr=>{
             const members=day.assignments[cr.code]??[]; const avb=day.avb[cr.code]??{budgeted:0,actual:0,revenue:0};
             return (<div key={cr.code} className="flex flex-col gap-2 rounded-lg border bg-slate-50 p-3">
               <div className="flex items-center justify-between">
@@ -828,14 +840,15 @@ function Import({
 // ── YTD Tab ───────────────────────────────────────────────────────────────────
 interface YtdProps {
   weeks: AvbWeek[];
+  crewDefs: CrewDef[];
 }
-function Ytd({ weeks }: YtdProps) {
+function Ytd({ weeks, crewDefs }: YtdProps) {
   if (!weeks.length) return <div className="py-16 text-center text-sm text-slate-400">No history yet.</div>;
   let ytdB=0,ytdO=0,ytdG=0,ytdOt=0;
   const crewYtd: Record<string,{budgeted:number;actual:number;gusto:number;ot:number}> = {};
-  CREW_DEFS.forEach(cr=>{crewYtd[cr.code]={budgeted:0,actual:0,gusto:0,ot:0};});
+  crewDefs.forEach(cr=>{crewYtd[cr.code]={budgeted:0,actual:0,gusto:0,ot:0};});
   weeks.forEach(w=>{
-    CREW_DEFS.forEach(cr=>{
+    crewDefs.forEach(cr=>{
       for(let d=0;d<7;d++){
         const avb=w.data.days[d]?.avb[cr.code]??{};
         const b=pf(avb.budgeted),a=pf(avb.actual);
@@ -854,7 +867,7 @@ function Ytd({ weeks }: YtdProps) {
   const ytdGap=ytdG>0?ytdG-ytdO:null;
   const weekRows = [...weeks].reverse().map(w=>{
     let wB=0,wO=0,wG=0;
-    CREW_DEFS.forEach(cr=>{for(let d=0;d<7;d++){wB+=pf(w.data.days[d]?.avb[cr.code]?.budgeted);wO+=pf(w.data.days[d]?.avb[cr.code]?.actual);(w.data.days[d]?.assignments[cr.code]??[]).forEach(u=>{wG+=getHrsOnDay(w.data.gusto,u,d);});}});
+    crewDefs.forEach(cr=>{for(let d=0;d<7;d++){wB+=pf(w.data.days[d]?.avb[cr.code]?.budgeted);wO+=pf(w.data.days[d]?.avb[cr.code]?.actual);(w.data.days[d]?.assignments[cr.code]??[]).forEach(u=>{wG+=getHrsOnDay(w.data.gusto,u,d);});}});
     const wAvb=wB-wO; const wEff=wG>0?Math.round(wO/wG*100):null; const wGap=wG>0?wG-wO:null;
     return {label:fmtDate(w.weekEnd),wB,wO,wG,wAvb,wEff,wGap};
   });
@@ -877,7 +890,7 @@ function Ytd({ weeks }: YtdProps) {
               <Th right>Gusto Clocked</Th><Th right>Indirect Gap</Th><Th right>Efficiency</Th><Th right>OT Hrs</Th>
             </tr></thead>
             <tbody className="divide-y divide-slate-100">
-              {CREW_DEFS.map(cr=>{
+              {crewDefs.map(cr=>{
                 const t=crewYtd[cr.code];
                 const avbV=t.budgeted-t.actual;
                 const gap=t.gusto>0?t.gusto-t.actual:null;
@@ -936,14 +949,38 @@ interface EmpFormState {
 }
 
 interface SettingsProps {
+  crewDefs: CrewDef[];
   dbEmployees: AvbEmployee[] | undefined;
   onUpsert: (emp: UpsertEmpPayload) => void;
   isUpserting: boolean;
   onSeedRoster: () => Promise<void>;
   isSeeding: boolean;
+  onUpsertCrew: (c: UpsertCrewPayload) => void;
+  onDeleteCrew: (id: string) => void;
+  isUpsertingCrew: boolean;
+  dbCrews: import("@/lib/hooks/use-avb-crews").AvbCrew[] | undefined;
 }
 
-function Settings({ dbEmployees, onUpsert, isUpserting, onSeedRoster, isSeeding }: SettingsProps) {
+function Settings({ crewDefs, dbEmployees, onUpsert, isUpserting, onSeedRoster, isSeeding, onUpsertCrew, onDeleteCrew, isUpsertingCrew, dbCrews }: SettingsProps) {
+  // ── Crew form state ──────────────────────────────────────────────────────────
+  const [crewEditId, setCrewEditId] = useState<string | null>(null);
+  const [crewForm, setCrewForm] = useState<{code: string; name: string} | null>(null);
+
+  function openAddCrew() { setCrewEditId(null); setCrewForm({ code: "", name: "" }); }
+  function openEditCrew(c: import("@/lib/hooks/use-avb-crews").AvbCrew) {
+    setCrewEditId(c.id);
+    setCrewForm({ code: c.code, name: c.name });
+  }
+  function closeCrewForm() { setCrewForm(null); setCrewEditId(null); }
+  function saveCrewForm() {
+    if (!crewForm || !crewForm.code.trim() || !crewForm.name.trim()) return;
+    onUpsertCrew({ ...(crewEditId ? { id: crewEditId } : {}), code: crewForm.code, name: crewForm.name });
+    closeCrewForm();
+  }
+
+  const notSeededCrews = dbCrews !== undefined && dbCrews.length === 0;
+
+  // ── Employee form state ──────────────────────────────────────────────────────
   const blank: EmpFormState = { uuid: "", name: "", csvName: "", csvJob: "", defaultCrew: "", isField: true };
   const [editId, setEditId] = useState<string | null>(null); // null = adding new
   const [form, setForm] = useState<EmpFormState | null>(null); // null = form hidden
@@ -984,6 +1021,113 @@ function Settings({ dbEmployees, onUpsert, isUpserting, onSeedRoster, isSeeding 
 
   return (
     <div className="flex flex-col gap-5">
+
+      {/* ── Crews section ──────────────────────────────────────────────────── */}
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-sm font-semibold text-slate-800">Crews</p>
+          <p className="text-xs text-slate-400">{crewDefs.length} crew{crewDefs.length !== 1 ? "s" : ""} · shown in all tabs and crew cards</p>
+        </div>
+        <div className="flex gap-2">
+          {notSeededCrews && (
+            <button
+              onClick={() => DEFAULT_CREW_DEFS.forEach((c, i) => onUpsertCrew({ code: c.code, name: c.name, sortOrder: i }))}
+              disabled={isUpsertingCrew}
+              className="rounded-md border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-60"
+            >
+              Load Default Crews
+            </button>
+          )}
+          <button
+            onClick={openAddCrew}
+            className="flex items-center gap-1.5 rounded-md bg-brand-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand-600"
+          >
+            <Plus className="h-3.5 w-3.5" /> Add Crew
+          </button>
+        </div>
+      </div>
+
+      {/* Crew add/edit form */}
+      {crewForm && (
+        <div className="rounded-lg border border-brand-200 bg-brand-50 p-4 shadow-sm">
+          <div className="mb-3 flex items-center justify-between">
+            <p className="text-sm font-semibold text-brand-700">{crewEditId ? "Edit Crew" : "New Crew"}</p>
+            <button onClick={closeCrewForm} className="text-slate-400 hover:text-slate-600"><X className="h-4 w-4" /></button>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="mb-1 block text-xs font-medium text-slate-600">Code * <span className="font-normal text-slate-400">(e.g. MAINT6)</span></label>
+              <input
+                type="text"
+                value={crewForm.code}
+                onChange={e => setCrewForm(f => f ? { ...f, code: e.target.value.toUpperCase() } : f)}
+                placeholder="e.g. ENHANCE2"
+                className="w-full rounded-md border border-slate-200 px-3 py-1.5 text-sm uppercase"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-slate-600">Display Name *</label>
+              <input
+                type="text"
+                value={crewForm.name}
+                onChange={e => setCrewForm(f => f ? { ...f, name: e.target.value } : f)}
+                placeholder="e.g. Enhancement 2"
+                className="w-full rounded-md border border-slate-200 px-3 py-1.5 text-sm"
+              />
+            </div>
+          </div>
+          <div className="mt-4 flex gap-2">
+            <button
+              onClick={saveCrewForm}
+              disabled={isUpsertingCrew || !crewForm.code.trim() || !crewForm.name.trim()}
+              className="rounded-md bg-brand-500 px-4 py-1.5 text-sm font-semibold text-white hover:bg-brand-600 disabled:opacity-50"
+            >
+              {isUpsertingCrew ? "Saving…" : crewEditId ? "Save Changes" : "Add Crew"}
+            </button>
+            <button onClick={closeCrewForm} className="rounded-md border border-slate-200 px-4 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50">Cancel</button>
+          </div>
+        </div>
+      )}
+
+      {/* Crew list */}
+      {crewDefs.length > 0 && (
+        <div className="overflow-hidden rounded-lg border bg-white shadow-sm">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-50">
+              <tr><Th>Code</Th><Th>Name</Th><Th>{""}</Th></tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {(dbCrews ?? []).filter(c => c.isActive).map(c => (
+                <tr key={c.id} className="hover:bg-slate-50">
+                  <td className="px-3 py-2.5 font-mono text-xs font-semibold text-slate-700">{c.code}</td>
+                  <td className="px-3 py-2.5 text-slate-800">{c.name}</td>
+                  <td className="px-3 py-2.5 pr-4">
+                    <div className="flex items-center justify-end gap-3">
+                      <button onClick={() => openEditCrew(c)} title="Edit" className="text-slate-400 hover:text-brand-600"><Pencil className="h-3.5 w-3.5" /></button>
+                      <button
+                        onClick={() => { if (confirm(`Remove crew "${c.code} — ${c.name}"? Historical data is preserved.`)) onDeleteCrew(c.id); }}
+                        title="Remove"
+                        disabled={isUpsertingCrew}
+                        className="text-slate-400 hover:text-red-500 disabled:opacity-50"
+                      ><X className="h-3.5 w-3.5" /></button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {notSeededCrews && crewDefs.map(c => (
+                <tr key={c.code} className="opacity-60">
+                  <td className="px-3 py-2.5 font-mono text-xs font-semibold text-slate-400">{c.code}</td>
+                  <td className="px-3 py-2.5 text-slate-400 italic">{c.name} <span className="ml-1 text-[10px]">(default)</span></td>
+                  <td className="px-3 py-2.5" />
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <div className="border-t border-slate-200 pt-2" />
+
       {/* Seed banner — shown only when DB has no employees at all */}
       {notSeeded && (
         <div className="flex items-center gap-4 rounded-lg border border-amber-200 bg-amber-50 p-4">
@@ -1073,7 +1217,7 @@ function Settings({ dbEmployees, onUpsert, isUpserting, onSeedRoster, isSeeding 
                 className="w-full rounded-md border border-slate-200 px-3 py-1.5 text-sm"
               >
                 <option value="">— None —</option>
-                {CREW_DEFS.map(cr => (
+                {crewDefs.map(cr => (
                   <option key={cr.code} value={cr.code}>{cr.code} — {cr.name}</option>
                 ))}
               </select>
@@ -1198,7 +1342,7 @@ export function AvbDashboard() {
   const [viewDay, setViewDay] = useState(0);
   const [importDay, setImportDay] = useState(0);
   const [weekEnd, setWeekEnd] = useState(thisSunday);
-  const [wd, setWd] = useState<AvbWeekData>(() => defaultWeekData({}));
+  const [wd, setWd] = useState<AvbWeekData>(() => defaultWeekData({}, DEFAULT_CREW_DEFS));
   const [csvSt, setCsvSt] = useState("");
   const [pdfSt, setPdfSt] = useState<Record<number,string>>({});
   const [cpFrom, setCpFrom] = useState("");
@@ -1213,6 +1357,17 @@ export function AvbDashboard() {
 
   const { data: dbEmployees } = useAvbEmployees();
   const upsertEmployee = useUpsertAvbEmployee();
+
+  const { data: dbCrews } = useAvbCrews();
+  const upsertCrew = useUpsertAvbCrew();
+  const deleteCrew = useDeleteAvbCrew();
+
+  // Use DB crews when available, fall back to defaults while loading or unset
+  const crewDefs = useMemo<CrewDef[]>(() => {
+    if (!dbCrews) return DEFAULT_CREW_DEFS;           // still loading
+    if (dbCrews.length === 0) return DEFAULT_CREW_DEFS; // not seeded yet
+    return dbCrews.filter(c => c.isActive);
+  }, [dbCrews]);
 
   // Build the fallback roster from hardcoded ALL_EMP (used while DB is loading or empty)
   const fallbackEmployees = useMemo<AvbEmployee[]>(() =>
@@ -1240,14 +1395,14 @@ export function AvbDashboard() {
 
   // Compute default crew assignments from DB employee defaultCrew fields
   const defAssignments = useMemo<Record<string, string[]>>(() => {
-    const result: Record<string, string[]> = Object.fromEntries(CREW_DEFS.map(cr => [cr.code, []]));
+    const result: Record<string, string[]> = Object.fromEntries(crewDefs.map(cr => [cr.code, []]));
     allEmp.filter(e => e.isField).forEach(emp => {
       if (emp.defaultCrew && emp.defaultCrew in result) {
         result[emp.defaultCrew].push(emp.uuid);
       }
     });
     return result;
-  }, [allEmp]);
+  }, [allEmp, crewDefs]);
 
   const cur = weeks.length ? weeks[weeks.length-1] : null;
 
@@ -1351,9 +1506,9 @@ export function AvbDashboard() {
   }, []);
 
   const handleImportNew = useCallback(() => {
-    setWd(defaultWeekData(defAssignments));
+    setWd(defaultWeekData(defAssignments, crewDefs));
     setTab("import");
-  }, [defAssignments]);
+  }, [defAssignments, crewDefs]);
 
   const handleDeleteWeek = useCallback((we: string) => {
     del.mutate(we);
@@ -1362,6 +1517,14 @@ export function AvbDashboard() {
   const handleUpsertEmployee = useCallback((emp: UpsertEmpPayload) => {
     upsertEmployee.mutate(emp);
   }, [upsertEmployee]);
+
+  const handleUpsertCrew = useCallback((c: UpsertCrewPayload) => {
+    upsertCrew.mutate(c);
+  }, [upsertCrew]);
+
+  const handleDeleteCrew = useCallback((id: string) => {
+    deleteCrew.mutate(id);
+  }, [deleteCrew]);
 
   const handleSeedRoster = useCallback(async () => {
     setIsSeeding(true);
@@ -1408,14 +1571,15 @@ export function AvbDashboard() {
         <div className="py-16 text-center text-sm text-slate-400">Loading…</div>
       ) : (
         <>
-          {tab==="summary"  && <Summary cur={cur} employees={allEmp} onEditWeek={handleEditWeek} onImportNew={handleImportNew} />}
-          {tab==="daily"    && <Daily cur={cur} employees={allEmp} viewDay={viewDay} setViewDay={setViewDay} />}
-          {tab==="history"  && <History weeks={weeks} onEditWeek={handleEditWeek} onDeleteWeek={handleDeleteWeek} />}
-          {tab==="ytd"      && <Ytd weeks={weeks} />}
+          {tab==="summary"  && <Summary cur={cur} employees={allEmp} crewDefs={crewDefs} onEditWeek={handleEditWeek} onImportNew={handleImportNew} />}
+          {tab==="daily"    && <Daily cur={cur} employees={allEmp} crewDefs={crewDefs} viewDay={viewDay} setViewDay={setViewDay} />}
+          {tab==="history"  && <History weeks={weeks} crewDefs={crewDefs} onEditWeek={handleEditWeek} onDeleteWeek={handleDeleteWeek} />}
+          {tab==="ytd"      && <Ytd weeks={weeks} crewDefs={crewDefs} />}
           {tab==="import"   && (
             <Import
               wd={wd}
               employees={allEmp}
+              crewDefs={crewDefs}
               fieldUuids={fieldUuids}
               importDay={importDay}
               setImportDay={setImportDay}
@@ -1443,11 +1607,16 @@ export function AvbDashboard() {
           )}
           {tab==="settings" && (
             <Settings
+              crewDefs={crewDefs}
+              dbCrews={dbCrews}
               dbEmployees={dbEmployees}
               onUpsert={handleUpsertEmployee}
               isUpserting={upsertEmployee.isPending}
               onSeedRoster={handleSeedRoster}
               isSeeding={isSeeding}
+              onUpsertCrew={handleUpsertCrew}
+              onDeleteCrew={handleDeleteCrew}
+              isUpsertingCrew={upsertCrew.isPending || deleteCrew.isPending}
             />
           )}
         </>

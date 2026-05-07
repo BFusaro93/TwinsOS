@@ -600,6 +600,47 @@ export type Database = {
           },
         ]
       }
+      avb_crews: {
+        Row: {
+          code: string
+          created_at: string | null
+          id: string
+          is_active: boolean
+          name: string
+          org_id: string
+          sort_order: number
+          updated_at: string | null
+        }
+        Insert: {
+          code: string
+          created_at?: string | null
+          id?: string
+          is_active?: boolean
+          name: string
+          org_id: string
+          sort_order?: number
+          updated_at?: string | null
+        }
+        Update: {
+          code?: string
+          created_at?: string | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          org_id?: string
+          sort_order?: number
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "avb_crews_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       avb_employees: {
         Row: {
           created_at: string
