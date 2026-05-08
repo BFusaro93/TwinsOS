@@ -70,6 +70,7 @@ export function useCreateAsset() {
         location: input.location,
         photo_url: input.photoUrl,
         notes: input.notes,
+        license_plate: input.licensePlate,
       }).select().single();
       if (error) throw error;
       return mapAsset(data);
@@ -106,6 +107,7 @@ export function useUpdateAsset() {
         ...(input.photoUrl !== undefined && { photo_url: input.photoUrl }),
         ...(input.barcode !== undefined && { barcode: input.barcode }),
         ...(input.parentAssetId !== undefined && { parent_asset_id: input.parentAssetId }),
+        ...(input.licensePlate !== undefined && { license_plate: input.licensePlate }),
       }).eq("id", id).select().single();
       if (error) throw error;
       return mapAsset(data);
@@ -181,6 +183,7 @@ export function useBulkImportAssets() {
           model: r.model?.trim() || null,
           year: r.year ? parseInt(r.year) || null : null,
           serial_number: r.serialNumber?.trim() || null,
+          license_plate: r.licensePlate?.trim() || null,
           location: r.location?.trim() || null,
           status: normaliseAssetStatus(r.status ?? ""),
           purchase_vendor_name: r.purchaseVendorName?.trim() || null,
@@ -206,6 +209,7 @@ export function useBulkImportAssets() {
             model: row.model,
             year: row.year,
             serial_number: row.serial_number,
+            license_plate: row.license_plate,
             location: row.location,
             status: row.status,
             purchase_vendor_name: row.purchase_vendor_name,

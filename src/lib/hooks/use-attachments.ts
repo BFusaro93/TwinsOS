@@ -22,42 +22,69 @@ export function useAttachments(recordType: AttachmentRecordType, recordId: strin
   });
 }
 
+/** Result for a single file in a batch upload. */
+export interface UploadResult {
+  fileName: string;
+  ok: boolean;
+  error?: string;
+}
+
 export function useUploadAttachment(recordType: AttachmentRecordType, recordId: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (file: File) => {
+    /**
+     * Accepts one or more files. All are uploaded in parallel.
+     * Returns an array of per-file results so callers can surface partial failures.
+     * Always invalidates the cache even when some files fail.
+     */
+    mutationFn: async (files: File | File[]): Promise<UploadResult[]> => {
+      const fileList = Array.isArray(files) ? files : [files];
       const supabase = createClient();
 
-      // Get current user name for uploaded_by_name
+      // Fetch caller identity once for all files
       const { data: { user } } = await supabase.auth.getUser();
       const { data: profile } = await supabase
         .from("profiles")
         .select("name")
         .eq("id", user?.id ?? "")
         .single();
+      const uploaderName = profile?.name ?? user?.email ?? "Unknown";
 
-      // Upload file to Supabase Storage.
-      // Read into ArrayBuffer first to avoid Safari "Load failed" errors when
-      // the File handle comes from iCloud Drive or a sandboxed file picker.
-      const buffer = await file.arrayBuffer();
-      const blob = new Blob([buffer], { type: file.type });
-      const storagePath = `${recordType}/${recordId}/${Date.now()}-${file.name}`;
-      const { error: uploadError } = await supabase.storage
-        .from("attachments")
-        .upload(storagePath, blob, { upsert: false, contentType: file.type });
-      if (uploadError) throw uploadError;
+      const uploadOne = async (file: File): Promise<UploadResult> => {
+        try {
+          // Read into ArrayBuffer first to avoid Safari "Load failed" errors with
+          // iCloud Drive or sandboxed file picker handles.
+          const buffer = await file.arrayBuffer();
+          const blob = new Blob([buffer], { type: file.type });
+          const storagePath = `${recordType}/${recordId}/${Date.now()}-${file.name}`;
 
-      // Insert attachment record
-      const { error: insertError } = await supabase.from("attachments").insert({
-        record_type: recordType,
-        record_id: recordId,
-        file_name: file.name,
-        file_size: file.size,
-        file_type: file.type,
-        storage_path: storagePath,
-        uploaded_by_name: profile?.name ?? user?.email ?? "Unknown",
-      });
-      if (insertError) throw insertError;
+          const { error: uploadError } = await supabase.storage
+            .from("attachments")
+            .upload(storagePath, blob, { upsert: false, contentType: file.type });
+          if (uploadError) throw uploadError;
+
+          const { error: insertError } = await supabase.from("attachments").insert({
+            record_type: recordType,
+            record_id: recordId,
+            file_name: file.name,
+            file_size: file.size,
+            file_type: file.type,
+            storage_path: storagePath,
+            uploaded_by_name: uploaderName,
+          });
+          if (insertError) throw insertError;
+
+          return { fileName: file.name, ok: true };
+        } catch (err) {
+          return {
+            fileName: file.name,
+            ok: false,
+            error: err instanceof Error ? err.message : String(err),
+          };
+        }
+      };
+
+      return Promise.all(fileList.map(uploadOne));
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["attachments", recordType, recordId] });

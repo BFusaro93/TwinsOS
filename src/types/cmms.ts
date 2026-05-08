@@ -80,6 +80,8 @@ export interface Asset extends BaseRecord {
   location: string | null;
   photoUrl: string | null;
   notes: string | null;
+  /** Optional license plate for assets that are registered vehicles or tagged equipment. */
+  licensePlate: string | null;
 }
 
 export interface AssetPart extends BaseRecord {
@@ -163,6 +165,9 @@ export interface PMSchedule extends BaseRecord {
   lastCompletedDate: string | null;
   isActive: boolean;
   description: string | null;
+  /** Default assignee pre-populated onto generated work orders. */
+  assignedToId: string | null;
+  assignedToName: string | null;
 }
 
 export interface Meter extends BaseRecord {

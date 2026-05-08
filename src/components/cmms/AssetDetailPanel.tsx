@@ -106,6 +106,12 @@ function DetailsTab({ asset, status }: { asset: Asset; status: AssetStatus }) {
           <MetaRow label="Model" value={asset.model} />
           <MetaRow label="Year" value={asset.year} />
           <MetaRow label="Serial Number" value={asset.serialNumber} />
+          {asset.licensePlate && (
+            <MetaRow
+              label="License Plate"
+              value={<span className="font-mono font-medium tracking-wide">{asset.licensePlate}</span>}
+            />
+          )}
           <MetaRow label="Engine Model" value={asset.engineModel} />
           <MetaRow label="Engine Serial" value={asset.engineSerialNumber} />
         </dl>

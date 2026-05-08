@@ -204,14 +204,27 @@ function parseGustoCsv(text: string, employees: AvbEmployee[]): GustoData {
 }
 
 // ── PDF Parser (dynamic pdf.js) ───────────────────────────────────────────────
-async function parseAvbPdf(file: File): Promise<Record<string, {budgeted:number;actual:number;revenue:number}>> {
-  type PdfLib = { GlobalWorkerOptions:{workerSrc:string}; getDocument:(o:{data:ArrayBuffer})=>{promise:Promise<{numPages:number;getPage:(n:number)=>Promise<{getTextContent:()=>Promise<{items:{transform:number[];str:string}[]}>}>}>} };
-  if (!(window as {pdfjsLib?:unknown}).pdfjsLib) {
+async function parseAvbPdf(
+  file: File,
+  knownCrewCodes: string[] = [],
+): Promise<Record<string, {budgeted:number;actual:number;revenue:number}>> {
+  type PdfLib = {
+    GlobalWorkerOptions: { workerSrc: string };
+    getDocument: (o: {data: ArrayBuffer}) => {
+      promise: Promise<{
+        numPages: number;
+        getPage: (n: number) => Promise<{
+          getTextContent: () => Promise<{items: {transform: number[]; str: string}[]}>
+        }>
+      }>
+    }
+  };
+  if (!(window as {pdfjsLib?: unknown}).pdfjsLib) {
     await new Promise<void>((res, rej) => {
       const s = document.createElement("script");
       s.src = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
       s.onload = () => {
-        ((window as {pdfjsLib?:PdfLib}).pdfjsLib!).GlobalWorkerOptions.workerSrc =
+        ((window as {pdfjsLib?: PdfLib}).pdfjsLib!).GlobalWorkerOptions.workerSrc =
           "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
         res();
       };
@@ -219,39 +232,122 @@ async function parseAvbPdf(file: File): Promise<Record<string, {budgeted:number;
       document.head.appendChild(s);
     });
   }
-  const lib = (window as {pdfjsLib?:PdfLib}).pdfjsLib!;
+  const lib = (window as {pdfjsLib?: PdfLib}).pdfjsLib!;
   const buf = await file.arrayBuffer();
-  const pdf = await lib.getDocument({data:buf}).promise;
-  let txt = "";
-  for (let p=1; p<=pdf.numPages; p++) {
+  const pdf = await lib.getDocument({data: buf}).promise;
+
+  // Build text lines. Use 8 px Y-tolerance (vs old 4 px) so items on the
+  // same visual row aren't split when PDF sub-pixel positions vary slightly.
+  const allLines: string[] = [];
+  for (let p = 1; p <= pdf.numPages; p++) {
     const page = await pdf.getPage(p);
-    const tc = await page.getTextContent();
-    const items = tc.items.map(i=>({x:Math.round(i.transform[4]),y:Math.round(i.transform[5]),str:i.str}));
-    items.sort((a,b)=>b.y-a.y||a.x-b.x);
-    const lm: Record<number,typeof items> = {};
-    items.forEach(it=>{const yk=Math.round(it.y/4)*4; if(!lm[yk])lm[yk]=[]; lm[yk].push(it);});
-    Object.keys(lm).map(Number).sort((a,b)=>b-a).forEach(y=>{
-      lm[y].sort((a,b)=>a.x-b.x); txt+=lm[y].map(i=>i.str).join(" ")+"\n";
+    const tc   = await page.getTextContent();
+    const items = (tc.items as {transform: number[]; str: string}[]).map(i => ({
+      x: Math.round(i.transform[4]),
+      y: Math.round(i.transform[5]),
+      str: i.str,
+    }));
+    const lm: Record<number, typeof items> = {};
+    items.forEach(it => {
+      const yk = Math.round(it.y / 8) * 8;
+      if (!lm[yk]) lm[yk] = [];
+      lm[yk].push(it);
+    });
+    Object.keys(lm).map(Number).sort((a, b) => b - a).forEach(y => {
+      lm[y].sort((a, b) => a.x - b.x);
+      const s = lm[y].map(i => i.str).join(" ").trim();
+      if (s) allLines.push(s);
     });
   }
-  const lines = txt.split("\n");
-  const results: Record<string,{budgeted:number;actual:number;revenue:number}> = {};
-  const SUM = /Sum:.*Sum:.*Sum:/i;
-  const CREW = /^\s*(FERT\d*|LNDSCP\d*|MAINT\d*|ENH\d*)\s*$/i;
+
   const NUMS = /([\d,]+\.\d{2,4})/g;
   const DOLR = /\$([\d,]+\.\d{2})/;
-  for (let i=0; i<lines.length-2; i++) {
-    if (SUM.test(lines[i])) {
-      const cm = CREW.exec(lines[i+1]);
-      if (cm) {
-        const crew = cm[1].toUpperCase();
-        if (results[crew]) continue;
-        const nums = [...lines[i+2].matchAll(NUMS)].map(m=>parseFloat(m[1].replace(",","")));
-        const dm = DOLR.exec(lines[i+2]);
-        if (nums.length>=2) results[crew]={budgeted:nums[0],actual:nums[1],revenue:dm?parseFloat(dm[1].replace(",",""))  :0};
+  const knownUpper = knownCrewCodes.map(c => c.toUpperCase());
+  const codeSet    = new Set(knownUpper);
+
+  function extractNums(s: string): number[] {
+    return [...s.matchAll(NUMS)].map(m => parseFloat(m[1].replace(/,/g, "")));
+  }
+  function extractRevenue(s: string, nums: number[]): number {
+    const dm = DOLR.exec(s);
+    if (dm) return parseFloat(dm[1].replace(/,/g, ""));
+    return nums.length >= 3 ? nums[2] : 0;
+  }
+  /** Returns the crew code if this line is exactly a crew code, else null. */
+  function matchCrewCode(line: string): string | null {
+    const clean = line.trim().toUpperCase().replace(/\s+/g, "");
+    if (codeSet.has(clean)) return clean;
+    // Fallback when no known codes were supplied
+    if (knownUpper.length === 0) {
+      const m = /^([A-Z]{2,10}\d*)$/.exec(clean);
+      return m ? m[1] : null;
+    }
+    return null;
+  }
+
+  const results: Record<string, {budgeted: number; actual: number; revenue: number}> = {};
+
+  // ── Pass 1: Sum-row strategy ────────────────────────────────────────────────
+  // Find any line with 2+ "Sum:" tokens (the totals header). Look ±3 lines for
+  // a known crew code, then grab numbers from the Sum line (or nearby lines).
+  for (let i = 0; i < allLines.length; i++) {
+    const sumMatches = allLines[i].match(/Sum:/gi);
+    if (!sumMatches || sumMatches.length < 2) continue;
+
+    // Find nearest crew code in a ±3 line window (skip the Sum line itself)
+    let crewCode: string | null = null;
+    for (let off = -3; off <= 3; off++) {
+      if (off === 0) continue;
+      const idx = i + off;
+      if (idx < 0 || idx >= allLines.length) continue;
+      const code = matchCrewCode(allLines[idx]);
+      if (code && !results[code]) { crewCode = code; break; }
+    }
+    if (!crewCode) continue;
+
+    // Grab numbers from the Sum line; if too few, scan forward up to 3 lines
+    let nums = extractNums(allLines[i]);
+    if (nums.length < 2) {
+      for (let j = i + 1; j <= i + 3 && j < allLines.length; j++) {
+        nums = extractNums(allLines[j]);
+        if (nums.length >= 2) break;
       }
     }
+    if (nums.length >= 2) {
+      results[crewCode] = {
+        budgeted: nums[0],
+        actual:   nums[1],
+        revenue:  extractRevenue(allLines[i], nums),
+      };
+    }
   }
+
+  // ── Pass 2: Crew-code-first scan ────────────────────────────────────────────
+  // For any known code not yet captured, find its line directly and look in
+  // the surrounding lines for a row that contains numbers.
+  for (const code of knownUpper) {
+    if (results[code]) continue;
+    for (let i = 0; i < allLines.length; i++) {
+      if (matchCrewCode(allLines[i]) !== code) continue;
+      // Search lines before and after the crew-code line for numbers
+      for (let off = -2; off <= 5; off++) {
+        if (off === 0) continue;
+        const idx = i + off;
+        if (idx < 0 || idx >= allLines.length) continue;
+        const nums = extractNums(allLines[idx]);
+        if (nums.length >= 2) {
+          results[code] = {
+            budgeted: nums[0],
+            actual:   nums[1],
+            revenue:  extractRevenue(allLines[idx], nums),
+          };
+          break;
+        }
+      }
+      if (results[code]) break;
+    }
+  }
+
   return results;
 }
 
@@ -1448,7 +1544,7 @@ export function AvbDashboard() {
   const handlePdf = useCallback(async (file: File, di: number) => {
     setPdfSt(s=>({...s,[di]:"Parsing…"}));
     try {
-      const crews = await parseAvbPdf(file);
+      const crews = await parseAvbPdf(file, crewDefs.map(c => c.code));
       const found = Object.keys(crews);
       if (!found.length) throw new Error("No crew data found");
       setWd(d=>{
@@ -1459,7 +1555,7 @@ export function AvbDashboard() {
       });
       setPdfSt(s=>({...s,[di]:`✓ ${found.join(", ")}`}));
     } catch(e) { setPdfSt(s=>({...s,[di]:"Error: "+String(e)})); }
-  }, []);
+  }, [crewDefs]);
 
   // Assignment helpers
   const addToCrew = useCallback((di: number, code: string, uuid: string) => setWd(d=>{

@@ -45,6 +45,8 @@ export function useCreatePMSchedule() {
         last_completed_date: input.lastCompletedDate,
         is_active: input.isActive,
         description: input.description,
+        assigned_to_id: input.assignedToId ?? null,
+        assigned_to_name: input.assignedToName ?? null,
       }).select().single();
       if (error) throw error;
       return mapPMSchedule(data);
@@ -68,6 +70,8 @@ export function useUpdatePMSchedule() {
         ...(input.lastCompletedDate !== undefined && { last_completed_date: input.lastCompletedDate }),
         ...(input.isActive !== undefined && { is_active: input.isActive }),
         ...(input.description !== undefined && { description: input.description }),
+        ...(input.assignedToId !== undefined && { assigned_to_id: input.assignedToId }),
+        ...(input.assignedToName !== undefined && { assigned_to_name: input.assignedToName }),
       }).eq("id", id).select().single();
       if (error) throw error;
       return mapPMSchedule(data);

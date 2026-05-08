@@ -60,6 +60,7 @@ export function NewAssetDialog({ open, onOpenChange, initialData, mode = "edit",
   const [model, setModel] = useState("");
   const [year, setYear] = useState("");
   const [serialNumber, setSerialNumber] = useState("");
+  const [licensePlate, setLicensePlate] = useState("");
   const [engineModel, setEngineModel] = useState("");
   const [engineSerialNumber, setEngineSerialNumber] = useState("");
 
@@ -94,6 +95,7 @@ export function NewAssetDialog({ open, onOpenChange, initialData, mode = "edit",
       setModel(initialData.model ?? "");
       setYear(initialData.year ? String(initialData.year) : "");
       setSerialNumber(isDuplicate ? "" : (initialData.serialNumber ?? ""));
+      setLicensePlate(isDuplicate ? "" : (initialData.licensePlate ?? ""));
       setEngineModel(initialData.engineModel ?? "");
       setEngineSerialNumber(isDuplicate ? "" : (initialData.engineSerialNumber ?? ""));
       setDivision(initialData.division ?? "");
@@ -146,6 +148,7 @@ export function NewAssetDialog({ open, onOpenChange, initialData, mode = "edit",
     setModel("");
     setYear("");
     setSerialNumber("");
+    setLicensePlate("");
     setEngineModel("");
     setEngineSerialNumber("");
     setDivision("");
@@ -173,6 +176,7 @@ export function NewAssetDialog({ open, onOpenChange, initialData, mode = "edit",
       model: model || null,
       year: year ? parseInt(year) : null,
       serialNumber: serialNumber || null,
+      licensePlate: licensePlate || null,
       engineSerialNumber: engineSerialNumber || null,
       engineModel: engineModel || null,
       manufacturer: null,
@@ -356,6 +360,17 @@ export function NewAssetDialog({ open, onOpenChange, initialData, mode = "edit",
                   />
                 </div>
               )}
+
+              <div className="grid gap-1.5">
+                <Label htmlFor="asset-license-plate">License Plate</Label>
+                <Input
+                  id="asset-license-plate"
+                  value={licensePlate}
+                  onChange={(e) => setLicensePlate(e.target.value.toUpperCase())}
+                  placeholder="e.g. ABC-1234"
+                  className="font-mono uppercase"
+                />
+              </div>
             </div>
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

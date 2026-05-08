@@ -115,7 +115,8 @@ export function AssetListPage() {
       (asset.make ?? "").toLowerCase().includes(q) ||
       (asset.model ?? "").toLowerCase().includes(q) ||
       (asset.division ?? "").toLowerCase().includes(q) ||
-      (asset.location ?? "").toLowerCase().includes(q);
+      (asset.location ?? "").toLowerCase().includes(q) ||
+      (asset.licensePlate ?? "").toLowerCase().includes(q);
     const matchStatus = matchesFilter(asset.status, filterValues.status);
     const matchType = matchesFilter(asset.assetType, filterValues.assetType);
     const matchMake = matchesFilter(asset.make ?? "", filterValues.make);
@@ -138,7 +139,8 @@ export function AssetListPage() {
     const assetMatch = all.find(
       (a) =>
         a.barcode?.toLowerCase() === q ||
-        a.assetTag.toLowerCase() === q
+        a.assetTag.toLowerCase() === q ||
+        (a.licensePlate ?? "").toLowerCase() === q
     );
     if (assetMatch) {
       setSelectedAssetId(assetMatch.id);
@@ -337,7 +339,7 @@ export function AssetListPage() {
             </Button>
             <ImportExportMenu
               entityLabel="Assets"
-              templateColumns={["name", "assetTag", "equipmentNumber", "assetType", "make", "model", "year", "serialNumber", "location", "status", "purchaseVendorName", "purchaseDate", "purchasePrice", "paymentMethod", "financeInstitution"]}
+              templateColumns={["name", "assetTag", "equipmentNumber", "assetType", "make", "model", "year", "serialNumber", "licensePlate", "location", "status", "purchaseVendorName", "purchaseDate", "purchasePrice", "paymentMethod", "financeInstitution"]}
               templateFilename="assets-template.csv"
               requiredColumns={["name", "assetTag"]}
               onExport={() =>
@@ -351,6 +353,7 @@ export function AssetListPage() {
                     model: a.model ?? "",
                     year: a.year ?? "",
                     serialNumber: a.serialNumber ?? "",
+                    licensePlate: a.licensePlate ?? "",
                     location: a.location ?? "",
                     status: a.status,
                   })),

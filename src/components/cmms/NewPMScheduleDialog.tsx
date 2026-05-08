@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/select";
 import { useAssets } from "@/lib/hooks/use-assets";
 import { useVehicles } from "@/lib/hooks/use-vehicles";
+import { useUsers } from "@/lib/hooks/use-users";
 import { EntityCombobox } from "@/components/shared/EntityCombobox";
 import { useCreatePMSchedule, useUpdatePMSchedule } from "@/lib/hooks/use-pm-schedules";
 import { useAddPMScheduleAsset, usePMScheduleAssets, useRemovePMScheduleAsset } from "@/lib/hooks/use-pm-schedule-assets";
@@ -48,6 +49,7 @@ export function NewPMScheduleDialog({ open, onOpenChange, initialData, onCreated
   const [frequency, setFrequency] = useState("");
   const [nextDueDate, setNextDueDate] = useState("");
   const [description, setDescription] = useState("");
+  const [assignedToId, setAssignedToId] = useState<string>("");
 
   // Multi-asset selection
   const [selectedAssets, setSelectedAssets] = useState<SelectedAsset[]>([]);
@@ -55,6 +57,7 @@ export function NewPMScheduleDialog({ open, onOpenChange, initialData, onCreated
 
   const { data: assets } = useAssets();
   const { data: vehicles } = useVehicles();
+  const { data: users } = useUsers();
 
   // When editing, load existing linked assets from the join table
   const { data: existingAssets } = usePMScheduleAssets(initialData?.id ?? "");
@@ -70,6 +73,7 @@ export function NewPMScheduleDialog({ open, onOpenChange, initialData, onCreated
       setFrequency(initialData.frequency);
       setNextDueDate(initialData.nextDueDate ?? "");
       setDescription(initialData.description ?? "");
+      setAssignedToId(initialData.assignedToId ?? "");
     }
     if (!open) {
       // Reset on close
@@ -77,6 +81,7 @@ export function NewPMScheduleDialog({ open, onOpenChange, initialData, onCreated
       setFrequency("");
       setNextDueDate("");
       setDescription("");
+      setAssignedToId("");
       setSelectedAssets([]);
       setPickerKey("");
     }
@@ -123,6 +128,7 @@ export function NewPMScheduleDialog({ open, onOpenChange, initialData, onCreated
     e.preventDefault();
     if (!isValid) return;
 
+    const resolvedAssignee = (users ?? []).find((u) => u.id === assignedToId);
     const payload = {
       title,
       assetId: null,
@@ -132,6 +138,8 @@ export function NewPMScheduleDialog({ open, onOpenChange, initialData, onCreated
       lastCompletedDate: null,
       isActive: true,
       description: description || null,
+      assignedToId: assignedToId || null,
+      assignedToName: resolvedAssignee?.name ?? null,
     };
 
     if (isEditing && initialData) {
@@ -282,6 +290,30 @@ export function NewPMScheduleDialog({ open, onOpenChange, initialData, onCreated
                   onChange={(e) => setNextDueDate(e.target.value)}
                 />
               </div>
+            </div>
+
+            {/* Assignee */}
+            <div className="grid gap-1.5">
+              <Label htmlFor="pm-assignee">Default Assignee</Label>
+              <Select value={assignedToId || "none"} onValueChange={(v) => setAssignedToId(v === "none" ? "" : v)}>
+                <SelectTrigger id="pm-assignee">
+                  <SelectValue placeholder="Unassigned" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Unassigned</SelectItem>
+                  {(users ?? []).map((u) => (
+                    <SelectItem key={u.id} value={u.id}>
+                      {u.name}
+                      {u.role && (
+                        <span className="ml-1.5 text-xs capitalize text-slate-400">{u.role}</span>
+                      )}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-slate-400">
+                This person is automatically assigned to every work order generated from this schedule.
+              </p>
             </div>
 
             {/* Description */}

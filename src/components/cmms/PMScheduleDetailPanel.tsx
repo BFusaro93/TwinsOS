@@ -98,6 +98,10 @@ function DetailsTab({ schedule }: { schedule: PMSchedule }) {
             )
           }
         />
+        <MetaRow
+          label="Assignee"
+          value={schedule.assignedToName ?? <span className="text-slate-400 font-normal">Unassigned</span>}
+        />
         <MetaRow label="Created" value={formatDate(schedule.createdAt)} />
       </dl>
 
