@@ -352,6 +352,7 @@ export function mapAsset(row: AssetRow): Asset {
     location: row.location,
     photoUrl: row.photo_url,
     notes: row.notes,
+    licensePlate: row.license_plate ?? null,
   };
 }
 
@@ -463,6 +464,8 @@ export function mapPMSchedule(row: PMScheduleRow): PMSchedule {
     lastCompletedDate: row.last_completed_date,
     isActive: row.is_active,
     description: row.description,
+    assignedToId: row.assigned_to_id ?? null,
+    assignedToName: row.assigned_to_name ?? null,
   };
 }
 

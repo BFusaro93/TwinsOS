@@ -1,7 +1,13 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Check, ChevronDown, Copy, Plus } from "lucide-react";
+import { Check, ChevronDown, Copy, Link, Plus, Unlink } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { StatusBadge } from "@/components/shared/StatusBadge";
@@ -106,6 +112,12 @@ function DetailsTab({ asset, status }: { asset: Asset; status: AssetStatus }) {
           <MetaRow label="Model" value={asset.model} />
           <MetaRow label="Year" value={asset.year} />
           <MetaRow label="Serial Number" value={asset.serialNumber} />
+          {asset.licensePlate && (
+            <MetaRow
+              label="License Plate"
+              value={<span className="font-mono font-medium tracking-wide">{asset.licensePlate}</span>}
+            />
+          )}
           <MetaRow label="Engine Model" value={asset.engineModel} />
           <MetaRow label="Engine Serial" value={asset.engineSerialNumber} />
         </dl>
@@ -194,7 +206,42 @@ function FilesTab({ asset }: { asset: Asset }) {
 
 function SubAssetsTab({ asset, onAddSubAsset }: { asset: Asset; onAddSubAsset: () => void }) {
   const { data: allAssets } = useAssets();
+  const { mutate: updateAsset, isPending: linking } = useUpdateAsset();
+
+  const [linkOpen, setLinkOpen] = useState(false);
+  const [linkSearch, setLinkSearch] = useState("");
+
   const subAssets = (allAssets ?? []).filter((a) => a.parentAssetId === asset.id);
+
+  // Linkable = assets with no parent, not this asset, and not already a child
+  const subAssetIds = new Set(subAssets.map((a) => a.id));
+  const linkable = (allAssets ?? []).filter(
+    (a) =>
+      a.id !== asset.id &&
+      !a.parentAssetId &&
+      !subAssetIds.has(a.id) &&
+      a.deletedAt === null
+  );
+
+  const filtered = linkSearch.trim()
+    ? linkable.filter((a) =>
+        a.name.toLowerCase().includes(linkSearch.toLowerCase()) ||
+        a.assetTag.toLowerCase().includes(linkSearch.toLowerCase()) ||
+        (a.make ?? "").toLowerCase().includes(linkSearch.toLowerCase()) ||
+        (a.model ?? "").toLowerCase().includes(linkSearch.toLowerCase())
+      )
+    : linkable;
+
+  function handleLink(id: string) {
+    updateAsset(
+      { id, parentAssetId: asset.id },
+      { onSuccess: () => { setLinkOpen(false); setLinkSearch(""); } }
+    );
+  }
+
+  function handleUnlink(id: string) {
+    updateAsset({ id, parentAssetId: null });
+  }
 
   return (
     <div className="flex flex-col gap-3 p-6">
@@ -203,10 +250,61 @@ function SubAssetsTab({ asset, onAddSubAsset }: { asset: Asset; onAddSubAsset: (
           Sub-assets
           <span className="ml-1.5 font-normal normal-case text-slate-300">({subAssets.length})</span>
         </p>
-        <Button size="sm" variant="outline" onClick={onAddSubAsset}>
-          <Plus className="mr-1.5 h-3.5 w-3.5" />
-          Add Sub-Asset
-        </Button>
+        <div className="flex items-center gap-2">
+          {/* Link existing asset */}
+          <Popover open={linkOpen} onOpenChange={(o) => { setLinkOpen(o); if (!o) setLinkSearch(""); }}>
+            <PopoverTrigger asChild>
+              <Button size="sm" variant="outline">
+                <Link className="mr-1.5 h-3.5 w-3.5" />
+                Link Existing
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-72 p-2" align="end">
+              <p className="mb-1.5 px-1 text-xs font-semibold text-slate-500">
+                Select an asset to attach as a sub-asset
+              </p>
+              <Input
+                autoFocus
+                placeholder="Search assets…"
+                value={linkSearch}
+                onChange={(e) => setLinkSearch(e.target.value)}
+                className="mb-1.5 h-8 text-sm"
+              />
+              <div
+                className="max-h-56 overflow-y-auto"
+                onWheel={(e) => e.stopPropagation()}
+              >
+                {filtered.length === 0 ? (
+                  <p className="py-3 text-center text-xs text-slate-400">
+                    {linkSearch ? "No assets match" : "No available assets"}
+                  </p>
+                ) : (
+                  filtered.map((a) => (
+                    <button
+                      key={a.id}
+                      type="button"
+                      disabled={linking}
+                      onClick={() => handleLink(a.id)}
+                      className="flex w-full flex-col rounded px-2 py-1.5 text-left text-sm hover:bg-accent disabled:opacity-50"
+                    >
+                      <span className="font-medium text-slate-800">{a.name}</span>
+                      <span className="text-xs text-slate-400">
+                        {[a.make, a.model].filter(Boolean).join(" ")}
+                        {a.assetTag && <span className="ml-1 font-mono">{a.assetTag}</span>}
+                      </span>
+                    </button>
+                  ))
+                )}
+              </div>
+            </PopoverContent>
+          </Popover>
+
+          {/* Create new sub-asset */}
+          <Button size="sm" variant="outline" onClick={onAddSubAsset}>
+            <Plus className="mr-1.5 h-3.5 w-3.5" />
+            New Sub-Asset
+          </Button>
+        </div>
       </div>
 
       {subAssets.length === 0 ? (
@@ -228,10 +326,20 @@ function SubAssetsTab({ asset, onAddSubAsset }: { asset: Asset; onAddSubAsset: (
                 )}
               </p>
             </div>
-            <StatusBadge
-              variant={sub.status as Parameters<typeof StatusBadge>[0]["variant"]}
-              label={ASSET_STATUS_LABELS[sub.status] ?? sub.status}
-            />
+            <div className="flex items-center gap-2">
+              <StatusBadge
+                variant={sub.status as Parameters<typeof StatusBadge>[0]["variant"]}
+                label={ASSET_STATUS_LABELS[sub.status] ?? sub.status}
+              />
+              <button
+                type="button"
+                title="Unlink this sub-asset"
+                onClick={() => handleUnlink(sub.id)}
+                className="ml-1 rounded p-1 text-slate-300 hover:bg-red-50 hover:text-red-500"
+              >
+                <Unlink className="h-3.5 w-3.5" />
+              </button>
+            </div>
           </div>
         ))
       )}

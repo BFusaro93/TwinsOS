@@ -278,6 +278,7 @@ export type Database = {
           equipment_number: string | null
           finance_institution: string | null
           id: string
+          license_plate: string | null
           location: string | null
           make: string | null
           manufacturer: string | null
@@ -314,6 +315,7 @@ export type Database = {
           equipment_number?: string | null
           finance_institution?: string | null
           id?: string
+          license_plate?: string | null
           location?: string | null
           make?: string | null
           manufacturer?: string | null
@@ -350,6 +352,7 @@ export type Database = {
           equipment_number?: string | null
           finance_institution?: string | null
           id?: string
+          license_plate?: string | null
           location?: string | null
           make?: string | null
           manufacturer?: string | null
@@ -1710,6 +1713,8 @@ export type Database = {
         Row: {
           asset_id: string | null
           asset_name: string
+          assigned_to_id: string | null
+          assigned_to_name: string | null
           created_at: string
           created_by: string | null
           deleted_at: string | null
@@ -1726,6 +1731,8 @@ export type Database = {
         Insert: {
           asset_id?: string | null
           asset_name?: string
+          assigned_to_id?: string | null
+          assigned_to_name?: string | null
           created_at?: string
           created_by?: string | null
           deleted_at?: string | null
@@ -1742,6 +1749,8 @@ export type Database = {
         Update: {
           asset_id?: string | null
           asset_name?: string
+          assigned_to_id?: string | null
+          assigned_to_name?: string | null
           created_at?: string
           created_by?: string | null
           deleted_at?: string | null

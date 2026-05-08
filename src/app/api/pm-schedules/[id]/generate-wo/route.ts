@@ -95,6 +95,9 @@ export async function POST(
   if (isSingleAsset) {
     // ── 4a. Single asset — create one flat WO with the asset attached directly ──
     const sa = scheduleAssets[0];
+    const assigneeIds   = schedule.assigned_to_id   ? [schedule.assigned_to_id]   : [];
+    const assigneeNames = schedule.assigned_to_name ? [schedule.assigned_to_name] : [];
+
     const { data: singleWO, error: singleErr } = await adminClient
       .from("work_orders")
       .insert({
@@ -109,8 +112,10 @@ export async function POST(
         asset_name: sa.asset_name,
         pm_schedule_id: scheduleId,
         work_order_number: `WO-${suffix}`,
-        assigned_to_ids: [],
-        assigned_to_names: [],
+        assigned_to_id: schedule.assigned_to_id ?? null,
+        assigned_to_name: schedule.assigned_to_name ?? null,
+        assigned_to_ids: assigneeIds,
+        assigned_to_names: assigneeNames,
         categories: ["Preventive Maintenance"],
         is_recurring: false,
       })
@@ -145,6 +150,9 @@ export async function POST(
     primaryWOId = singleWO.id;
   } else {
     // ── 4b. Multiple assets — create a parent WO + one sub-WO per asset ──────
+    const assigneeIds   = schedule.assigned_to_id   ? [schedule.assigned_to_id]   : [];
+    const assigneeNames = schedule.assigned_to_name ? [schedule.assigned_to_name] : [];
+
     const { data: parentWO, error: parentErr } = await adminClient
       .from("work_orders")
       .insert({
@@ -157,8 +165,10 @@ export async function POST(
         wo_type: "preventive",
         pm_schedule_id: scheduleId,
         work_order_number: `WO-${suffix}-P`,
-        assigned_to_ids: [],
-        assigned_to_names: [],
+        assigned_to_id: schedule.assigned_to_id ?? null,
+        assigned_to_name: schedule.assigned_to_name ?? null,
+        assigned_to_ids: assigneeIds,
+        assigned_to_names: assigneeNames,
         categories: ["Preventive Maintenance"],
         is_recurring: false,
       })
@@ -186,8 +196,10 @@ export async function POST(
           pm_schedule_id: scheduleId,
           parent_work_order_id: parentWO.id,
           work_order_number: `WO-${suffix}-${i + 1}`,
-          assigned_to_ids: [],
-          assigned_to_names: [],
+          assigned_to_id: schedule.assigned_to_id ?? null,
+          assigned_to_name: schedule.assigned_to_name ?? null,
+          assigned_to_ids: assigneeIds,
+          assigned_to_names: assigneeNames,
           categories: ["Preventive Maintenance"],
           is_recurring: false,
         })
