@@ -44,7 +44,7 @@ export default function HomePage() {
         </Link>
 
         <Link
-          href="/operations/estimate-builder"
+          href="/dashboards/estimate-builder"
           className={INTERNAL_BOX}
         >
           <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-brand-50 text-brand-500 transition-colors group-hover:bg-brand-100">
