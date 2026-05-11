@@ -44,7 +44,7 @@ export default function HomePage() {
         </Link>
 
         <a
-          href="https://claude.ai/artifacts/latest/d640bf7c-8328-40e7-8255-f780f6055a19"
+          href="https://estimate-builder.pages.dev"
           target="_blank"
           rel="noopener noreferrer"
           className={INTERNAL_BOX}
