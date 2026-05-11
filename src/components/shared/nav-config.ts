@@ -20,6 +20,7 @@ import {
   HelpCircle,
   Library,
   ClipboardCheck,
+  PenLine,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -64,6 +65,12 @@ export const NAV_SECTIONS: NavSection[] = [
       { label: "Parts Inventory", href: "/cmms/parts", icon: Cog },
       { label: "Meters", href: "/cmms/meters", icon: Gauge },
       { label: "Automations", href: "/cmms/automations", icon: Zap },
+    ],
+  },
+  {
+    label: "Operations",
+    items: [
+      { label: "Estimate Builder", href: "/operations/estimate-builder", icon: PenLine },
     ],
   },
   {

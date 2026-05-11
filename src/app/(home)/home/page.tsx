@@ -43,10 +43,8 @@ export default function HomePage() {
           </div>
         </Link>
 
-        <a
-          href="https://estimate-builder.pages.dev"
-          target="_blank"
-          rel="noopener noreferrer"
+        <Link
+          href="/operations/estimate-builder"
           className={INTERNAL_BOX}
         >
           <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-brand-50 text-brand-500 transition-colors group-hover:bg-brand-100">
@@ -56,7 +54,7 @@ export default function HomePage() {
             <p className="text-lg font-semibold text-slate-900">Estimate Writer</p>
             <p className="mt-1 text-sm text-slate-500">Generate estimate text &amp; language</p>
           </div>
-        </a>
+        </Link>
       </div>
 
       {/* External app shortcuts */}
