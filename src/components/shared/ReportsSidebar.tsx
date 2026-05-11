@@ -28,6 +28,11 @@ const REPORTS_NAV: ReportsNavSection[] = [
       { label: "Driver Safety Scores", href: "/dashboards/safety", icon: ShieldCheck },
       { label: "CRM Report", href: "/dashboards/crm", icon: FileText },
       { label: "Job Costing", href: "/dashboards/job-costing", icon: Calculator },
+    ],
+  },
+  {
+    label: "Tools",
+    items: [
       { label: "Estimate Builder", href: "/dashboards/estimate-builder", icon: PenLine },
     ],
   },
