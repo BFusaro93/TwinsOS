@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { formatDate, calculateNextDueDate } from "@/lib/utils";
+import { formatDate } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { RecordDetailTabs } from "@/components/shared/RecordDetailTabs";
@@ -48,10 +48,6 @@ function DetailsTab({ schedule }: { schedule: PMSchedule }) {
   const { data: scheduleAssets } = usePMScheduleAssets(schedule.id);
   const assetCount = scheduleAssets?.length ?? 0;
 
-  const calculatedNext = calculateNextDueDate(schedule.lastCompletedDate, schedule.frequency);
-  const nextDueDisplay = calculatedNext ?? schedule.nextDueDate;
-  const dateMismatch = calculatedNext !== null && calculatedNext !== schedule.nextDueDate;
-
   return (
     <div className="flex flex-col gap-5 p-6">
       <dl>
@@ -69,16 +65,7 @@ function DetailsTab({ schedule }: { schedule: PMSchedule }) {
         />
         <MetaRow
           label="Next Due"
-          value={
-            <span className="flex flex-col gap-0.5">
-              <span>{formatDate(nextDueDisplay)}</span>
-              {dateMismatch && (
-                <span className="text-xs font-normal text-amber-600">
-                  Calculated from last completion
-                </span>
-              )}
-            </span>
-          }
+          value={formatDate(schedule.nextDueDate)}
         />
         <MetaRow
           label="Last Completed"
