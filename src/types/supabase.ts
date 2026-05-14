@@ -1,1 +1,3270 @@
-{"types":"export type Json =\n  | string\n  | number\n  | boolean\n  | null\n  | { [key: string]: Json | undefined }\n  | Json[]\n\nexport type Database = {\n  // Allows to automatically instantiate createClient with right options\n  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)\n  __InternalSupabase: {\n    PostgrestVersion: \"14.4\"\n  }\n  public: {\n    Tables: {\n      app_config: {\n        Row: {\n          key: string\n          value: string\n        }\n        Insert: {\n          key: string\n          value: string\n        }\n        Update: {\n          key?: string\n          value?: string\n        }\n        Relationships: []\n      }\n      approval_flow_steps: {\n        Row: {\n          assigned_user_id: string | null\n          created_at: string\n          flow_id: string\n          id: string\n          label: string\n          order: number\n          required_role: string\n          threshold_cents: number\n          updated_at: string\n        }\n        Insert: {\n          assigned_user_id?: string | null\n          created_at?: string\n          flow_id: string\n          id?: string\n          label?: string\n          order: number\n          required_role: string\n          threshold_cents?: number\n          updated_at?: string\n        }\n        Update: {\n          assigned_user_id?: string | null\n          created_at?: string\n          flow_id?: string\n          id?: string\n          label?: string\n          order?: number\n          required_role?: string\n          threshold_cents?: number\n          updated_at?: string\n        }\n        Relationships: [\n          {\n            foreignKeyName: \"approval_flow_steps_assigned_user_id_fkey\"\n            columns: [\"assigned_user_id\"]\n            isOneToOne: false\n            referencedRelation: \"profiles\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"approval_flow_steps_flow_id_fkey\"\n            columns: [\"flow_id\"]\n            isOneToOne: false\n            referencedRelation: \"approval_flows\"\n            referencedColumns: [\"id\"]\n          },\n        ]\n      }\n      approval_flows: {\n        Row: {\n          created_at: string\n          created_by: string | null\n          deleted_at: string | null\n          entity_type: string\n          id: string\n          name: string\n          org_id: string\n          updated_at: string\n        }\n        Insert: {\n          created_at?: string\n          created_by?: string | null\n          deleted_at?: string | null\n          entity_type: string\n          id?: string\n          name: string\n          org_id?: string\n          updated_at?: string\n        }\n        Update: {\n          created_at?: string\n          created_by?: string | null\n          deleted_at?: string | null\n          entity_type?: string\n          id?: string\n          name?: string\n          org_id?: string\n          updated_at?: string\n        }\n        Relationships: [\n          {\n            foreignKeyName: \"approval_flows_created_by_fkey\"\n            columns: [\"created_by\"]\n            isOneToOne: false\n            referencedRelation: \"profiles\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"approval_flows_org_id_fkey\"\n            columns: [\"org_id\"]\n            isOneToOne: false\n            referencedRelation: \"organizations\"\n            referencedColumns: [\"id\"]\n          },\n        ]\n      }\n      approval_requests: {\n        Row: {\n          approver_id: string | null\n          approver_name: string\n          approver_role: string\n          comment: string | null\n          created_at: string\n          decided_at: string | null\n          entity_id: string\n          entity_type: string\n          flow_step_id: string | null\n          id: string\n          order: number\n          org_id: string\n          status: string\n          updated_at: string\n        }\n        Insert: {\n          approver_id?: string | null\n          approver_name?: string\n          approver_role?: string\n          comment?: string | null\n          created_at?: string\n          decided_at?: string | null\n          entity_id: string\n          entity_type: string\n          flow_step_id?: string | null\n          id?: string\n          order?: number\n          org_id?: string\n          status?: string\n          updated_at?: string\n        }\n        Update: {\n          approver_id?: string | null\n          approver_name?: string\n          approver_role?: string\n          comment?: string | null\n          created_at?: string\n          decided_at?: string | null\n          entity_id?: string\n          entity_type?: string\n          flow_step_id?: string | null\n          id?: string\n          order?: number\n          org_id?: string\n          status?: string\n          updated_at?: string\n        }\n        Relationships: [\n          {\n            foreignKeyName: \"approval_requests_approver_id_fkey\"\n            columns: [\"approver_id\"]\n            isOneToOne: false\n            referencedRelation: \"profiles\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"approval_requests_flow_step_id_fkey\"\n            columns: [\"flow_step_id\"]\n            isOneToOne: false\n            referencedRelation: \"approval_flow_steps\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"approval_requests_org_id_fkey\"\n            columns: [\"org_id\"]\n            isOneToOne: false\n            referencedRelation: \"organizations\"\n            referencedColumns: [\"id\"]\n          },\n        ]\n      }\n      asset_parts: {\n        Row: {\n          asset_id: string\n          created_at: string\n          created_by: string | null\n          deleted_at: string | null\n          id: string\n          org_id: string\n          part_id: string\n          part_name: string\n          part_number: string\n          updated_at: string\n        }\n        Insert: {\n          asset_id: string\n          created_at?: string\n          created_by?: string | null\n          deleted_at?: string | null\n          id?: string\n          org_id?: string\n          part_id: string\n          part_name?: string\n          part_number?: string\n          updated_at?: string\n        }\n        Update: {\n          asset_id?: string\n          created_at?: string\n          created_by?: string | null\n          deleted_at?: string | null\n          id?: string\n          org_id?: string\n          part_id?: string\n          part_name?: string\n          part_number?: string\n          updated_at?: string\n        }\n        Relationships: [\n          {\n            foreignKeyName: \"asset_parts_created_by_fkey\"\n            columns: [\"created_by\"]\n            isOneToOne: false\n            referencedRelation: \"profiles\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"asset_parts_org_id_fkey\"\n            columns: [\"org_id\"]\n            isOneToOne: false\n            referencedRelation: \"organizations\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"asset_parts_part_id_fkey\"\n            columns: [\"part_id\"]\n            isOneToOne: false\n            referencedRelation: \"parts\"\n            referencedColumns: [\"id\"]\n          },\n        ]\n      }\n      assets: {\n        Row: {\n          air_filter_part_number: string | null\n          asset_tag: string\n          asset_type: string\n          assigned_crew: string | null\n          barcode: string | null\n          created_at: string\n          created_by: string | null\n          deleted_at: string | null\n          division: string | null\n          engine_model: string | null\n          engine_serial_number: string | null\n          equipment_number: string | null\n          finance_institution: string | null\n          id: string\n          license_plate: string | null\n          location: string | null\n          make: string | null\n          manufacturer: string | null\n          model: string | null\n          name: string\n          notes: string | null\n          oil_filter_part_number: string | null\n          org_id: string\n          parent_asset_id: string | null\n          payment_method: string | null\n          photo_url: string | null\n          purchase_date: string | null\n          purchase_price: number | null\n          purchase_vendor_id: string | null\n          purchase_vendor_name: string | null\n          serial_number: string | null\n          spark_plug_part_number: string | null\n          status: string\n          updated_at: string\n          year: number | null\n        }\n        Insert: {\n          air_filter_part_number?: string | null\n          asset_tag?: string\n          asset_type?: string\n          assigned_crew?: string | null\n          barcode?: string | null\n          created_at?: string\n          created_by?: string | null\n          deleted_at?: string | null\n          division?: string | null\n          engine_model?: string | null\n          engine_serial_number?: string | null\n          equipment_number?: string | null\n          finance_institution?: string | null\n          id?: string\n          license_plate?: string | null\n          location?: string | null\n          make?: string | null\n          manufacturer?: string | null\n          model?: string | null\n          name: string\n          notes?: string | null\n          oil_filter_part_number?: string | null\n          org_id?: string\n          parent_asset_id?: string | null\n          payment_method?: string | null\n          photo_url?: string | null\n          purchase_date?: string | null\n          purchase_price?: number | null\n          purchase_vendor_id?: string | null\n          purchase_vendor_name?: string | null\n          serial_number?: string | null\n          spark_plug_part_number?: string | null\n          status?: string\n          updated_at?: string\n          year?: number | null\n        }\n        Update: {\n          air_filter_part_number?: string | null\n          asset_tag?: string\n          asset_type?: string\n          assigned_crew?: string | null\n          barcode?: string | null\n          created_at?: string\n          created_by?: string | null\n          deleted_at?: string | null\n          division?: string | null\n          engine_model?: string | null\n          engine_serial_number?: string | null\n          equipment_number?: string | null\n          finance_institution?: string | null\n          id?: string\n          license_plate?: string | null\n          location?: string | null\n          make?: string | null\n          manufacturer?: string | null\n          model?: string | null\n          name?: string\n          notes?: string | null\n          oil_filter_part_number?: string | null\n          org_id?: string\n          parent_asset_id?: string | null\n          payment_method?: string | null\n          photo_url?: string | null\n          purchase_date?: string | null\n          purchase_price?: number | null\n          purchase_vendor_id?: string | null\n          purchase_vendor_name?: string | null\n          serial_number?: string | null\n          spark_plug_part_number?: string | null\n          status?: string\n          updated_at?: string\n          year?: number | null\n        }\n        Relationships: [\n          {\n            foreignKeyName: \"assets_created_by_fkey\"\n            columns: [\"created_by\"]\n            isOneToOne: false\n            referencedRelation: \"profiles\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"assets_org_id_fkey\"\n            columns: [\"org_id\"]\n            isOneToOne: false\n            referencedRelation: \"organizations\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"assets_parent_asset_id_fkey\"\n            columns: [\"parent_asset_id\"]\n            isOneToOne: false\n            referencedRelation: \"assets\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"assets_purchase_vendor_id_fkey\"\n            columns: [\"purchase_vendor_id\"]\n            isOneToOne: false\n            referencedRelation: \"vendors\"\n            referencedColumns: [\"id\"]\n          },\n        ]\n      }\n      attachments: {\n        Row: {\n          created_at: string\n          created_by: string | null\n          deleted_at: string | null\n          file_name: string\n          file_size: number\n          file_type: string\n          id: string\n          org_id: string\n          record_id: string\n          record_type: string\n          storage_path: string\n          updated_at: string\n          uploaded_by_name: string\n        }\n        Insert: {\n          created_at?: string\n          created_by?: string | null\n          deleted_at?: string | null\n          file_name: string\n          file_size?: number\n          file_type?: string\n          id?: string\n          org_id?: string\n          record_id: string\n          record_type: string\n          storage_path: string\n          updated_at?: string\n          uploaded_by_name?: string\n        }\n        Update: {\n          created_at?: string\n          created_by?: string | null\n          deleted_at?: string | null\n          file_name?: string\n          file_size?: number\n          file_type?: string\n          id?: string\n          org_id?: string\n          record_id?: string\n          record_type?: string\n          storage_path?: string\n          updated_at?: string\n          uploaded_by_name?: string\n        }\n        Relationships: [\n          {\n            foreignKeyName: \"attachments_created_by_fkey\"\n            columns: [\"created_by\"]\n            isOneToOne: false\n            referencedRelation: \"profiles\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"attachments_org_id_fkey\"\n            columns: [\"org_id\"]\n            isOneToOne: false\n            referencedRelation: \"organizations\"\n            referencedColumns: [\"id\"]\n          },\n        ]\n      }\n      audit_log: {\n        Row: {\n          action: string\n          changed_by_name: string\n          created_at: string\n          created_by: string | null\n          deleted_at: string | null\n          description: string\n          field_changed: string | null\n          id: string\n          new_value: string | null\n          old_value: string | null\n          org_id: string\n          record_id: string\n          record_type: string\n          updated_at: string\n        }\n        Insert: {\n          action: string\n          changed_by_name?: string\n          created_at?: string\n          created_by?: string | null\n          deleted_at?: string | null\n          description?: string\n          field_changed?: string | null\n          id?: string\n          new_value?: string | null\n          old_value?: string | null\n          org_id?: string\n          record_id: string\n          record_type: string\n          updated_at?: string\n        }\n        Update: {\n          action?: string\n          changed_by_name?: string\n          created_at?: string\n          created_by?: string | null\n          deleted_at?: string | null\n          description?: string\n          field_changed?: string | null\n          id?: string\n          new_value?: string | null\n          old_value?: string | null\n          org_id?: string\n          record_id?: string\n          record_type?: string\n          updated_at?: string\n        }\n        Relationships: [\n          {\n            foreignKeyName: \"audit_log_created_by_fkey\"\n            columns: [\"created_by\"]\n            isOneToOne: false\n            referencedRelation: \"profiles\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"audit_log_org_id_fkey\"\n            columns: [\"org_id\"]\n            isOneToOne: false\n            referencedRelation: \"organizations\"\n            referencedColumns: [\"id\"]\n          },\n        ]\n      }\n      automations: {\n        Row: {\n          action_config: Json\n          action_type: string\n          created_at: string\n          created_by: string | null\n          deleted_at: string | null\n          enabled: boolean\n          id: string\n          last_fired_at: string | null\n          last_fired_value: number | null\n          name: string\n          org_id: string\n          pending_reset: boolean\n          trigger_config: Json\n          trigger_type: string\n          updated_at: string\n        }\n        Insert: {\n          action_config?: Json\n          action_type: string\n          created_at?: string\n          created_by?: string | null\n          deleted_at?: string | null\n          enabled?: boolean\n          id?: string\n          last_fired_at?: string | null\n          last_fired_value?: number | null\n          name: string\n          org_id: string\n          pending_reset?: boolean\n          trigger_config?: Json\n          trigger_type: string\n          updated_at?: string\n        }\n        Update: {\n          action_config?: Json\n          action_type?: string\n          created_at?: string\n          created_by?: string | null\n          deleted_at?: string | null\n          enabled?: boolean\n          id?: string\n          last_fired_at?: string | null\n          last_fired_value?: number | null\n          name?: string\n          org_id?: string\n          pending_reset?: boolean\n          trigger_config?: Json\n          trigger_type?: string\n          updated_at?: string\n        }\n        Relationships: [\n          {\n            foreignKeyName: \"automations_created_by_fkey\"\n            columns: [\"created_by\"]\n            isOneToOne: false\n            referencedRelation: \"profiles\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"automations_org_id_fkey\"\n            columns: [\"org_id\"]\n            isOneToOne: false\n            referencedRelation: \"organizations\"\n            referencedColumns: [\"id\"]\n          },\n        ]\n      }\n      avb_crews: {\n        Row: {\n          code: string\n          created_at: string | null\n          id: string\n          is_active: boolean\n          name: string\n          org_id: string\n          sort_order: number\n          updated_at: string | null\n        }\n        Insert: {\n          code: string\n          created_at?: string | null\n          id?: string\n          is_active?: boolean\n          name: string\n          org_id: string\n          sort_order?: number\n          updated_at?: string | null\n        }\n        Update: {\n          code?: string\n          created_at?: string | null\n          id?: string\n          is_active?: boolean\n          name?: string\n          org_id?: string\n          sort_order?: number\n          updated_at?: string | null\n        }\n        Relationships: [\n          {\n            foreignKeyName: \"avb_crews_org_id_fkey\"\n            columns: [\"org_id\"]\n            isOneToOne: false\n            referencedRelation: \"organizations\"\n            referencedColumns: [\"id\"]\n          },\n        ]\n      }\n      avb_employees: {\n        Row: {\n          created_at: string\n          csv_job: string\n          csv_name: string\n          default_crew: string\n          deleted_at: string | null\n          id: string\n          is_active: boolean\n          is_field: boolean\n          name: string\n          org_id: string\n          updated_at: string\n          uuid: string\n        }\n        Insert: {\n          created_at?: string\n          csv_job?: string\n          csv_name?: string\n          default_crew?: string\n          deleted_at?: string | null\n          id?: string\n          is_active?: boolean\n          is_field?: boolean\n          name: string\n          org_id: string\n          updated_at?: string\n          uuid: string\n        }\n        Update: {\n          created_at?: string\n          csv_job?: string\n          csv_name?: string\n          default_crew?: string\n          deleted_at?: string | null\n          id?: string\n          is_active?: boolean\n          is_field?: boolean\n          name?: string\n          org_id?: string\n          updated_at?: string\n          uuid?: string\n        }\n        Relationships: [\n          {\n            foreignKeyName: \"avb_employees_org_id_fkey\"\n            columns: [\"org_id\"]\n            isOneToOne: false\n            referencedRelation: \"organizations\"\n            referencedColumns: [\"id\"]\n          },\n        ]\n      }\n      avb_weeks: {\n        Row: {\n          created_at: string\n          data: Json\n          id: string\n          org_id: string\n          updated_at: string\n          week_end: string\n        }\n        Insert: {\n          created_at?: string\n          data?: Json\n          id?: string\n          org_id: string\n          updated_at?: string\n          week_end: string\n        }\n        Update: {\n          created_at?: string\n          data?: Json\n          id?: string\n          org_id?: string\n          updated_at?: string\n          week_end?: string\n        }\n        Relationships: [\n          {\n            foreignKeyName: \"avb_weeks_org_id_fkey\"\n            columns: [\"org_id\"]\n            isOneToOne: false\n            referencedRelation: \"organizations\"\n            referencedColumns: [\"id\"]\n          },\n        ]\n      }\n      comments: {\n        Row: {\n          author_id: string | null\n          author_name: string\n          body: string\n          created_at: string\n          created_by: string | null\n          deleted_at: string | null\n          id: string\n          org_id: string\n          record_id: string\n          record_type: string\n          updated_at: string\n        }\n        Insert: {\n          author_id?: string | null\n          author_name?: string\n          body: string\n          created_at?: string\n          created_by?: string | null\n          deleted_at?: string | null\n          id?: string\n          org_id?: string\n          record_id: string\n          record_type: string\n          updated_at?: string\n        }\n        Update: {\n          author_id?: string | null\n          author_name?: string\n          body?: string\n          created_at?: string\n          created_by?: string | null\n          deleted_at?: string | null\n          id?: string\n          org_id?: string\n          record_id?: string\n          record_type?: string\n          updated_at?: string\n        }\n        Relationships: [\n          {\n            foreignKeyName: \"comments_author_id_fkey\"\n            columns: [\"author_id\"]\n            isOneToOne: false\n            referencedRelation: \"profiles\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"comments_created_by_fkey\"\n            columns: [\"created_by\"]\n            isOneToOne: false\n            referencedRelation: \"profiles\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"comments_org_id_fkey\"\n            columns: [\"org_id\"]\n            isOneToOne: false\n            referencedRelation: \"organizations\"\n            referencedColumns: [\"id\"]\n          },\n        ]\n      }\n      crm_reports: {\n        Row: {\n          html_content: string\n          id: string\n          updated_at: string | null\n        }\n        Insert: {\n          html_content: string\n          id?: string\n          updated_at?: string | null\n        }\n        Update: {\n          html_content?: string\n          id?: string\n          updated_at?: string | null\n        }\n        Relationships: []\n      }\n      financial_periods: {\n        Row: {\n          created_at: string\n          data: Json\n          id: string\n          org_id: string\n          period_month: string\n          record_type: string\n          updated_at: string\n        }\n        Insert: {\n          created_at?: string\n          data?: Json\n          id?: string\n          org_id: string\n          period_month: string\n          record_type?: string\n          updated_at?: string\n        }\n        Update: {\n          created_at?: string\n          data?: Json\n          id?: string\n          org_id?: string\n          period_month?: string\n          record_type?: string\n          updated_at?: string\n        }\n        Relationships: [\n          {\n            foreignKeyName: \"financial_periods_org_id_fkey\"\n            columns: [\"org_id\"]\n            isOneToOne: false\n            referencedRelation: \"organizations\"\n            referencedColumns: [\"id\"]\n          },\n        ]\n      }\n      goods_receipt_lines: {\n        Row: {\n          created_at: string\n          id: string\n          is_maint_part: boolean\n          org_id: string\n          part_number: string\n          po_line_item_id: string | null\n          product_item_name: string\n          quantity_ordered: number\n          quantity_received: number\n          quantity_remaining: number\n          receipt_id: string\n          unit_cost: number\n          updated_at: string\n        }\n        Insert: {\n          created_at?: string\n          id?: string\n          is_maint_part?: boolean\n          org_id?: string\n          part_number?: string\n          po_line_item_id?: string | null\n          product_item_name?: string\n          quantity_ordered?: number\n          quantity_received?: number\n          quantity_remaining?: number\n          receipt_id: string\n          unit_cost?: number\n          updated_at?: string\n        }\n        Update: {\n          created_at?: string\n          id?: string\n          is_maint_part?: boolean\n          org_id?: string\n          part_number?: string\n          po_line_item_id?: string | null\n          product_item_name?: string\n          quantity_ordered?: number\n          quantity_received?: number\n          quantity_remaining?: number\n          receipt_id?: string\n          unit_cost?: number\n          updated_at?: string\n        }\n        Relationships: [\n          {\n            foreignKeyName: \"goods_receipt_lines_org_id_fkey\"\n            columns: [\"org_id\"]\n            isOneToOne: false\n            referencedRelation: \"organizations\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"goods_receipt_lines_po_line_item_id_fkey\"\n            columns: [\"po_line_item_id\"]\n            isOneToOne: false\n            referencedRelation: \"po_line_items\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"goods_receipt_lines_receipt_id_fkey\"\n            columns: [\"receipt_id\"]\n            isOneToOne: false\n            referencedRelation: \"goods_receipts\"\n            referencedColumns: [\"id\"]\n          },\n        ]\n      }\n      goods_receipts: {\n        Row: {\n          created_at: string\n          created_by: string | null\n          deleted_at: string | null\n          grand_total: number\n          id: string\n          notes: string | null\n          org_id: string\n          po_number: string\n          purchase_order_id: string\n          receipt_number: string\n          received_at: string\n          received_by_id: string | null\n          received_by_name: string\n          sales_tax: number\n          shipping_cost: number\n          subtotal: number\n          tax_rate_percent: number\n          updated_at: string\n          vendor_name: string\n        }\n        Insert: {\n          created_at?: string\n          created_by?: string | null\n          deleted_at?: string | null\n          grand_total?: number\n          id?: string\n          notes?: string | null\n          org_id?: string\n          po_number?: string\n          purchase_order_id: string\n          receipt_number: string\n          received_at?: string\n          received_by_id?: string | null\n          received_by_name?: string\n          sales_tax?: number\n          shipping_cost?: number\n          subtotal?: number\n          tax_rate_percent?: number\n          updated_at?: string\n          vendor_name?: string\n        }\n        Update: {\n          created_at?: string\n          created_by?: string | null\n          deleted_at?: string | null\n          grand_total?: number\n          id?: string\n          notes?: string | null\n          org_id?: string\n          po_number?: string\n          purchase_order_id?: string\n          receipt_number?: string\n          received_at?: string\n          received_by_id?: string | null\n          received_by_name?: string\n          sales_tax?: number\n          shipping_cost?: number\n          subtotal?: number\n          tax_rate_percent?: number\n          updated_at?: string\n          vendor_name?: string\n        }\n        Relationships: [\n          {\n            foreignKeyName: \"goods_receipts_created_by_fkey\"\n            columns: [\"created_by\"]\n            isOneToOne: false\n            referencedRelation: \"profiles\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"goods_receipts_org_id_fkey\"\n            columns: [\"org_id\"]\n            isOneToOne: false\n            referencedRelation: \"organizations\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"goods_receipts_purchase_order_id_fkey\"\n            columns: [\"purchase_order_id\"]\n            isOneToOne: false\n            referencedRelation: \"purchase_orders\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"goods_receipts_received_by_id_fkey\"\n            columns: [\"received_by_id\"]\n            isOneToOne: false\n            referencedRelation: \"profiles\"\n            referencedColumns: [\"id\"]\n          },\n        ]\n      }\n      integrations: {\n        Row: {\n          api_key: string | null\n          config: Json\n          created_at: string\n          enabled: boolean\n          id: string\n          last_sync_at: string | null\n          last_sync_status: string | null\n          org_id: string\n          provider: string\n          updated_at: string\n        }\n        Insert: {\n          api_key?: string | null\n          config?: Json\n          created_at?: string\n          enabled?: boolean\n          id?: string\n          last_sync_at?: string | null\n          last_sync_status?: string | null\n          org_id: string\n          provider: string\n          updated_at?: string\n        }\n        Update: {\n          api_key?: string | null\n          config?: Json\n          created_at?: string\n          enabled?: boolean\n          id?: string\n          last_sync_at?: string | null\n          last_sync_status?: string | null\n          org_id?: string\n          provider?: string\n          updated_at?: string\n        }\n        Relationships: [\n          {\n            foreignKeyName: \"integrations_org_id_fkey\"\n            columns: [\"org_id\"]\n            isOneToOne: false\n            referencedRelation: \"organizations\"\n            referencedColumns: [\"id\"]\n          },\n        ]\n      }\n      maintenance_requests: {\n        Row: {\n          asset_id: string | null\n          asset_name: string | null\n          automation_id: string | null\n          created_at: string\n          created_by: string | null\n          deleted_at: string | null\n          description: string | null\n          equipment_type: string | null\n          has_repair_tag: boolean | null\n          id: string\n          linked_work_order_id: string | null\n          linked_work_order_number: string | null\n          org_id: string\n          priority: string\n          repair_category: string | null\n          request_number: string\n          requested_by_id: string | null\n          requested_by_name: string\n          status: string\n          title: string\n          updated_at: string\n        }\n        Insert: {\n          asset_id?: string | null\n          asset_name?: string | null\n          automation_id?: string | null\n          created_at?: string\n          created_by?: string | null\n          deleted_at?: string | null\n          description?: string | null\n          equipment_type?: string | null\n          has_repair_tag?: boolean | null\n          id?: string\n          linked_work_order_id?: string | null\n          linked_work_order_number?: string | null\n          org_id?: string\n          priority?: string\n          repair_category?: string | null\n          request_number: string\n          requested_by_id?: string | null\n          requested_by_name?: string\n          status?: string\n          title: string\n          updated_at?: string\n        }\n        Update: {\n          asset_id?: string | null\n          asset_name?: string | null\n          automation_id?: string | null\n          created_at?: string\n          created_by?: string | null\n          deleted_at?: string | null\n          description?: string | null\n          equipment_type?: string | null\n          has_repair_tag?: boolean | null\n          id?: string\n          linked_work_order_id?: string | null\n          linked_work_order_number?: string | null\n          org_id?: string\n          priority?: string\n          repair_category?: string | null\n          request_number?: string\n          requested_by_id?: string | null\n          requested_by_name?: string\n          status?: string\n          title?: string\n          updated_at?: string\n        }\n        Relationships: [\n          {\n            foreignKeyName: \"maintenance_requests_automation_id_fkey\"\n            columns: [\"automation_id\"]\n            isOneToOne: false\n            referencedRelation: \"automations\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"maintenance_requests_created_by_fkey\"\n            columns: [\"created_by\"]\n            isOneToOne: false\n            referencedRelation: \"profiles\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"maintenance_requests_linked_work_order_id_fkey\"\n            columns: [\"linked_work_order_id\"]\n            isOneToOne: false\n            referencedRelation: \"work_orders\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"maintenance_requests_org_id_fkey\"\n            columns: [\"org_id\"]\n            isOneToOne: false\n            referencedRelation: \"organizations\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"maintenance_requests_requested_by_id_fkey\"\n            columns: [\"requested_by_id\"]\n            isOneToOne: false\n            referencedRelation: \"profiles\"\n            referencedColumns: [\"id\"]\n          },\n        ]\n      }\n      meter_readings: {\n        Row: {\n          created_at: string\n          created_by: string | null\n          deleted_at: string | null\n          id: string\n          meter_id: string\n          org_id: string\n          reading_at: string\n          recorded_by_name: string | null\n          source: string\n          updated_at: string\n          value: number\n        }\n        Insert: {\n          created_at?: string\n          created_by?: string | null\n          deleted_at?: string | null\n          id?: string\n          meter_id: string\n          org_id?: string\n          reading_at?: string\n          recorded_by_name?: string | null\n          source?: string\n          updated_at?: string\n          value: number\n        }\n        Update: {\n          created_at?: string\n          created_by?: string | null\n          deleted_at?: string | null\n          id?: string\n          meter_id?: string\n          org_id?: string\n          reading_at?: string\n          recorded_by_name?: string | null\n          source?: string\n          updated_at?: string\n          value?: number\n        }\n        Relationships: [\n          {\n            foreignKeyName: \"meter_readings_created_by_fkey\"\n            columns: [\"created_by\"]\n            isOneToOne: false\n            referencedRelation: \"profiles\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"meter_readings_meter_id_fkey\"\n            columns: [\"meter_id\"]\n            isOneToOne: false\n            referencedRelation: \"meters\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"meter_readings_org_id_fkey\"\n            columns: [\"org_id\"]\n            isOneToOne: false\n            referencedRelation: \"organizations\"\n            referencedColumns: [\"id\"]\n          },\n        ]\n      }\n      meters: {\n        Row: {\n          asset_id: string | null\n          asset_name: string\n          created_at: string\n          created_by: string | null\n          current_value: number\n          deleted_at: string | null\n          id: string\n          last_reading_at: string | null\n          name: string\n          org_id: string\n          source: string\n          unit: string\n          updated_at: string\n        }\n        Insert: {\n          asset_id?: string | null\n          asset_name?: string\n          created_at?: string\n          created_by?: string | null\n          current_value?: number\n          deleted_at?: string | null\n          id?: string\n          last_reading_at?: string | null\n          name: string\n          org_id?: string\n          source?: string\n          unit?: string\n          updated_at?: string\n        }\n        Update: {\n          asset_id?: string | null\n          asset_name?: string\n          created_at?: string\n          created_by?: string | null\n          current_value?: number\n          deleted_at?: string | null\n          id?: string\n          last_reading_at?: string | null\n          name?: string\n          org_id?: string\n          source?: string\n          unit?: string\n          updated_at?: string\n        }\n        Relationships: [\n          {\n            foreignKeyName: \"meters_created_by_fkey\"\n            columns: [\"created_by\"]\n            isOneToOne: false\n            referencedRelation: \"profiles\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"meters_org_id_fkey\"\n            columns: [\"org_id\"]\n            isOneToOne: false\n            referencedRelation: \"organizations\"\n            referencedColumns: [\"id\"]\n          },\n        ]\n      }\n      notification_reads: {\n        Row: {\n          notif_id: string\n          read_at: string\n          user_id: string\n        }\n        Insert: {\n          notif_id: string\n          read_at?: string\n          user_id: string\n        }\n        Update: {\n          notif_id?: string\n          read_at?: string\n          user_id?: string\n        }\n        Relationships: []\n      }\n      notifications: {\n        Row: {\n          created_at: string\n          entity_id: string | null\n          entity_type: string | null\n          id: string\n          message: string\n          org_id: string\n          read: boolean\n          title: string | null\n          type: string | null\n          user_id: string\n        }\n        Insert: {\n          created_at?: string\n          entity_id?: string | null\n          entity_type?: string | null\n          id?: string\n          message: string\n          org_id: string\n          read?: boolean\n          title?: string | null\n          type?: string | null\n          user_id: string\n        }\n        Update: {\n          created_at?: string\n          entity_id?: string | null\n          entity_type?: string | null\n          id?: string\n          message?: string\n          org_id?: string\n          read?: boolean\n          title?: string | null\n          type?: string | null\n          user_id?: string\n        }\n        Relationships: [\n          {\n            foreignKeyName: \"notifications_org_id_fkey\"\n            columns: [\"org_id\"]\n            isOneToOne: false\n            referencedRelation: \"organizations\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"notifications_user_id_fkey\"\n            columns: [\"user_id\"]\n            isOneToOne: false\n            referencedRelation: \"profiles\"\n            referencedColumns: [\"id\"]\n          },\n        ]\n      }\n      organizations: {\n        Row: {\n          address: Json\n          brand_color: string\n          cost_method: string\n          created_at: string\n          customizations: Json\n          id: string\n          name: string\n          plan: string\n          portal_enabled: boolean\n          slug: string\n          tax_rate_percent: number\n          updated_at: string\n        }\n        Insert: {\n          address?: Json\n          brand_color?: string\n          cost_method?: string\n          created_at?: string\n          customizations?: Json\n          id?: string\n          name: string\n          plan?: string\n          portal_enabled?: boolean\n          slug: string\n          tax_rate_percent?: number\n          updated_at?: string\n        }\n        Update: {\n          address?: Json\n          brand_color?: string\n          cost_method?: string\n          created_at?: string\n          customizations?: Json\n          id?: string\n          name?: string\n          plan?: string\n          portal_enabled?: boolean\n          slug?: string\n          tax_rate_percent?: number\n          updated_at?: string\n        }\n        Relationships: []\n      }\n      parts: {\n        Row: {\n          alternate_vendors: Json\n          categories: string[]\n          category: string\n          cost_layers: Json\n          created_at: string\n          created_by: string | null\n          deleted_at: string | null\n          description: string\n          id: string\n          is_inventory: boolean\n          location: string | null\n          minimum_stock: number\n          name: string\n          org_id: string\n          parent_part_id: string | null\n          part_number: string\n          picture_url: string | null\n          product_item_id: string | null\n          quantity_on_hand: number\n          unit_cost: number\n          updated_at: string\n          vendor_id: string | null\n          vendor_name: string | null\n        }\n        Insert: {\n          alternate_vendors?: Json\n          categories?: string[]\n          category?: string\n          cost_layers?: Json\n          created_at?: string\n          created_by?: string | null\n          deleted_at?: string | null\n          description?: string\n          id?: string\n          is_inventory?: boolean\n          location?: string | null\n          minimum_stock?: number\n          name: string\n          org_id?: string\n          parent_part_id?: string | null\n          part_number?: string\n          picture_url?: string | null\n          product_item_id?: string | null\n          quantity_on_hand?: number\n          unit_cost?: number\n          updated_at?: string\n          vendor_id?: string | null\n          vendor_name?: string | null\n        }\n        Update: {\n          alternate_vendors?: Json\n          categories?: string[]\n          category?: string\n          cost_layers?: Json\n          created_at?: string\n          created_by?: string | null\n          deleted_at?: string | null\n          description?: string\n          id?: string\n          is_inventory?: boolean\n          location?: string | null\n          minimum_stock?: number\n          name?: string\n          org_id?: string\n          parent_part_id?: string | null\n          part_number?: string\n          picture_url?: string | null\n          product_item_id?: string | null\n          quantity_on_hand?: number\n          unit_cost?: number\n          updated_at?: string\n          vendor_id?: string | null\n          vendor_name?: string | null\n        }\n        Relationships: [\n          {\n            foreignKeyName: \"parts_created_by_fkey\"\n            columns: [\"created_by\"]\n            isOneToOne: false\n            referencedRelation: \"profiles\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"parts_org_id_fkey\"\n            columns: [\"org_id\"]\n            isOneToOne: false\n            referencedRelation: \"organizations\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"parts_parent_part_id_fkey\"\n            columns: [\"parent_part_id\"]\n            isOneToOne: false\n            referencedRelation: \"parts\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"parts_product_item_id_fkey\"\n            columns: [\"product_item_id\"]\n            isOneToOne: false\n            referencedRelation: \"product_items\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"parts_vendor_id_fkey\"\n            columns: [\"vendor_id\"]\n            isOneToOne: false\n            referencedRelation: \"vendors\"\n            referencedColumns: [\"id\"]\n          },\n        ]\n      }\n      pm_schedule_asset_parts: {\n        Row: {\n          created_at: string\n          deleted_at: string | null\n          id: string\n          org_id: string\n          part_id: string | null\n          part_name: string\n          part_number: string\n          pm_schedule_asset_id: string\n          quantity: number\n          unit_cost: number\n          updated_at: string\n        }\n        Insert: {\n          created_at?: string\n          deleted_at?: string | null\n          id?: string\n          org_id?: string\n          part_id?: string | null\n          part_name?: string\n          part_number?: string\n          pm_schedule_asset_id: string\n          quantity?: number\n          unit_cost?: number\n          updated_at?: string\n        }\n        Update: {\n          created_at?: string\n          deleted_at?: string | null\n          id?: string\n          org_id?: string\n          part_id?: string | null\n          part_name?: string\n          part_number?: string\n          pm_schedule_asset_id?: string\n          quantity?: number\n          unit_cost?: number\n          updated_at?: string\n        }\n        Relationships: [\n          {\n            foreignKeyName: \"pm_schedule_asset_parts_org_id_fkey\"\n            columns: [\"org_id\"]\n            isOneToOne: false\n            referencedRelation: \"organizations\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"pm_schedule_asset_parts_part_id_fkey\"\n            columns: [\"part_id\"]\n            isOneToOne: false\n            referencedRelation: \"parts\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"pm_schedule_asset_parts_pm_schedule_asset_id_fkey\"\n            columns: [\"pm_schedule_asset_id\"]\n            isOneToOne: false\n            referencedRelation: \"pm_schedule_assets\"\n            referencedColumns: [\"id\"]\n          },\n        ]\n      }\n      pm_schedule_assets: {\n        Row: {\n          asset_id: string\n          asset_name: string\n          created_at: string\n          deleted_at: string | null\n          id: string\n          org_id: string\n          pm_schedule_id: string\n          updated_at: string\n        }\n        Insert: {\n          asset_id: string\n          asset_name?: string\n          created_at?: string\n          deleted_at?: string | null\n          id?: string\n          org_id?: string\n          pm_schedule_id: string\n          updated_at?: string\n        }\n        Update: {\n          asset_id?: string\n          asset_name?: string\n          created_at?: string\n          deleted_at?: string | null\n          id?: string\n          org_id?: string\n          pm_schedule_id?: string\n          updated_at?: string\n        }\n        Relationships: [\n          {\n            foreignKeyName: \"pm_schedule_assets_org_id_fkey\"\n            columns: [\"org_id\"]\n            isOneToOne: false\n            referencedRelation: \"organizations\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"pm_schedule_assets_pm_schedule_id_fkey\"\n            columns: [\"pm_schedule_id\"]\n            isOneToOne: false\n            referencedRelation: \"pm_schedules\"\n            referencedColumns: [\"id\"]\n          },\n        ]\n      }\n      pm_schedule_parts: {\n        Row: {\n          created_at: string\n          created_by: string | null\n          deleted_at: string | null\n          id: string\n          org_id: string\n          part_id: string | null\n          part_name: string\n          part_number: string\n          pm_schedule_id: string\n          quantity: number\n          unit_cost: number\n          updated_at: string\n        }\n        Insert: {\n          created_at?: string\n          created_by?: string | null\n          deleted_at?: string | null\n          id?: string\n          org_id?: string\n          part_id?: string | null\n          part_name: string\n          part_number?: string\n          pm_schedule_id: string\n          quantity?: number\n          unit_cost?: number\n          updated_at?: string\n        }\n        Update: {\n          created_at?: string\n          created_by?: string | null\n          deleted_at?: string | null\n          id?: string\n          org_id?: string\n          part_id?: string | null\n          part_name?: string\n          part_number?: string\n          pm_schedule_id?: string\n          quantity?: number\n          unit_cost?: number\n          updated_at?: string\n        }\n        Relationships: [\n          {\n            foreignKeyName: \"pm_schedule_parts_org_id_fkey\"\n            columns: [\"org_id\"]\n            isOneToOne: false\n            referencedRelation: \"organizations\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"pm_schedule_parts_part_id_fkey\"\n            columns: [\"part_id\"]\n            isOneToOne: false\n            referencedRelation: \"parts\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"pm_schedule_parts_pm_schedule_id_fkey\"\n            columns: [\"pm_schedule_id\"]\n            isOneToOne: false\n            referencedRelation: \"pm_schedules\"\n            referencedColumns: [\"id\"]\n          },\n        ]\n      }\n      pm_schedules: {\n        Row: {\n          asset_id: string | null\n          asset_name: string\n          assigned_to_id: string | null\n          assigned_to_name: string | null\n          created_at: string\n          created_by: string | null\n          deleted_at: string | null\n          description: string | null\n          frequency: string\n          id: string\n          is_active: boolean\n          last_completed_date: string | null\n          next_due_date: string\n          org_id: string\n          title: string\n          updated_at: string\n        }\n        Insert: {\n          asset_id?: string | null\n          asset_name?: string\n          assigned_to_id?: string | null\n          assigned_to_name?: string | null\n          created_at?: string\n          created_by?: string | null\n          deleted_at?: string | null\n          description?: string | null\n          frequency: string\n          id?: string\n          is_active?: boolean\n          last_completed_date?: string | null\n          next_due_date: string\n          org_id?: string\n          title: string\n          updated_at?: string\n        }\n        Update: {\n          asset_id?: string | null\n          asset_name?: string\n          assigned_to_id?: string | null\n          assigned_to_name?: string | null\n          created_at?: string\n          created_by?: string | null\n          deleted_at?: string | null\n          description?: string | null\n          frequency?: string\n          id?: string\n          is_active?: boolean\n          last_completed_date?: string | null\n          next_due_date?: string\n          org_id?: string\n          title?: string\n          updated_at?: string\n        }\n        Relationships: [\n          {\n            foreignKeyName: \"pm_schedules_created_by_fkey\"\n            columns: [\"created_by\"]\n            isOneToOne: false\n            referencedRelation: \"profiles\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"pm_schedules_org_id_fkey\"\n            columns: [\"org_id\"]\n            isOneToOne: false\n            referencedRelation: \"organizations\"\n            referencedColumns: [\"id\"]\n          },\n        ]\n      }\n      po_line_items: {\n        Row: {\n          created_at: string\n          id: string\n          notes: string | null\n          org_id: string\n          part_id: string | null\n          part_number: string\n          po_id: string\n          product_item_id: string | null\n          product_item_name: string\n          project_id: string | null\n          quantity: number\n          taxable: boolean\n          total_cost: number\n          unit_cost: number\n          updated_at: string\n        }\n        Insert: {\n          created_at?: string\n          id?: string\n          notes?: string | null\n          org_id?: string\n          part_id?: string | null\n          part_number?: string\n          po_id: string\n          product_item_id?: string | null\n          product_item_name?: string\n          project_id?: string | null\n          quantity?: number\n          taxable?: boolean\n          total_cost?: number\n          unit_cost?: number\n          updated_at?: string\n        }\n        Update: {\n          created_at?: string\n          id?: string\n          notes?: string | null\n          org_id?: string\n          part_id?: string | null\n          part_number?: string\n          po_id?: string\n          product_item_id?: string | null\n          product_item_name?: string\n          project_id?: string | null\n          quantity?: number\n          taxable?: boolean\n          total_cost?: number\n          unit_cost?: number\n          updated_at?: string\n        }\n        Relationships: [\n          {\n            foreignKeyName: \"po_line_items_org_id_fkey\"\n            columns: [\"org_id\"]\n            isOneToOne: false\n            referencedRelation: \"organizations\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"po_line_items_part_id_fkey\"\n            columns: [\"part_id\"]\n            isOneToOne: false\n            referencedRelation: \"parts\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"po_line_items_po_id_fkey\"\n            columns: [\"po_id\"]\n            isOneToOne: false\n            referencedRelation: \"purchase_orders\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"po_line_items_product_item_id_fkey\"\n            columns: [\"product_item_id\"]\n            isOneToOne: false\n            referencedRelation: \"product_items\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"po_line_items_project_id_fkey\"\n            columns: [\"project_id\"]\n            isOneToOne: false\n            referencedRelation: \"projects\"\n            referencedColumns: [\"id\"]\n          },\n        ]\n      }\n      product_items: {\n        Row: {\n          alternate_vendors: Json\n          category: string\n          cost_layers: Json\n          created_at: string\n          created_by: string | null\n          deleted_at: string | null\n          description: string\n          id: string\n          is_inventory: boolean\n          minimum_stock: number\n          name: string\n          org_id: string\n          part_category: string | null\n          part_number: string\n          picture_url: string | null\n          price: number\n          quantity_on_hand: number\n          unit_cost: number\n          updated_at: string\n          vendor_id: string | null\n          vendor_name: string\n        }\n        Insert: {\n          alternate_vendors?: Json\n          category: string\n          cost_layers?: Json\n          created_at?: string\n          created_by?: string | null\n          deleted_at?: string | null\n          description?: string\n          id?: string\n          is_inventory?: boolean\n          minimum_stock?: number\n          name: string\n          org_id?: string\n          part_category?: string | null\n          part_number?: string\n          picture_url?: string | null\n          price?: number\n          quantity_on_hand?: number\n          unit_cost?: number\n          updated_at?: string\n          vendor_id?: string | null\n          vendor_name?: string\n        }\n        Update: {\n          alternate_vendors?: Json\n          category?: string\n          cost_layers?: Json\n          created_at?: string\n          created_by?: string | null\n          deleted_at?: string | null\n          description?: string\n          id?: string\n          is_inventory?: boolean\n          minimum_stock?: number\n          name?: string\n          org_id?: string\n          part_category?: string | null\n          part_number?: string\n          picture_url?: string | null\n          price?: number\n          quantity_on_hand?: number\n          unit_cost?: number\n          updated_at?: string\n          vendor_id?: string | null\n          vendor_name?: string\n        }\n        Relationships: [\n          {\n            foreignKeyName: \"product_items_created_by_fkey\"\n            columns: [\"created_by\"]\n            isOneToOne: false\n            referencedRelation: \"profiles\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"product_items_org_id_fkey\"\n            columns: [\"org_id\"]\n            isOneToOne: false\n            referencedRelation: \"organizations\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"product_items_vendor_id_fkey\"\n            columns: [\"vendor_id\"]\n            isOneToOne: false\n            referencedRelation: \"vendors\"\n            referencedColumns: [\"id\"]\n          },\n        ]\n      }\n      profiles: {\n        Row: {\n          avatar_url: string | null\n          created_at: string\n          email: string\n          id: string\n          name: string\n          notification_prefs: Json\n          org_id: string\n          role: string\n          status: string\n          updated_at: string\n        }\n        Insert: {\n          avatar_url?: string | null\n          created_at?: string\n          email: string\n          id: string\n          name: string\n          notification_prefs?: Json\n          org_id: string\n          role?: string\n          status?: string\n          updated_at?: string\n        }\n        Update: {\n          avatar_url?: string | null\n          created_at?: string\n          email?: string\n          id?: string\n          name?: string\n          notification_prefs?: Json\n          org_id?: string\n          role?: string\n          status?: string\n          updated_at?: string\n        }\n        Relationships: [\n          {\n            foreignKeyName: \"profiles_org_id_fkey\"\n            columns: [\"org_id\"]\n            isOneToOne: false\n            referencedRelation: \"organizations\"\n            referencedColumns: [\"id\"]\n          },\n        ]\n      }\n      project_subcontract_costs: {\n        Row: {\n          amount: number\n          cost_date: string | null\n          cost_type: string\n          created_at: string\n          created_by: string | null\n          deleted_at: string | null\n          description: string\n          id: string\n          notes: string | null\n          org_id: string\n          project_id: string\n          updated_at: string\n          vendor_id: string | null\n          vendor_name: string\n        }\n        Insert: {\n          amount?: number\n          cost_date?: string | null\n          cost_type: string\n          created_at?: string\n          created_by?: string | null\n          deleted_at?: string | null\n          description: string\n          id?: string\n          notes?: string | null\n          org_id: string\n          project_id: string\n          updated_at?: string\n          vendor_id?: string | null\n          vendor_name: string\n        }\n        Update: {\n          amount?: number\n          cost_date?: string | null\n          cost_type?: string\n          created_at?: string\n          created_by?: string | null\n          deleted_at?: string | null\n          description?: string\n          id?: string\n          notes?: string | null\n          org_id?: string\n          project_id?: string\n          updated_at?: string\n          vendor_id?: string | null\n          vendor_name?: string\n        }\n        Relationships: [\n          {\n            foreignKeyName: \"project_subcontract_costs_org_id_fkey\"\n            columns: [\"org_id\"]\n            isOneToOne: false\n            referencedRelation: \"organizations\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"project_subcontract_costs_project_id_fkey\"\n            columns: [\"project_id\"]\n            isOneToOne: false\n            referencedRelation: \"projects\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"project_subcontract_costs_vendor_id_fkey\"\n            columns: [\"vendor_id\"]\n            isOneToOne: false\n            referencedRelation: \"vendors\"\n            referencedColumns: [\"id\"]\n          },\n        ]\n      }\n      projects: {\n        Row: {\n          address: string\n          created_at: string\n          created_by: string | null\n          customer_name: string\n          deleted_at: string | null\n          end_date: string | null\n          id: string\n          name: string\n          notes: string | null\n          org_id: string\n          start_date: string | null\n          status: string\n          total_cost: number\n          updated_at: string\n        }\n        Insert: {\n          address?: string\n          created_at?: string\n          created_by?: string | null\n          customer_name?: string\n          deleted_at?: string | null\n          end_date?: string | null\n          id?: string\n          name: string\n          notes?: string | null\n          org_id?: string\n          start_date?: string | null\n          status?: string\n          total_cost?: number\n          updated_at?: string\n        }\n        Update: {\n          address?: string\n          created_at?: string\n          created_by?: string | null\n          customer_name?: string\n          deleted_at?: string | null\n          end_date?: string | null\n          id?: string\n          name?: string\n          notes?: string | null\n          org_id?: string\n          start_date?: string | null\n          status?: string\n          total_cost?: number\n          updated_at?: string\n        }\n        Relationships: [\n          {\n            foreignKeyName: \"projects_created_by_fkey\"\n            columns: [\"created_by\"]\n            isOneToOne: false\n            referencedRelation: \"profiles\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"projects_org_id_fkey\"\n            columns: [\"org_id\"]\n            isOneToOne: false\n            referencedRelation: \"organizations\"\n            referencedColumns: [\"id\"]\n          },\n        ]\n      }\n      purchase_orders: {\n        Row: {\n          created_at: string\n          created_by: string | null\n          deleted_at: string | null\n          grand_total: number\n          id: string\n          invoice_number: string | null\n          notes: string | null\n          org_id: string\n          payment_booked_in_qb: boolean\n          payment_remitted: boolean\n          payment_submitted_to_ap: boolean\n          payment_type: string | null\n          po_date: string | null\n          po_number: string\n          requisition_id: string | null\n          sales_tax: number\n          shipping_cost: number\n          status: string\n          subtotal: number\n          tax_rate_percent: number\n          updated_at: string\n          vendor_id: string | null\n          vendor_name: string\n        }\n        Insert: {\n          created_at?: string\n          created_by?: string | null\n          deleted_at?: string | null\n          grand_total?: number\n          id?: string\n          invoice_number?: string | null\n          notes?: string | null\n          org_id?: string\n          payment_booked_in_qb?: boolean\n          payment_remitted?: boolean\n          payment_submitted_to_ap?: boolean\n          payment_type?: string | null\n          po_date?: string | null\n          po_number: string\n          requisition_id?: string | null\n          sales_tax?: number\n          shipping_cost?: number\n          status?: string\n          subtotal?: number\n          tax_rate_percent?: number\n          updated_at?: string\n          vendor_id?: string | null\n          vendor_name?: string\n        }\n        Update: {\n          created_at?: string\n          created_by?: string | null\n          deleted_at?: string | null\n          grand_total?: number\n          id?: string\n          invoice_number?: string | null\n          notes?: string | null\n          org_id?: string\n          payment_booked_in_qb?: boolean\n          payment_remitted?: boolean\n          payment_submitted_to_ap?: boolean\n          payment_type?: string | null\n          po_date?: string | null\n          po_number?: string\n          requisition_id?: string | null\n          sales_tax?: number\n          shipping_cost?: number\n          status?: string\n          subtotal?: number\n          tax_rate_percent?: number\n          updated_at?: string\n          vendor_id?: string | null\n          vendor_name?: string\n        }\n        Relationships: [\n          {\n            foreignKeyName: \"purchase_orders_created_by_fkey\"\n            columns: [\"created_by\"]\n            isOneToOne: false\n            referencedRelation: \"profiles\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"purchase_orders_org_id_fkey\"\n            columns: [\"org_id\"]\n            isOneToOne: false\n            referencedRelation: \"organizations\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"purchase_orders_requisition_id_fkey\"\n            columns: [\"requisition_id\"]\n            isOneToOne: false\n            referencedRelation: \"requisitions\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"purchase_orders_vendor_id_fkey\"\n            columns: [\"vendor_id\"]\n            isOneToOne: false\n            referencedRelation: \"vendors\"\n            referencedColumns: [\"id\"]\n          },\n        ]\n      }\n      requisition_line_items: {\n        Row: {\n          created_at: string\n          id: string\n          notes: string | null\n          org_id: string\n          part_id: string | null\n          part_number: string\n          product_item_id: string | null\n          product_item_name: string\n          project_id: string | null\n          quantity: number\n          requisition_id: string\n          total_cost: number\n          unit_cost: number\n          updated_at: string\n        }\n        Insert: {\n          created_at?: string\n          id?: string\n          notes?: string | null\n          org_id?: string\n          part_id?: string | null\n          part_number?: string\n          product_item_id?: string | null\n          product_item_name?: string\n          project_id?: string | null\n          quantity?: number\n          requisition_id: string\n          total_cost?: number\n          unit_cost?: number\n          updated_at?: string\n        }\n        Update: {\n          created_at?: string\n          id?: string\n          notes?: string | null\n          org_id?: string\n          part_id?: string | null\n          part_number?: string\n          product_item_id?: string | null\n          product_item_name?: string\n          project_id?: string | null\n          quantity?: number\n          requisition_id?: string\n          total_cost?: number\n          unit_cost?: number\n          updated_at?: string\n        }\n        Relationships: [\n          {\n            foreignKeyName: \"requisition_line_items_org_id_fkey\"\n            columns: [\"org_id\"]\n            isOneToOne: false\n            referencedRelation: \"organizations\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"requisition_line_items_part_id_fkey\"\n            columns: [\"part_id\"]\n            isOneToOne: false\n            referencedRelation: \"parts\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"requisition_line_items_product_item_id_fkey\"\n            columns: [\"product_item_id\"]\n            isOneToOne: false\n            referencedRelation: \"product_items\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"requisition_line_items_project_id_fkey\"\n            columns: [\"project_id\"]\n            isOneToOne: false\n            referencedRelation: \"projects\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"requisition_line_items_requisition_id_fkey\"\n            columns: [\"requisition_id\"]\n            isOneToOne: false\n            referencedRelation: \"requisitions\"\n            referencedColumns: [\"id\"]\n          },\n        ]\n      }\n      requisitions: {\n        Row: {\n          converted_po_id: string | null\n          created_at: string\n          created_by: string | null\n          deleted_at: string | null\n          grand_total: number\n          id: string\n          notes: string | null\n          org_id: string\n          requested_by_id: string | null\n          requested_by_name: string\n          requisition_number: string\n          sales_tax: number\n          shipping_cost: number\n          status: string\n          subtotal: number\n          tax_rate_percent: number\n          title: string\n          updated_at: string\n          vendor_id: string | null\n          vendor_name: string | null\n          work_order_id: string | null\n        }\n        Insert: {\n          converted_po_id?: string | null\n          created_at?: string\n          created_by?: string | null\n          deleted_at?: string | null\n          grand_total?: number\n          id?: string\n          notes?: string | null\n          org_id?: string\n          requested_by_id?: string | null\n          requested_by_name?: string\n          requisition_number: string\n          sales_tax?: number\n          shipping_cost?: number\n          status?: string\n          subtotal?: number\n          tax_rate_percent?: number\n          title: string\n          updated_at?: string\n          vendor_id?: string | null\n          vendor_name?: string | null\n          work_order_id?: string | null\n        }\n        Update: {\n          converted_po_id?: string | null\n          created_at?: string\n          created_by?: string | null\n          deleted_at?: string | null\n          grand_total?: number\n          id?: string\n          notes?: string | null\n          org_id?: string\n          requested_by_id?: string | null\n          requested_by_name?: string\n          requisition_number?: string\n          sales_tax?: number\n          shipping_cost?: number\n          status?: string\n          subtotal?: number\n          tax_rate_percent?: number\n          title?: string\n          updated_at?: string\n          vendor_id?: string | null\n          vendor_name?: string | null\n          work_order_id?: string | null\n        }\n        Relationships: [\n          {\n            foreignKeyName: \"requisitions_converted_po_id_fkey\"\n            columns: [\"converted_po_id\"]\n            isOneToOne: false\n            referencedRelation: \"purchase_orders\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"requisitions_created_by_fkey\"\n            columns: [\"created_by\"]\n            isOneToOne: false\n            referencedRelation: \"profiles\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"requisitions_org_id_fkey\"\n            columns: [\"org_id\"]\n            isOneToOne: false\n            referencedRelation: \"organizations\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"requisitions_requested_by_id_fkey\"\n            columns: [\"requested_by_id\"]\n            isOneToOne: false\n            referencedRelation: \"profiles\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"requisitions_vendor_id_fkey\"\n            columns: [\"vendor_id\"]\n            isOneToOne: false\n            referencedRelation: \"vendors\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"requisitions_work_order_id_fkey\"\n            columns: [\"work_order_id\"]\n            isOneToOne: false\n            referencedRelation: \"work_orders\"\n            referencedColumns: [\"id\"]\n          },\n        ]\n      }\n      safety_weeks: {\n        Row: {\n          created_at: string\n          data: Json\n          id: string\n          org_id: string\n          updated_at: string\n          week_end: string\n        }\n        Insert: {\n          created_at?: string\n          data?: Json\n          id?: string\n          org_id: string\n          updated_at?: string\n          week_end: string\n        }\n        Update: {\n          created_at?: string\n          data?: Json\n          id?: string\n          org_id?: string\n          updated_at?: string\n          week_end?: string\n        }\n        Relationships: [\n          {\n            foreignKeyName: \"safety_weeks_org_id_fkey\"\n            columns: [\"org_id\"]\n            isOneToOne: false\n            referencedRelation: \"organizations\"\n            referencedColumns: [\"id\"]\n          },\n        ]\n      }\n      vehicles: {\n        Row: {\n          air_filter_part_number: string | null\n          asset_tag: string\n          asset_type: string\n          assigned_crew: string | null\n          barcode: string | null\n          created_at: string\n          created_by: string | null\n          deleted_at: string | null\n          division: string | null\n          engine_model: string | null\n          engine_serial_number: string | null\n          equipment_number: string | null\n          finance_institution: string | null\n          fuel_type: string | null\n          id: string\n          license_plate: string | null\n          location: string | null\n          make: string | null\n          manufacturer: string | null\n          model: string | null\n          name: string\n          next_inspection_sticker_due: string | null\n          next_oil_change_due: string | null\n          next_oil_change_mileage: number | null\n          notes: string | null\n          oil_filter_part_number: string | null\n          org_id: string\n          payment_method: string | null\n          photo_url: string | null\n          purchase_date: string | null\n          purchase_price: number | null\n          purchase_vendor_id: string | null\n          purchase_vendor_name: string | null\n          samsara_vehicle_id: string | null\n          serial_number: string | null\n          spark_plug_part_number: string | null\n          status: string\n          updated_at: string\n          vin: string | null\n          year: number | null\n        }\n        Insert: {\n          air_filter_part_number?: string | null\n          asset_tag?: string\n          asset_type?: string\n          assigned_crew?: string | null\n          barcode?: string | null\n          created_at?: string\n          created_by?: string | null\n          deleted_at?: string | null\n          division?: string | null\n          engine_model?: string | null\n          engine_serial_number?: string | null\n          equipment_number?: string | null\n          finance_institution?: string | null\n          fuel_type?: string | null\n          id?: string\n          license_plate?: string | null\n          location?: string | null\n          make?: string | null\n          manufacturer?: string | null\n          model?: string | null\n          name: string\n          next_inspection_sticker_due?: string | null\n          next_oil_change_due?: string | null\n          next_oil_change_mileage?: number | null\n          notes?: string | null\n          oil_filter_part_number?: string | null\n          org_id?: string\n          payment_method?: string | null\n          photo_url?: string | null\n          purchase_date?: string | null\n          purchase_price?: number | null\n          purchase_vendor_id?: string | null\n          purchase_vendor_name?: string | null\n          samsara_vehicle_id?: string | null\n          serial_number?: string | null\n          spark_plug_part_number?: string | null\n          status?: string\n          updated_at?: string\n          vin?: string | null\n          year?: number | null\n        }\n        Update: {\n          air_filter_part_number?: string | null\n          asset_tag?: string\n          asset_type?: string\n          assigned_crew?: string | null\n          barcode?: string | null\n          created_at?: string\n          created_by?: string | null\n          deleted_at?: string | null\n          division?: string | null\n          engine_model?: string | null\n          engine_serial_number?: string | null\n          equipment_number?: string | null\n          finance_institution?: string | null\n          fuel_type?: string | null\n          id?: string\n          license_plate?: string | null\n          location?: string | null\n          make?: string | null\n          manufacturer?: string | null\n          model?: string | null\n          name?: string\n          next_inspection_sticker_due?: string | null\n          next_oil_change_due?: string | null\n          next_oil_change_mileage?: number | null\n          notes?: string | null\n          oil_filter_part_number?: string | null\n          org_id?: string\n          payment_method?: string | null\n          photo_url?: string | null\n          purchase_date?: string | null\n          purchase_price?: number | null\n          purchase_vendor_id?: string | null\n          purchase_vendor_name?: string | null\n          samsara_vehicle_id?: string | null\n          serial_number?: string | null\n          spark_plug_part_number?: string | null\n          status?: string\n          updated_at?: string\n          vin?: string | null\n          year?: number | null\n        }\n        Relationships: [\n          {\n            foreignKeyName: \"vehicles_created_by_fkey\"\n            columns: [\"created_by\"]\n            isOneToOne: false\n            referencedRelation: \"profiles\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"vehicles_org_id_fkey\"\n            columns: [\"org_id\"]\n            isOneToOne: false\n            referencedRelation: \"organizations\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"vehicles_purchase_vendor_id_fkey\"\n            columns: [\"purchase_vendor_id\"]\n            isOneToOne: false\n            referencedRelation: \"vendors\"\n            referencedColumns: [\"id\"]\n          },\n        ]\n      }\n      vendors: {\n        Row: {\n          address: string\n          contact_name: string\n          created_at: string\n          created_by: string | null\n          deleted_at: string | null\n          email: string\n          id: string\n          is_active: boolean\n          name: string\n          notes: string | null\n          org_id: string\n          phone: string\n          updated_at: string\n          vendor_type: string | null\n          w9_expiration_date: string | null\n          w9_received_date: string | null\n          w9_status: string\n          website: string | null\n        }\n        Insert: {\n          address?: string\n          contact_name?: string\n          created_at?: string\n          created_by?: string | null\n          deleted_at?: string | null\n          email?: string\n          id?: string\n          is_active?: boolean\n          name: string\n          notes?: string | null\n          org_id?: string\n          phone?: string\n          updated_at?: string\n          vendor_type?: string | null\n          w9_expiration_date?: string | null\n          w9_received_date?: string | null\n          w9_status?: string\n          website?: string | null\n        }\n        Update: {\n          address?: string\n          contact_name?: string\n          created_at?: string\n          created_by?: string | null\n          deleted_at?: string | null\n          email?: string\n          id?: string\n          is_active?: boolean\n          name?: string\n          notes?: string | null\n          org_id?: string\n          phone?: string\n          updated_at?: string\n          vendor_type?: string | null\n          w9_expiration_date?: string | null\n          w9_received_date?: string | null\n          w9_status?: string\n          website?: string | null\n        }\n        Relationships: [\n          {\n            foreignKeyName: \"vendors_created_by_fkey\"\n            columns: [\"created_by\"]\n            isOneToOne: false\n            referencedRelation: \"profiles\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"vendors_org_id_fkey\"\n            columns: [\"org_id\"]\n            isOneToOne: false\n            referencedRelation: \"organizations\"\n            referencedColumns: [\"id\"]\n          },\n        ]\n      }\n      wo_labor_entries: {\n        Row: {\n          created_at: string\n          created_by: string | null\n          deleted_at: string | null\n          description: string\n          hourly_rate: number\n          hours: number\n          id: string\n          org_id: string\n          technician_name: string\n          updated_at: string\n          work_order_id: string\n        }\n        Insert: {\n          created_at?: string\n          created_by?: string | null\n          deleted_at?: string | null\n          description?: string\n          hourly_rate?: number\n          hours?: number\n          id?: string\n          org_id?: string\n          technician_name?: string\n          updated_at?: string\n          work_order_id: string\n        }\n        Update: {\n          created_at?: string\n          created_by?: string | null\n          deleted_at?: string | null\n          description?: string\n          hourly_rate?: number\n          hours?: number\n          id?: string\n          org_id?: string\n          technician_name?: string\n          updated_at?: string\n          work_order_id?: string\n        }\n        Relationships: [\n          {\n            foreignKeyName: \"wo_labor_entries_created_by_fkey\"\n            columns: [\"created_by\"]\n            isOneToOne: false\n            referencedRelation: \"profiles\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"wo_labor_entries_org_id_fkey\"\n            columns: [\"org_id\"]\n            isOneToOne: false\n            referencedRelation: \"organizations\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"wo_labor_entries_work_order_id_fkey\"\n            columns: [\"work_order_id\"]\n            isOneToOne: false\n            referencedRelation: \"work_orders\"\n            referencedColumns: [\"id\"]\n          },\n        ]\n      }\n      wo_parts: {\n        Row: {\n          created_at: string\n          created_by: string | null\n          deleted_at: string | null\n          id: string\n          org_id: string\n          part_id: string | null\n          part_name: string\n          part_number: string\n          quantity: number\n          unit_cost: number\n          updated_at: string\n          work_order_id: string\n        }\n        Insert: {\n          created_at?: string\n          created_by?: string | null\n          deleted_at?: string | null\n          id?: string\n          org_id?: string\n          part_id?: string | null\n          part_name?: string\n          part_number?: string\n          quantity?: number\n          unit_cost?: number\n          updated_at?: string\n          work_order_id: string\n        }\n        Update: {\n          created_at?: string\n          created_by?: string | null\n          deleted_at?: string | null\n          id?: string\n          org_id?: string\n          part_id?: string | null\n          part_name?: string\n          part_number?: string\n          quantity?: number\n          unit_cost?: number\n          updated_at?: string\n          work_order_id?: string\n        }\n        Relationships: [\n          {\n            foreignKeyName: \"wo_parts_created_by_fkey\"\n            columns: [\"created_by\"]\n            isOneToOne: false\n            referencedRelation: \"profiles\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"wo_parts_org_id_fkey\"\n            columns: [\"org_id\"]\n            isOneToOne: false\n            referencedRelation: \"organizations\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"wo_parts_part_id_fkey\"\n            columns: [\"part_id\"]\n            isOneToOne: false\n            referencedRelation: \"parts\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"wo_parts_work_order_id_fkey\"\n            columns: [\"work_order_id\"]\n            isOneToOne: false\n            referencedRelation: \"work_orders\"\n            referencedColumns: [\"id\"]\n          },\n        ]\n      }\n      wo_vendor_charges: {\n        Row: {\n          cost: number\n          created_at: string\n          created_by: string | null\n          deleted_at: string | null\n          description: string\n          id: string\n          org_id: string\n          updated_at: string\n          vendor_id: string | null\n          vendor_name: string\n          work_order_id: string\n        }\n        Insert: {\n          cost?: number\n          created_at?: string\n          created_by?: string | null\n          deleted_at?: string | null\n          description?: string\n          id?: string\n          org_id?: string\n          updated_at?: string\n          vendor_id?: string | null\n          vendor_name?: string\n          work_order_id: string\n        }\n        Update: {\n          cost?: number\n          created_at?: string\n          created_by?: string | null\n          deleted_at?: string | null\n          description?: string\n          id?: string\n          org_id?: string\n          updated_at?: string\n          vendor_id?: string | null\n          vendor_name?: string\n          work_order_id?: string\n        }\n        Relationships: [\n          {\n            foreignKeyName: \"wo_vendor_charges_created_by_fkey\"\n            columns: [\"created_by\"]\n            isOneToOne: false\n            referencedRelation: \"profiles\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"wo_vendor_charges_org_id_fkey\"\n            columns: [\"org_id\"]\n            isOneToOne: false\n            referencedRelation: \"organizations\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"wo_vendor_charges_vendor_id_fkey\"\n            columns: [\"vendor_id\"]\n            isOneToOne: false\n            referencedRelation: \"vendors\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"wo_vendor_charges_work_order_id_fkey\"\n            columns: [\"work_order_id\"]\n            isOneToOne: false\n            referencedRelation: \"work_orders\"\n            referencedColumns: [\"id\"]\n          },\n        ]\n      }\n      work_orders: {\n        Row: {\n          asset_id: string | null\n          asset_name: string | null\n          assigned_to_id: string | null\n          assigned_to_ids: Json\n          assigned_to_name: string | null\n          assigned_to_names: Json\n          automation_id: string | null\n          categories: Json\n          category: string | null\n          created_at: string\n          created_by: string | null\n          deleted_at: string | null\n          description: string | null\n          due_date: string | null\n          id: string\n          is_recurring: boolean\n          linked_entity_type: string | null\n          org_id: string\n          parent_work_order_id: string | null\n          pm_schedule_id: string | null\n          priority: string\n          recurrence_frequency: string | null\n          start_date: string | null\n          status: string\n          title: string\n          updated_at: string\n          wo_type: string | null\n          work_order_number: string\n        }\n        Insert: {\n          asset_id?: string | null\n          asset_name?: string | null\n          assigned_to_id?: string | null\n          assigned_to_ids?: Json\n          assigned_to_name?: string | null\n          assigned_to_names?: Json\n          automation_id?: string | null\n          categories?: Json\n          category?: string | null\n          created_at?: string\n          created_by?: string | null\n          deleted_at?: string | null\n          description?: string | null\n          due_date?: string | null\n          id?: string\n          is_recurring?: boolean\n          linked_entity_type?: string | null\n          org_id?: string\n          parent_work_order_id?: string | null\n          pm_schedule_id?: string | null\n          priority?: string\n          recurrence_frequency?: string | null\n          start_date?: string | null\n          status?: string\n          title: string\n          updated_at?: string\n          wo_type?: string | null\n          work_order_number: string\n        }\n        Update: {\n          asset_id?: string | null\n          asset_name?: string | null\n          assigned_to_id?: string | null\n          assigned_to_ids?: Json\n          assigned_to_name?: string | null\n          assigned_to_names?: Json\n          automation_id?: string | null\n          categories?: Json\n          category?: string | null\n          created_at?: string\n          created_by?: string | null\n          deleted_at?: string | null\n          description?: string | null\n          due_date?: string | null\n          id?: string\n          is_recurring?: boolean\n          linked_entity_type?: string | null\n          org_id?: string\n          parent_work_order_id?: string | null\n          pm_schedule_id?: string | null\n          priority?: string\n          recurrence_frequency?: string | null\n          start_date?: string | null\n          status?: string\n          title?: string\n          updated_at?: string\n          wo_type?: string | null\n          work_order_number?: string\n        }\n        Relationships: [\n          {\n            foreignKeyName: \"work_orders_assigned_to_id_fkey\"\n            columns: [\"assigned_to_id\"]\n            isOneToOne: false\n            referencedRelation: \"profiles\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"work_orders_automation_id_fkey\"\n            columns: [\"automation_id\"]\n            isOneToOne: false\n            referencedRelation: \"automations\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"work_orders_created_by_fkey\"\n            columns: [\"created_by\"]\n            isOneToOne: false\n            referencedRelation: \"profiles\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"work_orders_org_id_fkey\"\n            columns: [\"org_id\"]\n            isOneToOne: false\n            referencedRelation: \"organizations\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"work_orders_parent_work_order_id_fkey\"\n            columns: [\"parent_work_order_id\"]\n            isOneToOne: false\n            referencedRelation: \"work_orders\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"work_orders_pm_schedule_id_fkey\"\n            columns: [\"pm_schedule_id\"]\n            isOneToOne: false\n            referencedRelation: \"pm_schedules\"\n            referencedColumns: [\"id\"]\n          },\n        ]\n      }\n    }\n    Views: {\n      [_ in never]: never\n    }\n    Functions: {\n      adjust_part_quantity: {\n        Args: { p_delta: number; p_part_id: string }\n        Returns: undefined\n      }\n      insert_audit_entry: {\n        Args: {\n          p_action: string\n          p_description: string\n          p_field_changed?: string\n          p_new_value?: string\n          p_old_value?: string\n          p_org_id: string\n          p_record_id: string\n          p_record_type: string\n        }\n        Returns: undefined\n      }\n      my_org_id: { Args: never; Returns: string }\n    }\n    Enums: {\n      [_ in never]: never\n    }\n    CompositeTypes: {\n      [_ in never]: never\n    }\n  }\n}\n\ntype DatabaseWithoutInternals = Omit<Database, \"__InternalSupabase\">\n\ntype DefaultSchema = DatabaseWithoutInternals[Extract<keyof Database, \"public\">]\n\nexport type Tables<\n  DefaultSchemaTableNameOrOptions extends\n    | keyof (DefaultSchema[\"Tables\"] & DefaultSchema[\"Views\"])\n    | { schema: keyof DatabaseWithoutInternals },\n  TableName extends DefaultSchemaTableNameOrOptions extends {\n    schema: keyof DatabaseWithoutInternals\n  }\n    ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions[\"schema\"]][\"Tables\"] &\n        DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions[\"schema\"]][\"Views\"])\n    : never = never,\n> = DefaultSchemaTableNameOrOptions extends {\n  schema: keyof DatabaseWithoutInternals\n}\n  ? (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions[\"schema\"]][\"Tables\"] &\n      DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions[\"schema\"]][\"Views\"])[TableName] extends {\n      Row: infer R\n    }\n    ? R\n    : never\n  : DefaultSchemaTableNameOrOptions extends keyof (DefaultSchema[\"Tables\"] &\n        DefaultSchema[\"Views\"])\n    ? (DefaultSchema[\"Tables\"] &\n        DefaultSchema[\"Views\"])[DefaultSchemaTableNameOrOptions] extends {\n        Row: infer R\n      }\n      ? R\n      : never\n    : never\n\nexport type TablesInsert<\n  DefaultSchemaTableNameOrOptions extends\n    | keyof DefaultSchema[\"Tables\"]\n    | { schema: keyof DatabaseWithoutInternals },\n  TableName extends DefaultSchemaTableNameOrOptions extends {\n    schema: keyof DatabaseWithoutInternals\n  }\n    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions[\"schema\"]][\"Tables\"]\n    : never = never,\n> = DefaultSchemaTableNameOrOptions extends {\n  schema: keyof DatabaseWithoutInternals\n}\n  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions[\"schema\"]][\"Tables\"][TableName] extends {\n      Insert: infer I\n    }\n    ? I\n    : never\n  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema[\"Tables\"]\n    ? DefaultSchema[\"Tables\"][DefaultSchemaTableNameOrOptions] extends {\n        Insert: infer I\n      }\n      ? I\n      : never\n    : never\n\nexport type TablesUpdate<\n  DefaultSchemaTableNameOrOptions extends\n    | keyof DefaultSchema[\"Tables\"]\n    | { schema: keyof DatabaseWithoutInternals },\n  TableName extends DefaultSchemaTableNameOrOptions extends {\n    schema: keyof DatabaseWithoutInternals\n  }\n    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions[\"schema\"]][\"Tables\"]\n    : never = never,\n> = DefaultSchemaTableNameOrOptions extends {\n  schema: keyof DatabaseWithoutInternals\n}\n  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions[\"schema\"]][\"Tables\"][TableName] extends {\n      Update: infer U\n    }\n    ? U\n    : never\n  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema[\"Tables\"]\n    ? DefaultSchema[\"Tables\"][DefaultSchemaTableNameOrOptions] extends {\n        Update: infer U\n      }\n      ? U\n      : never\n    : never\n\nexport type Enums<\n  DefaultSchemaEnumNameOrOptions extends\n    | keyof DefaultSchema[\"Enums\"]\n    | { schema: keyof DatabaseWithoutInternals },\n  EnumName extends DefaultSchemaEnumNameOrOptions extends {\n    schema: keyof DatabaseWithoutInternals\n  }\n    ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions[\"schema\"]][\"Enums\"]\n    : never = never,\n> = DefaultSchemaEnumNameOrOptions extends {\n  schema: keyof DatabaseWithoutInternals\n}\n  ? DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions[\"schema\"]][\"Enums\"][EnumName]\n  : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema[\"Enums\"]\n    ? DefaultSchema[\"Enums\"][DefaultSchemaEnumNameOrOptions]\n    : never\n\nexport type CompositeTypes<\n  PublicCompositeTypeNameOrOptions extends\n    | keyof DefaultSchema[\"CompositeTypes\"]\n    | { schema: keyof DatabaseWithoutInternals },\n  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {\n    schema: keyof DatabaseWithoutInternals\n  }\n    ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions[\"schema\"]][\"CompositeTypes\"]\n    : never = never,\n> = PublicCompositeTypeNameOrOptions extends {\n  schema: keyof DatabaseWithoutInternals\n}\n  ? DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions[\"schema\"]][\"CompositeTypes\"][CompositeTypeName]\n  : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema[\"CompositeTypes\"]\n    ? DefaultSchema[\"CompositeTypes\"][PublicCompositeTypeNameOrOptions]\n    : never\n\nexport const Constants = {\n  public: {\n    Enums: {},\n  },\n} as const\n"}
+export type Json =
+  | string
+  | number
+  | boolean
+  | null
+  | { [key: string]: Json | undefined }
+  | Json[]
+
+export type Database = {
+  // Allows to automatically instantiate createClient with right options
+  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
+  __InternalSupabase: {
+    PostgrestVersion: "14.4"
+  }
+  public: {
+    Tables: {
+      app_config: {
+        Row: {
+          key: string
+          value: string
+        }
+        Insert: {
+          key: string
+          value: string
+        }
+        Update: {
+          key?: string
+          value?: string
+        }
+        Relationships: []
+      }
+      approval_flow_steps: {
+        Row: {
+          assigned_user_id: string | null
+          created_at: string
+          flow_id: string
+          id: string
+          label: string
+          order: number
+          required_role: string
+          threshold_cents: number
+          updated_at: string
+        }
+        Insert: {
+          assigned_user_id?: string | null
+          created_at?: string
+          flow_id: string
+          id?: string
+          label?: string
+          order: number
+          required_role: string
+          threshold_cents?: number
+          updated_at?: string
+        }
+        Update: {
+          assigned_user_id?: string | null
+          created_at?: string
+          flow_id?: string
+          id?: string
+          label?: string
+          order?: number
+          required_role?: string
+          threshold_cents?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "approval_flow_steps_assigned_user_id_fkey"
+            columns: ["assigned_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "approval_flow_steps_flow_id_fkey"
+            columns: ["flow_id"]
+            isOneToOne: false
+            referencedRelation: "approval_flows"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      approval_flows: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          entity_type: string
+          id: string
+          name: string
+          org_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          entity_type: string
+          id?: string
+          name: string
+          org_id?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          entity_type?: string
+          id?: string
+          name?: string
+          org_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "approval_flows_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "approval_flows_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      approval_requests: {
+        Row: {
+          approver_id: string | null
+          approver_name: string
+          approver_role: string
+          comment: string | null
+          created_at: string
+          decided_at: string | null
+          entity_id: string
+          entity_type: string
+          flow_step_id: string | null
+          id: string
+          order: number
+          org_id: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          approver_id?: string | null
+          approver_name?: string
+          approver_role?: string
+          comment?: string | null
+          created_at?: string
+          decided_at?: string | null
+          entity_id: string
+          entity_type: string
+          flow_step_id?: string | null
+          id?: string
+          order?: number
+          org_id?: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          approver_id?: string | null
+          approver_name?: string
+          approver_role?: string
+          comment?: string | null
+          created_at?: string
+          decided_at?: string | null
+          entity_id?: string
+          entity_type?: string
+          flow_step_id?: string | null
+          id?: string
+          order?: number
+          org_id?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "approval_requests_approver_id_fkey"
+            columns: ["approver_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "approval_requests_flow_step_id_fkey"
+            columns: ["flow_step_id"]
+            isOneToOne: false
+            referencedRelation: "approval_flow_steps"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "approval_requests_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      asset_parts: {
+        Row: {
+          asset_id: string
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          id: string
+          org_id: string
+          part_id: string
+          part_name: string
+          part_number: string
+          updated_at: string
+        }
+        Insert: {
+          asset_id: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          org_id?: string
+          part_id: string
+          part_name?: string
+          part_number?: string
+          updated_at?: string
+        }
+        Update: {
+          asset_id?: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          org_id?: string
+          part_id?: string
+          part_name?: string
+          part_number?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "asset_parts_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "asset_parts_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "asset_parts_part_id_fkey"
+            columns: ["part_id"]
+            isOneToOne: false
+            referencedRelation: "parts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      assets: {
+        Row: {
+          air_filter_part_number: string | null
+          asset_tag: string
+          asset_type: string
+          assigned_crew: string | null
+          barcode: string | null
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          division: string | null
+          engine_model: string | null
+          engine_serial_number: string | null
+          equipment_number: string | null
+          finance_institution: string | null
+          id: string
+          license_plate: string | null
+          location: string | null
+          make: string | null
+          manufacturer: string | null
+          model: string | null
+          name: string
+          notes: string | null
+          oil_filter_part_number: string | null
+          org_id: string
+          parent_asset_id: string | null
+          payment_method: string | null
+          photo_url: string | null
+          purchase_date: string | null
+          purchase_price: number | null
+          purchase_vendor_id: string | null
+          purchase_vendor_name: string | null
+          serial_number: string | null
+          spark_plug_part_number: string | null
+          status: string
+          updated_at: string
+          year: number | null
+        }
+        Insert: {
+          air_filter_part_number?: string | null
+          asset_tag?: string
+          asset_type?: string
+          assigned_crew?: string | null
+          barcode?: string | null
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          division?: string | null
+          engine_model?: string | null
+          engine_serial_number?: string | null
+          equipment_number?: string | null
+          finance_institution?: string | null
+          id?: string
+          license_plate?: string | null
+          location?: string | null
+          make?: string | null
+          manufacturer?: string | null
+          model?: string | null
+          name: string
+          notes?: string | null
+          oil_filter_part_number?: string | null
+          org_id?: string
+          parent_asset_id?: string | null
+          payment_method?: string | null
+          photo_url?: string | null
+          purchase_date?: string | null
+          purchase_price?: number | null
+          purchase_vendor_id?: string | null
+          purchase_vendor_name?: string | null
+          serial_number?: string | null
+          spark_plug_part_number?: string | null
+          status?: string
+          updated_at?: string
+          year?: number | null
+        }
+        Update: {
+          air_filter_part_number?: string | null
+          asset_tag?: string
+          asset_type?: string
+          assigned_crew?: string | null
+          barcode?: string | null
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          division?: string | null
+          engine_model?: string | null
+          engine_serial_number?: string | null
+          equipment_number?: string | null
+          finance_institution?: string | null
+          id?: string
+          license_plate?: string | null
+          location?: string | null
+          make?: string | null
+          manufacturer?: string | null
+          model?: string | null
+          name?: string
+          notes?: string | null
+          oil_filter_part_number?: string | null
+          org_id?: string
+          parent_asset_id?: string | null
+          payment_method?: string | null
+          photo_url?: string | null
+          purchase_date?: string | null
+          purchase_price?: number | null
+          purchase_vendor_id?: string | null
+          purchase_vendor_name?: string | null
+          serial_number?: string | null
+          spark_plug_part_number?: string | null
+          status?: string
+          updated_at?: string
+          year?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "assets_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "assets_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "assets_parent_asset_id_fkey"
+            columns: ["parent_asset_id"]
+            isOneToOne: false
+            referencedRelation: "assets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "assets_purchase_vendor_id_fkey"
+            columns: ["purchase_vendor_id"]
+            isOneToOne: false
+            referencedRelation: "vendors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      attachments: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          file_name: string
+          file_size: number
+          file_type: string
+          id: string
+          org_id: string
+          record_id: string
+          record_type: string
+          storage_path: string
+          updated_at: string
+          uploaded_by_name: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          file_name: string
+          file_size?: number
+          file_type?: string
+          id?: string
+          org_id?: string
+          record_id: string
+          record_type: string
+          storage_path: string
+          updated_at?: string
+          uploaded_by_name?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          file_name?: string
+          file_size?: number
+          file_type?: string
+          id?: string
+          org_id?: string
+          record_id?: string
+          record_type?: string
+          storage_path?: string
+          updated_at?: string
+          uploaded_by_name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "attachments_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "attachments_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      audit_log: {
+        Row: {
+          action: string
+          changed_by_name: string
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          description: string
+          field_changed: string | null
+          id: string
+          new_value: string | null
+          old_value: string | null
+          org_id: string
+          record_id: string
+          record_type: string
+          updated_at: string
+        }
+        Insert: {
+          action: string
+          changed_by_name?: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          description?: string
+          field_changed?: string | null
+          id?: string
+          new_value?: string | null
+          old_value?: string | null
+          org_id?: string
+          record_id: string
+          record_type: string
+          updated_at?: string
+        }
+        Update: {
+          action?: string
+          changed_by_name?: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          description?: string
+          field_changed?: string | null
+          id?: string
+          new_value?: string | null
+          old_value?: string | null
+          org_id?: string
+          record_id?: string
+          record_type?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "audit_log_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "audit_log_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      automations: {
+        Row: {
+          action_config: Json
+          action_type: string
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          enabled: boolean
+          id: string
+          last_fired_at: string | null
+          last_fired_value: number | null
+          name: string
+          org_id: string
+          pending_reset: boolean
+          trigger_config: Json
+          trigger_type: string
+          updated_at: string
+        }
+        Insert: {
+          action_config?: Json
+          action_type: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          enabled?: boolean
+          id?: string
+          last_fired_at?: string | null
+          last_fired_value?: number | null
+          name: string
+          org_id: string
+          pending_reset?: boolean
+          trigger_config?: Json
+          trigger_type: string
+          updated_at?: string
+        }
+        Update: {
+          action_config?: Json
+          action_type?: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          enabled?: boolean
+          id?: string
+          last_fired_at?: string | null
+          last_fired_value?: number | null
+          name?: string
+          org_id?: string
+          pending_reset?: boolean
+          trigger_config?: Json
+          trigger_type?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "automations_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "automations_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      avb_crews: {
+        Row: {
+          code: string
+          created_at: string | null
+          id: string
+          is_active: boolean
+          name: string
+          org_id: string
+          sort_order: number
+          updated_at: string | null
+        }
+        Insert: {
+          code: string
+          created_at?: string | null
+          id?: string
+          is_active?: boolean
+          name: string
+          org_id: string
+          sort_order?: number
+          updated_at?: string | null
+        }
+        Update: {
+          code?: string
+          created_at?: string | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          org_id?: string
+          sort_order?: number
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "avb_crews_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      avb_employees: {
+        Row: {
+          created_at: string
+          csv_job: string
+          csv_name: string
+          default_crew: string
+          deleted_at: string | null
+          id: string
+          is_active: boolean
+          is_field: boolean
+          name: string
+          org_id: string
+          updated_at: string
+          uuid: string
+        }
+        Insert: {
+          created_at?: string
+          csv_job?: string
+          csv_name?: string
+          default_crew?: string
+          deleted_at?: string | null
+          id?: string
+          is_active?: boolean
+          is_field?: boolean
+          name: string
+          org_id: string
+          updated_at?: string
+          uuid: string
+        }
+        Update: {
+          created_at?: string
+          csv_job?: string
+          csv_name?: string
+          default_crew?: string
+          deleted_at?: string | null
+          id?: string
+          is_active?: boolean
+          is_field?: boolean
+          name?: string
+          org_id?: string
+          updated_at?: string
+          uuid?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "avb_employees_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      avb_weeks: {
+        Row: {
+          created_at: string
+          data: Json
+          id: string
+          org_id: string
+          updated_at: string
+          week_end: string
+        }
+        Insert: {
+          created_at?: string
+          data?: Json
+          id?: string
+          org_id: string
+          updated_at?: string
+          week_end: string
+        }
+        Update: {
+          created_at?: string
+          data?: Json
+          id?: string
+          org_id?: string
+          updated_at?: string
+          week_end?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "avb_weeks_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      comments: {
+        Row: {
+          author_id: string | null
+          author_name: string
+          body: string
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          id: string
+          org_id: string
+          record_id: string
+          record_type: string
+          updated_at: string
+        }
+        Insert: {
+          author_id?: string | null
+          author_name?: string
+          body: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          org_id?: string
+          record_id: string
+          record_type: string
+          updated_at?: string
+        }
+        Update: {
+          author_id?: string | null
+          author_name?: string
+          body?: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          org_id?: string
+          record_id?: string
+          record_type?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "comments_author_id_fkey"
+            columns: ["author_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "comments_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "comments_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      crm_reports: {
+        Row: {
+          html_content: string
+          id: string
+          updated_at: string | null
+        }
+        Insert: {
+          html_content: string
+          id?: string
+          updated_at?: string | null
+        }
+        Update: {
+          html_content?: string
+          id?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      financial_periods: {
+        Row: {
+          created_at: string
+          data: Json
+          id: string
+          org_id: string
+          period_month: string
+          record_type: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          data?: Json
+          id?: string
+          org_id: string
+          period_month: string
+          record_type?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          data?: Json
+          id?: string
+          org_id?: string
+          period_month?: string
+          record_type?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "financial_periods_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      goods_receipt_lines: {
+        Row: {
+          created_at: string
+          id: string
+          is_maint_part: boolean
+          org_id: string
+          part_number: string
+          po_line_item_id: string | null
+          product_item_name: string
+          quantity_ordered: number
+          quantity_received: number
+          quantity_remaining: number
+          receipt_id: string
+          unit_cost: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_maint_part?: boolean
+          org_id?: string
+          part_number?: string
+          po_line_item_id?: string | null
+          product_item_name?: string
+          quantity_ordered?: number
+          quantity_received?: number
+          quantity_remaining?: number
+          receipt_id: string
+          unit_cost?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_maint_part?: boolean
+          org_id?: string
+          part_number?: string
+          po_line_item_id?: string | null
+          product_item_name?: string
+          quantity_ordered?: number
+          quantity_received?: number
+          quantity_remaining?: number
+          receipt_id?: string
+          unit_cost?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "goods_receipt_lines_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "goods_receipt_lines_po_line_item_id_fkey"
+            columns: ["po_line_item_id"]
+            isOneToOne: false
+            referencedRelation: "po_line_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "goods_receipt_lines_receipt_id_fkey"
+            columns: ["receipt_id"]
+            isOneToOne: false
+            referencedRelation: "goods_receipts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      goods_receipts: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          grand_total: number
+          id: string
+          notes: string | null
+          org_id: string
+          po_number: string
+          purchase_order_id: string
+          receipt_number: string
+          received_at: string
+          received_by_id: string | null
+          received_by_name: string
+          sales_tax: number
+          shipping_cost: number
+          subtotal: number
+          tax_rate_percent: number
+          updated_at: string
+          vendor_name: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          grand_total?: number
+          id?: string
+          notes?: string | null
+          org_id?: string
+          po_number?: string
+          purchase_order_id: string
+          receipt_number: string
+          received_at?: string
+          received_by_id?: string | null
+          received_by_name?: string
+          sales_tax?: number
+          shipping_cost?: number
+          subtotal?: number
+          tax_rate_percent?: number
+          updated_at?: string
+          vendor_name?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          grand_total?: number
+          id?: string
+          notes?: string | null
+          org_id?: string
+          po_number?: string
+          purchase_order_id?: string
+          receipt_number?: string
+          received_at?: string
+          received_by_id?: string | null
+          received_by_name?: string
+          sales_tax?: number
+          shipping_cost?: number
+          subtotal?: number
+          tax_rate_percent?: number
+          updated_at?: string
+          vendor_name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "goods_receipts_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "goods_receipts_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "goods_receipts_purchase_order_id_fkey"
+            columns: ["purchase_order_id"]
+            isOneToOne: false
+            referencedRelation: "purchase_orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "goods_receipts_received_by_id_fkey"
+            columns: ["received_by_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      integrations: {
+        Row: {
+          api_key: string | null
+          config: Json
+          created_at: string
+          enabled: boolean
+          id: string
+          last_sync_at: string | null
+          last_sync_status: string | null
+          org_id: string
+          provider: string
+          updated_at: string
+        }
+        Insert: {
+          api_key?: string | null
+          config?: Json
+          created_at?: string
+          enabled?: boolean
+          id?: string
+          last_sync_at?: string | null
+          last_sync_status?: string | null
+          org_id: string
+          provider: string
+          updated_at?: string
+        }
+        Update: {
+          api_key?: string | null
+          config?: Json
+          created_at?: string
+          enabled?: boolean
+          id?: string
+          last_sync_at?: string | null
+          last_sync_status?: string | null
+          org_id?: string
+          provider?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "integrations_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      kpi_actuals: {
+        Row: {
+          actual_value: number | null
+          created_at: string
+          created_by: string | null
+          id: string
+          metric_key: string
+          org_id: string
+          period: string
+          target_value: number | null
+          updated_at: string
+        }
+        Insert: {
+          actual_value?: number | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          metric_key: string
+          org_id: string
+          period: string
+          target_value?: number | null
+          updated_at?: string
+        }
+        Update: {
+          actual_value?: number | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          metric_key?: string
+          org_id?: string
+          period?: string
+          target_value?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "kpi_actuals_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      maintenance_requests: {
+        Row: {
+          asset_id: string | null
+          asset_name: string | null
+          automation_id: string | null
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          description: string | null
+          equipment_type: string | null
+          has_repair_tag: boolean | null
+          id: string
+          linked_work_order_id: string | null
+          linked_work_order_number: string | null
+          org_id: string
+          priority: string
+          repair_category: string | null
+          request_number: string
+          requested_by_id: string | null
+          requested_by_name: string
+          status: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          asset_id?: string | null
+          asset_name?: string | null
+          automation_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          description?: string | null
+          equipment_type?: string | null
+          has_repair_tag?: boolean | null
+          id?: string
+          linked_work_order_id?: string | null
+          linked_work_order_number?: string | null
+          org_id?: string
+          priority?: string
+          repair_category?: string | null
+          request_number: string
+          requested_by_id?: string | null
+          requested_by_name?: string
+          status?: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          asset_id?: string | null
+          asset_name?: string | null
+          automation_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          description?: string | null
+          equipment_type?: string | null
+          has_repair_tag?: boolean | null
+          id?: string
+          linked_work_order_id?: string | null
+          linked_work_order_number?: string | null
+          org_id?: string
+          priority?: string
+          repair_category?: string | null
+          request_number?: string
+          requested_by_id?: string | null
+          requested_by_name?: string
+          status?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "maintenance_requests_automation_id_fkey"
+            columns: ["automation_id"]
+            isOneToOne: false
+            referencedRelation: "automations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "maintenance_requests_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "maintenance_requests_linked_work_order_id_fkey"
+            columns: ["linked_work_order_id"]
+            isOneToOne: false
+            referencedRelation: "work_orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "maintenance_requests_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "maintenance_requests_requested_by_id_fkey"
+            columns: ["requested_by_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      meter_readings: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          id: string
+          meter_id: string
+          org_id: string
+          reading_at: string
+          recorded_by_name: string | null
+          source: string
+          updated_at: string
+          value: number
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          meter_id: string
+          org_id?: string
+          reading_at?: string
+          recorded_by_name?: string | null
+          source?: string
+          updated_at?: string
+          value: number
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          meter_id?: string
+          org_id?: string
+          reading_at?: string
+          recorded_by_name?: string | null
+          source?: string
+          updated_at?: string
+          value?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meter_readings_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meter_readings_meter_id_fkey"
+            columns: ["meter_id"]
+            isOneToOne: false
+            referencedRelation: "meters"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meter_readings_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      meters: {
+        Row: {
+          asset_id: string | null
+          asset_name: string
+          created_at: string
+          created_by: string | null
+          current_value: number
+          deleted_at: string | null
+          id: string
+          last_reading_at: string | null
+          name: string
+          org_id: string
+          source: string
+          unit: string
+          updated_at: string
+        }
+        Insert: {
+          asset_id?: string | null
+          asset_name?: string
+          created_at?: string
+          created_by?: string | null
+          current_value?: number
+          deleted_at?: string | null
+          id?: string
+          last_reading_at?: string | null
+          name: string
+          org_id?: string
+          source?: string
+          unit?: string
+          updated_at?: string
+        }
+        Update: {
+          asset_id?: string | null
+          asset_name?: string
+          created_at?: string
+          created_by?: string | null
+          current_value?: number
+          deleted_at?: string | null
+          id?: string
+          last_reading_at?: string | null
+          name?: string
+          org_id?: string
+          source?: string
+          unit?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meters_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meters_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      notification_reads: {
+        Row: {
+          notif_id: string
+          read_at: string
+          user_id: string
+        }
+        Insert: {
+          notif_id: string
+          read_at?: string
+          user_id: string
+        }
+        Update: {
+          notif_id?: string
+          read_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      notifications: {
+        Row: {
+          created_at: string
+          entity_id: string | null
+          entity_type: string | null
+          id: string
+          message: string
+          org_id: string
+          read: boolean
+          title: string | null
+          type: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          entity_id?: string | null
+          entity_type?: string | null
+          id?: string
+          message: string
+          org_id: string
+          read?: boolean
+          title?: string | null
+          type?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          entity_id?: string | null
+          entity_type?: string | null
+          id?: string
+          message?: string
+          org_id?: string
+          read?: boolean
+          title?: string | null
+          type?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notifications_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notifications_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      organizations: {
+        Row: {
+          address: Json
+          brand_color: string
+          cost_method: string
+          created_at: string
+          customizations: Json
+          id: string
+          name: string
+          plan: string
+          portal_enabled: boolean
+          slug: string
+          tax_rate_percent: number
+          updated_at: string
+        }
+        Insert: {
+          address?: Json
+          brand_color?: string
+          cost_method?: string
+          created_at?: string
+          customizations?: Json
+          id?: string
+          name: string
+          plan?: string
+          portal_enabled?: boolean
+          slug: string
+          tax_rate_percent?: number
+          updated_at?: string
+        }
+        Update: {
+          address?: Json
+          brand_color?: string
+          cost_method?: string
+          created_at?: string
+          customizations?: Json
+          id?: string
+          name?: string
+          plan?: string
+          portal_enabled?: boolean
+          slug?: string
+          tax_rate_percent?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      parts: {
+        Row: {
+          alternate_vendors: Json
+          categories: string[]
+          category: string
+          cost_layers: Json
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          description: string
+          id: string
+          is_inventory: boolean
+          location: string | null
+          minimum_stock: number
+          name: string
+          org_id: string
+          parent_part_id: string | null
+          part_number: string
+          picture_url: string | null
+          product_item_id: string | null
+          quantity_on_hand: number
+          unit_cost: number
+          updated_at: string
+          vendor_id: string | null
+          vendor_name: string | null
+        }
+        Insert: {
+          alternate_vendors?: Json
+          categories?: string[]
+          category?: string
+          cost_layers?: Json
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          description?: string
+          id?: string
+          is_inventory?: boolean
+          location?: string | null
+          minimum_stock?: number
+          name: string
+          org_id?: string
+          parent_part_id?: string | null
+          part_number?: string
+          picture_url?: string | null
+          product_item_id?: string | null
+          quantity_on_hand?: number
+          unit_cost?: number
+          updated_at?: string
+          vendor_id?: string | null
+          vendor_name?: string | null
+        }
+        Update: {
+          alternate_vendors?: Json
+          categories?: string[]
+          category?: string
+          cost_layers?: Json
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          description?: string
+          id?: string
+          is_inventory?: boolean
+          location?: string | null
+          minimum_stock?: number
+          name?: string
+          org_id?: string
+          parent_part_id?: string | null
+          part_number?: string
+          picture_url?: string | null
+          product_item_id?: string | null
+          quantity_on_hand?: number
+          unit_cost?: number
+          updated_at?: string
+          vendor_id?: string | null
+          vendor_name?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "parts_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "parts_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "parts_parent_part_id_fkey"
+            columns: ["parent_part_id"]
+            isOneToOne: false
+            referencedRelation: "parts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "parts_product_item_id_fkey"
+            columns: ["product_item_id"]
+            isOneToOne: false
+            referencedRelation: "product_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "parts_vendor_id_fkey"
+            columns: ["vendor_id"]
+            isOneToOne: false
+            referencedRelation: "vendors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pm_schedule_asset_parts: {
+        Row: {
+          created_at: string
+          deleted_at: string | null
+          id: string
+          org_id: string
+          part_id: string | null
+          part_name: string
+          part_number: string
+          pm_schedule_asset_id: string
+          quantity: number
+          unit_cost: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          org_id?: string
+          part_id?: string | null
+          part_name?: string
+          part_number?: string
+          pm_schedule_asset_id: string
+          quantity?: number
+          unit_cost?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          org_id?: string
+          part_id?: string | null
+          part_name?: string
+          part_number?: string
+          pm_schedule_asset_id?: string
+          quantity?: number
+          unit_cost?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pm_schedule_asset_parts_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pm_schedule_asset_parts_part_id_fkey"
+            columns: ["part_id"]
+            isOneToOne: false
+            referencedRelation: "parts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pm_schedule_asset_parts_pm_schedule_asset_id_fkey"
+            columns: ["pm_schedule_asset_id"]
+            isOneToOne: false
+            referencedRelation: "pm_schedule_assets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pm_schedule_assets: {
+        Row: {
+          asset_id: string
+          asset_name: string
+          created_at: string
+          deleted_at: string | null
+          id: string
+          org_id: string
+          pm_schedule_id: string
+          updated_at: string
+        }
+        Insert: {
+          asset_id: string
+          asset_name?: string
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          org_id?: string
+          pm_schedule_id: string
+          updated_at?: string
+        }
+        Update: {
+          asset_id?: string
+          asset_name?: string
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          org_id?: string
+          pm_schedule_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pm_schedule_assets_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pm_schedule_assets_pm_schedule_id_fkey"
+            columns: ["pm_schedule_id"]
+            isOneToOne: false
+            referencedRelation: "pm_schedules"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pm_schedule_parts: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          id: string
+          org_id: string
+          part_id: string | null
+          part_name: string
+          part_number: string
+          pm_schedule_id: string
+          quantity: number
+          unit_cost: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          org_id?: string
+          part_id?: string | null
+          part_name: string
+          part_number?: string
+          pm_schedule_id: string
+          quantity?: number
+          unit_cost?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          org_id?: string
+          part_id?: string | null
+          part_name?: string
+          part_number?: string
+          pm_schedule_id?: string
+          quantity?: number
+          unit_cost?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pm_schedule_parts_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pm_schedule_parts_part_id_fkey"
+            columns: ["part_id"]
+            isOneToOne: false
+            referencedRelation: "parts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pm_schedule_parts_pm_schedule_id_fkey"
+            columns: ["pm_schedule_id"]
+            isOneToOne: false
+            referencedRelation: "pm_schedules"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pm_schedules: {
+        Row: {
+          asset_id: string | null
+          asset_name: string
+          assigned_to_id: string | null
+          assigned_to_name: string | null
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          description: string | null
+          frequency: string
+          id: string
+          is_active: boolean
+          last_completed_date: string | null
+          next_due_date: string
+          org_id: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          asset_id?: string | null
+          asset_name?: string
+          assigned_to_id?: string | null
+          assigned_to_name?: string | null
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          description?: string | null
+          frequency: string
+          id?: string
+          is_active?: boolean
+          last_completed_date?: string | null
+          next_due_date: string
+          org_id?: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          asset_id?: string | null
+          asset_name?: string
+          assigned_to_id?: string | null
+          assigned_to_name?: string | null
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          description?: string | null
+          frequency?: string
+          id?: string
+          is_active?: boolean
+          last_completed_date?: string | null
+          next_due_date?: string
+          org_id?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pm_schedules_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pm_schedules_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      po_line_items: {
+        Row: {
+          created_at: string
+          id: string
+          notes: string | null
+          org_id: string
+          part_id: string | null
+          part_number: string
+          po_id: string
+          product_item_id: string | null
+          product_item_name: string
+          project_id: string | null
+          quantity: number
+          taxable: boolean
+          total_cost: number
+          unit_cost: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          notes?: string | null
+          org_id?: string
+          part_id?: string | null
+          part_number?: string
+          po_id: string
+          product_item_id?: string | null
+          product_item_name?: string
+          project_id?: string | null
+          quantity?: number
+          taxable?: boolean
+          total_cost?: number
+          unit_cost?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          notes?: string | null
+          org_id?: string
+          part_id?: string | null
+          part_number?: string
+          po_id?: string
+          product_item_id?: string | null
+          product_item_name?: string
+          project_id?: string | null
+          quantity?: number
+          taxable?: boolean
+          total_cost?: number
+          unit_cost?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "po_line_items_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "po_line_items_part_id_fkey"
+            columns: ["part_id"]
+            isOneToOne: false
+            referencedRelation: "parts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "po_line_items_po_id_fkey"
+            columns: ["po_id"]
+            isOneToOne: false
+            referencedRelation: "purchase_orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "po_line_items_product_item_id_fkey"
+            columns: ["product_item_id"]
+            isOneToOne: false
+            referencedRelation: "product_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "po_line_items_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      product_items: {
+        Row: {
+          alternate_vendors: Json
+          category: string
+          cost_layers: Json
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          description: string
+          id: string
+          is_inventory: boolean
+          minimum_stock: number
+          name: string
+          org_id: string
+          part_category: string | null
+          part_number: string
+          picture_url: string | null
+          price: number
+          quantity_on_hand: number
+          unit_cost: number
+          updated_at: string
+          vendor_id: string | null
+          vendor_name: string
+        }
+        Insert: {
+          alternate_vendors?: Json
+          category: string
+          cost_layers?: Json
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          description?: string
+          id?: string
+          is_inventory?: boolean
+          minimum_stock?: number
+          name: string
+          org_id?: string
+          part_category?: string | null
+          part_number?: string
+          picture_url?: string | null
+          price?: number
+          quantity_on_hand?: number
+          unit_cost?: number
+          updated_at?: string
+          vendor_id?: string | null
+          vendor_name?: string
+        }
+        Update: {
+          alternate_vendors?: Json
+          category?: string
+          cost_layers?: Json
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          description?: string
+          id?: string
+          is_inventory?: boolean
+          minimum_stock?: number
+          name?: string
+          org_id?: string
+          part_category?: string | null
+          part_number?: string
+          picture_url?: string | null
+          price?: number
+          quantity_on_hand?: number
+          unit_cost?: number
+          updated_at?: string
+          vendor_id?: string | null
+          vendor_name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_items_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_items_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_items_vendor_id_fkey"
+            columns: ["vendor_id"]
+            isOneToOne: false
+            referencedRelation: "vendors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          created_at: string
+          email: string
+          id: string
+          name: string
+          notification_prefs: Json
+          org_id: string
+          role: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string
+          email: string
+          id: string
+          name: string
+          notification_prefs?: Json
+          org_id: string
+          role?: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string
+          email?: string
+          id?: string
+          name?: string
+          notification_prefs?: Json
+          org_id?: string
+          role?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "profiles_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      project_subcontract_costs: {
+        Row: {
+          amount: number
+          cost_date: string | null
+          cost_type: string
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          description: string
+          id: string
+          notes: string | null
+          org_id: string
+          project_id: string
+          updated_at: string
+          vendor_id: string | null
+          vendor_name: string
+        }
+        Insert: {
+          amount?: number
+          cost_date?: string | null
+          cost_type: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          description: string
+          id?: string
+          notes?: string | null
+          org_id: string
+          project_id: string
+          updated_at?: string
+          vendor_id?: string | null
+          vendor_name: string
+        }
+        Update: {
+          amount?: number
+          cost_date?: string | null
+          cost_type?: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          description?: string
+          id?: string
+          notes?: string | null
+          org_id?: string
+          project_id?: string
+          updated_at?: string
+          vendor_id?: string | null
+          vendor_name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_subcontract_costs_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_subcontract_costs_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_subcontract_costs_vendor_id_fkey"
+            columns: ["vendor_id"]
+            isOneToOne: false
+            referencedRelation: "vendors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      projects: {
+        Row: {
+          address: string
+          created_at: string
+          created_by: string | null
+          customer_name: string
+          deleted_at: string | null
+          end_date: string | null
+          id: string
+          name: string
+          notes: string | null
+          org_id: string
+          start_date: string | null
+          status: string
+          total_cost: number
+          updated_at: string
+        }
+        Insert: {
+          address?: string
+          created_at?: string
+          created_by?: string | null
+          customer_name?: string
+          deleted_at?: string | null
+          end_date?: string | null
+          id?: string
+          name: string
+          notes?: string | null
+          org_id?: string
+          start_date?: string | null
+          status?: string
+          total_cost?: number
+          updated_at?: string
+        }
+        Update: {
+          address?: string
+          created_at?: string
+          created_by?: string | null
+          customer_name?: string
+          deleted_at?: string | null
+          end_date?: string | null
+          id?: string
+          name?: string
+          notes?: string | null
+          org_id?: string
+          start_date?: string | null
+          status?: string
+          total_cost?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "projects_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "projects_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      purchase_orders: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          grand_total: number
+          id: string
+          invoice_number: string | null
+          notes: string | null
+          org_id: string
+          payment_booked_in_qb: boolean
+          payment_remitted: boolean
+          payment_submitted_to_ap: boolean
+          payment_type: string | null
+          po_date: string | null
+          po_number: string
+          requisition_id: string | null
+          sales_tax: number
+          shipping_cost: number
+          status: string
+          subtotal: number
+          tax_rate_percent: number
+          updated_at: string
+          vendor_id: string | null
+          vendor_name: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          grand_total?: number
+          id?: string
+          invoice_number?: string | null
+          notes?: string | null
+          org_id?: string
+          payment_booked_in_qb?: boolean
+          payment_remitted?: boolean
+          payment_submitted_to_ap?: boolean
+          payment_type?: string | null
+          po_date?: string | null
+          po_number: string
+          requisition_id?: string | null
+          sales_tax?: number
+          shipping_cost?: number
+          status?: string
+          subtotal?: number
+          tax_rate_percent?: number
+          updated_at?: string
+          vendor_id?: string | null
+          vendor_name?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          grand_total?: number
+          id?: string
+          invoice_number?: string | null
+          notes?: string | null
+          org_id?: string
+          payment_booked_in_qb?: boolean
+          payment_remitted?: boolean
+          payment_submitted_to_ap?: boolean
+          payment_type?: string | null
+          po_date?: string | null
+          po_number?: string
+          requisition_id?: string | null
+          sales_tax?: number
+          shipping_cost?: number
+          status?: string
+          subtotal?: number
+          tax_rate_percent?: number
+          updated_at?: string
+          vendor_id?: string | null
+          vendor_name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "purchase_orders_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "purchase_orders_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "purchase_orders_requisition_id_fkey"
+            columns: ["requisition_id"]
+            isOneToOne: false
+            referencedRelation: "requisitions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "purchase_orders_vendor_id_fkey"
+            columns: ["vendor_id"]
+            isOneToOne: false
+            referencedRelation: "vendors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      requisition_line_items: {
+        Row: {
+          created_at: string
+          id: string
+          notes: string | null
+          org_id: string
+          part_id: string | null
+          part_number: string
+          product_item_id: string | null
+          product_item_name: string
+          project_id: string | null
+          quantity: number
+          requisition_id: string
+          total_cost: number
+          unit_cost: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          notes?: string | null
+          org_id?: string
+          part_id?: string | null
+          part_number?: string
+          product_item_id?: string | null
+          product_item_name?: string
+          project_id?: string | null
+          quantity?: number
+          requisition_id: string
+          total_cost?: number
+          unit_cost?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          notes?: string | null
+          org_id?: string
+          part_id?: string | null
+          part_number?: string
+          product_item_id?: string | null
+          product_item_name?: string
+          project_id?: string | null
+          quantity?: number
+          requisition_id?: string
+          total_cost?: number
+          unit_cost?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "requisition_line_items_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "requisition_line_items_part_id_fkey"
+            columns: ["part_id"]
+            isOneToOne: false
+            referencedRelation: "parts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "requisition_line_items_product_item_id_fkey"
+            columns: ["product_item_id"]
+            isOneToOne: false
+            referencedRelation: "product_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "requisition_line_items_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "requisition_line_items_requisition_id_fkey"
+            columns: ["requisition_id"]
+            isOneToOne: false
+            referencedRelation: "requisitions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      requisitions: {
+        Row: {
+          converted_po_id: string | null
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          grand_total: number
+          id: string
+          notes: string | null
+          org_id: string
+          requested_by_id: string | null
+          requested_by_name: string
+          requisition_number: string
+          sales_tax: number
+          shipping_cost: number
+          status: string
+          subtotal: number
+          tax_rate_percent: number
+          title: string
+          updated_at: string
+          vendor_id: string | null
+          vendor_name: string | null
+          work_order_id: string | null
+        }
+        Insert: {
+          converted_po_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          grand_total?: number
+          id?: string
+          notes?: string | null
+          org_id?: string
+          requested_by_id?: string | null
+          requested_by_name?: string
+          requisition_number: string
+          sales_tax?: number
+          shipping_cost?: number
+          status?: string
+          subtotal?: number
+          tax_rate_percent?: number
+          title: string
+          updated_at?: string
+          vendor_id?: string | null
+          vendor_name?: string | null
+          work_order_id?: string | null
+        }
+        Update: {
+          converted_po_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          grand_total?: number
+          id?: string
+          notes?: string | null
+          org_id?: string
+          requested_by_id?: string | null
+          requested_by_name?: string
+          requisition_number?: string
+          sales_tax?: number
+          shipping_cost?: number
+          status?: string
+          subtotal?: number
+          tax_rate_percent?: number
+          title?: string
+          updated_at?: string
+          vendor_id?: string | null
+          vendor_name?: string | null
+          work_order_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "requisitions_converted_po_id_fkey"
+            columns: ["converted_po_id"]
+            isOneToOne: false
+            referencedRelation: "purchase_orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "requisitions_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "requisitions_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "requisitions_requested_by_id_fkey"
+            columns: ["requested_by_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "requisitions_vendor_id_fkey"
+            columns: ["vendor_id"]
+            isOneToOne: false
+            referencedRelation: "vendors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "requisitions_work_order_id_fkey"
+            columns: ["work_order_id"]
+            isOneToOne: false
+            referencedRelation: "work_orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      safety_weeks: {
+        Row: {
+          created_at: string
+          data: Json
+          id: string
+          org_id: string
+          updated_at: string
+          week_end: string
+        }
+        Insert: {
+          created_at?: string
+          data?: Json
+          id?: string
+          org_id: string
+          updated_at?: string
+          week_end: string
+        }
+        Update: {
+          created_at?: string
+          data?: Json
+          id?: string
+          org_id?: string
+          updated_at?: string
+          week_end?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "safety_weeks_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vehicles: {
+        Row: {
+          air_filter_part_number: string | null
+          asset_tag: string
+          asset_type: string
+          assigned_crew: string | null
+          barcode: string | null
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          division: string | null
+          engine_model: string | null
+          engine_serial_number: string | null
+          equipment_number: string | null
+          finance_institution: string | null
+          fuel_type: string | null
+          id: string
+          license_plate: string | null
+          location: string | null
+          make: string | null
+          manufacturer: string | null
+          model: string | null
+          name: string
+          next_inspection_sticker_due: string | null
+          next_oil_change_due: string | null
+          next_oil_change_mileage: number | null
+          notes: string | null
+          oil_filter_part_number: string | null
+          org_id: string
+          payment_method: string | null
+          photo_url: string | null
+          purchase_date: string | null
+          purchase_price: number | null
+          purchase_vendor_id: string | null
+          purchase_vendor_name: string | null
+          samsara_vehicle_id: string | null
+          serial_number: string | null
+          spark_plug_part_number: string | null
+          status: string
+          updated_at: string
+          vin: string | null
+          year: number | null
+        }
+        Insert: {
+          air_filter_part_number?: string | null
+          asset_tag?: string
+          asset_type?: string
+          assigned_crew?: string | null
+          barcode?: string | null
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          division?: string | null
+          engine_model?: string | null
+          engine_serial_number?: string | null
+          equipment_number?: string | null
+          finance_institution?: string | null
+          fuel_type?: string | null
+          id?: string
+          license_plate?: string | null
+          location?: string | null
+          make?: string | null
+          manufacturer?: string | null
+          model?: string | null
+          name: string
+          next_inspection_sticker_due?: string | null
+          next_oil_change_due?: string | null
+          next_oil_change_mileage?: number | null
+          notes?: string | null
+          oil_filter_part_number?: string | null
+          org_id?: string
+          payment_method?: string | null
+          photo_url?: string | null
+          purchase_date?: string | null
+          purchase_price?: number | null
+          purchase_vendor_id?: string | null
+          purchase_vendor_name?: string | null
+          samsara_vehicle_id?: string | null
+          serial_number?: string | null
+          spark_plug_part_number?: string | null
+          status?: string
+          updated_at?: string
+          vin?: string | null
+          year?: number | null
+        }
+        Update: {
+          air_filter_part_number?: string | null
+          asset_tag?: string
+          asset_type?: string
+          assigned_crew?: string | null
+          barcode?: string | null
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          division?: string | null
+          engine_model?: string | null
+          engine_serial_number?: string | null
+          equipment_number?: string | null
+          finance_institution?: string | null
+          fuel_type?: string | null
+          id?: string
+          license_plate?: string | null
+          location?: string | null
+          make?: string | null
+          manufacturer?: string | null
+          model?: string | null
+          name?: string
+          next_inspection_sticker_due?: string | null
+          next_oil_change_due?: string | null
+          next_oil_change_mileage?: number | null
+          notes?: string | null
+          oil_filter_part_number?: string | null
+          org_id?: string
+          payment_method?: string | null
+          photo_url?: string | null
+          purchase_date?: string | null
+          purchase_price?: number | null
+          purchase_vendor_id?: string | null
+          purchase_vendor_name?: string | null
+          samsara_vehicle_id?: string | null
+          serial_number?: string | null
+          spark_plug_part_number?: string | null
+          status?: string
+          updated_at?: string
+          vin?: string | null
+          year?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vehicles_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vehicles_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vehicles_purchase_vendor_id_fkey"
+            columns: ["purchase_vendor_id"]
+            isOneToOne: false
+            referencedRelation: "vendors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vendors: {
+        Row: {
+          address: string
+          contact_name: string
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          email: string
+          id: string
+          is_active: boolean
+          name: string
+          notes: string | null
+          org_id: string
+          phone: string
+          updated_at: string
+          vendor_type: string | null
+          w9_expiration_date: string | null
+          w9_received_date: string | null
+          w9_status: string
+          website: string | null
+        }
+        Insert: {
+          address?: string
+          contact_name?: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          email?: string
+          id?: string
+          is_active?: boolean
+          name: string
+          notes?: string | null
+          org_id?: string
+          phone?: string
+          updated_at?: string
+          vendor_type?: string | null
+          w9_expiration_date?: string | null
+          w9_received_date?: string | null
+          w9_status?: string
+          website?: string | null
+        }
+        Update: {
+          address?: string
+          contact_name?: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          email?: string
+          id?: string
+          is_active?: boolean
+          name?: string
+          notes?: string | null
+          org_id?: string
+          phone?: string
+          updated_at?: string
+          vendor_type?: string | null
+          w9_expiration_date?: string | null
+          w9_received_date?: string | null
+          w9_status?: string
+          website?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vendors_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vendors_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      wo_labor_entries: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          description: string
+          hourly_rate: number
+          hours: number
+          id: string
+          org_id: string
+          technician_name: string
+          updated_at: string
+          work_order_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          description?: string
+          hourly_rate?: number
+          hours?: number
+          id?: string
+          org_id?: string
+          technician_name?: string
+          updated_at?: string
+          work_order_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          description?: string
+          hourly_rate?: number
+          hours?: number
+          id?: string
+          org_id?: string
+          technician_name?: string
+          updated_at?: string
+          work_order_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "wo_labor_entries_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "wo_labor_entries_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "wo_labor_entries_work_order_id_fkey"
+            columns: ["work_order_id"]
+            isOneToOne: false
+            referencedRelation: "work_orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      wo_parts: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          id: string
+          org_id: string
+          part_id: string | null
+          part_name: string
+          part_number: string
+          quantity: number
+          unit_cost: number
+          updated_at: string
+          work_order_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          org_id?: string
+          part_id?: string | null
+          part_name?: string
+          part_number?: string
+          quantity?: number
+          unit_cost?: number
+          updated_at?: string
+          work_order_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          org_id?: string
+          part_id?: string | null
+          part_name?: string
+          part_number?: string
+          quantity?: number
+          unit_cost?: number
+          updated_at?: string
+          work_order_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "wo_parts_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "wo_parts_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "wo_parts_part_id_fkey"
+            columns: ["part_id"]
+            isOneToOne: false
+            referencedRelation: "parts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "wo_parts_work_order_id_fkey"
+            columns: ["work_order_id"]
+            isOneToOne: false
+            referencedRelation: "work_orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      wo_vendor_charges: {
+        Row: {
+          cost: number
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          description: string
+          id: string
+          org_id: string
+          updated_at: string
+          vendor_id: string | null
+          vendor_name: string
+          work_order_id: string
+        }
+        Insert: {
+          cost?: number
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          description?: string
+          id?: string
+          org_id?: string
+          updated_at?: string
+          vendor_id?: string | null
+          vendor_name?: string
+          work_order_id: string
+        }
+        Update: {
+          cost?: number
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          description?: string
+          id?: string
+          org_id?: string
+          updated_at?: string
+          vendor_id?: string | null
+          vendor_name?: string
+          work_order_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "wo_vendor_charges_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "wo_vendor_charges_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "wo_vendor_charges_vendor_id_fkey"
+            columns: ["vendor_id"]
+            isOneToOne: false
+            referencedRelation: "vendors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "wo_vendor_charges_work_order_id_fkey"
+            columns: ["work_order_id"]
+            isOneToOne: false
+            referencedRelation: "work_orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      work_orders: {
+        Row: {
+          asset_id: string | null
+          asset_name: string | null
+          assigned_to_id: string | null
+          assigned_to_ids: Json
+          assigned_to_name: string | null
+          assigned_to_names: Json
+          automation_id: string | null
+          categories: Json
+          category: string | null
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          description: string | null
+          due_date: string | null
+          id: string
+          is_recurring: boolean
+          linked_entity_type: string | null
+          org_id: string
+          parent_work_order_id: string | null
+          pm_schedule_id: string | null
+          priority: string
+          recurrence_frequency: string | null
+          start_date: string | null
+          status: string
+          title: string
+          updated_at: string
+          wo_type: string | null
+          work_order_number: string
+        }
+        Insert: {
+          asset_id?: string | null
+          asset_name?: string | null
+          assigned_to_id?: string | null
+          assigned_to_ids?: Json
+          assigned_to_name?: string | null
+          assigned_to_names?: Json
+          automation_id?: string | null
+          categories?: Json
+          category?: string | null
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          description?: string | null
+          due_date?: string | null
+          id?: string
+          is_recurring?: boolean
+          linked_entity_type?: string | null
+          org_id?: string
+          parent_work_order_id?: string | null
+          pm_schedule_id?: string | null
+          priority?: string
+          recurrence_frequency?: string | null
+          start_date?: string | null
+          status?: string
+          title: string
+          updated_at?: string
+          wo_type?: string | null
+          work_order_number: string
+        }
+        Update: {
+          asset_id?: string | null
+          asset_name?: string | null
+          assigned_to_id?: string | null
+          assigned_to_ids?: Json
+          assigned_to_name?: string | null
+          assigned_to_names?: Json
+          automation_id?: string | null
+          categories?: Json
+          category?: string | null
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          description?: string | null
+          due_date?: string | null
+          id?: string
+          is_recurring?: boolean
+          linked_entity_type?: string | null
+          org_id?: string
+          parent_work_order_id?: string | null
+          pm_schedule_id?: string | null
+          priority?: string
+          recurrence_frequency?: string | null
+          start_date?: string | null
+          status?: string
+          title?: string
+          updated_at?: string
+          wo_type?: string | null
+          work_order_number?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "work_orders_assigned_to_id_fkey"
+            columns: ["assigned_to_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_orders_automation_id_fkey"
+            columns: ["automation_id"]
+            isOneToOne: false
+            referencedRelation: "automations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_orders_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_orders_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_orders_parent_work_order_id_fkey"
+            columns: ["parent_work_order_id"]
+            isOneToOne: false
+            referencedRelation: "work_orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_orders_pm_schedule_id_fkey"
+            columns: ["pm_schedule_id"]
+            isOneToOne: false
+            referencedRelation: "pm_schedules"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      adjust_part_quantity: {
+        Args: { p_delta: number; p_part_id: string }
+        Returns: undefined
+      }
+      insert_audit_entry: {
+        Args: {
+          p_action: string
+          p_description: string
+          p_field_changed?: string
+          p_new_value?: string
+          p_old_value?: string
+          p_org_id: string
+          p_record_id: string
+          p_record_type: string
+        }
+        Returns: undefined
+      }
+      my_org_id: { Args: never; Returns: string }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
+}
+
+type DatabaseWithoutInternals = Omit<Database, "__InternalSupabase">
+
+type DefaultSchema = DatabaseWithoutInternals[Extract<keyof Database, "public">]
+
+export type Tables<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+        DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+      DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])[TableName] extends {
+      Row: infer R
+    }
+    ? R
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])
+    ? (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])[DefaultSchemaTableNameOrOptions] extends {
+        Row: infer R
+      }
+      ? R
+      : never
+    : never
+
+export type TablesInsert<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+      Insert: infer I
+    }
+    ? I
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+        Insert: infer I
+      }
+      ? I
+      : never
+    : never
+
+export type TablesUpdate<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+      Update: infer U
+    }
+    ? U
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+        Update: infer U
+      }
+      ? U
+      : never
+    : never
+
+export type Enums<
+  DefaultSchemaEnumNameOrOptions extends
+    | keyof DefaultSchema["Enums"]
+    | { schema: keyof DatabaseWithoutInternals },
+  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
+    : never = never,
+> = DefaultSchemaEnumNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"][EnumName]
+  : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema["Enums"]
+    ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
+    : never
+
+export type CompositeTypes<
+  PublicCompositeTypeNameOrOptions extends
+    | keyof DefaultSchema["CompositeTypes"]
+    | { schema: keyof DatabaseWithoutInternals },
+  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
+    : never = never,
+> = PublicCompositeTypeNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"][CompositeTypeName]
+  : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema["CompositeTypes"]
+    ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
+    : never
+
+export const Constants = {
+  public: {
+    Enums: {},
+  },
+} as const

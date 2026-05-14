@@ -40,9 +40,15 @@ export function useCreateProjectSubcontractCost() {
     mutationFn: async (input: CreateSubcontractCostInput) => {
       const supabase = createClient();
       const { data: userData } = await supabase.auth.getUser();
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("org_id")
+        .eq("id", userData.user!.id)
+        .single();
       const { data, error } = await supabase
         .from("project_subcontract_costs")
         .insert({
+          org_id: profile!.org_id,
           project_id: input.projectId,
           vendor_id: input.vendorId,
           vendor_name: input.vendorName,

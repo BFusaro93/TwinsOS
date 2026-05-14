@@ -48,16 +48,21 @@ export function useUpsertKpiActual() {
     }) => {
       const supabase = createClient();
       const { data: userData } = await supabase.auth.getUser();
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("org_id")
+        .eq("id", userData.user!.id)
+        .single();
 
       const { data, error } = await supabase
         .from("kpi_actuals")
         .upsert(
           {
+            org_id: profile!.org_id,
             period,
             metric_key: metricKey,
             ...(targetValue !== undefined && { target_value: targetValue }),
             ...(actualValue !== undefined && { actual_value: actualValue }),
-            updated_at: new Date().toISOString(),
             created_by: userData.user?.id,
           },
           { onConflict: "org_id,period,metric_key" }
