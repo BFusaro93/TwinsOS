@@ -59,6 +59,7 @@ import type { CostLayer } from "@/lib/cost-methods";
 type VendorRow = Database["public"]["Tables"]["vendors"]["Row"];
 type ProductItemRow = Database["public"]["Tables"]["product_items"]["Row"];
 type ProjectRow = Database["public"]["Tables"]["projects"]["Row"];
+type ProjectSubcontractCostRow = Database["public"]["Tables"]["project_subcontract_costs"]["Row"];
 type RequisitionRow = Database["public"]["Tables"]["requisitions"]["Row"];
 type ReqLineItemRow =
   Database["public"]["Tables"]["requisition_line_items"]["Row"];
@@ -137,6 +138,25 @@ export function mapProject(row: ProjectRow): Project {
     startDate: row.start_date ?? "",
     endDate: row.end_date,
     totalCost: row.total_cost,
+    notes: row.notes,
+  };
+}
+
+export function mapProjectSubcontractCost(row: ProjectSubcontractCostRow): import("@/types").ProjectSubcontractCost {
+  return {
+    id: row.id,
+    orgId: row.org_id,
+    createdBy: row.created_by ?? "",
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    deletedAt: row.deleted_at,
+    projectId: row.project_id,
+    vendorId: row.vendor_id,
+    vendorName: row.vendor_name,
+    description: row.description,
+    costType: row.cost_type as import("@/types").SubcontractCostType,
+    amount: row.amount,
+    costDate: row.cost_date,
     notes: row.notes,
   };
 }

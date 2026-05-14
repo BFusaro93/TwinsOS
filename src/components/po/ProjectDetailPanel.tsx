@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Pencil, Trash2, Plus, ExternalLink, Download } from "lucide-react";
+import { Pencil, Trash2, Plus, ExternalLink, Download, Building2 } from "lucide-react";
 import { printProject } from "@/lib/print";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { StatusBadge } from "@/components/shared/StatusBadge";
@@ -49,6 +49,13 @@ import { PROJECT_STATUS_LABELS } from "@/lib/constants";
 import { useRequisitions } from "@/lib/hooks/use-requisitions";
 import { usePurchaseOrders } from "@/lib/hooks/use-purchase-orders";
 import { useDeleteProject, useUpdateProject } from "@/lib/hooks/use-projects";
+import {
+  useProjectSubcontractCosts,
+  useCreateProjectSubcontractCost,
+  useUpdateProjectSubcontractCost,
+  useDeleteProjectSubcontractCost,
+} from "@/lib/hooks/use-project-subcontract-costs";
+import { useVendors } from "@/lib/hooks/use-vendors";
 import { usePOStore } from "@/stores";
 import type { PrefillItem } from "./NewRequisitionDialog";
 import type { POPrefillItem } from "./NewPODialog";
@@ -62,7 +69,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import type { Project, ProjectStatus, Requisition, PurchaseOrder } from "@/types";
+import type { Project, ProjectStatus, Requisition, PurchaseOrder, ProjectSubcontractCost, SubcontractCostType } from "@/types";
 
 interface ProjectDetailPanelProps {
   project: Project;
@@ -445,6 +452,303 @@ function MaterialsTab({ project }: { project: Project }) {
   );
 }
 
+const COST_TYPE_LABELS: Record<SubcontractCostType, string> = {
+  materials: "Materials",
+  labor: "Labor",
+  other: "Other",
+};
+
+const COST_TYPE_COLORS: Record<SubcontractCostType, string> = {
+  materials: "border-orange-200 bg-orange-50 text-orange-700",
+  labor: "border-blue-200 bg-blue-50 text-blue-700",
+  other: "border-slate-200 bg-slate-50 text-slate-600",
+};
+
+const BLANK_FORM = {
+  vendorId: "" as string,
+  vendorName: "",
+  description: "",
+  costType: "labor" as SubcontractCostType,
+  amount: "",
+  costDate: "",
+  notes: "",
+};
+
+function SubcontractsTab({ project }: { project: Project }) {
+  const { data: costs = [], isLoading } = useProjectSubcontractCosts(project.id);
+  const { data: vendors = [] } = useVendors();
+  const { mutate: createCost, isPending: creating } = useCreateProjectSubcontractCost();
+  const { mutate: updateCost, isPending: updating } = useUpdateProjectSubcontractCost();
+  const { mutate: deleteCost } = useDeleteProjectSubcontractCost();
+
+  const [addOpen, setAddOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [form, setForm] = useState(BLANK_FORM);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+
+  function openAdd() {
+    setForm(BLANK_FORM);
+    setEditingId(null);
+    setAddOpen(true);
+  }
+
+  function openEdit(cost: ProjectSubcontractCost) {
+    setForm({
+      vendorId: cost.vendorId ?? "",
+      vendorName: cost.vendorName,
+      description: cost.description,
+      costType: cost.costType,
+      amount: (cost.amount / 100).toFixed(2),
+      costDate: cost.costDate ?? "",
+      notes: cost.notes ?? "",
+    });
+    setEditingId(cost.id);
+    setAddOpen(true);
+  }
+
+  function handleVendorChange(vendorId: string) {
+    if (vendorId === "__manual__") {
+      setForm((f) => ({ ...f, vendorId: "", vendorName: "" }));
+      return;
+    }
+    const v = vendors.find((v) => v.id === vendorId);
+    setForm((f) => ({ ...f, vendorId, vendorName: v?.name ?? "" }));
+  }
+
+  function handleSave() {
+    const amount = Math.round(parseFloat(form.amount) * 100) || 0;
+    const payload = {
+      projectId: project.id,
+      vendorId: form.vendorId || null,
+      vendorName: form.vendorName.trim(),
+      description: form.description.trim(),
+      costType: form.costType,
+      amount,
+      costDate: form.costDate || null,
+      notes: form.notes.trim() || null,
+    };
+    if (editingId) {
+      updateCost({ id: editingId, ...payload }, { onSuccess: () => setAddOpen(false) });
+    } else {
+      createCost(payload, { onSuccess: () => setAddOpen(false) });
+    }
+  }
+
+  const isValid = form.vendorName.trim() && form.description.trim() && parseFloat(form.amount) > 0;
+
+  const materialTotal = costs.reduce((s, c) => c.costType === "materials" ? s + c.amount : s, 0);
+  const laborTotal = costs.reduce((s, c) => c.costType === "labor" ? s + c.amount : s, 0);
+  const otherTotal = costs.reduce((s, c) => c.costType === "other" ? s + c.amount : s, 0);
+  const grandTotal = costs.reduce((s, c) => s + c.amount, 0);
+
+  return (
+    <div className="flex flex-col gap-4 p-6">
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Subcontract Costs</p>
+        <Button size="sm" variant="outline" onClick={openAdd} className="h-7 gap-1 text-xs">
+          <Plus className="h-3 w-3" />
+          Add Cost
+        </Button>
+      </div>
+
+      {isLoading ? (
+        <p className="text-sm text-slate-400">Loading…</p>
+      ) : costs.length === 0 ? (
+        <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed border-slate-200 py-10 text-center">
+          <Building2 className="h-8 w-8 text-slate-300" />
+          <p className="text-sm text-slate-400">No subcontract costs yet.</p>
+          <Button size="sm" variant="outline" onClick={openAdd} className="mt-1 gap-1 text-xs">
+            <Plus className="h-3 w-3" /> Add First Cost
+          </Button>
+        </div>
+      ) : (
+        <>
+          <div className="overflow-hidden rounded-md border">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-slate-50 text-xs">
+                  <TableHead>Vendor</TableHead>
+                  <TableHead>Description</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead>Date</TableHead>
+                  <TableHead className="text-right">Amount</TableHead>
+                  <TableHead className="w-16" />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {costs.map((cost) => (
+                  <TableRow key={cost.id} className="group text-sm">
+                    <TableCell className="font-medium">{cost.vendorName}</TableCell>
+                    <TableCell className="text-slate-600">{cost.description}</TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className={`text-xs ${COST_TYPE_COLORS[cost.costType]}`}>
+                        {COST_TYPE_LABELS[cost.costType]}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-slate-500 text-xs">
+                      {cost.costDate ? formatDate(cost.costDate) : "—"}
+                    </TableCell>
+                    <TableCell className="text-right font-medium">{formatCurrency(cost.amount)}</TableCell>
+                    <TableCell className="px-2 text-right">
+                      <div className="flex items-center justify-end gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                        <button onClick={() => openEdit(cost)} className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600" title="Edit">
+                          <Pencil className="h-3.5 w-3.5" />
+                        </button>
+                        <button onClick={() => setDeleteConfirmId(cost.id)} className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-500" title="Delete">
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+
+          <div className="rounded-md bg-slate-50 p-3 text-sm">
+            {materialTotal > 0 && (
+              <div className="flex justify-between py-1 text-slate-600">
+                <span>Materials</span><span>{formatCurrency(materialTotal)}</span>
+              </div>
+            )}
+            {laborTotal > 0 && (
+              <div className="flex justify-between py-1 text-slate-600">
+                <span>Labor</span><span>{formatCurrency(laborTotal)}</span>
+              </div>
+            )}
+            {otherTotal > 0 && (
+              <div className="flex justify-between py-1 text-slate-600">
+                <span>Other</span><span>{formatCurrency(otherTotal)}</span>
+              </div>
+            )}
+            <div className="flex justify-between border-t pt-1 font-semibold text-slate-900">
+              <span>Subcontract Total</span><span>{formatCurrency(grandTotal)}</span>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Add / Edit dialog */}
+      <Dialog open={addOpen} onOpenChange={(o) => { if (!o) setAddOpen(false); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{editingId ? "Edit Subcontract Cost" : "Add Subcontract Cost"}</DialogTitle>
+            <DialogDescription>Record a cost from an outside vendor — materials they supplied or labor they performed.</DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-3">
+            {/* Vendor */}
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-slate-600">Vendor</label>
+              <select
+                className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                value={form.vendorId || "__manual__"}
+                onChange={(e) => handleVendorChange(e.target.value)}
+              >
+                <option value="__manual__">— Type vendor name —</option>
+                {vendors.map((v) => (
+                  <option key={v.id} value={v.id}>{v.name}</option>
+                ))}
+              </select>
+              {(!form.vendorId) && (
+                <Input
+                  placeholder="Vendor name"
+                  value={form.vendorName}
+                  onChange={(e) => setForm((f) => ({ ...f, vendorName: e.target.value }))}
+                />
+              )}
+            </div>
+
+            {/* Description */}
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-slate-600">Description</label>
+              <Input
+                placeholder="e.g. Irrigation install, Mulch delivery"
+                value={form.description}
+                onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+              />
+            </div>
+
+            {/* Cost type + Amount */}
+            <div className="flex gap-3">
+              <div className="flex flex-1 flex-col gap-1">
+                <label className="text-xs font-medium text-slate-600">Cost Type</label>
+                <select
+                  className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                  value={form.costType}
+                  onChange={(e) => setForm((f) => ({ ...f, costType: e.target.value as SubcontractCostType }))}
+                >
+                  <option value="materials">Materials</option>
+                  <option value="labor">Labor</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+              <div className="flex flex-1 flex-col gap-1">
+                <label className="text-xs font-medium text-slate-600">Amount ($)</label>
+                <Input
+                  type="number"
+                  min={0}
+                  step={0.01}
+                  placeholder="0.00"
+                  value={form.amount}
+                  onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))}
+                />
+              </div>
+            </div>
+
+            {/* Date */}
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-slate-600">Date (optional)</label>
+              <Input
+                type="date"
+                value={form.costDate}
+                onChange={(e) => setForm((f) => ({ ...f, costDate: e.target.value }))}
+              />
+            </div>
+
+            {/* Notes */}
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-slate-600">Notes (optional)</label>
+              <Input
+                placeholder="Invoice #, PO reference, etc."
+                value={form.notes}
+                onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
+              />
+            </div>
+
+            <Button onClick={handleSave} disabled={!isValid || creating || updating} className="mt-1">
+              {creating || updating ? "Saving…" : editingId ? "Save Changes" : "Add Cost"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete confirm */}
+      <AlertDialog open={!!deleteConfirmId} onOpenChange={(o) => { if (!o) setDeleteConfirmId(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Cost Entry</AlertDialogTitle>
+            <AlertDialogDescription>Are you sure you want to remove this subcontract cost? This cannot be undone.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 hover:bg-red-700"
+              onClick={() => {
+                if (deleteConfirmId) {
+                  deleteCost({ id: deleteConfirmId, projectId: project.id });
+                  setDeleteConfirmId(null);
+                }
+              }}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+}
+
 function DetailsTab({
   project,
   status,
@@ -558,8 +862,9 @@ export function ProjectDetailPanel({ project }: ProjectDetailPanelProps) {
   const { mutate: updateProject } = useUpdateProject();
   const { data: allRequisitions } = useRequisitions();
   const { data: allPurchaseOrders } = usePurchaseOrders();
+  const { data: subcontractCosts = [] } = useProjectSubcontractCosts(project.id);
 
-  // Compute project total cost dynamically from linked line items (mirrors MaterialsTab logic).
+  // Compute project total cost dynamically from linked line items + subcontract costs.
   // projects.total_cost in the DB is never written to, so we derive it here instead.
   const computedTotalCost = (() => {
     const taxRateBySourceId = new Map<string, number>();
@@ -587,7 +892,9 @@ export function ProjectDetailPanel({ project }: ProjectDetailPanelProps) {
       });
     });
 
-    return subtotal + tax;
+    const subcontractTotal = subcontractCosts.reduce((s, c) => s + c.amount, 0);
+
+    return subtotal + tax + subcontractTotal;
   })();
 
   function getPrintMaterials() {
@@ -660,6 +967,11 @@ export function ProjectDetailPanel({ project }: ProjectDetailPanelProps) {
             value: "materials",
             label: "Materials",
             content: <MaterialsTab project={project} />,
+          },
+          {
+            value: "subcontracts",
+            label: "Subcontracts",
+            content: <SubcontractsTab project={project} />,
           },
           {
             value: "history",

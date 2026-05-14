@@ -18,3 +18,16 @@ export interface Project extends BaseRecord {
   totalCost: number; // cents, derived
   notes: string | null;
 }
+
+export type SubcontractCostType = "materials" | "labor" | "other";
+
+export interface ProjectSubcontractCost extends BaseRecord {
+  projectId: string;
+  vendorId: string | null;
+  vendorName: string;
+  description: string;
+  costType: SubcontractCostType;
+  amount: number; // cents
+  costDate: string | null;
+  notes: string | null;
+}
