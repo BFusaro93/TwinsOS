@@ -273,13 +273,20 @@ async function parseAvbPdf(
     if (dm) return parseFloat(dm[1].replace(/,/g, ""));
     return nums.length >= 3 ? nums[2] : 0;
   }
-  /** Returns the crew code if this line is exactly a crew code, else null. */
+  /** Returns the crew code if this line contains a crew code, else null. */
   function matchCrewCode(line: string): string | null {
-    const clean = line.trim().toUpperCase().replace(/\s+/g, "");
-    if (codeSet.has(clean)) return clean;
-    // Fallback when no known codes were supplied
+    const trimmed = line.trim().toUpperCase();
+    // 1. Whole line (spaces stripped) matches a code — handles "MAINT 1" → "MAINT1"
+    const noSpaces = trimmed.replace(/\s+/g, "");
+    if (codeSet.has(noSpaces)) return noSpaces;
+    // 2. Any individual token matches — handles lines where Y-tolerance merged the
+    //    crew code with adjacent PDF elements (e.g. "MAINT1 18.50" → token "MAINT1")
+    for (const tok of trimmed.split(/\s+/)) {
+      if (codeSet.has(tok)) return tok;
+    }
+    // 3. Fallback regex when no known codes were supplied
     if (knownUpper.length === 0) {
-      const m = /^([A-Z]{2,10}\d*)$/.exec(clean);
+      const m = /^([A-Z]{2,10}\d*)$/.exec(noSpaces);
       return m ? m[1] : null;
     }
     return null;
