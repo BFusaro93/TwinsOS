@@ -829,6 +829,10 @@ function YtdTab({ actuals, budgets, ytdActuals }: { actuals: FinancialPeriodReco
   const budgetNoi = computeNOI(budgetYtd);
   const budgetEbitda = computeEbitda(budgetYtd);
 
+  const ytdGrossMarginPct = ytd.revenue > 0 ? (ytd.gross_profit / ytd.revenue) * 100 : 0;
+  const ytdNoiMarginPct = ytd.revenue > 0 ? (ytdNoi / ytd.revenue) * 100 : 0;
+  const ytdNetMarginPct = ytd.revenue > 0 ? (ytd.net_income / ytd.revenue) * 100 : 0;
+
   // Monthly progression chart
   const monthlyChart = ytdRecords.map((r) => ({
     month: monthLabel(r.periodMonth),
@@ -846,8 +850,8 @@ function YtdTab({ actuals, budgets, ytdActuals }: { actuals: FinancialPeriodReco
 
   return (
     <div className="space-y-6">
-      {/* Year selector */}
-      <div className="flex items-center gap-3">
+      {/* Year selector + margin pills */}
+      <div className="flex flex-wrap items-center gap-3">
         <Calendar className="h-4 w-4 text-slate-400" />
         <select
           value={year}
@@ -858,28 +862,43 @@ function YtdTab({ actuals, budgets, ytdActuals }: { actuals: FinancialPeriodReco
         </select>
         <span className="text-xs text-slate-400">{ytdRecords.length} month{ytdRecords.length !== 1 ? "s" : ""} on record</span>
         {usingQboYtd ? (
-          <span className="ml-2 rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-medium text-emerald-700">
+          <span className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-medium text-emerald-700">
             ✓ QBO YTD column · {monthLabelLong(ytdActualRecord!.periodMonth)}
           </span>
         ) : (
-          <span className="ml-2 rounded-full bg-amber-50 px-2.5 py-0.5 text-[11px] font-medium text-amber-700">
+          <span className="rounded-full bg-amber-50 px-2.5 py-0.5 text-[11px] font-medium text-amber-700">
             ⚠ Summing monthly actuals — enter a YTD Actual record for exact QBO figures
           </span>
         )}
+        <div className="flex flex-wrap gap-2 ml-auto">
+          {[
+            { label: "Gross Margin", val: ytdGrossMarginPct },
+            { label: "NOI Margin", val: ytdNoiMarginPct },
+            { label: "Net Margin", val: ytdNetMarginPct },
+          ].map(({ label, val }) => (
+            <div key={label} className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600">
+              {label}:{" "}
+              <span className={val >= 0 ? "font-bold text-emerald-600" : "font-bold text-red-500"}>
+                {val.toFixed(1)}%
+              </span>
+            </div>
+          ))}
+        </div>
       </div>
 
       {/* YTD KPI cards */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
         {[
-          { label: "Revenue YTD", val: ytd.revenue, bud: budgetYtd.revenue },
-          { label: "Gross Profit YTD", val: ytd.gross_profit, bud: budgetYtd.gross_profit },
-          { label: "NOI YTD", val: ytdNoi, bud: budgetNoi },
-          { label: "Adj. EBITDA YTD", val: ytdEbitda, bud: budgetEbitda },
-          { label: "Net Income YTD", val: ytd.net_income, bud: budgetYtd.net_income },
-        ].map(({ label, val, bud }) => (
+          { label: "Revenue YTD", val: ytd.revenue, bud: budgetYtd.revenue, sub: undefined },
+          { label: "Gross Profit YTD", val: ytd.gross_profit, bud: budgetYtd.gross_profit, sub: `${ytdGrossMarginPct.toFixed(1)}% margin` },
+          { label: "NOI YTD", val: ytdNoi, bud: budgetNoi, sub: `${ytdNoiMarginPct.toFixed(1)}% margin` },
+          { label: "Adj. EBITDA YTD", val: ytdEbitda, bud: budgetEbitda, sub: undefined },
+          { label: "Net Income YTD", val: ytd.net_income, bud: budgetYtd.net_income, sub: `${ytdNetMarginPct.toFixed(1)}% margin` },
+        ].map(({ label, val, bud, sub }) => (
           <KpiCard
             key={label}
             label={label}
+            sublabel={sub}
             value={val}
             budget={hasBudget ? bud : undefined}
             icon={<DollarSign className="h-5 w-5 text-slate-400" />}
