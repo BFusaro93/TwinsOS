@@ -7,6 +7,7 @@ export interface KpiActual {
   period: string;
   targetValue: number | null;
   actualValue: number | null;
+  updatedAt: string | null;
 }
 
 const QK = (period: string) => ["kpi-actuals", period];
@@ -18,7 +19,7 @@ export function useKpiActuals(period: string) {
       const supabase = createClient();
       const { data, error } = await supabase
         .from("kpi_actuals")
-        .select("id, metric_key, period, target_value, actual_value")
+        .select("id, metric_key, period, target_value, actual_value, updated_at")
         .eq("period", period);
       if (error) throw error;
       return (data ?? []).map((r) => ({
@@ -27,6 +28,7 @@ export function useKpiActuals(period: string) {
         period: r.period,
         targetValue: r.target_value !== null ? Number(r.target_value) : null,
         actualValue: r.actual_value !== null ? Number(r.actual_value) : null,
+        updatedAt: r.updated_at ?? null,
       })) as KpiActual[];
     },
   });
