@@ -1,7 +1,10 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { useKpiActuals, useUpsertKpiActual } from "@/lib/hooks/use-kpi-actuals";
+import { useAvbWeeks } from "@/lib/hooks/use-avb-weeks";
+import { useActualPeriods, useYtdActualPeriods, computeNOI, totalOpex, EMPTY_DATA, EMPTY_OPEX, type FinancialPeriodRecord, type FinancialPeriodData } from "@/lib/hooks/use-financial-periods";
+import { useSafetyWeeks } from "@/lib/hooks/use-safety-weeks";
 
 // ── KPI definitions ───────────────────────────────────────────────────────────
 
@@ -41,9 +44,10 @@ const KPI_CATEGORIES: CategoryDef[] = [
     key: "operations",
     label: "Operations",
     metrics: [
-      { key: "labor_efficiency",  label: "Labor Efficiency (YTD)",     unit: "percent", defaultTarget: 100, weight: 40 },
-      { key: "avb_variance",     label: "AvB Variance (Est vs Actual)", unit: "percent", defaultTarget: 100, weight: 35 },
-      { key: "ot_pct_hours",     label: "OT % of Total Hours",         unit: "percent", defaultTarget: 10,  weight: 25, lowerIsBetter: true },
+      { key: "labor_efficiency",       label: "Labor Efficiency (YTD)",      unit: "number",  defaultTarget: 100, weight: 35 },
+      { key: "avb_variance",           label: "AvB Variance (Est vs Actual)", unit: "number",  defaultTarget: null, weight: 30 },
+      { key: "ot_pct_hours",           label: "OT % of Total Hours",          unit: "percent", defaultTarget: 10,  weight: 20, lowerIsBetter: true },
+      { key: "fleet_avg_safety_score", label: "Fleet Avg Safety Score (YTD)", unit: "number",  defaultTarget: 90,  weight: 15 },
     ],
   },
   {
@@ -196,10 +200,12 @@ function CategoryCard({
   category,
   actualsMap,
   period,
+  derivedKeys,
 }: {
   category: CategoryDef;
   actualsMap: Map<string, { targetValue: number | null; actualValue: number | null }>;
   period: string;
+  derivedKeys?: Set<string>;
 }) {
   const { mutate: upsert } = useUpsertKpiActual();
   const score = calcCategoryScore(category.metrics, actualsMap);
@@ -258,13 +264,22 @@ function CategoryCard({
 
                   {/* Actual */}
                   <td className="border-l border-slate-100 px-4 py-3">
-                    <EditableCell
-                      value={actual}
-                      unit={metric.unit}
-                      onSave={(v) =>
-                        upsert({ period, metricKey: metric.key, actualValue: v })
-                      }
-                    />
+                    {derivedKeys?.has(metric.key) ? (
+                      <div className="flex items-center justify-end gap-1.5">
+                        <span className={`text-sm font-medium ${actual !== null ? "text-slate-800" : "text-slate-400"}`}>
+                          {actual !== null ? formatValue(actual, metric.unit) : "—"}
+                        </span>
+                        <span className="rounded-full bg-blue-50 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-blue-500">auto</span>
+                      </div>
+                    ) : (
+                      <EditableCell
+                        value={actual}
+                        unit={metric.unit}
+                        onSave={(v) =>
+                          upsert({ period, metricKey: metric.key, actualValue: v })
+                        }
+                      />
+                    )}
                   </td>
 
                   {/* Progress */}
@@ -294,6 +309,10 @@ export function KpiDashboard() {
   const [period, setPeriod] = useState(String(currentYear));
 
   const { data: actuals = [] } = useKpiActuals(period);
+  const { data: avbWeeks = [] } = useAvbWeeks();
+  const { data: financialActuals = [] } = useActualPeriods();
+  const { data: financialYtdActuals = [] } = useYtdActualPeriods();
+  const { data: safetyWeeks = [] } = useSafetyWeeks();
 
   // Build a lookup map: metricKey → { targetValue, actualValue }
   const actualsMap = useCallback(() => {
@@ -303,6 +322,105 @@ export function KpiDashboard() {
     }
     return map;
   }, [actuals])();
+
+  // Auto-derive all metrics from their source data for the selected year
+  const derivedActuals = useMemo(() => {
+    // ── AvB Operations metrics ────────────────────────────────────────────────
+    const avbInYear = avbWeeks.filter((w) => w.weekEnd.startsWith(period));
+    let totalBudgeted = 0, totalActual = 0, totalGustoHrs = 0, totalOtHrs = 0;
+    for (const week of avbInYear) {
+      for (const day of Object.values(week.data.days)) {
+        for (const avb of Object.values(day.avb)) {
+          totalBudgeted += avb.budgeted ?? 0;
+          totalActual += avb.actual ?? 0;
+        }
+      }
+      for (const emp of Object.values(week.data.gusto.employees ?? {})) {
+        totalGustoHrs += emp.total ?? 0;
+        totalOtHrs += emp.ot ?? 0;
+      }
+    }
+
+    // ── Fleet safety score (average of weekly fleet averages for the year) ───
+    const safetyInYear = safetyWeeks.filter((w) => w.weekEnd.startsWith(period));
+    const weeklyAvgs = safetyInYear
+      .map((w) => w.data.drivers)
+      .filter((d) => d.length > 0)
+      .map((d) => d.reduce((s, dr) => s + dr.score, 0) / d.length);
+    const fleetAvgSafety = weeklyAvgs.length > 0
+      ? parseFloat((weeklyAvgs.reduce((s, a) => s + a, 0) / weeklyAvgs.length).toFixed(1))
+      : null;
+
+    // ── Financial YTD metrics (prefer ytd_actual record, fallback sum monthlies) ─
+    const ytdRecord = [...financialYtdActuals]
+      .filter((r) => r.periodMonth.startsWith(period))
+      .sort((a, b) => b.periodMonth.localeCompare(a.periodMonth))[0];
+
+    let ytd: FinancialPeriodData;
+    if (ytdRecord) {
+      ytd = ytdRecord.data;
+    } else {
+      const monthlyInYear = financialActuals.filter((r) => r.periodMonth.startsWith(period));
+      if (monthlyInYear.length === 0) {
+        ytd = { ...EMPTY_DATA, operating_expenses: { ...EMPTY_OPEX } };
+      } else {
+        ytd = monthlyInYear.reduce<FinancialPeriodData>(
+          (acc, r) => ({
+            ...acc,
+            revenue: acc.revenue + r.data.revenue,
+            cogs: acc.cogs + r.data.cogs,
+            gross_profit: acc.gross_profit + r.data.gross_profit,
+            operating_expenses: {
+              payroll: acc.operating_expenses.payroll + (r.data.operating_expenses?.payroll ?? 0),
+              equipment: acc.operating_expenses.equipment + (r.data.operating_expenses?.equipment ?? 0),
+              fuel: acc.operating_expenses.fuel + (r.data.operating_expenses?.fuel ?? 0),
+              insurance: acc.operating_expenses.insurance + (r.data.operating_expenses?.insurance ?? 0),
+              marketing: acc.operating_expenses.marketing + (r.data.operating_expenses?.marketing ?? 0),
+              rent: acc.operating_expenses.rent + (r.data.operating_expenses?.rent ?? 0),
+              utilities: acc.operating_expenses.utilities + (r.data.operating_expenses?.utilities ?? 0),
+              other: acc.operating_expenses.other + (r.data.operating_expenses?.other ?? 0),
+            },
+            net_operating_income: acc.net_operating_income + (computeNOI(r.data)),
+            net_income: acc.net_income + r.data.net_income,
+          }),
+          { ...EMPTY_DATA, operating_expenses: { ...EMPTY_OPEX } }
+        );
+      }
+    }
+
+    const rev = ytd.revenue;
+    const opex = totalOpex(ytd.operating_expenses);
+    const noi = computeNOI(ytd);
+
+    return {
+      // Operations (AvB)
+      labor_efficiency: totalBudgeted > 0 && totalActual > 0
+        ? parseFloat((totalBudgeted / totalActual * 100).toFixed(1)) : null,
+      avb_variance: totalBudgeted > 0
+        ? parseFloat((totalBudgeted - totalActual).toFixed(1)) : null,
+      ot_pct_hours: totalGustoHrs > 0
+        ? parseFloat((totalOtHrs / totalGustoHrs * 100).toFixed(1)) : null,
+      // Operations (Safety)
+      fleet_avg_safety_score: fleetAvgSafety,
+      // Financial (from QBO YTD)
+      gross_margin_ytd: rev > 0 ? parseFloat((ytd.gross_profit / rev * 100).toFixed(1)) : null,
+      noi_margin_ytd: rev > 0 ? parseFloat((noi / rev * 100).toFixed(1)) : null,
+      net_margin_ytd: rev > 0 ? parseFloat((ytd.net_income / rev * 100).toFixed(1)) : null,
+      overhead_ratio: rev > 0 ? parseFloat((opex / rev * 100).toFixed(1)) : null,
+      revenue_invoiced: rev > 0 ? Math.round(rev / 100) : null, // cents → dollars
+    };
+  }, [avbWeeks, safetyWeeks, financialActuals, financialYtdActuals, period]);
+
+  const DERIVED_KEYS = new Set([
+    "labor_efficiency", "avb_variance", "ot_pct_hours", "fleet_avg_safety_score",
+    "gross_margin_ytd", "noi_margin_ytd", "net_margin_ytd", "overhead_ratio", "revenue_invoiced",
+  ]);
+
+  // Overlay derived values — derived always wins for actual; target stays user-editable
+  for (const [key, val] of Object.entries(derivedActuals)) {
+    const existing = actualsMap.get(key);
+    actualsMap.set(key, { targetValue: existing?.targetValue ?? null, actualValue: val });
+  }
 
   const lastUpdated = actuals.reduce<string | null>((latest, a) => {
     if (!a.updatedAt) return latest;
@@ -360,6 +478,7 @@ export function KpiDashboard() {
           category={cat}
           actualsMap={actualsMap}
           period={period}
+          derivedKeys={DERIVED_KEYS}
         />
       ))}
 
