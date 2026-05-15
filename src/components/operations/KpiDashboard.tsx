@@ -27,25 +27,23 @@ const KPI_CATEGORIES: CategoryDef[] = [
     key: "financial",
     label: "Financial",
     metrics: [
-      { key: "revenue_sold",         label: "Revenue (Sold)",          unit: "currency", defaultTarget: 3200000, weight: 20 },
-      { key: "revenue_invoiced",     label: "Revenue (Invoiced)",      unit: "currency", defaultTarget: 3200000, weight: 20 },
-      { key: "gross_profit_margin",  label: "Gross Profit Margin",     unit: "percent",  defaultTarget: 50,      weight: 15 },
-      { key: "gross_margin_ytd",     label: "Gross Margin YTD",        unit: "percent",  defaultTarget: 50,      weight: 10 },
-      { key: "net_profit_margin",    label: "Net Profit Margin",       unit: "percent",  defaultTarget: 15,      weight: 10 },
-      { key: "noi_margin_ytd",       label: "NOI Margin YTD",          unit: "percent",  defaultTarget: 20,      weight: 5  },
-      { key: "net_margin_ytd",       label: "Net Margin YTD",          unit: "percent",  defaultTarget: 15,      weight: 5  },
-      { key: "overhead_ratio",       label: "Overhead Ratio",          unit: "percent",  defaultTarget: 25,      weight: 5, lowerIsBetter: true },
-      { key: "ar_days",              label: "AR Days",                 unit: "number",   defaultTarget: 30,      weight: 5, lowerIsBetter: true },
-      { key: "ap_days",              label: "AP Days",                 unit: "number",   defaultTarget: 30,      weight: 5, lowerIsBetter: true },
+      { key: "revenue_sold",     label: "Revenue (Sold)",     unit: "currency", defaultTarget: 3200000, weight: 25 },
+      { key: "revenue_invoiced", label: "Revenue (Invoiced)", unit: "currency", defaultTarget: 3200000, weight: 20 },
+      { key: "gross_margin_ytd", label: "Gross Margin YTD",  unit: "percent",  defaultTarget: 50,      weight: 20 },
+      { key: "noi_margin_ytd",   label: "NOI Margin YTD",    unit: "percent",  defaultTarget: 20,      weight: 10 },
+      { key: "net_margin_ytd",   label: "Net Margin YTD",    unit: "percent",  defaultTarget: 15,      weight: 10 },
+      { key: "overhead_ratio",   label: "Overhead Ratio",    unit: "percent",  defaultTarget: 25,      weight: 5, lowerIsBetter: true },
+      { key: "ar_days",          label: "AR Days",           unit: "number",   defaultTarget: 30,      weight: 5, lowerIsBetter: true },
+      { key: "ap_days",          label: "AP Days",           unit: "number",   defaultTarget: 30,      weight: 5, lowerIsBetter: true },
     ],
   },
   {
     key: "operations",
     label: "Operations",
     metrics: [
-      { key: "job_cost_variance",     label: "Job Cost Variance",           unit: "percent",  defaultTarget: 100, weight: 35 },
-      { key: "crew_efficiency_score", label: "Crew Efficiency Score (Avg)", unit: "percent",  defaultTarget: 80,  weight: 35 },
-      { key: "est_vs_actual_hrs",     label: "Est. Hrs. vs. Actual Hrs.",   unit: "percent",  defaultTarget: 100, weight: 30 },
+      { key: "labor_efficiency",  label: "Labor Efficiency (YTD)",     unit: "percent", defaultTarget: 100, weight: 40 },
+      { key: "avb_variance",     label: "AvB Variance (Est vs Actual)", unit: "percent", defaultTarget: 100, weight: 35 },
+      { key: "ot_pct_hours",     label: "OT % of Total Hours",         unit: "percent", defaultTarget: 10,  weight: 25, lowerIsBetter: true },
     ],
   },
   {
@@ -306,6 +304,12 @@ export function KpiDashboard() {
     return map;
   }, [actuals])();
 
+  const lastUpdated = actuals.reduce<string | null>((latest, a) => {
+    if (!a.updatedAt) return latest;
+    if (!latest || a.updatedAt > latest) return a.updatedAt;
+    return latest;
+  }, null);
+
   // Overall score across all categories (simple average of category scores)
   const overallScore = Math.round(
     KPI_CATEGORIES.reduce((sum, cat) => sum + calcCategoryScore(cat.metrics, actualsMap), 0) /
@@ -321,7 +325,14 @@ export function KpiDashboard() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">KPI Scorecard</h1>
-          <p className="text-sm text-slate-500">Track progress toward your annual goals</p>
+          <p className="text-sm text-slate-500">
+            Track progress toward your annual goals
+            {lastUpdated && (
+              <span className="ml-2 text-slate-400">
+                · Last updated {new Date(lastUpdated).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+              </span>
+            )}
+          </p>
         </div>
         <div className="flex items-center gap-3">
           {/* Period selector */}
