@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { useKpiActuals, useUpsertKpiActual } from "@/lib/hooks/use-kpi-actuals";
+import { useAvbWeeks } from "@/lib/hooks/use-avb-weeks";
 
 // ── KPI definitions ───────────────────────────────────────────────────────────
 
@@ -41,9 +42,9 @@ const KPI_CATEGORIES: CategoryDef[] = [
     key: "operations",
     label: "Operations",
     metrics: [
-      { key: "labor_efficiency",  label: "Labor Efficiency (YTD)",     unit: "percent", defaultTarget: 100, weight: 40 },
-      { key: "avb_variance",     label: "AvB Variance (Est vs Actual)", unit: "percent", defaultTarget: 100, weight: 35 },
-      { key: "ot_pct_hours",     label: "OT % of Total Hours",         unit: "percent", defaultTarget: 10,  weight: 25, lowerIsBetter: true },
+      { key: "labor_efficiency", label: "Labor Efficiency (YTD)",      unit: "number",  defaultTarget: 100, weight: 40 },
+      { key: "avb_variance",    label: "AvB Variance (Est vs Actual)", unit: "number",  defaultTarget: null, weight: 35 },
+      { key: "ot_pct_hours",    label: "OT % of Total Hours",          unit: "percent", defaultTarget: 10,  weight: 25, lowerIsBetter: true },
     ],
   },
   {
@@ -196,10 +197,12 @@ function CategoryCard({
   category,
   actualsMap,
   period,
+  derivedKeys,
 }: {
   category: CategoryDef;
   actualsMap: Map<string, { targetValue: number | null; actualValue: number | null }>;
   period: string;
+  derivedKeys?: Set<string>;
 }) {
   const { mutate: upsert } = useUpsertKpiActual();
   const score = calcCategoryScore(category.metrics, actualsMap);
@@ -258,13 +261,22 @@ function CategoryCard({
 
                   {/* Actual */}
                   <td className="border-l border-slate-100 px-4 py-3">
-                    <EditableCell
-                      value={actual}
-                      unit={metric.unit}
-                      onSave={(v) =>
-                        upsert({ period, metricKey: metric.key, actualValue: v })
-                      }
-                    />
+                    {derivedKeys?.has(metric.key) ? (
+                      <div className="flex items-center justify-end gap-1.5">
+                        <span className={`text-sm font-medium ${actual !== null ? "text-slate-800" : "text-slate-400"}`}>
+                          {actual !== null ? formatValue(actual, metric.unit) : "—"}
+                        </span>
+                        <span className="rounded-full bg-blue-50 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-blue-500">auto</span>
+                      </div>
+                    ) : (
+                      <EditableCell
+                        value={actual}
+                        unit={metric.unit}
+                        onSave={(v) =>
+                          upsert({ period, metricKey: metric.key, actualValue: v })
+                        }
+                      />
+                    )}
                   </td>
 
                   {/* Progress */}
@@ -294,6 +306,7 @@ export function KpiDashboard() {
   const [period, setPeriod] = useState(String(currentYear));
 
   const { data: actuals = [] } = useKpiActuals(period);
+  const { data: avbWeeks = [] } = useAvbWeeks();
 
   // Build a lookup map: metricKey → { targetValue, actualValue }
   const actualsMap = useCallback(() => {
@@ -303,6 +316,45 @@ export function KpiDashboard() {
     }
     return map;
   }, [actuals])();
+
+  // Auto-derive Operations metrics from avb_weeks for the selected year
+  const derivedActuals = useMemo(() => {
+    const weeksInYear = avbWeeks.filter((w) => w.weekEnd.startsWith(period));
+    let totalBudgeted = 0, totalActual = 0, totalGustoHrs = 0, totalOtHrs = 0;
+
+    for (const week of weeksInYear) {
+      for (const day of Object.values(week.data.days)) {
+        for (const avb of Object.values(day.avb)) {
+          totalBudgeted += avb.budgeted ?? 0;
+          totalActual += avb.actual ?? 0;
+        }
+      }
+      for (const emp of Object.values(week.data.gusto.employees ?? {})) {
+        totalGustoHrs += emp.total ?? 0;
+        totalOtHrs += emp.ot ?? 0;
+      }
+    }
+
+    return {
+      labor_efficiency: totalBudgeted > 0 && totalActual > 0
+        ? parseFloat((totalBudgeted / totalActual * 100).toFixed(1))
+        : null,
+      avb_variance: totalBudgeted > 0
+        ? parseFloat((totalBudgeted - totalActual).toFixed(1))
+        : null,
+      ot_pct_hours: totalGustoHrs > 0
+        ? parseFloat((totalOtHrs / totalGustoHrs * 100).toFixed(1))
+        : null,
+    };
+  }, [avbWeeks, period]);
+
+  const DERIVED_KEYS = new Set(["labor_efficiency", "avb_variance", "ot_pct_hours"]);
+
+  // Overlay derived values — derived always wins for actual; target stays user-editable
+  for (const [key, val] of Object.entries(derivedActuals)) {
+    const existing = actualsMap.get(key);
+    actualsMap.set(key, { targetValue: existing?.targetValue ?? null, actualValue: val });
+  }
 
   const lastUpdated = actuals.reduce<string | null>((latest, a) => {
     if (!a.updatedAt) return latest;
@@ -360,6 +412,7 @@ export function KpiDashboard() {
           category={cat}
           actualsMap={actualsMap}
           period={period}
+          derivedKeys={DERIVED_KEYS}
         />
       ))}
 
