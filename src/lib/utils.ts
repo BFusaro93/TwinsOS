@@ -12,7 +12,9 @@ export function formatCurrency(cents: number): string {
   }).format(cents / 100);
 }
 
-export function formatDate(isoString: string): string {
+export function formatDate(isoString: string | null | undefined): string {
+  // Gracefully handle empty, null, or undefined values.
+  if (!isoString) return "—";
   // Date-only strings (YYYY-MM-DD) must be parsed as local time.
   // new Date("2025-04-15") treats it as UTC midnight, which shifts the display
   // date by one day in negative-offset timezones. Appending T00:00:00 forces
@@ -20,15 +22,19 @@ export function formatDate(isoString: string): string {
   const normalized = /^\d{4}-\d{2}-\d{2}$/.test(isoString)
     ? `${isoString}T00:00:00`
     : isoString;
+  const d = new Date(normalized);
+  if (isNaN(d.getTime())) return "—";
   return new Intl.DateTimeFormat("en-US", {
     month: "short",
     day: "numeric",
     year: "numeric",
-  }).format(new Date(normalized));
+  }).format(d);
 }
 
-export function formatDateTime(isoString: string): string {
+export function formatDateTime(isoString: string | null | undefined): string {
+  if (!isoString) return "—";
   const d = new Date(isoString);
+  if (isNaN(d.getTime())) return "—";
   const datePart = new Intl.DateTimeFormat("en-US", {
     month: "short",
     day: "numeric",
@@ -42,12 +48,15 @@ export function formatDateTime(isoString: string): string {
   return `${datePart} at ${timePart}`;
 }
 
-export function formatDateShort(isoString: string): string {
+export function formatDateShort(isoString: string | null | undefined): string {
+  if (!isoString) return "—";
+  const d = new Date(isoString);
+  if (isNaN(d.getTime())) return "—";
   return new Intl.DateTimeFormat("en-US", {
     month: "numeric",
     day: "numeric",
     year: "2-digit",
-  }).format(new Date(isoString));
+  }).format(d);
 }
 
 export function getInitials(name: string): string {

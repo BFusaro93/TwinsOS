@@ -37,6 +37,7 @@ export function NewProjectDialog({ open, onOpenChange, initialData }: NewProject
   const [status, setStatus] = useState("sold");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
+  const [contractPrice, setContractPrice] = useState("");
   const [notes, setNotes] = useState("");
   const createProject = useCreateProject();
   const updateProject = useUpdateProject();
@@ -49,6 +50,7 @@ export function NewProjectDialog({ open, onOpenChange, initialData }: NewProject
       setStatus(initialData.status);
       setStartDate(initialData.startDate ?? "");
       setEndDate(initialData.endDate ?? "");
+      setContractPrice(initialData.contractPrice > 0 ? (initialData.contractPrice / 100).toFixed(2) : "");
       setNotes(initialData.notes ?? "");
     }
   }, [open, initialData]);
@@ -63,12 +65,14 @@ export function NewProjectDialog({ open, onOpenChange, initialData }: NewProject
     setStatus("sold");
     setStartDate("");
     setEndDate("");
+    setContractPrice("");
     setNotes("");
   }
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!isValid) return;
+    const contractPriceCents = Math.round((parseFloat(contractPrice) || 0) * 100);
     const payload = {
       name,
       customerName,
@@ -76,6 +80,7 @@ export function NewProjectDialog({ open, onOpenChange, initialData }: NewProject
       status: status as import("@/types/project").ProjectStatus,
       startDate: startDate,
       endDate: endDate || null,
+      contractPrice: contractPriceCents,
       notes: notes || null,
     };
     if (isEditing && initialData) {
@@ -172,6 +177,20 @@ export function NewProjectDialog({ open, onOpenChange, initialData }: NewProject
                 type="date"
                 value={endDate}
                 onChange={(e) => setEndDate(e.target.value)}
+              />
+            </div>
+
+            {/* Contract Price — half width */}
+            <div className="grid gap-1.5">
+              <Label htmlFor="project-contract-price">Contract Price ($)</Label>
+              <Input
+                id="project-contract-price"
+                type="number"
+                min="0"
+                step="0.01"
+                value={contractPrice}
+                onChange={(e) => setContractPrice(e.target.value)}
+                placeholder="0.00"
               />
             </div>
 

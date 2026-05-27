@@ -2129,9 +2129,55 @@ export type Database = {
           },
         ]
       }
+      project_direct_items: {
+        Row: {
+          id: string
+          org_id: string
+          project_id: string
+          product_item_id: string | null
+          product_item_name: string
+          part_number: string
+          quantity: number
+          unit_cost: number
+          created_at: string
+          updated_at: string
+          deleted_at: string | null
+          created_by: string | null
+        }
+        Insert: {
+          id?: string
+          org_id: string
+          project_id: string
+          product_item_id?: string | null
+          product_item_name?: string
+          part_number?: string
+          quantity?: number
+          unit_cost?: number
+          created_at?: string
+          updated_at?: string
+          deleted_at?: string | null
+          created_by?: string | null
+        }
+        Update: {
+          id?: string
+          org_id?: string
+          project_id?: string
+          product_item_id?: string | null
+          product_item_name?: string
+          part_number?: string
+          quantity?: number
+          unit_cost?: number
+          created_at?: string
+          updated_at?: string
+          deleted_at?: string | null
+          created_by?: string | null
+        }
+        Relationships: []
+      }
       projects: {
         Row: {
           address: string
+          contract_price: number
           created_at: string
           created_by: string | null
           customer_name: string
@@ -2148,6 +2194,7 @@ export type Database = {
         }
         Insert: {
           address?: string
+          contract_price?: number
           created_at?: string
           created_by?: string | null
           customer_name?: string
@@ -2164,6 +2211,7 @@ export type Database = {
         }
         Update: {
           address?: string
+          contract_price?: number
           created_at?: string
           created_by?: string | null
           customer_name?: string

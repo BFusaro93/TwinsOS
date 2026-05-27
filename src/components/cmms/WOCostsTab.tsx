@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Plus, Search, Wrench, Store, Package, Pencil, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 import { formatCurrency } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -148,6 +149,11 @@ function PartsSection({ workOrderId }: { workOrderId: string }) {
           setAddOpen(false);
           setSearch("");
           setQtyMap({});
+        },
+        onError: (err) => {
+          toast.error("Failed to add part", {
+            description: err instanceof Error ? err.message : "Please try again.",
+          });
         },
       }
     );

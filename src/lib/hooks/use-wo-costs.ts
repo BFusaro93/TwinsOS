@@ -87,6 +87,36 @@ export function useAddWOPart() {
       unitCost: number;
     }): Promise<WOPart> => {
       const supabase = createClient();
+
+      // If this part was previously soft-deleted on this WO, restore it instead
+      // of inserting a new row (avoids unique constraint collision on work_order_id+part_id).
+      if (input.partId) {
+        const { data: existing } = await supabase
+          .from("wo_parts")
+          .select("id")
+          .eq("work_order_id", input.workOrderId)
+          .eq("part_id", input.partId)
+          .not("deleted_at", "is", null)
+          .maybeSingle();
+
+        if (existing) {
+          const { data: restored, error: restoreErr } = await supabase
+            .from("wo_parts")
+            .update({
+              deleted_at: null,
+              quantity: input.quantity,
+              unit_cost: input.unitCost,
+              part_name: input.partName,
+              part_number: input.partNumber,
+            })
+            .eq("id", existing.id)
+            .select()
+            .single();
+          if (restoreErr) throw restoreErr;
+          return mapWOPart(restored);
+        }
+      }
+
       const { data, error } = await supabase
         .from("wo_parts")
         .insert({

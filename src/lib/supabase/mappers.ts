@@ -138,6 +138,7 @@ export function mapProject(row: ProjectRow): Project {
     startDate: row.start_date ?? "",
     endDate: row.end_date,
     totalCost: row.total_cost,
+    contractPrice: row.contract_price ?? 0,
     notes: row.notes,
   };
 }

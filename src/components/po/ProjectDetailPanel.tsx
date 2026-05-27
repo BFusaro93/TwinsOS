@@ -50,6 +50,12 @@ import { useRequisitions } from "@/lib/hooks/use-requisitions";
 import { usePurchaseOrders } from "@/lib/hooks/use-purchase-orders";
 import { useDeleteProject, useUpdateProject } from "@/lib/hooks/use-projects";
 import {
+  useProjectDirectItems,
+  useAddProjectDirectItem,
+  useUpdateProjectDirectItem,
+  useDeleteProjectDirectItem,
+} from "@/lib/hooks/use-project-direct-items";
+import {
   useProjectSubcontractCosts,
   useCreateProjectSubcontractCost,
   useUpdateProjectSubcontractCost,
@@ -122,6 +128,11 @@ function MaterialsTab({ project }: { project: Project }) {
   const { data: requisitions } = useRequisitions();
   const { data: purchaseOrders } = usePurchaseOrders();
   const { data: products = [] } = useProducts();
+  const { data: directItems = [] } = useProjectDirectItems(project.id);
+  const { mutate: addDirectItem } = useAddProjectDirectItem();
+  const { mutate: updateDirectItem } = useUpdateProjectDirectItem();
+  const { mutate: deleteDirectItem } = useDeleteProjectDirectItem();
+
   // Build the initial list from linked REQ / PO line items.
   // Skip requisitions that have been converted to a PO (status "ordered"
   // with a convertedPoId) to avoid showing duplicate materials.
@@ -131,13 +142,14 @@ function MaterialsTab({ project }: { project: Project }) {
   const resolveName = (productItemId: string | null, fallback: string) =>
     (productItemId && productNameById.get(productItemId)) || fallback;
 
-  const persisted: ProjectLineItem[] = [];
+  // REQ + PO line items (from linked documents)
+  const linkedItems: ProjectLineItem[] = [];
   (requisitions ?? []).forEach((req) => {
     if (req.convertedPoId && req.status === "ordered") return;
     req.lineItems
       .filter((li) => li.projectId === project.id)
       .forEach((li) => {
-        persisted.push({
+        linkedItems.push({
           id: li.id,
           sourceId: req.id,
           sourceNumber: req.requisitionNumber,
@@ -148,7 +160,7 @@ function MaterialsTab({ project }: { project: Project }) {
           quantity: li.quantity,
           unitCost: li.unitCost,
           totalCost: li.totalCost,
-          taxable: true, // REQ line items are always taxable
+          taxable: true,
         });
       });
   });
@@ -156,7 +168,7 @@ function MaterialsTab({ project }: { project: Project }) {
     po.lineItems
       .filter((li) => li.projectId === project.id)
       .forEach((li) => {
-        persisted.push({
+        linkedItems.push({
           id: li.id,
           sourceId: po.id,
           sourceNumber: po.poNumber,
@@ -167,14 +179,27 @@ function MaterialsTab({ project }: { project: Project }) {
           quantity: li.quantity,
           unitCost: li.unitCost,
           totalCost: li.totalCost,
-          taxable: li.taxable !== false, // respect per-line taxable flag
+          taxable: li.taxable !== false,
         });
       });
   });
 
-  // Lift to state so edits / deletes are reflected live
-  const [items, setItems] = useState<ProjectLineItem[]>([]);
-  useEffect(() => { setItems(persisted); }, [requisitions, purchaseOrders, project.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Direct items come from DB — merge after linked items
+  const directProjectItems: ProjectLineItem[] = directItems.map((di) => ({
+    id: di.id,
+    sourceId: di.id,
+    sourceNumber: "Direct",
+    sourceType: "direct" as const,
+    productItemId: di.productItemId ?? "",
+    productItemName: resolveName(di.productItemId, di.productItemName),
+    partNumber: di.partNumber,
+    quantity: di.quantity,
+    unitCost: di.unitCost,
+    totalCost: di.quantity * di.unitCost,
+    taxable: false, // direct items are not taxed (no vendor tax rate)
+  }));
+
+  const items: ProjectLineItem[] = [...linkedItems, ...directProjectItems];
 
   // Edit dialog
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -188,21 +213,21 @@ function MaterialsTab({ project }: { project: Project }) {
   }
 
   function saveEdit() {
-    if (!editingId) return;
+    if (!editingId || !editingItem) return;
     const quantity = Math.max(0.01, parseFloat(editForm.quantity) || 0.01);
-    const unitCost = Math.round(parseFloat(editForm.unitCost) * 100) || 0;
-    setItems((prev) =>
-      prev.map((li) =>
-        li.id === editingId
-          ? { ...li, quantity, unitCost: unitCost || li.unitCost, totalCost: quantity * (unitCost || li.unitCost) }
-          : li
-      )
-    );
+    const unitCost = Math.round(parseFloat(editForm.unitCost) * 100) || editingItem.unitCost;
+    if (editingItem.sourceType === "direct") {
+      updateDirectItem({ id: editingId, projectId: project.id, quantity, unitCost });
+    }
+    // REQ / PO line items: local-only preview (full edit happens via the source document)
     setEditingId(null);
   }
 
-  function deleteItem(id: string) {
-    setItems((prev) => prev.filter((li) => li.id !== id));
+  function deleteItem(li: ProjectLineItem) {
+    if (li.sourceType === "direct") {
+      deleteDirectItem({ id: li.id, projectId: project.id });
+    }
+    // REQ / PO line items: removing from project scope must be done via the source document
   }
 
   // Source / Product overlay state
@@ -246,11 +271,21 @@ function MaterialsTab({ project }: { project: Project }) {
       }));
 
     if (destination.type === "direct") {
-      setItems((prev) => [...prev, ...toProjectItems(draftItems, "Direct", "direct")]);
+      // Persist to DB so items survive refresh
+      draftItems.forEach((i) => {
+        addDirectItem({
+          projectId: project.id,
+          productItemId: i.productKey || null,
+          productItemName: i.productName,
+          partNumber: i.partNumber,
+          quantity: i.quantity,
+          unitCost: Math.round(i.unitCost * 100),
+        });
+      });
     } else if (destination.type === "existing_req") {
-      setItems((prev) => [...prev, ...toProjectItems(draftItems, destination.reqNumber, "requisition")]);
+      // Items added to existing REQ will appear via TanStack Query cache invalidation
     } else if (destination.type === "existing_po") {
-      setItems((prev) => [...prev, ...toProjectItems(draftItems, destination.poNumber, "po")]);
+      // Items added to existing PO will appear via TanStack Query cache invalidation
     } else if (destination.type === "new_req") {
       setReqPrefill({
         projectId: project.id,
@@ -277,7 +312,21 @@ function MaterialsTab({ project }: { project: Project }) {
     const rate = taxRateBySourceId.get(li.sourceId) ?? 0;
     return sum + Math.round(li.quantity * li.unitCost * rate / 100);
   }, 0);
-  const total = subtotal + totalTax;
+
+  // Allocate PO shipping proportionally: for each PO that has line items on this
+  // project, include (project_subtotal_on_po / po_total_subtotal) × shipping_cost.
+  const allocatedShipping = (purchaseOrders ?? []).reduce((acc, po) => {
+    if (!po.shippingCost) return acc;
+    const projectSubtotal = po.lineItems
+      .filter((li) => li.projectId === project.id)
+      .reduce((s, li) => s + li.quantity * li.unitCost, 0);
+    if (projectSubtotal === 0) return acc;
+    const poSubtotal = po.lineItems.reduce((s, li) => s + li.quantity * li.unitCost, 0);
+    if (poSubtotal === 0) return acc;
+    return acc + Math.round((projectSubtotal / poSubtotal) * po.shippingCost);
+  }, 0);
+
+  const total = subtotal + totalTax + allocatedShipping;
 
   return (
     <div className="flex flex-col gap-4 p-6">
@@ -355,7 +404,7 @@ function MaterialsTab({ project }: { project: Project }) {
                         <button onClick={() => openEdit(li)} className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600" title="Edit">
                           <Pencil className="h-3.5 w-3.5" />
                         </button>
-                        <button onClick={() => deleteItem(li.id)} className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-500" title="Delete">
+                        <button onClick={() => deleteItem(li)} className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-500" title={li.sourceType !== "direct" ? "Remove from view only (edit via source document)" : "Delete"} disabled={li.sourceType !== "direct"}>
                           <Trash2 className="h-3.5 w-3.5" />
                         </button>
                       </div>
@@ -375,6 +424,12 @@ function MaterialsTab({ project }: { project: Project }) {
               <div className="flex justify-between py-1 text-slate-600">
                 <span>Sales Tax</span>
                 <span>{formatCurrency(totalTax)}</span>
+              </div>
+            )}
+            {allocatedShipping > 0 && (
+              <div className="flex justify-between py-1 text-slate-600">
+                <span>Shipping (from POs)</span>
+                <span>{formatCurrency(allocatedShipping)}</span>
               </div>
             )}
             <div className="flex justify-between border-t pt-1 font-semibold text-slate-900">
@@ -820,9 +875,40 @@ function DetailsTab({
           label="End Date"
           value={project.endDate ? formatDate(project.endDate) : "TBD"}
         />
-        <MetaRow label="Total Cost" value={formatCurrency(computedTotalCost)} />
         {project.notes && <MetaRow label="Notes" value={project.notes} />}
       </dl>
+
+      <Separator />
+
+      {/* Financials: price, cost, margin */}
+      <div className="rounded-md border bg-slate-50 p-4">
+        <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">Project Financials</p>
+        <div className="space-y-1.5 text-sm">
+          <div className="flex justify-between">
+            <span className="text-slate-500">Contract Price</span>
+            <span className="font-medium text-slate-900">
+              {project.contractPrice > 0 ? formatCurrency(project.contractPrice) : <span className="text-slate-400 italic">Not set</span>}
+            </span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-slate-500">Total Cost</span>
+            <span className="font-medium text-slate-900">{formatCurrency(computedTotalCost)}</span>
+          </div>
+          {project.contractPrice > 0 && (() => {
+            const margin = project.contractPrice - computedTotalCost;
+            const marginPct = Math.round((margin / project.contractPrice) * 100);
+            const isPositive = margin >= 0;
+            return (
+              <div className="flex justify-between border-t border-slate-200 pt-1.5">
+                <span className="font-semibold text-slate-700">Margin</span>
+                <span className={`font-semibold ${isPositive ? "text-green-600" : "text-red-600"}`}>
+                  {formatCurrency(Math.abs(margin))} {isPositive ? "" : "loss"} ({isPositive ? "" : "-"}{Math.abs(marginPct)}%)
+                </span>
+              </div>
+            );
+          })()}
+        </div>
+      </div>
     </div>
   );
 }
@@ -863,8 +949,9 @@ export function ProjectDetailPanel({ project }: ProjectDetailPanelProps) {
   const { data: allRequisitions } = useRequisitions();
   const { data: allPurchaseOrders } = usePurchaseOrders();
   const { data: subcontractCosts = [] } = useProjectSubcontractCosts(project.id);
+  const { data: allDirectItems = [] } = useProjectDirectItems(project.id);
 
-  // Compute project total cost dynamically from linked line items + subcontract costs.
+  // Compute project total cost dynamically from linked line items + allocated shipping + subcontract costs.
   // projects.total_cost in the DB is never written to, so we derive it here instead.
   const computedTotalCost = (() => {
     const taxRateBySourceId = new Map<string, number>();
@@ -892,9 +979,22 @@ export function ProjectDetailPanel({ project }: ProjectDetailPanelProps) {
       });
     });
 
-    const subcontractTotal = subcontractCosts.reduce((s, c) => s + c.amount, 0);
+    // Allocate PO shipping proportionally across the projects that share each PO
+    const allocatedShipping = (allPurchaseOrders ?? []).reduce((acc, po) => {
+      if (!po.shippingCost) return acc;
+      const projectSubtotal = po.lineItems
+        .filter((li) => li.projectId === project.id)
+        .reduce((s, li) => s + li.quantity * li.unitCost, 0);
+      if (projectSubtotal === 0) return acc;
+      const poSubtotal = po.lineItems.reduce((s, li) => s + li.quantity * li.unitCost, 0);
+      if (poSubtotal === 0) return acc;
+      return acc + Math.round((projectSubtotal / poSubtotal) * po.shippingCost);
+    }, 0);
 
-    return subtotal + tax + subcontractTotal;
+    const subcontractTotal = subcontractCosts.reduce((s, c) => s + c.amount, 0);
+    const directTotal = allDirectItems.reduce((s, di) => s + di.quantity * di.unitCost, 0);
+
+    return subtotal + tax + allocatedShipping + subcontractTotal + directTotal;
   })();
 
   function getPrintMaterials() {
@@ -909,6 +1009,9 @@ export function ProjectDetailPanel({ project }: ProjectDetailPanelProps) {
       po.lineItems.filter((li) => li.projectId === project.id).forEach((li) => {
         materials.push({ productItemName: li.productItemName, partNumber: li.partNumber, quantity: li.quantity, unitCost: li.unitCost, sourceNumber: po.poNumber, sourceType: "po" });
       });
+    });
+    allDirectItems.forEach((di) => {
+      materials.push({ productItemName: di.productItemName, partNumber: di.partNumber, quantity: di.quantity, unitCost: di.unitCost, sourceNumber: "Direct", sourceType: "direct" });
     });
     return materials;
   }

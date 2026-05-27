@@ -59,6 +59,7 @@ export function useCreateProject() {
           status: input.status,
           start_date: input.startDate || null,
           end_date: input.endDate,
+          contract_price: input.contractPrice ?? 0,
           notes: input.notes,
         })
         .select()
@@ -86,6 +87,7 @@ export function useUpdateProject() {
           ...(input.status !== undefined && { status: input.status }),
           ...(input.startDate !== undefined && { start_date: input.startDate || null }),
           ...(input.endDate !== undefined && { end_date: input.endDate }),
+          ...(input.contractPrice !== undefined && { contract_price: input.contractPrice }),
           ...(input.notes !== undefined && { notes: input.notes }),
         })
         .eq("id", id)
@@ -94,7 +96,7 @@ export function useUpdateProject() {
       if (error) throw error;
       return mapProject(data);
     },
-    onMutate: async ({ id, status, name, customerName, address, startDate, endDate, notes }) => {
+    onMutate: async ({ id, status, name, customerName, address, startDate, endDate, contractPrice, notes }) => {
       await queryClient.cancelQueries({ queryKey: ["projects"] });
       const previous = queryClient.getQueryData<Project[]>(["projects"]);
       const patch: Partial<Project> = {};
@@ -104,6 +106,7 @@ export function useUpdateProject() {
       if (address !== undefined) patch.address = address;
       if (startDate !== undefined) patch.startDate = startDate ?? null;
       if (endDate !== undefined) patch.endDate = endDate;
+      if (contractPrice !== undefined) patch.contractPrice = contractPrice;
       if (notes !== undefined) patch.notes = notes;
       patchProjectCache(queryClient, id, patch);
       return { previous };
