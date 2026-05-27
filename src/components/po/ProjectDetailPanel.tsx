@@ -271,16 +271,30 @@ function MaterialsTab({ project }: { project: Project }) {
       }));
 
     if (destination.type === "direct") {
-      // Persist to DB so items survive refresh
+      // productKey is "product:<uuid>" or "part:<uuid>" — extract the bare UUID
+      // for the product_item_id FK (only valid for product: prefix; parts live in
+      // a separate table and have no product_items row, so use null for them).
       draftItems.forEach((i) => {
-        addDirectItem({
-          projectId: project.id,
-          productItemId: i.productKey || null,
-          productItemName: i.productName,
-          partNumber: i.partNumber,
-          quantity: i.quantity,
-          unitCost: Math.round(i.unitCost * 100),
-        });
+        const productItemId = i.productKey.startsWith("product:")
+          ? i.productKey.slice(8)
+          : null;
+        addDirectItem(
+          {
+            projectId: project.id,
+            productItemId,
+            productItemName: i.productName,
+            partNumber: i.partNumber,
+            quantity: i.quantity,
+            unitCost: Math.round(i.unitCost * 100),
+          },
+          {
+            onError: () => {
+              import("sonner").then(({ toast }) =>
+                toast.error("Failed to add material", { description: "Please try again." })
+              );
+            },
+          }
+        );
       });
     } else if (destination.type === "existing_req") {
       // Items added to existing REQ will appear via TanStack Query cache invalidation
