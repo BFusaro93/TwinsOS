@@ -72,7 +72,12 @@ export function useUploadAttachment(recordType: AttachmentRecordType, recordId: 
             storage_path: storagePath,
             uploaded_by_name: uploaderName,
           });
-          if (insertError) throw insertError;
+          if (insertError) {
+            // Storage upload succeeded but DB insert failed — clean up the orphaned
+            // storage object so it doesn't accumulate as a ghost file.
+            await supabase.storage.from("attachments").remove([storagePath]);
+            throw insertError;
+          }
 
           return { fileName: file.name, ok: true };
         } catch (err) {
