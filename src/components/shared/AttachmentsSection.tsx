@@ -1,9 +1,9 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { FileText, Image, Upload, X } from "lucide-react";
+import { FileText, Image, Trash2, Upload, X } from "lucide-react";
 import { formatDate } from "@/lib/utils";
-import { useAttachments, useUploadAttachment, useDownloadAttachment } from "@/lib/hooks/use-attachments";
+import { useAttachments, useUploadAttachment, useDownloadAttachment, useDeleteAttachment } from "@/lib/hooks/use-attachments";
 import { Button } from "@/components/ui/button";
 import type { AttachmentRecordType } from "@/types";
 
@@ -50,10 +50,13 @@ export function AttachmentsSection({ recordType, recordId }: AttachmentsSectionP
   const { data: attachments, isLoading } = useAttachments(recordType, recordId);
   const upload = useUploadAttachment(recordType, recordId);
   const download = useDownloadAttachment();
+  const deleteAttachment = useDeleteAttachment(recordType, recordId);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [isDragging, setIsDragging] = useState(false);
   const [fileErrors, setFileErrors] = useState<{ fileName: string; error: string }[]>([]);
+  // Track which attachment row is in the "confirm delete" state
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   async function handleFiles(files: FileList | File[]) {
     const list = Array.from(files).filter(isAccepted);
@@ -181,14 +184,52 @@ export function AttachmentsSection({ recordType, recordId }: AttachmentsSectionP
                   {formatBytes(att.fileSize)} · {att.uploadedByName} · {formatDate(att.createdAt)}
                 </p>
               </div>
-              <button
-                className="shrink-0 text-xs text-brand-600 hover:underline"
-                onClick={() =>
-                  download.mutate({ storagePath: att.storagePath, fileName: att.fileName })
-                }
-              >
-                View
-              </button>
+
+              {confirmDeleteId === att.id ? (
+                /* Inline confirm — replaces the action buttons */
+                <div className="flex shrink-0 items-center gap-2">
+                  <span className="text-xs text-slate-500">Delete this file?</span>
+                  <button
+                    className="text-xs font-medium text-red-600 hover:underline disabled:opacity-50"
+                    disabled={deleteAttachment.isPending}
+                    onClick={() => {
+                      deleteAttachment.mutate(
+                        { id: att.id, storagePath: att.storagePath },
+                        { onSettled: () => setConfirmDeleteId(null) }
+                      );
+                    }}
+                  >
+                    {deleteAttachment.isPending && deleteAttachment.variables?.id === att.id
+                      ? "Deleting…"
+                      : "Delete"}
+                  </button>
+                  <button
+                    className="text-xs text-slate-400 hover:text-slate-600"
+                    onClick={() => setConfirmDeleteId(null)}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              ) : (
+                /* Normal actions */
+                <div className="flex shrink-0 items-center gap-3">
+                  <button
+                    className="text-xs text-brand-600 hover:underline"
+                    onClick={() =>
+                      download.mutate({ storagePath: att.storagePath, fileName: att.fileName })
+                    }
+                  >
+                    View
+                  </button>
+                  <button
+                    className="text-slate-300 transition-colors hover:text-red-500"
+                    title="Delete file"
+                    onClick={() => setConfirmDeleteId(att.id)}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              )}
             </li>
           ))}
         </ul>

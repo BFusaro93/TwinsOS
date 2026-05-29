@@ -97,6 +97,26 @@ export function useUploadAttachment(recordType: AttachmentRecordType, recordId: 
   });
 }
 
+export function useDeleteAttachment(recordType: AttachmentRecordType, recordId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, storagePath }: { id: string; storagePath: string }) => {
+      const supabase = createClient();
+      // Soft-delete the DB record
+      const { error: dbError } = await supabase
+        .from("attachments")
+        .update({ deleted_at: new Date().toISOString() })
+        .eq("id", id);
+      if (dbError) throw dbError;
+      // Best-effort storage removal — don't block on failure
+      await supabase.storage.from("attachments").remove([storagePath]);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["attachments", recordType, recordId] });
+    },
+  });
+}
+
 export function useDownloadAttachment() {
   return useMutation({
     mutationFn: async ({ storagePath, fileName }: { storagePath: string; fileName: string }) => {
