@@ -54,13 +54,23 @@ export function useUploadAttachment(recordType: AttachmentRecordType, recordId: 
         try {
           const storagePath = `${recordType}/${recordId}/${Date.now()}-${file.name}`;
 
-          // Pass File directly — avoids loading the entire file into JS heap before
-          // the upload begins, which was causing 10+ minute uploads for large PDFs.
-          // Supabase storage accepts File/Blob/ArrayBuffer; File is streamed natively
-          // by the browser fetch implementation without an extra memory copy.
-          const { error: uploadError } = await supabase.storage
+          // Fast path: stream File directly — no JS heap copy, fast for local files.
+          let { error: uploadError } = await supabase.storage
             .from("attachments")
             .upload(storagePath, file, { upsert: false, contentType: file.type });
+
+          // Safari + iCloud Drive / sandboxed file picker fallback: if the browser
+          // couldn't read the file handle (Safari reports "Load failed" when the
+          // file hasn't been downloaded from iCloud yet), materialise the full file
+          // into an ArrayBuffer first so the download completes, then retry.
+          if (uploadError && /load failed|failed to fetch/i.test(uploadError.message)) {
+            const buffer = await file.arrayBuffer();
+            const blob = new Blob([buffer], { type: file.type });
+            ({ error: uploadError } = await supabase.storage
+              .from("attachments")
+              .upload(storagePath, blob, { upsert: true, contentType: file.type }));
+          }
+
           if (uploadError) throw uploadError;
 
           const { error: insertError } = await supabase.from("attachments").insert({
