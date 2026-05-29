@@ -52,15 +52,15 @@ export function useUploadAttachment(recordType: AttachmentRecordType, recordId: 
 
       const uploadOne = async (file: File): Promise<UploadResult> => {
         try {
-          // Read into ArrayBuffer first to avoid Safari "Load failed" errors with
-          // iCloud Drive or sandboxed file picker handles.
-          const buffer = await file.arrayBuffer();
-          const blob = new Blob([buffer], { type: file.type });
           const storagePath = `${recordType}/${recordId}/${Date.now()}-${file.name}`;
 
+          // Pass File directly — avoids loading the entire file into JS heap before
+          // the upload begins, which was causing 10+ minute uploads for large PDFs.
+          // Supabase storage accepts File/Blob/ArrayBuffer; File is streamed natively
+          // by the browser fetch implementation without an extra memory copy.
           const { error: uploadError } = await supabase.storage
             .from("attachments")
-            .upload(storagePath, blob, { upsert: false, contentType: file.type });
+            .upload(storagePath, file, { upsert: false, contentType: file.type });
           if (uploadError) throw uploadError;
 
           const { error: insertError } = await supabase.from("attachments").insert({
