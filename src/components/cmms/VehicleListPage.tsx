@@ -6,6 +6,7 @@ import {
   ClipboardCheck,
   Droplets,
   FileCheck,
+  FolderUp,
   Maximize2,
   Minimize2,
   Plus,
@@ -27,6 +28,7 @@ import { useSort } from "@/lib/hooks/use-sort";
 import { VehicleListPanel } from "./VehicleListPanel";
 import { VehicleDetailPanel } from "./VehicleDetailPanel";
 import { NewVehicleDialog } from "./NewVehicleDialog";
+import { VehicleBulkImportDialog } from "./VehicleBulkImportDialog";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { StatusBadge } from "@/components/shared/StatusBadge";
@@ -405,6 +407,7 @@ export function VehicleListPage() {
   const [search, setSearch] = useState("");
   const [filterValues, setFilterValues] = useStickyState<Record<string, string | string[]>>("vehicle-filters", {});
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [bulkImportOpen, setBulkImportOpen] = useState(false);
   const [scanOpen, setScanOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"list" | "table" | "service">("list");
   const [sheetVehicleId, setSheetVehicleId] = useState<string | null>(null);
@@ -729,6 +732,10 @@ export function VehicleListPage() {
               }
               onImport={(rows) => bulkImportVehicles(rows)}
             />
+            <Button variant="outline" size="sm" onClick={() => setBulkImportOpen(true)}>
+              <FolderUp className="mr-1.5 h-4 w-4" />
+              Import Files
+            </Button>
             <Button variant="outline" size="sm" onClick={() => setScanOpen(true)}>
               <ScanLine className="mr-1.5 h-4 w-4" />
               Scan
@@ -778,6 +785,7 @@ export function VehicleListPage() {
       </Sheet>
 
       <NewVehicleDialog open={dialogOpen} onOpenChange={setDialogOpen} />
+      <VehicleBulkImportDialog open={bulkImportOpen} onOpenChange={setBulkImportOpen} />
 
       <BarcodeScanModal
         open={scanOpen}
