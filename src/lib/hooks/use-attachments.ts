@@ -55,20 +55,34 @@ export function useUploadAttachment(recordType: AttachmentRecordType, recordId: 
           const storagePath = `${recordType}/${recordId}/${Date.now()}-${file.name}`;
 
           // Fast path: stream File directly — no JS heap copy, fast for local files.
-          let { error: uploadError } = await supabase.storage
-            .from("attachments")
-            .upload(storagePath, file, { upsert: false, contentType: file.type });
-
-          // Safari + iCloud Drive / sandboxed file picker fallback: if the browser
-          // couldn't read the file handle (Safari reports "Load failed" when the
-          // file hasn't been downloaded from iCloud yet), materialise the full file
-          // into an ArrayBuffer first so the download completes, then retry.
-          if (uploadError && /load failed|failed to fetch/i.test(uploadError.message)) {
-            const buffer = await file.arrayBuffer();
-            const blob = new Blob([buffer], { type: file.type });
+          // The Supabase storage client may either return { error } OR throw depending
+          // on the SDK version and browser, so we catch both.
+          let uploadError: { message: string } | null = null;
+          try {
             ({ error: uploadError } = await supabase.storage
               .from("attachments")
-              .upload(storagePath, blob, { upsert: true, contentType: file.type }));
+              .upload(storagePath, file, { upsert: false, contentType: file.type }));
+          } catch (e) {
+            uploadError = e instanceof Error ? e : { message: String(e) };
+          }
+
+          // Safari + iCloud Drive / sandboxed file picker fallback: Safari throws
+          // "Load failed" (or "Failed to fetch") when the file hasn't been downloaded
+          // from iCloud yet. Materialise it into an ArrayBuffer first, then retry.
+          const needsFallback =
+            uploadError != null &&
+            /load failed|failed to fetch/i.test(uploadError.message);
+
+          if (needsFallback) {
+            const buffer = await file.arrayBuffer();
+            const blob = new Blob([buffer], { type: file.type });
+            try {
+              ({ error: uploadError } = await supabase.storage
+                .from("attachments")
+                .upload(storagePath, blob, { upsert: true, contentType: file.type }));
+            } catch (e) {
+              uploadError = e instanceof Error ? e : { message: String(e) };
+            }
           }
 
           if (uploadError) throw uploadError;
