@@ -326,10 +326,13 @@ function DetailsTab({
             {status === "skipped" && (
               <Button size="sm" variant="outline" onClick={() => onStatusChange("open")}>Reopen</Button>
             )}
-            {isParentWO && !allSubsDoneOrSkipped && status !== "done" && (
-              <p className="mt-1 w-full text-xs text-amber-600">
-                {subWorkOrders.filter((s) => s.status !== "done" && s.status !== "skipped").length} sub-work order(s) still pending
-              </p>
+            {isParentWO && !allSubsDoneOrSkipped && (
+              <div className="mt-2 flex w-full items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                <span className="mt-0.5 shrink-0">⚠</span>
+                <span>
+                  <strong>{subWorkOrders.filter((s) => s.status !== "done" && s.status !== "skipped").length} sub-work order(s) still open</strong> — this work order cannot be marked complete until all sub-work orders are done or skipped.
+                </span>
+              </div>
             )}
           </div>
         )}

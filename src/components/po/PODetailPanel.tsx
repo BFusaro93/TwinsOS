@@ -33,6 +33,7 @@ import { useProducts } from "@/lib/hooks/use-products";
 import { useParts } from "@/lib/hooks/use-parts";
 import { useVendors } from "@/lib/hooks/use-vendors";
 import { useProjects } from "@/lib/hooks/use-projects";
+import { useGoodsReceipts } from "@/lib/hooks/use-goods-receipts";
 import { PartDetailSheet } from "@/components/cmms/PartDetailSheet";
 import { useSubmitForApproval } from "@/lib/hooks/use-approval-requests";
 import { usePurchaseOrders, useUpdatePurchaseOrderStatus, useDeletePurchaseOrder, useAddPOLineItem, useUpdatePOLineItem, useDeletePOLineItem } from "@/lib/hooks/use-purchase-orders";
@@ -125,6 +126,18 @@ function DetailsTab({
   const { data: parts = [] } = useParts();
   const { data: vendors = [] } = useVendors();
   const { data: allPOs = [] } = usePurchaseOrders();
+  const { data: allReceipts = [] } = useGoodsReceipts();
+
+  // Build received-qty map from all goods receipts for this PO
+  const poReceipts = allReceipts.filter((r) => r.purchaseOrderId === po.id);
+  const receivedQtyByLineItemId = poReceipts.length > 0
+    ? poReceipts.reduce((map, receipt) => {
+        for (const line of receipt.lines) {
+          map.set(line.lineItemId, (map.get(line.lineItemId) ?? 0) + line.quantityReceived);
+        }
+        return map;
+      }, new Map<string, number>())
+    : undefined;
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
   const [selectedPartId, setSelectedPartId] = useState<string | null>(null);
   const [vendorSheetOpen, setVendorSheetOpen] = useState(false);
@@ -243,6 +256,7 @@ function DetailsTab({
           lineItems={lineItems}
           showProject
           editable
+          receivedQtyByLineItemId={receivedQtyByLineItemId}
           onItemsChange={setLineItems}
           onItemAdded={(item, newItems) => {
             const { subtotal, salesTax, grandTotal } = totals(newItems);

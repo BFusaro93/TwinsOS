@@ -51,6 +51,8 @@ interface LineItemsTableProps {
   /** When true, hides the built-in "Add Line Item" button at the bottom of the table.
    *  Use this when the parent provides its own add flow (e.g. RequisitionDetailPanel). */
   hideAddButton?: boolean;
+  /** When provided, replaces the plain Qty column with Ordered / Received / Pending columns. */
+  receivedQtyByLineItemId?: Map<string, number>;
   onItemsChange?: (items: LineItem[]) => void;
   /** Called after a new item is added, with the added item and the full updated list. */
   onItemAdded?: (item: LineItem, updatedItems: LineItem[]) => void;
@@ -68,6 +70,7 @@ export function LineItemsTable({
   showProject = false,
   editable = false,
   hideAddButton = false,
+  receivedQtyByLineItemId,
   onItemsChange,
   onItemAdded,
   onItemEdited,
@@ -169,7 +172,15 @@ export function LineItemsTable({
             <TableRow className="bg-slate-50 text-xs">
               <TableHead>Item</TableHead>
               <TableHead>Part #</TableHead>
-              <TableHead className="text-right">Qty</TableHead>
+              {receivedQtyByLineItemId ? (
+                <>
+                  <TableHead className="text-right">Ordered</TableHead>
+                  <TableHead className="text-right">Received</TableHead>
+                  <TableHead className="text-right">Pending</TableHead>
+                </>
+              ) : (
+                <TableHead className="text-right">Qty</TableHead>
+              )}
               <TableHead className="text-right">Unit Cost</TableHead>
               <TableHead className="text-right">Total</TableHead>
               {showProject && <TableHead>Project</TableHead>}
@@ -223,7 +234,21 @@ export function LineItemsTable({
                 <TableCell className="font-mono text-xs text-slate-500">
                   {li.partNumber ?? "—"}
                 </TableCell>
-                <TableCell className="text-right">{li.quantity}</TableCell>
+                {receivedQtyByLineItemId ? (() => {
+                  const received = receivedQtyByLineItemId.get(li.id) ?? 0;
+                  const pending = Math.max(0, li.quantity - received);
+                  return (
+                    <>
+                      <TableCell className="text-right text-slate-700">{li.quantity}</TableCell>
+                      <TableCell className="text-right font-medium text-emerald-700">{received}</TableCell>
+                      <TableCell className={cn("text-right font-medium", pending > 0 ? "text-amber-600" : "text-slate-400")}>
+                        {pending > 0 ? pending : "—"}
+                      </TableCell>
+                    </>
+                  );
+                })() : (
+                  <TableCell className="text-right">{li.quantity}</TableCell>
+                )}
                 <TableCell className="text-right">{formatCurrency(li.unitCost)}</TableCell>
                 <TableCell className="text-right font-medium">
                   {formatCurrency(li.quantity * li.unitCost)}

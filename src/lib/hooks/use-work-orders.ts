@@ -97,6 +97,21 @@ export function useUpdateWorkOrderStatus() {
       automationId?: string | null;
     }) => {
       const supabase = createClient();
+
+      // Block completing a parent WO that still has open children
+      if (status === "done") {
+        const { data: openChildren } = await supabase
+          .from("work_orders")
+          .select("id")
+          .eq("parent_work_order_id", id)
+          .is("deleted_at", null)
+          .not("status", "in", '("done","skipped")')
+          .limit(1);
+        if (openChildren && openChildren.length > 0) {
+          throw new Error("All sub-work orders must be completed or skipped before closing this work order.");
+        }
+      }
+
       const { error } = await supabase.from("work_orders").update({ status }).eq("id", id);
       if (error) throw error;
 
@@ -147,6 +162,7 @@ export function useUpdateWorkOrderStatus() {
       queryClient.invalidateQueries({ queryKey: ["work-orders", id] });
       queryClient.invalidateQueries({ queryKey: ["audit-log", "work_order", id] });
       queryClient.invalidateQueries({ queryKey: ["automations"] });
+      queryClient.invalidateQueries({ queryKey: ["part-wo-history"] });
       // Fire WO-status-changed email + in-app notification to assigned users (best-effort)
       fetch("/api/notifications/email", {
         method: "POST",
