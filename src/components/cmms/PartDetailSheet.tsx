@@ -401,12 +401,16 @@ function HistoryTab({ part, purchaseOrders, onPOClick }: { part: Part; purchaseO
       const supabase = createClient();
       const { data, error } = await supabase
         .from("wo_parts")
-        .select("id, quantity, unit_cost, created_at, work_orders(work_order_number, title, status, created_at)")
+        .select("id, quantity, unit_cost, created_at, work_orders(work_order_number, title, status, created_at, deleted_at)")
         .eq("part_id", part.id)
         .is("deleted_at", null)
         .order("created_at", { ascending: false });
       if (error) throw error;
-      return (data ?? []) as Array<{
+      return (data ?? [])
+        .filter((row) => {
+          const wo = row.work_orders as { deleted_at?: string | null } | null;
+          return wo && !wo.deleted_at;
+        }) as Array<{
         id: string;
         quantity: number;
         unit_cost: number;
