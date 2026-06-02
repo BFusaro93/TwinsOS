@@ -234,7 +234,10 @@ export async function POST(
   }
 
   // ── 5. Advance next_due_date on the PM schedule ───────────────────────────
-  const nextDue = advanceDate(schedule.next_due_date, schedule.frequency);
+  // Advance from today (actual generation date) so that generating early
+  // doesn't push the next due date further out than one interval from now.
+  const today = new Date().toISOString().slice(0, 10);
+  const nextDue = advanceDate(today, schedule.frequency);
   await adminClient
     .from("pm_schedules")
     .update({
