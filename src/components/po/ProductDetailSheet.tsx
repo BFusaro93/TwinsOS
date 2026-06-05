@@ -478,8 +478,13 @@ export function ProductDetailSheet({ product, open, onOpenChange }: ProductDetai
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         className="flex w-full flex-col overflow-hidden p-0 md:w-[580px] md:max-w-[580px]"
-        onPointerDownOutside={(e) => { if (selectedPOId || selectedWOId) e.preventDefault(); }}
-        onInteractOutside={(e) => { if (selectedPOId || selectedWOId) e.preventDefault(); }}
+        onPointerDownOutside={(e) => {
+          if (selectedPOId) { e.preventDefault(); setSelectedPOId(null); }
+          else if (selectedWOId) { e.preventDefault(); setSelectedWOId(null); }
+        }}
+        onInteractOutside={(e) => {
+          if (selectedPOId || selectedWOId) e.preventDefault();
+        }}
       >
         <SheetHeader className="shrink-0 border-b px-6 py-4 pr-12">
           <div className="flex items-start gap-3">
