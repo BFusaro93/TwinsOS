@@ -28,11 +28,6 @@ import { formatCurrency } from "@/lib/utils";
 import { PRODUCT_CATEGORY_LABELS } from "@/lib/constants";
 import { toast } from "sonner";
 import { useProducts, useBulkImportProducts } from "@/lib/hooks/use-products";
-import { usePurchaseOrders } from "@/lib/hooks/use-purchase-orders";
-import { useWorkOrders } from "@/lib/hooks/use-work-orders";
-import { PODetailSheet } from "./PODetailSheet";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { WorkOrderDetailPanel } from "@/components/cmms/WorkOrderDetailPanel";
 import type { ProductItem } from "@/types";
 
 const PRODUCTS_COLUMNS: ColumnDef[] = [
@@ -63,14 +58,8 @@ export function ProductsPage() {
   const { mutateAsync: bulkImportProducts } = useBulkImportProducts();
   const [selectedProduct, setSelectedProduct] = useState<ProductItem | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
-  const [selectedPOId, setSelectedPOId] = useState<string | null>(null);
-  const [selectedWOId, setSelectedWOId] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [bulkPriceOpen, setBulkPriceOpen] = useState(false);
-  const { data: allPOs = [] } = usePurchaseOrders();
-  const { data: allWOs = [] } = useWorkOrders();
-  const selectedPO = allPOs.find((p) => p.id === selectedPOId) ?? null;
-  const selectedWO = allWOs.find((w) => w.id === selectedWOId) ?? null;
   const [search, setSearch] = useState("");
   const [filterValues, setFilterValues] = useStickyState<Record<string, string | string[]>>("product-filters", {});
   const [visibleKeys, setVisibleKeys] = useState<string[]>(PRODUCTS_COLUMNS.map((c) => c.key));
@@ -296,22 +285,7 @@ export function ProductsPage() {
         product={selectedProduct}
         open={sheetOpen}
         onOpenChange={setSheetOpen}
-        onPOClick={(id) => setSelectedPOId(id)}
-        onWOClick={(id) => setSelectedWOId(id)}
       />
-      <PODetailSheet
-        po={selectedPO}
-        open={!!selectedPO}
-        onOpenChange={(o) => { if (!o) setSelectedPOId(null); }}
-      />
-      <Sheet open={!!selectedWO} onOpenChange={(o) => { if (!o) setSelectedWOId(null); }}>
-        <SheetContent className="flex w-full flex-col overflow-hidden p-0 md:w-[580px] md:max-w-[580px]">
-          <SheetHeader className="sr-only"><SheetTitle>{selectedWO?.workOrderNumber}</SheetTitle></SheetHeader>
-          <div className="flex-1 overflow-y-auto">
-            {selectedWO && <WorkOrderDetailPanel workOrder={selectedWO} />}
-          </div>
-        </SheetContent>
-      </Sheet>
       <NewProductDialog open={dialogOpen} onOpenChange={setDialogOpen} />
       <BulkPriceUpdateDialog
         open={bulkPriceOpen}

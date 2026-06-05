@@ -30,8 +30,12 @@ import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { ThumbnailUpload } from "@/components/shared/ThumbnailUpload";
-import { useState } from "react";
-import { Trash2 } from "lucide-react";
+import { useState, useRef, useEffect } from "react";
+import { createPortal } from "react-dom";
+import { Trash2, X } from "lucide-react";
+import { OverlayLevelContext, overlayZ, useOverlayLevel } from "@/lib/overlay-level";
+import { PODetailPanel } from "./PODetailPanel";
+import { WorkOrderDetailPanel } from "@/components/cmms/WorkOrderDetailPanel";
 import { Button } from "@/components/ui/button";
 import { EditButton } from "@/components/shared/EditButton";
 import { ManageVendorsDialog } from "@/components/shared/ManageVendorsDialog";
@@ -44,6 +48,7 @@ import { useQuery } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 import { useRequisitions } from "@/lib/hooks/use-requisitions";
 import { usePurchaseOrders } from "@/lib/hooks/use-purchase-orders";
+import { useWorkOrders } from "@/lib/hooks/use-work-orders";
 import { useParts } from "@/lib/hooks/use-parts";
 import { useDeleteProduct, useUpdateProduct } from "@/lib/hooks/use-products";
 import { WO_STATUS_LABELS } from "@/lib/constants";
@@ -52,9 +57,7 @@ import type { ProductItem } from "@/types";
 interface ProductDetailSheetProps {
   product: ProductItem | null;
   open: boolean;
-  onWOClick?: (woId: string) => void;
   onOpenChange: (open: boolean) => void;
-  onPOClick?: (poId: string) => void;
 }
 
 function DetailRow({ label, value }: { label: string; value: React.ReactNode }) {
@@ -402,15 +405,36 @@ function HistoryTab({
   );
 }
 
-export function ProductDetailSheet({ product, open, onOpenChange, onPOClick, onWOClick }: ProductDetailSheetProps) {
+export function ProductDetailSheet({ product, open, onOpenChange }: ProductDetailSheetProps) {
   const { data: requisitions } = useRequisitions();
   const { data: purchaseOrders } = usePurchaseOrders();
+  const { data: allWOs = [] } = useWorkOrders();
   const [qtyOnHand, setQtyOnHand] = useState<number | null>(null);
   const [editOpen, setEditOpen] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [manageVendorsOpen, setManageVendorsOpen] = useState(false);
+  const [selectedPOId, setSelectedPOId] = useState<string | null>(null);
+  const [selectedWOId, setSelectedWOId] = useState<string | null>(null);
+  const overlayPORef = useRef<HTMLDivElement>(null);
+  const overlayWORef = useRef<HTMLDivElement>(null);
+  const level = useOverlayLevel();
+  const { backdrop: childBackdropZ, panel: childPanelZ } = overlayZ(level + 1);
   const { mutate: deleteProduct, isPending: deleting } = useDeleteProduct();
   const { mutate: updateProduct } = useUpdateProduct();
+
+  // Prevent outer scroll-lock from blocking scroll inside child portals
+  useEffect(() => {
+    for (const ref of [overlayPORef, overlayWORef]) {
+      const el = ref.current;
+      if (!el) continue;
+      const stop = (e: Event) => e.stopPropagation();
+      el.addEventListener("wheel", stop);
+      el.addEventListener("touchmove", stop);
+    }
+  });
+
+  const selectedPO = selectedPOId ? (purchaseOrders ?? []).find((p) => p.id === selectedPOId) ?? null : null;
+  const selectedWO = selectedWOId ? allWOs.find((w) => w.id === selectedWOId) ?? null : null;
 
   if (!product) return null;
 
@@ -450,6 +474,7 @@ export function ProductDetailSheet({ product, open, onOpenChange, onPOClick, onW
       .reduce((sum, li) => sum + li.quantity, 0);
 
   return (
+    <>
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="flex w-full flex-col overflow-hidden p-0 md:w-[580px] md:max-w-[580px]">
         <SheetHeader className="shrink-0 border-b px-6 py-4 pr-12">
@@ -514,7 +539,7 @@ export function ProductDetailSheet({ product, open, onOpenChange, onPOClick, onW
             />
           </TabsContent>
           <TabsContent value="history" className="mt-0 flex-1 overflow-y-auto">
-            <HistoryTab product={product} purchaseOrders={purchaseOrders} onPOClick={onPOClick} onWOClick={onWOClick} />
+            <HistoryTab product={product} purchaseOrders={purchaseOrders} onPOClick={setSelectedPOId} onWOClick={setSelectedWOId} />
           </TabsContent>
           <TabsContent value="audit trail" className="mt-0 flex-1 overflow-y-auto">
             <AuditTrailTab recordType="product" recordId={product.id} />
@@ -558,5 +583,56 @@ export function ProductDetailSheet({ product, open, onOpenChange, onPOClick, onW
         </AlertDialogContent>
       </AlertDialog>
     </Sheet>
+
+    {/* PO overlay — portal so it stacks above the sheet without adding a dark backdrop */}
+    {selectedPO && createPortal(
+      <OverlayLevelContext.Provider value={level + 1}>
+        <div
+          className="fixed inset-0"
+          style={{ zIndex: childBackdropZ, backgroundColor: "transparent" }}
+          onClick={() => setSelectedPOId(null)}
+        />
+        <div
+          ref={overlayPORef}
+          className="pointer-events-auto fixed inset-y-0 right-0 flex w-full flex-col overflow-hidden border-l bg-background shadow-xl md:w-[680px]"
+          style={{ zIndex: childPanelZ }}
+        >
+          <button type="button" aria-label="Close" onClick={() => setSelectedPOId(null)}
+            className="absolute right-4 top-4 z-10 rounded-sm p-0.5 opacity-70 transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2">
+            <X className="h-4 w-4" />
+          </button>
+          <div className="flex-1 overflow-y-auto">
+            <PODetailPanel key={selectedPOId!} po={selectedPO} />
+          </div>
+        </div>
+      </OverlayLevelContext.Provider>,
+      document.body
+    )}
+
+    {/* WO overlay — same pattern, no added darkness */}
+    {selectedWO && createPortal(
+      <OverlayLevelContext.Provider value={level + 1}>
+        <div
+          className="fixed inset-0"
+          style={{ zIndex: childBackdropZ, backgroundColor: "transparent" }}
+          onClick={() => setSelectedWOId(null)}
+        />
+        <div
+          ref={overlayWORef}
+          className="pointer-events-auto fixed inset-y-0 right-0 flex w-full flex-col overflow-hidden border-l bg-background shadow-xl md:w-[580px]"
+          style={{ zIndex: childPanelZ }}
+        >
+          <button type="button" aria-label="Close" onClick={() => setSelectedWOId(null)}
+            className="absolute right-4 top-4 z-10 rounded-sm p-0.5 opacity-70 transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2">
+            <X className="h-4 w-4" />
+          </button>
+          <div className="flex-1 overflow-y-auto">
+            <WorkOrderDetailPanel workOrder={selectedWO} />
+          </div>
+        </div>
+      </OverlayLevelContext.Provider>,
+      document.body
+    )}
+  </>
   );
 }

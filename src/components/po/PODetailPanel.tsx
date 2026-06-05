@@ -306,7 +306,6 @@ function DetailsTab({
         onOpenChange={(open) => {
           if (!open) setSelectedProductId(null);
         }}
-        onPOClick={(poId) => setOverlayPOId(poId)}
       />
 
       {/* PO overlay — opened when clicking a PO # in the product history tab */}

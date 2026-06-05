@@ -36,6 +36,8 @@ import { usePurchaseOrders } from "@/lib/hooks/use-purchase-orders";
 import { useProducts } from "@/lib/hooks/use-products";
 import { useAssets } from "@/lib/hooks/use-assets";
 import { useVehicles } from "@/lib/hooks/use-vehicles";
+import { useWorkOrders } from "@/lib/hooks/use-work-orders";
+import { WorkOrderDetailPanel } from "@/components/cmms/WorkOrderDetailPanel";
 import { OverlayLevelContext, overlayZ, useOverlayLevel } from "@/lib/overlay-level";
 import { Plus, Search, ShoppingCart, Wrench, X } from "lucide-react";
 import {
@@ -393,7 +395,7 @@ function DetailsTab({
   );
 }
 
-function HistoryTab({ part, purchaseOrders, onPOClick }: { part: Part; purchaseOrders: ReturnType<typeof usePurchaseOrders>["data"]; onPOClick: (poId: string) => void }) {
+function HistoryTab({ part, purchaseOrders, onPOClick, onWOClick }: { part: Part; purchaseOrders: ReturnType<typeof usePurchaseOrders>["data"]; onPOClick: (poId: string) => void; onWOClick: (woId: string) => void }) {
   // ── WO usage history ──────────────────────────────────────────────────────
   const { data: woHistory = [] } = useQuery({
     queryKey: ["part-wo-history", part.id],
@@ -401,7 +403,7 @@ function HistoryTab({ part, purchaseOrders, onPOClick }: { part: Part; purchaseO
       const supabase = createClient();
       const { data, error } = await supabase
         .from("wo_parts")
-        .select("id, quantity, unit_cost, created_at, work_orders(work_order_number, title, status, created_at, deleted_at)")
+        .select("id, quantity, unit_cost, created_at, work_orders(id, work_order_number, title, status, created_at, deleted_at)")
         .eq("part_id", part.id)
         .is("deleted_at", null)
         .order("created_at", { ascending: false });
@@ -415,7 +417,7 @@ function HistoryTab({ part, purchaseOrders, onPOClick }: { part: Part; purchaseO
         quantity: number;
         unit_cost: number;
         created_at: string;
-        work_orders: { work_order_number: string; title: string; status: string; created_at: string } | null;
+        work_orders: { id: string; work_order_number: string; title: string; status: string; created_at: string } | null;
       }>;
     },
     enabled: !!part.id,
@@ -526,9 +528,19 @@ function HistoryTab({ part, purchaseOrders, onPOClick }: { part: Part; purchaseO
                     {woHistory.map((row) => (
                       <tr key={row.id} className="border-t border-slate-100">
                         <td className="px-3 py-2 font-mono text-xs font-medium">
-                          <span className="flex items-center gap-1.5 text-slate-700">
+                          <span className="flex items-center gap-1.5">
                             <Wrench className="h-3 w-3 text-slate-400" />
-                            {row.work_orders?.work_order_number ?? "—"}
+                            {row.work_orders?.id ? (
+                              <button
+                                type="button"
+                                onClick={() => onWOClick(row.work_orders!.id)}
+                                className="text-brand-600 hover:underline"
+                              >
+                                {row.work_orders.work_order_number}
+                              </button>
+                            ) : (
+                              <span className="text-slate-700">{row.work_orders?.work_order_number ?? "—"}</span>
+                            )}
                           </span>
                         </td>
                         <td className="max-w-[160px] truncate px-3 py-2 text-slate-600">
@@ -630,6 +642,8 @@ export function PartDetailSheet({ part, open, onOpenChange }: PartDetailSheetPro
   const [interchangeablePickerOemId, setInterchangeablePickerOemId] = useState<string | null>(null);
   const [linkSearch, setLinkSearch] = useState("");
   const [selectedPOId, setSelectedPOId] = useState<string | null>(null);
+  const [selectedWOId, setSelectedWOId] = useState<string | null>(null);
+  const { data: allWorkOrders = [] } = useWorkOrders();
 
   // Close on Escape key — dismiss PO overlay first if it's open
   useEffect(() => {
@@ -824,7 +838,7 @@ export function PartDetailSheet({ part, open, onOpenChange }: PartDetailSheetPro
               />
             </TabsContent>
             <TabsContent value="history" className="mt-0 min-h-0 flex-1 overflow-y-auto">
-              <HistoryTab part={livePart} purchaseOrders={purchaseOrders} onPOClick={setSelectedPOId} />
+              <HistoryTab part={livePart} purchaseOrders={purchaseOrders} onPOClick={setSelectedPOId} onWOClick={setSelectedWOId} />
             </TabsContent>
             <TabsContent value="audit trail" className="mt-0 min-h-0 flex-1 overflow-y-auto">
               <AuditTrailTab recordType="part" recordId={livePart.id} />
@@ -876,6 +890,38 @@ export function PartDetailSheet({ part, open, onOpenChange }: PartDetailSheetPro
               </button>
               <div className="flex-1 overflow-y-auto">
                 <PODetailPanel key={selectedPOId} po={selectedPO} />
+              </div>
+            </div>
+          </OverlayLevelContext.Provider>,
+          document.body
+        );
+      })()}
+
+      {/* WO detail overlay — same pattern as PO */}
+      {selectedWOId && (() => {
+        const selectedWO = allWorkOrders.find((w) => w.id === selectedWOId) ?? null;
+        if (!selectedWO) return null;
+        return createPortal(
+          <OverlayLevelContext.Provider value={level + 2}>
+            <div
+              className="fixed inset-0"
+              style={{ zIndex: childBackdropZ }}
+              onClick={() => setSelectedWOId(null)}
+            />
+            <div
+              className="pointer-events-auto fixed inset-y-0 right-0 flex w-full flex-col overflow-hidden border-l bg-background shadow-xl md:w-[580px]"
+              style={{ zIndex: childPanelZ }}
+            >
+              <button
+                type="button"
+                aria-label="Close"
+                onClick={() => setSelectedWOId(null)}
+                className="absolute right-4 top-4 z-10 rounded-sm p-0.5 opacity-70 transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+              >
+                <X className="h-4 w-4" />
+              </button>
+              <div className="flex-1 overflow-y-auto">
+                <WorkOrderDetailPanel workOrder={selectedWO} />
               </div>
             </div>
           </OverlayLevelContext.Provider>,
