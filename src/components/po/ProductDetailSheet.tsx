@@ -40,14 +40,19 @@ import { QtyAdjustControl } from "@/components/shared/QtyAdjustControl";
 import { AuditTrailTab } from "@/components/shared/AuditTrailTab";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { PRODUCT_CATEGORY_LABELS } from "@/lib/constants";
+import { useQuery } from "@tanstack/react-query";
+import { createClient } from "@/lib/supabase/client";
 import { useRequisitions } from "@/lib/hooks/use-requisitions";
 import { usePurchaseOrders } from "@/lib/hooks/use-purchase-orders";
+import { useParts } from "@/lib/hooks/use-parts";
 import { useDeleteProduct, useUpdateProduct } from "@/lib/hooks/use-products";
+import { WO_STATUS_LABELS } from "@/lib/constants";
 import type { ProductItem } from "@/types";
 
 interface ProductDetailSheetProps {
   product: ProductItem | null;
   open: boolean;
+  onWOClick?: (woId: string) => void;
   onOpenChange: (open: boolean) => void;
   onPOClick?: (poId: string) => void;
 }
@@ -185,11 +190,41 @@ function HistoryTab({
   product,
   purchaseOrders,
   onPOClick,
+  onWOClick,
 }: {
   product: ProductItem;
   purchaseOrders: ReturnType<typeof usePurchaseOrders>["data"];
   onPOClick?: (poId: string) => void;
+  onWOClick?: (woId: string) => void;
 }) {
+  const { data: allParts = [] } = useParts();
+  const linkedPart = allParts.find((p) => p.productItemId === product.id) ?? null;
+
+  const { data: woHistory = [] } = useQuery({
+    queryKey: ["part-wo-history", linkedPart?.id ?? ""],
+    queryFn: async () => {
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from("wo_parts")
+        .select("id, quantity, unit_cost, created_at, work_orders(id, work_order_number, title, status, created_at, deleted_at)")
+        .eq("part_id", linkedPart!.id)
+        .is("deleted_at", null)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return (data ?? []).filter((row) => {
+        const wo = row.work_orders as { deleted_at?: string | null } | null;
+        return wo && !wo.deleted_at;
+      }) as Array<{
+        id: string;
+        quantity: number;
+        unit_cost: number;
+        created_at: string;
+        work_orders: { id: string; work_order_number: string; title: string; status: string; created_at: string } | null;
+      }>;
+    },
+    enabled: !!linkedPart?.id,
+  });
+
   const pos = (purchaseOrders ?? [])
     .filter((po) => po.lineItems.some((li) => li.productItemId === product.id))
     .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
@@ -309,11 +344,65 @@ function HistoryTab({
           </div>
         </>
       )}
+      {/* WO usage history — only for maintenance parts with a linked part */}
+      {linkedPart && (
+        <div className="mt-6">
+          <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">
+            Work Order Usage
+          </p>
+          {woHistory.length === 0 ? (
+            <p className="text-sm text-slate-400">No work order usage recorded yet.</p>
+          ) : (
+            <div className="overflow-hidden rounded-md border">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-slate-50">
+                    <th className="px-3 py-2 text-left text-xs font-medium text-slate-500">WO #</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-slate-500">Title</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-slate-500">Date</th>
+                    <th className="px-3 py-2 text-right text-xs font-medium text-slate-500">Qty</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-slate-500">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {woHistory.map((row) => {
+                    const wo = row.work_orders;
+                    if (!wo) return null;
+                    return (
+                      <tr key={row.id} className="border-t border-slate-100">
+                        <td className="px-3 py-2 font-mono text-xs font-semibold">
+                          {onWOClick ? (
+                            <button
+                              type="button"
+                              onClick={() => onWOClick(wo.id)}
+                              className="text-brand-600 hover:underline"
+                            >
+                              {wo.work_order_number}
+                            </button>
+                          ) : (
+                            <span className="text-slate-800">{wo.work_order_number}</span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2 text-slate-600">{wo.title}</td>
+                        <td className="px-3 py-2 text-slate-500">{formatDate(wo.created_at)}</td>
+                        <td className="px-3 py-2 text-right text-slate-700">{row.quantity}</td>
+                        <td className="px-3 py-2">
+                          <StatusBadge variant={wo.status as import("@/types").WorkOrderStatus} label={(WO_STATUS_LABELS as Record<string, string>)[wo.status] ?? wo.status} />
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
 
-export function ProductDetailSheet({ product, open, onOpenChange, onPOClick }: ProductDetailSheetProps) {
+export function ProductDetailSheet({ product, open, onOpenChange, onPOClick, onWOClick }: ProductDetailSheetProps) {
   const { data: requisitions } = useRequisitions();
   const { data: purchaseOrders } = usePurchaseOrders();
   const [qtyOnHand, setQtyOnHand] = useState<number | null>(null);
@@ -425,7 +514,7 @@ export function ProductDetailSheet({ product, open, onOpenChange, onPOClick }: P
             />
           </TabsContent>
           <TabsContent value="history" className="mt-0 flex-1 overflow-y-auto">
-            <HistoryTab product={product} purchaseOrders={purchaseOrders} onPOClick={onPOClick} />
+            <HistoryTab product={product} purchaseOrders={purchaseOrders} onPOClick={onPOClick} onWOClick={onWOClick} />
           </TabsContent>
           <TabsContent value="audit trail" className="mt-0 flex-1 overflow-y-auto">
             <AuditTrailTab recordType="product" recordId={product.id} />

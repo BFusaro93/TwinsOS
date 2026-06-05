@@ -150,11 +150,16 @@ export function useUpdatePart() {
       // Sync changed fields to the linked product_items record
       if (data.product_item_id) {
         const productSync: Record<string, unknown> = {};
-        if (input.pictureUrl !== undefined) productSync.picture_url = input.pictureUrl;
+        if (input.name !== undefined) productSync.name = input.name;
+        if (input.partNumber !== undefined) productSync.part_number = input.partNumber;
+        if (input.description !== undefined) productSync.description = input.description;
+        if (input.unitCost !== undefined) productSync.unit_cost = input.unitCost;
         if (input.quantityOnHand !== undefined) productSync.quantity_on_hand = input.quantityOnHand;
         if (input.minimumStock !== undefined) productSync.minimum_stock = input.minimumStock;
-        if (input.unitCost !== undefined) productSync.unit_cost = input.unitCost;
-        if (input.name !== undefined) productSync.name = input.name;
+        if (input.pictureUrl !== undefined) productSync.picture_url = input.pictureUrl;
+        if (input.vendorId !== undefined) productSync.vendor_id = input.vendorId || null;
+        if (input.vendorName !== undefined) productSync.vendor_name = input.vendorName;
+        if (input.alternateVendors !== undefined) productSync.alternate_vendors = input.alternateVendors;
         if (Object.keys(productSync).length > 0) {
           await supabase
             .from("product_items")
