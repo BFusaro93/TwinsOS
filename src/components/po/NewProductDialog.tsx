@@ -110,11 +110,13 @@ export function NewProductDialog({ open, onOpenChange, initialData, onCreated }:
       price: Math.round((parseFloat(price) || 0) * 100),
       vendorId,
       vendorName: vendor?.name ?? "",
-      alternateVendors: [],
+      // When editing, preserve fields not exposed in this form — never overwrite
+      // pictureUrl or alternateVendors with blank/null on a plain description/cost edit.
+      alternateVendors: isEditing && initialData ? initialData.alternateVendors : [],
       isInventory,
       quantityOnHand: parseInt(quantityOnHand) || 0,
-      pictureUrl: null,
-      costLayers: [],
+      pictureUrl: isEditing && initialData ? initialData.pictureUrl : null,
+      costLayers: isEditing && initialData ? initialData.costLayers : [],
       minimumStock: isMaintPart ? parseInt(minimumStock) || 0 : 0,
       partCategory: isMaintPart && partCategory !== "none" ? partCategory : null,
     };

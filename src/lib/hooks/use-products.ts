@@ -217,11 +217,16 @@ export function useUpdateProduct() {
       // Sync relevant fields to the linked Part record (if maintenance_part)
       const syncFields: Record<string, unknown> = {};
       if (input.name !== undefined) syncFields.name = input.name;
+      if (input.partNumber !== undefined) syncFields.part_number = input.partNumber;
+      if (input.description !== undefined) syncFields.description = input.description;
       if (input.unitCost !== undefined) syncFields.unit_cost = input.unitCost;
       if (input.quantityOnHand !== undefined) syncFields.quantity_on_hand = input.quantityOnHand;
       if (input.minimumStock !== undefined) syncFields.minimum_stock = input.minimumStock;
       if (input.partCategory !== undefined) syncFields.category = input.partCategory;
       if (input.pictureUrl !== undefined) syncFields.picture_url = input.pictureUrl;
+      if (input.vendorId !== undefined) syncFields.vendor_id = input.vendorId || null;
+      if (input.vendorName !== undefined) syncFields.vendor_name = input.vendorName;
+      if (input.alternateVendors !== undefined) syncFields.alternate_vendors = input.alternateVendors;
       if (Object.keys(syncFields).length > 0) {
         await supabase
           .from("parts")
