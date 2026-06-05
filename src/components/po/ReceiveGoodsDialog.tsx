@@ -34,7 +34,7 @@ import { useUsers } from "@/lib/hooks/use-users";
 import { useProducts, useReceiveProductCostLayer } from "@/lib/hooks/use-products";
 import { useParts } from "@/lib/hooks/use-parts";
 import { useReceivePartCostLayer } from "@/lib/hooks/use-parts";
-import { useCreateGoodsReceipt } from "@/lib/hooks/use-goods-receipts";
+import { useCreateGoodsReceipt, useGoodsReceipts } from "@/lib/hooks/use-goods-receipts";
 import { formatCurrency } from "@/lib/utils";
 import type { PurchaseOrder, LineItem } from "@/types";
 
@@ -68,6 +68,16 @@ export function ReceiveGoodsDialog({
   const { mutate: receivePartLayer } = useReceivePartCostLayer();
   const { mutate: receiveProductLayer } = useReceiveProductCostLayer();
   const { mutate: createReceipt, isPending: saving } = useCreateGoodsReceipt();
+  const { data: allReceipts = [] } = useGoodsReceipts();
+
+  // Total already received per line item across all prior receipts for this PO
+  const alreadyReceivedMap = allReceipts
+    .filter((r) => r.purchaseOrderId === po.id)
+    .flatMap((r) => r.lines)
+    .reduce((map, l) => {
+      map.set(l.lineItemId, (map.get(l.lineItemId) ?? 0) + l.quantityReceived);
+      return map;
+    }, new Map<string, number>());
 
   const [lines, setLines] = useState<ReceiptDraftLine[]>([]);
   const [receivedById, setReceivedById] = useState("");
@@ -85,15 +95,19 @@ export function ReceiveGoodsDialog({
   useEffect(() => {
     if (open) {
       setLines(
-        po.lineItems.map((li: LineItem) => ({
-          lineItemId: li.id,
-          productItemName: li.productItemName,
-          partNumber: li.partNumber,
-          quantityOrdered: li.quantity,
-          quantityReceived: li.quantity, // default to full quantity
-          unitCost: li.unitCost,
-          isMaintPart: maintPartNumbers.has(li.partNumber),
-        }))
+        po.lineItems.map((li: LineItem) => {
+          const alreadyReceived = alreadyReceivedMap.get(li.id) ?? 0;
+          const remaining = Math.max(0, li.quantity - alreadyReceived);
+          return {
+            lineItemId: li.id,
+            productItemName: li.productItemName,
+            partNumber: li.partNumber,
+            quantityOrdered: li.quantity,
+            quantityReceived: remaining, // default to remaining only
+            unitCost: li.unitCost,
+            isMaintPart: maintPartNumbers.has(li.partNumber),
+          };
+        })
       );
       setReceivedById("");
       setNotes("");
@@ -104,11 +118,12 @@ export function ReceiveGoodsDialog({
 
   function handleQtyChange(lineItemId: string, qty: number) {
     setLines((prev) =>
-      prev.map((l) =>
-        l.lineItemId === lineItemId
-          ? { ...l, quantityReceived: Math.max(0, Math.min(qty, l.quantityOrdered)) }
-          : l
-      )
+      prev.map((l) => {
+        if (l.lineItemId !== lineItemId) return l;
+        const alreadyReceived = alreadyReceivedMap.get(l.lineItemId) ?? 0;
+        const remaining = Math.max(0, l.quantityOrdered - alreadyReceived);
+        return { ...l, quantityReceived: Math.max(0, Math.min(qty, remaining)) };
+      })
     );
   }
 
@@ -294,7 +309,8 @@ export function ReceiveGoodsDialog({
                         <TableHead>Part #</TableHead>
                         <TableHead className="text-right">Unit Cost</TableHead>
                         <TableHead className="text-right">Ordered</TableHead>
-                        <TableHead className="w-28 text-right">Received</TableHead>
+                        <TableHead className="text-right">Already Rcvd</TableHead>
+                        <TableHead className="w-28 text-right">Receiving Now</TableHead>
                         <TableHead>Type</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -314,11 +330,19 @@ export function ReceiveGoodsDialog({
                             {line.quantityOrdered}
                           </TableCell>
                           <TableCell className="text-right">
+                            {(() => {
+                              const already = alreadyReceivedMap.get(line.lineItemId) ?? 0;
+                              return already > 0
+                                ? <span className="font-medium text-emerald-700">{already}</span>
+                                : <span className="text-slate-400">—</span>;
+                            })()}
+                          </TableCell>
+                          <TableCell className="text-right">
                             <Input
                               type="number"
                               min={0}
                               step={0.01}
-                              max={line.quantityOrdered}
+                              max={Math.max(0, line.quantityOrdered - (alreadyReceivedMap.get(line.lineItemId) ?? 0))}
                               className="h-8 w-20 text-right text-xs"
                               value={line.quantityReceived}
                               onChange={(e) =>
