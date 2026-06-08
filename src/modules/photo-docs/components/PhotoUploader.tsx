@@ -65,7 +65,7 @@ export function PhotoUploader({ projectId }: PhotoUploaderProps) {
     setPending((prev) => [...prev, ...newPending]);
   }, [globalBeforeAfter, globalTags]);
 
-  function handleInput(ref: React.RefObject<HTMLInputElement>) {
+  function handleInput(ref: React.RefObject<HTMLInputElement | null>) {
     return async (e: React.ChangeEvent<HTMLInputElement>) => {
       await addFiles(Array.from(e.target.files ?? []));
       if (ref.current) ref.current.value = "";
