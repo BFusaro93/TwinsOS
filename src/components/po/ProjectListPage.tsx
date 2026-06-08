@@ -60,8 +60,14 @@ export function ProjectListPage() {
   const all = projects ?? [];
   const sheetProject = sheetProjectId ? (all.find((p) => p.id === sheetProjectId) ?? null) : null;
 
+  const ARCHIVED_OPTIONS = [
+    { value: "active",   label: "Active only" },
+    { value: "archived", label: "Archived only" },
+  ];
+
   const advancedFilters = [
-    { key: "status", placeholder: "All Statuses", options: STATUS_OPTIONS, multi: true as const },
+    { key: "status",   placeholder: "All Statuses",  options: STATUS_OPTIONS,   multi: true as const },
+    { key: "archived", placeholder: "All Projects",   options: ARCHIVED_OPTIONS, multi: false as const },
   ];
 
   const activeFilterCount = advancedFilters.filter((f) => {
@@ -80,7 +86,12 @@ export function ProjectListPage() {
       p.name.toLowerCase().includes(q) ||
       p.customerName.toLowerCase().includes(q);
     const matchStatus = matchesFilter(p.status, filterValues.status);
-    return matchSearch && matchStatus;
+    const archivedFilter = filterValues.archived as string | undefined;
+    const matchArchived =
+      !archivedFilter || archivedFilter === "all"
+        ? true
+        : archivedFilter === "archived" ? p.isArchived : !p.isArchived;
+    return matchSearch && matchStatus && matchArchived;
   });
 
   const { sortKey, sortDir, toggle, sorted } = useSort(filtered, "createdAt", "desc");

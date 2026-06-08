@@ -4,8 +4,15 @@ import { mapProject } from "@/lib/supabase/mappers";
 import type { Project } from "@/types";
 
 function patchProjectCache(queryClient: ReturnType<typeof useQueryClient>, id: string, patch: Partial<Project>) {
-  queryClient.setQueryData<Project[]>(["projects"], (old) =>
-    old?.map((p) => p.id === id ? { ...p, ...patch } : p) ?? []
+  // Patch all project list cache variants (includeArchived: true and false)
+  for (const includeArchived of [true, false]) {
+    queryClient.setQueryData<Project[]>(["projects", { includeArchived }], (old) =>
+      old?.map((p) => p.id === id ? { ...p, ...patch } : p) ?? []
+    );
+  }
+  // Also patch the single-project cache
+  queryClient.setQueryData<Project>(["projects", id], (old) =>
+    old ? { ...old, ...patch } : old
   );
 }
 

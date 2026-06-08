@@ -32,11 +32,16 @@ export function ProjectListPanel({ projects, selectedId, onSelect }: ProjectList
               <span className="truncate text-sm font-semibold text-slate-900">
                 {project.name}
               </span>
-              <StatusBadge
-                variant={project.status === "on_hold" ? "on_hold_project" : project.status}
-                label={PROJECT_STATUS_LABELS[project.status]}
-                className="shrink-0 whitespace-nowrap"
-              />
+              <div className="flex shrink-0 items-center gap-1.5">
+                {project.isArchived && (
+                  <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-500">Archived</span>
+                )}
+                <StatusBadge
+                  variant={project.status === "on_hold" ? "on_hold_project" : project.status}
+                  label={PROJECT_STATUS_LABELS[project.status]}
+                  className="whitespace-nowrap"
+                />
+              </div>
             </div>
             <div className="flex items-center justify-between gap-2">
               <span className="truncate text-xs text-slate-500">{project.customerName}</span>
