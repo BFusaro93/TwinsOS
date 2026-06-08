@@ -697,6 +697,7 @@ export function mapAuditEntry(row: AuditLogRow): AuditEntry {
 type ProfileRow = Database["public"]["Tables"]["profiles"]["Row"];
 
 export function mapOrgUser(row: ProfileRow): OrgUser {
+  const raw = row as unknown as Record<string, unknown>;
   return {
     id: row.id,
     orgId: row.org_id,
@@ -704,8 +705,11 @@ export function mapOrgUser(row: ProfileRow): OrgUser {
     email: row.email,
     role: row.role as Role,
     avatarUrl: row.avatar_url,
-    status: (((row as unknown as Record<string, unknown>).status as string | undefined) ?? "active") as OrgUser["status"],
+    status: ((raw.status as string | undefined) ?? "active") as OrgUser["status"],
     createdAt: row.created_at,
+    photoModuleAccess: row.role === "admin"
+      ? true
+      : Boolean(raw.photo_module_access ?? false),
   };
 }
 

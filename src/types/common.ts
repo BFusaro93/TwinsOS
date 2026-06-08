@@ -18,6 +18,8 @@ export interface OrgUser {
   avatarUrl: string | null;
   status: "active" | "invited" | "inactive";
   createdAt: string;
+  /** Photo Documentation module access flag (auto-granted to admin). */
+  photoModuleAccess: boolean;
 }
 
 export type ApprovalStatus =

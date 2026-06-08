@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { useUsers, useInviteUser, useUpdateUserRole, useDeactivateUser } from "@/lib/hooks/use-users";
+import { useUsers, useInviteUser, useUpdateUserRole, useDeactivateUser, useUpdatePhotoModuleAccess } from "@/lib/hooks/use-users";
+import { Switch } from "@/components/ui/switch";
 import { useCurrentUserStore } from "@/stores";
 import type { OrgUser } from "@/types";
 import { Check, Trash2, UserPlus } from "lucide-react";
@@ -298,6 +299,7 @@ export function UsersPage() {
   const { mutate: inviteUser, isPending: inviting } = useInviteUser();
   const { mutate: updateRole } = useUpdateUserRole();
   const { mutate: deactivate } = useDeactivateUser();
+  const { mutate: updatePhotoAccess } = useUpdatePhotoModuleAccess();
 
   const users = useMemo(
     () =>
@@ -374,6 +376,7 @@ export function UsersPage() {
                   <TableHead>User</TableHead>
                   <TableHead>Role</TableHead>
                   <TableHead>Status</TableHead>
+                  {isAdmin && <TableHead>Photo Module</TableHead>}
                   <TableHead>Joined</TableHead>
                   <TableHead className="w-12" />
                 </TableRow>
@@ -423,6 +426,23 @@ export function UsersPage() {
                       </Badge>
                     </TableCell>
 
+                    {isAdmin && (
+                      <TableCell>
+                        {user.role === "admin" ? (
+                          <span className="text-xs text-slate-400">Always on</span>
+                        ) : user.role === "requestor" ? (
+                          <span className="text-xs text-slate-500">N/A</span>
+                        ) : (
+                          <Switch
+                            checked={user.photoModuleAccess}
+                            onCheckedChange={(enabled) =>
+                              updatePhotoAccess({ userId: user.id, enabled })
+                            }
+                            aria-label={`Photo module access for ${user.name}`}
+                          />
+                        )}
+                      </TableCell>
+                    )}
                     <TableCell className="text-sm text-slate-500">
                       {formatDate((user as { joinedAt: string }).joinedAt)}
                     </TableCell>

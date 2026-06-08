@@ -69,3 +69,22 @@ export function useDeactivateUser() {
     },
   });
 }
+
+/** Toggle photo_module_access for a user (admin only — enforced by RLS). */
+export function useUpdatePhotoModuleAccess() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ userId, enabled }: { userId: string; enabled: boolean }) => {
+      const supabase = createClient();
+      const { error } = await supabase
+        .from("profiles")
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .update({ photo_module_access: enabled } as any)
+        .eq("id", userId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["users"] });
+    },
+  });
+}

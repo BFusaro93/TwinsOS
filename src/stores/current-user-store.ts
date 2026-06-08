@@ -10,6 +10,7 @@ const PLACEHOLDER_USER: OrgUser = {
   avatarUrl: null,
   status: "active",
   createdAt: "",
+  photoModuleAccess: false,
 };
 
 interface CurrentUserStore {

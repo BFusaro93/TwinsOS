@@ -8,6 +8,7 @@ import {
   Wrench,
   Bell,
   CalendarClock,
+  FileImage,
   Truck,
   Cpu,
   Cog,
@@ -64,6 +65,12 @@ export const NAV_SECTIONS: NavSection[] = [
       { label: "Parts Inventory", href: "/cmms/parts", icon: Cog },
       { label: "Meters", href: "/cmms/meters", icon: Gauge },
       { label: "Automations", href: "/cmms/automations", icon: Zap },
+    ],
+  },
+  {
+    label: "Field",
+    items: [
+      { label: "Job Photos", href: "/jobs", icon: FileImage },
     ],
   },
   {

@@ -13,6 +13,8 @@ export function AppSidebar() {
   const { sidebarCollapsed } = useUIStore();
   const { logoDataUrl, orgName } = useSettingsStore();
   const { currentUser } = useCurrentUserStore();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const hasPhotoAccess = currentUser.role === "admin" || Boolean((currentUser as any).photoModuleAccess);
   const isAdmin = currentUser.role === "admin";
 
   return (
@@ -62,7 +64,10 @@ export function AppSidebar() {
                 {section.label}
               </p>
             )}
-            {section.items.filter((item) => !item.adminOnly || isAdmin).map((item) => {
+            {section.items
+              .filter((item) => !item.adminOnly || isAdmin)
+              .filter((item) => item.href !== "/jobs" || hasPhotoAccess)
+              .map((item) => {
               const isActive =
                 pathname === item.href ||
                 (!item.exact && item.href !== "/dashboard" && pathname.startsWith(item.href + "/"));
