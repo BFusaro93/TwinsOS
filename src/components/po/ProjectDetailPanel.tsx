@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { toast } from "sonner";
 import { Pencil, Trash2, Plus, ExternalLink, Download, Building2 } from "lucide-react";
 import { printProject } from "@/lib/print";
 import { formatCurrency, formatDate } from "@/lib/utils";
@@ -1040,7 +1041,12 @@ export function ProjectDetailPanel({ project }: ProjectDetailPanelProps) {
     <div className="flex h-full flex-col">
       <div className="flex items-start justify-between border-b px-6 py-4 pr-12">
         <div>
-          <h2 className="text-base font-semibold text-slate-900">{project.name}</h2>
+          <div className="flex items-center gap-2">
+            <h2 className="text-base font-semibold text-slate-900">{project.name}</h2>
+            {project.isArchived && (
+              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-500">Archived</span>
+            )}
+          </div>
           <p className="text-sm text-slate-500">{project.customerName}</p>
         </div>
         <div className="flex items-center gap-2">
@@ -1058,7 +1064,10 @@ export function ProjectDetailPanel({ project }: ProjectDetailPanelProps) {
             size="sm"
             className={project.isArchived ? "text-amber-600 hover:text-amber-700" : "text-slate-400 hover:text-slate-600"}
             disabled={archiving}
-            onClick={() => archiveProject({ id: project.id, archived: !project.isArchived })}
+            onClick={() => archiveProject(
+              { id: project.id, archived: !project.isArchived },
+              { onSuccess: () => toast.success(project.isArchived ? "Project unarchived" : "Project archived — it will no longer appear in dropdowns or the active list") }
+            )}
             title={project.isArchived ? "Unarchive project" : "Archive project"}
           >
             {project.isArchived ? "Unarchive" : "Archive"}

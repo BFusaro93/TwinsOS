@@ -175,7 +175,14 @@ export function ProjectListPage() {
                 className="cursor-pointer hover:bg-slate-50"
                 onClick={() => setSheetProjectId(project.id)}
               >
-                <TableCell className="font-medium">{project.name}</TableCell>
+                <TableCell className="font-medium">
+                  <div className="flex items-center gap-2">
+                    {project.name}
+                    {project.isArchived && (
+                      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-500">Archived</span>
+                    )}
+                  </div>
+                </TableCell>
                 <TableCell className="text-slate-600">{project.customerName}</TableCell>
                 {col("status") && (
                   <TableCell>

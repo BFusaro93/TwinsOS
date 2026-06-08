@@ -17,7 +17,7 @@ interface PhotoNavItem {
 
 const PHOTOS_NAV: PhotoNavItem[] = [
   { label: "All Jobs",  href: "/photos/jobs",        icon: FileImage },
-  { label: "Projects",  href: "/po/projects",         icon: Briefcase, requiresPoAccess: true },
+  { label: "Projects",  href: "/photos/projects",      icon: Briefcase, requiresPoAccess: true },
 ];
 
 const PO_ROLES = new Set(["admin", "manager", "purchaser"]);
