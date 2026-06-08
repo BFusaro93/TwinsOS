@@ -38,7 +38,7 @@ export function PhotoGallery({ projectId }: PhotoGalleryProps) {
   const hasBeforeAfterPairs = beforePhotos.length > 0 && afterPhotos.length > 0;
 
   function handleAnnotate(photoId: string) {
-    router.push(`/jobs/${projectId}/photos/${photoId}/annotate`);
+    router.push(`/photos/jobs/${projectId}/${photoId}/annotate`);
   }
 
   return (
@@ -82,7 +82,7 @@ export function PhotoGallery({ projectId }: PhotoGalleryProps) {
             <Button
               size="sm"
               className="gap-1.5 text-xs"
-              onClick={() => router.push(`/jobs/${projectId}/photos/upload`)}
+              onClick={() => router.push(`/photos/jobs/${projectId}/upload`)}
             >
               <Camera className="h-3.5 w-3.5" />
               Upload Photos
@@ -126,7 +126,7 @@ export function PhotoGallery({ projectId }: PhotoGalleryProps) {
             <Button
               size="sm"
               className="gap-1.5 text-xs"
-              onClick={() => router.push(`/jobs/${projectId}/photos/upload`)}
+              onClick={() => router.push(`/photos/jobs/${projectId}/upload`)}
             >
               <Camera className="h-3.5 w-3.5" />
               Upload Photos

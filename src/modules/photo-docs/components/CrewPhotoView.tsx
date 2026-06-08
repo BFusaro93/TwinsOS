@@ -97,7 +97,7 @@ export function CrewPhotoView({
         <Button
           className="w-full gap-2"
           size="lg"
-          onClick={() => router.push(`/jobs/${projectId}/photos/upload`)}
+          onClick={() => router.push(`/photos/jobs/${projectId}/upload`)}
         >
           <Camera className="h-5 w-5" />
           Upload Progress Photo

@@ -9,18 +9,23 @@ function patchProjectCache(queryClient: ReturnType<typeof useQueryClient>, id: s
   );
 }
 
-export function useProjects() {
+/** Returns all non-deleted projects. Pass includeArchived=true to include archived ones (e.g. for admin views). */
+export function useProjects(includeArchived = false) {
   return useQuery({
-    queryKey: ["projects"],
+    queryKey: ["projects", { includeArchived }],
     queryFn: async () => {
       const supabase = createClient();
-      const { data, error } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let q = (supabase as any)
         .from("projects")
         .select("*")
         .is("deleted_at", null)
         .order("name");
+      if (!includeArchived) q = q.eq("is_archived", false);
+      const { data, error } = await q;
       if (error) throw error;
-      return data.map(mapProject);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return (data as any[]).map(mapProject);
     },
   });
 }
@@ -47,7 +52,7 @@ export function useCreateProject() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (
-      input: Omit<Project, "id" | "orgId" | "createdBy" | "createdAt" | "updatedAt" | "deletedAt" | "totalCost">
+      input: Omit<Project, "id" | "orgId" | "createdBy" | "createdAt" | "updatedAt" | "deletedAt" | "totalCost" | "isArchived">
     ) => {
       const supabase = createClient();
       const { data, error } = await supabase
@@ -135,6 +140,27 @@ export function useDeleteProject() {
       if (error) throw error;
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+    },
+  });
+}
+
+/** Toggle is_archived on a project. Archived projects are hidden from lists and dropdowns. */
+export function useArchiveProject() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, archived }: { id: string; archived: boolean }) => {
+      const supabase = createClient();
+      // is_archived not in generated types yet — use type cast
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase as any)
+        .from("projects")
+        .update({ is_archived: archived, updated_at: new Date().toISOString() })
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: (_, { id, archived }) => {
+      patchProjectCache(queryClient, id, { isArchived: archived });
       queryClient.invalidateQueries({ queryKey: ["projects"] });
     },
   });

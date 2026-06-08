@@ -113,7 +113,7 @@ export function PhotoUploader({ projectId }: PhotoUploaderProps) {
           >
             Upload More
           </Button>
-          <Button onClick={() => router.push(`/jobs/${projectId}/photos`)}>
+          <Button onClick={() => router.push(`/photos/jobs/${projectId}`)}>
             View Gallery
           </Button>
         </div>

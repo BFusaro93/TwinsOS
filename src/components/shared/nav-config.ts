@@ -70,7 +70,7 @@ export const NAV_SECTIONS: NavSection[] = [
   {
     label: "Field",
     items: [
-      { label: "Job Photos", href: "/jobs", icon: FileImage },
+      { label: "Job Photos", href: "/photos/jobs", icon: FileImage },
     ],
   },
   {

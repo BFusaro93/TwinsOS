@@ -56,7 +56,7 @@ export default function HomePage() {
           </div>
         </Link>
 
-        <Link href="/jobs" className={INTERNAL_BOX}>
+        <Link href="/photos/jobs" className={INTERNAL_BOX}>
           <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-brand-50 text-brand-500 transition-colors group-hover:bg-brand-100">
             <Camera className="h-8 w-8" />
           </div>

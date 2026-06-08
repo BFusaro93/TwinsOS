@@ -18,7 +18,7 @@ export function PhotoModuleGuard({ children }: PhotoModuleGuardProps) {
 
   useEffect(() => {
     if (!canAccess) {
-      router.replace("/dashboard");
+      router.replace("/home");
     }
   }, [canAccess, router]);
 

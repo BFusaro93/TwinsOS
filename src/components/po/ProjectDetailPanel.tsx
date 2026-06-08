@@ -48,7 +48,7 @@ import {
 import { PROJECT_STATUS_LABELS } from "@/lib/constants";
 import { useRequisitions } from "@/lib/hooks/use-requisitions";
 import { usePurchaseOrders } from "@/lib/hooks/use-purchase-orders";
-import { useDeleteProject, useUpdateProject } from "@/lib/hooks/use-projects";
+import { useDeleteProject, useUpdateProject, useArchiveProject } from "@/lib/hooks/use-projects";
 import {
   useProjectDirectItems,
   useAddProjectDirectItem,
@@ -959,6 +959,7 @@ export function ProjectDetailPanel({ project }: ProjectDetailPanelProps) {
   const [status, setStatus] = useState<ProjectStatus>(project.status);
   const { setSelectedProjectId } = usePOStore();
   const { mutate: deleteProject, isPending: deleting } = useDeleteProject();
+  const { mutate: archiveProject, isPending: archiving } = useArchiveProject();
   const { mutate: updateProject } = useUpdateProject();
   const { data: allRequisitions } = useRequisitions();
   const { data: allPurchaseOrders } = usePurchaseOrders();
@@ -1052,6 +1053,16 @@ export function ProjectDetailPanel({ project }: ProjectDetailPanelProps) {
             PDF
           </Button>
           <EditButton onClick={() => setEditOpen(true)} />
+          <Button
+            variant="ghost"
+            size="sm"
+            className={project.isArchived ? "text-amber-600 hover:text-amber-700" : "text-slate-400 hover:text-slate-600"}
+            disabled={archiving}
+            onClick={() => archiveProject({ id: project.id, archived: !project.isArchived })}
+            title={project.isArchived ? "Unarchive project" : "Archive project"}
+          >
+            {project.isArchived ? "Unarchive" : "Archive"}
+          </Button>
           <Button
             variant="ghost"
             size="icon"

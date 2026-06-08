@@ -46,7 +46,8 @@ const PROJECT_COLUMNS: ColumnDef[] = [
 ];
 
 export function ProjectListPage() {
-  const { data: projects, isLoading } = useProjects();
+  // Include archived projects in the management list so they can be unarchived
+  const { data: projects, isLoading } = useProjects(true);
   const { selectedProjectId, setSelectedProjectId } = usePOStore();
   const [newProjectOpen, setNewProjectOpen] = useState(false);
   const [search, setSearch] = useState("");

@@ -140,6 +140,7 @@ export function mapProject(row: ProjectRow): Project {
     totalCost: row.total_cost,
     contractPrice: row.contract_price ?? 0,
     notes: row.notes,
+    isArchived: (row as Record<string, unknown>).is_archived === true,
   };
 }
 
