@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { BarChart2, Wrench, Leaf, FileText, Truck, Users, ExternalLink, ClipboardList } from "lucide-react";
+import { BarChart2, Wrench, Leaf, FileText, Truck, Users, ExternalLink, ClipboardList, Camera } from "lucide-react";
 
 const INTERNAL_BOX =
   "group flex flex-col items-center gap-5 rounded-2xl border-2 border-slate-200 bg-white p-10 shadow-sm transition-all duration-150 hover:border-brand-400 hover:shadow-lg";
@@ -22,7 +22,7 @@ export default function HomePage() {
       </div>
 
       {/* Primary app boxes */}
-      <div className="grid w-full max-w-5xl grid-cols-1 gap-5 sm:grid-cols-3">
+      <div className="grid w-full max-w-5xl grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
         <Link href="/dashboards/avb" className={INTERNAL_BOX}>
           <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-brand-50 text-brand-500 transition-colors group-hover:bg-brand-100">
             <BarChart2 className="h-8 w-8" />
@@ -53,6 +53,16 @@ export default function HomePage() {
           <div className="text-center">
             <p className="text-lg font-semibold text-slate-900">Estimate Writer</p>
             <p className="mt-1 text-sm text-slate-500">Generate estimate text &amp; language</p>
+          </div>
+        </Link>
+
+        <Link href="/jobs" className={INTERNAL_BOX}>
+          <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-brand-50 text-brand-500 transition-colors group-hover:bg-brand-100">
+            <Camera className="h-8 w-8" />
+          </div>
+          <div className="text-center">
+            <p className="text-lg font-semibold text-slate-900">Job Photos</p>
+            <p className="mt-1 text-sm text-slate-500">Field photo documentation</p>
           </div>
         </Link>
       </div>
