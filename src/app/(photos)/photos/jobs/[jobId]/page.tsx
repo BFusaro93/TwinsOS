@@ -9,7 +9,7 @@ import { PhotoModuleGuard } from "@/modules/photo-docs/components/PhotoModuleGua
 import { PhotoGallery } from "@/modules/photo-docs/components/PhotoGallery";
 import { CrewPhotoView } from "@/modules/photo-docs/components/CrewPhotoView";
 import { usePhotoAccess } from "@/modules/photo-docs/hooks/usePhotoAccess";
-import { Button } from "@/components/ui/button";
+import { ProjectDetailSheet } from "@/components/po/ProjectDetailSheet";
 import { toast } from "sonner";
 
 const STATUS_COLORS: Record<string, string> = {
@@ -28,6 +28,7 @@ export default function JobPhotosPage({ params }: { params: Promise<{ jobId: str
 
   const [editingLink, setEditingLink] = useState(false);
   const [selectedProjectId, setSelectedProjectId] = useState<string>("");
+  const [projectSheetOpen, setProjectSheetOpen] = useState(false);
 
   function openLinkEditor() {
     setSelectedProjectId(job?.projectId ?? "");
@@ -46,7 +47,7 @@ export default function JobPhotosPage({ params }: { params: Promise<{ jobId: str
     );
   }
 
-  const linkedProject = job?.projectId ? projects.find((p) => p.id === job.projectId) : null;
+  const linkedProject = job?.projectId ? projects.find((p) => p.id === job.projectId) ?? null : null;
 
   return (
     <PhotoModuleGuard>
@@ -78,7 +79,7 @@ export default function JobPhotosPage({ params }: { params: Promise<{ jobId: str
                 </div>
               )}
 
-              {/* Project link section */}
+              {/* Project link row */}
               <div className="mt-3 border-t border-slate-100 pt-3">
                 {editingLink ? (
                   <div className="flex items-center gap-2">
@@ -89,11 +90,9 @@ export default function JobPhotosPage({ params }: { params: Promise<{ jobId: str
                       onChange={(e) => setSelectedProjectId(e.target.value)}
                     >
                       <option value="">— No project link —</option>
-                      {projects.map((p) => (
-                        <option key={p.id} value={p.id}>{p.name} ({p.customerName})</option>
-                      ))}
+                      {projects.map((p) => <option key={p.id} value={p.id}>{p.name} ({p.customerName})</option>)}
                     </select>
-                    <button onClick={saveLink} disabled={saving} className="rounded-md p-1.5 text-brand-600 hover:bg-brand-50">
+                    <button onClick={saveLink} disabled={saving} className="rounded-md p-1.5 text-brand-600 hover:bg-brand-50 disabled:opacity-50">
                       <Check className="h-4 w-4" />
                     </button>
                     <button onClick={() => setEditingLink(false)} className="rounded-md p-1.5 text-slate-400 hover:bg-slate-100">
@@ -104,13 +103,16 @@ export default function JobPhotosPage({ params }: { params: Promise<{ jobId: str
                   <div className="flex items-center gap-2">
                     <Link2 className="h-3.5 w-3.5 shrink-0 text-slate-400" />
                     {linkedProject ? (
-                      <span className="text-sm text-slate-600">
-                        Linked to project: <span className="font-medium text-brand-600">{linkedProject.name}</span>
-                      </span>
+                      <button
+                        onClick={() => setProjectSheetOpen(true)}
+                        className="text-sm font-medium text-brand-600 hover:underline"
+                      >
+                        {linkedProject.name}
+                      </button>
                     ) : (
                       <span className="text-sm text-slate-400">No project linked</span>
                     )}
-                    {(canAnnotate || !isCrew) && (
+                    {(!isCrew || canAnnotate) && (
                       <button onClick={openLinkEditor} className="ml-auto rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600">
                         <Pencil className="h-3.5 w-3.5" />
                       </button>
@@ -128,6 +130,13 @@ export default function JobPhotosPage({ params }: { params: Promise<{ jobId: str
           <PhotoGallery projectId={jobId} />
         )}
       </div>
+
+      {/* Linked project slide-in — opens within the photos window */}
+      <ProjectDetailSheet
+        project={linkedProject}
+        open={projectSheetOpen}
+        onOpenChange={setProjectSheetOpen}
+      />
     </PhotoModuleGuard>
   );
 }

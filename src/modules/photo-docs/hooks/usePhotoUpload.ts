@@ -53,17 +53,19 @@ export function usePhotoUpload(projectId: string) {
           );
 
         try {
-          // 1. Compress
+          const isImage = inp.file.type.startsWith("image/");
+
+          // 1. Compress images only; pass other file types straight through
           updateStatus("compressing");
-          const compressed = await compressPhoto(inp.file);
+          const compressed = isImage ? await compressPhoto(inp.file) : inp.file;
 
-          // 2. Read dimensions
-          const dims = await getImageDimensions(compressed).catch(() => null);
+          // 2. Dimensions — images only
+          const dims = isImage ? await getImageDimensions(compressed).catch(() => null) : null;
 
-          // 3. GPS (use provided or extract)
+          // 3. GPS — images only
           let gpsLat = inp.gpsLat ?? null;
           let gpsLng = inp.gpsLng ?? null;
-          if (gpsLat == null) {
+          if (isImage && gpsLat == null) {
             const gps = await extractGPS(compressed);
             gpsLat = gps?.lat ?? null;
             gpsLng = gps?.lng ?? null;
@@ -71,7 +73,7 @@ export function usePhotoUpload(projectId: string) {
 
           // 4. Upload to storage
           updateStatus("uploading");
-          const path = buildPhotoPath(orgId, projectId, compressed.name || inp.file.name);
+          const path = buildPhotoPath(orgId, projectId, inp.file.name);
           await uploadOriginalPhoto(path, compressed);
 
           // 5. Save metadata to DB
