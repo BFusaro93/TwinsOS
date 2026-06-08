@@ -109,8 +109,9 @@ interface Computed {
   otherOHPerHour: number;
   liabilitiesPerHour: number;
   ohPerHour: number;
-  breakEven: number;
+  baseBreakEven: number;
   nonBillablePerHour: number;
+  breakEven: number;
   bidRate: number;
   profitPerHour: number;
 }
@@ -136,11 +137,10 @@ function compute(i: Inputs): Computed {
   const liabilitiesPerHour = billableHours > 0 ? i.liabilities / billableHours : 0;
   const ohPerHour = ohPayrollPerHour + otherOHPerHour + liabilitiesPerHour;
   const breakEven = laborPerHour + ohPerHour;
-  // How much of the break-even rate is attributable to non-billable hours:
-  // the difference between the actual break-even and what it would be if 100%
-  // of hours were billable (i.e. totalCosts / totalHours).
+  // Base cost per hour if ALL hours were billable (no non-billable adjustment).
+  // Adding nonBillablePerHour to this gives the actual break-even.
   const baseBreakEven = totalHours > 0 ? (totalLaborCost + totalOverhead) / totalHours : 0;
-  const nonBillablePerHour = breakEven - baseBreakEven;
+  const nonBillablePerHour = breakEven - baseBreakEven; // the uplift from non-billable hours
   const bidRate = i.profitPct < 100 ? breakEven / (1 - i.profitPct / 100) : 0;
   const profitPerHour = bidRate - breakEven;
 
@@ -149,7 +149,7 @@ function compute(i: Inputs): Computed {
     totalDirectLabor, burdenPct, burdenAmount, totalLaborCost,
     totalOverhead, laborPerHour,
     ohPayrollPerHour, otherOHPerHour, liabilitiesPerHour,
-    ohPerHour, breakEven, nonBillablePerHour, bidRate, profitPerHour,
+    ohPerHour, baseBreakEven, nonBillablePerHour, breakEven, bidRate, profitPerHour,
   };
 }
 
@@ -440,9 +440,11 @@ function CalculatorTab({ inputs, setInputs }: { inputs: Inputs; setInputs: (i: I
               <div className="my-1 border-t border-slate-100" />
               <ResultRow label="Overhead / Billable Hour" value={fmtDollar(c.ohPerHour)} bold />
               <div className="my-1 border-t border-slate-100" />
+              <ResultRow label="Base Cost (if 100% billable)" value={fmtDollar(c.baseBreakEven)} muted />
+              <ResultRow label={`Non-billable uplift (${fmtPct(inputs.nonBillablePct)} of hrs)`} value={`+${fmtDollar(c.nonBillablePerHour)}`} muted />
+              <div className="my-1 border-t border-slate-100" />
               <ResultRow label="Break-Even Rate" value={fmtDollar(c.breakEven)} bold />
-              <ResultRow label={`↳ Non-billable hours (${fmtPct(inputs.nonBillablePct)}) adds`} value={`+${fmtDollar(c.nonBillablePerHour)}/hr vs 0%`} muted />
-              <ResultRow label={`Profit (${fmtPct(inputs.profitPct)} of revenue)`} value={fmtDollar(c.profitPerHour)} muted />
+              <ResultRow label={`Profit (${fmtPct(inputs.profitPct)} of revenue)`} value={`+${fmtDollar(c.profitPerHour)}`} muted />
               <div className="my-2 border-t-2 border-slate-200" />
               <ResultRow label="Bid Rate" value={fmtDollar(c.bidRate)} highlight bold />
             </div>
