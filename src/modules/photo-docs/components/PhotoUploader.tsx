@@ -84,7 +84,7 @@ export function PhotoUploader({ projectId }: PhotoUploaderProps) {
   async function handleSubmit() {
     if (pending.length === 0) return;
     const inputs: PhotoUploadInput[] = pending.map((p) => ({
-      projectId,
+      photoJobId: projectId,
       file: p.file,
       beforeAfter: p.beforeAfter,
       tags: p.tags,

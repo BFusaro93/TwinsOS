@@ -10,7 +10,7 @@ import { getOriginalUrl, getAnnotatedUrl } from "../lib/photoStorage";
 
 function mapPhoto(row: Record<string, any>): JobPhoto {
   return {
-    id: row.id, orgId: row.org_id, projectId: row.project_id,
+    id: row.id, orgId: row.org_id, photoJobId: row.photo_job_id,
     uploadedBy: row.uploaded_by, uploadedByName: row.uploaded_by_name,
     storagePath: row.storage_path, annotatedPath: row.annotated_path ?? null,
     thumbnailPath: row.thumbnail_path ?? null, fileName: row.file_name,
@@ -29,7 +29,7 @@ export function useJobPhotos(projectId: string, tab: GalleryTab = "all") {
     queryKey: ["job-photos", projectId, tab],
     queryFn: async () => {
       const db = createClient() as any;
-      let q = db.from("job_photos").select("*").eq("project_id", projectId)
+      let q = db.from("job_photos").select("*").eq("photo_job_id", projectId)
         .is("deleted_at", null).order("created_at", { ascending: false });
       if (tab === "before") q = q.eq("before_after", "before");
       if (tab === "after") q = q.eq("before_after", "after");

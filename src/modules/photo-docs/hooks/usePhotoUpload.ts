@@ -79,7 +79,7 @@ export function usePhotoUpload(projectId: string) {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const { error } = await (supabase as any).from("job_photos").insert({
             org_id: orgId,
-            project_id: projectId,
+            photo_job_id: projectId,
             uploaded_by: currentUser.id,
             uploaded_by_name: currentUser.name,
             storage_path: path,

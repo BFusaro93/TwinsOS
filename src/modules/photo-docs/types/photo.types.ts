@@ -5,37 +5,48 @@ import type { BaseRecord } from "@/types/common";
 export type BeforeAfterFlag = "before" | "after" | "none";
 
 export type UploadContext =
-  | "site_documentation"  // manager / sales — estimate / site visit
-  | "progress"            // technician / crew — during work
-  | "completion"          // technician / crew — finished work
+  | "site_documentation"
+  | "progress"
+  | "completion"
   | "other";
 
 export const PHOTO_TAGS = [
-  "Tree Removal",
-  "Trimming",
-  "Mulch",
-  "Lawn",
-  "Drainage",
-  "Hardscape",
-  "Cleanup",
-  "Other",
+  "Tree Removal", "Trimming", "Mulch", "Lawn",
+  "Drainage", "Hardscape", "Cleanup", "Other",
 ] as const;
-
 export type PhotoTag = (typeof PHOTO_TAGS)[number];
+
+export type PhotoJobStatus = "active" | "complete" | "on_hold";
+
+// ── Photo Job (photos module's own job record) ────────────────────────────────
+
+export interface PhotoJob {
+  id: string;
+  orgId: string;
+  name: string;
+  customerName: string;
+  address: string;
+  notes: string | null;
+  status: PhotoJobStatus;
+  /** Optional link to a Project for cost tracking. null = standalone photo job */
+  projectId: string | null;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt: string | null;
+  createdBy: string | null;
+}
 
 // ── Core domain types ─────────────────────────────────────────────────────────
 
 export interface JobPhoto extends BaseRecord {
-  projectId: string;
+  photoJobId: string;
   uploadedBy: string;
   uploadedByName: string;
-  /** Path inside the job-photos-original Supabase Storage bucket */
   storagePath: string;
-  /** Path inside job-photos-annotated bucket — null until first annotation is saved */
   annotatedPath: string | null;
   thumbnailPath: string | null;
   fileName: string;
-  fileSize: number; // bytes
+  fileSize: number;
   mimeType: string;
   width: number | null;
   height: number | null;
@@ -46,7 +57,7 @@ export interface JobPhoto extends BaseRecord {
   gpsLng: number | null;
   uploadContext: UploadContext;
   hasAnnotations: boolean;
-  // ─ Derived at read time (not stored) ─
+  // Derived at read time
   publicUrl?: string;
   annotatedUrl?: string;
 }
@@ -57,7 +68,6 @@ export interface PhotoAnnotation {
   photoId: string;
   authorId: string;
   authorName: string;
-  /** Full Fabric.js JSON canvas state */
   fabricJson: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
@@ -66,7 +76,7 @@ export interface PhotoAnnotation {
 // ── Input / form types ────────────────────────────────────────────────────────
 
 export interface PhotoUploadInput {
-  projectId: string;
+  photoJobId: string;
   file: File;
   beforeAfter: BeforeAfterFlag;
   tags: string[];
@@ -84,11 +94,7 @@ export interface PhotoUploadProgress {
   errorMessage?: string;
 }
 
-// ── Gallery filter ─────────────────────────────────────────────────────────────
-
 export type GalleryTab = "all" | "before" | "after" | "annotated";
-
-// ── Annotation draw tool ──────────────────────────────────────────────────────
 
 export type DrawTool = "select" | "arrow" | "circle" | "text" | "freehand";
 export type DrawColor = "#ef4444" | "#facc15" | "#22c55e" | "#ffffff";
