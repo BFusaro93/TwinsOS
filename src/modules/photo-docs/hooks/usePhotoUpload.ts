@@ -4,6 +4,8 @@ import { useState, useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 import { useCurrentUserStore } from "@/stores";
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { compressPhoto, getImageDimensions, extractGPS } from "../lib/imageCompression";
 import { buildPhotoPath, uploadOriginalPhoto } from "../lib/photoStorage";
 import type { PhotoUploadInput, PhotoUploadProgress } from "../types/photo.types";
@@ -74,7 +76,8 @@ export function usePhotoUpload(projectId: string) {
 
           // 5. Save metadata to DB
           updateStatus("saving");
-          const { error } = await supabase.from("job_photos" as any).insert({
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { error } = await (supabase as any).from("job_photos").insert({
             org_id: orgId,
             project_id: projectId,
             uploaded_by: currentUser.id,
