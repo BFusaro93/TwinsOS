@@ -5,6 +5,17 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+/**
+ * Format a split address into a single display string.
+ * Output: "123 Main St Springfield, MA 01234"
+ * State and ZIP share no comma; street and city share no comma.
+ */
+export function formatAddress(address: string, city: string, state: string, zip: string): string {
+  const streetCity = [address, city].filter(Boolean).join(" ");
+  const stateZip = [state, zip].filter(Boolean).join(" ");
+  return [streetCity, stateZip].filter(Boolean).join(", ");
+}
+
 export function formatCurrency(cents: number): string {
   return new Intl.NumberFormat("en-US", {
     style: "currency",

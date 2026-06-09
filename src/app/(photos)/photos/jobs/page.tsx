@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { cn, formatDate } from "@/lib/utils";
+import { cn, formatDate, formatAddress } from "@/lib/utils";
 import { PhotoModuleGuard } from "@/modules/photo-docs/components/PhotoModuleGuard";
 import { usePhotoAccess } from "@/modules/photo-docs/hooks/usePhotoAccess";
 import type { PhotoJobStatus } from "@/modules/photo-docs/types/photo.types";
@@ -52,7 +52,7 @@ export default function PhotoJobsPage() {
     if (archiveFilter === "active" && j.isArchived) return false;
     if (!search) return true;
     const q = search.toLowerCase();
-    const addr = [j.address, j.city, j.state, j.zip].filter(Boolean).join(" ").toLowerCase();
+    const addr = formatAddress(j.address, j.city, j.state, j.zip).toLowerCase();
     return j.name.toLowerCase().includes(q) || j.customerName.toLowerCase().includes(q) || addr.includes(q);
   });
 
@@ -172,7 +172,7 @@ export default function PhotoJobsPage() {
         ) : (
           <div className="space-y-2">
             {filtered.map((job) => {
-              const fullAddr = [job.address, job.city, job.state, job.zip].filter(Boolean).join(", ");
+              const fullAddr = formatAddress(job.address, job.city, job.state, job.zip);
               return (
                 <button key={job.id} className="flex w-full items-center gap-4 rounded-xl border border-slate-200 bg-white p-4 text-left shadow-sm transition-shadow hover:shadow-md" onClick={() => router.push(`/photos/jobs/${job.id}`)}>
                   <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-brand-50">

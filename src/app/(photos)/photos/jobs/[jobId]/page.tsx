@@ -15,6 +15,9 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
+import { formatAddress } from "@/lib/utils";
+import { PROJECT_STATUS_LABELS } from "@/lib/constants";
+import { StatusBadge } from "@/components/shared/StatusBadge";
 import type { PhotoJobStatus } from "@/modules/photo-docs/types/photo.types";
 
 const STATUS_COLORS: Record<string, string> = {
@@ -91,7 +94,7 @@ export default function JobPhotosPage({ params }: { params: Promise<{ jobId: str
   }
 
   const linkedProject = job?.projectId ? projects.find((p) => p.id === job.projectId) ?? null : null;
-  const fullAddress = [job?.address, job?.city, job?.state, job?.zip].filter(Boolean).join(", ");
+  const fullAddress = job ? formatAddress(job.address, job.city, job.state, job.zip) : "";
 
   return (
     <PhotoModuleGuard>
@@ -233,9 +236,15 @@ export default function JobPhotosPage({ params }: { params: Promise<{ jobId: str
                   <div className="flex items-center gap-2">
                     <Link2 className="h-3.5 w-3.5 shrink-0 text-slate-400" />
                     {linkedProject ? (
-                      <button onClick={() => setProjectSheetOpen(true)} className="text-sm font-medium text-brand-600 hover:underline">
-                        {linkedProject.name}
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button onClick={() => setProjectSheetOpen(true)} className="text-sm font-medium text-brand-600 hover:underline">
+                          {linkedProject.name}
+                        </button>
+                        <StatusBadge
+                          variant={linkedProject.status === "on_hold" ? "on_hold_project" : linkedProject.status}
+                          label={PROJECT_STATUS_LABELS[linkedProject.status]}
+                        />
+                      </div>
                     ) : (
                       <span className="text-sm text-slate-400">No project linked</span>
                     )}

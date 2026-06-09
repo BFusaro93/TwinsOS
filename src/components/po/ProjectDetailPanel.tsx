@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { Pencil, Trash2, Plus, ExternalLink, Download, Building2 } from "lucide-react";
 import { printProject } from "@/lib/print";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { formatCurrency, formatDate, formatAddress } from "@/lib/utils";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { RecordDetailTabs } from "@/components/shared/RecordDetailTabs";
 import { CommentsSection } from "@/components/shared/CommentsSection";
@@ -884,7 +884,7 @@ function DetailsTab({
             />
           }
         />
-        <MetaRow label="Address" value={[project.address, project.city, project.state, project.zip].filter(Boolean).join(", ")} />
+        <MetaRow label="Address" value={formatAddress(project.address, project.city, project.state, project.zip)} />
         <MetaRow label="Start Date" value={formatDate(project.startDate)} />
         <MetaRow
           label="End Date"
