@@ -163,6 +163,9 @@ function CrewPhotoCard({
       {/* Info overlay */}
       <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent p-2">
         <div className="flex flex-col gap-0.5">
+          {photo.displayName && (
+            <span className="truncate text-[10px] font-semibold text-white">{photo.displayName}</span>
+          )}
           {photo.beforeAfter !== "none" && (
             <span
               className={cn(
