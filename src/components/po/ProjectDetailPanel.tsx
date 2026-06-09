@@ -884,7 +884,7 @@ function DetailsTab({
             />
           }
         />
-        <MetaRow label="Address" value={project.address} />
+        <MetaRow label="Address" value={[project.address, project.city, project.state, project.zip].filter(Boolean).join(", ")} />
         <MetaRow label="Start Date" value={formatDate(project.startDate)} />
         <MetaRow
           label="End Date"

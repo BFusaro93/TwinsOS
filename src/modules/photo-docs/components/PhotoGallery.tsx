@@ -11,7 +11,7 @@ import { useJobPhotos, useDeletePhoto } from "../hooks/useJobPhotos";
 import { usePhotoAccess } from "../hooks/usePhotoAccess";
 import { PhotoLightbox } from "./PhotoLightbox";
 import { BeforeAfterSlider } from "./BeforeAfterSlider";
-import type { GalleryTab, JobPhoto } from "../types/photo.types";
+import type { GalleryTab, GalleryFileType, JobPhoto } from "../types/photo.types";
 
 interface PhotoGalleryProps {
   projectId: string;
@@ -24,15 +24,31 @@ const TABS: { value: GalleryTab; label: string }[] = [
   { value: "annotated", label: "Annotated" },
 ];
 
+const FILE_TYPE_FILTERS: { value: GalleryFileType; label: string }[] = [
+  { value: "all",       label: "All" },
+  { value: "photos",    label: "Photos" },
+  { value: "videos",    label: "Videos" },
+  { value: "documents", label: "Docs" },
+];
+
 export function PhotoGallery({ projectId }: PhotoGalleryProps) {
   const router = useRouter();
   const { canUpload, canAnnotate } = usePhotoAccess();
   const [tab, setTab] = useState<GalleryTab>("all");
+  const [fileType, setFileType] = useState<GalleryFileType>("all");
   const [lightboxPhoto, setLightboxPhoto] = useState<JobPhoto | null>(null);
   const [showBeforeAfter, setShowBeforeAfter] = useState(false);
 
-  const { data: photos = [], isLoading } = useJobPhotos(projectId, tab);
+  const { data: allPhotos = [], isLoading } = useJobPhotos(projectId, tab);
   const { mutate: deletePhoto } = useDeletePhoto(projectId);
+
+  // Client-side file type filter
+  const photos = allPhotos.filter((p) => {
+    if (fileType === "photos")    return p.mimeType?.startsWith("image/") ?? true;
+    if (fileType === "videos")    return p.mimeType?.startsWith("video/");
+    if (fileType === "documents") return !p.mimeType?.startsWith("image/") && !p.mimeType?.startsWith("video/");
+    return true;
+  });
 
   const beforePhotos = photos.filter((p) => p.beforeAfter === "before");
   const afterPhotos = photos.filter((p) => p.beforeAfter === "after");
@@ -46,7 +62,24 @@ export function PhotoGallery({ projectId }: PhotoGalleryProps) {
     <div className="flex flex-col gap-4">
       {/* Toolbar */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        {/* Tabs */}
+        {/* File type filter */}
+        <div className="flex items-center gap-1">
+          {FILE_TYPE_FILTERS.map((f) => (
+            <button
+              key={f.value}
+              onClick={() => setFileType(f.value)}
+              className={cn(
+                "rounded-full px-3 py-1 text-xs font-medium transition-colors",
+                fileType === f.value
+                  ? "bg-brand-500 text-white"
+                  : "border border-slate-600 text-slate-400 hover:text-slate-200",
+              )}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+        {/* Before/After tabs */}
         <div className="flex items-center rounded-md border border-slate-700 bg-slate-800 p-0.5">
           {TABS.map((t) => (
             <button
@@ -86,7 +119,7 @@ export function PhotoGallery({ projectId }: PhotoGalleryProps) {
               onClick={() => router.push(`/photos/jobs/${projectId}/upload`)}
             >
               <Camera className="h-3.5 w-3.5" />
-              Upload Photos
+              Upload Files
             </Button>
           )}
         </div>
@@ -130,7 +163,7 @@ export function PhotoGallery({ projectId }: PhotoGalleryProps) {
               onClick={() => router.push(`/photos/jobs/${projectId}/upload`)}
             >
               <Camera className="h-3.5 w-3.5" />
-              Upload Photos
+              Upload Files
             </Button>
           )}
         </div>
@@ -210,6 +243,9 @@ function PhotoThumbnail({
       <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent p-2">
         <div className="flex items-end justify-between gap-1">
           <div className="flex flex-col gap-0.5">
+            {photo.displayName && (
+              <span className="truncate text-[10px] font-semibold text-white">{photo.displayName}</span>
+            )}
             {photo.beforeAfter !== "none" && (
               <span
                 className={cn(

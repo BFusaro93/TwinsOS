@@ -68,6 +68,12 @@ export function useCreateProject() {
           name: input.name,
           customer_name: input.customerName,
           address: input.address,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          ...(input.city  !== undefined && { city:  (input as any).city  }),
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          ...(input.state !== undefined && { state: (input as any).state }),
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          ...(input.zip   !== undefined && { zip:   (input as any).zip   }),
           status: input.status,
           start_date: input.startDate || null,
           end_date: input.endDate,
@@ -96,6 +102,12 @@ export function useUpdateProject() {
           ...(input.name !== undefined && { name: input.name }),
           ...(input.customerName !== undefined && { customer_name: input.customerName }),
           ...(input.address !== undefined && { address: input.address }),
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          ...(input.city  !== undefined && { city:  (input as any).city  }),
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          ...(input.state !== undefined && { state: (input as any).state }),
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          ...(input.zip   !== undefined && { zip:   (input as any).zip   }),
           ...(input.status !== undefined && { status: input.status }),
           ...(input.startDate !== undefined && { start_date: input.startDate || null }),
           ...(input.endDate !== undefined && { end_date: input.endDate }),

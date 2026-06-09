@@ -21,6 +21,7 @@ interface PendingFile {
   file: File;
   preview: string | null; // null for non-images
   fileType: "image" | "video" | "other";
+  displayName: string;
   beforeAfter: BeforeAfterFlag;
   tags: string[];
   notes: string;
@@ -56,6 +57,7 @@ export function PhotoUploader({ projectId }: PhotoUploaderProps) {
           file,
           preview: type === "image" ? await fileToDataUrl(file).catch(() => null) : null,
           fileType: type,
+          displayName: "",
           beforeAfter: type === "image" ? globalBeforeAfter : "none" as BeforeAfterFlag,
           tags: type === "image" ? [...globalTags] : [],
           notes: "",
@@ -93,6 +95,7 @@ export function PhotoUploader({ projectId }: PhotoUploaderProps) {
     const inputs: PhotoUploadInput[] = pending.map((p) => ({
       photoJobId: projectId,
       file: p.file,
+      displayName: p.displayName || undefined,
       beforeAfter: p.beforeAfter,
       tags: p.tags,
       notes: p.notes || undefined,
@@ -207,11 +210,21 @@ export function PhotoUploader({ projectId }: PhotoUploaderProps) {
 
                   {/* Fields */}
                   <div className="flex-1 space-y-2">
-                    <p className="truncate text-xs font-medium text-slate-700">{p.file.name}</p>
+                    <p className="truncate text-[10px] text-slate-400">{p.file.name}</p>
                     <p className="text-[10px] text-slate-400">
                       {p.fileType === "image" ? "Photo" : p.fileType === "video" ? "Video" : "File"} ·{" "}
                       {(p.file.size / 1024).toFixed(0)} KB
                     </p>
+
+                    {!prog && (
+                      <input
+                        type="text"
+                        placeholder="Display name (optional)"
+                        className="w-full rounded border border-slate-200 px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-brand-400"
+                        value={p.displayName}
+                        onChange={(e) => updatePending(i, { displayName: e.target.value })}
+                      />
+                    )}
 
                     {!prog && isImage && (
                       <>

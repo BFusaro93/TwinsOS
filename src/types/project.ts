@@ -12,6 +12,9 @@ export interface Project extends BaseRecord {
   name: string;
   customerName: string;
   address: string;
+  city: string;
+  state: string;
+  zip: string;
   status: ProjectStatus;
   startDate: string;
   endDate: string | null;

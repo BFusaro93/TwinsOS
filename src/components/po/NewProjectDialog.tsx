@@ -34,6 +34,9 @@ export function NewProjectDialog({ open, onOpenChange, initialData }: NewProject
   const [name, setName] = useState("");
   const [customerName, setCustomerName] = useState("");
   const [address, setAddress] = useState("");
+  const [city, setCity] = useState("");
+  const [state, setState] = useState("");
+  const [zip, setZip] = useState("");
   const [status, setStatus] = useState("sold");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
@@ -47,6 +50,9 @@ export function NewProjectDialog({ open, onOpenChange, initialData }: NewProject
       setName(initialData.name);
       setCustomerName(initialData.customerName);
       setAddress(initialData.address ?? "");
+      setCity(initialData.city ?? "");
+      setState(initialData.state ?? "");
+      setZip(initialData.zip ?? "");
       setStatus(initialData.status);
       setStartDate(initialData.startDate ?? "");
       setEndDate(initialData.endDate ?? "");
@@ -62,6 +68,9 @@ export function NewProjectDialog({ open, onOpenChange, initialData }: NewProject
     setName("");
     setCustomerName("");
     setAddress("");
+    setCity("");
+    setState("");
+    setZip("");
     setStatus("sold");
     setStartDate("");
     setEndDate("");
@@ -77,6 +86,9 @@ export function NewProjectDialog({ open, onOpenChange, initialData }: NewProject
       name,
       customerName,
       address: address,
+      city,
+      state,
+      zip,
       status: status as import("@/types/project").ProjectStatus,
       startDate: startDate,
       endDate: endDate || null,
@@ -129,15 +141,29 @@ export function NewProjectDialog({ open, onOpenChange, initialData }: NewProject
               />
             </div>
 
-            {/* Address — full width */}
+            {/* Address — split into street / city / state / zip */}
             <div className="sm:col-span-2 grid gap-1.5">
-              <Label htmlFor="project-address">Address</Label>
+              <Label htmlFor="project-address">Street Address</Label>
               <Input
                 id="project-address"
                 value={address}
                 onChange={(e) => setAddress(e.target.value)}
-                placeholder="Job site address"
+                placeholder="123 Main St"
               />
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="project-city">City</Label>
+              <Input id="project-city" value={city} onChange={(e) => setCity(e.target.value)} placeholder="Springfield" />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="grid gap-1.5">
+                <Label htmlFor="project-state">State</Label>
+                <Input id="project-state" value={state} onChange={(e) => setState(e.target.value)} placeholder="IL" />
+              </div>
+              <div className="grid gap-1.5">
+                <Label htmlFor="project-zip">ZIP</Label>
+                <Input id="project-zip" value={zip} onChange={(e) => setZip(e.target.value)} placeholder="62701" />
+              </div>
             </div>
 
             {/* Status — half width */}

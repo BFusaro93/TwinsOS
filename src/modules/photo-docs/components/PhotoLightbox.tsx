@@ -124,7 +124,7 @@ export function PhotoLightbox({
         <div className="flex w-full flex-col gap-4 overflow-y-auto bg-[#1e1e1e] p-6 md:w-72">
           {/* Header */}
           <div className="flex items-start justify-between">
-            <p className="text-sm font-semibold text-white">Photo Details</p>
+            <p className="text-sm font-semibold text-white">{photo.displayName ?? photo.fileName}</p>
             <button
               onClick={onClose}
               className="rounded-sm p-0.5 text-slate-400 opacity-70 hover:opacity-100"

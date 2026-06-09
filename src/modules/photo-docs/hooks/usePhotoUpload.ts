@@ -84,6 +84,7 @@ export function usePhotoUpload(projectId: string) {
             photo_job_id: projectId,
             uploaded_by: currentUser.id,
             uploaded_by_name: currentUser.name,
+            display_name: inp.displayName ?? null,
             storage_path: path,
             file_name: inp.file.name,
             file_size: compressed.size,

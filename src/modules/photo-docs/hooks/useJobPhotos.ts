@@ -12,6 +12,7 @@ function mapPhoto(row: Record<string, any>): JobPhoto {
   return {
     id: row.id, orgId: row.org_id, photoJobId: row.photo_job_id,
     uploadedBy: row.uploaded_by, uploadedByName: row.uploaded_by_name,
+    displayName: row.display_name ?? null,
     storagePath: row.storage_path, annotatedPath: row.annotated_path ?? null,
     thumbnailPath: row.thumbnail_path ?? null, fileName: row.file_name,
     fileSize: row.file_size, mimeType: row.mime_type,

@@ -26,8 +26,12 @@ export interface PhotoJob {
   name: string;
   customerName: string;
   address: string;
+  city: string;
+  state: string;
+  zip: string;
   notes: string | null;
   status: PhotoJobStatus;
+  isArchived: boolean;
   /** Optional link to a Project for cost tracking. null = standalone photo job */
   projectId: string | null;
   createdAt: string;
@@ -42,6 +46,7 @@ export interface JobPhoto extends BaseRecord {
   photoJobId: string;
   uploadedBy: string;
   uploadedByName: string;
+  displayName: string | null;
   storagePath: string;
   annotatedPath: string | null;
   thumbnailPath: string | null;
@@ -78,6 +83,7 @@ export interface PhotoAnnotation {
 export interface PhotoUploadInput {
   photoJobId: string;
   file: File;
+  displayName?: string;
   beforeAfter: BeforeAfterFlag;
   tags: string[];
   notes?: string;
@@ -95,6 +101,7 @@ export interface PhotoUploadProgress {
 }
 
 export type GalleryTab = "all" | "before" | "after" | "annotated";
+export type GalleryFileType = "all" | "photos" | "videos" | "documents";
 
 export type DrawTool = "select" | "arrow" | "circle" | "text" | "freehand";
 export type DrawColor = "#ef4444" | "#facc15" | "#22c55e" | "#ffffff";

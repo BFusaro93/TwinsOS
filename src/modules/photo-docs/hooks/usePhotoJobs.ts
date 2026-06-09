@@ -14,8 +14,12 @@ function mapPhotoJob(row: Record<string, any>): PhotoJob {
     name: row.name,
     customerName: row.customer_name ?? "",
     address: row.address ?? "",
+    city: row.city ?? "",
+    state: row.state ?? "",
+    zip: row.zip ?? "",
     notes: row.notes ?? null,
     status: (row.status ?? "active") as PhotoJobStatus,
+    isArchived: row.is_archived === true,
     projectId: row.project_id ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -24,13 +28,14 @@ function mapPhotoJob(row: Record<string, any>): PhotoJob {
   };
 }
 
-export function usePhotoJobs(statusFilter?: PhotoJobStatus | "all") {
+export function usePhotoJobs(statusFilter?: PhotoJobStatus | "all", includeArchived = false) {
   return useQuery({
-    queryKey: ["photo-jobs", statusFilter ?? "all"],
+    queryKey: ["photo-jobs", statusFilter ?? "all", { includeArchived }],
     queryFn: async () => {
       const db = createClient() as any;
       let q = db.from("photo_jobs").select("*").is("deleted_at", null).order("name");
       if (statusFilter && statusFilter !== "all") q = q.eq("status", statusFilter);
+      if (!includeArchived) q = q.eq("is_archived", false);
       const { data, error } = await q;
       if (error) throw error;
       return ((data ?? []) as Record<string, any>[]).map(mapPhotoJob);
@@ -56,14 +61,17 @@ export function useCreatePhotoJob() {
   const qc = useQueryClient();
   const { currentUser } = useCurrentUserStore();
   return useMutation({
-    mutationFn: async (input: { name: string; customerName: string; address: string; notes?: string; projectId?: string }) => {
+    mutationFn: async (input: { name: string; customerName: string; address: string; city: string; state: string; zip: string; notes?: string; projectId?: string }) => {
       const db = createClient() as any;
-      const { data: profile } = await (createClient() as any).from("profiles").select("org_id").eq("id", currentUser.id).single();
+      const { data: profile } = await db.from("profiles").select("org_id").eq("id", currentUser.id).single();
       const { data, error } = await db.from("photo_jobs").insert({
         org_id: profile.org_id,
         name: input.name,
         customer_name: input.customerName,
         address: input.address,
+        city: input.city,
+        state: input.state,
+        zip: input.zip,
         notes: input.notes ?? null,
         project_id: input.projectId ?? null,
         created_by: currentUser.id,
@@ -78,12 +86,15 @@ export function useCreatePhotoJob() {
 export function useUpdatePhotoJob() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, ...input }: { id: string; name?: string; customerName?: string; address?: string; notes?: string | null; status?: PhotoJobStatus; projectId?: string | null }) => {
+    mutationFn: async ({ id, ...input }: { id: string; name?: string; customerName?: string; address?: string; city?: string; state?: string; zip?: string; notes?: string | null; status?: PhotoJobStatus; projectId?: string | null }) => {
       const db = createClient() as any;
       const { error } = await db.from("photo_jobs").update({
         ...(input.name !== undefined && { name: input.name }),
         ...(input.customerName !== undefined && { customer_name: input.customerName }),
         ...(input.address !== undefined && { address: input.address }),
+        ...(input.city !== undefined && { city: input.city }),
+        ...(input.state !== undefined && { state: input.state }),
+        ...(input.zip !== undefined && { zip: input.zip }),
         ...(input.notes !== undefined && { notes: input.notes }),
         ...(input.status !== undefined && { status: input.status }),
         ...(input.projectId !== undefined && { project_id: input.projectId }),
@@ -95,6 +106,18 @@ export function useUpdatePhotoJob() {
       qc.invalidateQueries({ queryKey: ["photo-jobs"] });
       qc.invalidateQueries({ queryKey: ["photo-jobs", id] });
     },
+  });
+}
+
+export function useArchivePhotoJob() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, archived }: { id: string; archived: boolean }) => {
+      const db = createClient() as any;
+      const { error } = await db.from("photo_jobs").update({ is_archived: archived, updated_at: new Date().toISOString() }).eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["photo-jobs"] }),
   });
 }
 
