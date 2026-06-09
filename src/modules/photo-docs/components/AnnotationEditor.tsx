@@ -50,8 +50,11 @@ export function AnnotationEditor({ photoId, projectId }: AnnotationEditorProps) 
   useEffect(() => {
     if (!canvasRef.current || !photo?.publicUrl) return;
 
+    let disposed = false;
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    import("fabric").then((mod: any) => {
+    import("fabric").then(async (mod: any) => {
+      if (disposed) return;
       const fabric = mod.fabric ?? mod;
       const canvas = new fabric.Canvas(canvasRef.current, {
         selection: true,
@@ -59,47 +62,47 @@ export function AnnotationEditor({ photoId, projectId }: AnnotationEditorProps) 
       });
       fabricRef.current = canvas;
 
-      // Support both Fabric.js v5 (callback API) and v6 (promise API)
-      const ImageClass = fabric.FabricImage ?? fabric.Image;
+      // Fabric.js v7: FabricImage.fromURL returns a Promise; backgroundImage is
+      // a direct property (setBackgroundImage was removed in v7).
+      const ImageClass: { fromURL: (url: string) => Promise<FabricCanvas> } =
+        fabric.FabricImage ?? fabric.Image;
 
-      function applyImage(img: FabricCanvas) {
+      try {
+        // Pre-fetch as blob — sidesteps CORS issues with Supabase signed URLs.
+        const r = await fetch(photo.publicUrl!);
+        if (disposed) return;
+        const blob = await r.blob();
+        const blobUrl = URL.createObjectURL(blob);
+
+        const img: FabricCanvas = await ImageClass.fromURL(blobUrl);
+        URL.revokeObjectURL(blobUrl);
+        if (disposed) return;
+
+        // Scale image to fit within 900×600 without upscaling
         const scaleX = 900 / (img.width ?? 900);
         const scaleY = 600 / (img.height ?? 600);
         const scale = Math.min(scaleX, scaleY, 1);
         canvas.setWidth((img.width ?? 900) * scale);
         canvas.setHeight((img.height ?? 600) * scale);
         img.set({ scaleX: scale, scaleY: scale, selectable: false, evented: false });
-        canvas.setBackgroundImage(img, canvas.renderAll.bind(canvas));
-        if (existingAnnotation?.fabricJson) {
-          canvas.loadFromJSON(existingAnnotation.fabricJson, () => canvas.renderAll());
-        }
-        setFabricReady(true);
-      }
 
-      // Pre-fetch the image as a blob to create a local object URL.
-      // This sidesteps CORS entirely — Fabric's crossOrigin header on signed
-      // Supabase Storage URLs can be silently rejected, keeping the spinner
-      // spinning forever. A blob URL is same-origin and never has CORS issues.
-      const imageUrl = photo.publicUrl; // narrow to string (undefined checked above)
-      if (!imageUrl) return;
-      fetch(imageUrl)
-        .then((r) => r.blob())
-        .then((blob) => {
-          const blobUrl = URL.createObjectURL(blob);
-          if (fabric.FabricImage) {
-            // Fabric.js v6+ — fromURL returns a Promise
-            ImageClass.fromURL(blobUrl)
-              .then((img: FabricCanvas) => { applyImage(img); URL.revokeObjectURL(blobUrl); })
-              .catch((err: unknown) => { console.error("[AnnotationEditor] image load failed", err); URL.revokeObjectURL(blobUrl); });
-          } else {
-            // Fabric.js v5 — fromURL uses callback
-            ImageClass.fromURL(blobUrl, (img: FabricCanvas) => { applyImage(img); URL.revokeObjectURL(blobUrl); });
-          }
-        })
-        .catch((err: unknown) => console.error("[AnnotationEditor] fetch failed", err));
+        // v7 API: assign backgroundImage directly, then render
+        canvas.backgroundImage = img;
+        canvas.renderAll();
+
+        if (existingAnnotation?.fabricJson) {
+          await canvas.loadFromJSON(existingAnnotation.fabricJson);
+          canvas.renderAll();
+        }
+
+        if (!disposed) setFabricReady(true);
+      } catch (err: unknown) {
+        console.error("[AnnotationEditor] failed to load image", err);
+      }
     });
 
     return () => {
+      disposed = true;
       fabricRef.current?.dispose();
       fabricRef.current = null;
     };
@@ -221,16 +224,16 @@ export function AnnotationEditor({ photoId, projectId }: AnnotationEditorProps) 
   return (
     <div className="flex h-full flex-col gap-4">
       {/* Toolbar */}
-      <div className="flex flex-wrap items-center gap-3 rounded-xl border border-slate-700 bg-slate-800 p-3">
+      <div className="flex flex-wrap items-center gap-3 rounded-xl border border-[#3a3a3a] bg-[#2a2a2a] p-3">
         <div className="flex items-center gap-1">
           {tools.map((t) => (
             <button key={t.tool} title={t.label} onClick={() => setTool(t.tool)}
-              className={cn("rounded-md p-2 transition-colors", tool === t.tool ? "bg-white/20 text-white" : "text-slate-400 hover:bg-slate-700 hover:text-white")}>
+              className={cn("rounded-md p-2 transition-colors", tool === t.tool ? "bg-white/20 text-white" : "text-slate-400 hover:bg-[#3a3a3a] hover:text-white")}>
               {t.icon}
             </button>
           ))}
         </div>
-        <div className="h-5 w-px bg-slate-600" />
+        <div className="h-5 w-px bg-[#4a4a4a]" />
         <div className="flex items-center gap-1.5">
           {DRAW_COLORS.map((c) => (
             <button key={c.value} title={c.label} onClick={() => setColor(c.value)}
@@ -239,10 +242,10 @@ export function AnnotationEditor({ photoId, projectId }: AnnotationEditorProps) 
             />
           ))}
         </div>
-        <div className="h-5 w-px bg-slate-600" />
+        <div className="h-5 w-px bg-[#4a4a4a]" />
         <div className="flex items-center gap-1">
-          <button title="Undo" onClick={undo} className="rounded-md p-2 text-slate-400 hover:bg-slate-700 hover:text-white"><Undo2 className="h-4 w-4" /></button>
-          <button title="Delete selected" onClick={deleteSelected} className="rounded-md p-2 text-slate-400 hover:bg-red-900/50 hover:text-red-400"><Trash2 className="h-4 w-4" /></button>
+          <button title="Undo" onClick={undo} className="rounded-md p-2 text-slate-400 hover:bg-[#3a3a3a] hover:text-white"><Undo2 className="h-4 w-4" /></button>
+          <button title="Delete selected" onClick={deleteSelected} className="rounded-md p-2 text-slate-400 hover:bg-red-950/70 hover:text-red-400"><Trash2 className="h-4 w-4" /></button>
         </div>
         <Button size="sm" className="ml-auto gap-1.5" onClick={handleSave} disabled={saving || !fabricReady}>
           {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
@@ -258,7 +261,7 @@ export function AnnotationEditor({ photoId, projectId }: AnnotationEditorProps) 
         {tool === "select" && "Click objects to select · Delete key removes selected"}
       </p>
 
-      <div className="flex flex-1 items-start justify-center overflow-auto rounded-xl border border-slate-700 bg-slate-950 p-4">
+      <div className="flex flex-1 items-start justify-center overflow-auto rounded-xl border border-[#3a3a3a] bg-[#111111] p-4">
         {!fabricReady && <div className="flex h-64 w-full items-center justify-center text-slate-500"><Loader2 className="h-6 w-6 animate-spin" /></div>}
         <canvas ref={canvasRef} className={cn(!fabricReady && "hidden")} />
       </div>
