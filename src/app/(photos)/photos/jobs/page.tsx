@@ -4,9 +4,9 @@ import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import {
   Camera, MapPin, Search, Images, Plus, X, LayoutGrid, LayoutList,
-  FileText, Link2, ArrowRight,
+  Pencil, Check, Archive, ArchiveRestore, Link2, FileText,
 } from "lucide-react";
-import { usePhotoJobs, useCreatePhotoJob } from "@/modules/photo-docs/hooks/usePhotoJobs";
+import { usePhotoJobs, useCreatePhotoJob, usePhotoJob, useUpdatePhotoJob, useArchivePhotoJob } from "@/modules/photo-docs/hooks/usePhotoJobs";
 import { useProjects } from "@/lib/hooks/use-projects";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -14,16 +14,19 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { cn, formatDate, formatAddress } from "@/lib/utils";
 import { PhotoModuleGuard } from "@/modules/photo-docs/components/PhotoModuleGuard";
+import { PhotoGallery } from "@/modules/photo-docs/components/PhotoGallery";
 import { usePhotoAccess } from "@/modules/photo-docs/hooks/usePhotoAccess";
 import { MasterDetailLayout } from "@/components/shared/MasterDetailLayout";
 import { StatusBadge } from "@/components/shared/StatusBadge";
+import { ProjectDetailSheet } from "@/components/po/ProjectDetailSheet";
 import { PROJECT_STATUS_LABELS } from "@/lib/constants";
 import { useStickyState } from "@/lib/hooks/use-sticky-state";
-import type { PhotoJob, PhotoJobStatus } from "@/modules/photo-docs/types/photo.types";
+import { toast } from "sonner";
+import type { PhotoJobStatus } from "@/modules/photo-docs/types/photo.types";
 
 type StatusFilter = PhotoJobStatus | "all";
 type ArchiveFilter = "active" | "archived";
-type ViewMode = "cards" | "list";
+type ViewMode = "list" | "table";
 
 const STATUS_FILTERS: { label: string; value: StatusFilter }[] = [
   { label: "All",      value: "all" },
@@ -38,68 +41,228 @@ const STATUS_COLORS: Record<PhotoJobStatus, string> = {
   on_hold:  "bg-amber-100 text-amber-700",
 };
 
+const STATUS_OPTIONS: { value: PhotoJobStatus; label: string }[] = [
+  { value: "active",   label: "Active" },
+  { value: "complete", label: "Complete" },
+  { value: "on_hold",  label: "On Hold" },
+];
+
 const EMPTY_FORM = { name: "", customerName: "", address: "", city: "", state: "", zip: "", notes: "", projectId: "" };
 
-// ── Inline detail pane (list view only) ──────────────────────────────────────
+// ── Full-featured detail pane (list view) ─────────────────────────────────────
 
-function JobDetailPane({ job, projects, onOpenFull }: { job: PhotoJob; projects: ReturnType<typeof useProjects>["data"]; onOpenFull: () => void }) {
-  const fullAddress = formatAddress(job.address, job.city, job.state, job.zip);
-  const linkedProject = job.projectId ? (projects ?? []).find((p) => p.id === job.projectId) ?? null : null;
+function JobDetailPane({ jobId }: { jobId: string }) {
+  const router = useRouter();
+  const { isCrew: isCrewRole, canAnnotate } = usePhotoAccess();
+  const { data: job, isLoading } = usePhotoJob(jobId);
+  const { data: projects = [] } = useProjects();
+  const { mutate: updateJob, isPending: saving } = useUpdatePhotoJob();
+  const { mutate: archiveJob, isPending: archiving } = useArchivePhotoJob();
+
+  const [editing, setEditing] = useState(false);
+  const [editingLink, setEditingLink] = useState(false);
+  const [selectedProjectId, setSelectedProjectId] = useState<string>("");
+  const [projectSheetOpen, setProjectSheetOpen] = useState(false);
+  const [form, setForm] = useState({
+    name: "", customerName: "", address: "", city: "", state: "", zip: "",
+    notes: "", status: "active" as PhotoJobStatus,
+  });
+
+  function openEdit() {
+    if (!job) return;
+    setForm({
+      name: job.name, customerName: job.customerName,
+      address: job.address, city: job.city, state: job.state, zip: job.zip,
+      notes: job.notes ?? "", status: job.status,
+    });
+    setEditing(true);
+  }
+
+  function saveEdit() {
+    updateJob(
+      { id: jobId, ...form, notes: form.notes || null },
+      {
+        onSuccess: () => { toast.success("Job updated"); setEditing(false); },
+        onError: () => toast.error("Failed to save"),
+      },
+    );
+  }
+
+  function saveLink() {
+    updateJob(
+      { id: jobId, projectId: selectedProjectId || null },
+      {
+        onSuccess: () => {
+          toast.success(selectedProjectId ? "Project linked" : "Project link removed");
+          setEditingLink(false);
+        },
+      },
+    );
+  }
+
+  const linkedProject = job?.projectId ? projects.find((p) => p.id === job.projectId) ?? null : null;
+  const fullAddress = job ? formatAddress(job.address, job.city, job.state, job.zip) : "";
+
+  if (isLoading) {
+    return (
+      <div className="flex h-full flex-col gap-4 overflow-y-auto p-5">
+        <div className="h-6 w-2/3 animate-pulse rounded bg-slate-100" />
+        <div className="h-4 w-1/2 animate-pulse rounded bg-slate-100" />
+        <div className="h-24 animate-pulse rounded-xl bg-slate-100" />
+      </div>
+    );
+  }
+
+  if (!job) return null;
 
   return (
-    <div className="flex h-full flex-col overflow-y-auto p-5">
-      <div className="mb-4 flex items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          <h2 className="truncate text-lg font-semibold text-slate-900" title={job.name}>{job.name}</h2>
-          {job.customerName && <p className="truncate text-sm text-slate-500">{job.customerName}</p>}
+    <div className="flex h-full flex-col overflow-y-auto">
+      <div className="flex flex-col gap-4 p-5">
+        {/* Header */}
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0 flex-1">
+            <h2 className="truncate text-base font-semibold text-slate-900" title={job.name}>{job.name}</h2>
+            {job.customerName && <p className="truncate text-sm text-slate-500">{job.customerName}</p>}
+          </div>
+          <div className="flex shrink-0 items-center gap-1.5">
+            <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-semibold capitalize", STATUS_COLORS[job.status])}>
+              {job.status.replace("_", " ")}
+            </span>
+            {job.isArchived && <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-500">Archived</span>}
+          </div>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
-          <span className={cn("rounded-full px-2.5 py-0.5 text-xs font-semibold capitalize", STATUS_COLORS[job.status])}>
-            {job.status.replace("_", " ")}
-          </span>
-          {job.isArchived && (
-            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-500">Archived</span>
-          )}
-        </div>
-      </div>
 
-      <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm">
-        {fullAddress && (
-          <div className="flex items-start gap-2 text-slate-600">
-            <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
-            <span>{fullAddress}</span>
+        {/* Action buttons */}
+        {!isCrewRole && !editing && (
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="outline" className="gap-1.5 text-xs" onClick={openEdit}>
+              <Pencil className="h-3.5 w-3.5" /> Edit
+            </Button>
+            <Button
+              size="sm" variant="outline"
+              className={cn("gap-1.5 text-xs", job.isArchived ? "border-brand-400 text-brand-600" : "border-slate-300 text-slate-500")}
+              disabled={archiving}
+              onClick={() => archiveJob({ id: job.id, archived: !job.isArchived }, { onSuccess: () => toast.success(job.isArchived ? "Job unarchived" : "Job archived") })}
+            >
+              {job.isArchived ? <><ArchiveRestore className="h-3.5 w-3.5" /> Unarchive</> : <><Archive className="h-3.5 w-3.5" /> Archive</>}
+            </Button>
+            <Button size="sm" variant="ghost" className="ml-auto gap-1.5 text-xs text-slate-500" onClick={() => router.push(`/photos/jobs/${job.id}`)}>
+              Open Full Page
+            </Button>
           </div>
         )}
-        {job.notes && (
-          <div className="flex items-start gap-2 text-slate-600">
-            <FileText className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
-            <p className="leading-relaxed">{job.notes}</p>
+
+        {/* Edit form */}
+        {editing && (
+          <div className="rounded-xl border border-brand-200 bg-white p-4 shadow-sm">
+            <div className="mb-3 flex items-center justify-between">
+              <p className="text-sm font-medium text-slate-900">Edit Job</p>
+              <button onClick={() => setEditing(false)}><X className="h-4 w-4 text-slate-400" /></button>
+            </div>
+            <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+              <div className="sm:col-span-2">
+                <Label className="text-xs">Job Name *</Label>
+                <Input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
+              </div>
+              <div>
+                <Label className="text-xs">Customer Name</Label>
+                <Input value={form.customerName} onChange={(e) => setForm((f) => ({ ...f, customerName: e.target.value }))} />
+              </div>
+              <div>
+                <Label className="text-xs">Status</Label>
+                <select className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" value={form.status} onChange={(e) => setForm((f) => ({ ...f, status: e.target.value as PhotoJobStatus }))}>
+                  {STATUS_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+              </div>
+              <div className="sm:col-span-2">
+                <Label className="text-xs">Street Address</Label>
+                <Input placeholder="123 Main St" value={form.address} onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))} />
+              </div>
+              <div>
+                <Label className="text-xs">City</Label>
+                <Input placeholder="Springfield" value={form.city} onChange={(e) => setForm((f) => ({ ...f, city: e.target.value }))} />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <Label className="text-xs">State</Label>
+                  <Input placeholder="IL" value={form.state} onChange={(e) => setForm((f) => ({ ...f, state: e.target.value }))} />
+                </div>
+                <div>
+                  <Label className="text-xs">ZIP</Label>
+                  <Input placeholder="62701" value={form.zip} onChange={(e) => setForm((f) => ({ ...f, zip: e.target.value }))} />
+                </div>
+              </div>
+              <div className="sm:col-span-2">
+                <Label className="text-xs">Notes</Label>
+                <Textarea rows={2} className="resize-none text-sm" value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} />
+              </div>
+            </div>
+            <div className="mt-3 flex justify-end gap-2">
+              <Button variant="outline" size="sm" onClick={() => setEditing(false)}>Cancel</Button>
+              <Button size="sm" disabled={!form.name.trim() || saving} onClick={saveEdit}>{saving ? "Saving…" : "Save Changes"}</Button>
+            </div>
           </div>
         )}
-        {linkedProject ? (
-          <div className="flex items-center gap-2 text-slate-600">
-            <Link2 className="h-4 w-4 shrink-0 text-slate-400" />
-            <span className="font-medium text-brand-600">{linkedProject.name}</span>
-            <StatusBadge
-              variant={linkedProject.status === "on_hold" ? "on_hold_project" : linkedProject.status}
-              label={PROJECT_STATUS_LABELS[linkedProject.status]}
-            />
-          </div>
-        ) : (
-          <div className="flex items-center gap-2 text-slate-400">
-            <Link2 className="h-4 w-4 shrink-0" />
-            <span className="text-xs">No project linked</span>
+
+        {/* Info card */}
+        {!editing && (
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm">
+            <div className="space-y-2">
+              {fullAddress && (
+                <div className="flex items-start gap-2 text-slate-600">
+                  <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400" />
+                  <span>{fullAddress}</span>
+                </div>
+              )}
+              {job.notes && (
+                <div className="flex items-start gap-2 text-slate-600">
+                  <FileText className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400" />
+                  <p className="leading-relaxed">{job.notes}</p>
+                </div>
+              )}
+              {/* Project link */}
+              <div className="border-t border-slate-200 pt-2">
+                {editingLink ? (
+                  <div className="flex items-center gap-2">
+                    <Link2 className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+                    <select className="flex-1 rounded-md border border-slate-200 px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-brand-500" value={selectedProjectId} onChange={(e) => setSelectedProjectId(e.target.value)}>
+                      <option value="">— No project link —</option>
+                      {projects.map((p) => <option key={p.id} value={p.id}>{p.name} ({p.customerName})</option>)}
+                    </select>
+                    <button onClick={saveLink} disabled={saving} className="rounded-md p-1 text-brand-600 hover:bg-brand-50 disabled:opacity-50"><Check className="h-3.5 w-3.5" /></button>
+                    <button onClick={() => setEditingLink(false)} className="rounded-md p-1 text-slate-400 hover:bg-slate-100"><X className="h-3.5 w-3.5" /></button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <Link2 className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+                    {linkedProject ? (
+                      <div className="flex items-center gap-1.5">
+                        <button onClick={() => setProjectSheetOpen(true)} className="text-xs font-medium text-brand-600 hover:underline">{linkedProject.name}</button>
+                        <StatusBadge variant={linkedProject.status === "on_hold" ? "on_hold_project" : linkedProject.status} label={PROJECT_STATUS_LABELS[linkedProject.status]} />
+                      </div>
+                    ) : (
+                      <span className="text-xs text-slate-400">No project linked</span>
+                    )}
+                    {(!isCrewRole || canAnnotate) && (
+                      <button onClick={() => { setSelectedProjectId(job.projectId ?? ""); setEditingLink(true); }} className="ml-auto rounded-md p-1 text-slate-400 hover:bg-slate-100">
+                        <Pencil className="h-3 w-3" />
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+              <p className="text-xs text-slate-400">Created {formatDate(job.createdAt)}</p>
+            </div>
           </div>
         )}
       </div>
 
-      <div className="mt-4 text-xs text-slate-400">Created {formatDate(job.createdAt)}</div>
-
-      <div className="mt-auto pt-6">
-        <Button className="w-full gap-2" onClick={onOpenFull}>
-          View Photos <ArrowRight className="h-4 w-4" />
-        </Button>
+      {/* Full photo gallery */}
+      <div className="border-t border-slate-200 px-5 py-4">
+        <PhotoGallery projectId={jobId} />
       </div>
+
+      <ProjectDetailSheet project={linkedProject} open={projectSheetOpen} onOpenChange={setProjectSheetOpen} />
     </div>
   );
 }
@@ -113,7 +276,7 @@ export default function PhotoJobsPage() {
   const [archiveFilter, setArchiveFilter] = useState<ArchiveFilter>("active");
   const [search, setSearch] = useState("");
   const [showNew, setShowNew] = useState(false);
-  const [viewMode, setViewMode] = useStickyState<ViewMode>("photos-jobs-view", "cards");
+  const [viewMode, setViewMode] = useStickyState<ViewMode>("photos-jobs-view", "table");
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
 
   const includeArchived = archiveFilter === "archived";
@@ -131,17 +294,25 @@ export default function PhotoJobsPage() {
     return j.name.toLowerCase().includes(q) || j.customerName.toLowerCase().includes(q) || addr.includes(q);
   }), [jobs, archiveFilter, search]);
 
-  const selectedJob = useMemo(() => filtered.find((j) => j.id === selectedJobId) ?? null, [filtered, selectedJobId]);
-
   function handleCreate() {
     if (!form.name.trim()) return;
     createJob(
       { name: form.name, customerName: form.customerName, address: form.address, city: form.city, state: form.state, zip: form.zip, notes: form.notes || undefined, projectId: form.projectId || undefined },
-      { onSuccess: (job) => { setShowNew(false); setForm(EMPTY_FORM); router.push(`/photos/jobs/${job.id}`); } },
+      {
+        onSuccess: (job) => {
+          setShowNew(false);
+          setForm(EMPTY_FORM);
+          if (viewMode === "list") {
+            setSelectedJobId(job.id);
+          } else {
+            router.push(`/photos/jobs/${job.id}`);
+          }
+        },
+      },
     );
   }
 
-  // ── List view ────────────────────────────────────────────────────────────────
+  // ── List-view left panel ─────────────────────────────────────────────────────
 
   const listPanel = (
     <div className="flex h-full flex-col">
@@ -168,8 +339,7 @@ export default function PhotoJobsPage() {
                   onClick={() => setSelectedJobId(job.id)}
                   className={cn(
                     "flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-slate-50",
-                    isSelected && "border-l-2 border-brand-500 bg-brand-50/60 hover:bg-brand-50/60",
-                    !isSelected && "border-l-2 border-transparent",
+                    isSelected ? "border-l-2 border-brand-500 bg-brand-50/60 hover:bg-brand-50/60" : "border-l-2 border-transparent",
                   )}
                 >
                   <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#2a2a2a]">
@@ -183,9 +353,7 @@ export default function PhotoJobsPage() {
                       </span>
                     </div>
                     {job.customerName && <p className="truncate text-xs text-slate-500">{job.customerName}</p>}
-                    {fullAddr && (
-                      <p className="truncate text-xs text-slate-400">{fullAddr}</p>
-                    )}
+                    {fullAddr && <p className="truncate text-xs text-slate-400">{fullAddr}</p>}
                   </div>
                 </button>
               );
@@ -193,21 +361,6 @@ export default function PhotoJobsPage() {
           </div>
         )}
       </div>
-    </div>
-  );
-
-  const detailPanel = selectedJob ? (
-    <JobDetailPane
-      job={selectedJob}
-      projects={projects}
-      onOpenFull={() => router.push(`/photos/jobs/${selectedJob.id}`)}
-    />
-  ) : null;
-
-  const emptyDetailState = (
-    <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
-      <Images className="h-10 w-10 text-slate-200" />
-      <p className="text-sm text-slate-400">Select a job to view details</p>
     </div>
   );
 
@@ -225,17 +378,15 @@ export default function PhotoJobsPage() {
             <div className="flex rounded-lg border border-slate-200 bg-white p-0.5">
               <button
                 onClick={() => setViewMode("list")}
-                className={cn("rounded-md p-1.5 transition-colors", viewMode === "list" ? "bg-slate-800 text-white" : "text-slate-400 hover:text-slate-600")}
-                title="List view"
+                className={cn("flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors", viewMode === "list" ? "bg-slate-800 text-white" : "text-slate-500 hover:text-slate-700")}
               >
-                <LayoutList className="h-4 w-4" />
+                <LayoutList className="h-3.5 w-3.5" /> List
               </button>
               <button
-                onClick={() => setViewMode("cards")}
-                className={cn("rounded-md p-1.5 transition-colors", viewMode === "cards" ? "bg-slate-800 text-white" : "text-slate-400 hover:text-slate-600")}
-                title="Card view"
+                onClick={() => setViewMode("table")}
+                className={cn("flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors", viewMode === "table" ? "bg-slate-800 text-white" : "text-slate-500 hover:text-slate-700")}
               >
-                <LayoutGrid className="h-4 w-4" />
+                <LayoutGrid className="h-3.5 w-3.5" /> Table
               </button>
             </div>
             {canUpload && (
@@ -299,47 +450,50 @@ export default function PhotoJobsPage() {
           </div>
         )}
 
-        {/* Search + Filters */}
-        <div className="flex flex-col gap-2">
-          <div className="relative">
+        {/* Search + Filters — inline single row */}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative w-full max-w-xs">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <Input placeholder="Search jobs…" value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="flex flex-wrap gap-1.5">
-              {STATUS_FILTERS.map((f) => (
-                <button key={f.value} onClick={() => setStatusFilter(f.value)}
-                  className={cn("rounded-full px-3 py-1 text-xs font-medium transition-colors", statusFilter === f.value ? "bg-brand-500 text-white" : "border border-slate-200 bg-white text-slate-600 hover:border-slate-300")}>
-                  {f.label}
-                </button>
-              ))}
-            </div>
-            <div className="h-4 w-px bg-slate-200" />
-            <div className="flex gap-1.5">
-              <button onClick={() => setArchiveFilter("active")}
-                className={cn("rounded-full px-3 py-1 text-xs font-medium transition-colors", archiveFilter === "active" ? "bg-slate-700 text-white" : "border border-slate-200 bg-white text-slate-600 hover:border-slate-300")}>
-                Active
+          <div className="flex flex-wrap gap-1.5">
+            {STATUS_FILTERS.map((f) => (
+              <button key={f.value} onClick={() => setStatusFilter(f.value)}
+                className={cn("rounded-full px-3 py-1 text-xs font-medium transition-colors", statusFilter === f.value ? "bg-brand-500 text-white" : "border border-slate-200 bg-white text-slate-600 hover:border-slate-300")}>
+                {f.label}
               </button>
-              <button onClick={() => setArchiveFilter("archived")}
-                className={cn("rounded-full px-3 py-1 text-xs font-medium transition-colors", archiveFilter === "archived" ? "bg-slate-700 text-white" : "border border-slate-200 bg-white text-slate-600 hover:border-slate-300")}>
-                Archived
-              </button>
-            </div>
+            ))}
+          </div>
+          <div className="h-4 w-px bg-slate-200" />
+          <div className="flex gap-1.5">
+            <button onClick={() => setArchiveFilter("active")}
+              className={cn("rounded-full px-3 py-1 text-xs font-medium transition-colors", archiveFilter === "active" ? "bg-slate-700 text-white" : "border border-slate-200 bg-white text-slate-600 hover:border-slate-300")}>
+              Active
+            </button>
+            <button onClick={() => setArchiveFilter("archived")}
+              className={cn("rounded-full px-3 py-1 text-xs font-medium transition-colors", archiveFilter === "archived" ? "bg-slate-700 text-white" : "border border-slate-200 bg-white text-slate-600 hover:border-slate-300")}>
+              Archived
+            </button>
           </div>
         </div>
 
         {/* Content */}
         {viewMode === "list" ? (
           <MasterDetailLayout
-            className="h-[calc(100vh-20rem)] min-h-[400px]"
+            className="h-[calc(100vh-20rem)] min-h-[480px]"
             listPanel={listPanel}
-            detailPanel={detailPanel}
-            emptyState={emptyDetailState}
+            detailPanel={selectedJobId ? <JobDetailPane jobId={selectedJobId} /> : null}
+            emptyState={
+              <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
+                <Images className="h-10 w-10 text-slate-200" />
+                <p className="text-sm text-slate-400">Select a job to view details</p>
+              </div>
+            }
             hasSelection={!!selectedJobId}
             onBack={() => setSelectedJobId(null)}
           />
         ) : (
-          /* Cards view */
+          /* Table / card view */
           isLoading ? (
             <div className="space-y-2">{Array.from({ length: 4 }).map((_, i) => <div key={i} className="h-20 animate-pulse rounded-xl bg-slate-100" />)}</div>
           ) : filtered.length === 0 ? (

@@ -314,6 +314,7 @@ interface CreateCrewAccountDialogProps {
 
 function CreateCrewAccountDialog({ open, onOpenChange }: CreateCrewAccountDialogProps) {
   const [teamName, setTeamName] = useState("");
+  const [customEmail, setCustomEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [creating, setCreating] = useState(false);
@@ -322,6 +323,7 @@ function CreateCrewAccountDialog({ open, onOpenChange }: CreateCrewAccountDialog
 
   function reset() {
     setTeamName("");
+    setCustomEmail("");
     setPassword("");
     setConfirmPassword("");
     setCreating(false);
@@ -346,7 +348,7 @@ function CreateCrewAccountDialog({ open, onOpenChange }: CreateCrewAccountDialog
       const res = await fetch("/api/users/create-crew", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ teamName: teamName.trim(), password }),
+        body: JSON.stringify({ teamName: teamName.trim(), password, customEmail: customEmail.trim() || undefined }),
       });
       const data: { success?: boolean; loginEmail?: string; error?: string } = await res.json();
       if (!res.ok || !data.success) {
@@ -367,7 +369,7 @@ function CreateCrewAccountDialog({ open, onOpenChange }: CreateCrewAccountDialog
         <DialogHeader>
           <DialogTitle>Create Crew Account</DialogTitle>
           <DialogDescription>
-            Creates a shared login for a crew team (e.g. MAINT1, ENHANCE1). No email required — credentials are shown once after creation.
+            Creates a shared login for a crew team (e.g. MAINT1, ENHANCE1). You can use a real email or leave it blank to auto-generate one. Credentials are shown once after creation.
           </DialogDescription>
         </DialogHeader>
 
@@ -405,6 +407,18 @@ function CreateCrewAccountDialog({ open, onOpenChange }: CreateCrewAccountDialog
                 value={teamName}
                 onChange={(e) => setTeamName(e.target.value)}
                 required
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="crew-email">
+                Login Email <span className="text-slate-400 font-normal text-xs">(optional — auto-generated if blank)</span>
+              </Label>
+              <Input
+                id="crew-email"
+                type="email"
+                placeholder="e.g. maint1tls@outlook.com"
+                value={customEmail}
+                onChange={(e) => setCustomEmail(e.target.value)}
               />
             </div>
             <div className="flex flex-col gap-1.5">

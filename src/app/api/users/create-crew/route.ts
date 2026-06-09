@@ -26,11 +26,11 @@ export async function POST(request: Request) {
   }
 
   // 2. Parse body
-  let body: { teamName?: string; password?: string };
+  let body: { teamName?: string; password?: string; customEmail?: string };
   try { body = await request.json(); } catch {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
-  const { teamName, password } = body;
+  const { teamName, password, customEmail } = body;
   if (!teamName?.trim() || !password || password.length < 8) {
     return NextResponse.json(
       { error: "teamName and password (min 8 chars) are required" },
@@ -38,9 +38,18 @@ export async function POST(request: Request) {
     );
   }
 
-  // 3. Generate a unique login email from the team name
-  const slug = teamName.trim().toLowerCase().replace(/[^a-z0-9]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
-  const loginEmail = `${slug}@crew.equipt.app`;
+  // 3. Determine login email — use custom if provided, otherwise auto-generate
+  let loginEmail: string;
+  if (customEmail?.trim()) {
+    // Basic email format validation
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customEmail.trim())) {
+      return NextResponse.json({ error: "Invalid email address format." }, { status: 400 });
+    }
+    loginEmail = customEmail.trim().toLowerCase();
+  } else {
+    const slug = teamName.trim().toLowerCase().replace(/[^a-z0-9]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
+    loginEmail = `${slug}@crew.equipt.app`;
+  }
 
   // 4. Create the auth user with the service role client (no email confirmation needed)
   const adminClient = createClient(

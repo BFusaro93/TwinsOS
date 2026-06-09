@@ -71,8 +71,8 @@ export function PhotoGallery({ projectId }: PhotoGalleryProps) {
               className={cn(
                 "rounded-full px-3 py-1 text-xs font-medium transition-colors",
                 fileType === f.value
-                  ? "bg-brand-500 text-white"
-                  : "border border-slate-600 text-slate-400 hover:text-slate-200",
+                  ? "bg-slate-800 text-white"
+                  : "border border-slate-200 text-slate-500 hover:border-slate-300 hover:text-slate-700",
               )}
             >
               {f.label}
@@ -80,7 +80,7 @@ export function PhotoGallery({ projectId }: PhotoGalleryProps) {
           ))}
         </div>
         {/* Before/After tabs */}
-        <div className="flex items-center rounded-md border border-slate-700 bg-slate-800 p-0.5">
+        <div className="flex items-center rounded-md border border-slate-200 bg-slate-100 p-0.5">
           {TABS.map((t) => (
             <button
               key={t.value}
@@ -88,8 +88,8 @@ export function PhotoGallery({ projectId }: PhotoGalleryProps) {
               className={cn(
                 "rounded px-3 py-1.5 text-xs font-medium transition-colors",
                 tab === t.value
-                  ? "bg-brand-500 text-white"
-                  : "text-slate-400 hover:text-slate-200",
+                  ? "bg-slate-800 text-white"
+                  : "text-slate-500 hover:text-slate-700",
               )}
             >
               {t.label}
@@ -103,8 +103,8 @@ export function PhotoGallery({ projectId }: PhotoGalleryProps) {
               variant="outline"
               size="sm"
               className={cn(
-                "gap-1.5 border-slate-600 text-xs",
-                showBeforeAfter && "border-brand-500 text-brand-400",
+                "gap-1.5 text-xs",
+                showBeforeAfter ? "border-slate-800 bg-slate-800 text-white" : "border-slate-200 text-slate-600",
               )}
               onClick={() => setShowBeforeAfter((v) => !v)}
             >
@@ -127,8 +127,8 @@ export function PhotoGallery({ projectId }: PhotoGalleryProps) {
 
       {/* Before/After slider mode */}
       {showBeforeAfter && hasBeforeAfterPairs && (
-        <div className="rounded-xl border border-slate-700 bg-slate-900 p-4">
-          <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+          <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">
             Before / After Comparison
           </p>
           <BeforeAfterSlider
@@ -146,11 +146,11 @@ export function PhotoGallery({ projectId }: PhotoGalleryProps) {
           ))}
         </div>
       ) : photos.length === 0 ? (
-        <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-slate-700 py-16 text-center">
-          <Images className="h-10 w-10 text-slate-600" />
+        <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-slate-200 py-16 text-center">
+          <Images className="h-10 w-10 text-slate-300" />
           <div>
-            <p className="text-sm font-medium text-slate-300">No photos yet</p>
-            <p className="text-xs text-slate-500">
+            <p className="text-sm font-medium text-slate-500">No photos yet</p>
+            <p className="text-xs text-slate-400">
               {tab === "all"
                 ? "Upload the first photo for this job"
                 : `No ${tab} photos`}
@@ -216,7 +216,7 @@ function PhotoThumbnail({
   const ext = photo.fileName.split(".").pop()?.toUpperCase() ?? "FILE";
 
   return (
-    <div className="group relative aspect-square overflow-hidden rounded-lg border border-slate-700 bg-slate-800">
+    <div className="group relative aspect-square overflow-hidden rounded-lg border border-slate-200 bg-slate-100">
       {/* Thumbnail */}
       <button className="h-full w-full" onClick={onClick}>
         {isImage && displayUrl ? (
@@ -227,12 +227,12 @@ function PhotoThumbnail({
             className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-105"
           />
         ) : isVideo ? (
-          <div className="flex h-full w-full flex-col items-center justify-center gap-2 bg-slate-900">
+          <div className="flex h-full w-full flex-col items-center justify-center gap-2 bg-slate-100">
             <Film className="h-10 w-10 text-slate-400" />
             <span className="text-[10px] font-medium text-slate-400">{ext}</span>
           </div>
         ) : (
-          <div className="flex h-full w-full flex-col items-center justify-center gap-2 bg-slate-900">
+          <div className="flex h-full w-full flex-col items-center justify-center gap-2 bg-slate-100">
             <FileText className="h-10 w-10 text-slate-400" />
             <span className="text-[10px] font-medium text-slate-400">{ext}</span>
           </div>
@@ -252,7 +252,7 @@ function PhotoThumbnail({
                   "inline-block rounded px-1.5 py-0.5 text-[10px] font-bold uppercase",
                   photo.beforeAfter === "before"
                     ? "bg-amber-500 text-white"
-                    : "bg-brand-500 text-white",
+                    : "bg-emerald-600 text-white",
                 )}
               >
                 {photo.beforeAfter}

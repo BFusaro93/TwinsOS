@@ -36,6 +36,7 @@ const ROLE_LABELS: Record<string, string> = {
   purchaser: "Purchaser",
   viewer: "Viewer",
   requestor: "Requestor",
+  crew: "Crew",
 };
 
 const ROLE_COLORS: Record<string, string> = {
@@ -45,6 +46,7 @@ const ROLE_COLORS: Record<string, string> = {
   purchaser: "bg-amber-100 text-amber-700 border-amber-200",
   viewer: "bg-slate-100 text-slate-600 border-slate-200",
   requestor: "bg-slate-100 text-slate-600 border-slate-200",
+  crew: "bg-orange-100 text-orange-700 border-orange-200",
 };
 
 function initials(name: string) {
@@ -84,9 +86,18 @@ function useBreadcrumbs() {
     "approval-flows": "Approval Flows",
     reports: "Reports",
     support: "Support",
+    photos: "Photo Docs",
+    jobs: "Job Photos",
+    dashboards: "Dashboards",
+    home: "Home",
   };
 
-  return segments.map((seg) => labels[seg] ?? seg);
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+  return segments.map((seg) => {
+    if (UUID_RE.test(seg)) return "Job Details";
+    return labels[seg] ?? seg;
+  });
 }
 
 export function TopBar() {
