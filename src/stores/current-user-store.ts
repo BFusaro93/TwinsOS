@@ -15,10 +15,12 @@ const PLACEHOLDER_USER: OrgUser = {
 
 interface CurrentUserStore {
   currentUser: OrgUser;
+  currentUserLoaded: boolean;
   setCurrentUser: (user: OrgUser) => void;
 }
 
 export const useCurrentUserStore = create<CurrentUserStore>((set) => ({
   currentUser: PLACEHOLDER_USER,
-  setCurrentUser: (user) => set({ currentUser: user }),
+  currentUserLoaded: false,
+  setCurrentUser: (user) => set({ currentUser: user, currentUserLoaded: true }),
 }));

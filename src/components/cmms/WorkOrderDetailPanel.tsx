@@ -454,24 +454,24 @@ function DetailsTab({
                       {users.map((u) => {
                         const isChecked = selectedIds.includes(u.id);
                         return (
-                          <label
+                          <div
                             key={u.id}
+                            role="option"
+                            aria-selected={isChecked}
                             className="flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-xs hover:bg-accent"
+                            onClick={() => {
+                              const nextIds = isChecked
+                                ? selectedIds.filter((id) => id !== u.id)
+                                : [...selectedIds, u.id];
+                              const nextNames = isChecked
+                                ? displayNames.filter((_, i) => selectedIds[i] !== u.id)
+                                : [...displayNames, u.name];
+                              onAssigneeChange(nextIds, nextNames);
+                            }}
                           >
-                            <Checkbox
-                              checked={isChecked}
-                              onCheckedChange={(checked) => {
-                                const nextIds = checked
-                                  ? [...selectedIds, u.id]
-                                  : selectedIds.filter((id) => id !== u.id);
-                                const nextNames = checked
-                                  ? [...displayNames, u.name]
-                                  : displayNames.filter((_, i) => selectedIds[i] !== u.id);
-                                onAssigneeChange(nextIds, nextNames);
-                              }}
-                            />
+                            <Checkbox checked={isChecked} />
                             <span className="truncate">{u.name}</span>
-                          </label>
+                          </div>
                         );
                       })}
                     </div>
@@ -516,21 +516,21 @@ function DetailsTab({
                       {enabledCats.map((c) => {
                         const isChecked = selectedCats.includes(c.id);
                         return (
-                          <label
+                          <div
                             key={c.id}
+                            role="option"
+                            aria-selected={isChecked}
                             className="flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-xs hover:bg-accent"
+                            onClick={() => {
+                              const nextCats = isChecked
+                                ? selectedCats.filter((id) => id !== c.id)
+                                : [...selectedCats, c.id];
+                              onCategoryChange(nextCats);
+                            }}
                           >
-                            <Checkbox
-                              checked={isChecked}
-                              onCheckedChange={(checked) => {
-                                const nextCats = checked
-                                  ? [...selectedCats, c.id]
-                                  : selectedCats.filter((id) => id !== c.id);
-                                onCategoryChange(nextCats);
-                              }}
-                            />
+                            <Checkbox checked={isChecked} />
                             <span className="truncate">{c.label}</span>
-                          </label>
+                          </div>
                         );
                       })}
                     </div>

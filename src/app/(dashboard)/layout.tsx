@@ -27,7 +27,7 @@ export default function DashboardLayout({
       <SettingsLoader />
 
       {/* Desktop sidebar */}
-      <div className="hidden md:flex">
+      <div className="hidden h-full md:flex">
         <AppSidebar />
       </div>
 

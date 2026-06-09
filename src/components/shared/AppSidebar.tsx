@@ -21,7 +21,7 @@ export function AppSidebar() {
   return (
     <aside
       className={cn(
-        "flex h-screen flex-col bg-[#1e1e1e] transition-all duration-200",
+        "flex h-full flex-col bg-[#1e1e1e] transition-all duration-200",
         sidebarCollapsed ? "w-16" : "w-[260px]"
       )}
     >
@@ -118,13 +118,13 @@ export function AppSidebar() {
       {!sidebarCollapsed && (
         <div className="flex items-center gap-3 border-t border-[#2a2a2a] p-4">
           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-500 text-xs font-bold text-white">
-            BF
+            {currentUser.name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2)}
           </div>
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-medium text-slate-200">
-              Brandon Fusaro
+              {currentUser.name}
             </p>
-            <p className="truncate text-xs text-slate-400">Admin</p>
+            <p className="truncate text-xs capitalize text-slate-400">{currentUser.role}</p>
           </div>
         </div>
       )}

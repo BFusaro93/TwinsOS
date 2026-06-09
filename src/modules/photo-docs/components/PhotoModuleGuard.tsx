@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { usePhotoAccess } from "../hooks/usePhotoAccess";
+import { useCurrentUserStore } from "@/stores";
 
 interface PhotoModuleGuardProps {
   children: React.ReactNode;
@@ -10,17 +11,29 @@ interface PhotoModuleGuardProps {
 
 /**
  * Access gate for all photo module routes.
- * Redirects to /dashboard if the current user does not have photo_module_access.
+ * Waits for the user store to finish loading before deciding whether to redirect —
+ * prevents hard-refresh false-redirects caused by the placeholder "viewer" user
+ * that exists before useSyncCurrentUser resolves.
  */
 export function PhotoModuleGuard({ children }: PhotoModuleGuardProps) {
   const { canAccess } = usePhotoAccess();
+  const { currentUserLoaded } = useCurrentUserStore();
   const router = useRouter();
 
   useEffect(() => {
-    if (!canAccess) {
+    if (currentUserLoaded && !canAccess) {
       router.replace("/home");
     }
-  }, [canAccess, router]);
+  }, [canAccess, currentUserLoaded, router]);
+
+  // Still loading — show spinner, don't redirect yet
+  if (!currentUserLoaded) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <p className="text-sm text-slate-400">Loading…</p>
+      </div>
+    );
+  }
 
   if (!canAccess) {
     return (
