@@ -74,48 +74,58 @@ export function AnnotationEditor({ photoId, projectId }: AnnotationEditorProps) 
       canvas.freeDrawingBrush.color = colorRef.current;
       canvas.freeDrawingBrush.width = 4;
 
-      // Attach a single persistent mouse:down / mouse:up handler.
-      // Using refs for tool/color means we never need to re-attach listeners.
+      // Use native pointer events on the underlying canvas element — more reliable
+      // than Fabric's event system across v5/v6/v7 API changes.
+      const el = canvas.getElement() as HTMLCanvasElement;
       let startX = 0;
       let startY = 0;
 
-      function onMouseDown(opt: FabricCanvas) {
-        // v7: coordinates live on opt.scenePoint (scene coords), not canvas.getPointer()
-        startX = opt.scenePoint?.x ?? 0;
-        startY = opt.scenePoint?.y ?? 0;
+      function canvasCoords(e: PointerEvent) {
+        const rect = el.getBoundingClientRect();
+        const zoom = canvas.getZoom?.() ?? 1;
+        const vpt  = canvas.viewportTransform ?? [1, 0, 0, 1, 0, 0];
+        // Convert client → canvas CSS pixel → scene (accounting for zoom/pan)
+        const cssX = (e.clientX - rect.left) / zoom - vpt[4] / zoom;
+        const cssY = (e.clientY - rect.top)  / zoom - vpt[5] / zoom;
+        return { x: cssX, y: cssY };
       }
 
-      function onMouseUp(opt: FabricCanvas) {
+      function onPointerDown(e: PointerEvent) {
+        const pt = canvasCoords(e);
+        startX = pt.x;
+        startY = pt.y;
+      }
+
+      function onPointerUp(e: PointerEvent) {
         const t = toolRef.current;
         const c = colorRef.current;
         if (t === "select" || t === "freehand") return;
 
-        const ptrX = opt.scenePoint?.x ?? 0;
-        const ptrY = opt.scenePoint?.y ?? 0;
-        const dx   = Math.abs(ptrX - startX);
-        const dy   = Math.abs(ptrY - startY);
+        const pt  = canvasCoords(e);
+        const dx  = Math.abs(pt.x - startX);
+        const dy  = Math.abs(pt.y - startY);
 
         if (t === "arrow" && (dx > 5 || dy > 5)) {
-          const angle   = Math.atan2(ptrY - startY, ptrX - startX);
+          const angle   = Math.atan2(pt.y - startY, pt.x - startX);
           const headLen = 15;
           const pts = [
-            { x: ptrX, y: ptrY },
-            { x: ptrX - headLen * Math.cos(angle - Math.PI / 7), y: ptrY - headLen * Math.sin(angle - Math.PI / 7) },
-            { x: ptrX - headLen * Math.cos(angle + Math.PI / 7), y: ptrY - headLen * Math.sin(angle + Math.PI / 7) },
-            { x: ptrX, y: ptrY },
+            { x: pt.x,   y: pt.y },
+            { x: pt.x - headLen * Math.cos(angle - Math.PI / 7), y: pt.y - headLen * Math.sin(angle - Math.PI / 7) },
+            { x: pt.x - headLen * Math.cos(angle + Math.PI / 7), y: pt.y - headLen * Math.sin(angle + Math.PI / 7) },
+            { x: pt.x,   y: pt.y },
             { x: startX, y: startY },
           ];
           canvas.add(new fabric.Polyline(pts, { fill: "transparent", stroke: c, strokeWidth: 3 }));
         } else if (t === "circle") {
           canvas.add(new fabric.Circle({ left: startX - 40, top: startY - 40, radius: 40, fill: "transparent", stroke: c, strokeWidth: 3 }));
         } else if (t === "text") {
-          canvas.add(new fabric.IText("Label", { left: ptrX, top: ptrY, fill: c, fontSize: 18, fontWeight: "bold", backgroundColor: "rgba(0,0,0,0.4)" }));
+          canvas.add(new fabric.IText("Label", { left: pt.x, top: pt.y, fill: c, fontSize: 18, fontWeight: "bold", backgroundColor: "rgba(0,0,0,0.4)" }));
         }
         canvas.renderAll();
       }
 
-      canvas.on("mouse:down", onMouseDown);
-      canvas.on("mouse:up",   onMouseUp);
+      el.addEventListener("pointerdown", onPointerDown);
+      el.addEventListener("pointerup",   onPointerUp);
 
       // ── Load image ──────────────────────────────────────────────────────────
       const ImageClass: { fromURL: (url: string) => Promise<FabricCanvas> } =
@@ -169,6 +179,11 @@ export function AnnotationEditor({ photoId, projectId }: AnnotationEditorProps) 
 
     return () => {
       disposed = true;
+      const cleanEl = fabricRef.current?.getElement?.() as HTMLCanvasElement | undefined;
+      if (cleanEl) {
+        cleanEl.removeEventListener("pointerdown", () => {});
+        cleanEl.removeEventListener("pointerup",   () => {});
+      }
       fabricRef.current?.dispose();
       fabricRef.current = null;
       setFabricReady(false);

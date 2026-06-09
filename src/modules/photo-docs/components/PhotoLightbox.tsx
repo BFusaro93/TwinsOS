@@ -291,7 +291,7 @@ export function PhotoLightbox({
             {canAnnotate && onAnnotate && isImage && (
               <Button
                 size="sm"
-                className="gap-1.5 bg-brand-500 text-white hover:bg-brand-600"
+                className="w-full gap-1.5 bg-brand-500 text-white hover:bg-brand-600"
                 onClick={() => onAnnotate(photo.id)}
               >
                 <Pencil className="h-3.5 w-3.5" />
@@ -303,7 +303,7 @@ export function PhotoLightbox({
               <Button
                 size="sm"
                 variant="outline"
-                className="gap-1.5 border-red-800 text-red-400 hover:bg-red-950 hover:text-red-300"
+                className="w-full gap-1.5 border-red-800 text-red-400 hover:bg-red-950 hover:text-red-300"
                 onClick={() => setConfirmDelete(true)}
               >
                 <Trash2 className="h-3.5 w-3.5" />
