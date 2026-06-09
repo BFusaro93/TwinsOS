@@ -6,6 +6,7 @@ import {
   Camera, MapPin, Search, Images, Plus, X, LayoutGrid, LayoutList,
   Pencil, Check, Archive, ArchiveRestore, Link2, FileText,
 } from "lucide-react";
+import { PageHeader } from "@/components/shared/PageHeader";
 import { usePhotoJobs, useCreatePhotoJob, usePhotoJob, useUpdatePhotoJob, useArchivePhotoJob } from "@/modules/photo-docs/hooks/usePhotoJobs";
 import { useProjects } from "@/lib/hooks/use-projects";
 import { Input } from "@/components/ui/input";
@@ -368,34 +369,34 @@ export default function PhotoJobsPage() {
     <PhotoModuleGuard>
       <div className="flex flex-col gap-4">
         {/* Header */}
-        <div className="flex items-start justify-between">
-          <div>
-            <h1 className="text-xl font-semibold text-slate-900">Jobs</h1>
-            <p className="text-sm text-slate-500">Photo documentation by job site</p>
-          </div>
-          <div className="flex items-center gap-2">
-            {/* View mode toggle */}
-            <div className="flex rounded-lg border border-slate-200 bg-white p-0.5">
-              <button
-                onClick={() => setViewMode("list")}
-                className={cn("flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors", viewMode === "list" ? "bg-slate-800 text-white" : "text-slate-500 hover:text-slate-700")}
-              >
-                <LayoutList className="h-3.5 w-3.5" /> List
-              </button>
-              <button
-                onClick={() => setViewMode("table")}
-                className={cn("flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors", viewMode === "table" ? "bg-slate-800 text-white" : "text-slate-500 hover:text-slate-700")}
-              >
-                <LayoutGrid className="h-3.5 w-3.5" /> Table
-              </button>
-            </div>
-            {canUpload && (
-              <Button size="sm" className="gap-1.5" onClick={() => setShowNew(true)}>
-                <Plus className="h-4 w-4" /> New Job
-              </Button>
-            )}
-          </div>
-        </div>
+        <PageHeader
+          title="Jobs"
+          description="Photo documentation by job site"
+          action={
+            <>
+              {/* View mode toggle */}
+              <div className="flex rounded-lg border border-slate-200 bg-white p-0.5">
+                <button
+                  onClick={() => setViewMode("list")}
+                  className={cn("flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors", viewMode === "list" ? "bg-slate-800 text-white" : "text-slate-500 hover:text-slate-700")}
+                >
+                  <LayoutList className="h-3.5 w-3.5" /> List
+                </button>
+                <button
+                  onClick={() => setViewMode("table")}
+                  className={cn("flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors", viewMode === "table" ? "bg-slate-800 text-white" : "text-slate-500 hover:text-slate-700")}
+                >
+                  <LayoutGrid className="h-3.5 w-3.5" /> Table
+                </button>
+              </div>
+              {canUpload && (
+                <Button size="sm" className="gap-1.5" onClick={() => setShowNew(true)}>
+                  <Plus className="h-4 w-4" /> New Job
+                </Button>
+              )}
+            </>
+          }
+        />
 
         {/* New job form */}
         {showNew && (
