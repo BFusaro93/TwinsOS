@@ -5,7 +5,8 @@ import { useUsers, useInviteUser, useUpdateUserRole, useDeactivateUser, useUpdat
 import { Switch } from "@/components/ui/switch";
 import { useCurrentUserStore } from "@/stores";
 import type { OrgUser } from "@/types";
-import { Check, Trash2, UserPlus, Users2 } from "lucide-react";
+import { Check, Trash2, UserPlus, Users2, Send } from "lucide-react";
+import { toast } from "sonner";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { StatCard } from "@/components/shared/StatCard";
 import { Button } from "@/components/ui/button";
@@ -475,6 +476,28 @@ export function UsersPage() {
   const { mutate: updateRole } = useUpdateUserRole();
   const { mutate: deactivate } = useDeactivateUser();
   const { mutate: updatePhotoAccess } = useUpdatePhotoModuleAccess();
+  const [resendingId, setResendingId] = useState<string | null>(null);
+
+  async function handleResendInvite(user: OrgUser) {
+    setResendingId(user.id);
+    try {
+      await fetch("/api/users/invite", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: user.email, name: user.name, role: user.role }),
+      }).then(async (res) => {
+        if (!res.ok) {
+          const { error } = await res.json();
+          throw new Error(error ?? "Failed to resend invite");
+        }
+      });
+      toast.success(`Invite resent to ${user.email}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to resend invite");
+    } finally {
+      setResendingId(null);
+    }
+  }
 
   const users = useMemo(
     () =>
@@ -630,17 +653,32 @@ export function UsersPage() {
                     </TableCell>
 
                     <TableCell>
-                      {user.status !== "inactive" && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-slate-400 hover:text-red-500"
-                          onClick={() => handleDeactivate(user.id)}
-                          aria-label={`Deactivate ${user.name}`}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      )}
+                      <div className="flex items-center gap-1">
+                        {user.status === "invited" && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-slate-400 hover:text-brand-600"
+                            onClick={() => handleResendInvite(user)}
+                            disabled={resendingId === user.id}
+                            aria-label={`Resend invite to ${user.name}`}
+                            title="Resend invite email"
+                          >
+                            <Send className="h-4 w-4" />
+                          </Button>
+                        )}
+                        {user.status !== "inactive" && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-slate-400 hover:text-red-500"
+                            onClick={() => handleDeactivate(user.id)}
+                            aria-label={`Deactivate ${user.name}`}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
