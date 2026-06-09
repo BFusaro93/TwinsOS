@@ -74,36 +74,26 @@ export function AnnotationEditor({ photoId, projectId }: AnnotationEditorProps) 
       canvas.freeDrawingBrush.color = colorRef.current;
       canvas.freeDrawingBrush.width = 4;
 
-      // Use native pointer events on the underlying canvas element — more reliable
-      // than Fabric's event system across v5/v6/v7 API changes.
-      const el = canvas.getElement() as HTMLCanvasElement;
+      // Use Fabric's own event system with v7's getScenePoint(e) for coordinates.
+      // Native DOM events on the lower canvas interfere with Fabric's selection
+      // and freehand brush (which both operate on the upper canvas overlay).
       let startX = 0;
       let startY = 0;
 
-      function canvasCoords(e: PointerEvent) {
-        const rect = el.getBoundingClientRect();
-        const zoom = canvas.getZoom?.() ?? 1;
-        const vpt  = canvas.viewportTransform ?? [1, 0, 0, 1, 0, 0];
-        // Convert client → canvas CSS pixel → scene (accounting for zoom/pan)
-        const cssX = (e.clientX - rect.left) / zoom - vpt[4] / zoom;
-        const cssY = (e.clientY - rect.top)  / zoom - vpt[5] / zoom;
-        return { x: cssX, y: cssY };
-      }
-
-      function onPointerDown(e: PointerEvent) {
-        const pt = canvasCoords(e);
+      function onMouseDown(opt: FabricCanvas) {
+        const pt = canvas.getScenePoint(opt.e);
         startX = pt.x;
         startY = pt.y;
       }
 
-      function onPointerUp(e: PointerEvent) {
+      function onMouseUp(opt: FabricCanvas) {
         const t = toolRef.current;
         const c = colorRef.current;
         if (t === "select" || t === "freehand") return;
 
-        const pt  = canvasCoords(e);
-        const dx  = Math.abs(pt.x - startX);
-        const dy  = Math.abs(pt.y - startY);
+        const pt = canvas.getScenePoint(opt.e);
+        const dx = Math.abs(pt.x - startX);
+        const dy = Math.abs(pt.y - startY);
 
         if (t === "arrow" && (dx > 5 || dy > 5)) {
           const angle   = Math.atan2(pt.y - startY, pt.x - startX);
@@ -124,8 +114,8 @@ export function AnnotationEditor({ photoId, projectId }: AnnotationEditorProps) 
         canvas.renderAll();
       }
 
-      el.addEventListener("pointerdown", onPointerDown);
-      el.addEventListener("pointerup",   onPointerUp);
+      canvas.on("mouse:down", onMouseDown);
+      canvas.on("mouse:up",   onMouseUp);
 
       // ── Load image ──────────────────────────────────────────────────────────
       const ImageClass: { fromURL: (url: string) => Promise<FabricCanvas> } =
@@ -179,11 +169,6 @@ export function AnnotationEditor({ photoId, projectId }: AnnotationEditorProps) 
 
     return () => {
       disposed = true;
-      const cleanEl = fabricRef.current?.getElement?.() as HTMLCanvasElement | undefined;
-      if (cleanEl) {
-        cleanEl.removeEventListener("pointerdown", () => {});
-        cleanEl.removeEventListener("pointerup",   () => {});
-      }
       fabricRef.current?.dispose();
       fabricRef.current = null;
       setFabricReady(false);
