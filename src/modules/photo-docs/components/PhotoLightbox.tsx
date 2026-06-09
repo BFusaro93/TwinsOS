@@ -157,7 +157,7 @@ export function PhotoLightbox({
         </div>
 
         {/* Sidebar info */}
-        <div className="flex w-full flex-col gap-4 overflow-y-auto bg-[#1e1e1e] p-6 md:w-72">
+        <div className="flex w-full flex-col gap-4 overflow-y-auto bg-[#1e1e1e] p-5 md:w-72" style={{ maxHeight: "50vh" }} onTouchStart={(e) => e.stopPropagation()}>
           {/* Header */}
           <div className="flex items-start justify-between">
             <p className="text-sm font-semibold text-white">{photo.displayName ?? photo.fileName}</p>
@@ -240,16 +240,16 @@ export function PhotoLightbox({
               {/* Meta */}
               <div className="space-y-3 text-sm text-slate-300">
                 <div className="flex items-center gap-2">
-                  <User className="h-3.5 w-3.5 shrink-0 text-slate-500" />
+                  <User className="h-3.5 w-3.5 shrink-0 text-brand-500" />
                   <span>{photo.uploadedByName}</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Clock className="h-3.5 w-3.5 shrink-0 text-slate-500" />
+                  <Clock className="h-3.5 w-3.5 shrink-0 text-brand-500" />
                   <span>{formatDate(photo.createdAt)}</span>
                 </div>
                 {photo.gpsLat != null && photo.gpsLng != null && (
                   <div className="flex items-center gap-2">
-                    <MapPin className="h-3.5 w-3.5 shrink-0 text-slate-500" />
+                    <MapPin className="h-3.5 w-3.5 shrink-0 text-brand-500" />
                     <span className="font-mono text-xs">
                       {photo.gpsLat.toFixed(5)}, {photo.gpsLng.toFixed(5)}
                     </span>
@@ -257,10 +257,10 @@ export function PhotoLightbox({
                 )}
                 {photo.tags.length > 0 && (
                   <div className="flex items-start gap-2">
-                    <Tag className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-500" />
+                    <Tag className="mt-0.5 h-3.5 w-3.5 shrink-0 text-brand-500" />
                     <div className="flex flex-wrap gap-1">
                       {photo.tags.map((tag) => (
-                        <span key={tag} className="rounded-full bg-slate-700 px-2 py-0.5 text-xs text-slate-300">
+                        <span key={tag} className="rounded-full bg-[#2a2a2a] px-2 py-0.5 text-xs text-slate-300">
                           {tag}
                         </span>
                       ))}
@@ -268,7 +268,7 @@ export function PhotoLightbox({
                   </div>
                 )}
                 {photo.notes && (
-                  <p className="rounded-md bg-slate-800 p-3 text-xs leading-relaxed text-slate-300">
+                  <p className="rounded-md bg-[#2a2a2a] p-3 text-xs leading-relaxed text-slate-300">
                     {photo.notes}
                   </p>
                 )}

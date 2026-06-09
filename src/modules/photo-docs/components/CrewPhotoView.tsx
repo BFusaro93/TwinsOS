@@ -2,20 +2,26 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Camera, MapPin, Tag, MessageSquare, Images } from "lucide-react";
+import { Camera, Tag, MessageSquare, Images } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatDate } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import { useJobPhotos } from "../hooks/useJobPhotos";
 import { PhotoLightbox } from "./PhotoLightbox";
-import type { JobPhoto } from "../types/photo.types";
+import type { JobPhoto, GalleryTab } from "../types/photo.types";
 
 interface CrewPhotoViewProps {
   projectId: string;
   projectName: string;
   projectAddress: string;
 }
+
+const TABS: { value: GalleryTab; label: string }[] = [
+  { value: "all",    label: "All" },
+  { value: "before", label: "Before" },
+  { value: "after",  label: "After" },
+];
 
 /**
  * Simplified mobile-optimised view for technician / crew role.
@@ -24,29 +30,36 @@ interface CrewPhotoViewProps {
  */
 export function CrewPhotoView({
   projectId,
-  projectName,
-  projectAddress,
 }: CrewPhotoViewProps) {
   const router = useRouter();
-  const { data: photos = [], isLoading } = useJobPhotos(projectId, "all");
+  const [tab, setTab] = useState<GalleryTab>("all");
+  const { data: photos = [], isLoading } = useJobPhotos(projectId, tab);
   const [lightboxPhoto, setLightboxPhoto] = useState<JobPhoto | null>(null);
 
   const annotatedPhotos = photos.filter((p) => p.hasAnnotations);
-  const allPhotos = photos;
 
   return (
     <div className="flex flex-col gap-5 pb-24">
-      {/* Job header */}
-      <div className="rounded-xl border border-slate-700 bg-slate-800 p-4">
-        <p className="text-lg font-semibold text-white">{projectName}</p>
-        <div className="mt-1 flex items-center gap-1.5 text-sm text-slate-400">
-          <MapPin className="h-3.5 w-3.5" />
-          <span>{projectAddress}</span>
+      {/* Filters */}
+      <div className="flex items-center gap-2">
+        <div className="flex items-center rounded-md border border-slate-200 bg-slate-100 p-0.5">
+          {TABS.map((t) => (
+            <button
+              key={t.value}
+              onClick={() => setTab(t.value)}
+              className={cn(
+                "rounded px-3 py-1.5 text-xs font-medium transition-colors",
+                tab === t.value ? "bg-slate-800 text-white" : "text-slate-500 hover:text-slate-700",
+              )}
+            >
+              {t.label}
+            </button>
+          ))}
         </div>
       </div>
 
       {/* Annotated photos — primary crew reference */}
-      {annotatedPhotos.length > 0 && (
+      {tab === "all" && annotatedPhotos.length > 0 && (
         <section>
           <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
             Instructions / Marked Photos ({annotatedPhotos.length})
@@ -66,22 +79,22 @@ export function CrewPhotoView({
       {/* All photos */}
       <section>
         <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
-          All Photos ({allPhotos.length})
+          {tab === "all" ? `All Photos (${photos.length})` : tab === "before" ? `Before Photos (${photos.length})` : `After Photos (${photos.length})`}
         </p>
         {isLoading ? (
           <div className="grid grid-cols-2 gap-3">
             {Array.from({ length: 4 }).map((_, i) => (
-              <Skeleton key={i} className="aspect-square rounded-lg bg-slate-800" />
+              <Skeleton key={i} className="aspect-square rounded-lg bg-slate-200" />
             ))}
           </div>
-        ) : allPhotos.length === 0 ? (
-          <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-slate-700 py-10">
-            <Images className="h-8 w-8 text-slate-600" />
-            <p className="text-sm text-slate-500">No photos yet for this job</p>
+        ) : photos.length === 0 ? (
+          <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-slate-200 py-10">
+            <Images className="h-8 w-8 text-slate-300" />
+            <p className="text-sm text-slate-400">No photos yet for this job</p>
           </div>
         ) : (
           <div className="grid grid-cols-2 gap-3">
-            {allPhotos.map((photo) => (
+            {photos.map((photo) => (
               <CrewPhotoCard
                 key={photo.id}
                 photo={photo}
@@ -93,9 +106,9 @@ export function CrewPhotoView({
       </section>
 
       {/* Fixed upload button — sticky at bottom for quick field use */}
-      <div className="fixed inset-x-0 bottom-0 z-10 border-t border-slate-700 bg-[#1e1e1e] p-4">
+      <div className="fixed inset-x-0 bottom-0 z-10 border-t border-slate-200 bg-white p-4">
         <Button
-          className="w-full gap-2"
+          className="w-full gap-2 bg-brand-500 text-white hover:bg-brand-600"
           size="lg"
           onClick={() => router.push(`/photos/jobs/${projectId}/upload`)}
         >
