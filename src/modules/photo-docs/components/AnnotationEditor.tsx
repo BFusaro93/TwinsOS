@@ -82,8 +82,10 @@ export function AnnotationEditor({ photoId, projectId }: AnnotationEditorProps) 
         const scaleX = 900 / (img.width ?? 900);
         const scaleY = 600 / (img.height ?? 600);
         const scale = Math.min(scaleX, scaleY, 1);
-        canvas.setWidth((img.width ?? 900) * scale);
-        canvas.setHeight((img.height ?? 600) * scale);
+        const w = (img.width ?? 900) * scale;
+        const h = (img.height ?? 600) * scale;
+        // v7: setWidth/setHeight removed — use setDimensions
+        canvas.setDimensions({ width: w, height: h });
         img.set({ scaleX: scale, scaleY: scale, selectable: false, evented: false });
 
         // v7 API: assign backgroundImage directly, then render
@@ -228,7 +230,7 @@ export function AnnotationEditor({ photoId, projectId }: AnnotationEditorProps) 
         <div className="flex items-center gap-1">
           {tools.map((t) => (
             <button key={t.tool} title={t.label} onClick={() => setTool(t.tool)}
-              className={cn("rounded-md p-2 transition-colors", tool === t.tool ? "bg-white/20 text-white" : "text-slate-400 hover:bg-[#3a3a3a] hover:text-white")}>
+              className={cn("rounded-md p-2 transition-colors", tool === t.tool ? "bg-white/20 text-brand-400" : "text-brand-500 hover:bg-[#3a3a3a] hover:text-brand-400")}>
               {t.icon}
             </button>
           ))}
@@ -244,10 +246,10 @@ export function AnnotationEditor({ photoId, projectId }: AnnotationEditorProps) 
         </div>
         <div className="h-5 w-px bg-[#4a4a4a]" />
         <div className="flex items-center gap-1">
-          <button title="Undo" onClick={undo} className="rounded-md p-2 text-slate-400 hover:bg-[#3a3a3a] hover:text-white"><Undo2 className="h-4 w-4" /></button>
-          <button title="Delete selected" onClick={deleteSelected} className="rounded-md p-2 text-slate-400 hover:bg-red-950/70 hover:text-red-400"><Trash2 className="h-4 w-4" /></button>
+          <button title="Undo" onClick={undo} className="rounded-md p-2 text-brand-500 hover:bg-[#3a3a3a] hover:text-brand-400"><Undo2 className="h-4 w-4" /></button>
+          <button title="Delete selected" onClick={deleteSelected} className="rounded-md p-2 text-brand-500 hover:bg-red-950/70 hover:text-red-400"><Trash2 className="h-4 w-4" /></button>
         </div>
-        <Button size="sm" className="ml-auto gap-1.5" onClick={handleSave} disabled={saving || !fabricReady}>
+        <Button size="sm" className="ml-auto gap-1.5 bg-slate-200 text-slate-800 hover:bg-slate-300" onClick={handleSave} disabled={saving || !fabricReady}>
           {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
           {saving ? "Saving…" : "Save Annotation"}
         </Button>
