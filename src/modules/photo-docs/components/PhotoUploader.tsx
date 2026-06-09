@@ -215,6 +215,12 @@ export function PhotoUploader({ projectId }: PhotoUploaderProps) {
                       {p.fileType === "image" ? "Photo" : p.fileType === "video" ? "Video" : "File"} ·{" "}
                       {(p.file.size / 1024).toFixed(0)} KB
                     </p>
+                    {/* Warn if iOS gave us an iCloud proxy (very small file for a full-res image) */}
+                    {p.fileType === "image" && p.file.size < 100 * 1024 && (
+                      <p className="text-[10px] font-medium text-amber-600">
+                        ⚠️ This photo may not be fully downloaded from iCloud. Open it in your Photos app first, then re-add it.
+                      </p>
+                    )}
 
                     {!prog && (
                       <input

@@ -176,7 +176,7 @@ export function PhotoLightbox({
               <div className="flex flex-col gap-1">
                 <label className="text-[10px] text-slate-400">Name / Label</label>
                 <Input
-                  className="h-7 border-slate-600 bg-slate-700 text-xs text-white placeholder:text-slate-500"
+                  className="h-7 border-slate-600 bg-slate-700 text-xs text-white placeholder:text-slate-500 focus-visible:ring-brand-500"
                   placeholder={photo.fileName}
                   value={metaForm.displayName}
                   onChange={(e) => setMetaForm((f) => ({ ...f, displayName: e.target.value }))}
@@ -185,7 +185,7 @@ export function PhotoLightbox({
               <div className="flex flex-col gap-1">
                 <label className="text-[10px] text-slate-400">Before / After</label>
                 <select
-                  className="rounded-md border border-slate-600 bg-slate-700 px-2 py-1.5 text-xs text-white"
+                  className="rounded-md border border-slate-600 bg-slate-700 px-2 py-1.5 text-xs text-white focus:outline-none focus:ring-1 focus:ring-brand-500"
                   value={metaForm.beforeAfter}
                   onChange={(e) => setMetaForm((f) => ({ ...f, beforeAfter: e.target.value as JobPhoto["beforeAfter"] }))}
                 >
@@ -197,7 +197,7 @@ export function PhotoLightbox({
               <div className="flex flex-col gap-1">
                 <label className="text-[10px] text-slate-400">Tags (comma-separated)</label>
                 <Input
-                  className="h-7 border-slate-600 bg-slate-700 text-xs text-white placeholder:text-slate-500"
+                  className="h-7 border-slate-600 bg-slate-700 text-xs text-white placeholder:text-slate-500 focus-visible:ring-brand-500"
                   placeholder="e.g. lawn, front yard"
                   value={metaForm.tags}
                   onChange={(e) => setMetaForm((f) => ({ ...f, tags: e.target.value }))}
@@ -206,7 +206,7 @@ export function PhotoLightbox({
               <div className="flex flex-col gap-1">
                 <label className="text-[10px] text-slate-400">Notes</label>
                 <Textarea
-                  className="resize-none border-slate-600 bg-slate-700 text-xs text-white placeholder:text-slate-500"
+                  className="resize-none border-slate-600 bg-slate-700 text-xs text-white placeholder:text-slate-500 focus-visible:ring-brand-500"
                   rows={3}
                   placeholder="Add a note…"
                   value={metaForm.notes}
@@ -278,7 +278,7 @@ export function PhotoLightbox({
               <Button
                 size="sm"
                 variant="outline"
-                className="gap-1.5 border-slate-700 text-xs text-slate-300 hover:bg-slate-800 hover:text-white"
+                className="gap-1.5 border-brand-500 text-xs text-brand-400 hover:bg-brand-500/10 hover:text-brand-300"
                 onClick={openMetaEdit}
               >
                 <Pencil className="h-3 w-3" /> Edit Details
@@ -291,7 +291,7 @@ export function PhotoLightbox({
             {canAnnotate && onAnnotate && isImage && (
               <Button
                 size="sm"
-                className="gap-1.5"
+                className="gap-1.5 bg-brand-500 text-white hover:bg-brand-600"
                 onClick={() => onAnnotate(photo.id)}
               >
                 <Pencil className="h-3.5 w-3.5" />

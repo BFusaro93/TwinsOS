@@ -228,6 +228,18 @@ function PhotoThumbnail({
             src={displayUrl}
             alt={photo.fileName}
             className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-105"
+            onError={(e) => {
+              // Hide broken image and show fallback placeholder
+              (e.currentTarget as HTMLImageElement).style.display = "none";
+              const parent = e.currentTarget.parentElement;
+              if (parent && !parent.querySelector("[data-img-error]")) {
+                const fb = document.createElement("div");
+                fb.setAttribute("data-img-error", "1");
+                fb.className = "flex h-full w-full flex-col items-center justify-center gap-1 bg-slate-200";
+                fb.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-slate-400"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg><span style="font-size:10px;color:#94a3b8;">Failed to load</span>`;
+                parent.appendChild(fb);
+              }
+            }}
           />
         ) : isVideo ? (
           <div className="flex h-full w-full flex-col items-center justify-center gap-2 bg-slate-100">
