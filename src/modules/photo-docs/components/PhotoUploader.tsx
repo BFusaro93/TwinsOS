@@ -153,7 +153,7 @@ export function PhotoUploader({ projectId }: PhotoUploaderProps) {
       </div>
 
       {/* Hidden file inputs */}
-      <input ref={photoInputRef} type="file" accept="image/*" multiple capture="environment" className="hidden" onChange={handleInput(photoInputRef)} />
+      <input ref={photoInputRef} type="file" accept="image/*" multiple className="hidden" onChange={handleInput(photoInputRef)} />
       <input ref={videoInputRef} type="file" accept="video/*" multiple className="hidden" onChange={handleInput(videoInputRef)} />
       <input ref={fileInputRef}  type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv" multiple className="hidden" onChange={handleInput(fileInputRef)} />
 
