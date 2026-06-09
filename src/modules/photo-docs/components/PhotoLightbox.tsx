@@ -278,7 +278,7 @@ export function PhotoLightbox({
               <Button
                 size="sm"
                 variant="outline"
-                className="gap-1.5 border-brand-500 text-xs text-brand-400 hover:bg-brand-500/10 hover:text-brand-300"
+                className="w-full gap-1.5 border-brand-500 text-xs text-brand-400 hover:bg-brand-500/10 hover:text-brand-300"
                 onClick={openMetaEdit}
               >
                 <Pencil className="h-3 w-3" /> Edit Details
