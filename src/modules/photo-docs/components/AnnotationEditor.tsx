@@ -80,9 +80,9 @@ export function AnnotationEditor({ photoId, projectId }: AnnotationEditorProps) 
       let startY = 0;
 
       function onMouseDown(opt: FabricCanvas) {
-        const ptr = canvas.getPointer(opt.e);
-        startX = ptr.x;
-        startY = ptr.y;
+        // v7: coordinates live on opt.scenePoint (scene coords), not canvas.getPointer()
+        startX = opt.scenePoint?.x ?? 0;
+        startY = opt.scenePoint?.y ?? 0;
       }
 
       function onMouseUp(opt: FabricCanvas) {
@@ -90,25 +90,26 @@ export function AnnotationEditor({ photoId, projectId }: AnnotationEditorProps) 
         const c = colorRef.current;
         if (t === "select" || t === "freehand") return;
 
-        const ptr = canvas.getPointer(opt.e);
-        const dx  = Math.abs(ptr.x - startX);
-        const dy  = Math.abs(ptr.y - startY);
+        const ptrX = opt.scenePoint?.x ?? 0;
+        const ptrY = opt.scenePoint?.y ?? 0;
+        const dx   = Math.abs(ptrX - startX);
+        const dy   = Math.abs(ptrY - startY);
 
         if (t === "arrow" && (dx > 5 || dy > 5)) {
-          const angle   = Math.atan2(ptr.y - startY, ptr.x - startX);
+          const angle   = Math.atan2(ptrY - startY, ptrX - startX);
           const headLen = 15;
           const pts = [
-            { x: ptr.x, y: ptr.y },
-            { x: ptr.x - headLen * Math.cos(angle - Math.PI / 7), y: ptr.y - headLen * Math.sin(angle - Math.PI / 7) },
-            { x: ptr.x - headLen * Math.cos(angle + Math.PI / 7), y: ptr.y - headLen * Math.sin(angle + Math.PI / 7) },
-            { x: ptr.x, y: ptr.y },
+            { x: ptrX, y: ptrY },
+            { x: ptrX - headLen * Math.cos(angle - Math.PI / 7), y: ptrY - headLen * Math.sin(angle - Math.PI / 7) },
+            { x: ptrX - headLen * Math.cos(angle + Math.PI / 7), y: ptrY - headLen * Math.sin(angle + Math.PI / 7) },
+            { x: ptrX, y: ptrY },
             { x: startX, y: startY },
           ];
           canvas.add(new fabric.Polyline(pts, { fill: "transparent", stroke: c, strokeWidth: 3 }));
         } else if (t === "circle") {
           canvas.add(new fabric.Circle({ left: startX - 40, top: startY - 40, radius: 40, fill: "transparent", stroke: c, strokeWidth: 3 }));
         } else if (t === "text") {
-          canvas.add(new fabric.IText("Label", { left: ptr.x, top: ptr.y, fill: c, fontSize: 18, fontWeight: "bold", backgroundColor: "rgba(0,0,0,0.4)" }));
+          canvas.add(new fabric.IText("Label", { left: ptrX, top: ptrY, fill: c, fontSize: 18, fontWeight: "bold", backgroundColor: "rgba(0,0,0,0.4)" }));
         }
         canvas.renderAll();
       }
