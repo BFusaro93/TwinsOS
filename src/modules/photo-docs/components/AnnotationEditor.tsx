@@ -76,15 +76,25 @@ export function AnnotationEditor({ photoId, projectId }: AnnotationEditorProps) 
         setFabricReady(true);
       }
 
-      if (fabric.FabricImage) {
-        // Fabric.js v6+ — fromURL returns a Promise
-        ImageClass.fromURL(photo.publicUrl, { crossOrigin: "anonymous" })
-          .then(applyImage)
-          .catch((err: unknown) => console.error("[AnnotationEditor] image load failed", err));
-      } else {
-        // Fabric.js v5 — fromURL uses callback
-        ImageClass.fromURL(photo.publicUrl, applyImage, { crossOrigin: "anonymous" });
-      }
+      // Pre-fetch the image as a blob to create a local object URL.
+      // This sidesteps CORS entirely — Fabric's crossOrigin header on signed
+      // Supabase Storage URLs can be silently rejected, keeping the spinner
+      // spinning forever. A blob URL is same-origin and never has CORS issues.
+      fetch(photo.publicUrl)
+        .then((r) => r.blob())
+        .then((blob) => {
+          const blobUrl = URL.createObjectURL(blob);
+          if (fabric.FabricImage) {
+            // Fabric.js v6+ — fromURL returns a Promise
+            ImageClass.fromURL(blobUrl)
+              .then((img: FabricCanvas) => { applyImage(img); URL.revokeObjectURL(blobUrl); })
+              .catch((err: unknown) => { console.error("[AnnotationEditor] image load failed", err); URL.revokeObjectURL(blobUrl); });
+          } else {
+            // Fabric.js v5 — fromURL uses callback
+            ImageClass.fromURL(blobUrl, (img: FabricCanvas) => { applyImage(img); URL.revokeObjectURL(blobUrl); });
+          }
+        })
+        .catch((err: unknown) => console.error("[AnnotationEditor] fetch failed", err));
     });
 
     return () => {
