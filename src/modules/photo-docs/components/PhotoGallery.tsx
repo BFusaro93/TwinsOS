@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Camera, Pencil, SlidersHorizontal, Images } from "lucide-react";
+import { Camera, Pencil, SlidersHorizontal, Images, Film, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
@@ -176,21 +176,30 @@ function PhotoThumbnail({
   onAnnotate?: (id: string) => void;
 }) {
   const displayUrl = photo.annotatedUrl ?? photo.publicUrl;
+  const isImage = photo.mimeType?.startsWith("image/") ?? true;
+  const isVideo = photo.mimeType?.startsWith("video/");
+  const ext = photo.fileName.split(".").pop()?.toUpperCase() ?? "FILE";
 
   return (
     <div className="group relative aspect-square overflow-hidden rounded-lg border border-slate-700 bg-slate-800">
-      {/* Image */}
+      {/* Thumbnail */}
       <button className="h-full w-full" onClick={onClick}>
-        {displayUrl ? (
+        {isImage && displayUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={displayUrl}
             alt={photo.fileName}
             className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-105"
           />
+        ) : isVideo ? (
+          <div className="flex h-full w-full flex-col items-center justify-center gap-2 bg-slate-900">
+            <Film className="h-10 w-10 text-slate-400" />
+            <span className="text-[10px] font-medium text-slate-400">{ext}</span>
+          </div>
         ) : (
-          <div className="flex h-full w-full items-center justify-center text-slate-600">
-            <Camera className="h-8 w-8" />
+          <div className="flex h-full w-full flex-col items-center justify-center gap-2 bg-slate-900">
+            <FileText className="h-10 w-10 text-slate-400" />
+            <span className="text-[10px] font-medium text-slate-400">{ext}</span>
           </div>
         )}
       </button>
