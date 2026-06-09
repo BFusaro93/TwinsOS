@@ -137,7 +137,7 @@ export default function JobPhotosPage({ params }: { params: Promise<{ jobId: str
           <div className="rounded-xl border border-brand-200 bg-white p-5 shadow-sm">
             <div className="mb-4 flex items-center justify-between">
               <p className="font-medium text-slate-900">Edit Job</p>
-              <button onClick={() => setEditing(false)}><X className="h-4 w-4 text-slate-400" /></button>
+              <button onClick={() => setEditing(false)} className="hidden sm:inline-flex"><X className="h-4 w-4 text-slate-400" /></button>
             </div>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="sm:col-span-2">

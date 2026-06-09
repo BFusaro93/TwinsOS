@@ -84,12 +84,13 @@ export function useDeletePhoto(projectId: string) {
 export function useUpdatePhoto(projectId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, beforeAfter, tags, notes }: { id: string; beforeAfter?: JobPhoto["beforeAfter"]; tags?: string[]; notes?: string | null; }) => {
+    mutationFn: async ({ id, beforeAfter, tags, notes, displayName }: { id: string; beforeAfter?: JobPhoto["beforeAfter"]; tags?: string[]; notes?: string | null; displayName?: string | null }) => {
       const db = createClient() as any;
       const { error } = await db.from("job_photos").update({
         ...(beforeAfter !== undefined && { before_after: beforeAfter }),
         ...(tags !== undefined && { tags }),
         ...(notes !== undefined && { notes }),
+        ...(displayName !== undefined && { display_name: displayName }),
         updated_at: new Date().toISOString(),
       }).eq("id", id);
       if (error) throw error;

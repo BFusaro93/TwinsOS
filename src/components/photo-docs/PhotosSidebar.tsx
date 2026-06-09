@@ -33,7 +33,7 @@ export function PhotosSidebar() {
   return (
     <aside
       className={cn(
-        "flex h-screen flex-col bg-[#1e1e1e] transition-all duration-200",
+        "flex h-full flex-col bg-[#1e1e1e] transition-all duration-200",
         sidebarCollapsed ? "w-16" : "w-[260px]"
       )}
     >

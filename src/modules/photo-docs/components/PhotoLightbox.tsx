@@ -2,9 +2,13 @@
 
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { X, ChevronLeft, ChevronRight, Pencil, MapPin, Clock, User, Tag, Trash2, Film, FileText } from "lucide-react";
+import { X, ChevronLeft, ChevronRight, Pencil, MapPin, Clock, User, Tag, Trash2, Film, FileText, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { toast } from "sonner";
 import { formatDate } from "@/lib/utils";
+import { useUpdatePhoto } from "../hooks/useJobPhotos";
 import type { JobPhoto } from "../types/photo.types";
 
 interface PhotoLightboxProps {
@@ -15,6 +19,7 @@ interface PhotoLightboxProps {
   canAnnotate?: boolean;
   onAnnotate?: (photoId: string) => void;
   onDelete?: (photoId: string) => void;
+  projectId?: string;
 }
 
 export function PhotoLightbox({
@@ -25,11 +30,42 @@ export function PhotoLightbox({
   canAnnotate,
   onAnnotate,
   onDelete,
+  projectId,
 }: PhotoLightboxProps) {
   const currentIndex = photos.findIndex((p) => p.id === photo.id);
   const hasPrev = currentIndex > 0;
   const hasNext = currentIndex < photos.length - 1;
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [editingMeta, setEditingMeta] = useState(false);
+  const [metaForm, setMetaForm] = useState({ displayName: "", beforeAfter: "none" as JobPhoto["beforeAfter"], notes: "", tags: "" });
+  const { mutate: updatePhoto, isPending: savingMeta } = useUpdatePhoto(projectId ?? photo.photoJobId);
+
+  function openMetaEdit() {
+    setMetaForm({
+      displayName: photo.displayName ?? "",
+      beforeAfter: photo.beforeAfter,
+      notes: photo.notes ?? "",
+      tags: photo.tags.join(", "),
+    });
+    setEditingMeta(true);
+  }
+
+  function saveMetaEdit() {
+    const tags = metaForm.tags.split(",").map((t) => t.trim()).filter(Boolean);
+    updatePhoto(
+      {
+        id: photo.id,
+        displayName: metaForm.displayName || null,
+        beforeAfter: metaForm.beforeAfter,
+        notes: metaForm.notes || null,
+        tags,
+      },
+      {
+        onSuccess: () => { toast.success("Photo updated"); setEditingMeta(false); },
+        onError: () => toast.error("Failed to save"),
+      },
+    );
+  }
 
   const isImage = photo.mimeType?.startsWith("image/") ?? true;
   const isVideo = photo.mimeType?.startsWith("video/");
@@ -133,58 +169,122 @@ export function PhotoLightbox({
             </button>
           </div>
 
-          {/* Before / After badge */}
-          {photo.beforeAfter !== "none" && (
-            <span
-              className={`inline-flex w-fit rounded-full px-3 py-1 text-xs font-semibold ${
-                photo.beforeAfter === "before"
-                  ? "bg-amber-500/20 text-amber-400"
-                  : "bg-brand-500/20 text-brand-400"
-              }`}
-            >
-              {photo.beforeAfter === "before" ? "Before" : "After"}
-            </span>
-          )}
-
-          {/* Meta */}
-          <div className="space-y-3 text-sm text-slate-300">
-            <div className="flex items-center gap-2">
-              <User className="h-3.5 w-3.5 shrink-0 text-slate-500" />
-              <span>{photo.uploadedByName}</span>
+          {/* Edit metadata form */}
+          {editingMeta ? (
+            <div className="flex flex-col gap-3 rounded-lg border border-slate-700 bg-slate-800 p-3">
+              <p className="text-xs font-semibold text-slate-300">Edit Details</p>
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] text-slate-400">Name / Label</label>
+                <Input
+                  className="h-7 border-slate-600 bg-slate-700 text-xs text-white placeholder:text-slate-500"
+                  placeholder={photo.fileName}
+                  value={metaForm.displayName}
+                  onChange={(e) => setMetaForm((f) => ({ ...f, displayName: e.target.value }))}
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] text-slate-400">Before / After</label>
+                <select
+                  className="rounded-md border border-slate-600 bg-slate-700 px-2 py-1.5 text-xs text-white"
+                  value={metaForm.beforeAfter}
+                  onChange={(e) => setMetaForm((f) => ({ ...f, beforeAfter: e.target.value as JobPhoto["beforeAfter"] }))}
+                >
+                  <option value="none">None</option>
+                  <option value="before">Before</option>
+                  <option value="after">After</option>
+                </select>
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] text-slate-400">Tags (comma-separated)</label>
+                <Input
+                  className="h-7 border-slate-600 bg-slate-700 text-xs text-white placeholder:text-slate-500"
+                  placeholder="e.g. lawn, front yard"
+                  value={metaForm.tags}
+                  onChange={(e) => setMetaForm((f) => ({ ...f, tags: e.target.value }))}
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] text-slate-400">Notes</label>
+                <Textarea
+                  className="resize-none border-slate-600 bg-slate-700 text-xs text-white placeholder:text-slate-500"
+                  rows={3}
+                  placeholder="Add a note…"
+                  value={metaForm.notes}
+                  onChange={(e) => setMetaForm((f) => ({ ...f, notes: e.target.value }))}
+                />
+              </div>
+              <div className="flex gap-2">
+                <Button size="sm" variant="outline" className="flex-1 border-slate-600 text-xs text-slate-300 hover:bg-slate-700" onClick={() => setEditingMeta(false)}>
+                  Cancel
+                </Button>
+                <Button size="sm" className="flex-1 gap-1 bg-white text-xs text-slate-900 hover:bg-slate-100" disabled={savingMeta} onClick={saveMetaEdit}>
+                  <Check className="h-3 w-3" /> {savingMeta ? "Saving…" : "Save"}
+                </Button>
+              </div>
             </div>
-            <div className="flex items-center gap-2">
-              <Clock className="h-3.5 w-3.5 shrink-0 text-slate-500" />
-              <span>{formatDate(photo.createdAt)}</span>
-            </div>
-            {photo.gpsLat != null && photo.gpsLng != null && (
-              <div className="flex items-center gap-2">
-                <MapPin className="h-3.5 w-3.5 shrink-0 text-slate-500" />
-                <span className="font-mono text-xs">
-                  {photo.gpsLat.toFixed(5)}, {photo.gpsLng.toFixed(5)}
+          ) : (
+            <>
+              {/* Before / After badge */}
+              {photo.beforeAfter !== "none" && (
+                <span
+                  className={`inline-flex w-fit rounded-full px-3 py-1 text-xs font-semibold ${
+                    photo.beforeAfter === "before"
+                      ? "bg-amber-500/20 text-amber-400"
+                      : "bg-emerald-600/20 text-emerald-400"
+                  }`}
+                >
+                  {photo.beforeAfter === "before" ? "Before" : "After"}
                 </span>
-              </div>
-            )}
-            {photo.tags.length > 0 && (
-              <div className="flex items-start gap-2">
-                <Tag className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-500" />
-                <div className="flex flex-wrap gap-1">
-                  {photo.tags.map((tag) => (
-                    <span
-                      key={tag}
-                      className="rounded-full bg-slate-700 px-2 py-0.5 text-xs text-slate-300"
-                    >
-                      {tag}
-                    </span>
-                  ))}
+              )}
+
+              {/* Meta */}
+              <div className="space-y-3 text-sm text-slate-300">
+                <div className="flex items-center gap-2">
+                  <User className="h-3.5 w-3.5 shrink-0 text-slate-500" />
+                  <span>{photo.uploadedByName}</span>
                 </div>
+                <div className="flex items-center gap-2">
+                  <Clock className="h-3.5 w-3.5 shrink-0 text-slate-500" />
+                  <span>{formatDate(photo.createdAt)}</span>
+                </div>
+                {photo.gpsLat != null && photo.gpsLng != null && (
+                  <div className="flex items-center gap-2">
+                    <MapPin className="h-3.5 w-3.5 shrink-0 text-slate-500" />
+                    <span className="font-mono text-xs">
+                      {photo.gpsLat.toFixed(5)}, {photo.gpsLng.toFixed(5)}
+                    </span>
+                  </div>
+                )}
+                {photo.tags.length > 0 && (
+                  <div className="flex items-start gap-2">
+                    <Tag className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-500" />
+                    <div className="flex flex-wrap gap-1">
+                      {photo.tags.map((tag) => (
+                        <span key={tag} className="rounded-full bg-slate-700 px-2 py-0.5 text-xs text-slate-300">
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {photo.notes && (
+                  <p className="rounded-md bg-slate-800 p-3 text-xs leading-relaxed text-slate-300">
+                    {photo.notes}
+                  </p>
+                )}
               </div>
-            )}
-            {photo.notes && (
-              <p className="rounded-md bg-slate-800 p-3 text-xs leading-relaxed text-slate-300">
-                {photo.notes}
-              </p>
-            )}
-          </div>
+
+              {/* Edit details button */}
+              <Button
+                size="sm"
+                variant="outline"
+                className="gap-1.5 border-slate-700 text-xs text-slate-300 hover:bg-slate-800 hover:text-white"
+                onClick={openMetaEdit}
+              >
+                <Pencil className="h-3 w-3" /> Edit Details
+              </Button>
+            </>
+          )}
 
           {/* Actions */}
           <div className="mt-auto flex flex-col gap-2">

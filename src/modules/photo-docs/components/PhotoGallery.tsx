@@ -115,7 +115,8 @@ export function PhotoGallery({ projectId }: PhotoGalleryProps) {
           {canUpload && (
             <Button
               size="sm"
-              className="gap-1.5 text-xs"
+              variant="outline"
+              className="gap-1.5 border-slate-700 bg-slate-800 text-xs text-white hover:bg-slate-700 hover:text-white"
               onClick={() => router.push(`/photos/jobs/${projectId}/upload`)}
             >
               <Camera className="h-3.5 w-3.5" />
@@ -159,7 +160,8 @@ export function PhotoGallery({ projectId }: PhotoGalleryProps) {
           {canUpload && tab === "all" && (
             <Button
               size="sm"
-              className="gap-1.5 text-xs"
+              variant="outline"
+              className="gap-1.5 border-slate-700 bg-slate-800 text-xs text-white hover:bg-slate-700 hover:text-white"
               onClick={() => router.push(`/photos/jobs/${projectId}/upload`)}
             >
               <Camera className="h-3.5 w-3.5" />
@@ -186,6 +188,7 @@ export function PhotoGallery({ projectId }: PhotoGalleryProps) {
         <PhotoLightbox
           photo={lightboxPhoto}
           photos={photos}
+          projectId={projectId}
           onClose={() => setLightboxPhoto(null)}
           onNavigate={setLightboxPhoto}
           canAnnotate={canAnnotate}

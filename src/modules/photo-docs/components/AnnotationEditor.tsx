@@ -59,7 +59,10 @@ export function AnnotationEditor({ photoId, projectId }: AnnotationEditorProps) 
       });
       fabricRef.current = canvas;
 
-      fabric.Image.fromURL(photo.publicUrl, (img: FabricCanvas) => {
+      // Support both Fabric.js v5 (callback API) and v6 (promise API)
+      const ImageClass = fabric.FabricImage ?? fabric.Image;
+
+      function applyImage(img: FabricCanvas) {
         const scaleX = 900 / (img.width ?? 900);
         const scaleY = 600 / (img.height ?? 600);
         const scale = Math.min(scaleX, scaleY, 1);
@@ -67,12 +70,21 @@ export function AnnotationEditor({ photoId, projectId }: AnnotationEditorProps) 
         canvas.setHeight((img.height ?? 600) * scale);
         img.set({ scaleX: scale, scaleY: scale, selectable: false, evented: false });
         canvas.setBackgroundImage(img, canvas.renderAll.bind(canvas));
-
         if (existingAnnotation?.fabricJson) {
           canvas.loadFromJSON(existingAnnotation.fabricJson, () => canvas.renderAll());
         }
         setFabricReady(true);
-      });
+      }
+
+      if (fabric.FabricImage) {
+        // Fabric.js v6+ — fromURL returns a Promise
+        ImageClass.fromURL(photo.publicUrl, { crossOrigin: "anonymous" })
+          .then(applyImage)
+          .catch((err: unknown) => console.error("[AnnotationEditor] image load failed", err));
+      } else {
+        // Fabric.js v5 — fromURL uses callback
+        ImageClass.fromURL(photo.publicUrl, applyImage, { crossOrigin: "anonymous" });
+      }
     });
 
     return () => {
@@ -201,7 +213,7 @@ export function AnnotationEditor({ photoId, projectId }: AnnotationEditorProps) 
         <div className="flex items-center gap-1">
           {tools.map((t) => (
             <button key={t.tool} title={t.label} onClick={() => setTool(t.tool)}
-              className={cn("rounded-md p-2 transition-colors", tool === t.tool ? "bg-brand-500 text-white" : "text-slate-400 hover:bg-slate-700 hover:text-white")}>
+              className={cn("rounded-md p-2 transition-colors", tool === t.tool ? "bg-white/20 text-white" : "text-slate-400 hover:bg-slate-700 hover:text-white")}>
               {t.icon}
             </button>
           ))}

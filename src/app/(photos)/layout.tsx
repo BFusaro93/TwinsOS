@@ -22,7 +22,7 @@ export default function PhotosLayout({ children }: { children: React.ReactNode }
       <SettingsLoader />
 
       {/* Desktop sidebar */}
-      <div className="hidden md:flex">
+      <div className="hidden h-full md:flex">
         <PhotosSidebar />
       </div>
 
