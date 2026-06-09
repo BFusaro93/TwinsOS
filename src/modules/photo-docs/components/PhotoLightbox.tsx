@@ -171,12 +171,12 @@ export function PhotoLightbox({
 
           {/* Edit metadata form */}
           {editingMeta ? (
-            <div className="flex flex-col gap-3 rounded-lg border border-slate-700 bg-slate-800 p-3">
+            <div className="flex flex-col gap-3 rounded-lg border border-[#3a3a3a] bg-[#2a2a2a] p-3">
               <p className="text-xs font-semibold text-slate-300">Edit Details</p>
               <div className="flex flex-col gap-1">
                 <label className="text-[10px] text-slate-400">Name / Label</label>
                 <Input
-                  className="h-7 border-slate-600 bg-slate-700 text-xs text-white placeholder:text-slate-500 focus-visible:ring-brand-500"
+                  className="h-7 border-[#3a3a3a] bg-[#1e1e1e] text-xs text-white placeholder:text-slate-500 focus-visible:ring-brand-500"
                   placeholder={photo.fileName}
                   value={metaForm.displayName}
                   onChange={(e) => setMetaForm((f) => ({ ...f, displayName: e.target.value }))}
@@ -185,7 +185,7 @@ export function PhotoLightbox({
               <div className="flex flex-col gap-1">
                 <label className="text-[10px] text-slate-400">Before / After</label>
                 <select
-                  className="rounded-md border border-slate-600 bg-slate-700 px-2 py-1.5 text-xs text-white focus:outline-none focus:ring-1 focus:ring-brand-500"
+                  className="rounded-md border border-[#3a3a3a] bg-[#1e1e1e] px-2 py-1.5 text-xs text-white focus:outline-none focus:ring-1 focus:ring-brand-500"
                   value={metaForm.beforeAfter}
                   onChange={(e) => setMetaForm((f) => ({ ...f, beforeAfter: e.target.value as JobPhoto["beforeAfter"] }))}
                 >
@@ -197,7 +197,7 @@ export function PhotoLightbox({
               <div className="flex flex-col gap-1">
                 <label className="text-[10px] text-slate-400">Tags (comma-separated)</label>
                 <Input
-                  className="h-7 border-slate-600 bg-slate-700 text-xs text-white placeholder:text-slate-500 focus-visible:ring-brand-500"
+                  className="h-7 border-[#3a3a3a] bg-[#1e1e1e] text-xs text-white placeholder:text-slate-500 focus-visible:ring-brand-500"
                   placeholder="e.g. lawn, front yard"
                   value={metaForm.tags}
                   onChange={(e) => setMetaForm((f) => ({ ...f, tags: e.target.value }))}
@@ -206,7 +206,7 @@ export function PhotoLightbox({
               <div className="flex flex-col gap-1">
                 <label className="text-[10px] text-slate-400">Notes</label>
                 <Textarea
-                  className="resize-none border-slate-600 bg-slate-700 text-xs text-white placeholder:text-slate-500 focus-visible:ring-brand-500"
+                  className="resize-none border-[#3a3a3a] bg-[#1e1e1e] text-xs text-white placeholder:text-slate-500 focus-visible:ring-brand-500"
                   rows={3}
                   placeholder="Add a note…"
                   value={metaForm.notes}
@@ -214,7 +214,7 @@ export function PhotoLightbox({
                 />
               </div>
               <div className="flex gap-2">
-                <Button size="sm" variant="outline" className="flex-1 border-slate-600 text-xs text-slate-300 hover:bg-slate-700" onClick={() => setEditingMeta(false)}>
+                <Button size="sm" variant="outline" className="flex-1 border-[#3a3a3a] text-xs text-slate-300 hover:bg-[#2a2a2a]" onClick={() => setEditingMeta(false)}>
                   Cancel
                 </Button>
                 <Button size="sm" className="flex-1 gap-1 bg-white text-xs text-slate-900 hover:bg-slate-100" disabled={savingMeta} onClick={saveMetaEdit}>
