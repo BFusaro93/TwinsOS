@@ -78,15 +78,32 @@ export function AnnotationEditor({ photoId, projectId }: AnnotationEditorProps) 
         URL.revokeObjectURL(blobUrl);
         if (disposed) return;
 
-        // Scale image to fit within 900×600 without upscaling
-        const scaleX = 900 / (img.width ?? 900);
-        const scaleY = 600 / (img.height ?? 600);
-        const scale = Math.min(scaleX, scaleY, 1);
-        const w = (img.width ?? 900) * scale;
-        const h = (img.height ?? 600) * scale;
+        // Read natural pixel dimensions directly from the underlying <img> element.
+        // img.width/img.height on the FabricImage may be 0 before the first render,
+        // so we fall back to the HTMLImageElement's naturalWidth/naturalHeight.
+        const el = img.getElement?.() as HTMLImageElement | undefined;
+        const naturalW = el?.naturalWidth || img.width || 900;
+        const naturalH = el?.naturalHeight || img.height || 600;
+
+        // Scale to fit within 900×600 without upscaling
+        const scale = Math.min(900 / naturalW, 600 / naturalH, 1);
+        const w = Math.round(naturalW * scale);
+        const h = Math.round(naturalH * scale);
+
         // v7: setWidth/setHeight removed — use setDimensions
         canvas.setDimensions({ width: w, height: h });
-        img.set({ scaleX: scale, scaleY: scale, selectable: false, evented: false });
+
+        // Pin image to top-left at the correct scale
+        img.set({
+          left: 0,
+          top: 0,
+          originX: "left",
+          originY: "top",
+          scaleX: scale,
+          scaleY: scale,
+          selectable: false,
+          evented: false,
+        });
 
         // v7 API: assign backgroundImage directly, then render
         canvas.backgroundImage = img;
