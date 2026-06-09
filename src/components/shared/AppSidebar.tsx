@@ -16,7 +16,7 @@ export function AppSidebar() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const hasPhotoAccess = currentUser.role === "admin" || Boolean((currentUser as any).photoModuleAccess);
   const isAdmin = currentUser.role === "admin";
-  const isDriver = currentUser.role === "driver";
+  const isCrew = currentUser.role === "crew";
 
   return (
     <aside
@@ -68,7 +68,7 @@ export function AppSidebar() {
             {section.items
               .filter((item) => !item.adminOnly || isAdmin)
               .filter((item) => item.href !== "/jobs" || hasPhotoAccess)
-              .filter((item) => !item.hideFromDriver || !isDriver)
+              .filter((item) => !item.hideFromCrew || !isCrew)
               .map((item) => {
               const isActive =
                 pathname === item.href ||

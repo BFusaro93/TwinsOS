@@ -105,7 +105,7 @@ export default function JobPhotosPage({ params }: { params: Promise<{ jobId: str
             <ArrowLeft className="h-3.5 w-3.5" /> Job Photos
           </button>
           <div className="flex items-center justify-between gap-2">
-            <h1 className="text-xl font-semibold text-slate-900">{job?.name ?? "Job Photos"}</h1>
+            <h1 className="min-w-0 flex-1 truncate text-xl font-semibold text-slate-900" title={job?.name}>{job?.name ?? "Job Photos"}</h1>
             {!isCrew && !editing && (
               <div className="flex items-center gap-2">
                 <Button size="sm" variant="outline" className="gap-1.5" onClick={openEdit}>

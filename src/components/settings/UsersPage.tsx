@@ -5,7 +5,7 @@ import { useUsers, useInviteUser, useUpdateUserRole, useDeactivateUser, useUpdat
 import { Switch } from "@/components/ui/switch";
 import { useCurrentUserStore } from "@/stores";
 import type { OrgUser } from "@/types";
-import { Check, Trash2, UserPlus } from "lucide-react";
+import { Check, Trash2, UserPlus, Users2 } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { StatCard } from "@/components/shared/StatCard";
 import { Button } from "@/components/ui/button";
@@ -31,6 +31,7 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -57,7 +58,7 @@ const ROLE_LABELS: Record<OrgUser["role"], string> = {
   technician: "Technician",
   viewer: "Viewer",
   requestor: "Requestor",
-  driver: "Driver",
+  crew: "Crew",
 };
 
 const ROLES = [
@@ -146,9 +147,9 @@ const ROLES = [
     ],
   },
   {
-    name: "Driver",
-    key: "driver",
-    description: "Field driver — access to submit maintenance requests, view safety and labor dashboards, and upload job-site photos.",
+    name: "Crew",
+    key: "crew",
+    description: "Field crew account for shared team devices — assigned to a crew (e.g. MAINT1, ENHANCE1) rather than an individual person.",
     permissions: [
       "Submit maintenance requests",
       "View Labor Efficiency dashboard",
@@ -274,7 +275,7 @@ function InviteUserDialog({ open, onOpenChange, onInvite, submitting = false }: 
                 <SelectItem value="technician">Technician</SelectItem>
                 <SelectItem value="viewer">Viewer</SelectItem>
                 <SelectItem value="requestor">Requestor</SelectItem>
-                <SelectItem value="driver">Driver</SelectItem>
+                <SelectItem value="crew">Crew</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -297,6 +298,152 @@ function InviteUserDialog({ open, onOpenChange, onInvite, submitting = false }: 
             </Button>
           </DialogFooter>
         </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// CreateCrewAccountDialog (inline)
+// ---------------------------------------------------------------------------
+
+interface CreateCrewAccountDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}
+
+function CreateCrewAccountDialog({ open, onOpenChange }: CreateCrewAccountDialogProps) {
+  const [teamName, setTeamName] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [loginEmail, setLoginEmail] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  function reset() {
+    setTeamName("");
+    setPassword("");
+    setConfirmPassword("");
+    setCreating(false);
+    setLoginEmail(null);
+    setError(null);
+  }
+
+  function handleOpenChange(val: boolean) {
+    if (!val) reset();
+    onOpenChange(val);
+  }
+
+  async function handleCreate(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    if (!teamName.trim()) { setError("Team name is required."); return; }
+    if (password.length < 8) { setError("Password must be at least 8 characters."); return; }
+    if (password !== confirmPassword) { setError("Passwords do not match."); return; }
+
+    setCreating(true);
+    try {
+      const res = await fetch("/api/users/create-crew", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ teamName: teamName.trim(), password }),
+      });
+      const data: { success?: boolean; loginEmail?: string; error?: string } = await res.json();
+      if (!res.ok || !data.success) {
+        setError(data.error ?? "Failed to create crew account.");
+      } else {
+        setLoginEmail(data.loginEmail ?? null);
+      }
+    } catch {
+      setError("Network error — please try again.");
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Create Crew Account</DialogTitle>
+          <DialogDescription>
+            Creates a shared login for a crew team (e.g. MAINT1, ENHANCE1). No email required — credentials are shown once after creation.
+          </DialogDescription>
+        </DialogHeader>
+
+        {loginEmail ? (
+          /* Success state — show credentials */
+          <div className="flex flex-col gap-4 pt-2">
+            <div className="rounded-lg border border-brand-200 bg-brand-50 p-4">
+              <p className="mb-2 text-sm font-medium text-brand-900">Crew account created!</p>
+              <div className="rounded-md border border-slate-200 bg-white p-3 font-mono text-sm">
+                <div className="flex items-center gap-2">
+                  <span className="text-slate-400">Login:</span>
+                  <span className="select-all text-slate-900">{loginEmail}</span>
+                </div>
+                <div className="mt-1 flex items-center gap-2">
+                  <span className="text-slate-400">Password:</span>
+                  <span className="select-all text-slate-900">{password}</span>
+                </div>
+              </div>
+              <p className="mt-3 text-xs text-amber-700">
+                Save these credentials — the password cannot be retrieved after this dialog is closed.
+              </p>
+            </div>
+            <DialogFooter>
+              <Button onClick={() => handleOpenChange(false)}>Done</Button>
+            </DialogFooter>
+          </div>
+        ) : (
+          /* Creation form */
+          <form onSubmit={handleCreate} className="flex flex-col gap-4 pt-2">
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="crew-team-name">Team Name</Label>
+              <Input
+                id="crew-team-name"
+                placeholder="e.g. MAINT1"
+                value={teamName}
+                onChange={(e) => setTeamName(e.target.value)}
+                required
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="crew-password">Password</Label>
+              <Input
+                id="crew-password"
+                type="password"
+                placeholder="Min 8 characters"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="crew-confirm-password">Confirm Password</Label>
+              <Input
+                id="crew-confirm-password"
+                type="password"
+                placeholder="Re-enter password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                required
+              />
+            </div>
+            {error && (
+              <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                {error}
+              </p>
+            )}
+            <DialogFooter className="pt-2">
+              <Button type="button" variant="outline" onClick={() => handleOpenChange(false)} disabled={creating}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={creating}>
+                {creating ? "Creating…" : "Create Account"}
+              </Button>
+            </DialogFooter>
+          </form>
+        )}
       </DialogContent>
     </Dialog>
   );
@@ -327,6 +474,7 @@ export function UsersPage() {
   );
 
   const [inviteOpen, setInviteOpen] = useState(false);
+  const [crewDialogOpen, setCrewDialogOpen] = useState(false);
 
   const totalUsers = users.length;
   const activeUsers = users.filter((u) => u.status === "active").length;
@@ -361,10 +509,16 @@ export function UsersPage() {
         description="Manage team members and their permissions"
         action={
           isAdmin ? (
-            <Button size="sm" onClick={() => setInviteOpen(true)}>
-              <UserPlus className="mr-1.5 h-4 w-4" />
-              Invite User
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button size="sm" variant="outline" onClick={() => setCrewDialogOpen(true)}>
+                <Users2 className="mr-1.5 h-4 w-4" />
+                Create Crew Account
+              </Button>
+              <Button size="sm" onClick={() => setInviteOpen(true)}>
+                <UserPlus className="mr-1.5 h-4 w-4" />
+                Invite User
+              </Button>
+            </div>
           ) : undefined
         }
       />
@@ -513,6 +667,11 @@ export function UsersPage() {
         onOpenChange={setInviteOpen}
         onInvite={handleInvite}
         submitting={inviting}
+      />
+
+      <CreateCrewAccountDialog
+        open={crewDialogOpen}
+        onOpenChange={setCrewDialogOpen}
       />
     </div>
   );
