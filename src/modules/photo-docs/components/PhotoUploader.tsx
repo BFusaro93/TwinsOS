@@ -2,7 +2,7 @@
 
 import { useState, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { Camera, Video, FileUp, X, CheckCircle2, AlertCircle, Loader2, Film, FileText } from "lucide-react";
+import { Camera, Images, Video, FileUp, X, CheckCircle2, AlertCircle, Loader2, Film, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -42,9 +42,10 @@ export function PhotoUploader({ projectId }: PhotoUploaderProps) {
   const [globalBeforeAfter, setGlobalBeforeAfter] = useState<BeforeAfterFlag>("none");
   const [globalTags, setGlobalTags] = useState<string[]>([]);
 
-  const photoInputRef = useRef<HTMLInputElement>(null);
-  const videoInputRef = useRef<HTMLInputElement>(null);
-  const fileInputRef  = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const photoInputRef  = useRef<HTMLInputElement>(null);
+  const videoInputRef  = useRef<HTMLInputElement>(null);
+  const fileInputRef   = useRef<HTMLInputElement>(null);
 
   const uploadContext: UploadContext = isCrew ? "progress" : "site_documentation";
 
@@ -124,15 +125,23 @@ export function PhotoUploader({ projectId }: PhotoUploaderProps) {
 
   return (
     <div className="flex flex-col gap-5">
-      {/* Three picker buttons */}
-      <div className="grid grid-cols-3 gap-3">
+      {/* Four picker buttons */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <button
+          onClick={() => cameraInputRef.current?.click()}
+          className="flex flex-col items-center gap-2 rounded-xl border-2 border-dashed border-slate-200 py-5 text-center transition-colors hover:border-brand-400 hover:bg-brand-50"
+        >
+          <Camera className="h-7 w-7 text-brand-500" />
+          <span className="text-xs font-medium text-slate-700">Camera</span>
+          <span className="text-[10px] text-slate-400">Take a photo</span>
+        </button>
         <button
           onClick={() => photoInputRef.current?.click()}
           className="flex flex-col items-center gap-2 rounded-xl border-2 border-dashed border-slate-200 py-5 text-center transition-colors hover:border-brand-400 hover:bg-brand-50"
         >
-          <Camera className="h-7 w-7 text-brand-500" />
-          <span className="text-xs font-medium text-slate-700">Photos</span>
-          <span className="text-[10px] text-slate-400">Camera or library</span>
+          <Images className="h-7 w-7 text-brand-500" />
+          <span className="text-xs font-medium text-slate-700">Library</span>
+          <span className="text-[10px] text-slate-400">Saved photos</span>
         </button>
         <button
           onClick={() => videoInputRef.current?.click()}
@@ -153,9 +162,12 @@ export function PhotoUploader({ projectId }: PhotoUploaderProps) {
       </div>
 
       {/* Hidden file inputs */}
-      <input ref={photoInputRef} type="file" accept="image/*" multiple className="hidden" onChange={handleInput(photoInputRef)} />
-      <input ref={videoInputRef} type="file" accept="video/*" multiple className="hidden" onChange={handleInput(videoInputRef)} />
-      <input ref={fileInputRef}  type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv" multiple className="hidden" onChange={handleInput(fileInputRef)} />
+      {/* capture="environment" opens the rear camera directly on Android/iOS */}
+      <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" multiple className="hidden" onChange={handleInput(cameraInputRef)} />
+      {/* No capture — opens library/file picker on all platforms */}
+      <input ref={photoInputRef}  type="file" accept="image/*" multiple className="hidden" onChange={handleInput(photoInputRef)} />
+      <input ref={videoInputRef}  type="file" accept="video/*" multiple className="hidden" onChange={handleInput(videoInputRef)} />
+      <input ref={fileInputRef}   type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv" multiple className="hidden" onChange={handleInput(fileInputRef)} />
 
       {/* Global defaults (images only) */}
       {pending.length === 0 && (
