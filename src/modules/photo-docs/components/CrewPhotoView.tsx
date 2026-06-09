@@ -121,7 +121,7 @@ export function CrewPhotoView({
       {lightboxPhoto && (
         <PhotoLightbox
           photo={lightboxPhoto}
-          photos={allPhotos}
+          photos={photos}
           onClose={() => setLightboxPhoto(null)}
           onNavigate={setLightboxPhoto}
           canAnnotate={false}
