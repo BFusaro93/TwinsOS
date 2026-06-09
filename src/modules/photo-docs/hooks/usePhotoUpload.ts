@@ -74,7 +74,7 @@ export function usePhotoUpload(projectId: string) {
           // 4. Upload to storage
           updateStatus("uploading");
           const path = buildPhotoPath(orgId, projectId, inp.file.name);
-          await uploadOriginalPhoto(path, compressed);
+          await uploadOriginalPhoto(path, compressed, supabase);
 
           // 5. Save metadata to DB
           updateStatus("saving");

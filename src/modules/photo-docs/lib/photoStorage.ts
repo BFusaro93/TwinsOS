@@ -20,17 +20,26 @@ export function buildPhotoPath(
 
 /**
  * Upload a compressed photo file to the originals bucket.
+ * Accepts an optional pre-authenticated supabase client to avoid
+ * creating a second client instance that might miss the auth session.
  * Returns the storage path on success.
  */
 export async function uploadOriginalPhoto(
   path: string,
   file: File,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabaseClient?: any,
 ): Promise<string> {
-  const supabase = createClient();
+  const supabase = supabaseClient ?? createClient();
+  const contentType = file.type || "application/octet-stream";
   const { error } = await supabase.storage
     .from(ORIGINALS_BUCKET)
-    .upload(path, file, { contentType: file.type, upsert: false });
-  if (error) throw new Error(`Storage upload failed: ${error.message}`);
+    .upload(path, file, { contentType, upsert: false });
+  if (error) {
+    // Log full error object for debugging
+    console.error("[uploadOriginalPhoto] Storage error:", error);
+    throw new Error(`Storage upload failed: ${error.message ?? JSON.stringify(error)}`);
+  }
   return path;
 }
 
