@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { formatDate } from "@/lib/utils";
-import { useJobPhotos } from "../hooks/useJobPhotos";
+import { useJobPhotos, useDeletePhoto } from "../hooks/useJobPhotos";
 import { usePhotoAccess } from "../hooks/usePhotoAccess";
 import { PhotoLightbox } from "./PhotoLightbox";
 import { BeforeAfterSlider } from "./BeforeAfterSlider";
@@ -32,6 +32,7 @@ export function PhotoGallery({ projectId }: PhotoGalleryProps) {
   const [showBeforeAfter, setShowBeforeAfter] = useState(false);
 
   const { data: photos = [], isLoading } = useJobPhotos(projectId, tab);
+  const { mutate: deletePhoto } = useDeletePhoto(projectId);
 
   const beforePhotos = photos.filter((p) => p.beforeAfter === "before");
   const afterPhotos = photos.filter((p) => p.beforeAfter === "after");
@@ -156,6 +157,7 @@ export function PhotoGallery({ projectId }: PhotoGalleryProps) {
           onNavigate={setLightboxPhoto}
           canAnnotate={canAnnotate}
           onAnnotate={handleAnnotate}
+          onDelete={(id) => { deletePhoto(id); setLightboxPhoto(null); }}
         />
       )}
     </div>

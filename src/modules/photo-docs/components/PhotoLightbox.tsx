@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { X, ChevronLeft, ChevronRight, Pencil, MapPin, Clock, User, Tag } from "lucide-react";
+import { X, ChevronLeft, ChevronRight, Pencil, MapPin, Clock, User, Tag, Trash2, Film, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatDate } from "@/lib/utils";
 import type { JobPhoto } from "../types/photo.types";
@@ -14,6 +14,7 @@ interface PhotoLightboxProps {
   onNavigate: (photo: JobPhoto) => void;
   canAnnotate?: boolean;
   onAnnotate?: (photoId: string) => void;
+  onDelete?: (photoId: string) => void;
 }
 
 export function PhotoLightbox({
@@ -23,10 +24,16 @@ export function PhotoLightbox({
   onNavigate,
   canAnnotate,
   onAnnotate,
+  onDelete,
 }: PhotoLightboxProps) {
   const currentIndex = photos.findIndex((p) => p.id === photo.id);
   const hasPrev = currentIndex > 0;
   const hasNext = currentIndex < photos.length - 1;
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
+  const isImage = photo.mimeType?.startsWith("image/") ?? true;
+  const isVideo = photo.mimeType?.startsWith("video/");
+  const ext = photo.fileName.split(".").pop()?.toUpperCase() ?? "FILE";
 
   // Active URL: show annotated composite if available, otherwise original
   const activeUrl = photo.annotatedUrl ?? photo.publicUrl;
@@ -75,16 +82,33 @@ export function PhotoLightbox({
             </button>
           )}
 
-          {activeUrl ? (
+          {isImage && activeUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={activeUrl}
               alt={photo.fileName}
               className="max-h-[80vh] max-w-full rounded-md object-contain shadow-2xl"
             />
+          ) : isVideo ? (
+            <video
+              src={activeUrl}
+              controls
+              className="max-h-[80vh] max-w-full rounded-md shadow-2xl"
+            />
           ) : (
-            <div className="flex h-64 w-64 items-center justify-center rounded-md bg-slate-800 text-slate-500">
-              Loading…
+            <div className="flex flex-col items-center gap-4 rounded-xl bg-slate-800 px-12 py-16 shadow-2xl">
+              <FileText className="h-16 w-16 text-slate-400" />
+              <p className="text-sm font-medium text-slate-300">{photo.fileName}</p>
+              {activeUrl && (
+                <a
+                  href={activeUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="rounded-md bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600"
+                >
+                  Open / Download
+                </a>
+              )}
             </div>
           )}
 
@@ -163,16 +187,49 @@ export function PhotoLightbox({
           </div>
 
           {/* Actions */}
-          {canAnnotate && onAnnotate && (
-            <Button
-              size="sm"
-              className="mt-auto gap-1.5"
-              onClick={() => onAnnotate(photo.id)}
-            >
-              <Pencil className="h-3.5 w-3.5" />
-              {photo.hasAnnotations ? "Edit Annotation" : "Annotate"}
-            </Button>
-          )}
+          <div className="mt-auto flex flex-col gap-2">
+            {canAnnotate && onAnnotate && isImage && (
+              <Button
+                size="sm"
+                className="gap-1.5"
+                onClick={() => onAnnotate(photo.id)}
+              >
+                <Pencil className="h-3.5 w-3.5" />
+                {photo.hasAnnotations ? "Edit Annotation" : "Annotate"}
+              </Button>
+            )}
+
+            {onDelete && !confirmDelete && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="gap-1.5 border-red-800 text-red-400 hover:bg-red-950 hover:text-red-300"
+                onClick={() => setConfirmDelete(true)}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                Delete
+              </Button>
+            )}
+
+            {onDelete && confirmDelete && (
+              <div className="rounded-md border border-red-800 bg-red-950/50 p-3">
+                <p className="mb-2 text-xs text-red-300">Delete this file? This cannot be undone.</p>
+                <div className="flex gap-2">
+                  <Button size="sm" variant="outline" className="flex-1 text-xs" onClick={() => setConfirmDelete(false)}>
+                    Cancel
+                  </Button>
+                  <Button
+                    size="sm"
+                    className="flex-1 gap-1 bg-red-600 text-xs hover:bg-red-700"
+                    onClick={() => { onDelete(photo.id); onClose(); }}
+                  >
+                    <Trash2 className="h-3 w-3" />
+                    Delete
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
 
           {/* Counter */}
           <p className="text-center text-xs text-slate-600">
