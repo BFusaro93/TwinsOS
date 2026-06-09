@@ -56,9 +56,11 @@ export async function uploadAnnotatedPhoto(
   blob: Blob,
 ): Promise<string> {
   const supabase = createClient();
+  // Convert Blob to ArrayBuffer to avoid Safari fetch bug
+  const buffer = await blob.arrayBuffer();
   const { error } = await supabase.storage
     .from(ANNOTATED_BUCKET)
-    .upload(path, blob, { contentType: "image/png", upsert: true });
+    .upload(path, buffer, { contentType: "image/png", upsert: true });
   if (error) throw new Error(`Annotated upload failed: ${error.message}`);
   return path;
 }
