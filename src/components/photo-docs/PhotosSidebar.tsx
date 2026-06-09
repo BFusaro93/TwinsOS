@@ -16,10 +16,11 @@ interface PhotoNavItem {
 }
 
 const PHOTOS_NAV: PhotoNavItem[] = [
-  { label: "All Jobs",  href: "/photos/jobs",        icon: FileImage },
-  { label: "Projects",  href: "/photos/projects",      icon: Briefcase, requiresPoAccess: true },
+  { label: "Job Photos", href: "/photos/jobs",     icon: FileImage },
+  { label: "Projects",   href: "/photos/projects", icon: Briefcase, requiresPoAccess: true },
 ];
 
+// Roles with access to the PO/Projects side (Projects nav item)
 const PO_ROLES = new Set(["admin", "manager", "purchaser"]);
 
 export function PhotosSidebar() {

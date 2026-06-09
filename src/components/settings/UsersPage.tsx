@@ -57,6 +57,7 @@ const ROLE_LABELS: Record<OrgUser["role"], string> = {
   technician: "Technician",
   viewer: "Viewer",
   requestor: "Requestor",
+  driver: "Driver",
 };
 
 const ROLES = [
@@ -142,6 +143,18 @@ const ROLES = [
       "View status of their own submitted records",
       "Cannot approve, edit, or delete any records",
       "No access to assets, vendors, or inventory",
+    ],
+  },
+  {
+    name: "Driver",
+    key: "driver",
+    description: "Field driver — access to submit maintenance requests, view safety and labor dashboards, and upload job-site photos.",
+    permissions: [
+      "Submit maintenance requests",
+      "View Labor Efficiency dashboard",
+      "View Driver Safety Scores dashboard",
+      "Upload photos to job sites (Job Photos)",
+      "No access to purchasing, assets, inventory, or settings",
     ],
   },
 ];
@@ -261,6 +274,7 @@ function InviteUserDialog({ open, onOpenChange, onInvite, submitting = false }: 
                 <SelectItem value="technician">Technician</SelectItem>
                 <SelectItem value="viewer">Viewer</SelectItem>
                 <SelectItem value="requestor">Requestor</SelectItem>
+                <SelectItem value="driver">Driver</SelectItem>
               </SelectContent>
             </Select>
           </div>

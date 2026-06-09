@@ -7,7 +7,7 @@ export interface BaseRecord {
   deletedAt: string | null;
 }
 
-export type Role = "admin" | "manager" | "technician" | "purchaser" | "viewer" | "requestor";
+export type Role = "admin" | "manager" | "technician" | "purchaser" | "viewer" | "requestor" | "driver";
 
 export interface OrgUser {
   id: string;

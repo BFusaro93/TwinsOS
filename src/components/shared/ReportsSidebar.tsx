@@ -12,6 +12,7 @@ interface ReportsNavItem {
   label: string;
   href: string;
   icon: LucideIcon;
+  hideFromDriver?: boolean;
 }
 
 interface ReportsNavSection {
@@ -23,18 +24,18 @@ const REPORTS_NAV: ReportsNavSection[] = [
   {
     label: "Dashboards",
     items: [
-      { label: "Financial", href: "/dashboards/financials", icon: DollarSign },
-      { label: "Labor Efficiency", href: "/dashboards/avb", icon: TrendingUp },
-      { label: "Driver Safety Scores", href: "/dashboards/safety", icon: ShieldCheck },
-      { label: "CRM Report", href: "/dashboards/crm", icon: FileText },
-      { label: "Job Costing", href: "/dashboards/job-costing", icon: Calculator },
-      { label: "KPI Scorecard", href: "/dashboards/kpis", icon: Target },
+      { label: "Financial",           href: "/dashboards/financials",  icon: DollarSign,  hideFromDriver: true },
+      { label: "Labor Efficiency",    href: "/dashboards/avb",         icon: TrendingUp },
+      { label: "Driver Safety Scores",href: "/dashboards/safety",      icon: ShieldCheck },
+      { label: "CRM Report",          href: "/dashboards/crm",         icon: FileText,    hideFromDriver: true },
+      { label: "KPI Scorecard",       href: "/dashboards/kpis",        icon: Target,      hideFromDriver: true },
     ],
   },
   {
     label: "Tools",
     items: [
-      { label: "Estimate Builder", href: "/dashboards/estimate-builder", icon: PenLine },
+      { label: "Estimate Builder", href: "/dashboards/estimate-builder", icon: PenLine,   hideFromDriver: true },
+      { label: "Job Costing",      href: "/dashboards/job-costing",      icon: Calculator, hideFromDriver: true },
     ],
   },
 ];
@@ -45,6 +46,7 @@ export function ReportsSidebar() {
   const { logoDataUrl, orgName } = useSettingsStore();
   const { currentUser } = useCurrentUserStore();
   const isAdmin = currentUser.role === "admin";
+  const isDriver = currentUser.role === "driver";
 
   return (
     <aside
@@ -91,7 +93,10 @@ export function ReportsSidebar() {
                 {section.label}
               </p>
             )}
-            {section.items.filter((item) => item.href !== "/dashboards/financials" || isAdmin).map((item) => {
+            {section.items
+              .filter((item) => item.href !== "/dashboards/financials" || isAdmin)
+              .filter((item) => !item.hideFromDriver || !isDriver)
+              .map((item) => {
               const isActive =
                 pathname === item.href || pathname.startsWith(item.href + "/");
               const Icon = item.icon;

@@ -102,7 +102,7 @@ export default function JobPhotosPage({ params }: { params: Promise<{ jobId: str
         {/* Back nav */}
         <div>
           <button onClick={() => router.push("/photos/jobs")} className="mb-2 flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-600">
-            <ArrowLeft className="h-3.5 w-3.5" /> All Jobs
+            <ArrowLeft className="h-3.5 w-3.5" /> Job Photos
           </button>
           <div className="flex items-center justify-between gap-2">
             <h1 className="text-xl font-semibold text-slate-900">{job?.name ?? "Job Photos"}</h1>
