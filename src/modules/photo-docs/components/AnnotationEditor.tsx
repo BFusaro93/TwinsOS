@@ -80,7 +80,9 @@ export function AnnotationEditor({ photoId, projectId }: AnnotationEditorProps) 
       // This sidesteps CORS entirely — Fabric's crossOrigin header on signed
       // Supabase Storage URLs can be silently rejected, keeping the spinner
       // spinning forever. A blob URL is same-origin and never has CORS issues.
-      fetch(photo.publicUrl)
+      const imageUrl = photo.publicUrl; // narrow to string (undefined checked above)
+      if (!imageUrl) return;
+      fetch(imageUrl)
         .then((r) => r.blob())
         .then((blob) => {
           const blobUrl = URL.createObjectURL(blob);
