@@ -218,7 +218,7 @@ function JobDetailPane({ jobId }: { jobId: string }) {
               {job.notes && (
                 <div className="flex items-start gap-2 text-slate-600">
                   <FileText className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400" />
-                  <p className="leading-relaxed">{job.notes}</p>
+                  <p className="whitespace-pre-wrap leading-relaxed">{job.notes}</p>
                 </div>
               )}
               {/* Project link */}

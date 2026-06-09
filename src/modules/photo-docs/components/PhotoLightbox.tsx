@@ -268,7 +268,7 @@ export function PhotoLightbox({
                   </div>
                 )}
                 {photo.notes && (
-                  <p className="rounded-md bg-[#2a2a2a] p-3 text-xs leading-relaxed text-slate-300">
+                  <p className="whitespace-pre-wrap rounded-md bg-[#2a2a2a] p-3 text-xs leading-relaxed text-slate-300">
                     {photo.notes}
                   </p>
                 )}

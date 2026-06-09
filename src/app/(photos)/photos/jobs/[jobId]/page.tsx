@@ -208,7 +208,7 @@ export default function JobPhotosPage({ params }: { params: Promise<{ jobId: str
               )}
               {job.notes && (
                 <div className="flex items-start gap-1.5 text-sm text-slate-500">
-                  <FileText className="mt-0.5 h-3.5 w-3.5 shrink-0" /><p className="leading-relaxed">{job.notes}</p>
+                  <FileText className="mt-0.5 h-3.5 w-3.5 shrink-0" /><p className="whitespace-pre-wrap leading-relaxed">{job.notes}</p>
                 </div>
               )}
 
