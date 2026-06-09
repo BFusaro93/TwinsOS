@@ -32,11 +32,15 @@ export async function uploadOriginalPhoto(
 ): Promise<string> {
   const supabase = supabaseClient ?? createClient();
   const contentType = file.type || "application/octet-stream";
+
+  // Safari rejects fetch uploads with File objects directly (StorageUnknownError: Load failed).
+  // Converting to ArrayBuffer first works around this Safari bug.
+  const buffer = await file.arrayBuffer();
+
   const { error } = await supabase.storage
     .from(ORIGINALS_BUCKET)
-    .upload(path, file, { contentType, upsert: false });
+    .upload(path, buffer, { contentType, upsert: false });
   if (error) {
-    // Log full error object for debugging
     console.error("[uploadOriginalPhoto] Storage error:", error);
     throw new Error(`Storage upload failed: ${error.message ?? JSON.stringify(error)}`);
   }
