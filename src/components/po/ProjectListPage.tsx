@@ -86,7 +86,9 @@ export function ProjectListPage() {
       p.name.toLowerCase().includes(q) ||
       p.customerName.toLowerCase().includes(q);
     const matchStatus = matchesFilter(p.status, filterValues.status);
-    const archivedFilter = filterValues.archived as string | undefined;
+    // filterValues.archived comes from AdvancedSearchDialog as string[] — normalise to scalar
+    const archivedRaw = filterValues.archived;
+    const archivedFilter = Array.isArray(archivedRaw) ? archivedRaw[0] : (archivedRaw as string | undefined);
     const matchArchived =
       !archivedFilter || archivedFilter === "all"
         ? true
