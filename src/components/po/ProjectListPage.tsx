@@ -26,6 +26,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { useProjects } from "@/lib/hooks/use-projects";
 import { usePOStore } from "@/stores";
+import { cn } from "@/lib/utils";
 import { useSort } from "@/lib/hooks/use-sort";
 import { PROJECT_STATUS_LABELS } from "@/lib/constants";
 import { formatCurrency, formatDate, matchesFilter } from "@/lib/utils";
@@ -230,18 +231,24 @@ export function ProjectListPage() {
         title="Projects"
         action={
           <div className="flex flex-wrap items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-1.5"
-              onClick={() => setViewMode(viewMode === "list" ? "table" : "list")}
-            >
-              {viewMode === "list" ? (
-                <><Maximize2 className="h-3.5 w-3.5" />Table view</>
-              ) : (
-                <><Minimize2 className="h-3.5 w-3.5" />List view</>
-              )}
-            </Button>
+            <div className="flex items-center rounded-md border bg-white shadow-sm">
+              <Button
+                variant="ghost"
+                size="sm"
+                className={cn("rounded-r-none border-r px-3", viewMode === "list" && "bg-slate-100 font-semibold")}
+                onClick={() => setViewMode("list")}
+              >
+                <Minimize2 className="mr-1.5 h-3.5 w-3.5" />List
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className={cn("rounded-l-none px-3", viewMode === "table" && "bg-slate-100 font-semibold")}
+                onClick={() => setViewMode("table")}
+              >
+                <Maximize2 className="mr-1.5 h-3.5 w-3.5" />Table
+              </Button>
+            </div>
             <Button size="sm" onClick={() => setNewProjectOpen(true)}>
               <Plus className="mr-1.5 h-4 w-4" />
               New Project

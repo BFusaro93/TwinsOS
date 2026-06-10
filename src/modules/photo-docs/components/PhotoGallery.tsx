@@ -372,7 +372,7 @@ function PhotoThumbnail({
           </div>
           <div className="flex items-center gap-1.5">
             {photo.notes && (
-              <MessageSquare className="h-4 w-4 shrink-0 text-sky-400" />
+              <MessageSquare className="h-5 w-5 shrink-0 text-brand-500" />
             )}
             {photo.hasAnnotations && (
               <Pencil className="h-3 w-3 shrink-0 text-brand-400" />

@@ -3,7 +3,7 @@
 import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import {
-  Camera, MapPin, Search, Images, Plus, X, LayoutGrid, LayoutList,
+  Camera, MapPin, Search, Images, Plus, X, Maximize2, Minimize2,
   Pencil, Check, Archive, ArchiveRestore, Link2, FileText,
 } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -375,19 +375,23 @@ export default function PhotoJobsPage() {
           action={
             <>
               {/* View mode toggle */}
-              <div className="flex rounded-lg border border-slate-200 bg-white p-0.5">
-                <button
+              <div className="flex items-center rounded-md border bg-white shadow-sm">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className={cn("rounded-r-none border-r px-3", viewMode === "list" && "bg-slate-100 font-semibold")}
                   onClick={() => setViewMode("list")}
-                  className={cn("flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors", viewMode === "list" ? "bg-slate-800 text-white" : "text-slate-500 hover:text-slate-700")}
                 >
-                  <LayoutList className="h-3.5 w-3.5" /> List
-                </button>
-                <button
+                  <Minimize2 className="mr-1.5 h-3.5 w-3.5" />List
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className={cn("rounded-l-none px-3", viewMode === "table" && "bg-slate-100 font-semibold")}
                   onClick={() => setViewMode("table")}
-                  className={cn("flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors", viewMode === "table" ? "bg-slate-800 text-white" : "text-slate-500 hover:text-slate-700")}
                 >
-                  <LayoutGrid className="h-3.5 w-3.5" /> Table
-                </button>
+                  <Maximize2 className="mr-1.5 h-3.5 w-3.5" />Table
+                </Button>
               </div>
               {canUpload && (
                 <Button size="sm" className="gap-1.5" onClick={() => setShowNew(true)}>
