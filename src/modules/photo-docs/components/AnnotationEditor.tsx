@@ -81,7 +81,9 @@ export function AnnotationEditor({ photoId, projectId }: AnnotationEditorProps) 
       let startY = 0;
 
       function onMouseDown(opt: FabricCanvas) {
-        const pt = canvas.getScenePoint(opt.e);
+        // Fabric v7: scenePoint is a pre-computed property on the event info object.
+        // Do NOT call canvas.getScenePoint() — it may not exist or may throw.
+        const pt: { x: number; y: number } = opt.scenePoint ?? opt.absolutePointer ?? { x: 0, y: 0 };
         startX = pt.x;
         startY = pt.y;
       }
@@ -91,7 +93,7 @@ export function AnnotationEditor({ photoId, projectId }: AnnotationEditorProps) 
         const c = colorRef.current;
         if (t === "select" || t === "freehand") return;
 
-        const pt = canvas.getScenePoint(opt.e);
+        const pt: { x: number; y: number } = opt.scenePoint ?? opt.absolutePointer ?? { x: startX + 1, y: startY + 1 };
         const dx = Math.abs(pt.x - startX);
         const dy = Math.abs(pt.y - startY);
 

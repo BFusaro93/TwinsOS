@@ -274,15 +274,17 @@ export function PhotoLightbox({
                 )}
               </div>
 
-              {/* Edit details button */}
-              <Button
-                size="sm"
-                variant="outline"
-                className="w-full gap-1.5 border-brand-500 text-xs text-brand-400 hover:bg-brand-500/10 hover:text-brand-300"
-                onClick={openMetaEdit}
-              >
-                <Pencil className="h-3 w-3" /> Edit Details
-              </Button>
+              {/* Edit details button — must sit inside a flex-col div to stretch full-width */}
+              <div className="flex flex-col">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="w-full gap-1.5 border-brand-500 text-xs text-brand-400 hover:bg-brand-500/10 hover:text-brand-300"
+                  onClick={openMetaEdit}
+                >
+                  <Pencil className="h-3 w-3" /> Edit Details
+                </Button>
+              </div>
             </>
           )}
 
