@@ -36,12 +36,15 @@ export function AnnotationEditor({ photoId, projectId }: AnnotationEditorProps) 
   const canvasRef      = useRef<HTMLCanvasElement>(null);
   const containerRef   = useRef<HTMLDivElement>(null);
   const fabricRef      = useRef<FabricCanvas>(null);
-  // Stores the removeEventListener calls added inside the async init so the
-  // synchronous effect cleanup can reach them even if the component unmounts early.
-  const domCleanupRef  = useRef<(() => void) | null>(null);
+  // Fabric shape constructors stored after the dynamic import so React event
+  // handlers (which run outside the import callback) can create objects.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const fabricClassesRef = useRef<any>({});
   // Store current tool/color in refs so event handlers always see the latest values
   const toolRef    = useRef<DrawTool>("select");
   const colorRef   = useRef<DrawColor>("#ef4444");
+  // Track mouse-down position for drag-based tools (arrow)
+  const drawStartRef = useRef<{ x: number; y: number } | null>(null);
 
   const [tool,  setToolState]  = useState<DrawTool>("select");
   const [color, setColorState] = useState<DrawColor>("#ef4444");
@@ -66,6 +69,14 @@ export function AnnotationEditor({ photoId, projectId }: AnnotationEditorProps) 
       if (disposed) return;
       const fabric = mod.fabric ?? mod;
 
+      // Store constructors so React synthetic event handlers can create shapes
+      // without needing to re-import fabric.
+      fabricClassesRef.current = {
+        Circle:   fabric.Circle,
+        Polyline: fabric.Polyline,
+        IText:    fabric.IText,
+      };
+
       const canvas = new fabric.Canvas(canvasRef.current, {
         selection: true,
         isDrawingMode: false,
@@ -76,66 +87,6 @@ export function AnnotationEditor({ photoId, projectId }: AnnotationEditorProps) 
       canvas.freeDrawingBrush = new fabric.PencilBrush(canvas);
       canvas.freeDrawingBrush.color = colorRef.current;
       canvas.freeDrawingBrush.width = 4;
-
-      // Attach native pointer events to the UPPER canvas (where Fabric also listens).
-      // Fabric's own selection and freehand brush handlers also live on upperCanvasEl,
-      // so attaching here means both our handlers AND Fabric's handlers fire for the
-      // same events — no interference, no Fabric event-system uncertainty.
-      const upper = canvas.upperCanvasEl as HTMLElement;
-
-      let startX = 0;
-      let startY = 0;
-
-      function getCanvasXY(e: PointerEvent): { x: number; y: number } {
-        const rect = upper.getBoundingClientRect();
-        return {
-          x: e.clientX - rect.left,
-          y: e.clientY - rect.top,
-        };
-      }
-
-      function onPointerDown(e: PointerEvent) {
-        const pt = getCanvasXY(e);
-        startX = pt.x;
-        startY = pt.y;
-      }
-
-      function onPointerUp(e: PointerEvent) {
-        const t = toolRef.current;
-        const c = colorRef.current;
-        // For select and freehand, Fabric's own handlers do the work — bail out.
-        if (t === "select" || t === "freehand") return;
-
-        const pt  = getCanvasXY(e);
-        const dx  = Math.abs(pt.x - startX);
-        const dy  = Math.abs(pt.y - startY);
-
-        if (t === "arrow" && (dx > 5 || dy > 5)) {
-          const angle   = Math.atan2(pt.y - startY, pt.x - startX);
-          const headLen = 15;
-          const pts = [
-            { x: pt.x,   y: pt.y },
-            { x: pt.x - headLen * Math.cos(angle - Math.PI / 7), y: pt.y - headLen * Math.sin(angle - Math.PI / 7) },
-            { x: pt.x - headLen * Math.cos(angle + Math.PI / 7), y: pt.y - headLen * Math.sin(angle + Math.PI / 7) },
-            { x: pt.x,   y: pt.y },
-            { x: startX, y: startY },
-          ];
-          canvas.add(new fabric.Polyline(pts, { fill: "transparent", stroke: c, strokeWidth: 3 }));
-        } else if (t === "circle") {
-          canvas.add(new fabric.Circle({ left: startX - 40, top: startY - 40, radius: 40, fill: "transparent", stroke: c, strokeWidth: 3 }));
-        } else if (t === "text") {
-          canvas.add(new fabric.IText("Label", { left: startX, top: startY, fill: c, fontSize: 18, fontWeight: "bold", backgroundColor: "rgba(0,0,0,0.4)" }));
-        }
-        canvas.renderAll();
-      }
-
-      upper.addEventListener("pointerdown", onPointerDown);
-      upper.addEventListener("pointerup",   onPointerUp);
-      // Store DOM cleanup so the effect cleanup (outside the Promise) can call it.
-      domCleanupRef.current = () => {
-        upper.removeEventListener("pointerdown", onPointerDown);
-        upper.removeEventListener("pointerup",   onPointerUp);
-      };
 
       // ── Load image ──────────────────────────────────────────────────────────
       const ImageClass: { fromURL: (url: string) => Promise<FabricCanvas> } =
@@ -189,8 +140,6 @@ export function AnnotationEditor({ photoId, projectId }: AnnotationEditorProps) 
 
     return () => {
       disposed = true;
-      domCleanupRef.current?.();
-      domCleanupRef.current = null;
       fabricRef.current?.dispose();
       fabricRef.current = null;
       setFabricReady(false);
@@ -255,6 +204,60 @@ export function AnnotationEditor({ photoId, projectId }: AnnotationEditorProps) 
         onError:   () => toast.error("Failed to save annotation"),
       },
     );
+  }
+
+  // ── Drawing via React synthetic mouse events on the container ─────────────
+  // Using React's onMouseDown/onMouseUp on the wrapper div is the most reliable
+  // approach across all browsers — no Fabric event API uncertainty, no
+  // addEventListener-on-internal-element race conditions.
+  // We compute canvas-relative coords by subtracting the upper canvas's rect.
+  function getCanvasCoords(e: React.MouseEvent): { x: number; y: number } {
+    const canvas = fabricRef.current;
+    const upper = canvas?.upperCanvasEl as HTMLElement | undefined;
+    const el    = upper ?? containerRef.current;
+    if (!el) return { x: 0, y: 0 };
+    const rect = el.getBoundingClientRect();
+    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+  }
+
+  function handleCanvasMouseDown(e: React.MouseEvent) {
+    if (!fabricReady) return;
+    drawStartRef.current = getCanvasCoords(e);
+  }
+
+  function handleCanvasMouseUp(e: React.MouseEvent) {
+    const canvas = fabricRef.current;
+    if (!canvas || !fabricReady) return;
+    const t = toolRef.current;
+    if (t === "select" || t === "freehand") return;
+    if (!drawStartRef.current) return;
+
+    const start = drawStartRef.current;
+    const end   = getCanvasCoords(e);
+    const c     = colorRef.current;
+    const dx    = Math.abs(end.x - start.x);
+    const dy    = Math.abs(end.y - start.y);
+    const { Circle, Polyline, IText } = fabricClassesRef.current;
+    if (!Circle) return; // fabric not yet loaded
+
+    if (t === "arrow" && (dx > 5 || dy > 5)) {
+      const angle   = Math.atan2(end.y - start.y, end.x - start.x);
+      const headLen = 15;
+      const pts = [
+        { x: end.x,   y: end.y },
+        { x: end.x - headLen * Math.cos(angle - Math.PI / 7), y: end.y - headLen * Math.sin(angle - Math.PI / 7) },
+        { x: end.x - headLen * Math.cos(angle + Math.PI / 7), y: end.y - headLen * Math.sin(angle + Math.PI / 7) },
+        { x: end.x,   y: end.y },
+        { x: start.x, y: start.y },
+      ];
+      canvas.add(new Polyline(pts, { fill: "transparent", stroke: c, strokeWidth: 3 }));
+    } else if (t === "circle") {
+      canvas.add(new Circle({ left: start.x - 40, top: start.y - 40, radius: 40, fill: "transparent", stroke: c, strokeWidth: 3 }));
+    } else if (t === "text") {
+      canvas.add(new IText("Label", { left: start.x, top: start.y, fill: c, fontSize: 18, fontWeight: "bold", backgroundColor: "rgba(0,0,0,0.4)" }));
+    }
+    canvas.renderAll();
+    drawStartRef.current = null;
   }
 
   const tools: { tool: DrawTool; icon: React.ReactNode; label: string }[] = [
@@ -334,6 +337,8 @@ export function AnnotationEditor({ photoId, projectId }: AnnotationEditorProps) 
       <div
         ref={containerRef}
         className="flex flex-1 items-start justify-center overflow-auto rounded-xl border border-[#3a3a3a] bg-[#111111] p-4"
+        onMouseDown={handleCanvasMouseDown}
+        onMouseUp={handleCanvasMouseUp}
       >
         {!fabricReady && (
           <div className="flex h-64 w-full items-center justify-center text-slate-500">

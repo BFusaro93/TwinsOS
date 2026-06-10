@@ -157,7 +157,9 @@ export function PhotoLightbox({
         </div>
 
         {/* Sidebar info */}
-        <div className="flex w-full flex-col gap-4 overflow-y-auto bg-[#1e1e1e] p-5 md:w-72" style={{ maxHeight: "50vh" }} onTouchStart={(e) => e.stopPropagation()}>
+        {/* Mobile: max 50vh so image stays visible above the stacked sidebar.
+            Desktop (md:flex-row): fill the full panel height, no cap. */}
+        <div className="flex w-full flex-col gap-4 overflow-y-auto bg-[#1e1e1e] p-5 max-h-[50vh] md:max-h-full md:w-72" onTouchStart={(e) => e.stopPropagation()}>
           {/* Header */}
           <div className="flex items-start justify-between">
             <p className="text-sm font-semibold text-white">{photo.displayName ?? photo.fileName}</p>
