@@ -33,9 +33,12 @@ interface AnnotationEditorProps {
 export function AnnotationEditor({ photoId, projectId }: AnnotationEditorProps) {
   const router = useRouter();
   const { currentUser } = useCurrentUserStore();
-  const canvasRef  = useRef<HTMLCanvasElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const fabricRef  = useRef<FabricCanvas>(null);
+  const canvasRef      = useRef<HTMLCanvasElement>(null);
+  const containerRef   = useRef<HTMLDivElement>(null);
+  const fabricRef      = useRef<FabricCanvas>(null);
+  // Stores the removeEventListener calls added inside the async init so the
+  // synchronous effect cleanup can reach them even if the component unmounts early.
+  const domCleanupRef  = useRef<(() => void) | null>(null);
   // Store current tool/color in refs so event handlers always see the latest values
   const toolRef    = useRef<DrawTool>("select");
   const colorRef   = useRef<DrawColor>("#ef4444");
@@ -74,28 +77,38 @@ export function AnnotationEditor({ photoId, projectId }: AnnotationEditorProps) 
       canvas.freeDrawingBrush.color = colorRef.current;
       canvas.freeDrawingBrush.width = 4;
 
-      // Use Fabric's own event system with v7's getScenePoint(e) for coordinates.
-      // Native DOM events on the lower canvas interfere with Fabric's selection
-      // and freehand brush (which both operate on the upper canvas overlay).
+      // Attach native pointer events to the UPPER canvas (where Fabric also listens).
+      // Fabric's own selection and freehand brush handlers also live on upperCanvasEl,
+      // so attaching here means both our handlers AND Fabric's handlers fire for the
+      // same events — no interference, no Fabric event-system uncertainty.
+      const upper = canvas.upperCanvasEl as HTMLElement;
+
       let startX = 0;
       let startY = 0;
 
-      function onMouseDown(opt: FabricCanvas) {
-        // Fabric v7: scenePoint is a pre-computed property on the event info object.
-        // Do NOT call canvas.getScenePoint() — it may not exist or may throw.
-        const pt: { x: number; y: number } = opt.scenePoint ?? opt.absolutePointer ?? { x: 0, y: 0 };
+      function getCanvasXY(e: PointerEvent): { x: number; y: number } {
+        const rect = upper.getBoundingClientRect();
+        return {
+          x: e.clientX - rect.left,
+          y: e.clientY - rect.top,
+        };
+      }
+
+      function onPointerDown(e: PointerEvent) {
+        const pt = getCanvasXY(e);
         startX = pt.x;
         startY = pt.y;
       }
 
-      function onMouseUp(opt: FabricCanvas) {
+      function onPointerUp(e: PointerEvent) {
         const t = toolRef.current;
         const c = colorRef.current;
+        // For select and freehand, Fabric's own handlers do the work — bail out.
         if (t === "select" || t === "freehand") return;
 
-        const pt: { x: number; y: number } = opt.scenePoint ?? opt.absolutePointer ?? { x: startX + 1, y: startY + 1 };
-        const dx = Math.abs(pt.x - startX);
-        const dy = Math.abs(pt.y - startY);
+        const pt  = getCanvasXY(e);
+        const dx  = Math.abs(pt.x - startX);
+        const dy  = Math.abs(pt.y - startY);
 
         if (t === "arrow" && (dx > 5 || dy > 5)) {
           const angle   = Math.atan2(pt.y - startY, pt.x - startX);
@@ -111,13 +124,18 @@ export function AnnotationEditor({ photoId, projectId }: AnnotationEditorProps) 
         } else if (t === "circle") {
           canvas.add(new fabric.Circle({ left: startX - 40, top: startY - 40, radius: 40, fill: "transparent", stroke: c, strokeWidth: 3 }));
         } else if (t === "text") {
-          canvas.add(new fabric.IText("Label", { left: pt.x, top: pt.y, fill: c, fontSize: 18, fontWeight: "bold", backgroundColor: "rgba(0,0,0,0.4)" }));
+          canvas.add(new fabric.IText("Label", { left: startX, top: startY, fill: c, fontSize: 18, fontWeight: "bold", backgroundColor: "rgba(0,0,0,0.4)" }));
         }
         canvas.renderAll();
       }
 
-      canvas.on("mouse:down", onMouseDown);
-      canvas.on("mouse:up",   onMouseUp);
+      upper.addEventListener("pointerdown", onPointerDown);
+      upper.addEventListener("pointerup",   onPointerUp);
+      // Store DOM cleanup so the effect cleanup (outside the Promise) can call it.
+      domCleanupRef.current = () => {
+        upper.removeEventListener("pointerdown", onPointerDown);
+        upper.removeEventListener("pointerup",   onPointerUp);
+      };
 
       // ── Load image ──────────────────────────────────────────────────────────
       const ImageClass: { fromURL: (url: string) => Promise<FabricCanvas> } =
@@ -171,6 +189,8 @@ export function AnnotationEditor({ photoId, projectId }: AnnotationEditorProps) 
 
     return () => {
       disposed = true;
+      domCleanupRef.current?.();
+      domCleanupRef.current = null;
       fabricRef.current?.dispose();
       fabricRef.current = null;
       setFabricReady(false);
