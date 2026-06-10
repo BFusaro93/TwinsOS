@@ -212,9 +212,10 @@ export function AnnotationEditor({ photoId, projectId }: AnnotationEditorProps) 
   // addEventListener-on-internal-element race conditions.
   // We compute canvas-relative coords by subtracting the upper canvas's rect.
   function getCanvasCoords(e: React.MouseEvent): { x: number; y: number } {
-    const canvas = fabricRef.current;
-    const upper = canvas?.upperCanvasEl as HTMLElement | undefined;
-    const el    = upper ?? containerRef.current;
+    // Use the lower canvas element (canvasRef) — it's a React-owned element
+    // whose position we can trust. The upper canvas was the previous choice but
+    // it was permanently hidden (Fabric copied the "hidden" className at init).
+    const el = canvasRef.current;
     if (!el) return { x: 0, y: 0 };
     const rect = el.getBoundingClientRect();
     return { x: e.clientX - rect.left, y: e.clientY - rect.top };
@@ -334,18 +335,22 @@ export function AnnotationEditor({ photoId, projectId }: AnnotationEditorProps) 
         {tool === "select"   && "Click objects to select · Delete key removes selected"}
       </p>
 
+      {/* IMPORTANT: never put className="hidden" on the <canvas> element.
+          Fabric copies the lower canvas className to the upper canvas at init
+          time, permanently hiding it and silencing all mouse events.
+          Instead, cover with an absolute spinner overlay during load. */}
       <div
         ref={containerRef}
-        className="flex flex-1 items-start justify-center overflow-auto rounded-xl border border-[#3a3a3a] bg-[#111111] p-4"
+        className="relative flex flex-1 items-center justify-center overflow-auto rounded-xl border border-[#3a3a3a] bg-[#111111] p-4"
         onMouseDown={handleCanvasMouseDown}
         onMouseUp={handleCanvasMouseUp}
       >
+        <canvas ref={canvasRef} />
         {!fabricReady && (
-          <div className="flex h-64 w-full items-center justify-center text-slate-500">
-            <Loader2 className="h-6 w-6 animate-spin" />
+          <div className="absolute inset-0 flex items-center justify-center rounded-xl bg-[#111111]">
+            <Loader2 className="h-6 w-6 animate-spin text-slate-500" />
           </div>
         )}
-        <canvas ref={canvasRef} className={cn(!fabricReady && "hidden")} />
       </div>
     </div>
   );
