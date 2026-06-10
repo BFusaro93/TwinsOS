@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Camera, CheckSquare, Pencil, SlidersHorizontal, Images, Film, FileText, X } from "lucide-react";
+import { Camera, CheckSquare, MessageSquare, Pencil, SlidersHorizontal, Images, Film, FileText, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
@@ -370,9 +370,14 @@ function PhotoThumbnail({
               {formatDate(photo.createdAt)}
             </span>
           </div>
-          {photo.hasAnnotations && (
-            <Pencil className="h-3 w-3 shrink-0 text-brand-400" />
-          )}
+          <div className="flex items-center gap-1.5">
+            {photo.notes && (
+              <MessageSquare className="h-3 w-3 shrink-0 text-sky-400" />
+            )}
+            {photo.hasAnnotations && (
+              <Pencil className="h-3 w-3 shrink-0 text-brand-400" />
+            )}
+          </div>
         </div>
       </div>
 
