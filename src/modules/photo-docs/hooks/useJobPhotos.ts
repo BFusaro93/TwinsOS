@@ -33,6 +33,7 @@ export function useJobPhotos(projectId: string, tab: GalleryTab = "all") {
       let q = db.from("job_photos").select("*").eq("photo_job_id", projectId)
         .is("deleted_at", null).order("created_at", { ascending: false });
       if (tab === "before") q = q.eq("before_after", "before");
+      if (tab === "during") q = q.eq("before_after", "during");
       if (tab === "after") q = q.eq("before_after", "after");
       if (tab === "annotated") q = q.eq("has_annotations", true);
       const { data, error } = await q;
@@ -99,6 +100,20 @@ export function useUpdatePhoto(projectId: string) {
       qc.invalidateQueries({ queryKey: ["job-photos", projectId] });
       qc.invalidateQueries({ queryKey: ["job-photo", id] });
     },
+  });
+}
+
+export function useBulkUpdatePhotos(projectId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ ids, beforeAfter }: { ids: string[]; beforeAfter: JobPhoto["beforeAfter"] }) => {
+      const db = createClient() as any;
+      const { error } = await db.from("job_photos")
+        .update({ before_after: beforeAfter, updated_at: new Date().toISOString() })
+        .in("id", ids);
+      if (error) throw error;
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["job-photos", projectId] }); },
   });
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */

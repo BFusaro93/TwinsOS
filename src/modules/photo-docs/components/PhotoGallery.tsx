@@ -2,16 +2,16 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Camera, Pencil, SlidersHorizontal, Images, Film, FileText } from "lucide-react";
+import { Camera, CheckSquare, Pencil, SlidersHorizontal, Images, Film, FileText, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { formatDate } from "@/lib/utils";
-import { useJobPhotos, useDeletePhoto } from "../hooks/useJobPhotos";
+import { useJobPhotos, useDeletePhoto, useBulkUpdatePhotos } from "../hooks/useJobPhotos";
 import { usePhotoAccess } from "../hooks/usePhotoAccess";
 import { PhotoLightbox } from "./PhotoLightbox";
 import { BeforeAfterSlider } from "./BeforeAfterSlider";
-import type { GalleryTab, GalleryFileType, JobPhoto } from "../types/photo.types";
+import type { GalleryTab, GalleryFileType, JobPhoto, BeforeAfterFlag } from "../types/photo.types";
 
 interface PhotoGalleryProps {
   projectId: string;
@@ -20,6 +20,7 @@ interface PhotoGalleryProps {
 const TABS: { value: GalleryTab; label: string }[] = [
   { value: "all", label: "All" },
   { value: "before", label: "Before" },
+  { value: "during", label: "During" },
   { value: "after", label: "After" },
   { value: "annotated", label: "Annotated" },
 ];
@@ -38,9 +39,12 @@ export function PhotoGallery({ projectId }: PhotoGalleryProps) {
   const [fileType, setFileType] = useState<GalleryFileType>("all");
   const [lightboxPhoto, setLightboxPhoto] = useState<JobPhoto | null>(null);
   const [showBeforeAfter, setShowBeforeAfter] = useState(false);
+  const [selectMode, setSelectMode] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
 
   const { data: allPhotos = [], isLoading } = useJobPhotos(projectId, tab);
   const { mutate: deletePhoto } = useDeletePhoto(projectId);
+  const { mutate: bulkUpdate, isPending: isBulkPending } = useBulkUpdatePhotos(projectId);
 
   // Client-side file type filter
   const photos = allPhotos.filter((p) => {
@@ -56,6 +60,24 @@ export function PhotoGallery({ projectId }: PhotoGalleryProps) {
 
   function handleAnnotate(photoId: string) {
     router.push(`/photos/jobs/${projectId}/${photoId}/annotate`);
+  }
+
+  function toggleSelect(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }
+
+  function exitSelectMode() {
+    setSelectMode(false);
+    setSelected(new Set());
+  }
+
+  function handleBulkTag(flag: BeforeAfterFlag) {
+    if (selected.size === 0) return;
+    bulkUpdate({ ids: Array.from(selected), beforeAfter: flag }, { onSuccess: exitSelectMode });
   }
 
   return (
@@ -98,7 +120,7 @@ export function PhotoGallery({ projectId }: PhotoGalleryProps) {
         </div>
 
         <div className="flex items-center gap-2">
-          {hasBeforeAfterPairs && (
+          {hasBeforeAfterPairs && !selectMode && (
             <Button
               variant="outline"
               size="sm"
@@ -116,6 +138,24 @@ export function PhotoGallery({ projectId }: PhotoGalleryProps) {
             <Button
               size="sm"
               variant="outline"
+              className={cn(
+                "gap-1.5 text-xs",
+                selectMode
+                  ? "border-brand-600 bg-brand-600 text-white hover:bg-brand-700 hover:text-white"
+                  : "border-slate-700 bg-slate-800 text-white hover:bg-slate-700 hover:text-white",
+              )}
+              onClick={() => {
+                if (selectMode) { exitSelectMode(); } else { setSelectMode(true); setShowBeforeAfter(false); }
+              }}
+            >
+              <CheckSquare className="h-3.5 w-3.5" />
+              {selectMode ? "Cancel" : "Select"}
+            </Button>
+          )}
+          {!selectMode && canUpload && (
+            <Button
+              size="sm"
+              variant="outline"
               className="gap-1.5 border-slate-700 bg-slate-800 text-xs text-white hover:bg-slate-700 hover:text-white"
               onClick={() => router.push(`/photos/jobs/${projectId}/upload`)}
             >
@@ -125,6 +165,38 @@ export function PhotoGallery({ projectId }: PhotoGalleryProps) {
           )}
         </div>
       </div>
+
+      {/* Bulk action bar */}
+      {selectMode && (
+        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 px-4 py-2.5">
+          <span className="text-xs font-medium text-slate-500">
+            {selected.size === 0 ? "Select photos to tag" : `${selected.size} selected`}
+          </span>
+          <div className="flex items-center gap-1.5">
+            {(["before", "during", "after", "none"] as BeforeAfterFlag[]).map((flag) => (
+              <button
+                key={flag}
+                disabled={selected.size === 0 || isBulkPending}
+                onClick={() => handleBulkTag(flag)}
+                className={cn(
+                  "rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors disabled:opacity-40",
+                  flag === "before" ? "bg-amber-500 text-white hover:bg-amber-600"
+                  : flag === "during" ? "bg-sky-500 text-white hover:bg-sky-600"
+                  : flag === "after"  ? "bg-emerald-600 text-white hover:bg-emerald-700"
+                  : "bg-slate-600 text-white hover:bg-slate-700",
+                )}
+              >
+                {flag === "none" ? "Clear tag" : flag.charAt(0).toUpperCase() + flag.slice(1)}
+              </button>
+            ))}
+          </div>
+          {selected.size > 0 && (
+            <button onClick={() => setSelected(new Set())} className="ml-auto text-xs text-slate-400 hover:text-slate-600">
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Before/After slider mode */}
       {showBeforeAfter && hasBeforeAfterPairs && (
@@ -175,9 +247,11 @@ export function PhotoGallery({ projectId }: PhotoGalleryProps) {
             <PhotoThumbnail
               key={photo.id}
               photo={photo}
-              onClick={() => setLightboxPhoto(photo)}
-              canAnnotate={canAnnotate}
+              onClick={() => selectMode ? toggleSelect(photo.id) : setLightboxPhoto(photo)}
+              canAnnotate={!selectMode && canAnnotate}
               onAnnotate={handleAnnotate}
+              selectMode={selectMode}
+              isSelected={selected.has(photo.id)}
             />
           ))}
         </div>
@@ -207,11 +281,15 @@ function PhotoThumbnail({
   onClick,
   canAnnotate,
   onAnnotate,
+  selectMode,
+  isSelected,
 }: {
   photo: JobPhoto;
   onClick: () => void;
   canAnnotate?: boolean;
   onAnnotate?: (id: string) => void;
+  selectMode?: boolean;
+  isSelected?: boolean;
 }) {
   const displayUrl = photo.annotatedUrl ?? photo.publicUrl;
   const isImage = photo.mimeType?.startsWith("image/") ?? true;
@@ -219,7 +297,20 @@ function PhotoThumbnail({
   const ext = photo.fileName.split(".").pop()?.toUpperCase() ?? "FILE";
 
   return (
-    <div className="group relative aspect-square overflow-hidden rounded-lg border border-slate-200 bg-slate-100">
+    <div className={cn(
+      "group relative aspect-square overflow-hidden rounded-lg border bg-slate-100 transition-all",
+      isSelected ? "border-brand-500 ring-2 ring-brand-500" : "border-slate-200",
+    )}>
+      {/* Select mode checkbox */}
+      {selectMode && (
+        <div className={cn(
+          "pointer-events-none absolute left-2 top-2 z-10 flex h-5 w-5 items-center justify-center rounded border-2 transition-colors",
+          isSelected ? "border-brand-500 bg-brand-500" : "border-white bg-black/30",
+        )}>
+          {isSelected && <span className="text-[10px] font-bold text-white">✓</span>}
+        </div>
+      )}
+
       {/* Thumbnail */}
       <button className="h-full w-full" onClick={onClick}>
         {isImage && displayUrl ? (
@@ -267,6 +358,8 @@ function PhotoThumbnail({
                   "inline-block rounded px-1.5 py-0.5 text-[10px] font-bold uppercase",
                   photo.beforeAfter === "before"
                     ? "bg-amber-500 text-white"
+                    : photo.beforeAfter === "during"
+                    ? "bg-sky-500 text-white"
                     : "bg-emerald-600 text-white",
                 )}
               >

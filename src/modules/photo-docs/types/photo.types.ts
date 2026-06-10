@@ -2,7 +2,7 @@ import type { BaseRecord } from "@/types/common";
 
 // ── Enums / Unions ────────────────────────────────────────────────────────────
 
-export type BeforeAfterFlag = "before" | "after" | "none";
+export type BeforeAfterFlag = "before" | "during" | "after" | "none";
 
 export type UploadContext =
   | "site_documentation"
@@ -100,7 +100,7 @@ export interface PhotoUploadProgress {
   errorMessage?: string;
 }
 
-export type GalleryTab = "all" | "before" | "after" | "annotated";
+export type GalleryTab = "all" | "before" | "during" | "after" | "annotated";
 export type GalleryFileType = "all" | "photos" | "videos" | "documents";
 
 export type DrawTool = "select" | "arrow" | "circle" | "text" | "freehand";
