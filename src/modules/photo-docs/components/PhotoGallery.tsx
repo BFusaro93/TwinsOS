@@ -355,7 +355,7 @@ function PhotoThumbnail({
             {photo.beforeAfter !== "none" && (
               <span
                 className={cn(
-                  "inline-block rounded px-1.5 py-0.5 text-[10px] font-bold uppercase",
+                  "self-start rounded px-1.5 py-0.5 text-[10px] font-bold uppercase",
                   photo.beforeAfter === "before"
                     ? "bg-amber-500 text-white"
                     : photo.beforeAfter === "during"
@@ -372,7 +372,7 @@ function PhotoThumbnail({
           </div>
           <div className="flex items-center gap-1.5">
             {photo.notes && (
-              <MessageSquare className="h-3 w-3 shrink-0 text-sky-400" />
+              <MessageSquare className="h-4 w-4 shrink-0 text-sky-400" />
             )}
             {photo.hasAnnotations && (
               <Pencil className="h-3 w-3 shrink-0 text-brand-400" />
