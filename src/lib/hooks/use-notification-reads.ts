@@ -50,9 +50,9 @@ export function useNotificationReads(activeNotifIds: string[]) {
       localStorage.setItem(LS_PRUNE_KEY, String(Date.now()));
     }
 
-    async function fetchFromDb() {
-      const supabase = createClient();
+    const supabase = createClient();
 
+    async function fetchFromDb() {
       // Fetch user ID and notification reads in parallel
       const [{ data: { user } }, { data: reads }] = await Promise.all([
         supabase.auth.getUser(),
@@ -76,7 +76,29 @@ export function useNotificationReads(activeNotifIds: string[]) {
       setDbLoaded(true);
     }
     fetchFromDb();
-    return () => { cancelled = true; };
+
+    // Realtime: pick up reads made on other devices immediately
+    const channel = supabase
+      .channel("notification_reads_sync")
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "notification_reads" },
+        (payload) => {
+          const notifId = (payload.new as { notif_id: string }).notif_id;
+          setReadIdsState((prev) => {
+            if (prev.has(notifId)) return prev;
+            const next = new Set([...prev, notifId]);
+            writeLocalCache(next);
+            return next;
+          });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      cancelled = true;
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   // Prune stale IDs monthly to keep localStorage + DB clean.

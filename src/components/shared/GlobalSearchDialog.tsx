@@ -11,6 +11,8 @@ import {
   Box,
   Building2,
   Leaf,
+  FolderKanban,
+  Camera,
 } from "lucide-react";
 import {
   CommandDialog,
@@ -30,6 +32,8 @@ import { usePurchaseOrders } from "@/lib/hooks/use-purchase-orders";
 import { useParts } from "@/lib/hooks/use-parts";
 import { useProducts } from "@/lib/hooks/use-products";
 import { useVendors } from "@/lib/hooks/use-vendors";
+import { useProjects } from "@/lib/hooks/use-projects";
+import { usePhotoJobs } from "@/modules/photo-docs/hooks/usePhotoJobs";
 import { usePOStore, useCMMSStore } from "@/stores";
 import {
   WO_STATUS_LABELS,
@@ -69,6 +73,8 @@ export function GlobalSearchDialog({ open, onOpenChange }: GlobalSearchDialogPro
   const { data: parts = [] } = useParts();
   const { data: allProducts = [] } = useProducts();
   const { data: vendors = [] } = useVendors();
+  const { data: projects = [] } = useProjects();
+  const { data: photoJobs = [] } = usePhotoJobs();
 
   // Only surface stocked and project materials in search (maintenance_parts are already in Parts)
   const catalogProducts = allProducts.filter(
@@ -95,7 +101,7 @@ export function GlobalSearchDialog({ open, onOpenChange }: GlobalSearchDialogPro
 
   return (
     <CommandDialog open={open} onOpenChange={onOpenChange}>
-      <CommandInput placeholder="Search work orders, assets, parts, requisitions…" />
+      <CommandInput placeholder="Search work orders, assets, parts, projects, photos…" />
       <CommandList className="max-h-[480px]">
         <CommandEmpty>No results found.</CommandEmpty>
 
@@ -301,6 +307,56 @@ export function GlobalSearchDialog({ open, onOpenChange }: GlobalSearchDialogPro
                   <span className="truncate text-sm font-medium">{vendor.name}</span>
                   {vendor.contactName && (
                     <span className="truncate text-xs text-slate-400">{vendor.contactName}</span>
+                  )}
+                </div>
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        )}
+
+        {(vendors.length > 0 && projects.length > 0) && <CommandSeparator />}
+
+        {projects.length > 0 && (
+          <CommandGroup heading="Projects">
+            {projects.map((project) => (
+              <CommandItem
+                key={project.id}
+                value={`${project.name} ${project.customerName ?? ""} project job`}
+                onSelect={() => go("/po/projects")}
+                className="flex items-center gap-3"
+              >
+                <FolderKanban className="h-4 w-4 shrink-0 text-slate-400" />
+                <div className="flex min-w-0 flex-1 flex-col">
+                  <span className="truncate text-sm font-medium">{project.name}</span>
+                  {project.customerName && (
+                    <span className="truncate text-xs text-slate-400">{project.customerName}</span>
+                  )}
+                </div>
+                <StatusBadge
+                  variant={project.status as Parameters<typeof StatusBadge>[0]["variant"]}
+                  label={project.status}
+                />
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        )}
+
+        {(projects.length > 0 && photoJobs.length > 0) && <CommandSeparator />}
+
+        {photoJobs.length > 0 && (
+          <CommandGroup heading="Photo Jobs">
+            {photoJobs.map((job) => (
+              <CommandItem
+                key={job.id}
+                value={`${job.name} ${job.customerName ?? ""} ${job.address ?? ""} photo job`}
+                onSelect={() => go(`/photos/jobs/${job.id}`)}
+                className="flex items-center gap-3"
+              >
+                <Camera className="h-4 w-4 shrink-0 text-slate-400" />
+                <div className="flex min-w-0 flex-1 flex-col">
+                  <span className="truncate text-sm font-medium">{job.name}</span>
+                  {job.customerName && (
+                    <span className="truncate text-xs text-slate-400">{job.customerName}</span>
                   )}
                 </div>
               </CommandItem>
