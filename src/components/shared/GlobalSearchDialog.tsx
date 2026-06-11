@@ -34,7 +34,7 @@ import { useProducts } from "@/lib/hooks/use-products";
 import { useVendors } from "@/lib/hooks/use-vendors";
 import { useProjects } from "@/lib/hooks/use-projects";
 import { usePhotoJobs } from "@/modules/photo-docs/hooks/usePhotoJobs";
-import { usePOStore, useCMMSStore } from "@/stores";
+import { usePOStore, useCMMSStore, useCurrentUserStore } from "@/stores";
 import {
   WO_STATUS_LABELS,
   PO_STATUS_LABELS,
@@ -64,6 +64,12 @@ export function GlobalSearchDialog({ open, onOpenChange }: GlobalSearchDialogPro
     setSelectedVehicleId,
     setSelectedPMScheduleId,
   } = useCMMSStore();
+  const { currentUser } = useCurrentUserStore();
+
+  const isCrew = currentUser.role === "crew";
+  const hasPhotoAccess = isCrew || currentUser.role === "admin" || currentUser.photoModuleAccess;
+  // Crew only sees Photo Jobs — all other groups are hidden from them
+  const showFullSearch = !isCrew;
 
   const { data: workOrders = [] } = useWorkOrders();
   const { data: assets = [] } = useAssets();
@@ -105,7 +111,7 @@ export function GlobalSearchDialog({ open, onOpenChange }: GlobalSearchDialogPro
       <CommandList className="max-h-[480px]">
         <CommandEmpty>No results found.</CommandEmpty>
 
-        {workOrders.length > 0 && (
+        {showFullSearch && workOrders.length > 0 && (
           <CommandGroup heading="Work Orders">
             {workOrders.map((wo) => (
               <CommandItem
@@ -129,9 +135,9 @@ export function GlobalSearchDialog({ open, onOpenChange }: GlobalSearchDialogPro
           </CommandGroup>
         )}
 
-        {(workOrders.length > 0 && assets.length > 0) && <CommandSeparator />}
+        {showFullSearch && (workOrders.length > 0 && assets.length > 0) && <CommandSeparator />}
 
-        {assets.length > 0 && (
+        {showFullSearch && assets.length > 0 && (
           <CommandGroup heading="Assets">
             {assets.map((asset) => (
               <CommandItem
@@ -157,9 +163,9 @@ export function GlobalSearchDialog({ open, onOpenChange }: GlobalSearchDialogPro
           </CommandGroup>
         )}
 
-        {(assets.length > 0 && vehicles.length > 0) && <CommandSeparator />}
+        {showFullSearch && (assets.length > 0 && vehicles.length > 0) && <CommandSeparator />}
 
-        {vehicles.length > 0 && (
+        {showFullSearch && vehicles.length > 0 && (
           <CommandGroup heading="Vehicles">
             {vehicles.map((vehicle) => (
               <CommandItem
@@ -185,9 +191,9 @@ export function GlobalSearchDialog({ open, onOpenChange }: GlobalSearchDialogPro
           </CommandGroup>
         )}
 
-        {(vehicles.length > 0 && parts.length > 0) && <CommandSeparator />}
+        {showFullSearch && (vehicles.length > 0 && parts.length > 0) && <CommandSeparator />}
 
-        {parts.length > 0 && (
+        {showFullSearch && parts.length > 0 && (
           <CommandGroup heading="Parts">
             {parts.map((part) => (
               <CommandItem
@@ -211,9 +217,9 @@ export function GlobalSearchDialog({ open, onOpenChange }: GlobalSearchDialogPro
           </CommandGroup>
         )}
 
-        {(parts.length > 0 && catalogProducts.length > 0) && <CommandSeparator />}
+        {showFullSearch && (parts.length > 0 && catalogProducts.length > 0) && <CommandSeparator />}
 
-        {catalogProducts.length > 0 && (
+        {showFullSearch && catalogProducts.length > 0 && (
           <CommandGroup heading="Products">
             {catalogProducts.map((product) => (
               <CommandItem
@@ -235,9 +241,9 @@ export function GlobalSearchDialog({ open, onOpenChange }: GlobalSearchDialogPro
           </CommandGroup>
         )}
 
-        {(catalogProducts.length > 0 && requisitions.length > 0) && <CommandSeparator />}
+        {showFullSearch && (catalogProducts.length > 0 && requisitions.length > 0) && <CommandSeparator />}
 
-        {requisitions.length > 0 && (
+        {showFullSearch && requisitions.length > 0 && (
           <CommandGroup heading="Requisitions">
             {requisitions.map((req) => (
               <CommandItem
@@ -264,9 +270,9 @@ export function GlobalSearchDialog({ open, onOpenChange }: GlobalSearchDialogPro
           </CommandGroup>
         )}
 
-        {(requisitions.length > 0 && purchaseOrders.length > 0) && <CommandSeparator />}
+        {showFullSearch && (requisitions.length > 0 && purchaseOrders.length > 0) && <CommandSeparator />}
 
-        {purchaseOrders.length > 0 && (
+        {showFullSearch && purchaseOrders.length > 0 && (
           <CommandGroup heading="Purchase Orders">
             {purchaseOrders.map((po) => (
               <CommandItem
@@ -291,9 +297,9 @@ export function GlobalSearchDialog({ open, onOpenChange }: GlobalSearchDialogPro
           </CommandGroup>
         )}
 
-        {(purchaseOrders.length > 0 && vendors.length > 0) && <CommandSeparator />}
+        {showFullSearch && (purchaseOrders.length > 0 && vendors.length > 0) && <CommandSeparator />}
 
-        {vendors.length > 0 && (
+        {showFullSearch && vendors.length > 0 && (
           <CommandGroup heading="Vendors">
             {vendors.map((vendor) => (
               <CommandItem
@@ -314,14 +320,14 @@ export function GlobalSearchDialog({ open, onOpenChange }: GlobalSearchDialogPro
           </CommandGroup>
         )}
 
-        {(vendors.length > 0 && projects.length > 0) && <CommandSeparator />}
+        {showFullSearch && (vendors.length > 0 && projects.length > 0) && <CommandSeparator />}
 
-        {projects.length > 0 && (
+        {showFullSearch && projects.length > 0 && (
           <CommandGroup heading="Projects">
             {projects.map((project) => (
               <CommandItem
                 key={project.id}
-                value={`${project.name} ${project.customerName ?? ""} project job`}
+                value={`${project.name} ${project.customerName ?? ""} ${project.address ?? ""} ${project.city ?? ""} ${project.state ?? ""} project job`}
                 onSelect={() => go("/po/projects")}
                 className="flex items-center gap-3"
               >
@@ -341,9 +347,9 @@ export function GlobalSearchDialog({ open, onOpenChange }: GlobalSearchDialogPro
           </CommandGroup>
         )}
 
-        {(projects.length > 0 && photoJobs.length > 0) && <CommandSeparator />}
+        {hasPhotoAccess && (showFullSearch ? projects.length > 0 : false) && photoJobs.length > 0 && <CommandSeparator />}
 
-        {photoJobs.length > 0 && (
+        {hasPhotoAccess && photoJobs.length > 0 && (
           <CommandGroup heading="Photo Jobs">
             {photoJobs.map((job) => (
               <CommandItem
