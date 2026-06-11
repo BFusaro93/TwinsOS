@@ -203,18 +203,19 @@ export function LineItemsTable({
                       </div>
                     )}
                     <div className="flex flex-col gap-0.5">
-                    {onProductClick && li.productItemId ? (
+                    {/* Parts (maintenance_part) always open the Part detail — partId takes priority */}
+                    {onPartClick && li.partId ? (
                       <button
                         type="button"
-                        onClick={() => onProductClick(li.productItemId!)}
+                        onClick={() => onPartClick(li.partId!)}
                         className="text-left font-medium text-brand-600 hover:underline"
                       >
                         {product?.name ?? li.productItemName}
                       </button>
-                    ) : onPartClick && li.partId ? (
+                    ) : onProductClick && li.productItemId ? (
                       <button
                         type="button"
-                        onClick={() => onPartClick(li.partId!)}
+                        onClick={() => onProductClick(li.productItemId!)}
                         className="text-left font-medium text-brand-600 hover:underline"
                       >
                         {product?.name ?? li.productItemName}

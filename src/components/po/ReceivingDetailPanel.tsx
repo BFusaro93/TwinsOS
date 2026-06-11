@@ -13,7 +13,9 @@ import { AuditTrailTab } from "@/components/shared/AuditTrailTab";
 import { NewReceivingDialog } from "./NewReceivingDialog";
 import { ProductDetailSheet } from "./ProductDetailSheet";
 import { PODetailSheet } from "./PODetailSheet";
+import { PartDetailSheet } from "@/components/cmms/PartDetailSheet";
 import { useProducts } from "@/lib/hooks/use-products";
+import { useParts } from "@/lib/hooks/use-parts";
 import { usePurchaseOrders, useUpdatePurchaseOrderStatus } from "@/lib/hooks/use-purchase-orders";
 import { useGoodsReceipts } from "@/lib/hooks/use-goods-receipts";
 import {
@@ -47,18 +49,20 @@ const RECEIVING_FLOW_STEPS = [
 ];
 
 /** Precomputed per-receipt-line product info resolved via the linked PO. */
-type LineProductInfo = { productId: string; liveName: string };
+type LineProductInfo = { productId: string; partId: string | null; liveName: string };
 
 function DetailsTab({
   receipt,
   lineProductMap,
   onProductClick,
+  onPartClick,
   onPOClick,
 }: {
   receipt: GoodsReceipt;
   /** Maps receipt line id → resolved product info (UUID + live catalog name). */
   lineProductMap: Map<string, LineProductInfo>;
   onProductClick: (productId: string) => void;
+  onPartClick: (partId: string) => void;
   onPOClick: () => void;
 }) {
   const hasMaintParts = receipt.lines.some((l) => l.isMaintPart);
@@ -132,7 +136,11 @@ function DetailsTab({
                     {productInfo ? (
                       <button
                         type="button"
-                        onClick={() => onProductClick(productInfo.productId)}
+                        onClick={() =>
+                          productInfo.partId
+                            ? onPartClick(productInfo.partId)
+                            : onProductClick(productInfo.productId)
+                        }
                         className="text-left font-medium text-brand-600 hover:underline"
                       >
                         {displayName}
@@ -227,8 +235,10 @@ function FilesTab({ receipt }: { receipt: GoodsReceipt }) {
 export function ReceivingDetailPanel({ receipt }: ReceivingDetailPanelProps) {
   const [editOpen, setEditOpen] = useState(false);
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
+  const [selectedPartId, setSelectedPartId] = useState<string | null>(null);
   const [poSheetOpen, setPoSheetOpen] = useState(false);
   const { data: products = [] } = useProducts();
+  const { data: parts = [] } = useParts();
   const { data: purchaseOrders = [] } = usePurchaseOrders();
   const { data: allReceipts = [] } = useGoodsReceipts();
   const syncPOStatus = useUpdatePurchaseOrderStatus();
@@ -238,17 +248,25 @@ export function ReceivingDetailPanel({ receipt }: ReceivingDetailPanelProps) {
       ? (products.find((p) => p.id === selectedProductId) ?? null)
       : null;
 
+  const selectedPart =
+    selectedPartId ? (parts.find((p) => p.id === selectedPartId) ?? null) : null;
+
   const linkedPO = purchaseOrders.find((po) => po.id === receipt.purchaseOrderId) ?? null;
 
-  // Precompute receipt lineId → { productId (UUID), liveName } via the linked PO's line items.
-  // This resolves by UUID (not part number), so renames in the catalog are always reflected.
+  // Precompute receipt lineId → { productId (UUID), partId, liveName } via the linked PO's line items.
+  // partId is resolved via the parts table (product_item_id FK) so maintenance parts open Part detail.
   const lineProductMap = new Map<string, LineProductInfo>();
   for (const receiptLine of receipt.lines) {
     const poLine = linkedPO?.lineItems.find((li) => li.id === receiptLine.lineItemId);
     if (poLine?.productItemId) {
       const catalogProduct = products.find((p) => p.id === poLine.productItemId);
+      // For maintenance parts, resolve the linked Part ID so we can open Part detail directly
+      const linkedPart = poLine.partId
+        ? parts.find((p) => p.id === poLine.partId)
+        : parts.find((p) => p.productItemId === poLine.productItemId);
       lineProductMap.set(receiptLine.id, {
         productId: poLine.productItemId,
+        partId: linkedPart?.id ?? null,
         liveName: catalogProduct?.name ?? receiptLine.productItemName,
       });
     }
@@ -289,6 +307,7 @@ export function ReceivingDetailPanel({ receipt }: ReceivingDetailPanelProps) {
                 receipt={receipt}
                 lineProductMap={lineProductMap}
                 onProductClick={(productId) => setSelectedProductId(productId)}
+                onPartClick={(partId) => setSelectedPartId(partId)}
                 onPOClick={() => setPoSheetOpen(true)}
               />
             ),
@@ -309,6 +328,11 @@ export function ReceivingDetailPanel({ receipt }: ReceivingDetailPanelProps) {
           if (!o) setSelectedProductId(null);
         }}
         product={selectedProduct}
+      />
+      <PartDetailSheet
+        part={selectedPart}
+        open={!!selectedPart}
+        onOpenChange={(o) => { if (!o) setSelectedPartId(null); }}
       />
       <PODetailSheet
         po={linkedPO}

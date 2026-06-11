@@ -68,8 +68,10 @@ import type { PrefillItem } from "./NewRequisitionDialog";
 import type { POPrefillItem } from "./NewPODialog";
 import { PODetailSheet } from "./PODetailSheet";
 import { ProductDetailSheet } from "./ProductDetailSheet";
+import { PartDetailSheet } from "@/components/cmms/PartDetailSheet";
 import { RequisitionDetailPanel } from "./RequisitionDetailPanel";
 import { useProducts } from "@/lib/hooks/use-products";
+import { useParts } from "@/lib/hooks/use-parts";
 import {
   Sheet,
   SheetContent,
@@ -234,6 +236,8 @@ function MaterialsTab({ project }: { project: Project }) {
   // Source / Product overlay state
   const [selectedSourceItem, setSelectedSourceItem] = useState<ProjectLineItem | null>(null);
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
+  const [selectedPartId, setSelectedPartId] = useState<string | null>(null);
+  const { data: parts = [] } = useParts();
 
   const selectedProduct = selectedProductId
     ? products.find((p) => p.id === selectedProductId) ?? null
@@ -377,7 +381,11 @@ function MaterialsTab({ project }: { project: Project }) {
                       {li.productItemId ? (
                         <button
                           type="button"
-                          onClick={() => setSelectedProductId(li.productItemId)}
+                          onClick={() => {
+                            const linkedPart = parts.find((p) => p.productItemId === li.productItemId);
+                            if (linkedPart) setSelectedPartId(linkedPart.id);
+                            else setSelectedProductId(li.productItemId);
+                          }}
                           className="text-left font-medium text-brand-600 hover:underline"
                         >
                           {li.productItemName}
@@ -491,6 +499,13 @@ function MaterialsTab({ project }: { project: Project }) {
         product={selectedProduct}
         open={!!selectedProduct}
         onOpenChange={(o) => { if (!o) setSelectedProductId(null); }}
+      />
+
+      {/* Part overlay — maintenance parts open directly in CMMS Part detail */}
+      <PartDetailSheet
+        part={parts.find((p) => p.id === selectedPartId) ?? null}
+        open={!!selectedPartId}
+        onOpenChange={(o) => { if (!o) setSelectedPartId(null); }}
       />
 
       {/* Edit dialog */}
