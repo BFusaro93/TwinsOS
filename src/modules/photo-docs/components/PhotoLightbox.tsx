@@ -10,7 +10,6 @@ import { toast } from "sonner";
 import { formatDate } from "@/lib/utils";
 import { useUpdatePhoto } from "../hooks/useJobPhotos";
 import type { JobPhoto } from "../types/photo.types";
-import { CommentsSection } from "@/components/shared/CommentsSection";
 
 interface PhotoLightboxProps {
   photo: JobPhoto;
@@ -344,11 +343,6 @@ export function PhotoLightbox({
             {currentIndex + 1} / {photos.length}
           </p>
 
-          {/* Comments — crew can message the office directly from the photo */}
-          <div className="border-t border-[#2a2a2a] pt-3">
-            <p className="mb-2 text-xs font-semibold text-slate-400">Comments</p>
-            <CommentsSection recordType="job_photo" recordId={photo.id} dark />
-          </div>
         </div>
       </div>
     </div>
