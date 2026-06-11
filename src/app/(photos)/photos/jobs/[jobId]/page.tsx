@@ -99,7 +99,7 @@ export default function JobPhotosPage({ params }: { params: Promise<{ jobId: str
 
   return (
     <PhotoModuleGuard>
-      <div className="flex flex-col gap-5">
+      <div className="flex flex-col gap-5 pb-28">{/* pb-28: clears the fixed Upload Progress Photo bar on crew tablets */}
         {/* Back nav */}
         <div>
           <button onClick={() => router.push("/photos/jobs")} className="mb-2 flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-600">

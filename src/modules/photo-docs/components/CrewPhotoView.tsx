@@ -106,7 +106,7 @@ export function CrewPhotoView({
       </section>
 
       {/* Fixed upload button — sticky at bottom for quick field use */}
-      <div className="fixed inset-x-0 bottom-0 z-10 border-t border-slate-200 bg-white p-4">
+      <div className="fixed bottom-0 left-0 right-0 z-10 border-t border-slate-200 bg-white p-4 md:left-[260px]">
         <Button
           className="w-full gap-2 bg-brand-500 text-white hover:bg-brand-600"
           size="lg"
