@@ -227,6 +227,7 @@ export function useUpdateProduct() {
       if (input.vendorId !== undefined) syncFields.vendor_id = input.vendorId || null;
       if (input.vendorName !== undefined) syncFields.vendor_name = input.vendorName;
       if (input.alternateVendors !== undefined) syncFields.alternate_vendors = input.alternateVendors;
+      if (input.isInventory !== undefined) syncFields.is_inventory = input.isInventory;
       if (Object.keys(syncFields).length > 0) {
         await supabase
           .from("parts")
