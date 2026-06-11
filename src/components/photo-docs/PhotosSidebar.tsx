@@ -106,15 +106,13 @@ export function PhotosSidebar() {
 
       {/* User footer */}
       {!sidebarCollapsed && (
-        <div className="shrink-0 border-t border-[#2a2a2a] px-4 py-3">
-          <div className="flex items-center gap-3">
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-500 text-xs font-bold text-white">
-              {currentUser.name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2)}
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium text-slate-200">{currentUser.name}</p>
-              <p className="truncate text-xs capitalize text-slate-400">{currentUser.role}</p>
-            </div>
+        <div className="flex items-center gap-3 border-t border-[#2a2a2a] p-4">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-500 text-xs font-bold text-white">
+            {currentUser.name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2)}
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-medium text-slate-200">{currentUser.name}</p>
+            <p className="truncate text-xs capitalize text-slate-400">{currentUser.role}</p>
           </div>
         </div>
       )}
