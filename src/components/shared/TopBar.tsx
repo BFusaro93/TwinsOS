@@ -166,8 +166,8 @@ export function TopBar() {
 
       <GlobalSearchDialog open={searchOpen} onOpenChange={setSearchOpen} />
 
-      {/* Notifications */}
-      <NotificationsBell />
+      {/* Notifications — hidden for crew users (they only need photo access, not CMMS/PO alerts) */}
+      {currentUser.role !== "crew" && <NotificationsBell />}
 
       {/* User avatar + switcher */}
       <DropdownMenu>

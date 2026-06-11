@@ -5,7 +5,8 @@ export type CommentRecordType =
   | "po"
   | "receiving"
   | "project"
-  | "work_order";
+  | "work_order"
+  | "job_photo";
 
 export interface Comment extends BaseRecord {
   recordType: CommentRecordType;

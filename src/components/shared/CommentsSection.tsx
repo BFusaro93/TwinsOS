@@ -11,9 +11,11 @@ import type { CommentRecordType } from "@/types";
 interface CommentsSectionProps {
   recordType: CommentRecordType;
   recordId: string;
+  /** Dark variant — use inside dark-background panels like the photo lightbox */
+  dark?: boolean;
 }
 
-export function CommentsSection({ recordType, recordId }: CommentsSectionProps) {
+export function CommentsSection({ recordType, recordId, dark = false }: CommentsSectionProps) {
   const { data: comments, isLoading } = useComments(recordType, recordId);
   const { mutate: addComment, isPending: sending } = useAddComment();
   const { currentUser } = useCurrentUserStore();
@@ -52,14 +54,14 @@ export function CommentsSection({ recordType, recordId }: CommentsSectionProps) 
                 </div>
                 <div className="flex-1">
                   <div className="flex items-baseline gap-2">
-                    <span className="text-sm font-medium text-slate-900">
+                    <span className={`text-sm font-medium ${dark ? "text-slate-100" : "text-slate-900"}`}>
                       {comment.authorName}
                     </span>
                     <span className="text-xs text-slate-400">
                       {formatDateTime(comment.createdAt)}
                     </span>
                   </div>
-                  <p className="mt-0.5 whitespace-pre-wrap text-sm text-slate-700">{comment.body}</p>
+                  <p className={`mt-0.5 whitespace-pre-wrap text-sm ${dark ? "text-slate-300" : "text-slate-700"}`}>{comment.body}</p>
                 </div>
               </li>
             );
@@ -70,13 +72,13 @@ export function CommentsSection({ recordType, recordId }: CommentsSectionProps) 
       )}
 
       {/* New comment input */}
-      <div className="flex gap-2 rounded-md border border-slate-200 bg-white p-2">
+      <div className={`flex gap-2 rounded-md border p-2 ${dark ? "border-[#3a3a3a] bg-[#2a2a2a]" : "border-slate-200 bg-white"}`}>
         <textarea
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           placeholder="Add a comment…"
           rows={2}
-          className="flex-1 resize-none text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none"
+          className={`flex-1 resize-none bg-transparent text-sm placeholder:text-slate-500 focus:outline-none ${dark ? "text-white" : "text-slate-900 placeholder:text-slate-400"}`}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault();

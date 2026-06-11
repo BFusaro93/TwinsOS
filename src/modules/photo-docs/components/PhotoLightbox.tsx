@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import { formatDate } from "@/lib/utils";
 import { useUpdatePhoto } from "../hooks/useJobPhotos";
 import type { JobPhoto } from "../types/photo.types";
+import { CommentsSection } from "@/components/shared/CommentsSection";
 
 interface PhotoLightboxProps {
   photo: JobPhoto;
@@ -193,6 +194,7 @@ export function PhotoLightbox({
                 >
                   <option value="none">None</option>
                   <option value="before">Before</option>
+                  <option value="during">During</option>
                   <option value="after">After</option>
                 </select>
               </div>
@@ -226,16 +228,18 @@ export function PhotoLightbox({
             </div>
           ) : (
             <>
-              {/* Before / After badge */}
+              {/* Before / During / After badge */}
               {photo.beforeAfter !== "none" && (
                 <span
                   className={`inline-flex w-fit rounded-full px-3 py-1 text-xs font-semibold ${
                     photo.beforeAfter === "before"
                       ? "bg-amber-500/20 text-amber-400"
+                      : photo.beforeAfter === "during"
+                      ? "bg-sky-500/20 text-sky-400"
                       : "bg-emerald-600/20 text-emerald-400"
                   }`}
                 >
-                  {photo.beforeAfter === "before" ? "Before" : "After"}
+                  {photo.beforeAfter === "before" ? "Before" : photo.beforeAfter === "during" ? "During" : "After"}
                 </span>
               )}
 
@@ -339,6 +343,12 @@ export function PhotoLightbox({
           <p className="text-center text-xs text-slate-600">
             {currentIndex + 1} / {photos.length}
           </p>
+
+          {/* Comments — crew can message the office directly from the photo */}
+          <div className="border-t border-[#2a2a2a] pt-3">
+            <p className="mb-2 text-xs font-semibold text-slate-400">Comments</p>
+            <CommentsSection recordType="job_photo" recordId={photo.id} dark />
+          </div>
         </div>
       </div>
     </div>
