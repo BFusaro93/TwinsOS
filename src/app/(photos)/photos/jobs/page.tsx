@@ -22,6 +22,7 @@ import { StatusBadge } from "@/components/shared/StatusBadge";
 import { ProjectDetailSheet } from "@/components/po/ProjectDetailSheet";
 import { PROJECT_STATUS_LABELS } from "@/lib/constants";
 import { useStickyState } from "@/lib/hooks/use-sticky-state";
+import { CommentsSection } from "@/components/shared/CommentsSection";
 import { toast } from "sonner";
 import type { PhotoJobStatus } from "@/modules/photo-docs/types/photo.types";
 
@@ -263,6 +264,12 @@ function JobDetailPane({ jobId }: { jobId: string }) {
         <PhotoGallery projectId={jobId} />
       </div>
 
+      {/* Job-level comments */}
+      <div className="border-t border-slate-200 px-5 py-4">
+        <p className="mb-3 text-sm font-semibold text-slate-900">Comments</p>
+        <CommentsSection recordType="job_photo" recordId={jobId} />
+      </div>
+
       <ProjectDetailSheet project={linkedProject} open={projectSheetOpen} onOpenChange={setProjectSheetOpen} />
     </div>
   );
@@ -367,7 +374,7 @@ export default function PhotoJobsPage() {
 
   return (
     <PhotoModuleGuard>
-      <div className="flex flex-col gap-4">
+      <div className="flex h-full flex-col gap-4">
         {/* Header */}
         <PageHeader
           title="Jobs"
@@ -485,7 +492,7 @@ export default function PhotoJobsPage() {
         {/* Content */}
         {viewMode === "list" ? (
           <MasterDetailLayout
-            className="h-[calc(100vh-20rem)] min-h-[480px]"
+            className="min-h-0 flex-1"
             listPanel={listPanel}
             detailPanel={selectedJobId ? <JobDetailPane jobId={selectedJobId} /> : null}
             emptyState={
