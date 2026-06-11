@@ -220,13 +220,27 @@ export function PhotoGallery({ projectId }: PhotoGalleryProps) {
         </div>
       ) : photos.length === 0 ? (
         <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-slate-200 py-16 text-center">
-          <Images className="h-10 w-10 text-slate-300" />
+          {fileType === "videos" ? (
+            <Film className="h-10 w-10 text-slate-300" />
+          ) : fileType === "documents" ? (
+            <FileText className="h-10 w-10 text-slate-300" />
+          ) : (
+            <Images className="h-10 w-10 text-slate-300" />
+          )}
           <div>
-            <p className="text-sm font-medium text-slate-500">No photos yet</p>
+            <p className="text-sm font-medium text-slate-500">
+              {fileType === "videos"
+                ? "No videos yet"
+                : fileType === "documents"
+                ? "No documents yet"
+                : "No photos yet"}
+            </p>
             <p className="text-xs text-slate-400">
-              {tab === "all"
+              {tab === "all" && fileType === "all"
                 ? "Upload the first photo for this job"
-                : `No ${tab} photos`}
+                : tab !== "all"
+                ? `No ${tab} ${fileType === "videos" ? "videos" : fileType === "documents" ? "documents" : "photos"}`
+                : `No ${fileType} uploaded yet`}
             </p>
           </div>
           {canUpload && tab === "all" && (
