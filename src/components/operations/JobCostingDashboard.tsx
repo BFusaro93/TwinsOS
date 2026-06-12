@@ -443,10 +443,10 @@ function CalculatorTab({ inputs, setInputs }: { inputs: Inputs; setInputs: (i: I
           <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
             <h3 className="mb-4 text-sm font-semibold text-slate-800">Rate Calculation</h3>
             <div className="space-y-1.5">
-              <ResultRow label="Direct Labor/hr" value={fmtDollar(c.totalDirectLabor / c.billableHours)} muted />
-              <ResultRow label={`Payroll Burden/hr (${fmtPct(c.burdenPct)} of labor)`} value={fmtDollar(c.burdenAmount / c.billableHours)} muted />
+              <ResultRow label="Direct Labor/hr" value={fmtDollar(c.totalHours > 0 ? c.totalDirectLabor / c.totalHours : 0)} muted />
+              <ResultRow label={`Payroll Burden/hr (${fmtPct(c.burdenPct)})`} value={fmtDollar(c.totalHours > 0 ? c.burdenAmount / c.totalHours : 0)} muted />
               <div className="my-1 border-t border-slate-100" />
-              <ResultRow label="Labor / Billable Hour" value={fmtDollar(c.laborPerHour)} bold />
+              <ResultRow label="Burdened Labor/hr" value={fmtDollar(c.laborPerHour)} bold />
               <div className="my-1 border-t border-slate-100" />
               <ResultRow label="OH Payroll/hr" value={fmtDollar(c.ohPayrollPerHour)} muted />
               <ResultRow label="Other Overhead/hr" value={fmtDollar(c.otherOHPerHour)} muted />
