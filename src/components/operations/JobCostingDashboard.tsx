@@ -88,13 +88,13 @@ const PRESET_SCENARIOS: Scenario[] = [
 ];
 
 // ── Core calculation engine ───────────────────────────────────────────────────
-// Matches the Excel model (Book2.xlsx):
+// Formula:
 //   1. Blended wage  = OT_wage × (OT_hrs/Reg_hrs) + Reg_wage × (1 − OT_hrs/Reg_hrs)
 //   2. Labor/hr      = blended_wage × (1 + burden%)
 //   3. OH total      = ohPayroll + otherOH + liabilities + ohPayroll × burden%
 //   4. OH/hr         = OH total ÷ (reg_hrs + OT_hrs)
-//   5. Break-even    = (OH/hr + Labor/hr) × (1 + nonBillable%)   ← additive markup
-//   6. Bid rate      = break-even × (1 + profit%)                ← additive markup
+//   5. Break-even    = (OH/hr + Labor/hr) ÷ (1 − nonBillable%)  ← true cost coverage
+//   6. Bid rate      = break-even ÷ (1 − profit%)               ← true profit margin
 
 interface Computed {
   totalRegHours: number;
@@ -147,13 +147,13 @@ function compute(i: Inputs): Computed {
   const otherOHPerHour    = totalHours > 0 ? i.otherOH / totalHours : 0;
   const liabilitiesPerHour = totalHours > 0 ? i.liabilities / totalHours : 0;
 
-  // Break-even grosses up for non-billable time as an additive markup (Excel K8)
+  // Break-even: divide by (1 − nonBillable%) so billable hours fully cover all costs
   const baseBreakEven = laborPerHour + ohPerHour;
-  const breakEven = baseBreakEven * (1 + i.nonBillablePct / 100);
+  const breakEven = i.nonBillablePct < 100 ? baseBreakEven / (1 - i.nonBillablePct / 100) : 0;
   const nonBillablePerHour = breakEven - baseBreakEven;
 
-  // Bid rate = break-even × (1 + profit%) — additive markup, not margin (Excel K10)
-  const bidRate = breakEven * (1 + i.profitPct / 100);
+  // Bid rate: divide by (1 − profit%) so profit% is true margin (profit ÷ revenue)
+  const bidRate = i.profitPct < 100 ? breakEven / (1 - i.profitPct / 100) : 0;
   const profitPerHour = bidRate - breakEven;
 
   return {
