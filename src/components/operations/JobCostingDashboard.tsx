@@ -120,9 +120,12 @@ function compute(i: Inputs): Computed {
   const totalRegHours = i.numFieldEmp * i.fieldHrsReg;
   const totalOTHours = i.numFieldEmp * i.fieldHrsOT;
   const totalHours = totalRegHours + totalOTHours;
-  const billableHours = totalHours * (1 - i.nonBillablePct / 100);
 
-  // OT hours paid at 1.5× base wage; regular hours at 1×
+  // Billable capacity is based on regular hours only — OT is extra cost, not
+  // extra sellable capacity. This ensures more OT always raises the bid rate.
+  const billableHours = totalRegHours * (1 - i.nonBillablePct / 100);
+
+  // Regular hours at 1×, OT hours at 1.5× base wage
   const totalDirectLabor = totalRegHours * i.fieldEmpWage + totalOTHours * i.fieldEmpWage * 1.5;
   const burdenPct = i.ficaPct + i.workCompPct + i.suiPct + i.fuiPct + i.pfmlPct;
   const burdenAmount = totalDirectLabor * (burdenPct / 100);
@@ -136,10 +139,8 @@ function compute(i: Inputs): Computed {
   const liabilitiesPerHour = billableHours > 0 ? i.liabilities / billableHours : 0;
   const ohPerHour = ohPayrollPerHour + otherOHPerHour + liabilitiesPerHour;
   const breakEven = laborPerHour + ohPerHour;
-  // Base cost per hour if ALL hours were billable (no non-billable adjustment).
-  // Adding nonBillablePerHour to this gives the actual break-even.
-  const baseBreakEven = totalHours > 0 ? (totalLaborCost + totalOverhead) / totalHours : 0;
-  const nonBillablePerHour = breakEven - baseBreakEven; // the uplift from non-billable hours
+  const baseBreakEven = totalRegHours > 0 ? (totalLaborCost + totalOverhead) / totalRegHours : 0;
+  const nonBillablePerHour = breakEven - baseBreakEven;
   const bidRate = i.profitPct < 100 ? breakEven / (1 - i.profitPct / 100) : 0;
   const profitPerHour = bidRate - breakEven;
 
