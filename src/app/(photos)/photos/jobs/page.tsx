@@ -4,10 +4,10 @@ import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import {
   Camera, MapPin, Search, Images, Plus, X, Maximize2, Minimize2,
-  Pencil, Check, Archive, ArchiveRestore, Link2, FileText,
+  Pencil, Check, Archive, ArchiveRestore, Link2, FileText, Trash2,
 } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
-import { usePhotoJobs, useCreatePhotoJob, usePhotoJob, useUpdatePhotoJob, useArchivePhotoJob } from "@/modules/photo-docs/hooks/usePhotoJobs";
+import { usePhotoJobs, useCreatePhotoJob, usePhotoJob, useUpdatePhotoJob, useArchivePhotoJob, useDeletePhotoJob } from "@/modules/photo-docs/hooks/usePhotoJobs";
 import { useProjects } from "@/lib/hooks/use-projects";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -60,6 +60,7 @@ function JobDetailPane({ jobId }: { jobId: string }) {
   const { data: projects = [] } = useProjects();
   const { mutate: updateJob, isPending: saving } = useUpdatePhotoJob();
   const { mutate: archiveJob, isPending: archiving } = useArchivePhotoJob();
+  const { mutate: deleteJob, isPending: deleting } = useDeletePhotoJob();
 
   const [editing, setEditing] = useState(false);
   const [editingLink, setEditingLink] = useState(false);
@@ -147,6 +148,18 @@ function JobDetailPane({ jobId }: { jobId: string }) {
               onClick={() => archiveJob({ id: job.id, archived: !job.isArchived }, { onSuccess: () => toast.success(job.isArchived ? "Job unarchived" : "Job archived") })}
             >
               {job.isArchived ? <><ArchiveRestore className="h-3.5 w-3.5" /> Unarchive</> : <><Archive className="h-3.5 w-3.5" /> Archive</>}
+            </Button>
+            <Button
+              size="sm" variant="outline"
+              className="gap-1.5 text-xs border-red-200 text-red-500 hover:bg-red-50"
+              disabled={deleting}
+              onClick={() => {
+                if (confirm(`Permanently delete "${job.name}"? This cannot be undone.`)) {
+                  deleteJob(job.id, { onSuccess: () => { toast.success("Job deleted"); router.back(); } });
+                }
+              }}
+            >
+              <Trash2 className="h-3.5 w-3.5" /> Delete
             </Button>
             <Button size="sm" variant="ghost" className="ml-auto gap-1.5 text-xs text-slate-500" onClick={() => router.push(`/photos/jobs/${job.id}`)}>
               Open Full Page
@@ -290,6 +303,7 @@ export default function PhotoJobsPage() {
   const includeArchived = archiveFilter === "archived";
   const { data: jobs = [], isLoading } = usePhotoJobs(statusFilter, includeArchived);
   const { mutate: createJob, isPending: creating } = useCreatePhotoJob();
+  const { mutate: deleteJob } = useDeletePhotoJob();
   const { data: projects = [] } = useProjects();
   const [form, setForm] = useState(EMPTY_FORM);
 
@@ -518,22 +532,33 @@ export default function PhotoJobsPage() {
               {filtered.map((job) => {
                 const fullAddr = formatAddress(job.address, job.city, job.state, job.zip);
                 return (
-                  <button key={job.id} className="flex w-full items-center gap-4 rounded-xl border border-slate-200 bg-white p-4 text-left shadow-sm transition-shadow hover:shadow-md" onClick={() => router.push(`/photos/jobs/${job.id}`)}>
-                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-[#2a2a2a]">
-                      <Camera className="h-5 w-5 text-white" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <p className="truncate font-medium text-slate-900">{job.name}</p>
-                        <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold capitalize", STATUS_COLORS[job.status])}>{job.status.replace("_", " ")}</span>
-                        {job.isArchived && <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-500">Archived</span>}
-                        {job.projectId && <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-medium text-blue-600">Project linked</span>}
+                  <div key={job.id} className="group flex w-full items-center gap-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition-shadow hover:shadow-md">
+                    <button className="flex flex-1 items-center gap-4 text-left min-w-0" onClick={() => router.push(`/photos/jobs/${job.id}`)}>
+                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-[#2a2a2a]">
+                        <Camera className="h-5 w-5 text-white" />
                       </div>
-                      {job.customerName && <p className="truncate text-sm text-slate-500">{job.customerName}</p>}
-                      {fullAddr && <div className="mt-0.5 flex items-center gap-1 text-xs text-slate-400"><MapPin className="h-3 w-3" /><span className="truncate">{fullAddr}</span></div>}
-                    </div>
-                    <p className="shrink-0 text-xs text-slate-400">{formatDate(job.createdAt)}</p>
-                  </button>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <p className="truncate font-medium text-slate-900">{job.name}</p>
+                          <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold capitalize", STATUS_COLORS[job.status])}>{job.status.replace("_", " ")}</span>
+                          {job.isArchived && <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-500">Archived</span>}
+                          {job.projectId && <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-medium text-blue-600">Project linked</span>}
+                        </div>
+                        {job.customerName && <p className="truncate text-sm text-slate-500">{job.customerName}</p>}
+                        {fullAddr && <div className="mt-0.5 flex items-center gap-1 text-xs text-slate-400"><MapPin className="h-3 w-3" /><span className="truncate">{fullAddr}</span></div>}
+                      </div>
+                      <p className="shrink-0 text-xs text-slate-400">{formatDate(job.createdAt)}</p>
+                    </button>
+                    {canUpload && (
+                      <button
+                        className="shrink-0 rounded-md p-1.5 text-slate-300 opacity-0 transition-opacity hover:bg-red-50 hover:text-red-500 group-hover:opacity-100"
+                        title="Delete job"
+                        onClick={(e) => { e.stopPropagation(); if (confirm(`Permanently delete "${job.name}"? This cannot be undone.`)) deleteJob(job.id, { onSuccess: () => toast.success("Job deleted") }); }}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    )}
+                  </div>
                 );
               })}
             </div>
