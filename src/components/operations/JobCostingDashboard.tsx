@@ -141,11 +141,13 @@ function compute(i: Inputs): Computed {
   const ohPayrollBurden = i.ohPayroll * (burdenPct / 100);
   const totalOverhead = i.ohPayroll + i.otherOH + i.liabilities + ohPayrollBurden;
 
-  // OH/hr spreads over ALL hours (reg + OT), matching Excel H10
-  const ohPerHour         = totalHours > 0 ? totalOverhead / totalHours : 0;
-  const ohPayrollPerHour  = totalHours > 0 ? (i.ohPayroll + ohPayrollBurden) / totalHours : 0;
-  const otherOHPerHour    = totalHours > 0 ? i.otherOH / totalHours : 0;
-  const liabilitiesPerHour = totalHours > 0 ? i.liabilities / totalHours : 0;
+  // OH/hr spreads over regular hours only — overhead is fixed and doesn't scale
+  // with OT. Dividing by all hours would dilute OH as OT increases, which would
+  // incorrectly lower the bid rate when workers do more overtime.
+  const ohPerHour         = totalRegHours > 0 ? totalOverhead / totalRegHours : 0;
+  const ohPayrollPerHour  = totalRegHours > 0 ? (i.ohPayroll + ohPayrollBurden) / totalRegHours : 0;
+  const otherOHPerHour    = totalRegHours > 0 ? i.otherOH / totalRegHours : 0;
+  const liabilitiesPerHour = totalRegHours > 0 ? i.liabilities / totalRegHours : 0;
 
   // Break-even: divide by (1 − nonBillable%) so billable hours fully cover all costs
   const baseBreakEven = laborPerHour + ohPerHour;
