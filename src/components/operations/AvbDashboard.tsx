@@ -148,8 +148,8 @@ function getHrsOnDay(gusto: GustoData, uuid: string, dayIdx: number) {
   return gusto.employees[uuid]?.days.find(d=>d.date===dk)?.total ?? 0;
 }
 
-const epColor = (ep: number|null) => ep===null ? "text-slate-400" : ep>=88 ? "text-green-600" : ep>=75 ? "text-amber-500" : "text-red-500";
-const epBadge = (ep: number|null) => ep===null ? "bg-slate-100 text-slate-500" : ep>=88 ? "bg-green-100 text-green-700" : ep>=75 ? "bg-amber-100 text-amber-700" : "bg-red-100 text-red-700";
+const epColor = (ep: number|null) => ep===null ? "text-slate-400" : ep>=85 ? "text-green-600" : ep>=75 ? "text-amber-500" : "text-red-500";
+const epBadge = (ep: number|null) => ep===null ? "bg-slate-100 text-slate-500" : ep>=85 ? "bg-green-100 text-green-700" : ep>=75 ? "bg-amber-100 text-amber-700" : "bg-red-100 text-red-700";
 
 // ── CSV Parser ────────────────────────────────────────────────────────────────
 function parseGustoCsv(text: string, employees: AvbEmployee[]): GustoData {
@@ -197,7 +197,16 @@ function parseGustoCsv(text: string, employees: AvbEmployee[]): GustoData {
       const nm = hm[1].trim().replace(/,+$/, "").trim();
       const job = daily.find(d=>d.job)?.job??"";
       const uuid = matchUuid(nm, job, employees);
-      if (uuid) emp(uuid).days = daily;
+      if (uuid) {
+        // Merge into existing days rather than overwriting — an employee can appear
+        // in multiple "Hours for" sections (different departments/pay types).
+        const existing = emp(uuid).days;
+        for (const d of daily) {
+          const prev = existing.find(e => e.date === d.date);
+          if (prev) { prev.total += d.total; prev.regular += d.regular; prev.ot += d.ot; }
+          else existing.push(d);
+        }
+      }
     }
   }
   return result;
@@ -236,9 +245,12 @@ async function parseAvbPdf(
   const buf = await file.arrayBuffer();
   const pdf = await lib.getDocument({data: buf}).promise;
 
-  // Build text lines. Use 8 px Y-tolerance (vs old 4 px) so items on the
-  // same visual row aren't split when PDF sub-pixel positions vary slightly.
-  const allLines: string[] = [];
+  // Build lines preserving X positions per item so we can identify the
+  // rightmost column (revenue) vs leftmost columns (budgeted, actual).
+  // Use 8 px Y-tolerance so items on the same visual row aren't split.
+  type PdfItem = { x: number; str: string };
+  type PdfLine = { str: string; items: PdfItem[] };
+  const allLines: PdfLine[] = [];
   for (let p = 1; p <= pdf.numPages; p++) {
     const page = await pdf.getPage(p);
     const tc   = await page.getTextContent();
@@ -247,44 +259,78 @@ async function parseAvbPdf(
       y: Math.round(i.transform[5]),
       str: i.str,
     }));
-    const lm: Record<number, typeof items> = {};
+    const lm: Record<number, PdfItem[]> = {};
     items.forEach(it => {
       const yk = Math.round(it.y / 8) * 8;
       if (!lm[yk]) lm[yk] = [];
-      lm[yk].push(it);
+      lm[yk].push({ x: it.x, str: it.str });
     });
     Object.keys(lm).map(Number).sort((a, b) => b - a).forEach(y => {
       lm[y].sort((a, b) => a.x - b.x);
-      const s = lm[y].map(i => i.str).join(" ").trim();
-      if (s) allLines.push(s);
+      const str = lm[y].map(i => i.str).join(" ").trim();
+      if (str) allLines.push({ str, items: lm[y] });
     });
   }
 
-  const NUMS = /([\d,]+\.\d{2,4})/g;
-  const DOLR = /\$([\d,]+\.\d{2})/;
+  // Extract numeric values from each PDF item individually (not the joined
+  // string) so positions are preserved. Returns [{val, x}] sorted left→right.
+  // This correctly identifies budgeted (leftmost), actual (2nd), and revenue
+  // (rightmost) regardless of how many variance columns sit in between.
+  const NUM_CELL = /^-?[\$]?([\d,]+\.[\d]{2,4})$/;
+  function extractCellNums(line: PdfLine): { val: number; x: number }[] {
+    const out: { val: number; x: number }[] = [];
+    for (const item of line.items) {
+      const clean = item.str.replace(/,/g, "").replace(/^\$/, "");
+      if (NUM_CELL.test(clean)) {
+        const v = parseFloat(clean);
+        if (!isNaN(v)) out.push({ val: v, x: item.x });
+      }
+    }
+    return out.sort((a, b) => a.x - b.x);
+  }
+
+  // Fallback: regex-extract all numbers from the joined string when individual
+  // items don't yield enough (e.g. "$1,234.56" is a single item).
+  const NUMS_RE = /([\d,]+\.[\d]{2,4})/g;
+  function extractNums(line: PdfLine): number[] {
+    return [...line.str.matchAll(NUMS_RE)].map(m => parseFloat(m[1].replace(/,/g, "")));
+  }
+
+  function pickValues(line: PdfLine): { budgeted: number; actual: number; revenue: number } | null {
+    const cells = extractCellNums(line);
+    if (cells.length >= 2) {
+      return {
+        budgeted: cells[0].val,
+        actual:   cells[1].val,
+        // Revenue is the rightmost column (col 13 in the AvB report).
+        // Using the last cell by X position avoids accidentally grabbing
+        // intermediate variance columns (e.g. the time-variance-sum at col 9).
+        revenue:  cells[cells.length - 1].val,
+      };
+    }
+    // Fallback to joined-string extraction when item-level parse yields < 2
+    const nums = extractNums(line);
+    if (nums.length >= 2) {
+      return {
+        budgeted: nums[0],
+        actual:   nums[1],
+        revenue:  nums[nums.length - 1],
+      };
+    }
+    return null;
+  }
+
   const knownUpper = knownCrewCodes.map(c => c.toUpperCase());
   const codeSet    = new Set(knownUpper);
 
-  function extractNums(s: string): number[] {
-    return [...s.matchAll(NUMS)].map(m => parseFloat(m[1].replace(/,/g, "")));
-  }
-  function extractRevenue(s: string, nums: number[]): number {
-    const dm = DOLR.exec(s);
-    if (dm) return parseFloat(dm[1].replace(/,/g, ""));
-    return nums.length >= 3 ? nums[2] : 0;
-  }
   /** Returns the crew code if this line contains a crew code, else null. */
-  function matchCrewCode(line: string): string | null {
-    const trimmed = line.trim().toUpperCase();
-    // 1. Whole line (spaces stripped) matches a code — handles "MAINT 1" → "MAINT1"
+  function matchCrewCode(line: PdfLine): string | null {
+    const trimmed = line.str.trim().toUpperCase();
     const noSpaces = trimmed.replace(/\s+/g, "");
     if (codeSet.has(noSpaces)) return noSpaces;
-    // 2. Any individual token matches — handles lines where Y-tolerance merged the
-    //    crew code with adjacent PDF elements (e.g. "MAINT1 18.50" → token "MAINT1")
     for (const tok of trimmed.split(/\s+/)) {
       if (codeSet.has(tok)) return tok;
     }
-    // 3. Fallback regex when no known codes were supplied
     if (knownUpper.length === 0) {
       const m = /^([A-Z]{2,10}\d*)$/.exec(noSpaces);
       return m ? m[1] : null;
@@ -294,64 +340,91 @@ async function parseAvbPdf(
 
   const results: Record<string, {budgeted: number; actual: number; revenue: number}> = {};
 
-  // ── Pass 1: Sum-row strategy ────────────────────────────────────────────────
-  // Find any line with 2+ "Sum:" tokens (the totals header). Look ±3 lines for
-  // a known crew code, then grab numbers from the Sum line (or nearby lines).
-  for (let i = 0; i < allLines.length; i++) {
-    const sumMatches = allLines[i].match(/Sum:/gi);
-    if (!sumMatches || sumMatches.length < 2) continue;
-
-    // Find nearest crew code in a ±3 line window (skip the Sum line itself)
-    let crewCode: string | null = null;
-    for (let off = -3; off <= 3; off++) {
-      if (off === 0) continue;
-      const idx = i + off;
-      if (idx < 0 || idx >= allLines.length) continue;
-      const code = matchCrewCode(allLines[idx]);
-      if (code && !results[code]) { crewCode = code; break; }
-    }
-    if (!crewCode) continue;
-
-    // Grab numbers from the Sum line; if too few, scan forward up to 3 lines
-    let nums = extractNums(allLines[i]);
-    if (nums.length < 2) {
-      for (let j = i + 1; j <= i + 3 && j < allLines.length; j++) {
-        nums = extractNums(allLines[j]);
-        if (nums.length >= 2) break;
+  // ── Stacked-value collector ─────────────────────────────────────────────────
+  // The AvB report renders each crew's Sum row as stacked cells:
+  //   "[CREW] Sum:"  →  "6.0000"  →  "Sum:"  →  "3.8200"  →  "Sum:"  →  "2.1800"  →  "Sum:"  →  "$910.96"
+  // This function starts at `startIdx` (the crew-code line), skips "Sum:" label
+  // lines, and collects the next 4 single-cell numeric values.
+  // The 4th value (rightmost / last) is always the revenue total.
+  function collectStackedValues(startIdx: number): {budgeted:number;actual:number;revenue:number} | null {
+    const vals: number[] = [];
+    for (let j = startIdx + 1; j < allLines.length && vals.length < 4; j++) {
+      const s = allLines[j].str.trim();
+      if (/^Sum:$/i.test(s)) continue;
+      // Stop if we hit a new crew section (a line that itself contains a code + "Sum:")
+      if (j > startIdx + 1 && matchCrewCode(allLines[j]) && /Sum:/i.test(s)) break;
+      const cells = extractCellNums(allLines[j]);
+      if (cells.length === 1) {
+        vals.push(cells[0].val);
+      } else if (cells.length >= 2) {
+        // Got a multi-value line — use pickValues and bail
+        const pv = pickValues(allLines[j]);
+        if (pv) return pv;
+        break;
       }
     }
-    if (nums.length >= 2) {
-      results[crewCode] = {
-        budgeted: nums[0],
-        actual:   nums[1],
-        revenue:  extractRevenue(allLines[i], nums),
-      };
+    if (vals.length >= 3) {
+      return { budgeted: vals[0], actual: vals[1], revenue: vals[vals.length - 1] };
     }
+    return null;
+  }
+
+  // ── Pass 1: Sum-row strategy ────────────────────────────────────────────────
+  // Find any line with 2+ "Sum:" tokens. Check the Sum line itself for a crew
+  // code first (common: "FERT1 Sum: Sum: Sum: Sum:"), then surrounding ±3 lines.
+  for (let i = 0; i < allLines.length; i++) {
+    const sumMatches = allLines[i].str.match(/Sum:/gi);
+    if (!sumMatches || sumMatches.length < 2) continue;
+
+    // Check the Sum line itself before scanning neighbours
+    let crewCode: string | null = matchCrewCode(allLines[i]);
+    if (!crewCode || results[crewCode]) {
+      crewCode = null;
+      for (let off = -3; off <= 3; off++) {
+        if (off === 0) continue;
+        const idx = i + off;
+        if (idx < 0 || idx >= allLines.length) continue;
+        const code = matchCrewCode(allLines[idx]);
+        if (code && !results[code]) { crewCode = code; break; }
+      }
+    }
+    if (!crewCode || results[crewCode]) continue;
+
+    // Try multi-column (all values on one line) first, then stacked fallback
+    let vals = pickValues(allLines[i]);
+    if (!vals) {
+      for (let j = i + 1; j <= i + 3 && j < allLines.length; j++) {
+        vals = pickValues(allLines[j]);
+        if (vals) break;
+      }
+    }
+    if (!vals) vals = collectStackedValues(i);
+    if (vals) results[crewCode] = vals;
   }
 
   // ── Pass 2: Crew-code-first scan ────────────────────────────────────────────
-  // For any known code not yet captured, find its line directly and look in
-  // the surrounding lines for a row that contains numbers.
+  // For any code still missing: find its line, try multi-column neighbours, then
+  // fall back to the stacked-value collector.
   for (const code of knownUpper) {
     if (results[code]) continue;
     for (let i = 0; i < allLines.length; i++) {
       if (matchCrewCode(allLines[i]) !== code) continue;
-      // Search lines before and after the crew-code line for numbers
+
+      // 2a: adjacent line with 2+ numbers (multi-column layout)
+      let found = false;
       for (let off = -2; off <= 5; off++) {
         if (off === 0) continue;
         const idx = i + off;
         if (idx < 0 || idx >= allLines.length) continue;
-        const nums = extractNums(allLines[idx]);
-        if (nums.length >= 2) {
-          results[code] = {
-            budgeted: nums[0],
-            actual:   nums[1],
-            revenue:  extractRevenue(allLines[idx], nums),
-          };
-          break;
-        }
+        const vals = pickValues(allLines[idx]);
+        if (vals) { results[code] = vals; found = true; break; }
       }
-      if (results[code]) break;
+      if (!found) {
+        // 2b: stacked layout
+        const vals = collectStackedValues(i);
+        if (vals) { results[code] = vals; found = true; }
+      }
+      if (found) break;
     }
   }
 
@@ -1451,6 +1524,9 @@ export function AvbDashboard() {
   const [cpFrom, setCpFrom] = useState("");
   const [cpTo, setCpTo] = useState("");
   const [isSeeding, setIsSeeding] = useState(false);
+  // When editing an existing week, lock weekEnd so a re-uploaded CSV doesn't
+  // create a new row instead of overwriting the existing one.
+  const editingOriginalWeekEnd = useRef<string | null>(null);
   const csvRef = useRef<HTMLInputElement>(null);
   const pdfRef = useRef<HTMLInputElement>(null);
 
@@ -1540,12 +1616,28 @@ export function AvbDashboard() {
       try {
         const g = parseGustoCsv(ev.target!.result as string, allEmp);
         setCsvSt(`✓ ${Object.keys(g.employees).length} employees | ${g.weekStart} → ${g.weekEnd}`);
-        if (g.weekEnd) setWeekEnd(g.weekEnd);
+        // Only auto-set weekEnd from CSV when importing a new week, not when
+        // editing an existing one — otherwise a different CSV would create a
+        // duplicate row instead of overwriting the original.
+        if (g.weekEnd && !editingOriginalWeekEnd.current) {
+          setWeekEnd(g.weekEnd);
+          // Warn if this CSV matches a week that already has saved data — the
+          // user should Edit that week instead so their daily AvB data is preserved.
+          const existing = weeks.find(w => w.weekEnd === g.weekEnd);
+          if (existing) {
+            const ok = window.confirm(
+              `A saved entry already exists for the week of ${fmtDate(g.weekEnd)}.\n\n` +
+              `Starting a fresh import will erase that week's daily AvB data (budgeted hours, actual hours, revenue).\n\n` +
+              `Click OK to continue and overwrite, or Cancel to go back and use "Edit Week" instead.`
+            );
+            if (!ok) { setCsvSt(""); return; }
+          }
+        }
         setWd(d=>({...d,gusto:g}));
       } catch(e) { setCsvSt("Error: "+String(e)); }
     };
     r.readAsText(file);
-  }, [allEmp]);
+  }, [allEmp, weeks]);
 
   // PDF
   const handlePdf = useCallback(async (file: File, di: number) => {
@@ -1617,6 +1709,7 @@ export function AvbDashboard() {
     if (!weekEnd) return;
     try {
       await upsert.mutateAsync({weekEnd,data:wd});
+      editingOriginalWeekEnd.current = null;
       setTab("summary");
     } catch(e) {
       alert("Save failed: " + String(e));
@@ -1624,6 +1717,7 @@ export function AvbDashboard() {
   }, [weekEnd, wd, upsert]);
 
   const handleEditWeek = useCallback((w: AvbWeek) => {
+    editingOriginalWeekEnd.current = w.weekEnd;
     setWd(w.data);
     setWeekEnd(w.weekEnd);
     setImportDay(0);
@@ -1633,9 +1727,9 @@ export function AvbDashboard() {
   }, []);
 
   const handleImportNew = useCallback(() => {
-    // Reset wd to a fresh week (clears any in-progress gusto data so the
-    // useEffect above re-applies current defAssignments).
+    editingOriginalWeekEnd.current = null;
     setWd(defaultWeekData(defAssignments, crewDefs));
+    setWeekEnd(thisSunday());
     setImportDay(0);
     setCsvSt("");
     setPdfSt({});

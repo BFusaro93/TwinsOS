@@ -88,8 +88,8 @@ const PRESET_SCENARIOS: Scenario[] = [
 ];
 
 // ── Core calculation engine ───────────────────────────────────────────────────
-// Formula matches the Excel model:
-//   - All hours (reg + OT) billed at base wage — no 1.5x OT premium in rate calc
+// Formula:
+//   - Regular hours at base wage, OT hours at 1.5× base wage
 //   - Billable hours = totalHours × (1 − nonBillable%)
 //   - OH and labor spread over billable hours
 //   - Bid rate = breakEven / (1 − profit%)
@@ -122,9 +122,8 @@ function compute(i: Inputs): Computed {
   const totalHours = totalRegHours + totalOTHours;
   const billableHours = totalHours * (1 - i.nonBillablePct / 100);
 
-  // All hours at base wage — matches Excel (OT hours count toward capacity,
-  // no premium applied in the blended rate model)
-  const totalDirectLabor = totalHours * i.fieldEmpWage;
+  // OT hours paid at 1.5× base wage; regular hours at 1×
+  const totalDirectLabor = totalRegHours * i.fieldEmpWage + totalOTHours * i.fieldEmpWage * 1.5;
   const burdenPct = i.ficaPct + i.workCompPct + i.suiPct + i.fuiPct + i.pfmlPct;
   const burdenAmount = totalDirectLabor * (burdenPct / 100);
   const totalLaborCost = totalDirectLabor + burdenAmount;
