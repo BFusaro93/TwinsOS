@@ -1817,7 +1817,7 @@ export function AvbDashboard() {
       ) : (
         <>
           {(tab==="summary" || tab==="daily") && weeks.length > 0 && (() => {
-            const PAGE = 6;
+            const PAGE = 10;
             // Window: show up to PAGE weeks ending at curIdx (or the last PAGE if curIdx near end)
             const windowEnd = Math.max(PAGE - 1, curIdx);
             const windowStart = Math.max(0, windowEnd - PAGE + 1);
@@ -1826,6 +1826,7 @@ export function AvbDashboard() {
             const canRight = windowEnd < weeks.length - 1;
             return (
               <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs font-semibold uppercase tracking-widest text-slate-400">Week:</span>
                 <button
                   disabled={curIdx <= 0}
                   onClick={() => setViewWeekEnd(weeks[curIdx - 1].weekEnd)}

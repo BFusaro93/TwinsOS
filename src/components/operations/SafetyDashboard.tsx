@@ -291,7 +291,7 @@ export function SafetyDashboard() {
             title="Previous week"
           >&#8592;</button>
           {(() => {
-            const PAGE = 8;
+            const PAGE = 10;
             const windowEnd = Math.max(PAGE - 1, curIdx);
             const windowStart = Math.max(0, windowEnd - PAGE + 1);
             const visible = weeks.slice(windowStart, windowEnd + 1);
