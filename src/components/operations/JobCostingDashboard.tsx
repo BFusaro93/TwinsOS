@@ -452,7 +452,7 @@ function CalculatorTab({ inputs, setInputs }: { inputs: Inputs; setInputs: (i: I
               <ResultRow label="Other Overhead/hr" value={fmtDollar(c.otherOHPerHour)} muted />
               <ResultRow label="Liabilities/hr" value={fmtDollar(c.liabilitiesPerHour)} muted />
               <div className="my-1 border-t border-slate-100" />
-              <ResultRow label="Overhead / Billable Hour" value={fmtDollar(c.ohPerHour)} bold />
+              <ResultRow label="Fixed OH / Reg Hr" value={fmtDollar(c.ohPerHour)} bold />
               <div className="my-1 border-t border-slate-100" />
               <ResultRow label="Base Cost (if 100% billable)" value={fmtDollar(c.baseBreakEven)} muted />
               <ResultRow label={`Non-billable uplift (${fmtPct(inputs.nonBillablePct)} of hrs)`} value={`+${fmtDollar(c.nonBillablePerHour)}`} muted />
@@ -668,7 +668,7 @@ function ScenariosTab({
                 /* ── Summary view ── */
                 <div className="p-4 space-y-1.5">
                   <div className="flex justify-between text-xs"><span className="text-slate-500">Labor/hr</span><span className="font-medium text-slate-700">{fmtDollar(c.laborPerHour)}</span></div>
-                  <div className="flex justify-between text-xs"><span className="text-slate-500">Overhead/hr</span><span className="font-medium text-slate-700">{fmtDollar(c.ohPerHour)}</span></div>
+                  <div className="flex justify-between text-xs"><span className="text-slate-500">Fixed OH/reg hr</span><span className="font-medium text-slate-700">{fmtDollar(c.ohPerHour)}</span></div>
                   <div className="flex justify-between text-xs"><span className="text-slate-500">Break-even</span><span className="font-medium text-slate-700">{fmtDollar(c.breakEven)}</span></div>
                   <div className="my-1.5 border-t border-slate-100" />
                   <div className="flex justify-between text-xs"><span className="text-slate-500">Employees</span><span className="font-medium text-slate-700">{s.inputs.numFieldEmp}</span></div>

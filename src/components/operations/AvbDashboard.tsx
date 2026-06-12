@@ -12,7 +12,7 @@ import {
   type AvbWeekData, type GustoData, type EmpData,
 } from "@/lib/hooks/use-avb-weeks";
 import {
-  useAvbEmployees, useUpsertAvbEmployee,
+  useAvbEmployees, useUpsertAvbEmployee, useDeleteAvbEmployee,
   type AvbEmployee, type UpsertEmpPayload,
 } from "@/lib/hooks/use-avb-employees";
 import {
@@ -750,15 +750,16 @@ function History({ weeks, crewDefs, onEditWeek, onDeleteWeek }: HistoryProps) {
         <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-slate-400">Weekly Log</p>
         <div className="overflow-hidden rounded-lg border bg-white shadow-sm">
           <table className="w-full text-sm">
-            <thead className="bg-slate-50"><tr><Th>Week</Th><Th right>Budgeted</Th><Th right>On-Site</Th><Th right>Gusto Clocked</Th><Th right>Indirect Gap</Th><Th right>Efficiency</Th><Th>{""}</Th></tr></thead>
+            <thead className="bg-slate-50"><tr><Th>Week</Th><Th right>Budgeted</Th><Th right>On-Site</Th><Th right>AvB Var</Th><Th right>Gusto Clocked</Th><Th right>Indirect Gap</Th><Th right>Efficiency</Th><Th>{""}</Th></tr></thead>
             <tbody className="divide-y divide-slate-100">
               {[...weeks].reverse().map(w=>{
                 let tG=0,tO=0,tB=0;
                 crewDefs.forEach(cr=>{for(let d=0;d<7;d++){tO+=pf(w.data.days[d]?.avb[cr.code]?.actual);tB+=pf(w.data.days[d]?.avb[cr.code]?.budgeted);(w.data.days[d]?.assignments[cr.code]??[]).forEach(u=>{tG+=getHrsOnDay(w.data.gusto,u,d);});}});
-                const gap=tG>0?tG-tO:null; const ep=tG>0?Math.round(tO/tG*100):null;
+                const avbVar=tB-tO; const gap=tG>0?tG-tO:null; const ep=tG>0?Math.round(tO/tG*100):null;
                 return (<tr key={w.weekEnd} className="hover:bg-slate-50">
                   <td className="py-3 pl-4 font-medium">Week of {fmtDate(w.weekEnd)}</td>
                   <Td right>{tB.toFixed(1)}</Td><Td right>{tO.toFixed(1)}</Td>
+                  <Td right><span className={avbVar>=0?"text-green-600":"text-red-600"}>{avbVar>=0?"+":""}{avbVar.toFixed(1)}</span></Td>
                   <Td right>{tG>0?tG.toFixed(1):"—"}</Td>
                   <Td right>{gap!==null?<span className={Math.abs(gap)>10?"text-red-600":"text-green-600"}>{gap>=0?"+":""}{gap.toFixed(1)}</span>:"—"}</Td>
                   <Td right>{ep!==null?<span className={`${epBadge(ep)} rounded-full px-2 py-0.5 text-xs font-semibold`}>{ep}%</span>:"—"}</Td>
@@ -1128,6 +1129,7 @@ interface SettingsProps {
   crewDefs: CrewDef[];
   dbEmployees: AvbEmployee[] | undefined;
   onUpsert: (emp: UpsertEmpPayload) => void;
+  onDeleteEmployee: (id: string) => void;
   isUpserting: boolean;
   onSeedRoster: () => Promise<void>;
   isSeeding: boolean;
@@ -1137,7 +1139,7 @@ interface SettingsProps {
   dbCrews: import("@/lib/hooks/use-avb-crews").AvbCrew[] | undefined;
 }
 
-function Settings({ crewDefs, dbEmployees, onUpsert, isUpserting, onSeedRoster, isSeeding, onUpsertCrew, onDeleteCrew, isUpsertingCrew, dbCrews }: SettingsProps) {
+function Settings({ crewDefs, dbEmployees, onUpsert, onDeleteEmployee, isUpserting, onSeedRoster, isSeeding, onUpsertCrew, onDeleteCrew, isUpsertingCrew, dbCrews }: SettingsProps) {
   // ── Crew form state ──────────────────────────────────────────────────────────
   const [crewEditId, setCrewEditId] = useState<string | null>(null);
   const [crewForm, setCrewForm] = useState<{code: string; name: string} | null>(null);
@@ -1462,10 +1464,16 @@ function Settings({ crewDefs, dbEmployees, onUpsert, isUpserting, onSeedRoster, 
                       ><Pencil className="h-3.5 w-3.5" /></button>
                       <button
                         onClick={() => { if (confirm(`Deactivate ${emp.name}? They'll be removed from crew lists but historical data is preserved.`)) setActive(emp, false); }}
-                        title="Deactivate"
-                        className="text-slate-400 hover:text-red-500"
+                        title="Deactivate (keeps history)"
+                        className="text-slate-400 hover:text-amber-500"
                         disabled={isUpserting}
                       ><X className="h-3.5 w-3.5" /></button>
+                      <button
+                        onClick={() => { if (confirm(`Permanently delete ${emp.name}? Use this only for duplicate entries — this cannot be undone.`)) onDeleteEmployee(emp.id); }}
+                        title="Delete (duplicate entry)"
+                        className="text-slate-400 hover:text-red-500"
+                        disabled={isUpserting}
+                      ><Trash2 className="h-3.5 w-3.5" /></button>
                     </div>
                   </td>
                 </tr>
@@ -1536,6 +1544,7 @@ export function AvbDashboard() {
 
   const { data: dbEmployees } = useAvbEmployees();
   const upsertEmployee = useUpsertAvbEmployee();
+  const deleteEmployee = useDeleteAvbEmployee();
 
   const { data: dbCrews } = useAvbCrews();
   const upsertCrew = useUpsertAvbCrew();
@@ -1595,7 +1604,16 @@ export function AvbDashboard() {
     return result;
   }, [allEmp, crewDefs]);
 
-  const cur = weeks.length ? weeks[weeks.length-1] : null;
+  const [viewWeekEnd, setViewWeekEnd] = useState<string | null>(null);
+  const curIdx = useMemo(() => {
+    if (!weeks.length) return -1;
+    if (viewWeekEnd) {
+      const i = weeks.findIndex(w => w.weekEnd === viewWeekEnd);
+      return i >= 0 ? i : weeks.length - 1;
+    }
+    return weeks.length - 1;
+  }, [weeks, viewWeekEnd]);
+  const cur = curIdx >= 0 ? weeks[curIdx] : null;
 
   // Keep wd in sync with defAssignments/crewDefs as long as no Gusto CSV has
   // been uploaded yet (weekStart null = fresh/blank import state). This makes
@@ -1710,6 +1728,7 @@ export function AvbDashboard() {
     try {
       await upsert.mutateAsync({weekEnd,data:wd});
       editingOriginalWeekEnd.current = null;
+      setViewWeekEnd(weekEnd);
       setTab("summary");
     } catch(e) {
       alert("Save failed: " + String(e));
@@ -1797,6 +1816,24 @@ export function AvbDashboard() {
         <div className="py-16 text-center text-sm text-slate-400">Loading…</div>
       ) : (
         <>
+          {(tab==="summary" || tab==="daily") && weeks.length > 1 && (
+            <div className="flex items-center justify-center gap-3">
+              <button
+                disabled={curIdx <= 0}
+                onClick={() => setViewWeekEnd(weeks[curIdx - 1].weekEnd)}
+                className="rounded p-1 text-slate-400 hover:text-slate-700 disabled:opacity-30"
+              >&#8592;</button>
+              <span className="min-w-[160px] text-center text-sm font-medium text-slate-600">
+                Week of {cur ? fmtDate(cur.weekEnd) : "—"}
+                {curIdx === weeks.length - 1 && <span className="ml-1.5 rounded-full bg-brand-100 px-2 py-0.5 text-xs font-semibold text-brand-600">Latest</span>}
+              </span>
+              <button
+                disabled={curIdx >= weeks.length - 1}
+                onClick={() => setViewWeekEnd(weeks[curIdx + 1].weekEnd)}
+                className="rounded p-1 text-slate-400 hover:text-slate-700 disabled:opacity-30"
+              >&#8594;</button>
+            </div>
+          )}
           {tab==="summary"  && <Summary cur={cur} employees={allEmp} crewDefs={crewDefs} onEditWeek={handleEditWeek} onImportNew={handleImportNew} />}
           {tab==="daily"    && <Daily cur={cur} employees={allEmp} crewDefs={crewDefs} viewDay={viewDay} setViewDay={setViewDay} />}
           {tab==="history"  && <History weeks={weeks} crewDefs={crewDefs} onEditWeek={handleEditWeek} onDeleteWeek={handleDeleteWeek} />}
@@ -1837,7 +1874,8 @@ export function AvbDashboard() {
               dbCrews={dbCrews}
               dbEmployees={dbEmployees}
               onUpsert={handleUpsertEmployee}
-              isUpserting={upsertEmployee.isPending}
+              onDeleteEmployee={(id) => deleteEmployee.mutate(id)}
+              isUpserting={upsertEmployee.isPending || deleteEmployee.isPending}
               onSeedRoster={handleSeedRoster}
               isSeeding={isSeeding}
               onUpsertCrew={handleUpsertCrew}

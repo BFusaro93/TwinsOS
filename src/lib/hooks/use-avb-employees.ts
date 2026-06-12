@@ -53,6 +53,22 @@ export function useAvbEmployees() {
   });
 }
 
+/** Hard-deletes an employee row (sets deleted_at). For removing duplicate entries. */
+export function useDeleteAvbEmployee() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const supabase = createClient();
+      const { error } = await supabase
+        .from("avb_employees")
+        .update({ deleted_at: new Date().toISOString() })
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["avb-employees"] }),
+  });
+}
+
 /** Upserts an employee. Conflict key: (org_id, uuid). */
 export function useUpsertAvbEmployee() {
   const qc = useQueryClient();
