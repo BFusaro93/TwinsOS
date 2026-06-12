@@ -1816,24 +1816,45 @@ export function AvbDashboard() {
         <div className="py-16 text-center text-sm text-slate-400">Loading…</div>
       ) : (
         <>
-          {(tab==="summary" || tab==="daily") && weeks.length > 1 && (
-            <div className="flex items-center justify-center gap-3">
-              <button
-                disabled={curIdx <= 0}
-                onClick={() => setViewWeekEnd(weeks[curIdx - 1].weekEnd)}
-                className="rounded p-1 text-slate-400 hover:text-slate-700 disabled:opacity-30"
-              >&#8592;</button>
-              <span className="min-w-[160px] text-center text-sm font-medium text-slate-600">
-                Week of {cur ? fmtDate(cur.weekEnd) : "—"}
-                {curIdx === weeks.length - 1 && <span className="ml-1.5 rounded-full bg-brand-100 px-2 py-0.5 text-xs font-semibold text-brand-600">Latest</span>}
-              </span>
-              <button
-                disabled={curIdx >= weeks.length - 1}
-                onClick={() => setViewWeekEnd(weeks[curIdx + 1].weekEnd)}
-                className="rounded p-1 text-slate-400 hover:text-slate-700 disabled:opacity-30"
-              >&#8594;</button>
-            </div>
-          )}
+          {(tab==="summary" || tab==="daily") && weeks.length > 0 && (() => {
+            const PAGE = 6;
+            // Window: show up to PAGE weeks ending at curIdx (or the last PAGE if curIdx near end)
+            const windowEnd = Math.max(PAGE - 1, curIdx);
+            const windowStart = Math.max(0, windowEnd - PAGE + 1);
+            const visible = weeks.slice(windowStart, windowEnd + 1);
+            const canLeft = windowStart > 0;
+            const canRight = windowEnd < weeks.length - 1;
+            return (
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  disabled={curIdx <= 0}
+                  onClick={() => setViewWeekEnd(weeks[curIdx - 1].weekEnd)}
+                  className="rounded p-1.5 text-slate-400 hover:text-slate-700 disabled:opacity-30"
+                  title="Previous week"
+                >&#8592;</button>
+                {canLeft && <span className="text-xs text-slate-300">…</span>}
+                {visible.map(w => (
+                  <button
+                    key={w.weekEnd}
+                    onClick={() => setViewWeekEnd(w.weekEnd)}
+                    className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${w.weekEnd === cur?.weekEnd ? "bg-brand-500 text-white" : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}
+                  >
+                    {fmtDate(w.weekEnd)}
+                    {w.weekEnd === weeks[weeks.length - 1].weekEnd && w.weekEnd !== cur?.weekEnd && (
+                      <span className="ml-1.5 rounded-full bg-brand-100 px-1.5 py-0.5 text-[10px] font-semibold text-brand-600">Latest</span>
+                    )}
+                  </button>
+                ))}
+                {canRight && <span className="text-xs text-slate-300">…</span>}
+                <button
+                  disabled={curIdx >= weeks.length - 1}
+                  onClick={() => setViewWeekEnd(weeks[curIdx + 1].weekEnd)}
+                  className="rounded p-1.5 text-slate-400 hover:text-slate-700 disabled:opacity-30"
+                  title="Next week"
+                >&#8594;</button>
+              </div>
+            );
+          })()}
           {tab==="summary"  && <Summary cur={cur} employees={allEmp} crewDefs={crewDefs} onEditWeek={handleEditWeek} onImportNew={handleImportNew} />}
           {tab==="daily"    && <Daily cur={cur} employees={allEmp} crewDefs={crewDefs} viewDay={viewDay} setViewDay={setViewDay} />}
           {tab==="history"  && <History weeks={weeks} crewDefs={crewDefs} onEditWeek={handleEditWeek} onDeleteWeek={handleDeleteWeek} />}

@@ -284,15 +284,37 @@ export function SafetyDashboard() {
         {/* Week selector */}
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-xs font-semibold uppercase tracking-widest text-slate-400">Week:</span>
-          {weeks.map(w => (
-            <button
-              key={w.weekEnd}
-              onClick={() => setViewWeekEnd(w.weekEnd)}
-              className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${w.weekEnd === curWeek?.weekEnd ? "bg-brand-500 text-white" : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}
-            >
-              {w.data.label || fmtDate(w.weekEnd)}
-            </button>
-          ))}
+          <button
+            disabled={curIdx <= 0}
+            onClick={() => setViewWeekEnd(weeks[curIdx - 1].weekEnd)}
+            className="rounded p-1.5 text-slate-400 hover:text-slate-700 disabled:opacity-30"
+            title="Previous week"
+          >&#8592;</button>
+          {(() => {
+            const PAGE = 8;
+            const windowEnd = Math.max(PAGE - 1, curIdx);
+            const windowStart = Math.max(0, windowEnd - PAGE + 1);
+            const visible = weeks.slice(windowStart, windowEnd + 1);
+            return (<>
+              {windowStart > 0 && <span className="text-xs text-slate-300">…</span>}
+              {visible.map(w => (
+                <button
+                  key={w.weekEnd}
+                  onClick={() => setViewWeekEnd(w.weekEnd)}
+                  className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${w.weekEnd === curWeek?.weekEnd ? "bg-brand-500 text-white" : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}
+                >
+                  {w.data.label || fmtDate(w.weekEnd)}
+                </button>
+              ))}
+              {windowEnd < weeks.length - 1 && <span className="text-xs text-slate-300">…</span>}
+            </>);
+          })()}
+          <button
+            disabled={curIdx >= weeks.length - 1}
+            onClick={() => setViewWeekEnd(weeks[curIdx + 1].weekEnd)}
+            className="rounded p-1.5 text-slate-400 hover:text-slate-700 disabled:opacity-30"
+            title="Next week"
+          >&#8594;</button>
           <div className="ml-auto flex gap-2">
             <button
               onClick={() => {
