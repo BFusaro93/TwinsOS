@@ -88,11 +88,13 @@ const PRESET_SCENARIOS: Scenario[] = [
 ];
 
 // ── Core calculation engine ───────────────────────────────────────────────────
-// Formula:
-//   - Regular hours at base wage, OT hours at 1.5× base wage
-//   - Billable hours = totalHours × (1 − nonBillable%)
-//   - OH and labor spread over billable hours
-//   - Bid rate = breakEven / (1 − profit%)
+// Matches the Excel model (Book2.xlsx):
+//   1. Blended wage  = OT_wage × (OT_hrs/Reg_hrs) + Reg_wage × (1 − OT_hrs/Reg_hrs)
+//   2. Labor/hr      = blended_wage × (1 + burden%)
+//   3. OH total      = ohPayroll + otherOH + liabilities + ohPayroll × burden%
+//   4. OH/hr         = OH total ÷ (reg_hrs + OT_hrs)
+//   5. Break-even    = (OH/hr + Labor/hr) × (1 + nonBillable%)   ← additive markup
+//   6. Bid rate      = break-even × (1 + profit%)                ← additive markup
 
 interface Computed {
   totalRegHours: number;
@@ -120,28 +122,38 @@ function compute(i: Inputs): Computed {
   const totalRegHours = i.numFieldEmp * i.fieldHrsReg;
   const totalOTHours = i.numFieldEmp * i.fieldHrsOT;
   const totalHours = totalRegHours + totalOTHours;
+  const billableHours = totalHours * (1 - i.nonBillablePct / 100); // for display only
 
-  // Billable capacity is based on regular hours only — OT is extra cost, not
-  // extra sellable capacity. This ensures more OT always raises the bid rate.
-  const billableHours = totalRegHours * (1 - i.nonBillablePct / 100);
-
-  // Regular hours at 1×, OT hours at 1.5× base wage
-  const totalDirectLabor = totalRegHours * i.fieldEmpWage + totalOTHours * i.fieldEmpWage * 1.5;
   const burdenPct = i.ficaPct + i.workCompPct + i.suiPct + i.fuiPct + i.pfmlPct;
+
+  // Blended wage: weight OT and regular rates by OT_hrs/Reg_hrs (Excel B11/B12 formula)
+  const otPct  = totalRegHours > 0 ? totalOTHours / totalRegHours : 0;
+  const regPct = 1 - otPct;
+  const blendedWage = i.fieldEmpWage * 1.5 * otPct + i.fieldEmpWage * regPct;
+  const laborPerHour = blendedWage * (1 + burdenPct / 100);
+
+  // Total direct labor (for display summary rows)
+  const totalDirectLabor = totalHours * blendedWage;
   const burdenAmount = totalDirectLabor * (burdenPct / 100);
   const totalLaborCost = totalDirectLabor + burdenAmount;
 
-  const totalOverhead = i.ohPayroll + i.otherOH + i.liabilities;
+  // Overhead: includes burden on admin payroll (Excel H8 = H5 × burden%)
+  const ohPayrollBurden = i.ohPayroll * (burdenPct / 100);
+  const totalOverhead = i.ohPayroll + i.otherOH + i.liabilities + ohPayrollBurden;
 
-  const laborPerHour = billableHours > 0 ? totalLaborCost / billableHours : 0;
-  const ohPayrollPerHour = billableHours > 0 ? i.ohPayroll / billableHours : 0;
-  const otherOHPerHour = billableHours > 0 ? i.otherOH / billableHours : 0;
-  const liabilitiesPerHour = billableHours > 0 ? i.liabilities / billableHours : 0;
-  const ohPerHour = ohPayrollPerHour + otherOHPerHour + liabilitiesPerHour;
-  const breakEven = laborPerHour + ohPerHour;
-  const baseBreakEven = totalRegHours > 0 ? (totalLaborCost + totalOverhead) / totalRegHours : 0;
+  // OH/hr spreads over ALL hours (reg + OT), matching Excel H10
+  const ohPerHour         = totalHours > 0 ? totalOverhead / totalHours : 0;
+  const ohPayrollPerHour  = totalHours > 0 ? (i.ohPayroll + ohPayrollBurden) / totalHours : 0;
+  const otherOHPerHour    = totalHours > 0 ? i.otherOH / totalHours : 0;
+  const liabilitiesPerHour = totalHours > 0 ? i.liabilities / totalHours : 0;
+
+  // Break-even grosses up for non-billable time as an additive markup (Excel K8)
+  const baseBreakEven = laborPerHour + ohPerHour;
+  const breakEven = baseBreakEven * (1 + i.nonBillablePct / 100);
   const nonBillablePerHour = breakEven - baseBreakEven;
-  const bidRate = i.profitPct < 100 ? breakEven / (1 - i.profitPct / 100) : 0;
+
+  // Bid rate = break-even × (1 + profit%) — additive markup, not margin (Excel K10)
+  const bidRate = breakEven * (1 + i.profitPct / 100);
   const profitPerHour = bidRate - breakEven;
 
   return {
