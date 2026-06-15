@@ -128,7 +128,14 @@ export function AnnotationEditor({ photoId, projectId }: AnnotationEditorProps) 
         canvas.renderAll();
 
         if (existingAnnotation?.fabricJson) {
-          await canvas.loadFromJSON(existingAnnotation.fabricJson);
+          // Strip backgroundImage from saved JSON before loading — the saved
+          // value is a blob: URL from a previous session and is now invalid.
+          // We re-apply the freshly-fetched img as backgroundImage after load.
+          const { backgroundImage: _bg, ...annotationObjects } = existingAnnotation.fabricJson as Record<string, unknown>;
+          await canvas.loadFromJSON(annotationObjects);
+          // loadFromJSON replaces the entire canvas state — re-apply our image.
+          img.set({ left: 0, top: 0, originX: "left", originY: "top", scaleX: scale, scaleY: scale, selectable: false, evented: false });
+          canvas.backgroundImage = img;
           canvas.renderAll();
         }
 
@@ -182,7 +189,9 @@ export function AnnotationEditor({ photoId, projectId }: AnnotationEditorProps) 
   async function handleSave() {
     const canvas = fabricRef.current;
     if (!canvas) return;
-    const fabricJson = canvas.toJSON() as Record<string, unknown>;
+    // Exclude backgroundImage — it's a blob: URL valid only for this session.
+    // We re-fetch and re-apply it from publicUrl on every load.
+    const { backgroundImage: _bg, ...fabricJson } = canvas.toJSON() as Record<string, unknown>;
     const blob: Blob = await new Promise((res, rej) =>
       canvas.getElement().toBlob(
         (b: Blob | null) => (b ? res(b) : rej(new Error("toBlob failed"))),
@@ -200,7 +209,7 @@ export function AnnotationEditor({ photoId, projectId }: AnnotationEditorProps) 
     saveAnnotation(
       { fabricJson, compositeBlob: blob, orgId: profile.org_id },
       {
-        onSuccess: () => { toast.success("Annotation saved"); router.push(`/jobs/${projectId}/photos`); },
+        onSuccess: () => { toast.success("Annotation saved"); router.push(`/photos/jobs/${projectId}`); },
         onError:   () => toast.error("Failed to save annotation"),
       },
     );

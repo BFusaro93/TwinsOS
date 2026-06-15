@@ -71,10 +71,14 @@ export function PhotoLightbox({
   const isVideo = photo.mimeType?.startsWith("video/");
   const ext = photo.fileName.split(".").pop()?.toUpperCase() ?? "FILE";
 
-  // Active URL: show annotated composite if available, otherwise original
+  // Active URL: show annotated composite if available, otherwise original.
+  // imgSrc degrades to publicUrl if the annotated composite fails to load.
   const activeUrl = photo.annotatedUrl ?? photo.publicUrl;
+  const [imgSrc, setImgSrc] = useState(activeUrl);
 
   const backdropRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => { setImgSrc(activeUrl); }, [activeUrl]);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -118,12 +122,13 @@ export function PhotoLightbox({
             </button>
           )}
 
-          {isImage && activeUrl ? (
+          {isImage && imgSrc ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
-              src={activeUrl}
+              src={imgSrc}
               alt={photo.fileName}
               className="max-h-[80vh] max-w-full rounded-md object-contain shadow-2xl"
+              onError={() => { if (photo.publicUrl && imgSrc !== photo.publicUrl) setImgSrc(photo.publicUrl); }}
             />
           ) : isVideo ? (
             <video
