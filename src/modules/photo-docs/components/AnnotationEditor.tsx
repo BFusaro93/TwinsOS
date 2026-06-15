@@ -115,9 +115,18 @@ export function AnnotationEditor({ photoId, projectId }: AnnotationEditorProps) 
         const naturalW = el?.naturalWidth  || img.width  || 900;
         const naturalH = el?.naturalHeight || img.height || 600;
 
-        // Scale to fill available container width (minus padding), max 1 (no upscale)
-        const containerW = (containerRef.current?.clientWidth  ?? 900) - 32;
-        const containerH = (containerRef.current?.clientHeight ?? 600) - 32;
+        // Wait two animation frames so the flex layout has fully settled before
+        // reading container dimensions — on mobile the initial clientHeight is
+        // often 0 before the browser calculates the flex-1 height.
+        await new Promise<void>(res => requestAnimationFrame(() => requestAnimationFrame(() => res())));
+        if (disposed) return;
+
+        // Scale to fill available container, falling back to window dimensions
+        // on mobile where the container may not yet have a measured height.
+        const cw = containerRef.current?.clientWidth  || window.innerWidth;
+        const ch = containerRef.current?.clientHeight || Math.floor(window.innerHeight * 0.55);
+        const containerW = cw - 32;
+        const containerH = ch - 32;
         const scale = Math.min(containerW / naturalW, containerH / naturalH, 1);
         const w = Math.round(naturalW * scale);
         const h = Math.round(naturalH * scale);
@@ -227,22 +236,40 @@ export function AnnotationEditor({ photoId, projectId }: AnnotationEditorProps) 
   // approach across all browsers — no Fabric event API uncertainty, no
   // addEventListener-on-internal-element race conditions.
   // We compute canvas-relative coords by subtracting the upper canvas's rect.
-  function getCanvasCoords(e: React.MouseEvent): { x: number; y: number } {
+  function getCanvasCoords(clientX: number, clientY: number): { x: number; y: number } {
     // Use the lower canvas element (canvasRef) — it's a React-owned element
     // whose position we can trust. The upper canvas was the previous choice but
     // it was permanently hidden (Fabric copied the "hidden" className at init).
     const el = canvasRef.current;
     if (!el) return { x: 0, y: 0 };
     const rect = el.getBoundingClientRect();
-    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    return { x: clientX - rect.left, y: clientY - rect.top };
   }
 
   function handleCanvasMouseDown(e: React.MouseEvent) {
     if (!fabricReady) return;
-    drawStartRef.current = getCanvasCoords(e);
+    drawStartRef.current = getCanvasCoords(e.clientX, e.clientY);
+  }
+
+  function handleTouchStart(e: React.TouchEvent) {
+    if (!fabricReady || e.touches.length !== 1) return;
+    const t = e.touches[0];
+    drawStartRef.current = getCanvasCoords(t.clientX, t.clientY);
+  }
+
+  function handleTouchEnd(e: React.TouchEvent) {
+    if (!fabricReady || e.changedTouches.length !== 1) return;
+    e.preventDefault();
+    const t = e.changedTouches[0];
+    // Synthesize a mouse-up–style call by temporarily pointing clientX/Y
+    handleCanvasMouseUpCoords(t.clientX, t.clientY);
   }
 
   function handleCanvasMouseUp(e: React.MouseEvent) {
+    handleCanvasMouseUpCoords(e.clientX, e.clientY);
+  }
+
+  function handleCanvasMouseUpCoords(clientX: number, clientY: number) {
     const canvas = fabricRef.current;
     if (!canvas || !fabricReady) return;
     // If Fabric fired object:moving, the user was dragging an existing object —
@@ -257,7 +284,7 @@ export function AnnotationEditor({ photoId, projectId }: AnnotationEditorProps) 
     if (!drawStartRef.current) return;
 
     const start = drawStartRef.current;
-    const end   = getCanvasCoords(e);
+    const end   = getCanvasCoords(clientX, clientY);
     const c     = colorRef.current;
     const dx    = Math.abs(end.x - start.x);
     const dy    = Math.abs(end.y - start.y);
@@ -293,7 +320,7 @@ export function AnnotationEditor({ photoId, projectId }: AnnotationEditorProps) 
   ];
 
   return (
-    <div className="flex h-full flex-col gap-4">
+    <div className="flex min-h-0 flex-1 flex-col gap-4">
       {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-3 rounded-xl border border-[#3a3a3a] bg-[#2a2a2a] p-3">
         <div className="flex items-center gap-1">
@@ -364,9 +391,11 @@ export function AnnotationEditor({ photoId, projectId }: AnnotationEditorProps) 
           Instead, cover with an absolute spinner overlay during load. */}
       <div
         ref={containerRef}
-        className="relative flex flex-1 items-center justify-center overflow-auto rounded-xl border border-[#3a3a3a] bg-[#111111] p-4"
+        className="relative flex min-h-0 flex-1 items-center justify-center overflow-auto rounded-xl border border-[#3a3a3a] bg-[#111111] p-4"
         onMouseDown={handleCanvasMouseDown}
         onMouseUp={handleCanvasMouseUp}
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
       >
         <canvas ref={canvasRef} />
         {!fabricReady && (
