@@ -91,9 +91,12 @@ export function AnnotationEditor({ photoId, projectId }: AnnotationEditorProps) 
       canvas.freeDrawingBrush.color = colorRef.current;
       canvas.freeDrawingBrush.width = 4;
 
-      // Track when the user drags an existing object so mouseup doesn't also
-      // draw a new shape.
-      canvas.on("object:moving", () => { isDraggingObjectRef.current = true; });
+      // Track when the user interacts with an existing object so mouseup doesn't
+      // also draw a new shape.
+      const setDragging = () => { isDraggingObjectRef.current = true; };
+      canvas.on("object:moving",  setDragging);
+      canvas.on("object:scaling", setDragging);
+      canvas.on("object:rotating", setDragging);
 
       // ── Load image ──────────────────────────────────────────────────────────
       const ImageClass: { fromURL: (url: string) => Promise<FabricCanvas> } =
