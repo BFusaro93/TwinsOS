@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { formatDate } from "@/lib/utils";
 import { useUpdatePhoto } from "../hooks/useJobPhotos";
+import { useClearAnnotation } from "../hooks/useAnnotations";
 import type { JobPhoto } from "../types/photo.types";
 
 interface PhotoLightboxProps {
@@ -39,6 +40,7 @@ export function PhotoLightbox({
   const [editingMeta, setEditingMeta] = useState(false);
   const [metaForm, setMetaForm] = useState({ displayName: "", beforeAfter: "none" as JobPhoto["beforeAfter"], notes: "", tags: "" });
   const { mutate: updatePhoto, isPending: savingMeta } = useUpdatePhoto(projectId ?? photo.photoJobId);
+  const { mutate: clearAnnotation, isPending: clearingAnnotation } = useClearAnnotation(photo.id, projectId ?? photo.photoJobId);
 
   function openMetaEdit() {
     setMetaForm({
@@ -308,6 +310,22 @@ export function PhotoLightbox({
               >
                 <Pencil className="h-3.5 w-3.5" />
                 {photo.hasAnnotations ? "Edit Annotation" : "Annotate"}
+              </Button>
+            )}
+
+            {canAnnotate && photo.hasAnnotations && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="w-full gap-1.5 border-slate-600 text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+                disabled={clearingAnnotation}
+                onClick={() => {
+                  if (confirm("Remove annotation from this photo? The original photo is kept.")) {
+                    clearAnnotation(undefined, { onSuccess: () => toast.success("Annotation removed") });
+                  }
+                }}
+              >
+                <X className="h-3.5 w-3.5" /> Remove Annotation
               </Button>
             )}
 

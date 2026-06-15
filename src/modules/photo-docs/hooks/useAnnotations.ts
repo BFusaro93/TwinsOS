@@ -33,6 +33,28 @@ export function usePhotoAnnotation(photoId: string | null) {
   });
 }
 
+export function useClearAnnotation(photoId: string, projectId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const db = createClient() as any;
+      const { error: annErr } = await db.from("photo_annotations")
+        .delete().eq("photo_id", photoId);
+      if (annErr) throw annErr;
+      const { error: photoErr } = await db.from("job_photos").update({
+        has_annotations: false, annotated_path: null,
+        updated_at: new Date().toISOString(),
+      }).eq("id", photoId);
+      if (photoErr) throw photoErr;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["photo-annotation", photoId] });
+      qc.invalidateQueries({ queryKey: ["job-photo", photoId] });
+      qc.invalidateQueries({ queryKey: ["job-photos", projectId] });
+    },
+  });
+}
+
 export function useSaveAnnotation(photoId: string, projectId: string) {
   const qc = useQueryClient();
   const { currentUser } = useCurrentUserStore();

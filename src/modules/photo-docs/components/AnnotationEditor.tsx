@@ -45,6 +45,9 @@ export function AnnotationEditor({ photoId, projectId }: AnnotationEditorProps) 
   const colorRef   = useRef<DrawColor>("#ef4444");
   // Track mouse-down position for drag-based tools (arrow)
   const drawStartRef = useRef<{ x: number; y: number } | null>(null);
+  // Set by Fabric's object:moving event — prevents mouseup from drawing a new
+  // shape when the user was dragging an existing object.
+  const isDraggingObjectRef = useRef(false);
 
   const [tool,  setToolState]  = useState<DrawTool>("select");
   const [color, setColorState] = useState<DrawColor>("#ef4444");
@@ -87,6 +90,10 @@ export function AnnotationEditor({ photoId, projectId }: AnnotationEditorProps) 
       canvas.freeDrawingBrush = new fabric.PencilBrush(canvas);
       canvas.freeDrawingBrush.color = colorRef.current;
       canvas.freeDrawingBrush.width = 4;
+
+      // Track when the user drags an existing object so mouseup doesn't also
+      // draw a new shape.
+      canvas.on("object:moving", () => { isDraggingObjectRef.current = true; });
 
       // ── Load image ──────────────────────────────────────────────────────────
       const ImageClass: { fromURL: (url: string) => Promise<FabricCanvas> } =
@@ -238,6 +245,13 @@ export function AnnotationEditor({ photoId, projectId }: AnnotationEditorProps) 
   function handleCanvasMouseUp(e: React.MouseEvent) {
     const canvas = fabricRef.current;
     if (!canvas || !fabricReady) return;
+    // If Fabric fired object:moving, the user was dragging an existing object —
+    // don't draw a new shape.
+    if (isDraggingObjectRef.current) {
+      isDraggingObjectRef.current = false;
+      drawStartRef.current = null;
+      return;
+    }
     const t = toolRef.current;
     if (t === "select" || t === "freehand") return;
     if (!drawStartRef.current) return;
