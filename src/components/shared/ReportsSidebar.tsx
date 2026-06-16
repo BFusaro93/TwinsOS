@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { TrendingUp, ArrowLeft, Leaf, ShieldCheck, DollarSign, FileText, Calculator, PenLine, Target } from "lucide-react";
+import { TrendingUp, ArrowLeft, Leaf, ShieldCheck, DollarSign, FileText, Calculator, PenLine, Target, ShieldAlert } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useUIStore, useCurrentUserStore } from "@/stores";
 import { useSettingsStore } from "@/stores/settings-store";
@@ -35,7 +35,8 @@ const REPORTS_NAV: ReportsNavSection[] = [
     label: "Tools",
     items: [
       { label: "Estimate Builder", href: "/dashboards/estimate-builder", icon: PenLine,   hideFromCrew: true},
-      { label: "Job Costing",      href: "/dashboards/job-costing",      icon: Calculator, hideFromCrew: true},
+      { label: "Job Costing",      href: "/dashboards/job-costing",      icon: Calculator,   hideFromCrew: true},
+      { label: "Damage Cases",    href: "/dashboards/damage-cases",    icon: ShieldAlert,  hideFromCrew: true},
     ],
   },
 ];
