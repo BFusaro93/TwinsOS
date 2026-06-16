@@ -16,10 +16,15 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import dynamic from "next/dynamic";
 import { useDamageCases } from "@/lib/hooks/use-damage-cases";
 import { DamageCaseDetailPanel } from "./DamageCaseDetailPanel";
-import { DamageCasesChart } from "./DamageCasesChart";
 import { NewDamageCaseDialog } from "./NewDamageCaseDialog";
+
+const DamageCasesChart = dynamic(
+  () => import("./DamageCasesChart").then((m) => ({ default: m.DamageCasesChart })),
+  { ssr: false, loading: () => <div className="h-64 flex items-center justify-center text-muted-foreground text-sm">Loading chart…</div> }
+);
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { DAMAGE_CASE_STATUS_LABELS, DAMAGE_CASE_TYPE_LABELS } from "@/lib/constants";
 

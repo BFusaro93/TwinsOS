@@ -43,7 +43,6 @@ export const NAV_SECTIONS: NavSection[] = [
     label: "Overview",
     items: [
       { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard, hideFromCrew: true, exact: true },
-      { label: "Damage Cases", href: "/dashboard/damage-cases", icon: ShieldAlert, hideFromCrew: true },
     ],
   },
   {

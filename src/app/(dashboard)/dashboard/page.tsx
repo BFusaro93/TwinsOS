@@ -10,6 +10,7 @@ import {
   AlertTriangle,
   Calendar,
   CheckCircle2,
+  ShieldAlert,
 } from "lucide-react";
 import {
   BarChart,
@@ -32,6 +33,7 @@ import { useAssets } from "@/lib/hooks/use-assets";
 import { usePMSchedules } from "@/lib/hooks/use-pm-schedules";
 import { useProducts } from "@/lib/hooks/use-products";
 import { useRecentActivityFeed } from "@/lib/hooks/use-audit-log";
+import { useDamageCases } from "@/lib/hooks/use-damage-cases";
 import { formatCurrency, getInitials, getAvatarColor, relativeTime } from "@/lib/utils";
 
 const ACTIVITY_TYPE_LABELS: Record<string, string> = {
@@ -78,6 +80,7 @@ export default function DashboardPage() {
   const { data: pmSchedules = [] } = usePMSchedules();
   const { data: products = [] } = useProducts();
   const { data: activityFeed = [] } = useRecentActivityFeed(8);
+  const { data: damageCases = [] } = useDamageCases();
 
   // Build a lookup of productItemId → category so spend charts can filter to maintenance_part only
   const productCategoryMap = useMemo(() => {
@@ -217,6 +220,44 @@ export default function DashboardPage() {
             subLabel="assets in service"
             icon={CheckCircle2}
             href="/cmms/pm-schedules"
+          />
+        </div>
+      </section>
+
+      {/* Damage Cases */}
+      <section>
+        <div className="mb-3 flex items-center justify-between">
+          <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">
+            Damage Cases
+          </p>
+          <a href="/dashboard/damage-cases" className="text-xs text-brand-600 hover:underline">
+            View all →
+          </a>
+        </div>
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+          <StatCard
+            title="Open Cases"
+            value={damageCases.filter((c) => c.status === "open" || c.status === "in_progress").length}
+            icon={ShieldAlert}
+            href="/dashboard/damage-cases"
+          />
+          <StatCard
+            title="Damage — YTD"
+            value={formatCurrency(damageCases.filter((c) => c.caseType === "damage" && new Date(c.dateOfIncident).getFullYear() === today.getFullYear()).reduce((s, c) => s + c.totalCost, 0))}
+            icon={AlertTriangle}
+            href="/dashboard/damage-cases"
+          />
+          <StatCard
+            title="Warranty — YTD"
+            value={formatCurrency(damageCases.filter((c) => c.caseType === "warranty" && new Date(c.dateOfIncident).getFullYear() === today.getFullYear()).reduce((s, c) => s + c.totalCost, 0))}
+            icon={ShieldAlert}
+            href="/dashboard/damage-cases"
+          />
+          <StatCard
+            title="Total Cost YTD"
+            value={formatCurrency(damageCases.filter((c) => new Date(c.dateOfIncident).getFullYear() === today.getFullYear()).reduce((s, c) => s + c.totalCost, 0))}
+            icon={DollarSign}
+            href="/dashboard/damage-cases"
           />
         </div>
       </section>
