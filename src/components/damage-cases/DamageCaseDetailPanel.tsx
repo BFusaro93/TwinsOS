@@ -14,6 +14,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { useDamageCase, useUpdateDamageCase, useDeleteDamageCaseExpense } from "@/lib/hooks/use-damage-cases";
 import { usePurchaseOrders } from "@/lib/hooks/use-purchase-orders";
 import { AddExpenseDialog } from "./AddExpenseDialog";
+import { CommentsSection } from "@/components/shared/CommentsSection";
+import { AuditTrailTab } from "@/components/shared/AuditTrailTab";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { DAMAGE_CASE_STATUS_LABELS, DAMAGE_CASE_TYPE_LABELS } from "@/lib/constants";
 import type { DamageCaseStatus } from "@/types";
@@ -161,62 +164,80 @@ export function DamageCaseDetailPanel({ caseId }: Props) {
         )}
       </div>
 
-      {/* Expenses */}
-      <div className="flex-1 p-6 space-y-4">
-        <div className="flex items-center justify-between">
-          <h3 className="font-semibold text-sm">Expenses</h3>
-          <Button size="sm" variant="outline" onClick={() => setAddExpenseOpen(true)}>
-            <Plus className="h-3.5 w-3.5 mr-1" />
-            Add Expense
-          </Button>
+      {/* Tabbed body */}
+      <Tabs defaultValue="expenses" className="flex-1 flex flex-col min-h-0">
+        <div className="px-6 border-b">
+          <TabsList className="h-9 rounded-none bg-transparent border-0 p-0 gap-4">
+            <TabsTrigger value="expenses" className="rounded-none border-b-2 border-transparent data-[state=active]:border-foreground data-[state=active]:bg-transparent pb-2 px-0 text-sm">Expenses</TabsTrigger>
+            <TabsTrigger value="comments" className="rounded-none border-b-2 border-transparent data-[state=active]:border-foreground data-[state=active]:bg-transparent pb-2 px-0 text-sm">Comments</TabsTrigger>
+            <TabsTrigger value="audit" className="rounded-none border-b-2 border-transparent data-[state=active]:border-foreground data-[state=active]:bg-transparent pb-2 px-0 text-sm">Audit Trail</TabsTrigger>
+          </TabsList>
         </div>
 
-        {expenses.length === 0 ? (
-          <p className="text-sm text-muted-foreground py-4 text-center">No expenses yet. Add the first expense to start tracking costs.</p>
-        ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Date</TableHead>
-                <TableHead>Vendor</TableHead>
-                <TableHead>Description</TableHead>
-                <TableHead className="text-right">Amount</TableHead>
-                <TableHead className="w-8" />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {expenses.map((exp) => (
-                <TableRow key={exp.id}>
-                  <TableCell className="text-sm">{formatDate(exp.expenseDate)}</TableCell>
-                  <TableCell className="text-sm">{exp.vendorName ?? "—"}</TableCell>
-                  <TableCell className="text-sm">{exp.description}</TableCell>
-                  <TableCell className="text-right text-sm">{formatCurrency(exp.amount)}</TableCell>
-                  <TableCell>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="h-7 w-7 text-destructive hover:text-destructive"
-                      onClick={() => deleteExpense.mutate({ id: exp.id, damageCaseId: data.id })}
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        )}
+        <TabsContent value="expenses" className="flex-1 overflow-y-auto p-6 space-y-4 mt-0">
+          <div className="flex items-center justify-between">
+            <h3 className="font-semibold text-sm">Expenses</h3>
+            <Button size="sm" variant="outline" onClick={() => setAddExpenseOpen(true)}>
+              <Plus className="h-3.5 w-3.5 mr-1" />
+              Add Expense
+            </Button>
+          </div>
 
-        {expenses.length > 0 && (
-          <>
-            <Separator />
-            <div className="flex justify-end text-sm font-semibold">
-              <span className="text-muted-foreground mr-4">Total Cost</span>
-              <span>{formatCurrency(data.totalCost)}</span>
-            </div>
-          </>
-        )}
-      </div>
+          {expenses.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-4 text-center">No expenses yet. Add the first expense to start tracking costs.</p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Vendor</TableHead>
+                  <TableHead>Description</TableHead>
+                  <TableHead className="text-right">Amount</TableHead>
+                  <TableHead className="w-8" />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {expenses.map((exp) => (
+                  <TableRow key={exp.id}>
+                    <TableCell className="text-sm">{formatDate(exp.expenseDate)}</TableCell>
+                    <TableCell className="text-sm">{exp.vendorName ?? "—"}</TableCell>
+                    <TableCell className="text-sm">{exp.description}</TableCell>
+                    <TableCell className="text-right text-sm">{formatCurrency(exp.amount)}</TableCell>
+                    <TableCell>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-7 w-7 text-destructive hover:text-destructive"
+                        onClick={() => deleteExpense.mutate({ id: exp.id, damageCaseId: data.id })}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+
+          {expenses.length > 0 && (
+            <>
+              <Separator />
+              <div className="flex justify-end text-sm font-semibold">
+                <span className="text-muted-foreground mr-4">Total Cost</span>
+                <span>{formatCurrency(data.totalCost)}</span>
+              </div>
+            </>
+          )}
+        </TabsContent>
+
+        <TabsContent value="comments" className="flex-1 overflow-y-auto p-6 mt-0">
+          <CommentsSection recordType="damage_case" recordId={data.id} />
+        </TabsContent>
+
+        <TabsContent value="audit" className="flex-1 overflow-y-auto mt-0">
+          <AuditTrailTab recordType="damage_case" recordId={data.id} />
+        </TabsContent>
+      </Tabs>
 
       <AddExpenseDialog damageCaseId={data.id} open={addExpenseOpen} onOpenChange={setAddExpenseOpen} />
     </div>

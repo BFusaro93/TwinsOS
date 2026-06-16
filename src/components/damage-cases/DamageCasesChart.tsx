@@ -30,10 +30,17 @@ export function DamageCasesChart() {
   const [mode, setMode] = useState<ViewMode>("both");
   const currentYear = new Date().getFullYear();
 
+  // Parse YYYY-MM-DD without timezone conversion (new Date("2026-01-01") is UTC
+  // midnight which shifts to Dec 31 in US timezones — split the string instead)
+  const parseLocalDate = (s: string) => {
+    const [y, m, d] = s.split("-").map(Number);
+    return new Date(y, m - 1, d);
+  };
+
   const chartData = useMemo(() => {
     return MONTHS.map((month, idx) => {
       const monthCases = cases.filter((c) => {
-        const d = new Date(c.dateOfIncident);
+        const d = parseLocalDate(c.dateOfIncident);
         return d.getFullYear() === currentYear && d.getMonth() === idx;
       });
       return {
@@ -46,8 +53,8 @@ export function DamageCasesChart() {
     });
   }, [cases, currentYear]);
 
-  const ytdDamage = cases.filter((c) => c.caseType === "damage" && new Date(c.dateOfIncident).getFullYear() === currentYear).reduce((s, c) => s + c.totalCost, 0);
-  const ytdWarranty = cases.filter((c) => c.caseType === "warranty" && new Date(c.dateOfIncident).getFullYear() === currentYear).reduce((s, c) => s + c.totalCost, 0);
+  const ytdDamage = cases.filter((c) => c.caseType === "damage" && parseLocalDate(c.dateOfIncident).getFullYear() === currentYear).reduce((s, c) => s + c.totalCost, 0);
+  const ytdWarranty = cases.filter((c) => c.caseType === "warranty" && parseLocalDate(c.dateOfIncident).getFullYear() === currentYear).reduce((s, c) => s + c.totalCost, 0);
   const ytdTotal = ytdDamage + ytdWarranty;
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -81,14 +88,14 @@ export function DamageCasesChart() {
           <p className="text-xs text-red-600 uppercase tracking-wide">Damage</p>
           <p className="text-2xl font-bold mt-1 text-red-700">{formatCurrency(ytdDamage)}</p>
           <p className="text-xs text-red-500 mt-0.5">
-            {cases.filter((c) => c.caseType === "damage" && new Date(c.dateOfIncident).getFullYear() === currentYear).length} cases
+            {cases.filter((c) => c.caseType === "damage" && parseLocalDate(c.dateOfIncident).getFullYear() === currentYear).length} cases
           </p>
         </div>
         <div className="rounded-lg border bg-purple-50 p-4">
           <p className="text-xs text-purple-600 uppercase tracking-wide">Warranty</p>
           <p className="text-2xl font-bold mt-1 text-purple-700">{formatCurrency(ytdWarranty)}</p>
           <p className="text-xs text-purple-500 mt-0.5">
-            {cases.filter((c) => c.caseType === "warranty" && new Date(c.dateOfIncident).getFullYear() === currentYear).length} cases
+            {cases.filter((c) => c.caseType === "warranty" && parseLocalDate(c.dateOfIncident).getFullYear() === currentYear).length} cases
           </p>
         </div>
       </div>
