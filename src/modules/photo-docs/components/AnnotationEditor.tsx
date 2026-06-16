@@ -156,18 +156,37 @@ export function AnnotationEditor({ photoId, projectId }: AnnotationEditorProps) 
         canvas.renderAll();
 
         if (existingAnnotation?.fabricJson) {
-          // Strip backgroundImage (stale blob: URL) and pull out the saved
-          // canvas dimensions so we can re-scale objects if the canvas is a
-          // different size this time (different device or window size).
-          const { backgroundImage: _bg, _canvasW, _canvasH, ...annotationObjects } =
-            existingAnnotation.fabricJson as Record<string, unknown>;
+          // Strip fields we manage ourselves:
+          //   backgroundImage  — stale blob: URL only valid for this session
+          //   width / height   — Fabric's loadFromJSON would resize the canvas to
+          //                      the saved dimensions, overwriting our setDimensions
+          //                      call above and causing every object to land in the
+          //                      wrong position relative to the current canvas size.
+          //   viewportTransform — any saved pan/zoom would displace all objects.
+          //   _canvasW/_canvasH — our own fields, extracted separately below.
+          const {
+            backgroundImage: _bg,
+            width: _savedW,
+            height: _savedH,
+            viewportTransform: _vt,
+            _canvasW,
+            _canvasH,
+            ...annotationObjects
+          } = existingAnnotation.fabricJson as Record<string, unknown>;
+
           await canvas.loadFromJSON(annotationObjects);
+
+          // Guarantee the canvas stays at the dimensions we measured for the
+          // current container — loadFromJSON can still mutate this in some
+          // Fabric versions even after stripping width/height from the object.
+          canvas.setDimensions({ width: w, height: h });
+          canvas.setViewportTransform([1, 0, 0, 1, 0, 0]);
 
           // Re-scale all objects if the canvas is a different size than when
           // the annotation was saved (e.g. annotated on desktop, viewing on mobile).
-          const savedW = Number(_canvasW);
-          const savedH = Number(_canvasH);
-          if (savedW > 0 && savedH > 0 && (Math.abs(savedW - w) > 1 || Math.abs(savedH - h) > 1)) {
+          const savedW = Number(_canvasW) || Number(_savedW) || 0;
+          const savedH = Number(_canvasH) || Number(_savedH) || 0;
+          if (savedW > 0 && savedH > 0 && (Math.abs(savedW - w) > 2 || Math.abs(savedH - h) > 2)) {
             const rx = w / savedW;
             const ry = h / savedH;
             canvas.getObjects().forEach((obj: FabricCanvas) => {
@@ -181,7 +200,7 @@ export function AnnotationEditor({ photoId, projectId }: AnnotationEditorProps) 
             });
           }
 
-          // loadFromJSON replaces the entire canvas state — re-apply our image.
+          // Re-apply our background image (loadFromJSON cleared canvas state).
           img.set({ left: 0, top: 0, originX: "left", originY: "top", scaleX: scale, scaleY: scale, selectable: false, evented: false });
           canvas.backgroundImage = img;
           canvas.renderAll();
