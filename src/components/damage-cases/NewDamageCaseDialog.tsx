@@ -26,20 +26,24 @@ export function NewDamageCaseDialog({ open, onOpenChange, onCreated }: Props) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const result = await createCase.mutateAsync({
-      caseType,
-      customerName,
-      propertyAddress,
-      dateOfIncident,
-      description,
-    });
-    onCreated?.(result.id);
-    onOpenChange(false);
-    setCaseType("damage");
-    setCustomerName("");
-    setPropertyAddress("");
-    setDateOfIncident("");
-    setDescription("");
+    try {
+      const result = await createCase.mutateAsync({
+        caseType,
+        customerName,
+        propertyAddress,
+        dateOfIncident,
+        description,
+      });
+      onCreated?.(result.id);
+      onOpenChange(false);
+      setCaseType("damage");
+      setCustomerName("");
+      setPropertyAddress("");
+      setDateOfIncident("");
+      setDescription("");
+    } catch {
+      // error displayed below the form via createCase.error
+    }
   };
 
   return (
@@ -85,6 +89,9 @@ export function NewDamageCaseDialog({ open, onOpenChange, onCreated }: Props) {
               placeholder={caseType === "damage" ? "e.g. Siding damage on north wall from mower" : "e.g. Plant died within warranty period — needs replacement"}
             />
           </div>
+          {createCase.error && (
+            <p className="text-sm text-destructive">{String(createCase.error)}</p>
+          )}
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
             <Button type="submit" disabled={createCase.isPending}>
