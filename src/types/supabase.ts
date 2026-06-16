@@ -2253,6 +2253,7 @@ export type Database = {
           invoice_number: string | null
           notes: string | null
           org_id: string
+          check_number: string | null
           payment_booked_in_qb: boolean
           payment_remitted: boolean
           payment_submitted_to_ap: boolean
@@ -2278,6 +2279,7 @@ export type Database = {
           invoice_number?: string | null
           notes?: string | null
           org_id?: string
+          check_number?: string | null
           payment_booked_in_qb?: boolean
           payment_remitted?: boolean
           payment_submitted_to_ap?: boolean
@@ -2303,6 +2305,7 @@ export type Database = {
           invoice_number?: string | null
           notes?: string | null
           org_id?: string
+          check_number?: string | null
           payment_booked_in_qb?: boolean
           payment_remitted?: boolean
           payment_submitted_to_ap?: boolean
