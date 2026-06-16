@@ -45,9 +45,12 @@ export function AnnotationEditor({ photoId, projectId }: AnnotationEditorProps) 
   const colorRef   = useRef<DrawColor>("#ef4444");
   // Track mouse-down position for drag-based tools (arrow)
   const drawStartRef = useRef<{ x: number; y: number } | null>(null);
-  // Set by Fabric's object:moving event — prevents mouseup from drawing a new
-  // shape when the user was dragging an existing object.
+  // Set by Fabric's object:moving/scaling/rotating events — prevents mouseup
+  // from drawing a new shape when the user was interacting with an existing one.
   const isDraggingObjectRef = useRef(false);
+  // Set by Fabric's mouse:down when the click landed on an existing object —
+  // prevents drawing when the user clicks a scale/rotate handle without moving.
+  const clickedOnObjectRef = useRef(false);
 
   const [tool,  setToolState]  = useState<DrawTool>("select");
   const [color, setColorState] = useState<DrawColor>("#ef4444");
@@ -94,9 +97,15 @@ export function AnnotationEditor({ photoId, projectId }: AnnotationEditorProps) 
       // Track when the user interacts with an existing object so mouseup doesn't
       // also draw a new shape.
       const setDragging = () => { isDraggingObjectRef.current = true; };
-      canvas.on("object:moving",  setDragging);
-      canvas.on("object:scaling", setDragging);
+      canvas.on("object:moving",   setDragging);
+      canvas.on("object:scaling",  setDragging);
       canvas.on("object:rotating", setDragging);
+      // Also detect clicks directly on an object (e.g. tapping a scale handle
+      // without moving) so we suppress drawing even when no drag event fires.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      canvas.on("mouse:down", (opt: any) => {
+        clickedOnObjectRef.current = !!opt.target;
+      });
 
       // ── Load image ──────────────────────────────────────────────────────────
       const ImageClass: { fromURL: (url: string) => Promise<FabricCanvas> } =
@@ -147,11 +156,31 @@ export function AnnotationEditor({ photoId, projectId }: AnnotationEditorProps) 
         canvas.renderAll();
 
         if (existingAnnotation?.fabricJson) {
-          // Strip backgroundImage from saved JSON before loading — the saved
-          // value is a blob: URL from a previous session and is now invalid.
-          // We re-apply the freshly-fetched img as backgroundImage after load.
-          const { backgroundImage: _bg, ...annotationObjects } = existingAnnotation.fabricJson as Record<string, unknown>;
+          // Strip backgroundImage (stale blob: URL) and pull out the saved
+          // canvas dimensions so we can re-scale objects if the canvas is a
+          // different size this time (different device or window size).
+          const { backgroundImage: _bg, _canvasW, _canvasH, ...annotationObjects } =
+            existingAnnotation.fabricJson as Record<string, unknown>;
           await canvas.loadFromJSON(annotationObjects);
+
+          // Re-scale all objects if the canvas is a different size than when
+          // the annotation was saved (e.g. annotated on desktop, viewing on mobile).
+          const savedW = Number(_canvasW);
+          const savedH = Number(_canvasH);
+          if (savedW > 0 && savedH > 0 && (Math.abs(savedW - w) > 1 || Math.abs(savedH - h) > 1)) {
+            const rx = w / savedW;
+            const ry = h / savedH;
+            canvas.getObjects().forEach((obj: FabricCanvas) => {
+              obj.set({
+                left:   (obj.left  ?? 0) * rx,
+                top:    (obj.top   ?? 0) * ry,
+                scaleX: (obj.scaleX ?? 1) * rx,
+                scaleY: (obj.scaleY ?? 1) * ry,
+              });
+              obj.setCoords();
+            });
+          }
+
           // loadFromJSON replaces the entire canvas state — re-apply our image.
           img.set({ left: 0, top: 0, originX: "left", originY: "top", scaleX: scale, scaleY: scale, selectable: false, evented: false });
           canvas.backgroundImage = img;
@@ -210,7 +239,11 @@ export function AnnotationEditor({ photoId, projectId }: AnnotationEditorProps) 
     if (!canvas) return;
     // Exclude backgroundImage — it's a blob: URL valid only for this session.
     // We re-fetch and re-apply it from publicUrl on every load.
+    // Store canvas dimensions so objects can be re-scaled if the canvas is a
+    // different size on the next load (different device or window size).
     const { backgroundImage: _bg, ...fabricJson } = canvas.toJSON() as Record<string, unknown>;
+    fabricJson._canvasW = canvas.getWidth();
+    fabricJson._canvasH = canvas.getHeight();
     const blob: Blob = await new Promise((res, rej) =>
       canvas.getElement().toBlob(
         (b: Blob | null) => (b ? res(b) : rej(new Error("toBlob failed"))),
@@ -275,10 +308,11 @@ export function AnnotationEditor({ photoId, projectId }: AnnotationEditorProps) 
   function handleCanvasMouseUpCoords(clientX: number, clientY: number) {
     const canvas = fabricRef.current;
     if (!canvas || !fabricReady) return;
-    // If Fabric fired object:moving, the user was dragging an existing object —
-    // don't draw a new shape.
-    if (isDraggingObjectRef.current) {
+    // If the user was interacting with an existing object (dragging, resizing,
+    // or even just clicking a handle), don't draw a new shape.
+    if (isDraggingObjectRef.current || clickedOnObjectRef.current) {
       isDraggingObjectRef.current = false;
+      clickedOnObjectRef.current = false;
       drawStartRef.current = null;
       return;
     }
