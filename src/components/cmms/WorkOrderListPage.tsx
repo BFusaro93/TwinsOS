@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { useStickyState } from "@/lib/hooks/use-sticky-state";
 import {
   CalendarClock,
@@ -331,6 +332,11 @@ function UpcomingMaintenanceView({
 export function WorkOrderListPage() {
   const { data: workOrders, isLoading } = useWorkOrders();
   const { selectedWorkOrderId, setSelectedWorkOrderId } = useCMMSStore();
+  const searchParams = useSearchParams();
+  useEffect(() => {
+    const id = searchParams.get("id");
+    if (id) setSelectedWorkOrderId(id);
+  }, [searchParams, setSelectedWorkOrderId]);
   const [search, setSearch] = useState("");
   const [filterValues, setFilterValues] = useStickyState<Record<string, string | string[]>>("wo-filters", {});
   const [dialogOpen, setDialogOpen] = useState(false);

@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { useStickyState } from "@/lib/hooks/use-sticky-state";
 import { FileText, Maximize2, Minimize2, Plus } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -51,6 +52,11 @@ const REQ_COLUMNS: ColumnDef[] = [
 export function RequisitionListPage() {
   const { data: requisitions, isLoading } = useRequisitions();
   const { selectedRequisitionId, setSelectedRequisitionId } = usePOStore();
+  const searchParams = useSearchParams();
+  useEffect(() => {
+    const id = searchParams.get("id");
+    if (id) setSelectedRequisitionId(id);
+  }, [searchParams, setSelectedRequisitionId]);
   const [search, setSearch] = useState("");
   const [filterValues, setFilterValues] = useStickyState<Record<string, string | string[]>>("req-filters", {});
   const [dialogOpen, setDialogOpen] = useState(false);

@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { useStickyState } from "@/lib/hooks/use-sticky-state";
 import { Maximize2, Minimize2, Plus, ShoppingCart } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -54,6 +55,11 @@ export function POListPage() {
   const { data: orders, isLoading } = usePurchaseOrders();
   const { mutateAsync: bulkImportPOs } = useBulkImportPurchaseOrders();
   const { selectedPOId, setSelectedPOId } = usePOStore();
+  const searchParams = useSearchParams();
+  useEffect(() => {
+    const id = searchParams.get("id");
+    if (id) setSelectedPOId(id);
+  }, [searchParams, setSelectedPOId]);
   const [search, setSearch] = useState("");
   const [filterValues, setFilterValues] = useStickyState<Record<string, string | string[]>>("po-filters", {});
   const [dialogOpen, setDialogOpen] = useState(false);

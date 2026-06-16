@@ -263,7 +263,7 @@ export async function POST(request: Request) {
     if (notifType === "wo_created" || notifType === "wo_assigned") {
       const num   = (entity.work_order_number ?? "Work Order") as string;
       const title = (entity.title ?? "") as string;
-      const link  = `${SITE_URL}/cmms/work-orders`;
+      const link  = `${SITE_URL}/cmms/work-orders?id=${entity.id as string}`;
       // Admin broadcast recipients are watching all WOs — they weren't personally assigned,
       // so use "created" language regardless of whether it's a wo_assigned event.
       const isCreatedContext = notifType === "wo_created" || isAdminBroadcast;
@@ -285,7 +285,7 @@ export async function POST(request: Request) {
       const num    = (entity.work_order_number ?? "Work Order") as string;
       const title  = (entity.title ?? "") as string;
       const status = ((entity.status as string) ?? "").replace(/_/g, " ");
-      const link   = `${SITE_URL}/cmms/work-orders`;
+      const link   = `${SITE_URL}/cmms/work-orders?id=${entity.id as string}`;
       return {
         subject: `Work order status updated: ${num}`,
         html: `<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px 24px">
@@ -301,7 +301,7 @@ export async function POST(request: Request) {
       const num   = (entity.work_order_number ?? "Work Order") as string;
       const title = (entity.title ?? "") as string;
       const commentBody = extra.commentBody ?? "";
-      const link  = `${SITE_URL}/cmms/work-orders`;
+      const link  = `${SITE_URL}/cmms/work-orders?id=${entity.id as string}`;
       return {
         subject: `New comment on ${num}`,
         html: `<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px 24px">
@@ -318,7 +318,7 @@ export async function POST(request: Request) {
       const isApproved = notifType === "approved";
       const num = ((entity.requisition_number ?? entity.po_number ?? "Request")) as string;
       const entityLabel = entityType === "requisition" ? "Purchase Requisition" : "Purchase Order";
-      const link = entityType === "requisition" ? `${SITE_URL}/po/requisitions` : `${SITE_URL}/po/orders`;
+      const link = entityType === "requisition" ? `${SITE_URL}/po/requisitions?id=${entity.id as string}` : `${SITE_URL}/po/orders?id=${entity.id as string}`;
       const color = isApproved ? "#16a34a" : "#dc2626";
       const verb  = isApproved ? "approved" : "rejected";
       return {
@@ -335,7 +335,7 @@ export async function POST(request: Request) {
     if (notifType === "new_maintenance_request") {
       const title = (entity.title ?? "Maintenance Request") as string;
       const num   = (entity.request_number ?? "") as string;
-      const link  = `${SITE_URL}/cmms/work-orders`;
+      const link  = `${SITE_URL}/cmms/work-orders?id=${entity.id as string}`;
       return {
         subject: `New maintenance request: ${title}`,
         html: `<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px 24px">
