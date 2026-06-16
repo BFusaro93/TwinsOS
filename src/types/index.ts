@@ -10,3 +10,4 @@ export * from "./comment";
 export * from "./attachment";
 export * from "./audit";
 export * from "./approval";
+export * from "./damage-case";

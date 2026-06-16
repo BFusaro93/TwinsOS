@@ -791,3 +791,43 @@ export function mapPMPart(row: Record<string, any>): PMPart {
     unitCost: row.unit_cost,
   };
 }
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function mapDamageCase(row: Record<string, any>): import("@/types").DamageCase {
+  return {
+    id: row.id,
+    orgId: row.org_id,
+    createdBy: row.created_by ?? "",
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    deletedAt: row.deleted_at,
+    caseNumber: row.case_number,
+    caseType: row.case_type,
+    status: row.status,
+    customerName: row.customer_name,
+    propertyAddress: row.property_address ?? null,
+    dateOfIncident: row.date_of_incident,
+    description: row.description,
+    resolutionNotes: row.resolution_notes ?? null,
+    totalCost: row.total_cost ?? 0,
+  };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function mapDamageCaseExpense(row: Record<string, any>): import("@/types").DamageCaseExpense {
+  return {
+    id: row.id,
+    orgId: row.org_id,
+    createdBy: row.created_by ?? "",
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    deletedAt: row.deleted_at,
+    damageCaseId: row.damage_case_id,
+    expenseDate: row.expense_date,
+    vendorId: row.vendor_id ?? null,
+    vendorName: row.vendor_name ?? null,
+    description: row.description,
+    amount: row.amount,
+    purchaseOrderId: row.purchase_order_id ?? null,
+  };
+}

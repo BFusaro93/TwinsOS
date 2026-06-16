@@ -177,3 +177,17 @@ export const APPROVAL_FLOW_STEPS: Array<{
   { label: "Approved", statuses: ["approved", "rejected"] },
   { label: "Ordered / Closed", statuses: ["ordered", "closed"] },
 ];
+
+// ─── Damage Cases ─────────────────────────────────────────────────────────────
+
+export const DAMAGE_CASE_STATUS_LABELS: Record<string, string> = {
+  open: "Open",
+  in_progress: "In Progress",
+  resolved: "Resolved",
+  closed: "Closed",
+};
+
+export const DAMAGE_CASE_TYPE_LABELS: Record<string, string> = {
+  damage: "Damage",
+  warranty: "Warranty",
+};
