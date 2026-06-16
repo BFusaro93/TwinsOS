@@ -140,6 +140,7 @@ export function SplitToPOsDialog({
           paymentSubmittedToAP: false,
           paymentRemitted: false,
           paymentType: null,
+          checkNumber: null,
           paymentBookedInQB: false,
           notes: null,
         });

@@ -371,6 +371,7 @@ export function NewPODialog({ open, onOpenChange, initialData, prefillData, onCr
       paymentSubmittedToAP: false,
       paymentRemitted: false,
       paymentType: (paymentType as import("@/types").PaymentType) || null,
+      checkNumber: null,
       paymentBookedInQB: false,
       notes: notes || null,
     };

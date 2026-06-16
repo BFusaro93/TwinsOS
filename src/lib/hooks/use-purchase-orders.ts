@@ -514,6 +514,7 @@ export function useUpdatePurchaseOrderStatus() {
       paymentSubmittedToAP,
       paymentRemitted,
       paymentType,
+      checkNumber,
       paymentBookedInQB,
     }: {
       id: string;
@@ -522,6 +523,7 @@ export function useUpdatePurchaseOrderStatus() {
       paymentSubmittedToAP?: boolean;
       paymentRemitted?: boolean;
       paymentType?: PurchaseOrder["paymentType"];
+      checkNumber?: string | null;
       paymentBookedInQB?: boolean;
     }) => {
       const supabase = createClient();
@@ -533,6 +535,7 @@ export function useUpdatePurchaseOrderStatus() {
           ...(paymentSubmittedToAP !== undefined && { payment_submitted_to_ap: paymentSubmittedToAP }),
           ...(paymentRemitted !== undefined && { payment_remitted: paymentRemitted }),
           ...(paymentType !== undefined && { payment_type: paymentType }),
+          ...(checkNumber !== undefined && { check_number: checkNumber }),
           ...(paymentBookedInQB !== undefined && { payment_booked_in_qb: paymentBookedInQB }),
         })
         .eq("id", id)
@@ -540,7 +543,7 @@ export function useUpdatePurchaseOrderStatus() {
         .single();
       if (error) throw error;
     },
-    onMutate: async ({ id, status, invoiceNumber, paymentSubmittedToAP, paymentRemitted, paymentType, paymentBookedInQB }) => {
+    onMutate: async ({ id, status, invoiceNumber, paymentSubmittedToAP, paymentRemitted, paymentType, checkNumber, paymentBookedInQB }) => {
       await queryClient.cancelQueries({ queryKey: ["purchase-orders"] });
       const previous = queryClient.getQueryData<PurchaseOrder[]>(["purchase-orders"]);
       patchPOCache(queryClient, id, {
@@ -549,6 +552,7 @@ export function useUpdatePurchaseOrderStatus() {
         ...(paymentSubmittedToAP !== undefined && { paymentSubmittedToAP }),
         ...(paymentRemitted !== undefined && { paymentRemitted }),
         ...(paymentType !== undefined && { paymentType }),
+        ...(checkNumber !== undefined && { checkNumber }),
         ...(paymentBookedInQB !== undefined && { paymentBookedInQB }),
       });
       return { previous };

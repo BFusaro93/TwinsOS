@@ -30,6 +30,7 @@ export interface PurchaseOrder extends BaseRecord {
   paymentSubmittedToAP: boolean;
   paymentRemitted: boolean;
   paymentType: PaymentType | null;
+  checkNumber: string | null;
   paymentBookedInQB: boolean;
   notes: string | null;
 }

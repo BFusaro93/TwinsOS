@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Check, Loader2, Minus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useUpdatePurchaseOrderStatus } from "@/lib/hooks/use-purchase-orders";
@@ -48,12 +48,21 @@ export function POPaymentTracking({ po }: { po: PurchaseOrder }) {
   const [submittedToAP, setSubmittedToAP] = useState(po.paymentSubmittedToAP);
   const [remitted, setRemitted]           = useState(po.paymentRemitted);
   const [bookedInQB, setBookedInQB]       = useState(po.paymentBookedInQB);
+  const [checkNumber, setCheckNumber]     = useState(po.checkNumber ?? "");
+  const checkSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const paymentTypeLabel =
     po.paymentType === "check"       ? "Check"
     : po.paymentType === "ach"       ? "ACH"
     : po.paymentType === "credit_card" ? "Credit Card"
     : null;
+
+  function saveCheckNumber(value: string) {
+    if (checkSaveTimer.current) clearTimeout(checkSaveTimer.current);
+    checkSaveTimer.current = setTimeout(() => {
+      updateStatus({ id: po.id, status: po.status, checkNumber: value || null });
+    }, 600);
+  }
 
   function toggle(
     field: "paymentSubmittedToAP" | "paymentRemitted" | "paymentBookedInQB",
@@ -95,6 +104,18 @@ export function POPaymentTracking({ po }: { po: PurchaseOrder }) {
         pending={isPending}
         onToggle={() => toggle("paymentRemitted", remitted, setRemitted)}
       />
+      <div className="ml-8 mb-1">
+        <input
+          type="text"
+          placeholder="Check #"
+          value={checkNumber}
+          onChange={(e) => {
+            setCheckNumber(e.target.value);
+            saveCheckNumber(e.target.value);
+          }}
+          className="w-36 rounded border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700 placeholder:text-slate-300 focus:border-brand-400 focus:outline-none focus:ring-1 focus:ring-brand-400"
+        />
+      </div>
       <CheckRow
         label="Booked in QuickBooks"
         checked={bookedInQB}

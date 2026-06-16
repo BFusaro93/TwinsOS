@@ -239,6 +239,7 @@ export function mapPurchaseOrder(
     paymentSubmittedToAP: row.payment_submitted_to_ap,
     paymentRemitted: row.payment_remitted,
     paymentType: row.payment_type as PaymentType | null,
+    checkNumber: row.check_number ?? null,
     paymentBookedInQB: row.payment_booked_in_qb,
     notes: row.notes,
   };
