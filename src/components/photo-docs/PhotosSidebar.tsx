@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { useUIStore, useCurrentUserStore } from "@/stores";
 import { useSettingsStore } from "@/stores/settings-store";
-import { Camera, FileImage, ArrowLeft, Leaf, Briefcase } from "lucide-react";
+import { Camera, FileImage, ArrowLeft, Leaf, Briefcase, Wrench, CalendarDays, ClipboardList } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 interface PhotoNavItem {
@@ -18,6 +18,12 @@ interface PhotoNavItem {
 const PHOTOS_NAV: PhotoNavItem[] = [
   { label: "Job Photos", href: "/photos/jobs",     icon: FileImage },
   { label: "Projects",   href: "/photos/projects", icon: Briefcase, requiresPoAccess: true },
+];
+
+const FIELD_NAV: PhotoNavItem[] = [
+  { label: "Morning Checklist",  href: "/photos/field/crew-checklist",  icon: ClipboardList },
+  { label: "Repair Request",     href: "/photos/field/repair-request",  icon: Wrench },
+  { label: "Time Off Request",   href: "/photos/field/time-off",        icon: CalendarDays },
 ];
 
 // Roles with access to the PO/Projects side (Projects nav item)
@@ -59,6 +65,7 @@ export function PhotosSidebar() {
 
       {/* Nav */}
       <nav className="flex-1 overflow-y-auto py-4">
+        {/* Photos section */}
         {!sidebarCollapsed && (
           <p className="mb-1 px-4 text-[10px] font-semibold uppercase tracking-widest text-slate-400">
             Photos
@@ -87,6 +94,36 @@ export function PhotosSidebar() {
             </Link>
           );
         })}
+
+        {/* Field section */}
+        <div className="mt-4">
+          {!sidebarCollapsed && (
+            <p className="mb-1 px-4 text-[10px] font-semibold uppercase tracking-widest text-slate-400">
+              Field
+            </p>
+          )}
+          {FIELD_NAV.map((item) => {
+            const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
+            const Icon = item.icon;
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={cn(
+                  "flex items-center gap-3 px-4 py-2 text-sm transition-colors",
+                  isActive
+                    ? "border-l-2 border-brand-400 bg-white/5 text-brand-400"
+                    : "border-l-2 border-transparent text-slate-300 hover:bg-white/5 hover:text-white",
+                  sidebarCollapsed && "justify-center px-0",
+                )}
+                title={sidebarCollapsed ? item.label : undefined}
+              >
+                <Icon className="h-4 w-4 shrink-0" />
+                {!sidebarCollapsed && <span className="truncate">{item.label}</span>}
+              </Link>
+            );
+          })}
+        </div>
       </nav>
 
       {/* Back to Home */}
