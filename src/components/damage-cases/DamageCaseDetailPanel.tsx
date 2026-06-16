@@ -166,11 +166,17 @@ export function DamageCaseDetailPanel({ caseId }: Props) {
 
       {/* Tabbed body */}
       <Tabs defaultValue="expenses" className="flex-1 flex flex-col min-h-0">
-        <div className="px-6 border-b">
-          <TabsList className="h-9 rounded-none bg-transparent border-0 p-0 gap-4">
-            <TabsTrigger value="expenses" className="rounded-none border-b-2 border-transparent data-[state=active]:border-foreground data-[state=active]:bg-transparent pb-2 px-0 text-sm">Expenses</TabsTrigger>
-            <TabsTrigger value="comments" className="rounded-none border-b-2 border-transparent data-[state=active]:border-foreground data-[state=active]:bg-transparent pb-2 px-0 text-sm">Comments</TabsTrigger>
-            <TabsTrigger value="audit" className="rounded-none border-b-2 border-transparent data-[state=active]:border-foreground data-[state=active]:bg-transparent pb-2 px-0 text-sm">Audit Trail</TabsTrigger>
+        <div className="shrink-0 overflow-x-auto border-b px-4 md:px-6">
+          <TabsList className="h-10 bg-transparent p-0">
+            {(["expenses", "comments", "audit trail"] as const).map((v) => (
+              <TabsTrigger
+                key={v}
+                value={v === "audit trail" ? "audit" : v}
+                className="h-10 whitespace-nowrap rounded-none border-b-2 border-transparent px-2.5 pb-0 pt-0 text-xs font-medium text-slate-500 md:px-4 md:text-sm data-[state=active]:border-brand-500 data-[state=active]:text-brand-600 data-[state=active]:shadow-none capitalize"
+              >
+                {v}
+              </TabsTrigger>
+            ))}
           </TabsList>
         </div>
 
