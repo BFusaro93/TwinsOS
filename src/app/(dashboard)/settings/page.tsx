@@ -755,7 +755,7 @@ function GeneralTab() {
                 size="sm"
                 variant="outline"
                 className="h-8 shrink-0 gap-1.5 text-xs"
-                onClick={() => window.open("/request", "_blank")}
+                onClick={() => window.open(`/request/${remoteSettings?.slug ?? ""}`, "_blank")}
               >
                 <ExternalLink className="h-3 w-3" />
                 Open
