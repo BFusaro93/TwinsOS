@@ -223,7 +223,7 @@ export default function RepairRequestPage() {
             className="mt-0.5 accent-primary"
           />
           <span className="text-sm">
-            I've already attached a repair tag to the equipment
+            I&apos;ve already attached a repair tag to the equipment
           </span>
         </label>
 
