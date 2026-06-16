@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import dynamic from "next/dynamic";
 import { Plus, ShieldAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,17 +17,16 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import dynamic from "next/dynamic";
 import { useDamageCases } from "@/lib/hooks/use-damage-cases";
 import { DamageCaseDetailPanel } from "./DamageCaseDetailPanel";
 import { NewDamageCaseDialog } from "./NewDamageCaseDialog";
+import { formatCurrency, formatDate } from "@/lib/utils";
+import { DAMAGE_CASE_STATUS_LABELS, DAMAGE_CASE_TYPE_LABELS } from "@/lib/constants";
 
 const DamageCasesChart = dynamic(
   () => import("./DamageCasesChart").then((m) => ({ default: m.DamageCasesChart })),
   { ssr: false, loading: () => <div className="h-64 flex items-center justify-center text-muted-foreground text-sm">Loading chart…</div> }
 );
-import { formatCurrency, formatDate } from "@/lib/utils";
-import { DAMAGE_CASE_STATUS_LABELS, DAMAGE_CASE_TYPE_LABELS } from "@/lib/constants";
 
 const STATUS_COLORS: Record<string, string> = {
   open: "bg-yellow-100 text-yellow-800",
