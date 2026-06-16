@@ -20,6 +20,7 @@ import { PROJECT_STATUS_LABELS } from "@/lib/constants";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { CommentsSection } from "@/components/shared/CommentsSection";
 import { AuditTrailTab } from "@/components/shared/AuditTrailTab";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { PhotoJobStatus } from "@/modules/photo-docs/types/photo.types";
 
 const STATUS_COLORS: Record<string, string> = {
@@ -268,18 +269,30 @@ export default function JobPhotosPage({ params }: { params: Promise<{ jobId: str
           <PhotoGallery projectId={jobId} />
         )}
 
-        {/* Job-level comments — crew can message the office about the job as a whole */}
-        <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h2 className="mb-4 text-sm font-semibold text-slate-900">Comments</h2>
-          <CommentsSection recordType="job_photo" recordId={jobId} />
-        </div>
-
-        {/* Audit trail */}
-        <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
-          <div className="px-5 pt-5 pb-1">
-            <h2 className="text-sm font-semibold text-slate-900">Audit Trail</h2>
-          </div>
-          <AuditTrailTab recordType="job_photo" recordId={jobId} />
+        {/* Comments + Audit Trail tabs */}
+        <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+          <Tabs defaultValue="comments">
+            <div className="shrink-0 overflow-x-auto border-b border-slate-200 px-5">
+              <TabsList className="h-10 bg-transparent p-0">
+                <TabsTrigger value="comments" className="h-10 whitespace-nowrap rounded-none border-b-2 border-transparent px-2.5 pb-0 pt-0 text-xs font-medium text-slate-500 md:px-4 md:text-sm data-[state=active]:border-brand-500 data-[state=active]:text-brand-600 data-[state=active]:shadow-none">
+                  Comments
+                </TabsTrigger>
+                {!isCrew && (
+                  <TabsTrigger value="audit" className="h-10 whitespace-nowrap rounded-none border-b-2 border-transparent px-2.5 pb-0 pt-0 text-xs font-medium text-slate-500 md:px-4 md:text-sm data-[state=active]:border-brand-500 data-[state=active]:text-brand-600 data-[state=active]:shadow-none">
+                    Audit Trail
+                  </TabsTrigger>
+                )}
+              </TabsList>
+            </div>
+            <TabsContent value="comments" className="p-5 mt-0">
+              <CommentsSection recordType="job_photo" recordId={jobId} />
+            </TabsContent>
+            {!isCrew && (
+              <TabsContent value="audit" className="mt-0">
+                <AuditTrailTab recordType="job_photo" recordId={jobId} />
+              </TabsContent>
+            )}
+          </Tabs>
         </div>
       </div>
 

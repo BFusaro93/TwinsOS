@@ -24,6 +24,7 @@ import { PROJECT_STATUS_LABELS } from "@/lib/constants";
 import { useStickyState } from "@/lib/hooks/use-sticky-state";
 import { CommentsSection } from "@/components/shared/CommentsSection";
 import { AuditTrailTab } from "@/components/shared/AuditTrailTab";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import type { PhotoJobStatus } from "@/modules/photo-docs/types/photo.types";
 
@@ -278,16 +279,30 @@ function JobDetailPane({ jobId }: { jobId: string }) {
         <PhotoGallery projectId={jobId} />
       </div>
 
-      {/* Job-level comments */}
-      <div className="border-t border-slate-200 px-5 py-4">
-        <p className="mb-3 text-sm font-semibold text-slate-900">Comments</p>
-        <CommentsSection recordType="job_photo" recordId={jobId} />
-      </div>
-
-      {/* Audit trail */}
-      <div className="border-t border-slate-200 px-5 py-4">
-        <p className="mb-1 text-sm font-semibold text-slate-900">Audit Trail</p>
-        <AuditTrailTab recordType="job_photo" recordId={jobId} />
+      {/* Comments + Audit Trail tabs */}
+      <div className="border-t border-slate-200">
+        <Tabs defaultValue="comments">
+          <div className="shrink-0 overflow-x-auto border-b border-slate-200 px-5">
+            <TabsList className="h-10 bg-transparent p-0">
+              <TabsTrigger value="comments" className="h-10 whitespace-nowrap rounded-none border-b-2 border-transparent px-2.5 pb-0 pt-0 text-xs font-medium text-slate-500 md:px-4 md:text-sm data-[state=active]:border-brand-500 data-[state=active]:text-brand-600 data-[state=active]:shadow-none">
+                Comments
+              </TabsTrigger>
+              {!isCrewRole && (
+                <TabsTrigger value="audit" className="h-10 whitespace-nowrap rounded-none border-b-2 border-transparent px-2.5 pb-0 pt-0 text-xs font-medium text-slate-500 md:px-4 md:text-sm data-[state=active]:border-brand-500 data-[state=active]:text-brand-600 data-[state=active]:shadow-none">
+                  Audit Trail
+                </TabsTrigger>
+              )}
+            </TabsList>
+          </div>
+          <TabsContent value="comments" className="px-5 py-4 mt-0">
+            <CommentsSection recordType="job_photo" recordId={jobId} />
+          </TabsContent>
+          {!isCrewRole && (
+            <TabsContent value="audit" className="mt-0">
+              <AuditTrailTab recordType="job_photo" recordId={jobId} />
+            </TabsContent>
+          )}
+        </Tabs>
       </div>
 
       <ProjectDetailSheet project={linkedProject} open={projectSheetOpen} onOpenChange={setProjectSheetOpen} />
