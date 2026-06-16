@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, Trash2, ExternalLink } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -52,18 +52,23 @@ export function DamageCaseDetailPanel({ caseId }: Props) {
 
   return (
     <div className="flex flex-col h-full overflow-y-auto">
-      {/* Header */}
-      <div className="p-6 border-b space-y-3">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2 mb-1">
-              <span className="text-xs font-mono text-muted-foreground">{data.caseNumber}</span>
-              <Badge className={TYPE_COLORS[data.caseType]}>{DAMAGE_CASE_TYPE_LABELS[data.caseType]}</Badge>
-            </div>
-            <h2 className="text-lg font-semibold">{data.customerName}</h2>
-            {data.propertyAddress && (
-              <p className="text-sm text-muted-foreground">{data.propertyAddress}</p>
-            )}
+      {/* Header — pr-12 reserves space for Sheet's absolute close button */}
+      <div className="px-6 pt-6 pb-4 border-b space-y-3 pr-12">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-mono text-muted-foreground">{data.caseNumber}</span>
+          <Badge className={TYPE_COLORS[data.caseType]}>{DAMAGE_CASE_TYPE_LABELS[data.caseType]}</Badge>
+        </div>
+        <div>
+          <h2 className="text-lg font-semibold">{data.customerName}</h2>
+          {data.propertyAddress && (
+            <p className="text-sm text-muted-foreground">{data.propertyAddress}</p>
+          )}
+        </div>
+
+        <div className="flex items-center gap-4 flex-wrap">
+          <div className="text-sm">
+            <span className="text-muted-foreground">Incident Date: </span>
+            <span className="font-medium">{formatDate(data.dateOfIncident)}</span>
           </div>
           <Select
             value={data.status}
@@ -78,19 +83,6 @@ export function DamageCaseDetailPanel({ caseId }: Props) {
               ))}
             </SelectContent>
           </Select>
-        </div>
-
-        <div className="grid grid-cols-2 gap-x-8 gap-y-1 text-sm">
-          <div>
-            <span className="text-muted-foreground">Incident Date</span>
-            <p className="font-medium">{formatDate(data.dateOfIncident)}</p>
-          </div>
-          <div>
-            <span className="text-muted-foreground">Status</span>
-            <p>
-              <Badge className={`${STATUS_COLORS[data.status]} text-xs`}>{DAMAGE_CASE_STATUS_LABELS[data.status]}</Badge>
-            </p>
-          </div>
         </div>
 
         <div className="text-sm">
