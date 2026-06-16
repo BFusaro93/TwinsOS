@@ -11,21 +11,21 @@ const MATERIALS = [
     id: "decorative_rock",
     label: "Decorative Rock",
     densityTonsPerCY: 1.4,   // ~2,800 lbs/CY
-    color: "from-slate-500 to-slate-800",
+    color: "bg-slate-600",
     Icon: Gem,
   },
   {
     id: "bark_mulch",
     label: "Bark Mulch",
     densityTonsPerCY: 0.205, // ~410 lbs/CY
-    color: "from-orange-700 to-amber-950",
+    color: "bg-orange-700",
     Icon: TreeDeciduous,
   },
   {
     id: "topsoil",
     label: "Topsoil",
     densityTonsPerCY: 1.1,   // ~2,200 lbs/CY loose topsoil
-    color: "from-emerald-800 to-emerald-950",
+    color: "bg-emerald-800",
     Icon: Layers,
   },
 ] as const;
@@ -174,10 +174,7 @@ export function MaterialCalculatorPage() {
 
       {/* Calculator */}
       <div className="overflow-hidden rounded-2xl shadow-lg">
-        <div className={`bg-gradient-to-br ${material.color} px-6 py-5`}>
-          <div className="flex items-center gap-2 mb-1">
-            <span className="text-xs font-semibold uppercase tracking-widest text-white/60">How much should I get?</span>
-          </div>
+        <div className={`${material.color} px-6 py-5`}>
           <h2 className="text-3xl font-extrabold uppercase tracking-tight text-white">{material.label}</h2>
           <p className="mt-1 text-sm text-white/70">
             Enter your project dimensions below to calculate how much material you need.
@@ -211,7 +208,7 @@ export function MaterialCalculatorPage() {
           </div>
 
           {/* Results */}
-          <div className={`bg-gradient-to-br ${material.color} space-y-3 p-6`}>
+          <div className={`${material.color} space-y-3 p-6`}>
             <ResultCard
               label="Square Feet"
               value={hasValues ? fmt(sqFt) : "—"}
