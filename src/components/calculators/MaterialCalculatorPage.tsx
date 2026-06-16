@@ -11,21 +11,21 @@ const MATERIALS = [
     id: "decorative_rock",
     label: "Decorative Rock",
     densityTonsPerCY: 1.4,   // ~2,800 lbs/CY
-    color: "from-stone-700 to-stone-900",
+    color: "from-slate-500 to-slate-800",
     Icon: Gem,
   },
   {
     id: "bark_mulch",
-    label: "Bark & Mulch",
+    label: "Bark Mulch",
     densityTonsPerCY: 0.205, // ~410 lbs/CY
-    color: "from-amber-800 to-stone-900",
+    color: "from-orange-700 to-amber-950",
     Icon: TreeDeciduous,
   },
   {
     id: "topsoil",
     label: "Topsoil",
     densityTonsPerCY: 1.1,   // ~2,200 lbs/CY loose topsoil
-    color: "from-yellow-900 to-stone-900",
+    color: "from-emerald-800 to-emerald-950",
     Icon: Layers,
   },
 ] as const;
@@ -248,7 +248,7 @@ export function MaterialCalculatorPage() {
               <td className="py-2 text-muted-foreground">~160–240 sq ft</td>
             </tr>
             <tr>
-              <td className="py-2 pr-4 font-medium">Bark & Mulch</td>
+              <td className="py-2 pr-4 font-medium">Bark Mulch</td>
               <td className="py-2 pr-4 text-muted-foreground">0.2 tons/CY</td>
               <td className="py-2 pr-4 text-muted-foreground">2–4 in</td>
               <td className="py-2 text-muted-foreground">~80–160 sq ft</td>

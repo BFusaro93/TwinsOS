@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { BarChart2, Wrench, Leaf, FileText, Truck, Users, ExternalLink, ClipboardList, Camera } from "lucide-react";
+import { BarChart2, Wrench, Leaf, Truck, Users, ExternalLink, ClipboardList, Camera, FlaskConical } from "lucide-react";
 
 const INTERNAL_BOX =
   "group flex flex-col items-center gap-5 rounded-2xl border-2 border-slate-200 bg-white p-10 shadow-sm transition-all duration-150 hover:border-brand-400 hover:shadow-lg";
@@ -43,16 +43,13 @@ export default function HomePage() {
           </div>
         </Link>
 
-        <Link
-          href="/dashboards/estimate-builder"
-          className={INTERNAL_BOX}
-        >
+        <Link href="/tools/calculators" className={INTERNAL_BOX}>
           <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-brand-50 text-brand-500 transition-colors group-hover:bg-brand-100">
-            <FileText className="h-8 w-8" />
+            <FlaskConical className="h-8 w-8" />
           </div>
           <div className="text-center">
-            <p className="text-lg font-semibold text-slate-900">Estimate Writer</p>
-            <p className="mt-1 text-sm text-slate-500">Generate estimate text &amp; language</p>
+            <p className="text-lg font-semibold text-slate-900">Tools</p>
+            <p className="mt-1 text-sm text-slate-500">Estimating, job costing &amp; calculators</p>
           </div>
         </Link>
 
