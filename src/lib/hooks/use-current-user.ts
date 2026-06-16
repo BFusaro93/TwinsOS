@@ -26,8 +26,18 @@ export function useSyncCurrentUser() {
         .select("*")
         .eq("id", userId)
         .single()
-        .then(({ data }) => {
-          if (data) setCurrentUser(mapOrgUser(data));
+        .then(async ({ data }) => {
+          if (!data) return;
+          // If the profile is still marked "invited", the user has now signed in —
+          // flip it to "active" so the Users page reflects their real status.
+          if (data.status === "invited") {
+            await supabase
+              .from("profiles")
+              .update({ status: "active" })
+              .eq("id", userId);
+            data = { ...data, status: "active" };
+          }
+          setCurrentUser(mapOrgUser(data));
         });
     });
   }, [setCurrentUser]);
