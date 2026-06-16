@@ -29,8 +29,8 @@ export default function PhotosLayout({ children }: { children: React.ReactNode }
       {/* Mobile drawer */}
       {sidebarOpen && (
         <div className="fixed inset-0 z-50 md:hidden">
-          <div className="absolute inset-0 bg-black/50" onClick={() => setSidebarOpen(false)} />
-          <div className="relative z-10 h-full w-[260px]">
+          <div className="absolute inset-0 bg-black/50 touch-none" onClick={() => setSidebarOpen(false)} />
+          <div className="relative z-10 h-full w-[260px] overflow-y-auto overscroll-contain">
             <PhotosSidebar />
           </div>
         </div>

@@ -34,13 +34,13 @@ export default function DashboardLayout({
       {/* Mobile sidebar drawer */}
       {sidebarOpen && (
         <div className="fixed inset-0 z-50 md:hidden">
-          {/* Backdrop */}
+          {/* Backdrop — touch-none prevents scroll bleed to page behind */}
           <div
-            className="absolute inset-0 bg-black/50"
+            className="absolute inset-0 bg-black/50 touch-none"
             onClick={() => setSidebarOpen(false)}
           />
-          {/* Sidebar */}
-          <div className="relative z-10 h-full w-[260px]">
+          {/* Sidebar — overscroll-contain keeps scroll inside the drawer */}
+          <div className="relative z-10 h-full w-[260px] overflow-y-auto overscroll-contain">
             <AppSidebar />
           </div>
         </div>
