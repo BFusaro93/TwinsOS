@@ -19,6 +19,7 @@ import { formatAddress } from "@/lib/utils";
 import { PROJECT_STATUS_LABELS } from "@/lib/constants";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { CommentsSection } from "@/components/shared/CommentsSection";
+import { AuditTrailTab } from "@/components/shared/AuditTrailTab";
 import type { PhotoJobStatus } from "@/modules/photo-docs/types/photo.types";
 
 const STATUS_COLORS: Record<string, string> = {
@@ -271,6 +272,14 @@ export default function JobPhotosPage({ params }: { params: Promise<{ jobId: str
         <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
           <h2 className="mb-4 text-sm font-semibold text-slate-900">Comments</h2>
           <CommentsSection recordType="job_photo" recordId={jobId} />
+        </div>
+
+        {/* Audit trail */}
+        <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
+          <div className="px-5 pt-5 pb-1">
+            <h2 className="text-sm font-semibold text-slate-900">Audit Trail</h2>
+          </div>
+          <AuditTrailTab recordType="job_photo" recordId={jobId} />
         </div>
       </div>
 

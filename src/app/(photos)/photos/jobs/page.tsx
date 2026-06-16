@@ -23,6 +23,7 @@ import { ProjectDetailSheet } from "@/components/po/ProjectDetailSheet";
 import { PROJECT_STATUS_LABELS } from "@/lib/constants";
 import { useStickyState } from "@/lib/hooks/use-sticky-state";
 import { CommentsSection } from "@/components/shared/CommentsSection";
+import { AuditTrailTab } from "@/components/shared/AuditTrailTab";
 import { toast } from "sonner";
 import type { PhotoJobStatus } from "@/modules/photo-docs/types/photo.types";
 
@@ -281,6 +282,12 @@ function JobDetailPane({ jobId }: { jobId: string }) {
       <div className="border-t border-slate-200 px-5 py-4">
         <p className="mb-3 text-sm font-semibold text-slate-900">Comments</p>
         <CommentsSection recordType="job_photo" recordId={jobId} />
+      </div>
+
+      {/* Audit trail */}
+      <div className="border-t border-slate-200 px-5 py-4">
+        <p className="mb-1 text-sm font-semibold text-slate-900">Audit Trail</p>
+        <AuditTrailTab recordType="job_photo" recordId={jobId} />
       </div>
 
       <ProjectDetailSheet project={linkedProject} open={projectSheetOpen} onOpenChange={setProjectSheetOpen} />
