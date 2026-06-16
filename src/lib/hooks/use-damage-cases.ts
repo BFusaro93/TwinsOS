@@ -72,6 +72,8 @@ export function useCreateDamageCase() {
       const { data: caseNumber, error: rpcError } = await (supabase as any).rpc("next_damage_case_number");
       if (rpcError) throw rpcError;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: { user } } = await supabase.auth.getUser();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
         .from("damage_cases")
         .insert({
@@ -82,6 +84,7 @@ export function useCreateDamageCase() {
           date_of_incident: input.dateOfIncident,
           description: input.description,
           resolution_notes: input.notes || null,
+          created_by: user?.id ?? null,
         })
         .select()
         .single();
