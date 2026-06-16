@@ -810,6 +810,7 @@ export function mapDamageCase(row: Record<string, any>): import("@/types").Damag
     description: row.description,
     resolutionNotes: row.resolution_notes ?? null,
     totalCost: row.total_cost ?? 0,
+    linkedPoId: row.purchase_order_id ?? null,
   };
 }
 

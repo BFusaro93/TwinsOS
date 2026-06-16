@@ -110,6 +110,7 @@ export function useUpdateDamageCase() {
           ...(input.dateOfIncident !== undefined && { date_of_incident: input.dateOfIncident }),
           ...(input.description !== undefined && { description: input.description }),
           ...(input.resolutionNotes !== undefined && { resolution_notes: input.resolutionNotes }),
+          ...(input.linkedPoId !== undefined && { purchase_order_id: input.linkedPoId }),
         })
         .eq("id", id)
         .select()

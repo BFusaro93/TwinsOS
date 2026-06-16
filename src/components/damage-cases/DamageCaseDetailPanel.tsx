@@ -1,14 +1,18 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, Link2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Check, ChevronsUpDown, X } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useDamageCase, useUpdateDamageCase, useDeleteDamageCaseExpense } from "@/lib/hooks/use-damage-cases";
+import { usePurchaseOrders } from "@/lib/hooks/use-purchase-orders";
 import { AddExpenseDialog } from "./AddExpenseDialog";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { DAMAGE_CASE_STATUS_LABELS, DAMAGE_CASE_TYPE_LABELS } from "@/lib/constants";
@@ -34,7 +38,9 @@ export function DamageCaseDetailPanel({ caseId }: Props) {
   const { data, isLoading } = useDamageCase(caseId);
   const updateCase = useUpdateDamageCase();
   const deleteExpense = useDeleteDamageCaseExpense();
+  const { data: allPOs = [] } = usePurchaseOrders();
   const [addExpenseOpen, setAddExpenseOpen] = useState(false);
+  const [poPickerOpen, setPoPickerOpen] = useState(false);
 
   if (isLoading) {
     return (
@@ -95,6 +101,63 @@ export function DamageCaseDetailPanel({ caseId }: Props) {
             <span className="text-muted-foreground">Resolution Notes</span>
             <p className="mt-0.5">{data.resolutionNotes}</p>
           </div>
+        )}
+      </div>
+
+      {/* Linked PO */}
+      <div className="px-6 py-3 border-b flex items-center gap-3">
+        <Link2 className="h-4 w-4 text-muted-foreground shrink-0" />
+        <span className="text-sm text-muted-foreground shrink-0">Linked PO</span>
+        {data.linkedPoId ? (
+          <>
+            <span className="text-sm font-mono font-medium">
+              {allPOs.find((p) => p.id === data.linkedPoId)?.poNumber ?? data.linkedPoId}
+            </span>
+            <span className="text-sm text-muted-foreground">
+              {allPOs.find((p) => p.id === data.linkedPoId)?.vendorName}
+            </span>
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-6 w-6 ml-auto text-muted-foreground hover:text-destructive"
+              onClick={() => updateCase.mutate({ id: data.id, linkedPoId: null })}
+            >
+              <X className="h-3.5 w-3.5" />
+            </Button>
+          </>
+        ) : (
+          <Popover open={poPickerOpen} onOpenChange={setPoPickerOpen}>
+            <PopoverTrigger asChild>
+              <Button variant="outline" size="sm" className="h-7 text-xs gap-1.5">
+                Link a PO
+                <ChevronsUpDown className="h-3 w-3 opacity-50" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-72 p-0" align="start">
+              <Command>
+                <CommandInput placeholder="Search PO number or vendor…" />
+                <CommandList>
+                  <CommandEmpty>No POs found.</CommandEmpty>
+                  <CommandGroup>
+                    {allPOs.map((po) => (
+                      <CommandItem
+                        key={po.id}
+                        value={`${po.poNumber} ${po.vendorName}`}
+                        onSelect={() => {
+                          updateCase.mutate({ id: data.id, linkedPoId: po.id });
+                          setPoPickerOpen(false);
+                        }}
+                      >
+                        <Check className="h-3.5 w-3.5 mr-2 opacity-0" />
+                        <span className="font-mono text-xs mr-2">{po.poNumber}</span>
+                        <span className="text-muted-foreground text-xs truncate">{po.vendorName}</span>
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                </CommandList>
+              </Command>
+            </PopoverContent>
+          </Popover>
         )}
       </div>
 
