@@ -63,7 +63,7 @@ export function RequisitionListPage() {
   useEffect(() => {
     if (urlFiltersApplied) return;
     const statusParam = searchParams.get("status");
-    if (statusParam) setFilterValues((prev) => ({ ...prev, status: statusParam.split(",") }));
+    if (statusParam) setFilterValues({ status: statusParam.split(",") });
     setUrlFiltersApplied(true);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

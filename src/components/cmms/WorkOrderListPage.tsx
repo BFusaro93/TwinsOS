@@ -347,12 +347,12 @@ export function WorkOrderListPage() {
     const priorityParam = searchParams.get("priority");
     const overdueParam = searchParams.get("overdue");
     if (statusParam || priorityParam || overdueParam) {
-      setFilterValues((prev) => ({
-        ...prev,
+      // Replace all sticky filters — don't merge, stale sticky state would conflict
+      setFilterValues({
         ...(statusParam ? { status: statusParam.split(",") } : {}),
         ...(priorityParam ? { priority: priorityParam.split(",") } : {}),
         ...(overdueParam === "1" ? { overdue: "1" } : {}),
-      }));
+      });
     }
     setUrlFiltersApplied(true);
   // eslint-disable-next-line react-hooks/exhaustive-deps
