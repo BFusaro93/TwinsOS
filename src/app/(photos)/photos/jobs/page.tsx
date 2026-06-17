@@ -36,20 +36,17 @@ const STATUS_FILTERS: { label: string; value: StatusFilter }[] = [
   { label: "All",      value: "all" },
   { label: "Active",   value: "active" },
   { label: "Complete", value: "complete" },
-  { label: "On Hold",  value: "on_hold" },
 ];
 
 const STATUS_COLORS: Record<PhotoJobStatus, string> = {
   active:   "bg-brand-100 text-brand-700",
   complete: "bg-slate-100 text-slate-600",
-  on_hold:  "bg-amber-100 text-amber-700",
   pending:  "bg-purple-100 text-purple-700",
 };
 
 const STATUS_OPTIONS: { value: PhotoJobStatus; label: string }[] = [
   { value: "active",   label: "Active" },
   { value: "complete", label: "Complete" },
-  { value: "on_hold",  label: "On Hold" },
   { value: "pending",  label: "Pending" },
 ];
 
@@ -152,14 +149,8 @@ function JobDetailPane({ jobId }: { jobId: string }) {
             {job.status === "pending" && (
               <Button size="sm" onClick={() => changeStatus("active")} disabled={saving}>Mark Active</Button>
             )}
-            {(job.status === "active" || job.status === "on_hold") && (
-              <Button size="sm" onClick={() => changeStatus("complete")} disabled={saving}>Mark Complete</Button>
-            )}
             {job.status === "active" && (
-              <Button size="sm" variant="outline" onClick={() => changeStatus("on_hold")} disabled={saving}>Put On Hold</Button>
-            )}
-            {job.status === "on_hold" && (
-              <Button size="sm" variant="outline" onClick={() => changeStatus("active")} disabled={saving}>Resume</Button>
+              <Button size="sm" onClick={() => changeStatus("complete")} disabled={saving}>Mark Complete</Button>
             )}
             {job.status === "complete" && (
               <Button size="sm" variant="outline" onClick={() => changeStatus("active")} disabled={saving}>Reopen</Button>
