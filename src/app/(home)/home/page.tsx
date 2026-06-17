@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { BarChart2, Wrench, Hammer, Leaf, Truck, Users, ExternalLink, ClipboardList, Camera } from "lucide-react";
+import { BarChart2, Wrench, NotepadText, Leaf, Truck, Users, ExternalLink, ClipboardList, Camera } from "lucide-react";
 
 const INTERNAL_BOX =
   "group flex flex-col items-center gap-5 rounded-2xl border-2 border-slate-200 bg-white p-10 shadow-sm transition-all duration-150 hover:border-brand-400 hover:shadow-lg";
@@ -45,7 +45,7 @@ export default function HomePage() {
 
         <Link href="/tools/calculators" className={INTERNAL_BOX}>
           <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-brand-50 text-brand-500 transition-colors group-hover:bg-brand-100">
-            <Hammer className="h-8 w-8" />
+            <NotepadText className="h-8 w-8" />
           </div>
           <div className="text-center">
             <p className="text-lg font-semibold text-slate-900">Tools</p>
