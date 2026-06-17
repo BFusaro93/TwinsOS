@@ -16,7 +16,7 @@ export const PHOTO_TAGS = [
 ] as const;
 export type PhotoTag = (typeof PHOTO_TAGS)[number];
 
-export type PhotoJobStatus = "active" | "complete" | "on_hold";
+export type PhotoJobStatus = "active" | "complete" | "on_hold" | "pending";
 
 // ── Photo Job (photos module's own job record) ────────────────────────────────
 

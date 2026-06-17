@@ -29,7 +29,7 @@ import { toast } from "sonner";
 import type { PhotoJobStatus } from "@/modules/photo-docs/types/photo.types";
 
 type StatusFilter = PhotoJobStatus | "all";
-type ArchiveFilter = "active" | "archived";
+type ArchiveFilter = "active" | "pending" | "archived";
 type ViewMode = "list" | "table";
 
 const STATUS_FILTERS: { label: string; value: StatusFilter }[] = [
@@ -43,12 +43,14 @@ const STATUS_COLORS: Record<PhotoJobStatus, string> = {
   active:   "bg-brand-100 text-brand-700",
   complete: "bg-slate-100 text-slate-600",
   on_hold:  "bg-amber-100 text-amber-700",
+  pending:  "bg-purple-100 text-purple-700",
 };
 
 const STATUS_OPTIONS: { value: PhotoJobStatus; label: string }[] = [
   { value: "active",   label: "Active" },
   { value: "complete", label: "Complete" },
   { value: "on_hold",  label: "On Hold" },
+  { value: "pending",  label: "Pending" },
 ];
 
 const EMPTY_FORM = { name: "", customerName: "", address: "", city: "", state: "", zip: "", notes: "", projectId: "" };
@@ -323,7 +325,11 @@ export default function PhotoJobsPage() {
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
 
   const includeArchived = archiveFilter === "archived";
-  const { data: jobs = [], isLoading } = usePhotoJobs(statusFilter, includeArchived);
+  // When viewing the pending bucket, force statusFilter to "pending" regardless of pill selection.
+  // When viewing active, pass the user's pill selection but the query will still return pending jobs
+  // from the server — we filter them out client-side below.
+  const hookStatusFilter = archiveFilter === "pending" ? "pending" : (archiveFilter === "archived" ? statusFilter : statusFilter);
+  const { data: jobs = [], isLoading } = usePhotoJobs(hookStatusFilter, includeArchived);
   const { mutate: createJob, isPending: creating } = useCreatePhotoJob();
   const { mutate: deleteJob } = useDeletePhotoJob();
   const { data: projects = [] } = useProjects();
@@ -331,7 +337,9 @@ export default function PhotoJobsPage() {
 
   const filtered = useMemo(() => jobs.filter((j) => {
     if (archiveFilter === "archived" && !j.isArchived) return false;
-    if (archiveFilter === "active" && j.isArchived) return false;
+    if (archiveFilter === "pending" && (j.isArchived || j.status !== "pending")) return false;
+    // Active bucket: non-archived AND not pending (pending jobs live in their own bucket)
+    if (archiveFilter === "active" && (j.isArchived || j.status === "pending")) return false;
     if (!search) return true;
     const q = search.toLowerCase();
     const addr = formatAddress(j.address, j.city, j.state, j.zip).toLowerCase();
@@ -504,24 +512,25 @@ export default function PhotoJobsPage() {
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <Input placeholder="Search jobs…" value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
           </div>
-          <div className="flex flex-wrap gap-1.5">
-            {STATUS_FILTERS.map((f) => (
-              <button key={f.value} onClick={() => setStatusFilter(f.value)}
-                className={cn("rounded-full px-3 py-1 text-xs font-medium transition-colors", statusFilter === f.value ? "bg-brand-500 text-white" : "border border-slate-200 bg-white text-slate-600 hover:border-slate-300")}>
-                {f.label}
-              </button>
-            ))}
-          </div>
+          {archiveFilter !== "pending" && (
+            <div className="flex flex-wrap gap-1.5">
+              {STATUS_FILTERS.map((f) => (
+                <button key={f.value} onClick={() => setStatusFilter(f.value)}
+                  className={cn("rounded-full px-3 py-1 text-xs font-medium transition-colors", statusFilter === f.value ? "bg-brand-500 text-white" : "border border-slate-200 bg-white text-slate-600 hover:border-slate-300")}>
+                  {f.label}
+                </button>
+              ))}
+            </div>
+          )}
           <div className="h-4 w-px bg-slate-200" />
           <div className="flex gap-1.5">
-            <button onClick={() => setArchiveFilter("active")}
-              className={cn("rounded-full px-3 py-1 text-xs font-medium transition-colors", archiveFilter === "active" ? "bg-slate-700 text-white" : "border border-slate-200 bg-white text-slate-600 hover:border-slate-300")}>
-              Active
-            </button>
-            <button onClick={() => setArchiveFilter("archived")}
-              className={cn("rounded-full px-3 py-1 text-xs font-medium transition-colors", archiveFilter === "archived" ? "bg-slate-700 text-white" : "border border-slate-200 bg-white text-slate-600 hover:border-slate-300")}>
-              Archived
-            </button>
+            {(["active", "pending", "archived"] as ArchiveFilter[]).map((f) => (
+              <button key={f} onClick={() => setArchiveFilter(f)}
+                className={cn("rounded-full px-3 py-1 text-xs font-medium capitalize transition-colors",
+                  archiveFilter === f ? "bg-slate-700 text-white" : "border border-slate-200 bg-white text-slate-600 hover:border-slate-300")}>
+                {f}
+              </button>
+            ))}
           </div>
         </div>
 

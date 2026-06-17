@@ -27,12 +27,14 @@ const STATUS_COLORS: Record<string, string> = {
   active:   "bg-brand-100 text-brand-700",
   complete: "bg-slate-100 text-slate-600",
   on_hold:  "bg-amber-100 text-amber-700",
+  pending:  "bg-purple-100 text-purple-700",
 };
 
 const STATUS_OPTIONS: { value: PhotoJobStatus; label: string }[] = [
   { value: "active",   label: "Active" },
   { value: "complete", label: "Complete" },
   { value: "on_hold",  label: "On Hold" },
+  { value: "pending",  label: "Pending" },
 ];
 
 export default function JobPhotosPage({ params }: { params: Promise<{ jobId: string }> }) {
