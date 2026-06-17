@@ -40,6 +40,8 @@ export function AnnotationEditor({ photoId, projectId }: AnnotationEditorProps) 
   // handlers (which run outside the import callback) can create objects.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const fabricClassesRef = useRef<any>({});
+  // Natural image dimensions stored so handleSave can write them into the JSON
+  const naturalDimsRef = useRef<{ w: number; h: number } | null>(null);
   // Store current tool/color in refs so event handlers always see the latest values
   const toolRef    = useRef<DrawTool>("select");
   const colorRef   = useRef<DrawColor>("#ef4444");
@@ -126,6 +128,7 @@ export function AnnotationEditor({ photoId, projectId }: AnnotationEditorProps) 
         const el      = img.getElement?.() as HTMLImageElement | undefined;
         const naturalW = el?.naturalWidth  || img.width  || 900;
         const naturalH = el?.naturalHeight || img.height || 600;
+        naturalDimsRef.current = { w: naturalW, h: naturalH };
 
         // Wait two animation frames so the flex layout has fully settled before
         // reading container dimensions — on mobile the initial clientHeight is
@@ -184,11 +187,25 @@ export function AnnotationEditor({ photoId, projectId }: AnnotationEditorProps) 
 
           // Re-scale all objects if the canvas is a different size than when
           // the annotation was saved (e.g. annotated on desktop, viewing on mobile).
+          // Compare scale ratios (canvas/natural) rather than raw pixel sizes —
+          // pixel sizes can vary by a few px between sessions due to container
+          // layout jitter (scrollbar, flex settle, rounding), which would falsely
+          // trigger re-scaling and shift annotations by a small amount.
           const savedW = Number(_canvasW) || Number(_savedW) || 0;
           const savedH = Number(_canvasH) || Number(_savedH) || 0;
-          if (savedW > 0 && savedH > 0 && (Math.abs(savedW - w) > 2 || Math.abs(savedH - h) > 2)) {
-            const rx = w / savedW;
-            const ry = h / savedH;
+          const savedNatW = Number((existingAnnotation.fabricJson as Record<string, unknown>)._naturalW) || savedW;
+          const savedNatH = Number((existingAnnotation.fabricJson as Record<string, unknown>)._naturalH) || savedH;
+          const savedScaleX = savedW / savedNatW;
+          const savedScaleY = savedH / savedNatH;
+          const curScaleX   = w / naturalW;
+          const curScaleY   = h / naturalH;
+          // Only re-scale if the ratio changed by more than 0.5% — ignores layout jitter
+          const needsRescale = savedW > 0 && savedH > 0 &&
+            (Math.abs(curScaleX - savedScaleX) / savedScaleX > 0.005 ||
+             Math.abs(curScaleY - savedScaleY) / savedScaleY > 0.005);
+          if (needsRescale) {
+            const rx = curScaleX / savedScaleX;
+            const ry = curScaleY / savedScaleY;
             canvas.getObjects().forEach((obj: FabricCanvas) => {
               obj.set({
                 left:   (obj.left  ?? 0) * rx,
@@ -261,8 +278,10 @@ export function AnnotationEditor({ photoId, projectId }: AnnotationEditorProps) 
     // Store canvas dimensions so objects can be re-scaled if the canvas is a
     // different size on the next load (different device or window size).
     const { backgroundImage: _bg, ...fabricJson } = canvas.toJSON() as Record<string, unknown>;
-    fabricJson._canvasW = canvas.getWidth();
-    fabricJson._canvasH = canvas.getHeight();
+    fabricJson._canvasW  = canvas.getWidth();
+    fabricJson._canvasH  = canvas.getHeight();
+    fabricJson._naturalW = naturalDimsRef.current?.w ?? canvas.getWidth();
+    fabricJson._naturalH = naturalDimsRef.current?.h ?? canvas.getHeight();
     const blob: Blob = await new Promise((res, rej) =>
       canvas.getElement().toBlob(
         (b: Blob | null) => (b ? res(b) : rej(new Error("toBlob failed"))),
