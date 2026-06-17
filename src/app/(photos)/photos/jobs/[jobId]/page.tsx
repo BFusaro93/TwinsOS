@@ -81,6 +81,13 @@ export default function JobPhotosPage({ params }: { params: Promise<{ jobId: str
     );
   }
 
+  function changeStatus(status: PhotoJobStatus) {
+    updateJob(
+      { id: jobId, status },
+      { onSuccess: () => toast.success(`Marked ${status.replace("_", " ")}`), onError: () => toast.error("Failed to update status") },
+    );
+  }
+
   function openLinkEditor() {
     setSelectedProjectId(job?.projectId ?? "");
     setEditingLink(true);
@@ -136,6 +143,32 @@ export default function JobPhotosPage({ params }: { params: Promise<{ jobId: str
             )}
           </div>
         </div>
+
+        {/* Inline status actions */}
+        {!isCrew && !editing && job && (
+          <div className="flex flex-wrap gap-1.5">
+            {job.status === "pending" && (
+              <Button size="sm" onClick={() => changeStatus("active")} disabled={saving}>Mark Active</Button>
+            )}
+            {(job.status === "active" || job.status === "on_hold") && (
+              <Button size="sm" onClick={() => changeStatus("complete")} disabled={saving}>Mark Complete</Button>
+            )}
+            {job.status === "active" && (
+              <Button size="sm" variant="outline" onClick={() => changeStatus("on_hold")} disabled={saving}>Put On Hold</Button>
+            )}
+            {job.status === "on_hold" && (
+              <Button size="sm" variant="outline" onClick={() => changeStatus("active")} disabled={saving}>Resume</Button>
+            )}
+            {job.status === "complete" && (
+              <Button size="sm" variant="outline" onClick={() => changeStatus("active")} disabled={saving}>Reopen</Button>
+            )}
+            {job.status !== "pending" && (
+              <Button size="sm" variant="outline" className="text-purple-600 border-purple-200 hover:bg-purple-50" onClick={() => changeStatus("pending")} disabled={saving}>
+                Mark Pending
+              </Button>
+            )}
+          </div>
+        )}
 
         {/* Edit form */}
         {editing && job && (
