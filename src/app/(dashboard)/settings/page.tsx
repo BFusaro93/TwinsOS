@@ -417,6 +417,8 @@ function GeneralTab() {
     setBrandColor,
     portalEnabled,
     setPortalEnabled,
+    breakevenLaborRateCents,
+    setBreakevenLaborRateCents,
     loadFromRemote,
   } = useSettingsStore();
 
@@ -426,6 +428,7 @@ function GeneralTab() {
   const [addressSaved, setAddressSaved] = useState(false);
 
   const [taxDraft, setTaxDraft] = useState(taxRatePercent);
+  const [breakevenDraft, setBreakevenDraft] = useState((breakevenLaborRateCents / 100).toFixed(2));
   const [orgNameDraft, setOrgNameDraft] = useState(orgName);
 
   useEffect(() => {
@@ -443,6 +446,8 @@ function GeneralTab() {
     // Sync controlled draft inputs to the DB values on first load.
     setOrgNameDraft(remoteSettings.name);
     setTaxDraft(remoteSettings.taxRatePercent);
+    const savedRate = (remoteSettings.customizations as Record<string, unknown>)?.breakevenLaborRateCents;
+    if (typeof savedRate === "number") setBreakevenDraft((savedRate / 100).toFixed(2));
   }, [remoteSettings, loadFromRemote]);
 
   const logoInputRef = useRef<HTMLInputElement>(null);
@@ -688,6 +693,35 @@ function GeneralTab() {
                 onClick={() => {
                   setTaxRatePercent(taxDraft);
                   updateOrgSettings({ taxRatePercent: taxDraft });
+                }}
+              >
+                Save
+              </Button>
+            </div>
+          </SettingRow>
+          <SettingRow
+            label="Breakeven Labor Rate"
+            description="Fully-loaded cost per labor hour (wages + burden + overhead). Used in Job Costing and Project net profit calculations."
+          >
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-slate-500">$</span>
+              <input
+                type="number"
+                min={0}
+                step={0.01}
+                value={breakevenDraft}
+                onChange={(e) => setBreakevenDraft(e.target.value)}
+                className="w-24 rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-900 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+              />
+              <span className="text-sm text-slate-500">/hr</span>
+              <Button
+                size="sm"
+                className="h-8"
+                disabled={Math.round(parseFloat(breakevenDraft) * 100) === breakevenLaborRateCents}
+                onClick={() => {
+                  const cents = Math.round((parseFloat(breakevenDraft) || 0) * 100);
+                  setBreakevenLaborRateCents(cents);
+                  updateOrgSettings({ customizations: { breakevenLaborRateCents: cents } });
                 }}
               >
                 Save

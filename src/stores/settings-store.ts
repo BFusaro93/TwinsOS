@@ -272,6 +272,10 @@ interface SettingsState {
   portalEnabled: boolean;
   setPortalEnabled: (enabled: boolean) => void;
 
+  /** Breakeven labor rate in cents per hour. Used in Projects net profit and Job Costing. Default $69.27. */
+  breakevenLaborRateCents: number;
+  setBreakevenLaborRateCents: (cents: number) => void;
+
   /** Bulk-load all settings from the remote org row on first mount. */
   loadFromRemote: (data: {
     orgName?: string;
@@ -289,6 +293,7 @@ interface SettingsState {
     vendorTypes?: VendorTypeConfig[];
     filterFields?: FilterFieldConfig[];
     requiredFields?: RequiredFieldsConfig;
+    breakevenLaborRateCents?: number;
   }) => void;
 }
 
@@ -538,6 +543,9 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   portalEnabled: true,
   setPortalEnabled: (enabled) => set({ portalEnabled: enabled }),
 
+  breakevenLaborRateCents: 6927,
+  setBreakevenLaborRateCents: (cents) => set({ breakevenLaborRateCents: cents }),
+
   loadFromRemote: (data) =>
     set((s) => ({
       ...(data.orgName !== undefined      && { orgName: data.orgName }),
@@ -555,5 +563,6 @@ export const useSettingsStore = create<SettingsState>((set) => ({
       ...(data.vendorTypes !== undefined  && { vendorTypes: data.vendorTypes }),
       ...(data.filterFields !== undefined && { filterFields: data.filterFields }),
       ...(data.requiredFields !== undefined && { requiredFields: data.requiredFields }),
+      ...(data.breakevenLaborRateCents !== undefined && { breakevenLaborRateCents: data.breakevenLaborRateCents }),
     })),
 }));

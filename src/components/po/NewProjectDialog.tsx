@@ -41,6 +41,7 @@ export function NewProjectDialog({ open, onOpenChange, initialData }: NewProject
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [contractPrice, setContractPrice] = useState("");
+  const [laborHours, setLaborHours] = useState("");
   const [notes, setNotes] = useState("");
   const createProject = useCreateProject();
   const updateProject = useUpdateProject();
@@ -57,6 +58,7 @@ export function NewProjectDialog({ open, onOpenChange, initialData }: NewProject
       setStartDate(initialData.startDate ?? "");
       setEndDate(initialData.endDate ?? "");
       setContractPrice(initialData.contractPrice > 0 ? (initialData.contractPrice / 100).toFixed(2) : "");
+      setLaborHours(initialData.laborHours != null ? String(initialData.laborHours) : "");
       setNotes(initialData.notes ?? "");
     }
   }, [open, initialData]);
@@ -75,6 +77,7 @@ export function NewProjectDialog({ open, onOpenChange, initialData }: NewProject
     setStartDate("");
     setEndDate("");
     setContractPrice("");
+    setLaborHours("");
     setNotes("");
   }
 
@@ -93,6 +96,7 @@ export function NewProjectDialog({ open, onOpenChange, initialData }: NewProject
       startDate: startDate,
       endDate: endDate || null,
       contractPrice: contractPriceCents,
+      laborHours: parseFloat(laborHours) > 0 ? parseFloat(laborHours) : null,
       notes: notes || null,
     };
     if (isEditing && initialData) {
@@ -217,6 +221,20 @@ export function NewProjectDialog({ open, onOpenChange, initialData }: NewProject
                 value={contractPrice}
                 onChange={(e) => setContractPrice(e.target.value)}
                 placeholder="0.00"
+              />
+            </div>
+
+            {/* Labor Hours — half width */}
+            <div className="grid gap-1.5">
+              <Label htmlFor="project-labor-hours">Labor Hours</Label>
+              <Input
+                id="project-labor-hours"
+                type="number"
+                min="0"
+                step="0.5"
+                value={laborHours}
+                onChange={(e) => setLaborHours(e.target.value)}
+                placeholder="0"
               />
             </div>
 

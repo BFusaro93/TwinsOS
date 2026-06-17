@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useSettingsStore } from "@/stores/settings-store";
 import { toast } from "sonner";
 import { Pencil, Trash2, Plus, ExternalLink, Download, Building2 } from "lucide-react";
 import { printProject } from "@/lib/print";
@@ -845,6 +846,7 @@ function DetailsTab({
   onStatusChange: (s: ProjectStatus) => void;
   computedTotalCost: number;
 }) {
+  const { breakevenLaborRateCents } = useSettingsStore();
   return (
     <div className="flex flex-col gap-5 p-6">
       {/* Status flow */}
@@ -910,35 +912,63 @@ function DetailsTab({
 
       <Separator />
 
-      {/* Financials: price, cost, margin */}
-      <div className="rounded-md border bg-slate-50 p-4">
-        <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">Project Financials</p>
-        <div className="space-y-1.5 text-sm">
-          <div className="flex justify-between">
-            <span className="text-slate-500">Contract Price</span>
-            <span className="font-medium text-slate-900">
-              {project.contractPrice > 0 ? formatCurrency(project.contractPrice) : <span className="text-slate-400 italic">Not set</span>}
-            </span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-slate-500">Total Cost</span>
-            <span className="font-medium text-slate-900">{formatCurrency(computedTotalCost)}</span>
-          </div>
-          {project.contractPrice > 0 && (() => {
-            const margin = project.contractPrice - computedTotalCost;
-            const marginPct = Math.round((margin / project.contractPrice) * 100);
-            const isPositive = margin >= 0;
-            return (
-              <div className="flex justify-between border-t border-slate-200 pt-1.5">
-                <span className="font-semibold text-slate-700">Margin</span>
-                <span className={`font-semibold ${isPositive ? "text-green-600" : "text-red-600"}`}>
-                  {formatCurrency(Math.abs(margin))} {isPositive ? "" : "loss"} ({isPositive ? "" : "-"}{Math.abs(marginPct)}%)
+      {/* Financials: price, cost, margin, net profit */}
+      {(() => {
+        const BREAKEVEN_RATE_CENTS = breakevenLaborRateCents;
+        const laborCost = project.laborHours != null ? Math.round(project.laborHours * BREAKEVEN_RATE_CENTS) : null;
+        const totalWithLabor = computedTotalCost + (laborCost ?? 0);
+        const netProfit = project.contractPrice > 0 ? project.contractPrice - totalWithLabor : null;
+        const netProfitPct = netProfit != null && project.contractPrice > 0
+          ? Math.round((netProfit / project.contractPrice) * 100)
+          : null;
+        return (
+          <div className="rounded-md border bg-slate-50 p-4">
+            <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">Project Financials</p>
+            <div className="space-y-1.5 text-sm">
+              <div className="flex justify-between">
+                <span className="text-slate-500">Contract Price</span>
+                <span className="font-medium text-slate-900">
+                  {project.contractPrice > 0 ? formatCurrency(project.contractPrice) : <span className="text-slate-400 italic">Not set</span>}
                 </span>
               </div>
-            );
-          })()}
-        </div>
-      </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Material & Subcontract Costs</span>
+                <span className="font-medium text-slate-900">{formatCurrency(computedTotalCost)}</span>
+              </div>
+              {project.laborHours != null && laborCost != null && (
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Labor ({project.laborHours}h × {formatCurrency(BREAKEVEN_RATE_CENTS)})</span>
+                  <span className="font-medium text-slate-900">{formatCurrency(laborCost)}</span>
+                </div>
+              )}
+              {netProfit != null && (
+                <div className="flex justify-between border-t border-slate-200 pt-1.5">
+                  <span className="font-semibold text-slate-700">Net Profit</span>
+                  <span className={`font-semibold ${netProfit >= 0 ? "text-green-600" : "text-red-600"}`}>
+                    {netProfit < 0 ? "-" : ""}{formatCurrency(Math.abs(netProfit))}
+                    {netProfitPct != null && ` (${netProfit < 0 ? "-" : ""}${Math.abs(netProfitPct)}%)`}
+                  </span>
+                </div>
+              )}
+              {project.laborHours == null && project.contractPrice > 0 && (() => {
+                const margin = project.contractPrice - computedTotalCost;
+                const marginPct = Math.round((margin / project.contractPrice) * 100);
+                return (
+                  <div className="flex justify-between border-t border-slate-200 pt-1.5">
+                    <span className="font-semibold text-slate-700">Margin</span>
+                    <span className={`font-semibold ${margin >= 0 ? "text-green-600" : "text-red-600"}`}>
+                      {margin < 0 ? "-" : ""}{formatCurrency(Math.abs(margin))} ({margin < 0 ? "-" : ""}{Math.abs(marginPct)}%)
+                    </span>
+                  </div>
+                );
+              })()}
+            </div>
+            {project.laborHours == null && (
+              <p className="mt-2 text-xs text-slate-400">Add labor hours to see net profit after labor costs.</p>
+            )}
+          </div>
+        );
+      })()}
     </div>
   );
 }

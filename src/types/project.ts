@@ -20,6 +20,7 @@ export interface Project extends BaseRecord {
   endDate: string | null;
   totalCost: number; // cents, derived
   contractPrice: number; // cents — what the customer is paying
+  laborHours: number | null;
   notes: string | null;
   isArchived: boolean;
 }

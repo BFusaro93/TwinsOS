@@ -78,6 +78,7 @@ export function useCreateProject() {
           start_date: input.startDate || null,
           end_date: input.endDate,
           contract_price: input.contractPrice ?? 0,
+          labor_hours: input.laborHours ?? null,
           notes: input.notes,
         })
         .select()
@@ -112,6 +113,7 @@ export function useUpdateProject() {
           ...(input.startDate !== undefined && { start_date: input.startDate || null }),
           ...(input.endDate !== undefined && { end_date: input.endDate }),
           ...(input.contractPrice !== undefined && { contract_price: input.contractPrice }),
+          ...(input.laborHours !== undefined && { labor_hours: input.laborHours }),
           ...(input.notes !== undefined && { notes: input.notes }),
         })
         .eq("id", id)
@@ -120,7 +122,7 @@ export function useUpdateProject() {
       if (error) throw error;
       return mapProject(data);
     },
-    onMutate: async ({ id, status, name, customerName, address, startDate, endDate, contractPrice, notes }) => {
+    onMutate: async ({ id, status, name, customerName, address, startDate, endDate, contractPrice, laborHours, notes }) => {
       await queryClient.cancelQueries({ queryKey: ["projects"] });
       const previous = queryClient.getQueryData<Project[]>(["projects"]);
       const patch: Partial<Project> = {};
@@ -131,6 +133,7 @@ export function useUpdateProject() {
       if (startDate !== undefined) patch.startDate = startDate ?? null;
       if (endDate !== undefined) patch.endDate = endDate;
       if (contractPrice !== undefined) patch.contractPrice = contractPrice;
+      if (laborHours !== undefined) patch.laborHours = laborHours;
       if (notes !== undefined) patch.notes = notes;
       patchProjectCache(queryClient, id, patch);
       return { previous };

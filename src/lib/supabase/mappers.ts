@@ -142,6 +142,7 @@ export function mapProject(row: ProjectRow): Project {
     endDate: row.end_date,
     totalCost: row.total_cost,
     contractPrice: row.contract_price ?? 0,
+    laborHours: (row as Record<string, unknown>).labor_hours as number | null ?? null,
     notes: row.notes,
     isArchived: (row as Record<string, unknown>).is_archived === true,
   };

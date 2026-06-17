@@ -1,6 +1,8 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
+import { useSettingsStore } from "@/stores/settings-store";
+import { useUpdateOrgSettings } from "@/lib/hooks/use-org-settings";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   ResponsiveContainer, PieChart, Pie, Cell,
@@ -352,6 +354,17 @@ function InputsForm({ inputs, setInputs, compact }: InputsFormProps) {
 
 function CalculatorTab({ inputs, setInputs }: { inputs: Inputs; setInputs: (i: Inputs) => void }) {
   const c = useMemo(() => compute(inputs), [inputs]);
+  const { breakevenLaborRateCents, setBreakevenLaborRateCents } = useSettingsStore();
+  const { mutate: updateOrgSettings } = useUpdateOrgSettings();
+  const [savedBreakEven, setSavedBreakEven] = useState(false);
+
+  const handleSaveBreakEven = useCallback(() => {
+    const cents = Math.round(c.breakEven * 100);
+    setBreakevenLaborRateCents(cents);
+    updateOrgSettings({ customizations: { breakevenLaborRateCents: cents } });
+    setSavedBreakEven(true);
+    setTimeout(() => setSavedBreakEven(false), 2000);
+  }, [c.breakEven, setBreakevenLaborRateCents, updateOrgSettings]);
 
   const breakdownData = [
     {
@@ -402,6 +415,13 @@ function CalculatorTab({ inputs, setInputs }: { inputs: Inputs; setInputs: (i: I
             </div>
           </div>
           <p className="mt-2 text-xs text-slate-500">Labor {fmtDollar(c.laborPerHour)} + OH {fmtDollar(c.ohPerHour)}</p>
+          <button
+            type="button"
+            onClick={handleSaveBreakEven}
+            className="mt-2 text-xs font-medium text-brand-600 hover:text-brand-700"
+          >
+            {savedBreakEven ? "✓ Saved as project rate" : Math.round(c.breakEven * 100) === breakevenLaborRateCents ? `Using this rate (${fmtDollar(c.breakEven)}/hr)` : `Set as project rate`}
+          </button>
         </div>
 
         <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
