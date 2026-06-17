@@ -208,7 +208,7 @@ export default function DashboardPage() {
         </p>
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
           <StatCard title="Open Work Orders" value={cmmsKPIs.openWorkOrders} icon={Wrench} href="/cmms/work-orders?status=open,in_progress,on_hold" />
-          <StatCard title="High Priority" value={cmmsKPIs.highPriority} icon={AlertTriangle} href="/cmms/work-orders?priority=high,critical" />
+          <StatCard title="High Priority" value={cmmsKPIs.highPriority} icon={AlertTriangle} href="/cmms/work-orders?priority=high,critical&status=open,in_progress,on_hold" />
           <StatCard title="Overdue WOs" value={cmmsKPIs.overdueWOs} icon={Clock} href="/cmms/work-orders?overdue=1" />
           <StatCard
             title="PM Compliance"
