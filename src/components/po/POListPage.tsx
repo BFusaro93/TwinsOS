@@ -62,6 +62,14 @@ export function POListPage() {
   }, [searchParams, setSelectedPOId]);
   const [search, setSearch] = useState("");
   const [filterValues, setFilterValues] = useStickyState<Record<string, string | string[]>>("po-filters", {});
+  const [urlFiltersApplied, setUrlFiltersApplied] = useState(false);
+  useEffect(() => {
+    if (urlFiltersApplied) return;
+    const statusParam = searchParams.get("status");
+    if (statusParam) setFilterValues((prev) => ({ ...prev, status: statusParam.split(",") }));
+    setUrlFiltersApplied(true);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"list" | "table">("list");
   const [sheetPOId, setSheetPOId] = useState<string | null>(null);

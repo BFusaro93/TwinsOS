@@ -339,6 +339,24 @@ export function WorkOrderListPage() {
   }, [searchParams, setSelectedWorkOrderId]);
   const [search, setSearch] = useState("");
   const [filterValues, setFilterValues] = useStickyState<Record<string, string | string[]>>("wo-filters", {});
+  // Seed filters from URL params on first mount (dashboard deep-links)
+  const [urlFiltersApplied, setUrlFiltersApplied] = useState(false);
+  useEffect(() => {
+    if (urlFiltersApplied) return;
+    const statusParam = searchParams.get("status");
+    const priorityParam = searchParams.get("priority");
+    const overdueParam = searchParams.get("overdue");
+    if (statusParam || priorityParam || overdueParam) {
+      setFilterValues((prev) => ({
+        ...prev,
+        ...(statusParam ? { status: statusParam.split(",") } : {}),
+        ...(priorityParam ? { priority: priorityParam.split(",") } : {}),
+        ...(overdueParam === "1" ? { overdue: "1" } : {}),
+      }));
+    }
+    setUrlFiltersApplied(true);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"list" | "table" | "upcoming">("list");
   const [sheetWOId, setSheetWOId] = useState<string | null>(null);
@@ -375,7 +393,7 @@ export function WorkOrderListPage() {
     { key: "category",       placeholder: "All Categories",        options: categoryOptions,      multi: true as const },
   ];
 
-  const activeFilterCount = advancedFilters.filter((f) => {
+  const activeFilterCount = [...advancedFilters, { key: "overdue" }].filter((f) => {
     const v = filterValues[f.key];
     return Array.isArray(v) ? v.length > 0 : !!v && v !== "all";
   }).length;
@@ -410,7 +428,8 @@ export function WorkOrderListPage() {
     const assigneeNames = wo.assignedToNames.length > 0 ? wo.assignedToNames : (wo.assignedToName ? [wo.assignedToName] : []);
     const matchAssignee  = !filterValues.assignedToName?.length || assigneeNames.some((n) => matchesFilter(n, filterValues.assignedToName));
     const matchCategory  = matchesFilter(wo.category ?? "", filterValues.category);
-    return matchSearch && matchStatus && matchPriority && matchType && matchRecurring && matchAsset && matchAssignee && matchCategory;
+    const matchOverdue   = filterValues.overdue !== "1" || (wo.status !== "done" && !!wo.dueDate && wo.dueDate < todayDateStr);
+    return matchSearch && matchStatus && matchPriority && matchType && matchRecurring && matchAsset && matchAssignee && matchCategory && matchOverdue;
   });
 
   const PRIORITY_ORDER = { critical: 0, high: 1, medium: 2, low: 3 };
