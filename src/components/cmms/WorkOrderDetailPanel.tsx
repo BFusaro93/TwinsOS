@@ -511,8 +511,8 @@ function DetailsTab({
                       <ChevronDown className="h-3 w-3 opacity-50" />
                     </button>
                   </PopoverTrigger>
-                  <PopoverContent className="w-48 p-1" align="start">
-                    <div className="flex max-h-48 flex-col overflow-y-auto">
+                  <PopoverContent className="w-48 max-h-60 overflow-y-auto p-1" align="start" avoidCollisions sideOffset={4}>
+                    <div className="flex flex-col">
                       {enabledCats.map((c) => {
                         const isChecked = selectedCats.includes(c.id);
                         return (

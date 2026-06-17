@@ -30,6 +30,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { Resend } from "resend";
 import type { Database } from "@/types/supabase";
 
 const VALID_PRIORITIES = new Set(["low", "medium", "high", "critical"]);
@@ -116,16 +117,48 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Failed to create request" }, { status: 500 });
   }
 
-  // Notify admins/managers (best-effort)
-  fetch(`${req.nextUrl.origin}/api/notifications/email`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      type: "new_maintenance_request",
-      entityId: mr.id,
-      entityType: "maintenance_request",
-    }),
-  }).catch(() => {});
+  // Notify admins/managers via email (best-effort, direct send — no auth session available)
+  try {
+    const resendKey = process.env.RESEND_API_KEY;
+    if (resendKey) {
+      const { data: recipients } = await supabase
+        .from("profiles")
+        .select("email, name, notification_prefs")
+        .eq("org_id", org.id)
+        .in("role", ["admin", "manager"]);
+
+      const eligible = (recipients ?? []).filter((p) => {
+        if (!p.email) return false;
+        const prefs = (p.notification_prefs ?? {}) as Record<string, unknown>;
+        return prefs["emailNewMaintenanceRequest"] !== false;
+      });
+
+      if (eligible.length > 0) {
+        const resend = new Resend(resendKey);
+        const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://twins-os.vercel.app";
+        const subject = `New maintenance request: ${title}`;
+        const link = `${siteUrl}/cmms/work-orders`;
+
+        await Promise.allSettled(
+          eligible.map((p) =>
+            resend.emails.send({
+              from: "Equipt <noreply@twinslawnservice.com>",
+              to: p.email as string,
+              subject,
+              html: `<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px 24px">
+                <h2 style="margin:0 0 8px;font-size:20px;color:#0f172a">New Maintenance Request</h2>
+                <p style="margin:0 0 4px;color:#475569">Hi ${p.name ?? "there"},</p>
+                <p style="margin:0 0 24px;color:#475569">${requestedBy} submitted: <strong>${requestNumber} — ${title}</strong>.</p>
+                <a href="${link}" style="display:inline-block;padding:12px 24px;background:#7c3aed;color:#fff;text-decoration:none;border-radius:6px;font-weight:600">Review Request</a>
+              </div>`,
+            })
+          )
+        );
+      }
+    }
+  } catch {
+    // best-effort — don't fail the request
+  }
 
   return NextResponse.json(
     { requestNumber: mr.request_number, id: mr.id },
