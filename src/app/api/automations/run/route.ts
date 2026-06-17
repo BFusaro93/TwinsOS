@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { createClient as createServerClient } from "@/lib/supabase/server";
+import { Resend } from "resend";
 import type { Database } from "@/types/supabase";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -185,6 +186,48 @@ async function handleRun(request: Request) {
         continue;
       }
       result = mr.request_number;
+
+      // Notify admins/managers about the auto-generated maintenance request
+      try {
+        const resendKey = process.env.RESEND_API_KEY;
+        if (resendKey) {
+          const { data: recipients } = await (adminClient as AdminClient)
+            .from("profiles")
+            .select("email, name, notification_prefs")
+            .eq("org_id", orgId)
+            .in("role", ["admin", "manager"]);
+
+          const eligible = (recipients ?? []).filter((p: { email: string | null; notification_prefs: Record<string, unknown> | null }) => {
+            if (!p.email) return false;
+            const prefs = (p.notification_prefs ?? {}) as Record<string, unknown>;
+            return prefs["emailNewMaintenanceRequest"] !== false;
+          });
+
+          if (eligible.length > 0) {
+            const resend = new Resend(resendKey);
+            const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://twins-os.vercel.app";
+            const subject = `New maintenance request: ${acTitle}`;
+            const link = `${siteUrl}/cmms/work-orders`;
+            await Promise.allSettled(
+              eligible.map((p: { email: string | null; name: string | null }) =>
+                resend.emails.send({
+                  from: "Equipt <noreply@twinslawnservice.com>",
+                  to: p.email as string,
+                  subject,
+                  html: `<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px 24px">
+                    <h2 style="margin:0 0 8px;font-size:20px;color:#0f172a">New Maintenance Request</h2>
+                    <p style="margin:0 0 4px;color:#475569">Hi ${p.name ?? "there"},</p>
+                    <p style="margin:0 0 24px;color:#475569">Automation <strong>${auto.name}</strong> created: <strong>${mr.request_number} — ${acTitle}</strong>.</p>
+                    <a href="${link}" style="display:inline-block;padding:12px 24px;background:#7c3aed;color:#fff;text-decoration:none;border-radius:6px;font-weight:600">Review Request</a>
+                  </div>`,
+                })
+              )
+            );
+          }
+        }
+      } catch {
+        // best-effort — don't fail the automation run
+      }
 
     } else if (auto.action_type === "create_requisition") {
       // ── Create draft Requisition ────────────────────────────────────────────
