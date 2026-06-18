@@ -544,7 +544,7 @@ function Summary({ cur, employees, crewDefs, onEditWeek, onImportNew }: SummaryP
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between rounded-md bg-slate-50 px-4 py-2 text-sm text-slate-500">
-        <span>Week of {fmtDate(cur.weekEnd)}</span>
+        <span>Wk ending {fmtDate(cur.weekEnd)}</span>
         <button
           onClick={()=>onEditWeek(cur)}
           className="flex items-center gap-1.5 text-xs font-medium text-brand-600 hover:underline"
@@ -705,13 +705,14 @@ interface HistoryProps {
 }
 function History({ weeks, crewDefs, onEditWeek, onDeleteWeek }: HistoryProps) {
   if (!weeks.length) return <div className="py-16 text-center text-sm text-slate-400">No history yet.</div>;
-  const labels = weeks.map(w=>fmtDate(w.weekEnd));
-  const hrsData = weeks.map((w,i)=>{
+  const recentWeeks = weeks.slice(-10);
+  const labels = recentWeeks.map(w=>fmtDate(w.weekEnd));
+  const hrsData = recentWeeks.map((w,i)=>{
     let tO=0,tG=0;
     crewDefs.forEach(cr=>{for(let d=0;d<7;d++){tO+=pf(w.data.days[d]?.avb[cr.code]?.actual);(w.data.days[d]?.assignments[cr.code]??[]).forEach(u=>{tG+=getHrsOnDay(w.data.gusto,u,d);});}});
     return {week:labels[i],"On-site":parseFloat(tO.toFixed(1)),"Gusto":parseFloat(tG.toFixed(1))};
   });
-  const effData = weeks.map((w,i)=>{
+  const effData = recentWeeks.map((w,i)=>{
     const pt: Record<string,number|string>={week:labels[i]};
     crewDefs.forEach(cr=>{let g=0,o=0;for(let d=0;d<7;d++){o+=pf(w.data.days[d]?.avb[cr.code]?.actual);(w.data.days[d]?.assignments[cr.code]??[]).forEach(u=>{g+=getHrsOnDay(w.data.gusto,u,d);});}if(g>0)pt[cr.code]=parseFloat((o/g*100).toFixed(1));});
     return pt;
@@ -757,7 +758,7 @@ function History({ weeks, crewDefs, onEditWeek, onDeleteWeek }: HistoryProps) {
                 crewDefs.forEach(cr=>{for(let d=0;d<7;d++){tO+=pf(w.data.days[d]?.avb[cr.code]?.actual);tB+=pf(w.data.days[d]?.avb[cr.code]?.budgeted);(w.data.days[d]?.assignments[cr.code]??[]).forEach(u=>{tG+=getHrsOnDay(w.data.gusto,u,d);});}});
                 const avbVar=tB-tO; const gap=tG>0?tG-tO:null; const ep=tG>0?Math.round(tO/tG*100):null;
                 return (<tr key={w.weekEnd} className="hover:bg-slate-50">
-                  <td className="py-3 pl-4 font-medium">Week of {fmtDate(w.weekEnd)}</td>
+                  <td className="py-3 pl-4 font-medium">Wk ending {fmtDate(w.weekEnd)}</td>
                   <Td right>{tB.toFixed(1)}</Td><Td right>{tO.toFixed(1)}</Td>
                   <Td right><span className={avbVar>=0?"text-green-600":"text-red-600"}>{avbVar>=0?"+":""}{avbVar.toFixed(1)}</span></Td>
                   <Td right>{tG>0?tG.toFixed(1):"—"}</Td>

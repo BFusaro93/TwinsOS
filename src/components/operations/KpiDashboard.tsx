@@ -5,6 +5,7 @@ import { useKpiActuals, useUpsertKpiActual } from "@/lib/hooks/use-kpi-actuals";
 import { useAvbWeeks } from "@/lib/hooks/use-avb-weeks";
 import { useActualPeriods, useYtdActualPeriods, computeNOI, totalOpex, EMPTY_DATA, EMPTY_OPEX, type FinancialPeriodRecord, type FinancialPeriodData } from "@/lib/hooks/use-financial-periods";
 import { useSafetyWeeks } from "@/lib/hooks/use-safety-weeks";
+import { useCrmReportMetrics } from "@/lib/hooks/use-crm-report-metrics";
 
 // ── KPI definitions ───────────────────────────────────────────────────────────
 
@@ -313,6 +314,7 @@ export function KpiDashboard() {
   const { data: financialActuals = [] } = useActualPeriods();
   const { data: financialYtdActuals = [] } = useYtdActualPeriods();
   const { data: safetyWeeks = [] } = useSafetyWeeks();
+  const { data: crmMetrics = {} } = useCrmReportMetrics();
 
   // Build a lookup map: metricKey → { targetValue, actualValue }
   const actualsMap = useCallback(() => {
@@ -408,12 +410,19 @@ export function KpiDashboard() {
       net_margin_ytd: rev > 0 ? parseFloat((ytd.net_income / rev * 100).toFixed(1)) : null,
       overhead_ratio: rev > 0 ? parseFloat((opex / rev * 100).toFixed(1)) : null,
       revenue_invoiced: rev > 0 ? Math.round(rev / 100) : null, // cents → dollars
+      // Sales (from CRM report)
+      new_leads_ytd: crmMetrics.new_leads_ytd ?? null,
+      new_clients_ytd: crmMetrics.new_clients_ytd ?? null,
+      lead_conversion_rate: crmMetrics.lead_conversion_rate ?? null,
+      close_ratio: crmMetrics.close_ratio ?? null,
+      won_estimates_ytd: crmMetrics.won_estimates_ytd ?? null,
     };
-  }, [avbWeeks, safetyWeeks, financialActuals, financialYtdActuals, period]);
+  }, [avbWeeks, safetyWeeks, financialActuals, financialYtdActuals, period, crmMetrics]);
 
   const DERIVED_KEYS = new Set([
     "labor_efficiency", "avb_variance", "ot_pct_hours", "fleet_avg_safety_score",
     "gross_margin_ytd", "noi_margin_ytd", "net_margin_ytd", "overhead_ratio", "revenue_invoiced",
+    "new_leads_ytd", "new_clients_ytd", "lead_conversion_rate", "close_ratio", "won_estimates_ytd",
   ]);
 
   // Overlay derived values — derived always wins for actual; target stays user-editable

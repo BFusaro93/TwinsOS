@@ -494,7 +494,8 @@ export function SafetyDashboard() {
       </div>
     );
 
-    const trendData = weeks.map(w => {
+    const recentWeeks = weeks.slice(-10);
+    const trendData = recentWeeks.map(w => {
       const drivers = (w.data.drivers ?? []).filter(d => !EXCLUDE_VEHICLES.has(d.name));
       const avg = drivers.length ? Math.round(drivers.reduce((s, d) => s + d.score, 0) / drivers.length) : 0;
       const perfect = drivers.filter(d => d.score === 100).length;
@@ -503,8 +504,8 @@ export function SafetyDashboard() {
     });
 
     // Per-truck trend data
-    const allTrucks = [...new Set(weeks.flatMap(w => w.data.drivers.map(d => d.name)))].filter(n => !EXCLUDE_VEHICLES.has(n)).sort();
-    const truckTrendData = weeks.map(w => {
+    const allTrucks = [...new Set(recentWeeks.flatMap(w => w.data.drivers.map(d => d.name)))].filter(n => !EXCLUDE_VEHICLES.has(n)).sort();
+    const truckTrendData = recentWeeks.map(w => {
       const row: Record<string, string | number> = { week: w.data.label || fmtDate(w.weekEnd) };
       w.data.drivers.forEach(d => { if (!EXCLUDE_VEHICLES.has(d.name)) row[d.name] = d.score; });
       return row;
