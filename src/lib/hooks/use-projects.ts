@@ -80,6 +80,8 @@ export function useCreateProject() {
           contract_price: input.contractPrice ?? 0,
           labor_hours: input.laborHours ?? null,
           budget_hours: input.budgetHours ?? null,
+          labor_rate_cents: input.laborRateCents ?? null,
+          burdened_rate_cents: input.burdenedRateCents ?? null,
           notes: input.notes,
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           ...(input.clientId !== undefined && { client_id: (input as any).clientId }),
@@ -118,6 +120,8 @@ export function useUpdateProject() {
           ...(input.contractPrice !== undefined && { contract_price: input.contractPrice }),
           ...(input.laborHours !== undefined && { labor_hours: input.laborHours }),
           ...(input.budgetHours !== undefined && { budget_hours: input.budgetHours }),
+          ...(input.laborRateCents !== undefined && { labor_rate_cents: input.laborRateCents }),
+          ...(input.burdenedRateCents !== undefined && { burdened_rate_cents: input.burdenedRateCents }),
           ...(input.notes !== undefined && { notes: input.notes }),
         })
         .eq("id", id)
@@ -126,7 +130,7 @@ export function useUpdateProject() {
       if (error) throw error;
       return mapProject(data);
     },
-    onMutate: async ({ id, status, name, customerName, address, startDate, endDate, contractPrice, laborHours, budgetHours, notes }) => {
+    onMutate: async ({ id, status, name, customerName, address, startDate, endDate, contractPrice, laborHours, budgetHours, laborRateCents, burdenedRateCents, notes }) => {
       await queryClient.cancelQueries({ queryKey: ["projects"] });
       const previous = queryClient.getQueryData<Project[]>(["projects"]);
       const patch: Partial<Project> = {};
@@ -139,6 +143,8 @@ export function useUpdateProject() {
       if (contractPrice !== undefined) patch.contractPrice = contractPrice;
       if (laborHours !== undefined) patch.laborHours = laborHours;
       if (budgetHours !== undefined) patch.budgetHours = budgetHours;
+      if (laborRateCents !== undefined) patch.laborRateCents = laborRateCents;
+      if (burdenedRateCents !== undefined) patch.burdenedRateCents = burdenedRateCents;
       if (notes !== undefined) patch.notes = notes;
       patchProjectCache(queryClient, id, patch);
       return { previous };

@@ -22,6 +22,8 @@ export interface Project extends BaseRecord {
   contractPrice: number; // cents — what the customer is paying
   laborHours: number | null;
   budgetHours: number | null;
+  laborRateCents: number | null;
+  burdenedRateCents: number | null;
   notes: string | null;
   isArchived: boolean;
   // CRM linkage

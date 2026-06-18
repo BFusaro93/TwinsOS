@@ -144,6 +144,8 @@ export function mapProject(row: ProjectRow): Project {
     contractPrice: row.contract_price ?? 0,
     laborHours: (row as Record<string, unknown>).labor_hours as number | null ?? null,
     budgetHours: (row as Record<string, unknown>).budget_hours as number | null ?? null,
+    laborRateCents: (row as Record<string, unknown>).labor_rate_cents as number | null ?? null,
+    burdenedRateCents: (row as Record<string, unknown>).burdened_rate_cents as number | null ?? null,
     notes: row.notes,
     isArchived: (row as Record<string, unknown>).is_archived === true,
     clientId: (row as Record<string, unknown>).client_id as string | null ?? null,

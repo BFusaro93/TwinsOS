@@ -890,29 +890,90 @@ function HoursField({
   );
 }
 
+function RateField({
+  label,
+  valueCents,
+  onSave,
+}: {
+  label: string;
+  valueCents: number;
+  onSave: (cents: number) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+
+  function startEdit() {
+    setDraft((valueCents / 100).toFixed(2));
+    setEditing(true);
+  }
+
+  function commit() {
+    const cents = Math.round((parseFloat(draft) || 0) * 100);
+    if (cents > 0) onSave(cents);
+    setEditing(false);
+  }
+
+  if (editing) {
+    return (
+      <div className="flex items-center gap-1">
+        <span className="text-xs text-slate-400">$</span>
+        <input
+          type="number"
+          min={0}
+          step={0.01}
+          autoFocus
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => { if (e.key === "Enter") commit(); if (e.key === "Escape") setEditing(false); }}
+          className="w-20 rounded border border-slate-300 px-2 py-0.5 text-sm text-right focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+        />
+        <span className="text-xs text-slate-400">/hr</span>
+      </div>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={startEdit}
+      className="group flex items-center gap-1 rounded px-1 text-sm font-medium text-slate-900 hover:bg-slate-100"
+      title={`Click to edit ${label}`}
+    >
+      {formatCurrency(valueCents)}/hr
+      <Pencil className="h-3 w-3 text-slate-300 opacity-0 transition-opacity group-hover:opacity-100" />
+    </button>
+  );
+}
+
 function DetailsTab({
   project,
   status,
   onStatusChange,
   computedTotalCost,
   onUpdateHours,
+  onUpdateRates,
 }: {
   project: Project;
   status: ProjectStatus;
   onStatusChange: (s: ProjectStatus) => void;
   computedTotalCost: number;
   onUpdateHours: (laborHours: number | null, budgetHours: number | null) => void;
+  onUpdateRates: (laborRateCents: number, burdenedRateCents: number) => void;
 }) {
   const { breakevenLaborRateCents, burdenedLaborRateCents } = useSettingsStore();
+  // Use project-level snapshot if set; fall back to org settings for old projects
+  const effectiveFullRate = project.laborRateCents ?? breakevenLaborRateCents;
+  const effectiveBurdenedRate = project.burdenedRateCents ?? burdenedLaborRateCents;
 
   // Hours variance
   const hasActual = project.laborHours != null;
   const hasBudget = project.budgetHours != null;
   const hoursVariance = hasActual && hasBudget ? project.laborHours! - project.budgetHours! : null;
 
-  // Cost calculations
-  const laborCostFull = project.laborHours != null ? Math.round(project.laborHours * breakevenLaborRateCents) : null;
-  const laborCostBurdened = project.laborHours != null ? Math.round(project.laborHours * burdenedLaborRateCents) : null;
+  // Cost calculations — use project-level rates (snapshotted at creation, editable per project)
+  const laborCostFull = project.laborHours != null ? Math.round(project.laborHours * effectiveFullRate) : null;
+  const laborCostBurdened = project.laborHours != null ? Math.round(project.laborHours * effectiveBurdenedRate) : null;
   const totalFull = computedTotalCost + (laborCostFull ?? 0);
   const totalBurdened = computedTotalCost + (laborCostBurdened ?? 0);
   const netFull = project.contractPrice > 0 ? project.contractPrice - totalFull : null;
@@ -981,9 +1042,9 @@ function DetailsTab({
 
       <Separator />
 
-      {/* Hours — inline editable, actual vs budget */}
+      {/* Hours + Rates — inline editable */}
       <div>
-        <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">Hours</p>
+        <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">Hours &amp; Labor Rates</p>
         <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
           <div className="text-slate-500">Budget Hours</div>
           <HoursField
@@ -1010,6 +1071,20 @@ function DetailsTab({
               </div>
             </>
           )}
+          <div className="mt-2 pt-2 border-t border-slate-100 text-slate-500">Full Rate</div>
+          <div className="mt-2 pt-2 border-t border-slate-100">
+            <RateField
+              label="Full Breakeven Rate"
+              valueCents={effectiveFullRate}
+              onSave={(cents) => onUpdateRates(cents, effectiveBurdenedRate)}
+            />
+          </div>
+          <div className="text-slate-500">Burdened Rate</div>
+          <RateField
+            label="Burdened Rate"
+            valueCents={effectiveBurdenedRate}
+            onSave={(cents) => onUpdateRates(effectiveFullRate, cents)}
+          />
         </div>
       </div>
 
@@ -1031,13 +1106,13 @@ function DetailsTab({
           </div>
           {laborCostFull != null && (
             <div className="flex justify-between">
-              <span className="text-slate-500">Labor — Full Rate ({project.laborHours}h × {formatCurrency(breakevenLaborRateCents)})</span>
+              <span className="text-slate-500">Labor — Full Rate ({project.laborHours}h × {formatCurrency(effectiveFullRate)})</span>
               <span className="font-medium text-slate-900">{formatCurrency(laborCostFull)}</span>
             </div>
           )}
           {laborCostBurdened != null && laborCostBurdened !== laborCostFull && (
             <div className="flex justify-between">
-              <span className="text-slate-500">Labor — Burdened Rate ({project.laborHours}h × {formatCurrency(burdenedLaborRateCents)})</span>
+              <span className="text-slate-500">Labor — Burdened Rate ({project.laborHours}h × {formatCurrency(effectiveBurdenedRate)})</span>
               <span className="font-medium text-slate-900">{formatCurrency(laborCostBurdened)}</span>
             </div>
           )}
@@ -1257,6 +1332,9 @@ export function ProjectDetailPanel({ project }: ProjectDetailPanelProps) {
                 }}
                 onUpdateHours={(laborHours, budgetHours) => {
                   updateProject({ id: project.id, laborHours, budgetHours });
+                }}
+                onUpdateRates={(laborRateCents, burdenedRateCents) => {
+                  updateProject({ id: project.id, laborRateCents, burdenedRateCents });
                 }}
               />
             ),

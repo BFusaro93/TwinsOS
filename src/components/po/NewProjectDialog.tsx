@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useCreateProject, useUpdateProject } from "@/lib/hooks/use-projects";
+import { useSettingsStore } from "@/stores/settings-store";
 import type { Project } from "@/types";
 
 interface NewProjectDialogProps {
@@ -46,6 +47,7 @@ export function NewProjectDialog({ open, onOpenChange, initialData }: NewProject
   const [notes, setNotes] = useState("");
   const createProject = useCreateProject();
   const updateProject = useUpdateProject();
+  const { breakevenLaborRateCents, burdenedLaborRateCents } = useSettingsStore();
 
   useEffect(() => {
     if (open && initialData) {
@@ -106,7 +108,11 @@ export function NewProjectDialog({ open, onOpenChange, initialData }: NewProject
     if (isEditing && initialData) {
       updateProject.mutate({ id: initialData.id, ...payload }, { onSuccess: () => handleClose() });
     } else {
-      createProject.mutate(payload, { onSuccess: () => handleClose() });
+      createProject.mutate({
+        ...payload,
+        laborRateCents: breakevenLaborRateCents,
+        burdenedRateCents: burdenedLaborRateCents,
+      }, { onSuccess: () => handleClose() });
     }
   }
   const saving = createProject.isPending || updateProject.isPending;

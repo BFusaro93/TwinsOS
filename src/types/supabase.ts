@@ -3642,6 +3642,7 @@ export type Database = {
         Row: {
           address: string
           budget_hours: number | null
+          burdened_rate_cents: number | null
           city: string
           contract_price: number
           created_at: string
@@ -3652,6 +3653,7 @@ export type Database = {
           id: string
           is_archived: boolean
           labor_hours: number | null
+          labor_rate_cents: number | null
           name: string
           notes: string | null
           org_id: string
@@ -3665,6 +3667,7 @@ export type Database = {
         Insert: {
           address?: string
           budget_hours?: number | null
+          burdened_rate_cents?: number | null
           city?: string
           contract_price?: number
           created_at?: string
@@ -3675,6 +3678,7 @@ export type Database = {
           id?: string
           is_archived?: boolean
           labor_hours?: number | null
+          labor_rate_cents?: number | null
           name: string
           notes?: string | null
           org_id?: string
@@ -3688,6 +3692,7 @@ export type Database = {
         Update: {
           address?: string
           budget_hours?: number | null
+          burdened_rate_cents?: number | null
           city?: string
           contract_price?: number
           created_at?: string
@@ -3698,6 +3703,7 @@ export type Database = {
           id?: string
           is_archived?: boolean
           labor_hours?: number | null
+          labor_rate_cents?: number | null
           name?: string
           notes?: string | null
           org_id?: string
