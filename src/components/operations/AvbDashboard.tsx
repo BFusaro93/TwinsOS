@@ -1606,6 +1606,7 @@ export function AvbDashboard() {
   }, [allEmp, crewDefs]);
 
   const [viewWeekEnd, setViewWeekEnd] = useState<string | null>(null);
+  const [weekWindowEnd, setWeekWindowEnd] = useState<number | null>(null);
   const curIdx = useMemo(() => {
     if (!weeks.length) return -1;
     if (viewWeekEnd) {
@@ -1819,22 +1820,24 @@ export function AvbDashboard() {
         <>
           {(tab==="summary" || tab==="daily") && weeks.length > 0 && (() => {
             const PAGE = 8;
-            // Window: show up to PAGE weeks ending at curIdx (or the last PAGE if curIdx near end)
-            const windowEnd = Math.max(PAGE - 1, curIdx);
-            const windowStart = Math.max(0, windowEnd - PAGE + 1);
-            const visible = weeks.slice(windowStart, windowEnd + 1);
-            const canLeft = windowStart > 0;
-            const canRight = windowEnd < weeks.length - 1;
+            const wEnd = weekWindowEnd ?? weeks.length - 1;
+            const wStart = Math.max(0, wEnd - PAGE + 1);
+            const visible = weeks.slice(wStart, wEnd + 1);
+            const canLeft = wStart > 0;
+            const canRight = wEnd < weeks.length - 1;
             return (
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-xs font-semibold uppercase tracking-widest text-slate-400">Week:</span>
                 <button
-                  disabled={curIdx <= 0}
-                  onClick={() => setViewWeekEnd(weeks[curIdx - 1].weekEnd)}
+                  disabled={!canLeft}
+                  onClick={() => {
+                    const newEnd = wEnd - 1;
+                    setWeekWindowEnd(newEnd);
+                    if (curIdx > newEnd) setViewWeekEnd(weeks[newEnd].weekEnd);
+                  }}
                   className="rounded p-1.5 text-slate-400 hover:text-slate-700 disabled:opacity-30"
-                  title="Previous week"
+                  title="Previous weeks"
                 >&#8592;</button>
-                {canLeft && <span className="text-xs text-slate-300">…</span>}
                 {visible.map(w => (
                   <button
                     key={w.weekEnd}
@@ -1847,12 +1850,15 @@ export function AvbDashboard() {
                     )}
                   </button>
                 ))}
-                {canRight && <span className="text-xs text-slate-300">…</span>}
                 <button
-                  disabled={curIdx >= weeks.length - 1}
-                  onClick={() => setViewWeekEnd(weeks[curIdx + 1].weekEnd)}
+                  disabled={!canRight}
+                  onClick={() => {
+                    const newEnd = wEnd + 1;
+                    setWeekWindowEnd(newEnd);
+                    if (curIdx < newEnd - PAGE + 1) setViewWeekEnd(weeks[newEnd - PAGE + 1].weekEnd);
+                  }}
                   className="rounded p-1.5 text-slate-400 hover:text-slate-700 disabled:opacity-30"
-                  title="Next week"
+                  title="Next weeks"
                 >&#8594;</button>
               </div>
             );

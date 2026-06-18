@@ -165,6 +165,7 @@ function KpiCard({
 export function SafetyDashboard() {
   const [tab, setTab] = useState<Tab>("overview");
   const [viewWeekEnd, setViewWeekEnd] = useState<string | null>(null);
+  const [weekWindowEnd, setWeekWindowEnd] = useState<number | null>(null);
 
   // Import state
   const [importLabel, setImportLabel] = useState("");
@@ -284,19 +285,24 @@ export function SafetyDashboard() {
         {/* Week selector */}
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-xs font-semibold uppercase tracking-widest text-slate-400">Week:</span>
-          <button
-            disabled={curIdx <= 0}
-            onClick={() => setViewWeekEnd(weeks[curIdx - 1].weekEnd)}
-            className="rounded p-1.5 text-slate-400 hover:text-slate-700 disabled:opacity-30"
-            title="Previous week"
-          >&#8592;</button>
           {(() => {
             const PAGE = 6;
-            const windowEnd = Math.max(PAGE - 1, curIdx);
-            const windowStart = Math.max(0, windowEnd - PAGE + 1);
-            const visible = weeks.slice(windowStart, windowEnd + 1);
+            const wEnd = weekWindowEnd ?? weeks.length - 1;
+            const wStart = Math.max(0, wEnd - PAGE + 1);
+            const visible = weeks.slice(wStart, wEnd + 1);
+            const canLeft = wStart > 0;
+            const canRight = wEnd < weeks.length - 1;
             return (<>
-              {windowStart > 0 && <span className="text-xs text-slate-300">…</span>}
+              <button
+                disabled={!canLeft}
+                onClick={() => {
+                  const newEnd = wEnd - 1;
+                  setWeekWindowEnd(newEnd);
+                  if (curIdx > newEnd) setViewWeekEnd(weeks[newEnd].weekEnd);
+                }}
+                className="rounded p-1.5 text-slate-400 hover:text-slate-700 disabled:opacity-30"
+                title="Previous weeks"
+              >&#8592;</button>
               {visible.map(w => (
                 <button
                   key={w.weekEnd}
@@ -306,15 +312,18 @@ export function SafetyDashboard() {
                   {w.data.label || fmtDate(w.weekEnd)}
                 </button>
               ))}
-              {windowEnd < weeks.length - 1 && <span className="text-xs text-slate-300">…</span>}
+              <button
+                disabled={!canRight}
+                onClick={() => {
+                  const newEnd = wEnd + 1;
+                  setWeekWindowEnd(newEnd);
+                  if (curIdx < newEnd - PAGE + 1) setViewWeekEnd(weeks[newEnd - PAGE + 1].weekEnd);
+                }}
+                className="rounded p-1.5 text-slate-400 hover:text-slate-700 disabled:opacity-30"
+                title="Next weeks"
+              >&#8594;</button>
             </>);
           })()}
-          <button
-            disabled={curIdx >= weeks.length - 1}
-            onClick={() => setViewWeekEnd(weeks[curIdx + 1].weekEnd)}
-            className="rounded p-1.5 text-slate-400 hover:text-slate-700 disabled:opacity-30"
-            title="Next week"
-          >&#8594;</button>
           <div className="ml-auto flex gap-2">
             <button
               onClick={() => {
