@@ -494,7 +494,7 @@ export function SafetyDashboard() {
       </div>
     );
 
-    const recentWeeks = weeks.slice(-10);
+    const recentWeeks = weeks.slice(-6);
     const trendData = recentWeeks.map(w => {
       const drivers = (w.data.drivers ?? []).filter(d => !EXCLUDE_VEHICLES.has(d.name));
       const avg = drivers.length ? Math.round(drivers.reduce((s, d) => s + d.score, 0) / drivers.length) : 0;

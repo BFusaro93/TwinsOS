@@ -395,9 +395,11 @@ export function KpiDashboard() {
     const noi = computeNOI(ytd);
 
     return {
-      // Operations (AvB)
-      labor_efficiency: totalBudgeted > 0 && totalActual > 0
-        ? parseFloat((totalBudgeted / totalActual * 100).toFixed(1)) : null,
+      // Operations (AvB) — matches AvB YTD formulas exactly
+      // labor_efficiency = on-site (AvB actual) ÷ gusto clocked
+      labor_efficiency: totalGustoHrs > 0 && totalActual > 0
+        ? parseFloat((totalActual / totalGustoHrs * 100).toFixed(1)) : null,
+      // avb_variance = budgeted on-site − actual on-site
       avb_variance: totalBudgeted > 0
         ? parseFloat((totalBudgeted - totalActual).toFixed(1)) : null,
       ot_pct_hours: totalGustoHrs > 0

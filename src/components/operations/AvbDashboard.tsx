@@ -705,7 +705,7 @@ interface HistoryProps {
 }
 function History({ weeks, crewDefs, onEditWeek, onDeleteWeek }: HistoryProps) {
   if (!weeks.length) return <div className="py-16 text-center text-sm text-slate-400">No history yet.</div>;
-  const recentWeeks = weeks.slice(-10);
+  const recentWeeks = weeks.slice(-8);
   const labels = recentWeeks.map(w=>fmtDate(w.weekEnd));
   const hrsData = recentWeeks.map((w,i)=>{
     let tO=0,tG=0;
