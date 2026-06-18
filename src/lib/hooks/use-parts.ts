@@ -116,6 +116,15 @@ export function useCreatePart() {
       queryClient.invalidateQueries({ queryKey: ["parts"] });
       queryClient.invalidateQueries({ queryKey: ["products"] });
     },
+    onError: (error: unknown) => {
+      import("sonner").then(({ toast }) => {
+        const code = (error as { code?: string }).code;
+        const msg = code === "23505"
+          ? "A part with that part number already exists."
+          : "Failed to create part. Please try again.";
+        toast.error("Create failed", { description: msg });
+      });
+    },
   });
 }
 

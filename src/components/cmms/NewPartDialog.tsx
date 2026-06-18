@@ -143,6 +143,7 @@ export function NewPartDialog({ open, onOpenChange, initialData, onCreated }: Ne
           onCreated?.(part);
           handleClose();
         },
+        onError: () => { /* toast handled in useCreatePart */ },
       });
     }
   }
