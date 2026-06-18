@@ -47,6 +47,9 @@ import type { PurchaseOrder, LineItem, POStatus } from "@/types";
 
 interface PODetailPanelProps {
   po: PurchaseOrder;
+  /** When set, clicking Edit calls this instead of opening the dialog internally.
+   *  Use this when PODetailPanel is rendered inside a Sheet to avoid nested-overlay conflicts. */
+  onEditClick?: () => void;
 }
 
 function MetaRow({ label, value }: { label: string; value: React.ReactNode }) {
@@ -360,7 +363,7 @@ function FilesTab({ po }: { po: PurchaseOrder }) {
   );
 }
 
-export function PODetailPanel({ po }: PODetailPanelProps) {
+export function PODetailPanel({ po, onEditClick }: PODetailPanelProps) {
   const [editOpen, setEditOpen] = useState(false);
   const [receiveOpen, setReceiveOpen] = useState(false);
   const [status, setStatus] = useState<POStatus>(po.status);
@@ -401,7 +404,7 @@ export function PODetailPanel({ po }: PODetailPanelProps) {
             <Download className="h-3.5 w-3.5" />
             PDF
           </Button>
-          <EditButton onClick={() => setEditOpen(true)} />
+          <EditButton onClick={() => onEditClick ? onEditClick() : setEditOpen(true)} />
           <Button
             variant="ghost"
             size="icon"
@@ -461,7 +464,7 @@ export function PODetailPanel({ po }: PODetailPanelProps) {
         ]}
       />
 
-      <NewPODialog open={editOpen} onOpenChange={setEditOpen} initialData={po} />
+      {!onEditClick && <NewPODialog open={editOpen} onOpenChange={setEditOpen} initialData={po} />}
       <ReceiveGoodsDialog
         open={receiveOpen}
         onOpenChange={setReceiveOpen}
