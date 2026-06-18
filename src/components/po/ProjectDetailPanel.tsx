@@ -630,7 +630,7 @@ function SubcontractsTab({ project }: { project: Project }) {
   return (
     <div className="flex flex-col gap-4 p-6">
       <div className="flex items-center justify-between">
-        <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Subcontract Costs</p>
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Other Costs</p>
         <Button size="sm" variant="outline" onClick={openAdd} className="h-7 gap-1 text-xs">
           <Plus className="h-3 w-3" />
           Add Cost
@@ -642,7 +642,7 @@ function SubcontractsTab({ project }: { project: Project }) {
       ) : costs.length === 0 ? (
         <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed border-slate-200 py-10 text-center">
           <Building2 className="h-8 w-8 text-slate-300" />
-          <p className="text-sm text-slate-400">No subcontract costs yet.</p>
+          <p className="text-sm text-slate-400">No other costs yet.</p>
           <Button size="sm" variant="outline" onClick={openAdd} className="mt-1 gap-1 text-xs">
             <Plus className="h-3 w-3" /> Add First Cost
           </Button>
@@ -708,7 +708,7 @@ function SubcontractsTab({ project }: { project: Project }) {
               </div>
             )}
             <div className="flex justify-between border-t pt-1 font-semibold text-slate-900">
-              <span>Subcontract Total</span><span>{formatCurrency(grandTotal)}</span>
+              <span>Other Costs Total</span><span>{formatCurrency(grandTotal)}</span>
             </div>
           </div>
         </>
@@ -718,7 +718,7 @@ function SubcontractsTab({ project }: { project: Project }) {
       <Dialog open={addOpen} onOpenChange={(o) => { if (!o) setAddOpen(false); }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>{editingId ? "Edit Subcontract Cost" : "Add Subcontract Cost"}</DialogTitle>
+            <DialogTitle>{editingId ? "Edit Cost Entry" : "Add Cost Entry"}</DialogTitle>
             <DialogDescription>Record a cost from an outside vendor — materials they supplied or labor they performed.</DialogDescription>
           </DialogHeader>
           <div className="flex flex-col gap-3">
@@ -813,7 +813,7 @@ function SubcontractsTab({ project }: { project: Project }) {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Cost Entry</AlertDialogTitle>
-            <AlertDialogDescription>Are you sure you want to remove this subcontract cost? This cannot be undone.</AlertDialogDescription>
+            <AlertDialogDescription>Are you sure you want to remove this cost entry? This cannot be undone.</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
@@ -1101,7 +1101,7 @@ function DetailsTab({
             </span>
           </div>
           <div className="flex justify-between">
-            <span className="text-slate-500">Material & Subcontract Costs</span>
+            <span className="text-slate-500">Material & Other Costs</span>
             <span className="font-medium text-slate-900">{formatCurrency(computedTotalCost)}</span>
           </div>
           {laborCostFull != null && (
@@ -1346,7 +1346,7 @@ export function ProjectDetailPanel({ project }: ProjectDetailPanelProps) {
           },
           {
             value: "subcontracts",
-            label: "Subcontracts",
+            label: "Other Costs",
             content: <SubcontractsTab project={project} />,
           },
           {
