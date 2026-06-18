@@ -835,18 +835,91 @@ function SubcontractsTab({ project }: { project: Project }) {
   );
 }
 
+function HoursField({
+  label,
+  value,
+  onSave,
+}: {
+  label: string;
+  value: number | null;
+  onSave: (v: number | null) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+
+  function startEdit() {
+    setDraft(value != null ? String(value) : "");
+    setEditing(true);
+  }
+
+  function commit() {
+    const parsed = parseFloat(draft);
+    onSave(parsed > 0 ? parsed : null);
+    setEditing(false);
+  }
+
+  if (editing) {
+    return (
+      <div className="flex items-center gap-1">
+        <input
+          type="number"
+          min={0}
+          step={0.5}
+          autoFocus
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => { if (e.key === "Enter") commit(); if (e.key === "Escape") setEditing(false); }}
+          className="w-20 rounded border border-slate-300 px-2 py-0.5 text-sm text-right focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+        />
+        <span className="text-xs text-slate-400">hrs</span>
+      </div>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={startEdit}
+      className="group flex items-center gap-1 rounded px-1 text-sm font-medium text-slate-900 hover:bg-slate-100"
+      title={`Click to edit ${label}`}
+    >
+      {value != null ? `${value} hrs` : <span className="italic text-slate-400">— click to add</span>}
+      <Pencil className="h-3 w-3 text-slate-300 opacity-0 transition-opacity group-hover:opacity-100" />
+    </button>
+  );
+}
+
 function DetailsTab({
   project,
   status,
   onStatusChange,
   computedTotalCost,
+  onUpdateHours,
 }: {
   project: Project;
   status: ProjectStatus;
   onStatusChange: (s: ProjectStatus) => void;
   computedTotalCost: number;
+  onUpdateHours: (laborHours: number | null, budgetHours: number | null) => void;
 }) {
-  const { breakevenLaborRateCents } = useSettingsStore();
+  const { breakevenLaborRateCents, burdenedLaborRateCents } = useSettingsStore();
+
+  // Hours variance
+  const hasActual = project.laborHours != null;
+  const hasBudget = project.budgetHours != null;
+  const hoursVariance = hasActual && hasBudget ? project.laborHours! - project.budgetHours! : null;
+
+  // Cost calculations
+  const laborCostFull = project.laborHours != null ? Math.round(project.laborHours * breakevenLaborRateCents) : null;
+  const laborCostBurdened = project.laborHours != null ? Math.round(project.laborHours * burdenedLaborRateCents) : null;
+  const totalFull = computedTotalCost + (laborCostFull ?? 0);
+  const totalBurdened = computedTotalCost + (laborCostBurdened ?? 0);
+  const netFull = project.contractPrice > 0 ? project.contractPrice - totalFull : null;
+  const netBurdened = project.contractPrice > 0 ? project.contractPrice - totalBurdened : null;
+  const netFullPct = netFull != null && project.contractPrice > 0 ? Math.round((netFull / project.contractPrice) * 100) : null;
+  const netBurdenedPct = netBurdened != null && project.contractPrice > 0 ? Math.round((netBurdened / project.contractPrice) * 100) : null;
+
   return (
     <div className="flex flex-col gap-5 p-6">
       {/* Status flow */}
@@ -859,7 +932,6 @@ function DetailsTab({
           currentIndex={PROJECT_STATUS_INDEX[status]}
           isTerminalError={status === "canceled"}
         />
-        {/* Action strip */}
         <div className="mt-3 flex flex-wrap gap-2">
           {status === "sold" && (<>
             <Button size="sm" onClick={() => onStatusChange("scheduled")}>Mark Scheduled</Button>
@@ -903,72 +975,109 @@ function DetailsTab({
         />
         <MetaRow label="Address" value={formatAddress(project.address, project.city, project.state, project.zip)} />
         <MetaRow label="Start Date" value={formatDate(project.startDate)} />
-        <MetaRow
-          label="End Date"
-          value={project.endDate ? formatDate(project.endDate) : "TBD"}
-        />
+        <MetaRow label="End Date" value={project.endDate ? formatDate(project.endDate) : "TBD"} />
         {project.notes && <MetaRow label="Notes" value={project.notes} />}
       </dl>
 
       <Separator />
 
-      {/* Financials: price, cost, margin, net profit */}
-      {(() => {
-        const BREAKEVEN_RATE_CENTS = breakevenLaborRateCents;
-        const laborCost = project.laborHours != null ? Math.round(project.laborHours * BREAKEVEN_RATE_CENTS) : null;
-        const totalWithLabor = computedTotalCost + (laborCost ?? 0);
-        const netProfit = project.contractPrice > 0 ? project.contractPrice - totalWithLabor : null;
-        const netProfitPct = netProfit != null && project.contractPrice > 0
-          ? Math.round((netProfit / project.contractPrice) * 100)
-          : null;
-        return (
-          <div className="rounded-md border bg-slate-50 p-4">
-            <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">Project Financials</p>
-            <div className="space-y-1.5 text-sm">
-              <div className="flex justify-between">
-                <span className="text-slate-500">Contract Price</span>
-                <span className="font-medium text-slate-900">
-                  {project.contractPrice > 0 ? formatCurrency(project.contractPrice) : <span className="text-slate-400 italic">Not set</span>}
+      {/* Hours — inline editable, actual vs budget */}
+      <div>
+        <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">Hours</p>
+        <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+          <div className="text-slate-500">Budget Hours</div>
+          <HoursField
+            label="Budget Hours"
+            value={project.budgetHours ?? null}
+            onSave={(v) => onUpdateHours(project.laborHours ?? null, v)}
+          />
+          <div className="text-slate-500">Actual Hours</div>
+          <HoursField
+            label="Actual Hours"
+            value={project.laborHours ?? null}
+            onSave={(v) => onUpdateHours(v, project.budgetHours ?? null)}
+          />
+          {hoursVariance != null && (
+            <>
+              <div className="text-slate-500 pt-1 border-t border-slate-100">Variance</div>
+              <div className={`pt-1 border-t border-slate-100 font-medium ${hoursVariance > 0 ? "text-red-600" : hoursVariance < 0 ? "text-green-600" : "text-slate-500"}`}>
+                {hoursVariance > 0 ? "+" : ""}{hoursVariance} hrs
+                {hasBudget && project.budgetHours! > 0 && (
+                  <span className="ml-1 text-xs font-normal text-slate-400">
+                    ({Math.round((hoursVariance / project.budgetHours!) * 100)}%)
+                  </span>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+
+      <Separator />
+
+      {/* Financials */}
+      <div className="rounded-md border bg-slate-50 p-4">
+        <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">Project Financials</p>
+        <div className="space-y-1.5 text-sm">
+          <div className="flex justify-between">
+            <span className="text-slate-500">Contract Price</span>
+            <span className="font-medium text-slate-900">
+              {project.contractPrice > 0 ? formatCurrency(project.contractPrice) : <span className="text-slate-400 italic">Not set</span>}
+            </span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-slate-500">Material & Subcontract Costs</span>
+            <span className="font-medium text-slate-900">{formatCurrency(computedTotalCost)}</span>
+          </div>
+          {laborCostFull != null && (
+            <div className="flex justify-between">
+              <span className="text-slate-500">Labor — Full Rate ({project.laborHours}h × {formatCurrency(breakevenLaborRateCents)})</span>
+              <span className="font-medium text-slate-900">{formatCurrency(laborCostFull)}</span>
+            </div>
+          )}
+          {laborCostBurdened != null && laborCostBurdened !== laborCostFull && (
+            <div className="flex justify-between">
+              <span className="text-slate-500">Labor — Burdened Rate ({project.laborHours}h × {formatCurrency(burdenedLaborRateCents)})</span>
+              <span className="font-medium text-slate-900">{formatCurrency(laborCostBurdened)}</span>
+            </div>
+          )}
+
+          {/* Net profit rows */}
+          {netFull != null && (
+            <div className="flex justify-between border-t border-slate-200 pt-1.5">
+              <span className="font-semibold text-slate-700">Net Profit (Full Rate)</span>
+              <span className={`font-semibold ${netFull >= 0 ? "text-green-600" : "text-red-600"}`}>
+                {netFull < 0 ? "-" : ""}{formatCurrency(Math.abs(netFull))}
+                {netFullPct != null && ` (${netFull < 0 ? "-" : ""}${Math.abs(netFullPct)}%)`}
+              </span>
+            </div>
+          )}
+          {netBurdened != null && netBurdened !== netFull && (
+            <div className="flex justify-between pt-0.5">
+              <span className="text-slate-500">Net Profit (Burdened Only)</span>
+              <span className={`font-medium ${netBurdened >= 0 ? "text-green-600" : "text-red-600"}`}>
+                {netBurdened < 0 ? "-" : ""}{formatCurrency(Math.abs(netBurdened))}
+                {netBurdenedPct != null && ` (${netBurdened < 0 ? "-" : ""}${Math.abs(netBurdenedPct)}%)`}
+              </span>
+            </div>
+          )}
+          {project.laborHours == null && project.contractPrice > 0 && (() => {
+            const margin = project.contractPrice - computedTotalCost;
+            const marginPct = Math.round((margin / project.contractPrice) * 100);
+            return (
+              <div className="flex justify-between border-t border-slate-200 pt-1.5">
+                <span className="font-semibold text-slate-700">Margin (excl. labor)</span>
+                <span className={`font-semibold ${margin >= 0 ? "text-green-600" : "text-red-600"}`}>
+                  {margin < 0 ? "-" : ""}{formatCurrency(Math.abs(margin))} ({margin < 0 ? "-" : ""}{Math.abs(marginPct)}%)
                 </span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500">Material & Subcontract Costs</span>
-                <span className="font-medium text-slate-900">{formatCurrency(computedTotalCost)}</span>
-              </div>
-              {project.laborHours != null && laborCost != null && (
-                <div className="flex justify-between">
-                  <span className="text-slate-500">Labor ({project.laborHours}h × {formatCurrency(BREAKEVEN_RATE_CENTS)})</span>
-                  <span className="font-medium text-slate-900">{formatCurrency(laborCost)}</span>
-                </div>
-              )}
-              {netProfit != null && (
-                <div className="flex justify-between border-t border-slate-200 pt-1.5">
-                  <span className="font-semibold text-slate-700">Net Profit</span>
-                  <span className={`font-semibold ${netProfit >= 0 ? "text-green-600" : "text-red-600"}`}>
-                    {netProfit < 0 ? "-" : ""}{formatCurrency(Math.abs(netProfit))}
-                    {netProfitPct != null && ` (${netProfit < 0 ? "-" : ""}${Math.abs(netProfitPct)}%)`}
-                  </span>
-                </div>
-              )}
-              {project.laborHours == null && project.contractPrice > 0 && (() => {
-                const margin = project.contractPrice - computedTotalCost;
-                const marginPct = Math.round((margin / project.contractPrice) * 100);
-                return (
-                  <div className="flex justify-between border-t border-slate-200 pt-1.5">
-                    <span className="font-semibold text-slate-700">Margin</span>
-                    <span className={`font-semibold ${margin >= 0 ? "text-green-600" : "text-red-600"}`}>
-                      {margin < 0 ? "-" : ""}{formatCurrency(Math.abs(margin))} ({margin < 0 ? "-" : ""}{Math.abs(marginPct)}%)
-                    </span>
-                  </div>
-                );
-              })()}
-            </div>
-            {project.laborHours == null && (
-              <p className="mt-2 text-xs text-slate-400">Add labor hours to see net profit after labor costs.</p>
-            )}
-          </div>
-        );
-      })()}
+            );
+          })()}
+        </div>
+        {project.laborHours == null && (
+          <p className="mt-2 text-xs text-slate-400">Add actual hours above to see net profit after labor costs.</p>
+        )}
+      </div>
     </div>
   );
 }
@@ -1145,6 +1254,9 @@ export function ProjectDetailPanel({ project }: ProjectDetailPanelProps) {
                 onStatusChange={(s) => {
                   setStatus(s);
                   updateProject({ id: project.id, status: s });
+                }}
+                onUpdateHours={(laborHours, budgetHours) => {
+                  updateProject({ id: project.id, laborHours, budgetHours });
                 }}
               />
             ),

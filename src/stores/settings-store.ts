@@ -272,9 +272,13 @@ interface SettingsState {
   portalEnabled: boolean;
   setPortalEnabled: (enabled: boolean) => void;
 
-  /** Breakeven labor rate in cents per hour. Used in Projects net profit and Job Costing. Default $69.27. */
+  /** Breakeven labor rate in cents per hour — full rate (burdened wages + non-billable uplift + fixed OH recovery). Used in Projects net profit and Job Costing. Default $69.27. */
   breakevenLaborRateCents: number;
   setBreakevenLaborRateCents: (cents: number) => void;
+
+  /** Burdened-only labor rate in cents per hour — wages + burden + non-billable uplift, WITHOUT fixed overhead recovery. Shows net profit excluding OH. Default $52.00. */
+  burdenedLaborRateCents: number;
+  setBurdenedLaborRateCents: (cents: number) => void;
 
   /** Bulk-load all settings from the remote org row on first mount. */
   loadFromRemote: (data: {
@@ -294,6 +298,7 @@ interface SettingsState {
     filterFields?: FilterFieldConfig[];
     requiredFields?: RequiredFieldsConfig;
     breakevenLaborRateCents?: number;
+    burdenedLaborRateCents?: number;
   }) => void;
 }
 
@@ -546,6 +551,9 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   breakevenLaborRateCents: 6927,
   setBreakevenLaborRateCents: (cents) => set({ breakevenLaborRateCents: cents }),
 
+  burdenedLaborRateCents: 5200,
+  setBurdenedLaborRateCents: (cents) => set({ burdenedLaborRateCents: cents }),
+
   loadFromRemote: (data) =>
     set((s) => ({
       ...(data.orgName !== undefined      && { orgName: data.orgName }),
@@ -564,5 +572,6 @@ export const useSettingsStore = create<SettingsState>((set) => ({
       ...(data.filterFields !== undefined && { filterFields: data.filterFields }),
       ...(data.requiredFields !== undefined && { requiredFields: data.requiredFields }),
       ...(data.breakevenLaborRateCents !== undefined && { breakevenLaborRateCents: data.breakevenLaborRateCents }),
+      ...(data.burdenedLaborRateCents !== undefined && { burdenedLaborRateCents: data.burdenedLaborRateCents }),
     })),
 }));

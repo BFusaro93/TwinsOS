@@ -419,6 +419,8 @@ function GeneralTab() {
     setPortalEnabled,
     breakevenLaborRateCents,
     setBreakevenLaborRateCents,
+    burdenedLaborRateCents,
+    setBurdenedLaborRateCents,
     loadFromRemote,
   } = useSettingsStore();
 
@@ -429,6 +431,7 @@ function GeneralTab() {
 
   const [taxDraft, setTaxDraft] = useState(taxRatePercent);
   const [breakevenDraft, setBreakevenDraft] = useState((breakevenLaborRateCents / 100).toFixed(2));
+  const [burdenedDraft, setBurdenedDraft] = useState((burdenedLaborRateCents / 100).toFixed(2));
   const [orgNameDraft, setOrgNameDraft] = useState(orgName);
 
   useEffect(() => {
@@ -448,6 +451,8 @@ function GeneralTab() {
     setTaxDraft(remoteSettings.taxRatePercent);
     const savedRate = (remoteSettings.customizations as Record<string, unknown>)?.breakevenLaborRateCents;
     if (typeof savedRate === "number") setBreakevenDraft((savedRate / 100).toFixed(2));
+    const savedBurdened = (remoteSettings.customizations as Record<string, unknown>)?.burdenedLaborRateCents;
+    if (typeof savedBurdened === "number") setBurdenedDraft((savedBurdened / 100).toFixed(2));
   }, [remoteSettings, loadFromRemote]);
 
   const logoInputRef = useRef<HTMLInputElement>(null);
@@ -701,7 +706,7 @@ function GeneralTab() {
           </SettingRow>
           <SettingRow
             label="Breakeven Labor Rate"
-            description="Fully-loaded cost per labor hour (wages + burden + overhead). Used in Job Costing and Project net profit calculations."
+            description="Fully-loaded cost per labor hour — wages + burden + non-billable uplift + fixed overhead recovery. Used in Job Costing and Project net profit (full rate)."
           >
             <div className="flex items-center gap-2">
               <span className="text-sm text-slate-500">$</span>
@@ -722,6 +727,35 @@ function GeneralTab() {
                   const cents = Math.round((parseFloat(breakevenDraft) || 0) * 100);
                   setBreakevenLaborRateCents(cents);
                   updateOrgSettings({ customizations: { breakevenLaborRateCents: cents } });
+                }}
+              >
+                Save
+              </Button>
+            </div>
+          </SettingRow>
+          <SettingRow
+            label="Burdened Labor Rate"
+            description="Wages + burden + non-billable uplift only — no fixed overhead recovery. Shows project net profit before overhead absorption."
+          >
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-slate-500">$</span>
+              <input
+                type="number"
+                min={0}
+                step={0.01}
+                value={burdenedDraft}
+                onChange={(e) => setBurdenedDraft(e.target.value)}
+                className="w-24 rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-900 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+              />
+              <span className="text-sm text-slate-500">/hr</span>
+              <Button
+                size="sm"
+                className="h-8"
+                disabled={Math.round(parseFloat(burdenedDraft) * 100) === burdenedLaborRateCents}
+                onClick={() => {
+                  const cents = Math.round((parseFloat(burdenedDraft) || 0) * 100);
+                  setBurdenedLaborRateCents(cents);
+                  updateOrgSettings({ customizations: { burdenedLaborRateCents: cents } });
                 }}
               >
                 Save

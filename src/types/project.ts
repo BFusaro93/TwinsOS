@@ -21,8 +21,14 @@ export interface Project extends BaseRecord {
   totalCost: number; // cents, derived
   contractPrice: number; // cents — what the customer is paying
   laborHours: number | null;
+  budgetHours: number | null;
   notes: string | null;
   isArchived: boolean;
+  // CRM linkage
+  clientId: string | null;
+  progressPct: number;
+  // joined
+  clientName?: string;
 }
 
 export type SubcontractCostType = "materials" | "labor" | "other";

@@ -59,7 +59,7 @@ export function useCreateProject() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (
-      input: Omit<Project, "id" | "orgId" | "createdBy" | "createdAt" | "updatedAt" | "deletedAt" | "totalCost" | "isArchived">
+      input: Omit<Project, "id" | "orgId" | "createdBy" | "createdAt" | "updatedAt" | "deletedAt" | "totalCost" | "isArchived" | "progressPct" | "clientId" | "clientName"> & { clientId?: string | null; progressPct?: number }
     ) => {
       const supabase = createClient();
       const { data, error } = await supabase
@@ -79,7 +79,10 @@ export function useCreateProject() {
           end_date: input.endDate,
           contract_price: input.contractPrice ?? 0,
           labor_hours: input.laborHours ?? null,
+          budget_hours: input.budgetHours ?? null,
           notes: input.notes,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          ...(input.clientId !== undefined && { client_id: (input as any).clientId }),
         })
         .select()
         .single();
@@ -114,6 +117,7 @@ export function useUpdateProject() {
           ...(input.endDate !== undefined && { end_date: input.endDate }),
           ...(input.contractPrice !== undefined && { contract_price: input.contractPrice }),
           ...(input.laborHours !== undefined && { labor_hours: input.laborHours }),
+          ...(input.budgetHours !== undefined && { budget_hours: input.budgetHours }),
           ...(input.notes !== undefined && { notes: input.notes }),
         })
         .eq("id", id)
@@ -122,7 +126,7 @@ export function useUpdateProject() {
       if (error) throw error;
       return mapProject(data);
     },
-    onMutate: async ({ id, status, name, customerName, address, startDate, endDate, contractPrice, laborHours, notes }) => {
+    onMutate: async ({ id, status, name, customerName, address, startDate, endDate, contractPrice, laborHours, budgetHours, notes }) => {
       await queryClient.cancelQueries({ queryKey: ["projects"] });
       const previous = queryClient.getQueryData<Project[]>(["projects"]);
       const patch: Partial<Project> = {};
@@ -134,6 +138,7 @@ export function useUpdateProject() {
       if (endDate !== undefined) patch.endDate = endDate;
       if (contractPrice !== undefined) patch.contractPrice = contractPrice;
       if (laborHours !== undefined) patch.laborHours = laborHours;
+      if (budgetHours !== undefined) patch.budgetHours = budgetHours;
       if (notes !== undefined) patch.notes = notes;
       patchProjectCache(queryClient, id, patch);
       return { previous };

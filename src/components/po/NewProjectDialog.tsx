@@ -42,6 +42,7 @@ export function NewProjectDialog({ open, onOpenChange, initialData }: NewProject
   const [endDate, setEndDate] = useState("");
   const [contractPrice, setContractPrice] = useState("");
   const [laborHours, setLaborHours] = useState("");
+  const [budgetHours, setBudgetHours] = useState("");
   const [notes, setNotes] = useState("");
   const createProject = useCreateProject();
   const updateProject = useUpdateProject();
@@ -59,6 +60,7 @@ export function NewProjectDialog({ open, onOpenChange, initialData }: NewProject
       setEndDate(initialData.endDate ?? "");
       setContractPrice(initialData.contractPrice > 0 ? (initialData.contractPrice / 100).toFixed(2) : "");
       setLaborHours(initialData.laborHours != null ? String(initialData.laborHours) : "");
+      setBudgetHours(initialData.budgetHours != null ? String(initialData.budgetHours) : "");
       setNotes(initialData.notes ?? "");
     }
   }, [open, initialData]);
@@ -78,6 +80,7 @@ export function NewProjectDialog({ open, onOpenChange, initialData }: NewProject
     setEndDate("");
     setContractPrice("");
     setLaborHours("");
+    setBudgetHours("");
     setNotes("");
   }
 
@@ -97,6 +100,7 @@ export function NewProjectDialog({ open, onOpenChange, initialData }: NewProject
       endDate: endDate || null,
       contractPrice: contractPriceCents,
       laborHours: parseFloat(laborHours) > 0 ? parseFloat(laborHours) : null,
+      budgetHours: parseFloat(budgetHours) > 0 ? parseFloat(budgetHours) : null,
       notes: notes || null,
     };
     if (isEditing && initialData) {
@@ -224,9 +228,23 @@ export function NewProjectDialog({ open, onOpenChange, initialData }: NewProject
               />
             </div>
 
-            {/* Labor Hours — half width */}
+            {/* Budget Hours — half width */}
             <div className="grid gap-1.5">
-              <Label htmlFor="project-labor-hours">Labor Hours</Label>
+              <Label htmlFor="project-budget-hours">Budget Hours</Label>
+              <Input
+                id="project-budget-hours"
+                type="number"
+                min="0"
+                step="0.5"
+                value={budgetHours}
+                onChange={(e) => setBudgetHours(e.target.value)}
+                placeholder="0"
+              />
+            </div>
+
+            {/* Actual Labor Hours — half width */}
+            <div className="grid gap-1.5">
+              <Label htmlFor="project-labor-hours">Actual Labor Hours</Label>
               <Input
                 id="project-labor-hours"
                 type="number"

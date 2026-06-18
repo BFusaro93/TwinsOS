@@ -3641,6 +3641,7 @@ export type Database = {
       projects: {
         Row: {
           address: string
+          budget_hours: number | null
           city: string
           contract_price: number
           created_at: string
@@ -3663,6 +3664,7 @@ export type Database = {
         }
         Insert: {
           address?: string
+          budget_hours?: number | null
           city?: string
           contract_price?: number
           created_at?: string
@@ -3685,6 +3687,7 @@ export type Database = {
         }
         Update: {
           address?: string
+          budget_hours?: number | null
           city?: string
           contract_price?: number
           created_at?: string
