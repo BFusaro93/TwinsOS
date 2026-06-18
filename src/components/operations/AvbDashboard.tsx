@@ -1818,7 +1818,7 @@ export function AvbDashboard() {
       ) : (
         <>
           {(tab==="summary" || tab==="daily") && weeks.length > 0 && (() => {
-            const PAGE = 10;
+            const PAGE = 8;
             // Window: show up to PAGE weeks ending at curIdx (or the last PAGE if curIdx near end)
             const windowEnd = Math.max(PAGE - 1, curIdx);
             const windowStart = Math.max(0, windowEnd - PAGE + 1);
