@@ -112,13 +112,13 @@ export function NotificationsBell() {
       weekFromNow.setDate(weekFromNow.getDate() + 7);
       const weekFromNowIso = weekFromNow.toISOString().slice(0, 10);
       return [
-        ...requisitions.filter((r) => r.status === "pending_approval").map((r) => `req-approval-${r.id}`),
-        ...purchaseOrders.filter((po) => po.status === "pending").map((po) => `po-approval-${po.id}`),
-        ...workOrders.filter((wo) => wo.status !== "done" && wo.dueDate !== null && wo.dueDate.slice(0, 10) < todayIso).map((wo) => `wo-overdue-${wo.id}`),
-        ...workOrders.filter((wo) => wo.status !== "done" && (wo.assignedToIds ?? []).includes(currentUser.id)).map((wo) => `wo-assigned-${wo.id}`),
+        ...(notifPrefs?.inAppApprovalRequired !== false ? requisitions.filter((r) => r.status === "pending_approval").map((r) => `req-approval-${r.id}`) : []),
+        ...(notifPrefs?.inAppPoApprovalRequired !== false ? purchaseOrders.filter((po) => po.status === "pending").map((po) => `po-approval-${po.id}`) : []),
+        ...(notifPrefs?.inAppWorkOrderOverdue !== false ? workOrders.filter((wo) => wo.status !== "done" && wo.dueDate !== null && wo.dueDate.slice(0, 10) < todayIso).map((wo) => `wo-overdue-${wo.id}`) : []),
+        ...(notifPrefs?.inAppWorkOrderAssigned !== false ? workOrders.filter((wo) => wo.status !== "done" && (wo.assignedToIds ?? []).includes(currentUser.id)).map((wo) => `wo-assigned-${wo.id}`) : []),
         ...(notifPrefs?.inAppLowStockAlert !== false ? parts.filter((p) => p.deletedAt === null && p.minimumStock !== null && p.quantityOnHand <= p.minimumStock).map((p) => `low-stock-${p.id}`) : []),
-        ...pmSchedules.filter((pm) => pm.isActive && pm.nextDueDate.slice(0, 10) <= weekFromNowIso).map((pm) => `pm-due-${pm.id}`),
-        ...maintenanceRequests.filter((mr) => mr.status === "open").map((mr) => `maint-req-${mr.id}`),
+        ...(notifPrefs?.inAppPmScheduleDue !== false ? pmSchedules.filter((pm) => pm.isActive && pm.nextDueDate.slice(0, 10) <= weekFromNowIso).map((pm) => `pm-due-${pm.id}`) : []),
+        ...(notifPrefs?.inAppNewMaintenanceRequest !== false ? maintenanceRequests.filter((mr) => mr.status === "open").map((mr) => `maint-req-${mr.id}`) : []),
         ...dbNotifications.map((n) => `db-notif-${n.id}`),
       ];
     }, [requisitions, purchaseOrders, workOrders, parts, pmSchedules, maintenanceRequests, dbNotifications, currentUser.id, notifPrefs])
@@ -134,7 +134,7 @@ export function NotificationsBell() {
     const items: AppNotification[] = [];
 
     // Pending-approval requisitions
-    requisitions
+    if (notifPrefs?.inAppApprovalRequired !== false) requisitions
       .filter((r) => r.status === "pending_approval")
       .forEach((r) => {
         const id = `req-approval-${r.id}`;
@@ -152,7 +152,7 @@ export function NotificationsBell() {
       });
 
     // Pending-approval purchase orders
-    purchaseOrders
+    if (notifPrefs?.inAppPoApprovalRequired !== false) purchaseOrders
       .filter((po) => po.status === "pending")
       .forEach((po) => {
         const id = `po-approval-${po.id}`;
@@ -170,7 +170,7 @@ export function NotificationsBell() {
       });
 
     // Work orders assigned to the current user
-    workOrders
+    if (notifPrefs?.inAppWorkOrderAssigned !== false) workOrders
       .filter((wo) => wo.status !== "done" && (wo.assignedToIds ?? []).includes(currentUser.id))
       .forEach((wo) => {
         const id = `wo-assigned-${wo.id}`;
@@ -188,7 +188,7 @@ export function NotificationsBell() {
       });
 
     // Overdue work orders
-    workOrders
+    if (notifPrefs?.inAppWorkOrderOverdue !== false) workOrders
       .filter(
         (wo) =>
           wo.status !== "done" &&
@@ -234,7 +234,7 @@ export function NotificationsBell() {
       });
 
     // PM schedules due within 7 days
-    pmSchedules
+    if (notifPrefs?.inAppPmScheduleDue !== false) pmSchedules
       .filter(
         (pm) =>
           pm.isActive &&
@@ -257,7 +257,11 @@ export function NotificationsBell() {
       });
 
     // Persisted DB notifications (wo_comment, wo_status_changed)
-    dbNotifications.forEach((n) => {
+    dbNotifications.filter((n) => {
+      if (n.type === "wo_comment" && notifPrefs?.inAppWorkOrderComment === false) return false;
+      if (n.type === "wo_status_changed" && notifPrefs?.inAppWorkOrderStatusChanged === false) return false;
+      return true;
+    }).forEach((n) => {
       const id = `db-notif-${n.id}`;
       const notifType = (n.type === "wo_status_changed" ? "wo_status_changed" : "wo_comment") as AppNotification["type"];
       items.push({
@@ -274,7 +278,7 @@ export function NotificationsBell() {
     });
 
     // Open maintenance requests (admins and managers only)
-    if (currentUser.role === "admin" || currentUser.role === "manager") {
+    if ((currentUser.role === "admin" || currentUser.role === "manager") && notifPrefs?.inAppNewMaintenanceRequest !== false) {
       maintenanceRequests
         .filter((mr) => mr.status === "open")
         .forEach((mr) => {
