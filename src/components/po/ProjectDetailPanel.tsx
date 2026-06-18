@@ -478,7 +478,11 @@ function MaterialsTab({ project }: { project: Project }) {
         open={!!selectedRequisition}
         onOpenChange={(o) => { if (!o) setSelectedSourceItem(null); }}
       >
-        <SheetContent className="flex w-full flex-col overflow-hidden p-0 md:w-[580px] md:max-w-[580px]">
+        <SheetContent
+          className="flex w-full flex-col overflow-hidden p-0 md:w-[580px] md:max-w-[580px]"
+          onPointerDownOutside={(e) => e.preventDefault()}
+          onInteractOutside={(e) => e.preventDefault()}
+        >
           <SheetHeader className="sr-only">
             <SheetTitle>{selectedRequisition?.requisitionNumber}</SheetTitle>
           </SheetHeader>
