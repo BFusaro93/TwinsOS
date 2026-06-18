@@ -35,6 +35,7 @@ import { createPortal } from "react-dom";
 import { Trash2, X } from "lucide-react";
 import { OverlayLevelContext, overlayZ, useOverlayLevel } from "@/lib/overlay-level";
 import { PODetailPanel } from "./PODetailPanel";
+import { NewPODialog } from "./NewPODialog";
 import { WorkOrderDetailPanel } from "@/components/cmms/WorkOrderDetailPanel";
 import { Button } from "@/components/ui/button";
 import { EditButton } from "@/components/shared/EditButton";
@@ -416,6 +417,7 @@ export function ProductDetailSheet({ product, open, onOpenChange }: ProductDetai
   const [manageVendorsOpen, setManageVendorsOpen] = useState(false);
   const [selectedPOId, setSelectedPOId] = useState<string | null>(null);
   const [selectedWOId, setSelectedWOId] = useState<string | null>(null);
+  const [poEditOpen, setPoEditOpen] = useState(false);
   const overlayPORef = useRef<HTMLDivElement>(null);
   const overlayWORef = useRef<HTMLDivElement>(null);
   const level = useOverlayLevel();
@@ -480,8 +482,19 @@ export function ProductDetailSheet({ product, open, onOpenChange }: ProductDetai
       <SheetContent
         className="flex w-full flex-col overflow-hidden p-0 md:w-[580px] md:max-w-[580px]"
         onPointerDownOutside={(e) => {
-          if (selectedPOId) { e.preventDefault(); setSelectedPOId(null); }
-          else if (selectedWOId) { e.preventDefault(); setSelectedWOId(null); }
+          if (selectedPOId) {
+            e.preventDefault();
+            // Only dismiss the PO overlay if the click is outside it (e.g. on the backdrop),
+            // not when clicking inside it (e.g. the Edit or PDF buttons).
+            if (!overlayPORef.current?.contains(e.target as Node)) {
+              setSelectedPOId(null);
+            }
+          } else if (selectedWOId) {
+            e.preventDefault();
+            if (!overlayWORef.current?.contains(e.target as Node)) {
+              setSelectedWOId(null);
+            }
+          }
         }}
         onInteractOutside={(e) => {
           if (selectedPOId || selectedWOId) e.preventDefault();
@@ -612,7 +625,7 @@ export function ProductDetailSheet({ product, open, onOpenChange }: ProductDetai
             <X className="h-4 w-4" />
           </button>
           <div className="flex-1 overflow-y-auto">
-            <PODetailPanel key={selectedPOId!} po={selectedPO} />
+            <PODetailPanel key={selectedPOId!} po={selectedPO} onEditClick={() => setPoEditOpen(true)} />
           </div>
         </div>
       </OverlayLevelContext.Provider>,
@@ -643,6 +656,8 @@ export function ProductDetailSheet({ product, open, onOpenChange }: ProductDetai
       </OverlayLevelContext.Provider>,
       document.body
     )}
+  {/* Rendered outside all overlays to avoid nested Radix layer conflicts */}
+  {selectedPO && <NewPODialog open={poEditOpen} onOpenChange={setPoEditOpen} initialData={selectedPO} />}
   </>
   );
 }
