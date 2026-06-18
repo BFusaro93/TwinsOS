@@ -26,6 +26,7 @@ import { useRequisitions } from "@/lib/hooks/use-requisitions";
 import { usePurchaseOrders } from "@/lib/hooks/use-purchase-orders";
 import { useRequests } from "@/lib/hooks/use-requests";
 import { useNotificationReads } from "@/lib/hooks/use-notification-reads";
+import { useNotificationPrefs } from "@/lib/hooks/use-notification-prefs";
 import { createClient } from "@/lib/supabase/client";
 import type { AppNotification } from "@/types/notification";
 
@@ -78,6 +79,7 @@ export function NotificationsBell() {
   const { data: requisitions = [] } = useRequisitions();
   const { data: purchaseOrders = [] } = usePurchaseOrders();
   const { data: maintenanceRequests = [] } = useRequests();
+  const { data: notifPrefs } = useNotificationPrefs();
 
   // Fetch persisted notifications (wo_comment type) from the DB
   const [dbNotifications, setDbNotifications] = useState<Array<{
@@ -114,12 +116,12 @@ export function NotificationsBell() {
         ...purchaseOrders.filter((po) => po.status === "pending").map((po) => `po-approval-${po.id}`),
         ...workOrders.filter((wo) => wo.status !== "done" && wo.dueDate !== null && wo.dueDate.slice(0, 10) < todayIso).map((wo) => `wo-overdue-${wo.id}`),
         ...workOrders.filter((wo) => wo.status !== "done" && (wo.assignedToIds ?? []).includes(currentUser.id)).map((wo) => `wo-assigned-${wo.id}`),
-        ...parts.filter((p) => p.deletedAt === null && p.minimumStock !== null && p.quantityOnHand <= p.minimumStock).map((p) => `low-stock-${p.id}`),
+        ...(notifPrefs?.inAppLowStockAlert !== false ? parts.filter((p) => p.deletedAt === null && p.minimumStock !== null && p.quantityOnHand <= p.minimumStock).map((p) => `low-stock-${p.id}`) : []),
         ...pmSchedules.filter((pm) => pm.isActive && pm.nextDueDate.slice(0, 10) <= weekFromNowIso).map((pm) => `pm-due-${pm.id}`),
         ...maintenanceRequests.filter((mr) => mr.status === "open").map((mr) => `maint-req-${mr.id}`),
         ...dbNotifications.map((n) => `db-notif-${n.id}`),
       ];
-    }, [requisitions, purchaseOrders, workOrders, parts, pmSchedules, maintenanceRequests, dbNotifications, currentUser.id])
+    }, [requisitions, purchaseOrders, workOrders, parts, pmSchedules, maintenanceRequests, dbNotifications, currentUser.id, notifPrefs])
   );
 
   // Derive notifications from live data
@@ -208,8 +210,8 @@ export function NotificationsBell() {
         });
       });
 
-    // Low stock parts
-    parts
+    // Low stock parts — skip if user has disabled in-app low stock alerts
+    if (notifPrefs?.inAppLowStockAlert !== false) parts
       .filter(
         (p) =>
           p.deletedAt === null &&
@@ -298,7 +300,7 @@ export function NotificationsBell() {
       }
       return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
     });
-  }, [parts, workOrders, pmSchedules, requisitions, purchaseOrders, maintenanceRequests, dbNotifications, currentUser, readIds]);
+  }, [parts, workOrders, pmSchedules, requisitions, purchaseOrders, maintenanceRequests, dbNotifications, currentUser, readIds, notifPrefs]);
 
   const unreadCount = notifications.filter((n) => n.readAt === null).length;
 
