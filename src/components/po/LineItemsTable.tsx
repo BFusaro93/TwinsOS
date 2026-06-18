@@ -82,7 +82,7 @@ export function LineItemsTable({
   const [items, setItems] = useState<LineItem[]>(lineItems);
   useEffect(() => { setItems(lineItems); }, [lineItems]);
 
-  const { data: projects = [] } = useProjects();
+  const { data: projects = [] } = useProjects(true);
   const { data: products = [] } = useProducts();
 
   const [editingId, setEditingId] = useState<string | null>(null);

@@ -373,7 +373,7 @@ export function PODetailPanel({ po }: PODetailPanelProps) {
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
 
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
-  const { data: projects = [] } = useProjects();
+  const { data: projects = [] } = useProjects(true);
   const selectedProject = projects.find((p) => p.id === selectedProjectId) ?? null;
   const { mutate: syncStatus } = useUpdatePurchaseOrderStatus();
   const { mutate: deletePO, isPending: deleting } = useDeletePurchaseOrder();

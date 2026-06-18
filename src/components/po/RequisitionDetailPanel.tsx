@@ -497,7 +497,7 @@ export function RequisitionDetailPanel({ requisition }: RequisitionDetailPanelPr
 
   const { data: products = [] } = useProducts();
   const { data: allParts = [] } = useParts();
-  const { data: projects = [] } = useProjects();
+  const { data: projects = [] } = useProjects(true);
   const { data: allPOs = [] } = usePurchaseOrders();
 
   const convertedPOs: PurchaseOrder[] = allPOs.filter((po) =>
