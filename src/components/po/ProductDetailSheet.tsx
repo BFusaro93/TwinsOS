@@ -230,18 +230,19 @@ function HistoryTab({
 
   const pos = (purchaseOrders ?? [])
     .filter((po) => po.lineItems.some((li) => li.productItemId === product.id))
-    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+    .sort((a, b) => new Date(a.poDate ?? a.createdAt).getTime() - new Date(b.poDate ?? b.createdAt).getTime());
 
   // Price history: one point per PO
   const priceHistory = pos.map((po) => {
     const li = po.lineItems.find((l) => l.productItemId === product.id)!;
+    const effectiveDate = po.poDate ?? po.createdAt;
     return {
-      date: new Date(po.createdAt).toLocaleDateString("en-US", {
+      date: new Date(effectiveDate).toLocaleDateString("en-US", {
         month: "short",
         year: "2-digit",
       }),
       unitCost: li.unitCost / 100,
-      fullDate: po.createdAt,
+      fullDate: effectiveDate,
     };
   });
 
@@ -331,7 +332,7 @@ function HistoryTab({
                           <span className="text-slate-800">{po.poNumber}</span>
                         )}
                       </td>
-                      <td className="px-3 py-2 text-slate-500">{formatDate(po.createdAt)}</td>
+                      <td className="px-3 py-2 text-slate-500">{formatDate(po.poDate ?? po.createdAt)}</td>
                       <td className="px-3 py-2 text-right text-slate-700">{li.quantity}</td>
                       <td className="px-3 py-2 text-right font-medium text-slate-900">
                         {formatCurrency(li.unitCost)}
