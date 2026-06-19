@@ -241,7 +241,7 @@ export function NewProjectDialog({ open, onOpenChange, initialData }: NewProject
                 id="project-budget-hours"
                 type="number"
                 min="0"
-                step="0.5"
+                step="any"
                 value={budgetHours}
                 onChange={(e) => setBudgetHours(e.target.value)}
                 placeholder="0"
@@ -255,7 +255,7 @@ export function NewProjectDialog({ open, onOpenChange, initialData }: NewProject
                 id="project-labor-hours"
                 type="number"
                 min="0"
-                step="0.5"
+                step="any"
                 value={laborHours}
                 onChange={(e) => setLaborHours(e.target.value)}
                 placeholder="0"
