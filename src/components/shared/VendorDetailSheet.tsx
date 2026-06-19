@@ -474,7 +474,7 @@ function POHistoryTab({ vendor }: { vendor: Vendor }) {
 
   const vendorPOs = (purchaseOrders ?? [])
     .filter((po) => po.vendorId === vendor.id)
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    .sort((a, b) => new Date(b.poDate ?? b.createdAt).getTime() - new Date(a.poDate ?? a.createdAt).getTime());
 
   const totalSpend = vendorPOs.reduce((sum, po) => sum + po.grandTotal, 0);
 
@@ -531,7 +531,7 @@ function POHistoryTab({ vendor }: { vendor: Vendor }) {
                       {po.poNumber}
                     </button>
                   </td>
-                  <td className="px-3 py-2 text-slate-500">{formatDate(po.createdAt)}</td>
+                  <td className="px-3 py-2 text-slate-500">{formatDate(po.poDate ?? po.createdAt)}</td>
                   <td className="px-3 py-2">
                     <StatusBadge variant={po.status} label={po.status.replace(/_/g, " ")} />
                   </td>
