@@ -109,14 +109,16 @@ function mapEvent(row: any): CRMSequenceEvent {
   };
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function db() { return createClient() as unknown as any; }
+
 // ── automations ───────────────────────────────────────────────────────────────
 
 export function useAutomations() {
   return useQuery({
     queryKey: ["crm-automations"],
-    queryFn: async () => {
-      const supabase = createClient();
-      const { data, error } = await supabase
+    queryFn: async (): Promise<CRMAutomation[]> => {
+      const { data, error } = await db()
         .from("crm_automations")
         .select("*")
         .is("deleted_at", null)
@@ -130,9 +132,8 @@ export function useAutomations() {
 export function useAutomation(id: string) {
   return useQuery({
     queryKey: ["crm-automations", id],
-    queryFn: async () => {
-      const supabase = createClient();
-      const { data, error } = await supabase
+    queryFn: async (): Promise<CRMAutomation & { sequences: CRMSequence[] }> => {
+      const { data, error } = await db()
         .from("crm_automations")
         .select("*, crm_automation_sequences(*)")
         .eq("id", id)
@@ -155,8 +156,7 @@ export function useCreateAutomation() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (values: { name: string; description?: string }) => {
-      const supabase = createClient();
-      const { data, error } = await supabase
+      const { data, error } = await db()
         .from("crm_automations")
         .insert({ name: values.name, description: values.description ?? null })
         .select()
@@ -180,8 +180,7 @@ export function useUpdateAutomation() {
       id: string;
       updates: Partial<Pick<CRMAutomation, "name" | "description" | "isActive">>;
     }) => {
-      const supabase = createClient();
-      const { error } = await supabase
+      const { error } = await db()
         .from("crm_automations")
         .update({
           name: updates.name,
@@ -202,8 +201,7 @@ export function useDeleteAutomation() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => {
-      const supabase = createClient();
-      const { error } = await supabase
+      const { error } = await db()
         .from("crm_automations")
         .update({ deleted_at: new Date().toISOString() })
         .eq("id", id);
@@ -220,9 +218,8 @@ export function useDeleteAutomation() {
 export function useSequences(automationId: string) {
   return useQuery({
     queryKey: ["crm-automations", automationId, "sequences"],
-    queryFn: async () => {
-      const supabase = createClient();
-      const { data, error } = await supabase
+    queryFn: async (): Promise<CRMSequence[]> => {
+      const { data, error } = await db()
         .from("crm_automation_sequences")
         .select("*")
         .eq("automation_id", automationId)
@@ -244,8 +241,7 @@ export function useCreateSequence() {
       description?: string;
       position?: number;
     }) => {
-      const supabase = createClient();
-      const { data, error } = await supabase
+      const { data, error } = await db()
         .from("crm_automation_sequences")
         .insert({
           automation_id: values.automationId,
@@ -287,8 +283,7 @@ export function useUpdateSequence() {
         >
       >;
     }) => {
-      const supabase = createClient();
-      const { error } = await supabase
+      const { error } = await db()
         .from("crm_automation_sequences")
         .update({
           name: updates.name,
@@ -313,8 +308,7 @@ export function useDeleteSequence() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ id, automationId }: { id: string; automationId: string }) => {
-      const supabase = createClient();
-      const { error } = await supabase
+      const { error } = await db()
         .from("crm_automation_sequences")
         .update({ deleted_at: new Date().toISOString() })
         .eq("id", id);
@@ -333,9 +327,8 @@ export function useDeleteSequence() {
 export function useSequenceEvents(sequenceId: string) {
   return useQuery({
     queryKey: ["crm-sequence-events", sequenceId],
-    queryFn: async () => {
-      const supabase = createClient();
-      const { data, error } = await supabase
+    queryFn: async (): Promise<CRMSequenceEvent[]> => {
+      const { data, error } = await db()
         .from("crm_sequence_events")
         .select("*")
         .eq("sequence_id", sequenceId)
@@ -358,8 +351,7 @@ export function useCreateEvent() {
       config?: Record<string, any>;
       position?: number;
     }) => {
-      const supabase = createClient();
-      const { data, error } = await supabase
+      const { data, error } = await db()
         .from("crm_sequence_events")
         .insert({
           sequence_id: values.sequenceId,
@@ -388,8 +380,7 @@ export function useUpdateEvent() {
       config?: Record<string, any>;
       isActive?: boolean;
     }) => {
-      const supabase = createClient();
-      const { error } = await supabase
+      const { error } = await db()
         .from("crm_sequence_events")
         .update({
           config: values.config,
@@ -408,8 +399,7 @@ export function useDeleteEvent() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ id, sequenceId }: { id: string; sequenceId: string }) => {
-      const supabase = createClient();
-      const { error } = await supabase
+      const { error } = await db()
         .from("crm_sequence_events")
         .update({ deleted_at: new Date().toISOString() })
         .eq("id", id);
@@ -432,8 +422,7 @@ export function useCreateTrigger() {
       triggerType: TriggerType;
       position?: number;
     }) => {
-      const supabase = createClient();
-      const { data, error } = await supabase
+      const { data, error } = await db()
         .from("crm_sequence_triggers")
         .insert({
           sequence_id: values.sequenceId,
@@ -455,8 +444,7 @@ export function useDeleteTrigger() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ id, sequenceId }: { id: string; sequenceId: string }) => {
-      const supabase = createClient();
-      const { error } = await supabase
+      const { error } = await db()
         .from("crm_sequence_triggers")
         .delete()
         .eq("id", id);
@@ -482,8 +470,7 @@ export function useCreateTriggerCondition() {
       operator: ConditionOperator;
       value?: string;
     }) => {
-      const supabase = createClient();
-      const { data, error } = await supabase
+      const { data, error } = await db()
         .from("crm_sequence_trigger_conditions")
         .insert({
           trigger_id: values.triggerId,
@@ -507,8 +494,7 @@ export function useDeleteTriggerCondition() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ id, sequenceId }: { id: string; sequenceId: string }) => {
-      const supabase = createClient();
-      const { error } = await supabase
+      const { error } = await db()
         .from("crm_sequence_trigger_conditions")
         .delete()
         .eq("id", id);
@@ -532,8 +518,7 @@ export function useCreateStopCondition() {
       operator: ConditionOperator;
       value?: string;
     }) => {
-      const supabase = createClient();
-      const { data, error } = await supabase
+      const { data, error } = await db()
         .from("crm_sequence_stop_conditions")
         .insert({
           sequence_id: values.sequenceId,
@@ -556,8 +541,7 @@ export function useDeleteStopCondition() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ id, sequenceId }: { id: string; sequenceId: string }) => {
-      const supabase = createClient();
-      const { error } = await supabase
+      const { error } = await db()
         .from("crm_sequence_stop_conditions")
         .delete()
         .eq("id", id);

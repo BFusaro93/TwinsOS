@@ -114,19 +114,20 @@ export function SequenceRulesDialog({ open, onOpenChange, sequenceId, automation
 
   useEffect(() => {
     if (!open || !sequenceId) return;
-    const supabase = createClient();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const supabase = createClient() as unknown as any;
     supabase
       .from("crm_sequence_triggers")
       .select("*")
       .eq("sequence_id", sequenceId)
       .order("position")
-      .then(({ data }) => setTriggers((data ?? []) as CRMSequenceTrigger[]));
+      .then(({ data }: { data: CRMSequenceTrigger[] | null }) => setTriggers((data ?? []) as CRMSequenceTrigger[]));
     supabase
       .from("crm_sequence_stop_conditions")
       .select("*")
       .eq("sequence_id", sequenceId)
       .order("created_at")
-      .then(({ data }) => setStopConditions((data ?? []) as CRMStopCondition[]));
+      .then(({ data }: { data: CRMStopCondition[] | null }) => setStopConditions((data ?? []) as CRMStopCondition[]));
   }, [open, sequenceId]);
 
   async function handleSave() {

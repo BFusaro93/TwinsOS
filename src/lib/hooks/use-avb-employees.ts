@@ -14,25 +14,16 @@ export interface AvbEmployee {
 
 export type UpsertEmpPayload = Omit<AvbEmployee, "id"> & { id?: string };
 
-function mapRow(row: {
-  id: string;
-  uuid: string;
-  name: string;
-  csv_name: string;
-  csv_job: string;
-  default_crew: string;
-  is_field: boolean;
-  is_active: boolean;
-}): AvbEmployee {
+function mapRow(row: Record<string, unknown>): AvbEmployee {
   return {
-    id: row.id,
-    uuid: row.uuid,
-    name: row.name,
-    csvName: row.csv_name,
-    csvJob: row.csv_job,
-    defaultCrew: row.default_crew,
-    isField: row.is_field,
-    isActive: row.is_active,
+    id: row.id as string,
+    uuid: row.uuid as string,
+    name: row.name as string,
+    csvName: row.csv_name as string,
+    csvJob: row.csv_job as string,
+    defaultCrew: row.default_crew as string,
+    isField: row.is_field as boolean,
+    isActive: row.is_active as boolean,
   };
 }
 
@@ -42,13 +33,15 @@ export function useAvbEmployees() {
     queryKey: ["avb-employees"],
     queryFn: async () => {
       const supabase = createClient();
-      const { data, error } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
         .from("avb_employees")
         .select("id, uuid, name, csv_name, csv_job, default_crew, is_field, is_active")
         .is("deleted_at", null)
         .order("name", { ascending: true });
       if (error) throw error;
-      return (data ?? []).map(mapRow);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return ((data ?? []) as any[]).map((r: Record<string, unknown>) => mapRow(r));
     },
   });
 }
@@ -59,7 +52,8 @@ export function useDeleteAvbEmployee() {
   return useMutation({
     mutationFn: async (id: string) => {
       const supabase = createClient();
-      const { error } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase as any)
         .from("avb_employees")
         .update({ deleted_at: new Date().toISOString() })
         .eq("id", id);
@@ -84,7 +78,8 @@ export function useUpsertAvbEmployee() {
         .single();
       const orgId = profile?.org_id;
       if (!orgId) throw new Error("No org found for user");
-      const { error } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase as any)
         .from("avb_employees")
         .upsert(
           {

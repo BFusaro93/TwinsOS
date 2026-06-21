@@ -97,7 +97,8 @@ export function NotificationsBell() {
       .in("type", ["wo_comment", "wo_status_changed"])
       .order("created_at", { ascending: false })
       .limit(50)
-      .then(({ data }) => { if (data) setDbNotifications(data); });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .then(({ data }) => { if (data) setDbNotifications(data as any); });
   }, [currentUser.id]);
 
   const [open, setOpen] = useState(false);

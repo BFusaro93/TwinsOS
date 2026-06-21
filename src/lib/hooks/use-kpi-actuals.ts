@@ -17,12 +17,14 @@ export function useKpiActuals(period: string) {
     queryKey: QK(period),
     queryFn: async () => {
       const supabase = createClient();
-      const { data, error } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
         .from("kpi_actuals")
         .select("id, metric_key, period, target_value, actual_value, updated_at")
         .eq("period", period);
       if (error) throw error;
-      return (data ?? []).map((r) => ({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return ((data ?? []) as any[]).map((r) => ({
         id: r.id,
         metricKey: r.metric_key,
         period: r.period,
@@ -56,7 +58,8 @@ export function useUpsertKpiActual() {
         .eq("id", userData.user!.id)
         .single();
 
-      const { data, error } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
         .from("kpi_actuals")
         .upsert(
           {

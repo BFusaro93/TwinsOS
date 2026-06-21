@@ -42,14 +42,16 @@ export function useAvbCrews() {
     queryFn: async () => {
       const supabase = createClient();
       const orgId = await getOrgId(supabase);
-      const { data, error } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
         .from("avb_crews")
         .select("*")
         .eq("org_id", orgId)
         .order("sort_order", { ascending: true })
         .order("code",       { ascending: true });
       if (error) throw error;
-      return (data ?? []).map(r => mapCrew(r as unknown as Record<string, unknown>));
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return ((data ?? []) as any[]).map((r: Record<string, unknown>) => mapCrew(r));
     },
   });
 }
@@ -69,11 +71,13 @@ export function useUpsertAvbCrew() {
         is_active:  input.isActive ?? true,
       };
       if (input.id) {
-        const { error } = await supabase
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error } = await (supabase as any)
           .from("avb_crews").update(patch).eq("id", input.id);
         if (error) throw error;
       } else {
-        const { error } = await supabase
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error } = await (supabase as any)
           .from("avb_crews").upsert(patch, { onConflict: "org_id,code" });
         if (error) throw error;
       }
@@ -88,7 +92,8 @@ export function useDeleteAvbCrew() {
   return useMutation({
     mutationFn: async (id: string) => {
       const supabase = createClient();
-      const { error } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase as any)
         .from("avb_crews").update({ is_active: false }).eq("id", id);
       if (error) throw error;
     },
