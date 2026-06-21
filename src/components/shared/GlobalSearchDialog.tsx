@@ -13,9 +13,6 @@ import {
   Leaf,
   FolderKanban,
   Camera,
-  Users,
-  UserPlus,
-  Receipt,
 } from "lucide-react";
 import {
   CommandDialog,
@@ -37,8 +34,6 @@ import { useProducts } from "@/lib/hooks/use-products";
 import { useVendors } from "@/lib/hooks/use-vendors";
 import { useProjects } from "@/lib/hooks/use-projects";
 import { usePhotoJobs } from "@/modules/photo-docs/hooks/usePhotoJobs";
-import { useClients, useLeads } from "@/lib/hooks/use-clients";
-import { useInvoices } from "@/lib/hooks/use-invoices";
 import { usePOStore, useCMMSStore, useCurrentUserStore } from "@/stores";
 import {
   WO_STATUS_LABELS,
@@ -86,9 +81,9 @@ export function GlobalSearchDialog({ open, onOpenChange }: GlobalSearchDialogPro
   const { data: vendors = [] } = useVendors();
   const { data: projects = [] } = useProjects();
   const { data: photoJobs = [] } = usePhotoJobs();
-  const { data: clients = [] } = useClients();
-  const { data: leads = [] } = useLeads();
-  const { data: invoices = [] } = useInvoices();
+  const clients: never[] = [];
+  const leads: never[] = [];
+  const invoices: never[] = [];
 
   // Only surface stocked and project materials in search (maintenance_parts are already in Parts)
   const catalogProducts = allProducts.filter(
