@@ -1,5 +1,5 @@
-import { ProjectListPage } from "@/components/po/ProjectListPage";
+import { redirect } from "next/navigation";
 
 export default function ProjectsPage() {
-  return <ProjectListPage />;
+  redirect("/crm/scheduling/projects");
 }

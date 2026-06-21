@@ -13,6 +13,9 @@ import {
   Leaf,
   FolderKanban,
   Camera,
+  Users,
+  UserPlus,
+  Receipt,
 } from "lucide-react";
 import {
   CommandDialog,
@@ -34,6 +37,8 @@ import { useProducts } from "@/lib/hooks/use-products";
 import { useVendors } from "@/lib/hooks/use-vendors";
 import { useProjects } from "@/lib/hooks/use-projects";
 import { usePhotoJobs } from "@/modules/photo-docs/hooks/usePhotoJobs";
+import { useClients, useLeads } from "@/lib/hooks/use-clients";
+import { useInvoices } from "@/lib/hooks/use-invoices";
 import { usePOStore, useCMMSStore, useCurrentUserStore } from "@/stores";
 import {
   WO_STATUS_LABELS,
@@ -81,6 +86,9 @@ export function GlobalSearchDialog({ open, onOpenChange }: GlobalSearchDialogPro
   const { data: vendors = [] } = useVendors();
   const { data: projects = [] } = useProjects();
   const { data: photoJobs = [] } = usePhotoJobs();
+  const { data: clients = [] } = useClients();
+  const { data: leads = [] } = useLeads();
+  const { data: invoices = [] } = useInvoices();
 
   // Only surface stocked and project materials in search (maintenance_parts are already in Parts)
   const catalogProducts = allProducts.filter(
@@ -107,7 +115,7 @@ export function GlobalSearchDialog({ open, onOpenChange }: GlobalSearchDialogPro
 
   return (
     <CommandDialog open={open} onOpenChange={onOpenChange}>
-      <CommandInput placeholder="Search work orders, assets, parts, projects, photos…" />
+      <CommandInput placeholder="Search clients, leads, invoices, work orders, assets…" />
       <CommandList className="max-h-[480px]">
         <CommandEmpty>No results found.</CommandEmpty>
 
@@ -342,6 +350,82 @@ export function GlobalSearchDialog({ open, onOpenChange }: GlobalSearchDialogPro
                   variant={project.status as Parameters<typeof StatusBadge>[0]["variant"]}
                   label={project.status}
                 />
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        )}
+
+        {showFullSearch && clients.length > 0 && <CommandSeparator />}
+
+        {showFullSearch && clients.length > 0 && (
+          <CommandGroup heading="Clients">
+            {clients.map((client) => (
+              <CommandItem
+                key={client.id}
+                value={`${client.displayName} ${client.primaryPhone ?? ""} ${client.primaryEmail ?? ""} ${client.billingCity ?? ""} client`}
+                onSelect={() => go(`/crm/clients/${client.id}`)}
+                className="flex items-center gap-3"
+              >
+                <Users className="h-4 w-4 shrink-0 text-slate-400" />
+                <div className="flex min-w-0 flex-1 flex-col">
+                  <span className="truncate text-sm font-medium">{client.displayName}</span>
+                  <span className="truncate text-xs text-slate-400">
+                    {[client.billingCity, client.billingState].filter(Boolean).join(", ") || client.primaryPhone || client.primaryEmail || ""}
+                  </span>
+                </div>
+                <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium capitalize ${client.status === "active" ? "bg-green-100 text-green-700" : "bg-slate-100 text-slate-500"}`}>
+                  {client.status}
+                </span>
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        )}
+
+        {showFullSearch && leads.length > 0 && <CommandSeparator />}
+
+        {showFullSearch && leads.length > 0 && (
+          <CommandGroup heading="Leads">
+            {leads.map((lead) => (
+              <CommandItem
+                key={lead.id}
+                value={`${lead.displayName} ${lead.primaryPhone ?? ""} ${lead.primaryEmail ?? ""} ${lead.billingCity ?? ""} lead`}
+                onSelect={() => go(`/crm/clients/${lead.id}`)}
+                className="flex items-center gap-3"
+              >
+                <UserPlus className="h-4 w-4 shrink-0 text-slate-400" />
+                <div className="flex min-w-0 flex-1 flex-col">
+                  <span className="truncate text-sm font-medium">{lead.displayName}</span>
+                  <span className="truncate text-xs text-slate-400">
+                    {lead.source ? `via ${lead.source}` : ""}{lead.billingCity ? ` · ${lead.billingCity}` : ""}
+                  </span>
+                </div>
+                <span className="shrink-0 rounded-full bg-yellow-100 px-1.5 py-0.5 text-[10px] font-medium text-yellow-700">
+                  Lead
+                </span>
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        )}
+
+        {showFullSearch && invoices.length > 0 && <CommandSeparator />}
+
+        {showFullSearch && invoices.length > 0 && (
+          <CommandGroup heading="Invoices">
+            {invoices.map((inv) => (
+              <CommandItem
+                key={inv.id}
+                value={`${inv.invoiceNumber} ${inv.clientName ?? ""} invoice`}
+                onSelect={() => go(`/crm/accounting/invoices/${inv.id}`)}
+                className="flex items-center gap-3"
+              >
+                <Receipt className="h-4 w-4 shrink-0 text-slate-400" />
+                <div className="flex min-w-0 flex-1 flex-col">
+                  <span className="truncate text-sm font-medium">{inv.invoiceNumber}</span>
+                  {inv.clientName && (
+                    <span className="truncate text-xs text-slate-400">{inv.clientName}</span>
+                  )}
+                </div>
+                <StatusBadge variant={inv.status as Parameters<typeof StatusBadge>[0]["variant"]} label={inv.status} />
               </CommandItem>
             ))}
           </CommandGroup>

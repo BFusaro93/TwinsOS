@@ -7,6 +7,7 @@ interface MasterDetailLayoutProps {
   detailPanel: React.ReactNode;
   emptyState: React.ReactNode;
   hasSelection: boolean;
+  expanded?: boolean;
   onBack?: () => void;
   className?: string;
 }
@@ -16,6 +17,7 @@ export function MasterDetailLayout({
   detailPanel,
   emptyState,
   hasSelection,
+  expanded = false,
   onBack,
   className,
 }: MasterDetailLayoutProps) {
@@ -26,11 +28,12 @@ export function MasterDetailLayout({
         className
       )}
     >
-      {/* List panel — hidden on mobile when an item is selected */}
+      {/* List panel — hidden on mobile when an item is selected, hidden when expanded */}
       <div
         className={cn(
-          "flex w-full flex-col md:w-[440px] md:shrink-0 md:border-r",
-          hasSelection && "hidden md:flex"
+          "flex w-full flex-col md:w-[440px] md:shrink-0 md:border-r transition-all duration-200",
+          (hasSelection && "hidden md:flex"),
+          expanded && "!hidden"
         )}
       >
         {listPanel}

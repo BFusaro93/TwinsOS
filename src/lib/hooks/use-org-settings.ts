@@ -13,6 +13,7 @@ export interface OrgSettingsData {
   costMethod: CostMethod;
   portalEnabled: boolean;
   customizations: Record<string, unknown>;
+  googleMapsApiKey: string | null;
 }
 
 export interface UpdateOrgSettingsInput {
@@ -23,6 +24,7 @@ export interface UpdateOrgSettingsInput {
   costMethod?: CostMethod;
   portalEnabled?: boolean;
   customizations?: Record<string, unknown>;
+  googleMapsApiKey?: string | null;
 }
 
 function mapOrgSettings(row: Record<string, unknown>): OrgSettingsData {
@@ -43,6 +45,7 @@ function mapOrgSettings(row: Record<string, unknown>): OrgSettingsData {
     costMethod: (row.cost_method as CostMethod) ?? "manual",
     portalEnabled: typeof row.portal_enabled === "boolean" ? row.portal_enabled : true,
     customizations: (row.customizations as Record<string, unknown>) ?? {},
+    googleMapsApiKey: ((row.customizations as Record<string, unknown>)?.google_maps_api_key as string) ?? null,
   };
 }
 
@@ -74,7 +77,8 @@ export function useOrgSettings() {
 export function useUpdateOrgSettings() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (input: UpdateOrgSettingsInput) => {
+    mutationFn: async (rawInput: UpdateOrgSettingsInput) => {
+      let input = rawInput;
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");
@@ -94,6 +98,17 @@ export function useUpdateOrgSettings() {
       if (input.portalEnabled !== undefined)  patch.portal_enabled   = input.portalEnabled;
 
       // Merge customizations with existing values instead of replacing them
+      if (input.googleMapsApiKey !== undefined) {
+        // Store the API key inside customizations so no migration is needed
+        input = {
+          ...input,
+          customizations: {
+            ...(input.customizations ?? {}),
+            google_maps_api_key: input.googleMapsApiKey ?? null,
+          },
+        };
+      }
+
       if (input.customizations !== undefined) {
         const { data: existing } = await supabase
           .from("organizations")

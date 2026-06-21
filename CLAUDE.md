@@ -1,6 +1,6 @@
-# PO + CMMS SaaS Platform
+# PO + CMMS + CRM/FSM SaaS Platform
 
-A combined **Purchase Order (PO)** and **Computerized Maintenance Management System (CMMS)** delivered as a multi-tenant SaaS. The primary industry context is **landscaping operations**, though the platform is designed to be industry-agnostic. Users include operations/maintenance teams, procurement/finance teams, and managers with approval authority.
+A combined **Purchase Order (PO)**, **Computerized Maintenance Management System (CMMS)**, and **Field Service Management / CRM** platform delivered as a multi-tenant SaaS. The primary industry context is **landscaping and snow operations** (modeled after Service Autopilot and Aspire Software), though the platform is designed to be industry-agnostic. Users include operations/maintenance teams, procurement/finance teams, field crews, and managers with approval authority.
 
 ---
 
@@ -37,6 +37,12 @@ src/
         pm-schedules/     # Preventive Maintenance schedules
         parts/            # Parts inventory (linked to assets and PO)
         vendors/          # Vendor management (shared with PO)
+      crm/                # CRM / FSM module
+        clients/          # Client accounts (residential & commercial)
+        estimates/        # Estimates with budget-based job costing engine (Sprint 3)
+        scheduling/       # Dispatch board, waiting list, routes (Sprint 2)
+        accounting/       # Invoices, payments, contracts (Sprint 3)
+        communication/    # Automations, email activity, campaigns (Sprint 4)
       settings/           # Org settings, users, roles
   components/
     ui/                   # shadcn/ui primitives (DO NOT modify)
@@ -51,7 +57,7 @@ src/
   stores/                 # Zustand stores
 ```
 
-### Two Core Modules — Keep Them Decoupled
+### Three Core Modules — Keep Them Decoupled
 
 **Purchase Order (PO) Module** — handles the full procurement lifecycle:
 - Purchase Requisitions → PO creation → Approval workflows → Vendor management → Receiving → Invoice matching
@@ -62,11 +68,28 @@ src/
 - Asset registry → Preventive Maintenance (PM) schedules → Work Orders → Parts inventory → Labor tracking → Maintenance history
 - **Parts section:** spare parts and consumables inventory. Each Part can be assigned to one or more Assets (the parts that asset typically requires). Parts are replenished via PO → Goods Receipt → Parts inventory flow.
 
+**CRM / FSM Module** — handles the full customer and field service lifecycle:
+- Clients (residential & commercial, with parent/child hierarchy) → Properties (with zone measurements/takeoffs) → Contacts → Unified activity timeline
+- Estimates (with Aspire-style budget engine: production rates, labor burden, overhead markup, margin sliders) → Jobs → Dispatch board → Invoices → Contracts
+- Job types: `recurring`, `one_time`, `waiting_list`, `package`, `snow`, `project`
+- Packages: fixed monthly billing for bundled service programs (e.g. 7-Step Fert, Gold Maintenance)
+- Waiting List: geo-tagged jobs queued for opportunistic scheduling within a date range
+- Snow jobs: storm-based scheduling and service entry
+- Communication: event-driven automations (e.g. job completed → send follow-up email 24h later)
+- Scheduling: dispatch board (SA-style daily list view) with route optimization
+
+**Client vs. Vendor distinction:** Clients are always customers — they are never suppliers. `clients` table is entirely separate from `vendors`. Do not conflate them.
+
+**Existing "client" references in photos/damage-cases/projects:** The current codebase uses informal client name strings (not FK references) in photo jobs, damage cases, and projects. These will eventually be linked to `clients.id` but that migration is deferred to a later sprint. Do not add the FK until the CRM client table is fully established.
+
 **Integration points** between modules (the only sanctioned ones):
 1. A Work Order can spawn a Purchase Requisition when parts are needed
 2. PO line items (category `maintenance_part`) can be received into CMMS Parts inventory
 3. **Vendors are shared** — the `vendors` table is module-agnostic. A vendor may supply both landscape materials (PO) and maintenance parts/services (CMMS). Vendor UI is surfaced in both modules but writes to the same underlying table.
 4. A PO line item of category `project_material` can be assigned a `project_id` from the Projects/Jobs section
+5. A CRM Job can spawn a Purchase Requisition when materials are needed (same pattern as Work Order → Requisition)
+6. CRM Invoices link to PO Purchase Orders for job cost reconciliation
+7. **Vendors are also shared with CRM** — CRM service vendors (subcontractors, chemical suppliers) are the same `vendors` table
 
 Do not create cross-module dependencies beyond these four points. Keep all other module logic in its own directory.
 
@@ -93,6 +116,20 @@ Understand these terms — use them consistently in code, variables, and comment
 | `LineItem` | A line on a Requisition or PO (quantity, unit cost, GL code, optional `project_id`, references a `ProductItem`) |
 | `GoodsReceipt` | Record of physical receipt of PO line items; triggers inventory update for `maintenance_part` category |
 | `Role` | User permission level: `admin`, `manager`, `technician`, `purchaser`, `viewer` |
+| `Client` | A customer account (residential or commercial). Always separate from `Vendor`. Has a display name, billing info, and optional parent/child hierarchy for commercial property managers. |
+| `ClientProperty` | A physical service address associated with a Client. Stores zone measurements (turf sq ft, mulch beds, etc.) used by the estimating engine. One client can have many properties. |
+| `ClientContact` | A named person associated with a Client (owner, billing contact, site manager, etc.). |
+| `ClientActivity` | A unified timeline entry on a Client record: notes, calls, emails, invoices, payments, job visits, estimates. Single `client_activity` table with `activity_type` discriminator. |
+| `PropertyZone` | A named measurement area within a property (e.g. "Front Turf: 12,000 sq ft"). Stored as JSONB array on `client_properties.zones`. Used as input to the estimating engine. |
+| `CRMJob` | A scheduled or waiting service for a Client. Types: `recurring`, `one_time`, `waiting_list`, `package`, `snow`, `project`. Not to be confused with CMMS `WorkOrder`. |
+| `Package` | A bundled service program (e.g. 7-Step Fertilizer). Client pays a fixed monthly installment; the package defines how many visits of each service are included. |
+| `WaitingList` | A `CRMJob` with type `waiting_list` — no fixed date, has a date range window. Geo-tagged for opportunistic dispatch when crews are nearby. |
+| `Estimate` | A client-facing price proposal built using the budget engine (production rates × labor burden + materials × overhead markup). Has configurable margin slider. |
+| `Contract` | A signed agreement for ongoing service at a fixed monthly price, covering a set of bundled services. |
+| `DispatchBoard` | The daily scheduling view showing all jobs for a given day, assignable to crews/resources. Modeled after Service Autopilot's dispatch board. |
+| `ProductionRate` | Service-specific rate in sq ft per man-hour. Core input to the Aspire-style estimating engine. Stored per service in the settings tables. |
+| `LaborBurden` | True fully-loaded cost of a worker per hour (wages + taxes + benefits + overhead). Used by the estimating engine. |
+| `OverheadMarkup` | Company-level overhead recovery factor applied on top of direct costs in an estimate. |
 
 ---
 

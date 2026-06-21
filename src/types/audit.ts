@@ -23,7 +23,13 @@ export type AuditRecordType =
   | "request"
   | "pm_schedule"
   | "damage_case"
-  | "job_photo";
+  | "job_photo"
+  | "ticket"
+  | "client"
+  | "lead"
+  | "crm_job"
+  | "invoice"
+  | "estimate";
 
 export interface AuditEntry extends BaseRecord {
   recordType: AuditRecordType;

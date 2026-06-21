@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { Menu, PanelLeftClose, Search, UserCog } from "lucide-react";
+import Link from "next/link";
+import { Menu, PanelLeftClose, Plus, Search, UserCog } from "lucide-react";
 import { useUIStore, useCurrentUserStore } from "@/stores";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
@@ -100,6 +101,54 @@ function useBreadcrumbs() {
   });
 }
 
+const CRM_QUICK_ADD = [
+  { label: "Client",   href: "/crm/clients" },
+  { label: "Lead",     href: "/crm/leads" },
+  { label: "Estimate", href: "/crm/estimates" },
+  { label: "Ticket",   href: "/crm/tickets" },
+  { label: "Invoice",  href: "/crm/accounting/invoices" },
+  { label: "Payment",  href: "/crm/accounting/payments" },
+];
+
+const EQUIPT_QUICK_ADD = [
+  { label: "Requisition",  href: "/po/requisitions" },
+  { label: "Purchase Order", href: "/po/orders" },
+  { label: "Work Order",   href: "/cmms/work-orders" },
+  { label: "Vendor",       href: "/vendors" },
+];
+
+function QuickAddMenu() {
+  const pathname = usePathname();
+  const isCRM = pathname.startsWith("/crm");
+  const items = isCRM ? CRM_QUICK_ADD : EQUIPT_QUICK_ADD;
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          size="icon"
+          className="h-8 w-8 shrink-0 rounded-full bg-brand-500 text-white hover:bg-brand-600"
+        >
+          <Plus className="h-4 w-4" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-44">
+        <DropdownMenuLabel className="flex items-center gap-1.5 text-xs font-semibold text-slate-500">
+          <Plus className="h-3 w-3" /> Quick Add
+        </DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        {items.map((item) => (
+          <DropdownMenuItem key={item.href} asChild>
+            <Link href={item.href} className="cursor-pointer">
+              {item.label}
+            </Link>
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 export function TopBar() {
   const { toggleSidebar, setSidebarOpen } = useUIStore();
   const { currentUser, setCurrentUser } = useCurrentUserStore();
@@ -165,6 +214,9 @@ export function TopBar() {
       </div>
 
       <GlobalSearchDialog open={searchOpen} onOpenChange={setSearchOpen} />
+
+      {/* Quick Add */}
+      <QuickAddMenu />
 
       {/* Notifications — hidden for crew users (they only need photo access, not CMMS/PO alerts) */}
       {currentUser.role !== "crew" && <NotificationsBell />}

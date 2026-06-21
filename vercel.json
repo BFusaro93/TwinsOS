@@ -12,6 +12,14 @@
     {
       "path": "/api/automations/run",
       "schedule": "0 11 * * *"
+    },
+    {
+      "path": "/api/cron/contract-invoices",
+      "schedule": "0 8 * * *"
+    },
+    {
+      "path": "/api/cron/recurring-visits",
+      "schedule": "0 6 * * *"
     }
   ]
 }

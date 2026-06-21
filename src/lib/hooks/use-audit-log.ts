@@ -21,7 +21,19 @@ export function useAuditLog(recordType: AuditRecordType, recordId: string) {
   });
 }
 
-/** Returns the most recent audit entries across all record types — used by the dashboard activity feed. */
+const CMMS_RECORD_TYPES = [
+  "work_order",
+  "po",
+  "receiving",
+  "requisition",
+  "part",
+  "asset",
+  "vehicle",
+  "project",
+  "pm_schedule",
+] as const;
+
+/** Returns the most recent CMMS/PO audit entries — excludes CRM activity. */
 export function useRecentActivityFeed(limit = 8) {
   return useQuery({
     queryKey: ["audit-log-feed", limit],
@@ -30,6 +42,7 @@ export function useRecentActivityFeed(limit = 8) {
       const { data, error } = await supabase
         .from("audit_log")
         .select("*")
+        .in("record_type", CMMS_RECORD_TYPES as unknown as string[])
         .order("created_at", { ascending: false })
         .limit(limit);
       if (error) throw error;

@@ -52,7 +52,6 @@ export const NAV_SECTIONS: NavSection[] = [
       { label: "Purchase Orders", href: "/po/orders", icon: ShoppingCart, hideFromCrew: true },
       { label: "Receiving", href: "/po/receiving", icon: Package, hideFromCrew: true },
       { label: "Products", href: "/po/products", icon: BookOpen, hideFromCrew: true },
-      { label: "Projects", href: "/po/projects", icon: Briefcase, hideFromCrew: true },
     ],
   },
   {
