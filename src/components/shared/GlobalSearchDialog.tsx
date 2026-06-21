@@ -350,7 +350,7 @@ export function GlobalSearchDialog({ open, onOpenChange }: GlobalSearchDialogPro
           </CommandGroup>
         )}
 
-        {hasPhotoAccess && (showFullSearch ? projects.length > 0 : false) && photoJobs.length > 0 && <CommandSeparator />
+        {hasPhotoAccess && (showFullSearch ? projects.length > 0 : false) && photoJobs.length > 0 && <CommandSeparator />}
 
         {hasPhotoAccess && photoJobs.length > 0 && (
           <CommandGroup heading="Photo Jobs">
