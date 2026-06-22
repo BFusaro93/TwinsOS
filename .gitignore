@@ -41,3 +41,4 @@ supabase/.branches
 supabase/.temp
 .env*.local
 .claude/worktrees/
+.env.local.test
