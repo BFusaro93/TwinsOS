@@ -17,7 +17,7 @@ export function useAssets() {
       const { data, error } = await supabase
         .from("assets").select("*").is("deleted_at", null).order("name");
       if (error) throw error;
-      return data.map(mapAsset);
+      return (data.map(mapAsset)) as Asset[];
     },
   });
 }

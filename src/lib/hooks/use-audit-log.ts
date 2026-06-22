@@ -1,21 +1,22 @@
 import { useQuery } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 import { mapAuditEntry } from "@/lib/supabase/mappers";
-import type { AuditRecordType } from "@/types/audit";
+import type { AuditEntry, AuditRecordType } from "@/types/audit";
 
 export function useAuditLog(recordType: AuditRecordType, recordId: string) {
   return useQuery({
     queryKey: ["audit-log", recordType, recordId],
     queryFn: async () => {
       const supabase = createClient();
-      const { data, error } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
         .from("audit_log")
         .select("*")
         .eq("record_type", recordType)
         .eq("record_id", recordId)
         .order("created_at", { ascending: false });
       if (error) throw error;
-      return data.map(mapAuditEntry);
+      return (data.map(mapAuditEntry)) as AuditEntry[];
     },
     enabled: !!recordId,
   });
@@ -39,14 +40,15 @@ export function useRecentActivityFeed(limit = 8) {
     queryKey: ["audit-log-feed", limit],
     queryFn: async () => {
       const supabase = createClient();
-      const { data, error } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
         .from("audit_log")
         .select("*")
         .in("record_type", CMMS_RECORD_TYPES as unknown as string[])
         .order("created_at", { ascending: false })
         .limit(limit);
       if (error) throw error;
-      return data.map(mapAuditEntry);
+      return (data.map(mapAuditEntry)) as AuditEntry[];
     },
   });
 }

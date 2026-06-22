@@ -609,7 +609,7 @@ export function UsersPage() {
                         onValueChange={(v) => handleRoleChange(user.id, v as OrgUser["role"])}
                       >
                         <SelectTrigger className="h-8 w-36 text-xs">
-                          <SelectValue>{ROLE_LABELS[user.role]}</SelectValue>
+                          <SelectValue>{ROLE_LABELS[user.role as keyof typeof ROLE_LABELS]}</SelectValue>
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="admin">Admin</SelectItem>

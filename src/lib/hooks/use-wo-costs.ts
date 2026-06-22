@@ -13,7 +13,8 @@ export function usePartOpenWOQty(partId: string) {
     queryKey: ["part-wo-qty", partId],
     queryFn: async () => {
       const supabase = createClient();
-      const { data, error } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
         .from("wo_parts")
         .select("quantity, work_order_id, work_orders!inner(status)")
         .eq("part_id", partId)
@@ -21,15 +22,18 @@ export function usePartOpenWOQty(partId: string) {
         .in("work_orders.status", ["open", "in_progress", "on_hold"]);
       if (error) {
         // Fallback: if the join fails, fetch without status filter
-        const { data: fallback, error: fallbackErr } = await supabase
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: fallback, error: fallbackErr } = await (supabase as any)
           .from("wo_parts")
           .select("quantity")
           .eq("part_id", partId)
           .is("deleted_at", null);
         if (fallbackErr) throw fallbackErr;
-        return (fallback ?? []).reduce((sum, r) => sum + (r.quantity as number), 0);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        return (fallback ?? []).reduce((sum: number, r: any) => sum + (r.quantity as number), 0);
       }
-      return (data ?? []).reduce((sum, r) => sum + (r.quantity as number), 0);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return (data ?? []).reduce((sum: number, r: any) => sum + (r.quantity as number), 0);
     },
     enabled: !!partId,
   });
@@ -42,13 +46,14 @@ export function useWOParts(workOrderId: string) {
     queryKey: ["wo-parts", workOrderId],
     queryFn: async () => {
       const supabase = createClient();
-      const { data, error } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
         .from("wo_parts")
         .select("*")
         .eq("work_order_id", workOrderId)
         .is("deleted_at", null);
       if (error) throw error;
-      return data.map(mapWOPart);
+      return (data.map(mapWOPart)) as WOPart[];
     },
     enabled: !!workOrderId,
   });
@@ -91,7 +96,8 @@ export function useAddWOPart() {
       // If this part was previously soft-deleted on this WO, restore it instead
       // of inserting a new row (avoids unique constraint collision on work_order_id+part_id).
       if (input.partId) {
-        const { data: existing } = await supabase
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: existing } = await (supabase as any)
           .from("wo_parts")
           .select("id")
           .eq("work_order_id", input.workOrderId)
@@ -100,7 +106,8 @@ export function useAddWOPart() {
           .maybeSingle();
 
         if (existing) {
-          const { data: restored, error: restoreErr } = await supabase
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { data: restored, error: restoreErr } = await (supabase as any)
             .from("wo_parts")
             .update({
               deleted_at: null,
@@ -117,7 +124,8 @@ export function useAddWOPart() {
         }
       }
 
-      const { data, error } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
         .from("wo_parts")
         .insert({
           work_order_id: input.workOrderId,
@@ -168,13 +176,15 @@ export function useUpdateWOPart() {
       const supabase = createClient();
 
       // Fetch old quantity and partId before updating so we can adjust inventory
-      const { data: existing } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: existing } = await (supabase as any)
         .from("wo_parts")
         .select("quantity, part_id")
         .eq("id", id)
         .single();
 
-      const { error } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase as any)
         .from("wo_parts")
         .update({ quantity, unit_cost: unitCost })
         .eq("id", id);
@@ -216,7 +226,8 @@ export function useDeleteWOPart() {
       quantity: number;
     }) => {
       const supabase = createClient();
-      const { error } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase as any)
         .from("wo_parts")
         .update({ deleted_at: new Date().toISOString() })
         .eq("id", id);
@@ -249,13 +260,14 @@ export function useWOLabor(workOrderId: string) {
     queryKey: ["wo-labor", workOrderId],
     queryFn: async () => {
       const supabase = createClient();
-      const { data, error } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
         .from("wo_labor_entries")
         .select("*")
         .eq("work_order_id", workOrderId)
         .is("deleted_at", null);
       if (error) throw error;
-      return data.map(mapWOLaborEntry);
+      return (data.map(mapWOLaborEntry)) as WOLaborEntry[];
     },
     enabled: !!workOrderId,
   });
@@ -272,7 +284,8 @@ export function useAddWOLabor() {
       hourlyRate: number;
     }): Promise<WOLaborEntry> => {
       const supabase = createClient();
-      const { data, error } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
         .from("wo_labor_entries")
         .insert({
           work_order_id: input.workOrderId,
@@ -311,7 +324,8 @@ export function useUpdateWOLabor() {
       hourlyRate: number;
     }) => {
       const supabase = createClient();
-      const { error } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase as any)
         .from("wo_labor_entries")
         .update({
           technician_name: technicianName,
@@ -333,7 +347,8 @@ export function useDeleteWOLabor() {
   return useMutation({
     mutationFn: async ({ id, workOrderId }: { id: string; workOrderId: string }) => {
       const supabase = createClient();
-      const { error } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase as any)
         .from("wo_labor_entries")
         .update({ deleted_at: new Date().toISOString() })
         .eq("id", id);
@@ -359,7 +374,7 @@ export function useWOVendorCharges(workOrderId: string) {
         .eq("work_order_id", workOrderId)
         .is("deleted_at", null);
       if (error) throw error;
-      return data.map(mapWOVendorCharge);
+      return (data.map(mapWOVendorCharge)) as WOVendorCharge[];
     },
     enabled: !!workOrderId,
   });

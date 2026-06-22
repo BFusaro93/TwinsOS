@@ -14,10 +14,11 @@ export function useVehicles() {
     queryKey: ["vehicles"],
     queryFn: async () => {
       const supabase = createClient();
-      const { data, error } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
         .from("vehicles").select("*").is("deleted_at", null).order("name");
       if (error) throw error;
-      return data.map(mapVehicle);
+      return (data.map(mapVehicle)) as Vehicle[];
     },
   });
 }
@@ -27,7 +28,8 @@ export function useVehicle(id: string) {
     queryKey: ["vehicles", id],
     queryFn: async () => {
       const supabase = createClient();
-      const { data, error } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
         .from("vehicles").select("*").eq("id", id).is("deleted_at", null).single();
       if (error) throw error;
       return mapVehicle(data);
@@ -41,7 +43,8 @@ export function useCreateVehicle() {
   return useMutation({
     mutationFn: async (input: Omit<Vehicle, "id" | "orgId" | "createdBy" | "createdAt" | "updatedAt" | "deletedAt">) => {
       const supabase = createClient();
-      const { data, error } = await supabase.from("vehicles").insert({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any).from("vehicles").insert({
         name: input.name,
         asset_tag: input.assetTag,
         equipment_number: input.equipmentNumber,
@@ -88,7 +91,8 @@ export function useUpdateVehicle() {
   return useMutation({
     mutationFn: async ({ id, ...input }: Partial<Vehicle> & { id: string }) => {
       const supabase = createClient();
-      const { data, error } = await supabase.from("vehicles").update({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any).from("vehicles").update({
         ...(input.name !== undefined && { name: input.name }),
         ...(input.assetTag !== undefined && { asset_tag: input.assetTag }),
         ...(input.equipmentNumber !== undefined && { equipment_number: input.equipmentNumber }),
@@ -151,7 +155,8 @@ export function useUpdateVehicleStatus() {
   return useMutation({
     mutationFn: async ({ id, status }: { id: string; status: AssetStatus }) => {
       const supabase = createClient();
-      const { error } = await supabase.from("vehicles").update({ status }).eq("id", id);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase as any).from("vehicles").update({ status }).eq("id", id);
       if (error) throw error;
     },
     onMutate: async ({ id, status }) => {
@@ -211,11 +216,13 @@ export function useBulkImportVehicles() {
       // Insert one-by-one; on duplicate asset_tag, update the existing row
       let count = 0;
       for (const row of inserts) {
-        const { error } = await supabase.from("vehicles").insert(row);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error } = await (supabase as any).from("vehicles").insert(row);
         if (error?.code === "23505") {
           const { data: { user } } = await supabase.auth.getUser();
           const { data: profile } = await supabase.from("profiles").select("org_id").eq("id", user!.id).single();
-          await supabase.from("vehicles").update({
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          await (supabase as any).from("vehicles").update({
             name: row.name,
             make: row.make,
             model: row.model,
@@ -247,7 +254,8 @@ export function useDeleteVehicle() {
   return useMutation({
     mutationFn: async (id: string) => {
       const supabase = createClient();
-      const { error } = await supabase.from("vehicles").update({ deleted_at: new Date().toISOString() }).eq("id", id);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase as any).from("vehicles").update({ deleted_at: new Date().toISOString() }).eq("id", id);
       if (error) throw error;
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["vehicles"] }),

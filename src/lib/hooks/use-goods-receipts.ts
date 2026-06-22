@@ -32,7 +32,7 @@ export function useGoodsReceipts() {
         .is("deleted_at", null)
         .order("created_at", { ascending: false });
       if (error) throw error;
-      return data.map(mapGoodsReceipt);
+      return (data.map(mapGoodsReceipt)) as GoodsReceipt[];
     },
   });
 }
@@ -93,7 +93,8 @@ export function useCreateGoodsReceipt() {
           unit_cost: line.unitCost,
           is_maint_part: line.isMaintPart,
         }));
-        const { error: linesError } = await supabase.from("goods_receipt_lines").insert(lineInserts);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error: linesError } = await (supabase as any).from("goods_receipt_lines").insert(lineInserts);
         if (linesError) throw linesError;
       }
 
@@ -132,17 +133,20 @@ export function useUpdateGoodsReceipt() {
         .eq("id", input.id)
         .single();
 
-      const { data: currentLines } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: currentLines } = await (supabase as any)
         .from("goods_receipt_lines")
         .select("id, quantity_received")
         .eq("receipt_id", input.id);
-      const oldByLineId = new Map(
-        (currentLines ?? []).map((l) => [l.id, l.quantity_received as number])
+      const oldByLineId = new Map<string, number>(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (currentLines ?? []).map((l: any) => [l.id as string, l.quantity_received as number])
       );
 
       // Update line items
       for (const line of input.lines) {
-        const { error: lineError } = await supabase
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error: lineError } = await (supabase as any)
           .from("goods_receipt_lines")
           .update({
             quantity_received: line.quantityReceived,

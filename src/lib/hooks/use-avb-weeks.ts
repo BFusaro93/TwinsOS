@@ -57,12 +57,13 @@ export function useAvbWeeks() {
     queryKey: ["avb-weeks"],
     queryFn: async () => {
       const supabase = createClient();
-      const { data, error } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
         .from("avb_weeks")
         .select("id, week_end, data, created_at, updated_at")
         .order("week_end", { ascending: true });
       if (error) throw error;
-      return (data ?? []).map(mapRow);
+      return ((data ?? []).map(mapRow)) as AvbWeekRecord[];
     },
   });
 }
@@ -82,7 +83,8 @@ export function useUpsertAvbWeek() {
       const orgId = profile?.org_id;
       if (!orgId) throw new Error("No org found for user");
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase as any)
         .from("avb_weeks")
         .upsert({ org_id: orgId, week_end: weekEnd, data: data as unknown as never }, { onConflict: "org_id,week_end" });
       if (error) throw error;
@@ -96,7 +98,8 @@ export function useDeleteAvbWeek() {
   return useMutation({
     mutationFn: async (weekEnd: string) => {
       const supabase = createClient();
-      const { error } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase as any)
         .from("avb_weeks")
         .delete()
         .eq("week_end", weekEnd);

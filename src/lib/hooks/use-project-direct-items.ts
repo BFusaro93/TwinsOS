@@ -39,14 +39,15 @@ export function useProjectDirectItems(projectId: string) {
     queryKey: QK(projectId),
     queryFn: async () => {
       const supabase = createClient();
-      const { data, error } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
         .from("project_direct_items")
         .select("*")
         .eq("project_id", projectId)
         .is("deleted_at", null)
         .order("created_at", { ascending: true });
       if (error) throw error;
-      return data.map(mapDirectItem);
+      return (data.map(mapDirectItem)) as ProjectDirectItem[];
     },
     enabled: !!projectId,
   });
@@ -72,7 +73,8 @@ export function useAddProjectDirectItem() {
         .select("org_id")
         .eq("id", userData.user!.id)
         .single();
-      const { data, error } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
         .from("project_direct_items")
         .insert({
           org_id: profile!.org_id,
@@ -110,7 +112,8 @@ export function useUpdateProjectDirectItem() {
       unitCost: number;
     }): Promise<ProjectDirectItem> => {
       const supabase = createClient();
-      const { data, error } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
         .from("project_direct_items")
         .update({ quantity, unit_cost: unitCost, updated_at: new Date().toISOString() })
         .eq("id", id)
@@ -130,7 +133,8 @@ export function useDeleteProjectDirectItem() {
   return useMutation({
     mutationFn: async ({ id, projectId }: { id: string; projectId: string }) => {
       const supabase = createClient();
-      const { error } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase as any)
         .from("project_direct_items")
         .update({ deleted_at: new Date().toISOString() })
         .eq("id", id);

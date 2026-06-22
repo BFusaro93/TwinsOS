@@ -56,7 +56,8 @@ export function useNotificationReads(activeNotifIds: string[]) {
       // Fetch user ID and notification reads in parallel
       const [{ data: { user } }, { data: reads }] = await Promise.all([
         supabase.auth.getUser(),
-        supabase.from("notification_reads").select("notif_id"),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (supabase as any).from("notification_reads").select("notif_id"),
       ]);
 
       if (cancelled) return;
@@ -67,7 +68,8 @@ export function useNotificationReads(activeNotifIds: string[]) {
 
       if (reads && reads.length > 0) {
         setReadIdsState((prev) => {
-          const merged = new Set([...prev, ...reads.map((r) => r.notif_id)]);
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const merged = new Set([...prev, ...reads.map((r: any) => r.notif_id as string)]);
           writeLocalCache(merged);
           return merged;
         });

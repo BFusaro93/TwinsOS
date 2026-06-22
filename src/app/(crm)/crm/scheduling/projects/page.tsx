@@ -1,10 +1,5 @@
-export default function Page() {
-  return (
-    <div className="flex h-full flex-col gap-4">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900">Projects</h1>
-        <p className="text-sm text-slate-500">Landscape project management</p>
-      </div>
-    </div>
-  );
+import { CRMProjectsList } from "@/components/crm/projects/CRMProjectsList";
+
+export default function CRMProjectsPage() {
+  return <CRMProjectsList />;
 }

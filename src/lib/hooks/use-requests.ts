@@ -8,13 +8,14 @@ export function useRequests() {
     queryKey: ["requests"],
     queryFn: async () => {
       const supabase = createClient();
-      const { data, error } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
         .from("maintenance_requests")
         .select("*")
         .is("deleted_at", null)
         .order("created_at", { ascending: false });
       if (error) throw error;
-      return data.map(mapMaintenanceRequest);
+      return (data.map(mapMaintenanceRequest)) as import("@/types").MaintenanceRequest[];
     },
   });
 }
@@ -24,7 +25,8 @@ export function useRequest(id: string | null) {
     queryKey: ["requests", id],
     queryFn: async () => {
       const supabase = createClient();
-      const { data, error } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
         .from("maintenance_requests")
         .select("*")
         .eq("id", id!)
@@ -54,7 +56,8 @@ export function useCreateRequest() {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
       const requestNumber = `MR-${new Date().getFullYear()}-${Date.now().toString().slice(-5)}`;
-      const { data, error } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
         .from("maintenance_requests")
         .insert({
           request_number: requestNumber,
@@ -101,7 +104,8 @@ export function useUpdateRequest() {
       assetName?: string | null;
     }) => {
       const supabase = createClient();
-      const { data, error } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
         .from("maintenance_requests")
         .update({
           title: input.title,
@@ -128,7 +132,8 @@ export function useUpdateRequestStatus() {
   return useMutation({
     mutationFn: async ({ id, status }: { id: string; status: MaintenanceRequestStatus }) => {
       const supabase = createClient();
-      const { error } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase as any)
         .from("maintenance_requests")
         .update({ status })
         .eq("id", id);
@@ -154,7 +159,8 @@ export function useConvertRequestToWO() {
       linkedWorkOrderNumber: string;
     }) => {
       const supabase = createClient();
-      const { error } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase as any)
         .from("maintenance_requests")
         .update({
           status: "converted",
@@ -176,7 +182,8 @@ export function useDeleteRequest() {
   return useMutation({
     mutationFn: async (id: string) => {
       const supabase = createClient();
-      const { error } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase as any)
         .from("maintenance_requests")
         .update({ deleted_at: new Date().toISOString() })
         .eq("id", id);

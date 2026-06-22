@@ -14,7 +14,7 @@ export function useVendors() {
         .is("deleted_at", null)
         .order("name");
       if (error) throw error;
-      return data.map(mapVendor);
+      return (data.map(mapVendor)) as Vendor[];
     },
   });
 }

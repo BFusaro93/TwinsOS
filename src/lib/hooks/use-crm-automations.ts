@@ -124,7 +124,7 @@ export function useAutomations() {
         .is("deleted_at", null)
         .order("created_at", { ascending: false });
       if (error) throw error;
-      return data.map(mapAutomation);
+      return (data.map(mapAutomation)) as CRMAutomation[];
     },
   });
 }
@@ -226,7 +226,7 @@ export function useSequences(automationId: string) {
         .is("deleted_at", null)
         .order("position");
       if (error) throw error;
-      return data.map(mapSequence);
+      return (data.map(mapSequence)) as CRMSequence[];
     },
     enabled: !!automationId,
   });
@@ -335,7 +335,7 @@ export function useSequenceEvents(sequenceId: string) {
         .is("deleted_at", null)
         .order("position");
       if (error) throw error;
-      return data.map(mapEvent);
+      return (data.map(mapEvent)) as CRMSequenceEvent[];
     },
     enabled: !!sequenceId,
   });

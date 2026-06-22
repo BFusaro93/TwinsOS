@@ -93,7 +93,7 @@ const CRM_NAV: NavSection[] = [
   {
     label: "Communication",
     items: [
-      { label: "Automations",     href: "/crm/communication/automations",  icon: Zap },
+      { label: "Automations",     href: "/crm/communication/automations",  icon: Zap,          comingSoon: true },
       { label: "Forms",           href: "/crm/communication/forms",        icon: FormInput,     comingSoon: true },
       { label: "Email Activity",  href: "/crm/communication/email",        icon: Mail,          comingSoon: true },
       { label: "Sales Campaigns", href: "/crm/communication/campaigns",    icon: Megaphone,     comingSoon: true },

@@ -1,0 +1,549 @@
+"use client";
+
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { createClient } from "@/lib/supabase/client";
+import type {
+  Client,
+  ClientContact,
+  ClientProperty,
+  ClientActivity,
+  NewClientFormValues,
+} from "@/types/crm";
+
+// ── mappers ───────────────────────────────────────────────────────────────────
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapClient(row: any): Client {
+  return {
+    id: row.id,
+    orgId: row.org_id,
+    displayName: row.display_name,
+    firstName: row.first_name ?? null,
+    lastName: row.last_name ?? null,
+    accountType: row.account_type,
+    status: row.status,
+    primaryPhone: row.primary_phone,
+    primaryEmail: row.primary_email,
+    billingAddress: row.billing_address,
+    billingCity: row.billing_city,
+    billingState: row.billing_state,
+    billingZip: row.billing_zip,
+    billingCountry: row.billing_country ?? "US",
+    billingEmail: row.billing_email,
+    invoiceFrequency: row.invoice_frequency ?? "daily",
+    defaultTaxRateBps: row.default_tax_rate_bps ?? 0,
+    defaultTerms: row.default_terms ?? "due_on_receipt",
+    defaultPaymentMethod: row.default_payment_method ?? null,
+    invoiceDelivery: row.invoice_delivery ?? "email",
+    officeNotes: row.office_notes ?? null,
+    paymentMethod: row.payment_method,
+    billingTerms: row.billing_terms,
+    isTaxable: row.is_taxable ?? true,
+    salesTaxCode: row.sales_tax_code,
+    salesRepId: row.sales_rep_id,
+    salesRepName: row.profiles?.full_name ?? null,
+    source: row.source,
+    referredBy: row.referred_by,
+    clientSince: row.client_since,
+    turfSqft: row.turf_sqft,
+    mulchBedSqft: row.mulch_bed_sqft,
+    grossSqft: row.gross_sqft,
+    linearFtPerimeter: row.linear_ft_perimeter,
+    linearFtEdging: row.linear_ft_edging,
+    yardsOfMulch: row.yards_of_mulch,
+    serviceAddress: row.service_address ?? null,
+    serviceCity: row.service_city ?? null,
+    serviceState: row.service_state ?? null,
+    serviceZip: row.service_zip ?? null,
+    billingSameAsService: row.billing_same_as_service ?? true,
+    gateCode: row.gate_lock_code,
+    notesToCrew: row.notes_to_crew,
+    mapCode: row.map_code,
+    priority: row.priority,
+    okToEmail: row.ok_to_email ?? true,
+    balanceOutstandingCents: row.balance_outstanding_cents ?? 0,
+    balanceUninvoicedCents: row.balance_uninvoiced_cents ?? 0,
+    balanceCreditsCents: row.balance_credits_cents ?? 0,
+    balancePrepaymentsCents: row.balance_prepay_cents ?? 0,
+    parentClientId: row.parent_client_id,
+    deletedAt: row.deleted_at,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    createdBy: row.created_by,
+    tags: (row.client_tags ?? []).map((t: { tag: string }) => t.tag),
+  };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapContact(row: any): ClientContact {
+  return {
+    id: row.id,
+    orgId: row.org_id,
+    clientId: row.client_id,
+    firstName: row.first_name,
+    lastName: row.last_name,
+    contactType: row.contact_type,
+    phone: row.phone,
+    phoneType: row.phone_type,
+    email: row.email,
+    isPrimary: row.is_primary,
+    okToEmail: row.ok_to_email,
+    notes: row.notes,
+    deletedAt: row.deleted_at,
+    createdAt: row.created_at,
+  };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapProperty(row: any): ClientProperty {
+  return {
+    id: row.id,
+    orgId: row.org_id,
+    clientId: row.client_id,
+    name: row.name,
+    address: row.address,
+    city: row.city,
+    state: row.state,
+    zip: row.zip,
+    country: row.country ?? "US",
+    turfSqft: row.turf_sqft,
+    mulchBedSqft: row.mulch_bed_sqft,
+    grossSqft: row.gross_sqft,
+    linearFtPerimeter: row.linear_ft_perimeter,
+    linearFtEdging: row.linear_ft_edging,
+    yardsOfMulch: row.yards_of_mulch,
+    parkingLotSqft: row.parking_lot_sqft,
+    zones: row.zones ?? [],
+    gateCode: row.gate_lock_code,
+    notesToCrew: row.notes_to_crew,
+    mapCode: row.map_code,
+    isMaster: row.is_master,
+    deletedAt: row.deleted_at,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapActivity(row: any): ClientActivity {
+  return {
+    id: row.id,
+    orgId: row.org_id,
+    clientId: row.client_id,
+    activityType: row.activity_type,
+    subject: row.subject,
+    body: row.body,
+    amountCents: row.amount_cents,
+    status: row.status,
+    refId: row.ref_id,
+    refTable: row.ref_table,
+    sentTo: row.sent_to,
+    deliveredAt: row.delivered_at,
+    occurredAt: row.occurred_at,
+    createdAt: row.created_at,
+    createdBy: row.created_by,
+    createdByName: row.profiles?.full_name ?? null,
+  };
+}
+
+// ── list ──────────────────────────────────────────────────────────────────────
+
+export function useClients() {
+  return useQuery({
+    queryKey: ["clients"],
+    queryFn: async () => {
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from("clients")
+        .select("*, client_tags(tag)")
+        .is("deleted_at", null)
+        .order("display_name");
+      if (error) throw error;
+      return (data.map(mapClient)) as Client[];
+    },
+  });
+}
+
+export function useChildClients(parentClientId: string) {
+  return useQuery({
+    queryKey: ["clients", parentClientId, "children"],
+    queryFn: async () => {
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from("clients")
+        .select("*, client_tags(tag)")
+        .eq("parent_client_id", parentClientId)
+        .is("deleted_at", null)
+        .order("display_name");
+      if (error) throw error;
+      return (data.map(mapClient)) as Client[];
+    },
+    enabled: !!parentClientId,
+  });
+}
+
+export function useSetParentClient() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, parentClientId }: { id: string; parentClientId: string | null }) => {
+      const supabase = createClient();
+      const { error } = await supabase
+        .from("clients")
+        .update({ parent_client_id: parentClientId })
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: (_data, { id, parentClientId }) => {
+      qc.invalidateQueries({ queryKey: ["clients"] });
+      qc.invalidateQueries({ queryKey: ["clients", id] });
+      if (parentClientId) {
+        qc.invalidateQueries({ queryKey: ["clients", parentClientId, "children"] });
+      }
+    },
+  });
+}
+
+// ── detail ────────────────────────────────────────────────────────────────────
+
+export function useClient(id: string) {
+  return useQuery({
+    queryKey: ["clients", id],
+    queryFn: async () => {
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from("clients")
+        .select("*, client_tags(tag)")
+        .eq("id", id)
+        .is("deleted_at", null)
+        .single();
+      if (error) throw error;
+      return mapClient(data);
+    },
+    enabled: !!id,
+  });
+}
+
+export function useClientContacts(clientId: string) {
+  return useQuery({
+    queryKey: ["clients", clientId, "contacts"],
+    queryFn: async () => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
+        .from("client_contacts")
+        .select("*")
+        .eq("client_id", clientId)
+        .is("deleted_at", null)
+        .order("is_primary", { ascending: false });
+      if (error) throw error;
+      return (data.map(mapContact)) as ClientContact[];
+    },
+    enabled: !!clientId,
+  });
+}
+
+export function useClientProperties(clientId: string) {
+  return useQuery({
+    queryKey: ["clients", clientId, "properties"],
+    queryFn: async () => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
+        .from("client_properties")
+        .select("*")
+        .eq("client_id", clientId)
+        .is("deleted_at", null)
+        .order("is_master", { ascending: false });
+      if (error) throw error;
+      return (data.map(mapProperty)) as ClientProperty[];
+    },
+    enabled: !!clientId,
+  });
+}
+
+export function useClientActivity(clientId: string) {
+  return useQuery({
+    queryKey: ["clients", clientId, "activity"],
+    queryFn: async () => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
+        .from("client_activity")
+        .select("*")
+        .eq("client_id", clientId)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return (data.map(mapActivity)) as ClientActivity[];
+    },
+    enabled: !!clientId,
+  });
+}
+
+export function useAddClientProperty() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      clientId,
+      property,
+    }: {
+      clientId: string;
+      property: { name?: string; address?: string; city?: string; state?: string; zip?: string; gateCode?: string; notesToCrew?: string };
+    }) => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase as any).from("client_properties").insert({
+        client_id: clientId,
+        name: property.name,
+        address: property.address,
+        city: property.city,
+        state: property.state,
+        zip: property.zip,
+        gate_lock_code: property.gateCode,
+        notes_to_crew: property.notesToCrew,
+        is_master: false,
+      });
+      if (error) throw error;
+    },
+    onSuccess: (_data, { clientId }) => {
+      qc.invalidateQueries({ queryKey: ["clients", clientId, "properties"] });
+    },
+  });
+}
+
+// ── mutations ─────────────────────────────────────────────────────────────────
+
+export function useCreateClient() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (values: NewClientFormValues) => {
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from("clients")
+        .insert({
+          display_name: values.displayName,
+          account_type: values.accountType,
+          primary_phone: values.primaryPhone || null,
+          primary_email: values.primaryEmail || null,
+          billing_address: values.billingAddress || null,
+          billing_city: values.billingCity || null,
+          billing_state: values.billingState || null,
+          billing_zip: values.billingZip || null,
+          source: values.source || null,
+          sales_rep_id: values.salesRepId || null,
+          client_since: new Date().toISOString().split("T")[0],
+        })
+        .select()
+        .single();
+      if (error) throw error;
+      return mapClient(data);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["clients"] });
+    },
+  });
+}
+
+export function useUpdateClient() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, updates }: { id: string; updates: Partial<Client> }) => {
+      const supabase = createClient();
+      const { error } = await supabase
+        .from("clients")
+        .update({
+          display_name: updates.displayName,
+          first_name: updates.firstName,
+          last_name: updates.lastName,
+          account_type: updates.accountType,
+          status: updates.status,
+          primary_phone: updates.primaryPhone,
+          primary_email: updates.primaryEmail,
+          billing_address: updates.billingAddress,
+          billing_city: updates.billingCity,
+          billing_state: updates.billingState,
+          billing_zip: updates.billingZip,
+          service_address: updates.serviceAddress,
+          service_city: updates.serviceCity,
+          service_state: updates.serviceState,
+          service_zip: updates.serviceZip,
+          billing_same_as_service: updates.billingSameAsService,
+          source: updates.source,
+          ok_to_email: updates.okToEmail,
+          payment_method: updates.paymentMethod,
+          billing_terms: updates.billingTerms,
+          invoice_frequency: updates.invoiceFrequency,
+          gate_lock_code: updates.gateCode,
+          notes_to_crew: updates.notesToCrew,
+          map_code: updates.mapCode,
+          default_tax_rate_bps: updates.defaultTaxRateBps,
+          default_terms: updates.defaultTerms,
+          default_payment_method: updates.defaultPaymentMethod,
+          invoice_delivery: updates.invoiceDelivery,
+          office_notes: updates.officeNotes,
+          billing_email: updates.billingEmail,
+          referred_by: updates.referredBy,
+          client_since: updates.clientSince ?? null,
+          priority: updates.priority ?? null,
+          is_taxable: updates.isTaxable,
+          turf_sqft: updates.turfSqft ?? null,
+          mulch_bed_sqft: updates.mulchBedSqft ?? null,
+          gross_sqft: updates.grossSqft ?? null,
+          linear_ft_perimeter: updates.linearFtPerimeter ?? null,
+          linear_ft_edging: updates.linearFtEdging ?? null,
+          yards_of_mulch: updates.yardsOfMulch ?? null,
+        })
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: (_data, { id }) => {
+      qc.invalidateQueries({ queryKey: ["clients"] });
+      qc.invalidateQueries({ queryKey: ["clients", id] });
+    },
+  });
+}
+
+export function useDeleteClient() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const supabase = createClient();
+      const { error } = await supabase
+        .from("clients")
+        .update({ deleted_at: new Date().toISOString() })
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["clients"] });
+    },
+  });
+}
+
+export function useAddClientNote() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ clientId, body }: { clientId: string; body: string }) => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase as any).from("client_activity").insert({
+        client_id: clientId,
+        activity_type: "note",
+        body,
+      });
+      if (error) throw error;
+    },
+    onSuccess: (_data, { clientId }) => {
+      qc.invalidateQueries({ queryKey: ["clients", clientId, "activity"] });
+    },
+  });
+}
+
+export function useAddClientContact() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      clientId,
+      contact,
+    }: {
+      clientId: string;
+      contact: Omit<ClientContact, "id" | "orgId" | "clientId" | "createdAt" | "deletedAt">;
+    }) => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase as any).from("client_contacts").insert({
+        client_id: clientId,
+        first_name: contact.firstName,
+        last_name: contact.lastName,
+        contact_type: contact.contactType,
+        phone: contact.phone,
+        phone_type: contact.phoneType,
+        email: contact.email,
+        is_primary: contact.isPrimary,
+        ok_to_email: contact.okToEmail,
+        notes: contact.notes,
+      });
+      if (error) throw error;
+    },
+    onSuccess: (_data, { clientId }) => {
+      qc.invalidateQueries({ queryKey: ["clients", clientId, "contacts"] });
+    },
+  });
+}
+
+// ── leads ─────────────────────────────────────────────────────────────────────
+
+export function useLeads() {
+  return useQuery({
+    queryKey: ["clients", { status: "lead" }],
+    queryFn: async () => {
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from("clients")
+        .select("*, client_tags(tag)")
+        .eq("status", "lead")
+        .is("deleted_at", null)
+        .order("display_name");
+      if (error) throw error;
+      return (data.map(mapClient)) as Client[];
+    },
+  });
+}
+
+export function useCreateLead() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (values: {
+      displayName: string;
+      accountType?: string;
+      primaryPhone?: string;
+      primaryEmail?: string;
+      billingAddress?: string;
+      billingCity?: string;
+      billingState?: string;
+      billingZip?: string;
+      source?: string;
+      notes?: string;
+    }) => {
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from("clients")
+        .insert({
+          display_name: values.displayName,
+          account_type: values.accountType ?? "residential",
+          primary_phone: values.primaryPhone || null,
+          primary_email: values.primaryEmail || null,
+          billing_address: values.billingAddress || null,
+          billing_city: values.billingCity || null,
+          billing_state: values.billingState || null,
+          billing_zip: values.billingZip || null,
+          source: values.source || null,
+          status: "lead",
+          client_since: new Date().toISOString().split("T")[0],
+        })
+        .select()
+        .single();
+      if (error) throw error;
+      return mapClient(data);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["clients"] });
+    },
+  });
+}
+
+export function useConvertLeadToClient() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const supabase = createClient();
+      const { error } = await supabase
+        .from("clients")
+        .update({ status: "active" })
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["clients"] });
+    },
+  });
+}

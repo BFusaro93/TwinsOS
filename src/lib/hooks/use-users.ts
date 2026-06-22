@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 import { mapOrgUser } from "@/lib/supabase/mappers";
+import type { OrgUser } from "@/types";
 
 export function useUsers() {
   return useQuery({
@@ -10,7 +11,7 @@ export function useUsers() {
       const { data, error } = await supabase
         .from("profiles").select("*").order("name");
       if (error) throw error;
-      return data.map(mapOrgUser);
+      return (data.map(mapOrgUser)) as OrgUser[];
     },
   });
 }

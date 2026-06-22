@@ -43,12 +43,13 @@ export function useSafetyWeeks() {
     queryKey: ["safety-weeks"],
     queryFn: async () => {
       const supabase = createClient();
-      const { data, error } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
         .from("safety_weeks")
         .select("id, week_end, data, created_at, updated_at")
         .order("week_end", { ascending: true });
       if (error) throw error;
-      return (data ?? []).map(mapRow);
+      return ((data ?? []).map(mapRow)) as SafetyWeekRecord[];
     },
   });
 }
@@ -67,7 +68,8 @@ export function useUpsertSafetyWeek() {
         .single();
       const orgId = profile?.org_id;
       if (!orgId) throw new Error("No org found for user");
-      const { error } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase as any)
         .from("safety_weeks")
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         .upsert({ org_id: orgId, week_end: weekEnd, data: data as unknown as never }, { onConflict: "org_id,week_end" });
@@ -82,7 +84,8 @@ export function useDeleteSafetyWeek() {
   return useMutation({
     mutationFn: async (weekEnd: string) => {
       const supabase = createClient();
-      const { error } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase as any)
         .from("safety_weeks")
         .delete()
         .eq("week_end", weekEnd);

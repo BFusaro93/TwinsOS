@@ -14,7 +14,7 @@ export function useApprovalFlows() {
         .is("deleted_at", null)
         .order("name");
       if (error) throw error;
-      return data.map(mapApprovalFlow);
+      return (data.map(mapApprovalFlow)) as ApprovalFlow[];
     },
   });
 }

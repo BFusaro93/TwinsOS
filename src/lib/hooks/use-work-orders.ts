@@ -18,7 +18,7 @@ export function useWorkOrders() {
         .from("work_orders").select("*").is("deleted_at", null)
         .order("created_at", { ascending: false });
       if (error) throw error;
-      return data.map(mapWorkOrder);
+      return (data.map(mapWorkOrder)) as WorkOrder[];
     },
   });
 }
@@ -117,7 +117,8 @@ export function useUpdateWorkOrderStatus() {
 
       // When completing a WO that was triggered by an automation, advance the threshold
       if (status === "done" && automationId) {
-        const { data: auto } = await supabase
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: auto } = await (supabase as any)
           .from("automations")
           .select("*")
           .eq("id", automationId)
@@ -134,7 +135,8 @@ export function useUpdateWorkOrderStatus() {
 
           if (interval != null) {
             const newThreshold = baseValue + interval;
-            await supabase
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            await (supabase as any)
               .from("automations")
               .update({
                 trigger_config: { ...tc, threshold: newThreshold },
@@ -145,7 +147,8 @@ export function useUpdateWorkOrderStatus() {
               })
               .eq("id", automationId);
           } else {
-            await supabase
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            await (supabase as any)
               .from("automations")
               .update({
                 pending_reset: false,
@@ -268,10 +271,12 @@ export function useBulkImportWorkOrders() {
       // Pre-fetch assets and vehicles to enable name-based auto-linking
       const [{ data: assets }, { data: vehicles }] = await Promise.all([
         supabase.from("assets").select("id, name").is("deleted_at", null),
-        supabase.from("vehicles").select("id, name").is("deleted_at", null),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (supabase as any).from("vehicles").select("id, name").is("deleted_at", null),
       ]);
       const assetMap = new Map((assets ?? []).map((a) => [a.name.toLowerCase(), a.id as string]));
-      const vehicleMap = new Map((vehicles ?? []).map((v) => [v.name.toLowerCase(), v.id as string]));
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const vehicleMap = new Map<string, string>((vehicles ?? []).map((v: any) => [v.name.toLowerCase() as string, v.id as string]));
 
       let count = 0;
       for (const r of valid) {
@@ -348,7 +353,7 @@ export function useSubWorkOrders(parentWorkOrderId: string | null) {
         .is("deleted_at", null)
         .order("created_at", { ascending: true });
       if (error) throw error;
-      return data.map(mapWorkOrder);
+      return (data.map(mapWorkOrder)) as WorkOrder[];
     },
     enabled: !!parentWorkOrderId,
   });

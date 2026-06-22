@@ -39,7 +39,7 @@ export function usePurchaseOrders() {
         .is("deleted_at", null)
         .order("created_at", { ascending: false });
       if (error) throw error;
-      return data.map(mapPurchaseOrder);
+      return (data.map(mapPurchaseOrder)) as PurchaseOrder[];
     },
   });
 }
@@ -97,7 +97,8 @@ export function useCreatePurchaseOrder() {
       if (poErr) throw poErr;
 
       if (po.lineItems.length > 0) {
-        const { error: lineErr } = await supabase
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error: lineErr } = await (supabase as any)
           .from("po_line_items")
           .insert(
             po.lineItems.map((li: LineItem) => ({
@@ -456,7 +457,8 @@ async function importDenormalized(supabase: SupabaseClient, rows: Record<string,
         }
       }
 
-      await supabase.from("po_line_items").insert({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (supabase as any).from("po_line_items").insert({
         po_id: created.id,
         product_item_id: productItemId,
         product_item_name: itemName,
@@ -590,7 +592,8 @@ export function useAddPOLineItem() {
     }) => {
       const supabase = createClient();
       const [{ error: lineErr }, { error: poErr }] = await Promise.all([
-        supabase.from("po_line_items").insert({
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (supabase as any).from("po_line_items").insert({
           id: item.id,          // anchor DB row to the client-generated UUID so edits
           // can target the row immediately without waiting for a refetch
           po_id: poId,
@@ -729,14 +732,16 @@ export function useDeletePOLineItem() {
 
       // Unlink receipt lines first — the FK on goods_receipt_lines.po_line_item_id
       // would block the delete if we skip this step.
-      const { error: unlinkErr } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error: unlinkErr } = await (supabase as any)
         .from("goods_receipt_lines")
         .update({ po_line_item_id: null })
         .eq("po_line_item_id", lineItemId);
       if (unlinkErr) throw unlinkErr;
 
       const [{ error: lineErr }, { error: poErr }] = await Promise.all([
-        supabase.from("po_line_items").delete().eq("id", lineItemId),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (supabase as any).from("po_line_items").delete().eq("id", lineItemId),
         supabase.from("purchase_orders").update({ subtotal, sales_tax: salesTax, grand_total: grandTotal }).eq("id", poId),
       ]);
       if (lineErr) throw lineErr;

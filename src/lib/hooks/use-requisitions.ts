@@ -23,13 +23,14 @@ export function useRequisitions() {
     queryKey: ["requisitions"],
     queryFn: async () => {
       const supabase = createClient();
-      const { data, error } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
         .from("requisitions")
         .select(REQ_SELECT)
         .is("deleted_at", null)
         .order("created_at", { ascending: false });
       if (error) throw error;
-      return data.map(mapRequisition);
+      return (data.map(mapRequisition)) as Requisition[];
     },
   });
 }
@@ -39,7 +40,8 @@ export function useRequisition(id: string) {
     queryKey: ["requisitions", id],
     queryFn: async () => {
       const supabase = createClient();
-      const { data, error } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
         .from("requisitions")
         .select(REQ_SELECT)
         .eq("id", id)
@@ -76,7 +78,8 @@ export function useCreateRequisition() {
       const requestedByName = profile?.name?.trim() || user?.user_metadata?.name || user?.email || "Unknown";
       const requisitionNumber = `REQ-${new Date().getFullYear()}-${Date.now().toString().slice(-6)}`;
 
-      const { data: req, error: reqErr } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: req, error: reqErr } = await (supabase as any)
         .from("requisitions")
         .insert({
           requisition_number: requisitionNumber,
@@ -98,7 +101,8 @@ export function useCreateRequisition() {
       if (reqErr) throw reqErr;
 
       if (input.lineItems.length > 0) {
-        const { error: lineErr } = await supabase
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error: lineErr } = await (supabase as any)
           .from("requisition_line_items")
           .insert(
             input.lineItems.map((li) => ({
@@ -117,7 +121,8 @@ export function useCreateRequisition() {
         if (lineErr) throw lineErr;
       }
 
-      const { data: full, error: fetchErr } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: full, error: fetchErr } = await (supabase as any)
         .from("requisitions")
         .select(REQ_SELECT)
         .eq("id", req.id)
@@ -149,7 +154,8 @@ export function useAddRequisitionLineItem() {
       newGrandTotal: number;
     }) => {
       const supabase = createClient();
-      const { error: lineErr } = await supabase.from("requisition_line_items").insert({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error: lineErr } = await (supabase as any).from("requisition_line_items").insert({
         requisition_id: requisitionId,
         product_item_id: lineItem.productItemId || null,
         part_id: lineItem.partId ?? null,
@@ -162,7 +168,8 @@ export function useAddRequisitionLineItem() {
         notes: lineItem.notes ?? null,
       });
       if (lineErr) throw lineErr;
-      const { error: reqErr } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error: reqErr } = await (supabase as any)
         .from("requisitions")
         .update({ subtotal: newSubtotal, sales_tax: newSalesTax, grand_total: newGrandTotal })
         .eq("id", requisitionId);
@@ -203,7 +210,8 @@ export function useUpdateRequisition() {
       notes: string | null;
     }) => {
       const supabase = createClient();
-      const { error } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase as any)
         .from("requisitions")
         .update({
           title,
@@ -257,11 +265,13 @@ export function useBulkImportRequisitions() {
       // Insert one-by-one; on duplicate requisition_number, update the existing row
       let count = 0;
       for (const row of inserts) {
-        const { error } = await supabase.from("requisitions").insert(row);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error } = await (supabase as any).from("requisitions").insert(row);
         if (error?.code === "23505") {
           const { data: { user: u } } = await supabase.auth.getUser();
           const { data: profile } = await supabase.from("profiles").select("org_id").eq("id", u!.id).single();
-          await supabase.from("requisitions").update({
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          await (supabase as any).from("requisitions").update({
             title: row.title,
             requested_by_id: row.requested_by_id,
             requested_by_name: row.requested_by_name,
@@ -293,7 +303,8 @@ export function useUpdateRequisitionStatus() {
       convertedPoId?: string | null;
     }) => {
       const supabase = createClient();
-      const { error } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase as any)
         .from("requisitions")
         .update({
           status,
@@ -346,7 +357,8 @@ export function useUpdateRequisitionLineItem() {
       newGrandTotal: number;
     }) => {
       const supabase = createClient();
-      const { error: lineErr } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error: lineErr } = await (supabase as any)
         .from("requisition_line_items")
         .update({
           quantity,
@@ -356,7 +368,8 @@ export function useUpdateRequisitionLineItem() {
         })
         .eq("id", lineItemId);
       if (lineErr) throw lineErr;
-      const { error: reqErr } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error: reqErr } = await (supabase as any)
         .from("requisitions")
         .update({ subtotal: newSubtotal, sales_tax: newSalesTax, grand_total: newGrandTotal })
         .eq("id", requisitionId);
@@ -390,12 +403,14 @@ export function useDeleteRequisitionLineItem() {
       newGrandTotal: number;
     }) => {
       const supabase = createClient();
-      const { error: lineErr } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error: lineErr } = await (supabase as any)
         .from("requisition_line_items")
         .delete()
         .eq("id", lineItemId);
       if (lineErr) throw lineErr;
-      const { error: reqErr } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error: reqErr } = await (supabase as any)
         .from("requisitions")
         .update({ subtotal: newSubtotal, sales_tax: newSalesTax, grand_total: newGrandTotal })
         .eq("id", requisitionId);
@@ -416,7 +431,8 @@ export function useDeleteRequisition() {
   return useMutation({
     mutationFn: async (id: string) => {
       const supabase = createClient();
-      const { error } = await supabase.from("requisitions").update({ deleted_at: new Date().toISOString() }).eq("id", id);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase as any).from("requisitions").update({ deleted_at: new Date().toISOString() }).eq("id", id);
       if (error) throw error;
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["requisitions"] }),

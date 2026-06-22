@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 import { mapAttachment } from "@/lib/supabase/mappers";
-import type { AttachmentRecordType } from "@/types/attachment";
+import type { Attachment, AttachmentRecordType } from "@/types/attachment";
 
 export function useAttachments(recordType: AttachmentRecordType, recordId: string) {
   return useQuery({
@@ -16,7 +16,7 @@ export function useAttachments(recordType: AttachmentRecordType, recordId: strin
         .is("deleted_at", null)
         .order("created_at", { ascending: false });
       if (error) throw error;
-      return data.map(mapAttachment);
+      return (data.map(mapAttachment)) as Attachment[];
     },
     enabled: !!recordId,
   });

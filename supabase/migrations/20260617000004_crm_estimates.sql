@@ -1,0 +1,3 @@
+-- Sprint 3: Estimates, templates, line items, direct costs
+-- Applied directly to crm-dev branch via apply_migration MCP tool
+-- See: mcp__0c5e86a2-bdcd-4bd5-bb49-0f04694a9412__apply_migration (crm_estimates)

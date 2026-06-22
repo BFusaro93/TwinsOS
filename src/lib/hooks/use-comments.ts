@@ -1,14 +1,15 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 import { mapComment } from "@/lib/supabase/mappers";
-import type { CommentRecordType } from "@/types";
+import type { Comment, CommentRecordType } from "@/types/comment";
 
 export function useComments(recordType: CommentRecordType, recordId: string) {
   return useQuery({
     queryKey: ["comments", recordType, recordId],
     queryFn: async () => {
       const supabase = createClient();
-      const { data, error } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
         .from("comments")
         .select("*")
         .eq("record_type", recordType)
@@ -16,7 +17,7 @@ export function useComments(recordType: CommentRecordType, recordId: string) {
         .is("deleted_at", null)
         .order("created_at", { ascending: true });
       if (error) throw error;
-      return data.map(mapComment);
+      return (data.map(mapComment)) as Comment[];
     },
     enabled: !!recordId,
   });
@@ -44,7 +45,8 @@ export function useAddComment() {
         .single();
       if (!profile) throw new Error("Profile not found");
 
-      const { data, error } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
         .from("comments")
         .insert({
           org_id: profile.org_id,

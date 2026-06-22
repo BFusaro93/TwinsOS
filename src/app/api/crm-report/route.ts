@@ -11,7 +11,8 @@ export const revalidate = 0; // always fetch fresh
 export async function GET() {
   const supabase = await createClient();
 
-  const { data, error } = await supabase
+  const { data, error } = // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (supabase as any)
     .from("crm_reports")
     .select("html_content, updated_at")
     .eq("id", "latest")

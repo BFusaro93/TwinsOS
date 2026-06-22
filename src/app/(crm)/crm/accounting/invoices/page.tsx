@@ -1,10 +1,9 @@
-export default function Page() {
+import { InvoicesList } from "@/components/crm/invoices/InvoicesList";
+
+export default function InvoicesPage() {
   return (
-    <div className="flex h-full flex-col gap-4">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900">Invoices</h1>
-        <p className="text-sm text-slate-500">Client invoices and billing</p>
-      </div>
+    <div className="flex h-full flex-col">
+      <InvoicesList />
     </div>
   );
 }

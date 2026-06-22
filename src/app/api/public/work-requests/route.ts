@@ -92,7 +92,8 @@ export async function POST(req: NextRequest) {
   const requestNumber = `MR-${new Date().getFullYear()}-${Date.now().toString().slice(-5)}`;
 
   // ── Insert ────────────────────────────────────────────────────────────────
-  const { data: mr, error: insertErr } = await supabase
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: mr, error: insertErr } = await (supabase as any)
     .from("maintenance_requests")
     .insert({
       org_id:             org.id,

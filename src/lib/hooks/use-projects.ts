@@ -31,8 +31,7 @@ export function useProjects(includeArchived = false) {
       if (!includeArchived) q = q.eq("is_archived", false);
       const { data, error } = await q;
       if (error) throw error;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      return (data as any[]).map(mapProject);
+      return data.map(mapProject) as Project[];
     },
   });
 }

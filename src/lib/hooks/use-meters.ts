@@ -8,10 +8,11 @@ export function useMeters() {
     queryKey: ["meters"],
     queryFn: async () => {
       const supabase = createClient();
-      const { data, error } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
         .from("meters").select("*").is("deleted_at", null).order("name");
       if (error) throw error;
-      return data.map(mapMeter);
+      return (data.map(mapMeter)) as Meter[];
     },
   });
 }
@@ -21,7 +22,8 @@ export function useMeter(id: string) {
     queryKey: ["meters", id],
     queryFn: async () => {
       const supabase = createClient();
-      const { data, error } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
         .from("meters").select("*").eq("id", id).is("deleted_at", null).single();
       if (error) throw error;
       return mapMeter(data);
@@ -35,7 +37,8 @@ export function useCreateMeter() {
   return useMutation({
     mutationFn: async (input: Omit<Meter, "id" | "orgId" | "createdBy" | "createdAt" | "updatedAt" | "deletedAt">) => {
       const supabase = createClient();
-      const { data, error } = await supabase.from("meters").insert({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any).from("meters").insert({
         name: input.name,
         asset_id: input.assetId,
         asset_name: input.assetName,
@@ -57,7 +60,8 @@ export function useUpdateMeter() {
   return useMutation({
     mutationFn: async ({ id, ...input }: Partial<Meter> & { id: string }) => {
       const supabase = createClient();
-      const { data, error } = await supabase.from("meters").update({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any).from("meters").update({
         ...(input.name !== undefined && { name: input.name }),
         ...(input.assetId !== undefined && { asset_id: input.assetId }),
         ...(input.assetName !== undefined && { asset_name: input.assetName }),
@@ -81,7 +85,8 @@ export function useDeleteMeter() {
   return useMutation({
     mutationFn: async (id: string) => {
       const supabase = createClient();
-      const { error } = await supabase.from("meters").update({ deleted_at: new Date().toISOString() }).eq("id", id);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase as any).from("meters").update({ deleted_at: new Date().toISOString() }).eq("id", id);
       if (error) throw error;
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["meters"] }),

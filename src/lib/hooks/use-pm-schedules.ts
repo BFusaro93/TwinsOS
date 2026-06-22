@@ -12,7 +12,7 @@ export function usePMSchedules() {
         .from("pm_schedules").select("*").is("deleted_at", null)
         .order("title");
       if (error) throw error;
-      return data.map(mapPMSchedule);
+      return (data.map(mapPMSchedule)) as PMSchedule[];
     },
   });
 }

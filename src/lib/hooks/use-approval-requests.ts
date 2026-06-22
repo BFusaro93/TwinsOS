@@ -17,7 +17,7 @@ export function useApprovalRequests(entityId: string) {
         .eq("entity_id", entityId)
         .order("order", { ascending: true });
       if (error) throw error;
-      return data.map(mapApprovalRequest);
+      return (data.map(mapApprovalRequest)) as ApprovalRequest[];
     },
     enabled: !!entityId,
   });

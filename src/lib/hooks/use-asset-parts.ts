@@ -14,7 +14,7 @@ export function useAssetParts(assetId: string | null) {
         .eq("asset_id", assetId!)
         .is("deleted_at", null);
       if (error) throw error;
-      return data.map(mapAssetPart);
+      return (data.map(mapAssetPart)) as AssetPart[];
     },
     enabled: !!assetId,
   });
@@ -62,7 +62,7 @@ export function useBulkAddAssetParts() {
         )
         .select();
       if (error) throw error;
-      return data.map(mapAssetPart);
+      return (data.map(mapAssetPart)) as AssetPart[];
     },
     onSuccess: (results) => {
       const assetIds = new Set(results.map((r) => r.assetId));
@@ -105,7 +105,7 @@ export function usePartAssetLinks(partId: string) {
         .eq("part_id", partId)
         .is("deleted_at", null);
       if (error) throw error;
-      return data.map(mapAssetPart);
+      return (data.map(mapAssetPart)) as AssetPart[];
     },
     enabled: !!partId,
   });

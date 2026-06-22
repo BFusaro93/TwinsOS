@@ -1,10 +1,9 @@
-export default function Page() {
+import { WaitingList } from "@/components/crm/WaitingList";
+
+export default function WaitingListPage() {
   return (
-    <div className="flex h-full flex-col gap-4">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900">Waiting List</h1>
-        <p className="text-sm text-slate-500">Jobs queued for opportunistic scheduling</p>
-      </div>
+    <div className="flex h-full flex-col">
+      <WaitingList />
     </div>
   );
 }

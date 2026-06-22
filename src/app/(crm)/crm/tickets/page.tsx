@@ -1,10 +1,9 @@
-export default function Page() {
+import { TicketsList } from "@/components/crm/tickets/TicketsList";
+
+export default function TicketsPage() {
   return (
-    <div className="flex h-full flex-col gap-4">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900">Tickets</h1>
-        <p className="text-sm text-slate-500">Support and service tickets</p>
-      </div>
+    <div className="flex h-full flex-col">
+      <TicketsList />
     </div>
   );
 }

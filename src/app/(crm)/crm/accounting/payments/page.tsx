@@ -1,10 +1,9 @@
-export default function Page() {
+import { PaymentsList } from "@/components/crm/payments/PaymentsList";
+
+export default function PaymentsPage() {
   return (
-    <div className="flex h-full flex-col gap-4">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900">Payments</h1>
-        <p className="text-sm text-slate-500">Payment records and history</p>
-      </div>
+    <div className="flex h-full flex-col">
+      <PaymentsList />
     </div>
   );
 }

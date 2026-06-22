@@ -565,7 +565,8 @@ const BLANK_FORM = {
 };
 
 function SubcontractsTab({ project }: { project: Project }) {
-  const { data: costs = [], isLoading } = useProjectSubcontractCosts(project.id);
+  const { data: costsRaw = [], isLoading } = useProjectSubcontractCosts(project.id);
+  const costs: import("@/types").ProjectSubcontractCost[] = costsRaw;
   const { data: vendors = [] } = useVendors();
   const { mutate: createCost, isPending: creating } = useCreateProjectSubcontractCost();
   const { mutate: updateCost, isPending: updating } = useUpdateProjectSubcontractCost();
@@ -1197,7 +1198,8 @@ export function ProjectDetailPanel({ project }: ProjectDetailPanelProps) {
   const { mutate: updateProject } = useUpdateProject();
   const { data: allRequisitions } = useRequisitions();
   const { data: allPurchaseOrders } = usePurchaseOrders();
-  const { data: subcontractCosts = [] } = useProjectSubcontractCosts(project.id);
+  const { data: subcontractCostsRaw = [] } = useProjectSubcontractCosts(project.id);
+  const subcontractCosts: import("@/types").ProjectSubcontractCost[] = subcontractCostsRaw;
   const { data: allDirectItems = [] } = useProjectDirectItems(project.id);
 
   // Compute project total cost dynamically from linked line items + allocated shipping + subcontract costs.

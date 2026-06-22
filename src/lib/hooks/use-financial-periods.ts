@@ -149,7 +149,7 @@ export function useFinancialPeriods(recordType?: RecordType) {
       if (recordType) q = q.eq("record_type", recordType);
       const { data, error } = await q;
       if (error) throw error;
-      return (data ?? []).map(mapRow);
+      return ((data ?? []).map(mapRow)) as FinancialPeriodRecord[];
     },
   });
 }

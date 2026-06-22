@@ -10,7 +10,8 @@ export function useProjectSubcontractCosts(projectId: string) {
     queryKey: QK(projectId),
     queryFn: async () => {
       const supabase = createClient();
-      const { data, error } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
         .from("project_subcontract_costs")
         .select("*")
         .eq("project_id", projectId)
@@ -45,7 +46,8 @@ export function useCreateProjectSubcontractCost() {
         .select("org_id")
         .eq("id", userData.user!.id)
         .single();
-      const { data, error } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
         .from("project_subcontract_costs")
         .insert({
           org_id: profile!.org_id,
@@ -87,7 +89,8 @@ export function useUpdateProjectSubcontractCost() {
   return useMutation({
     mutationFn: async ({ id, projectId, ...input }: UpdateSubcontractCostInput) => {
       const supabase = createClient();
-      const { data, error } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
         .from("project_subcontract_costs")
         .update({
           ...(input.vendorId !== undefined && { vendor_id: input.vendorId }),
@@ -116,7 +119,8 @@ export function useDeleteProjectSubcontractCost() {
   return useMutation({
     mutationFn: async ({ id, projectId }: { id: string; projectId: string }) => {
       const supabase = createClient();
-      const { error } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase as any)
         .from("project_subcontract_costs")
         .update({ deleted_at: new Date().toISOString() })
         .eq("id", id);

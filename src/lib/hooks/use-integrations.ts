@@ -36,7 +36,8 @@ export function useIntegration(provider: string) {
     queryKey: ["integrations", provider],
     queryFn: async () => {
       const supabase = createClient();
-      const { data, error } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
         .from("integrations")
         .select("*")
         .eq("provider", provider)
@@ -73,7 +74,8 @@ export function useUpsertIntegration() {
         .single();
       if (!profile) throw new Error("Profile not found");
 
-      const { error } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase as any)
         .from("integrations")
         .upsert(
           {

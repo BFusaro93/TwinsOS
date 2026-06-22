@@ -18,7 +18,7 @@ export function usePMParts(pmScheduleId: string) {
         .is("deleted_at", null);
       if (error) throw error;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      return (data as any[]).map(mapPMPart);
+      return (data.map(mapPMPart)) as any[];
     },
     enabled: !!pmScheduleId,
   });

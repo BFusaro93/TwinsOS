@@ -8,14 +8,15 @@ export function useMeterReadings(meterId: string | null) {
     queryKey: ["meter-readings", meterId],
     queryFn: async () => {
       const supabase = createClient();
-      const { data, error } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
         .from("meter_readings")
         .select("*")
         .eq("meter_id", meterId!)
         .is("deleted_at", null)
         .order("reading_at", { ascending: true });
       if (error) throw error;
-      return data.map(mapMeterReading);
+      return (data.map(mapMeterReading)) as MeterReading[];
     },
     enabled: !!meterId,
   });
@@ -26,7 +27,8 @@ export function useAddMeterReading() {
   return useMutation({
     mutationFn: async (input: Omit<MeterReading, "id" | "orgId" | "createdBy" | "createdAt" | "updatedAt" | "deletedAt">) => {
       const supabase = createClient();
-      const { data, error } = await supabase.from("meter_readings").insert({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any).from("meter_readings").insert({
         meter_id: input.meterId,
         value: input.value,
         reading_at: input.readingAt,
@@ -34,7 +36,8 @@ export function useAddMeterReading() {
         recorded_by_name: input.recordedByName,
       }).select().single();
       if (error) throw error;
-      await supabase.from("meters").update({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (supabase as any).from("meters").update({
         current_value: input.value,
         last_reading_at: input.readingAt,
       }).eq("id", input.meterId);
@@ -61,7 +64,8 @@ export function useDeleteMeterReading() {
   return useMutation({
     mutationFn: async ({ id, meterId }: { id: string; meterId: string }) => {
       const supabase = createClient();
-      const { error } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase as any)
         .from("meter_readings")
         .update({ deleted_at: new Date().toISOString() })
         .eq("id", id);

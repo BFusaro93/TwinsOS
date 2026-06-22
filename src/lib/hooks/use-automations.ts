@@ -180,13 +180,14 @@ export function useAutomations() {
     queryKey: ["automations"],
     queryFn: async () => {
       const supabase = createClient();
-      const { data, error } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
         .from("automations")
         .select("*")
         .is("deleted_at", null)
         .order("created_at", { ascending: true });
       if (error) throw error;
-      return data.map(mapAutomation);
+      return data.map(mapAutomation) as AutomationRule[];
     },
   });
 }
@@ -211,7 +212,8 @@ export function useCreateAutomation() {
         .eq("id", user.id)
         .single();
       if (!profile) throw new Error("Profile not found");
-      const { data, error } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
         .from("automations")
         .insert({
           org_id: profile.org_id,
@@ -256,7 +258,8 @@ export function useUpdateAutomation() {
         patch.action_type = updates.action.type;
         patch.action_config = serialiseActionConfig(updates.action);
       }
-      const { data, error } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
         .from("automations")
         .update(patch)
         .eq("id", id)
@@ -274,7 +277,8 @@ export function useDeleteAutomation() {
   return useMutation({
     mutationFn: async (id: string) => {
       const supabase = createClient();
-      const { error } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase as any)
         .from("automations")
         .update({ deleted_at: new Date().toISOString() })
         .eq("id", id);

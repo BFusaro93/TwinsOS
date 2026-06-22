@@ -17,7 +17,7 @@ export function usePMScheduleAssets(pmScheduleId: string) {
         .is("deleted_at", null)
         .order("asset_name");
       if (error) throw error;
-      return data.map(mapPMScheduleAsset);
+      return (data.map(mapPMScheduleAsset)) as PMScheduleAsset[];
     },
     enabled: !!pmScheduleId,
   });
@@ -76,14 +76,15 @@ export function usePMScheduleAssetParts(pmScheduleAssetId: string) {
     queryKey: ["pm-schedule-asset-parts", pmScheduleAssetId],
     queryFn: async () => {
       const supabase = createClient();
-      const { data, error } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
         .from("pm_schedule_asset_parts")
         .select("*")
         .eq("pm_schedule_asset_id", pmScheduleAssetId)
         .is("deleted_at", null)
         .order("part_name");
       if (error) throw error;
-      return data.map(mapPMScheduleAssetPart);
+      return (data.map(mapPMScheduleAssetPart)) as PMScheduleAssetPart[];
     },
     enabled: !!pmScheduleAssetId,
   });
@@ -101,7 +102,8 @@ export function useAddPMScheduleAssetPart() {
       unitCost: number;
     }) => {
       const supabase = createClient();
-      const { data, error } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
         .from("pm_schedule_asset_parts")
         .insert({
           pm_schedule_asset_id: input.pmScheduleAssetId,
@@ -138,7 +140,8 @@ export function useUpdatePMScheduleAssetPart() {
       unitCost?: number;
     }) => {
       const supabase = createClient();
-      const { data, error } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
         .from("pm_schedule_asset_parts")
         .update({
           ...(quantity !== undefined && { quantity }),
@@ -161,7 +164,8 @@ export function useDeletePMScheduleAssetPart() {
   return useMutation({
     mutationFn: async ({ id, pmScheduleAssetId }: { id: string; pmScheduleAssetId: string }) => {
       const supabase = createClient();
-      const { error } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase as any)
         .from("pm_schedule_asset_parts")
         .update({ deleted_at: new Date().toISOString() })
         .eq("id", id);
