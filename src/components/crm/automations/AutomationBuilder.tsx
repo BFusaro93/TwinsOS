@@ -37,6 +37,10 @@ import { EmailEventDialog } from "./EmailEventDialog";
 import { AlertEventDialog } from "./AlertEventDialog";
 import { TicketEventDialog } from "./TicketEventDialog";
 import { TextEventDialog } from "./TextEventDialog";
+import { NoteEventDialog } from "./NoteEventDialog";
+import { UpdateEventDialog } from "./UpdateEventDialog";
+import { TagsEventDialog } from "./TagsEventDialog";
+import { IfBranchEventDialog } from "./IfBranchEventDialog";
 
 interface Props {
   automationId: string;
@@ -268,6 +272,34 @@ export function AutomationBuilder({ automationId }: Props) {
       )}
       {editingEvent && editingEvent.eventType === "text_message" && (
         <TextEventDialog
+          open
+          onOpenChange={(v) => !v && setEditingEvent(null)}
+          event={editingEvent}
+        />
+      )}
+      {editingEvent && editingEvent.eventType === "note" && (
+        <NoteEventDialog
+          open
+          onOpenChange={(v) => !v && setEditingEvent(null)}
+          event={editingEvent}
+        />
+      )}
+      {editingEvent && editingEvent.eventType === "update" && (
+        <UpdateEventDialog
+          open
+          onOpenChange={(v) => !v && setEditingEvent(null)}
+          event={editingEvent}
+        />
+      )}
+      {editingEvent && editingEvent.eventType === "tags" && (
+        <TagsEventDialog
+          open
+          onOpenChange={(v) => !v && setEditingEvent(null)}
+          event={editingEvent}
+        />
+      )}
+      {editingEvent && editingEvent.eventType === "if_branch" && (
+        <IfBranchEventDialog
           open
           onOpenChange={(v) => !v && setEditingEvent(null)}
           event={editingEvent}

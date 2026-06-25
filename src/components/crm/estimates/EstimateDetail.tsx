@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   useEstimate,
@@ -8,15 +8,21 @@ import {
   useUpdateEstimateStage,
   useSaveEstimateFinancials,
   useUpsertLineItem,
+  useEstimateShareTokens,
 } from "@/lib/hooks/use-estimates";
 import { useCreateInvoiceFromEstimate } from "@/lib/hooks/use-invoices";
 import { useEstimateTemplates } from "@/lib/hooks/use-estimate-templates";
 import { useClients } from "@/lib/hooks/use-clients";
+import { useUsers } from "@/lib/hooks/use-users";
+import { useOrgList } from "@/lib/hooks/use-org-lists";
 import { computeLineItem } from "@/lib/estimate-calc";
 import { EstimateLineItemsGrid } from "./EstimateLineItemsGrid";
 import { EstimateDirectCostsGrid } from "./EstimateDirectCostsGrid";
 import { EstimateSummaryPanel } from "./EstimateSummaryPanel";
 import { ConvertToJobDialog } from "./ConvertToJobDialog";
+import { WonLostReasonDialog } from "./WonLostReasonDialog";
+import { RateIncreaseDialog } from "./RateIncreaseDialog";
+import { SendEstimateDialog } from "./SendEstimateDialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -44,10 +50,30 @@ import {
   MapPin,
   Phone,
   User,
+  Upload,
+  Paperclip,
+  Trash2,
+  Download,
+  TrendingUp,
+  Eye,
+  Printer,
+  Send,
 } from "lucide-react";
+import {
+  useAttachments,
+  useUploadAttachment,
+  useDeleteAttachment,
+  useDownloadAttachment,
+} from "@/lib/hooks/use-attachments";
 import type { EstimateStage, LineItemStatus } from "@/types/crm-estimates";
+import {
+  useEstimateStages,
+  useSeedDefaultStages,
+  type EstimateStage as DBEstimateStage,
+} from "@/lib/hooks/use-estimate-stages";
 
-const STAGE_COLOR: Record<EstimateStage, string> = {
+// Stage colors are keyed by stage_key — fallback palette for system stages
+const DEFAULT_STAGE_COLORS: Record<string, string> = {
   draft:    "bg-slate-100 text-slate-600",
   quote:    "bg-blue-100 text-blue-700",
   sent:     "bg-yellow-100 text-yellow-700",
@@ -57,17 +83,15 @@ const STAGE_COLOR: Record<EstimateStage, string> = {
   invoiced: "bg-teal-100 text-teal-700",
 };
 
-const STAGE_LABEL: Record<EstimateStage, string> = {
-  draft:    "Estimate Drafted",
-  quote:    "Quote Ready",
-  sent:     "Estimate Sent",
-  approved: "Approved",
-  won:      "Closed - Won",
-  lost:     "Closed - Lost",
-  invoiced: "Invoiced",
-};
-
-const STAGES: EstimateStage[] = ["draft","quote","sent","approved","won","lost","invoiced"];
+const DEFAULT_STAGE_LIST: { stageKey: string; name: string }[] = [
+  { stageKey: "draft",    name: "Estimate Drafted" },
+  { stageKey: "quote",    name: "Quote Ready" },
+  { stageKey: "sent",     name: "Estimate Sent" },
+  { stageKey: "approved", name: "Approved" },
+  { stageKey: "won",      name: "Closed - Won" },
+  { stageKey: "lost",     name: "Closed - Lost" },
+  { stageKey: "invoiced", name: "Invoiced" },
+];
 
 const LINE_ITEM_TABS: { value: LineItemStatus | "all"; label: string }[] = [
   { value: "all",   label: "All" },
@@ -79,6 +103,113 @@ const LINE_ITEM_TABS: { value: LineItemStatus | "all"; label: string }[] = [
 
 type Tab = "details" | "notes" | "attachments" | "audit";
 
+// ── Attachments tab ────────────────────────────────────────────────────────────
+
+function EstimateAttachmentsTab({ estimateId }: { estimateId: string }) {
+  const { data: attachments = [], isLoading } = useAttachments("estimate", estimateId);
+  const upload = useUploadAttachment("estimate", estimateId);
+  const remove = useDeleteAttachment("estimate", estimateId);
+  const download = useDownloadAttachment();
+  const [dragging, setDragging] = useState(false);
+
+  function formatBytes(bytes: number) {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  }
+
+  async function handleFiles(files: FileList | File[]) {
+    const list = Array.from(files);
+    if (!list.length) return;
+    const results = await upload.mutateAsync(list);
+    const failed = results.filter((r) => !r.ok);
+    if (failed.length) toast.error(`${failed.length} file(s) failed to upload`);
+    else toast.success(`${list.length} file(s) uploaded`);
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      {/* Drop zone */}
+      <div
+        onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+        onDragLeave={() => setDragging(false)}
+        onDrop={async (e) => {
+          e.preventDefault();
+          setDragging(false);
+          await handleFiles(e.dataTransfer.files);
+        }}
+        className={cn(
+          "rounded-lg border-2 border-dashed p-8 text-center transition-colors",
+          dragging
+            ? "border-brand-400 bg-brand-50"
+            : "border-slate-200 bg-white hover:border-slate-300"
+        )}
+      >
+        <Upload className={cn("mx-auto h-8 w-8 mb-3", dragging ? "text-brand-400" : "text-slate-300")} />
+        <p className="text-sm font-medium text-slate-600 mb-1">
+          {dragging ? "Drop files here" : "Drag & drop files here"}
+        </p>
+        <p className="text-xs text-slate-400 mb-3">or</p>
+        <label className="cursor-pointer">
+          <span className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-sm hover:bg-slate-50">
+            <Paperclip className="h-3.5 w-3.5" /> Browse files
+          </span>
+          <input
+            type="file"
+            multiple
+            className="sr-only"
+            onChange={(e) => { if (e.target.files) void handleFiles(e.target.files); }}
+          />
+        </label>
+        {upload.isPending && (
+          <p className="mt-3 text-xs text-slate-400">Uploading…</p>
+        )}
+      </div>
+
+      {/* File list */}
+      {isLoading ? (
+        <div className="text-xs text-slate-400 text-center py-4">Loading…</div>
+      ) : attachments.length === 0 ? (
+        <div className="text-xs text-slate-400 text-center py-2">No attachments yet</div>
+      ) : (
+        <div className="rounded-lg border bg-white shadow-sm divide-y">
+          {attachments.map((a) => (
+            <div key={a.id} className="flex items-center gap-3 px-4 py-3 group">
+              <Paperclip className="h-4 w-4 text-slate-300 shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-slate-800 truncate">{a.fileName}</p>
+                <p className="text-xs text-slate-400">
+                  {formatBytes(a.fileSize)} · {a.uploadedByName} · {new Date(a.createdAt).toLocaleDateString()}
+                </p>
+              </div>
+              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                <button
+                  onClick={() => download.mutate({ storagePath: a.storagePath, fileName: a.fileName })}
+                  className="rounded p-1 hover:bg-slate-100 text-slate-400 hover:text-slate-700"
+                  title="Download"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  onClick={async () => {
+                    if (!confirm(`Remove ${a.fileName}?`)) return;
+                    await remove.mutateAsync({ id: a.id, storagePath: a.storagePath });
+                    toast.success("Attachment removed");
+                  }}
+                  className="rounded p-1 hover:bg-red-50 text-slate-400 hover:text-red-500"
+                  title="Delete"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 interface Props {
   estimateId: string;
   onClose?: () => void;
@@ -89,11 +220,32 @@ export function EstimateDetail({ estimateId, onClose }: Props) {
   const { data: estimate, isLoading } = useEstimate(estimateId);
   const { data: templates } = useEstimateTemplates();
   const { data: clients }   = useClients();
+  const { data: users }     = useUsers();
   const { mutateAsync: updateEstimate } = useUpdateEstimate();
   const { mutateAsync: updateStage } = useUpdateEstimateStage();
   const { mutateAsync: saveFinancials } = useSaveEstimateFinancials();
   const { mutateAsync: upsertLineItem } = useUpsertLineItem();
   const { mutateAsync: createInvoice, isPending: creatingInvoice } = useCreateInvoiceFromEstimate();
+
+  const { data: clientSources = [] } = useOrgList("client_sources");
+
+  const { data: shareTokens = [] } = useEstimateShareTokens(estimate?.id ?? "");
+  const { data: dbStages = [], isLoading: stagesLoading } = useEstimateStages();
+  const seedStages = useSeedDefaultStages();
+
+  useEffect(() => {
+    if (!stagesLoading && dbStages.length === 0) {
+      seedStages.mutate(undefined);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stagesLoading, dbStages.length]);
+
+  const stageColor = (key: string) => DEFAULT_STAGE_COLORS[key] ?? "bg-slate-100 text-slate-600";
+  const stageName  = (key: string) => dbStages.find((s: DBEstimateStage) => s.stageKey === key)?.name
+    ?? DEFAULT_STAGE_LIST.find((s) => s.stageKey === key)?.name ?? key;
+  const stageList  = dbStages.length > 0
+    ? dbStages.map((s: DBEstimateStage) => ({ stageKey: s.stageKey, name: s.name }))
+    : DEFAULT_STAGE_LIST;
 
   const [activeTab,        setActiveTab]        = useState<Tab>("details");
   const [lineItemFilter,   setLineItemFilter]   = useState<LineItemStatus | "all">("all");
@@ -101,6 +253,10 @@ export function EstimateDetail({ estimateId, onClose }: Props) {
   const [recalcPending,    setRecalcPending]    = useState(false);
   const [headerEdits,      setHeaderEdits]      = useState<Record<string, string | boolean | number>>({});
   const [convertDialogOpen, setConvertDialogOpen] = useState(false);
+  const [wonLostDialog, setWonLostDialog] = useState<"won" | "lost" | null>(null);
+  const [rateIncreaseOpen, setRateIncreaseOpen] = useState(false);
+  const [sendDialogOpen, setSendDialogOpen] = useState(false);
+  const [selectedLineItemIds, setSelectedLineItemIds] = useState<string[]>([]);
 
   function patchHeader(key: string, val: string | boolean | number) {
     setHeaderEdits((p) => ({ ...p, [key]: val }));
@@ -120,13 +276,59 @@ export function EstimateDetail({ estimateId, onClose }: Props) {
     }
   }
 
-  async function handleStage(stage: EstimateStage) {
+  async function handleStage(stage: EstimateStage, reason?: string) {
     if (!estimate) return;
     try {
-      await updateStage({ id: estimate.id, stage });
-      toast.success(`Marked as ${STAGE_LABEL[stage]}`);
+      await updateStage({ id: estimate.id, stage, reason });
+      toast.success(`Marked as ${stageName(stage)}`);
     } catch {
       toast.error("Failed to update stage");
+    }
+  }
+
+  async function handleRateIncrease(amount: number, isPercent: boolean) {
+    if (!estimate) return;
+    const affected = (estimate.lineItems ?? []).filter(
+      (li) => !li.deletedAt && selectedLineItemIds.includes(li.id)
+    );
+    setRateIncreaseOpen(false);
+    try {
+      await Promise.all(
+        affected.map((li) => {
+          const newRate = isPercent
+            ? Math.round(li.rateCents * (1 + amount / 100))
+            : li.rateCents + Math.round(amount * 100);
+          const updated = computeLineItem({
+            calcType: li.calcType,
+            qty: li.qty,
+            rateCents: Math.max(0, newRate),
+            visits: li.visits,
+            budgetedHours: li.budgetedHours,
+            costCents: li.costCents,
+            adjRateCents: li.adjRateCents,
+            unitType: li.unitType ?? undefined,
+            productionRateSqftPerHr: li.productionRateSqftPerHr ?? undefined,
+          });
+          return upsertLineItem({
+            estimateId: estimate.id,
+            item: {
+              id: li.id,
+              rate_cents: Math.max(0, newRate),
+              total_cents: updated.totalCents,
+              total_budgeted_hours: updated.totalBudgetedHours,
+              budgeted_hours: updated.budgetedHours,
+              total_cost_cents: updated.totalCostCents,
+              margin_bps: updated.marginBps,
+              markup_bps: updated.markupBps,
+            },
+          });
+        })
+      );
+      await handleSaveFinancials();
+      toast.success(`Rate updated on ${affected.length} line item${affected.length !== 1 ? "s" : ""}`);
+      setSelectedLineItemIds([]);
+    } catch {
+      toast.error("Rate increase failed");
     }
   }
 
@@ -192,10 +394,15 @@ export function EstimateDetail({ estimateId, onClose }: Props) {
               Edit Estimate (#{estimate.estimateNumber})
               <span className="ml-2 text-slate-400 text-sm font-normal">—</span>
               <span className="ml-2">
-                <Badge className={cn("text-[10px]", STAGE_COLOR[effectiveStage])}>
-                  {STAGE_LABEL[effectiveStage]}
+                <Badge className={cn("text-[10px]", stageColor(effectiveStage))}>
+                  {stageName(effectiveStage)}
                 </Badge>
               </span>
+              {estimate.reason && (effectiveStage === "won" || effectiveStage === "lost") && (
+                <span className="ml-2 text-xs text-slate-500 font-normal">
+                  · {estimate.reason}
+                </span>
+              )}
             </h1>
             <p className="text-xs text-slate-400">
               Code: {estimate.id.slice(0, 8).toUpperCase()}
@@ -205,24 +412,24 @@ export function EstimateDetail({ estimateId, onClose }: Props) {
 
         <div className="flex items-center gap-1.5">
           <Button variant="outline" size="sm" className="h-8 text-xs"
-            onClick={() => setConvertDialogOpen(true)}>
+            onClick={() => setWonLostDialog("won")}>
             <CheckCircle2 className="mr-1 h-3.5 w-3.5 text-green-500" />Won
           </Button>
           <Button variant="outline" size="sm" className="h-8 text-xs"
-            onClick={() => handleStage("lost")}>
+            onClick={() => setWonLostDialog("lost")}>
             <XCircle className="mr-1 h-3.5 w-3.5 text-red-400" />Lost
-          </Button>
-          <Button variant="outline" size="sm" className="h-8 text-xs"
-            onClick={() => handleStage("draft")}>
-            Draft
           </Button>
           <Button variant="outline" size="sm" className="h-8 text-xs"
             onClick={() => handleStage("quote")}>
             <FileText className="mr-1 h-3.5 w-3.5 text-blue-400" />Quote
           </Button>
           <Button variant="outline" size="sm" className="h-8 text-xs"
-            onClick={() => handleStage("sent")}>
-            <Calendar className="mr-1 h-3.5 w-3.5 text-yellow-500" />Send
+            onClick={() => handleStage("draft")}>
+            Draft
+          </Button>
+          <Button variant="outline" size="sm" className="h-8 text-xs"
+            onClick={() => setSendDialogOpen(true)}>
+            <Send className="mr-1 h-3.5 w-3.5 text-yellow-500" />Send
           </Button>
           <Button
             variant="outline"
@@ -261,6 +468,30 @@ export function EstimateDetail({ estimateId, onClose }: Props) {
           >
             <Receipt className="mr-1 h-3.5 w-3.5 text-teal-500" />
             {creatingInvoice ? "Creating…" : "Invoice"}
+          </Button>
+          <div className="ml-1 h-5 w-px bg-slate-200" />
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 text-xs"
+            onClick={() => window.open(`/api/crm/estimates/${estimate.id}/pdf`, "_blank")}
+          >
+            <Eye className="mr-1 h-3.5 w-3.5 text-slate-500" />
+            Preview
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 text-xs"
+            onClick={async () => {
+              const win = window.open(`/api/crm/estimates/${estimate.id}/pdf`, "_blank");
+              if (win) {
+                win.addEventListener("load", () => win.print(), { once: true });
+              }
+            }}
+          >
+            <Printer className="mr-1 h-3.5 w-3.5 text-slate-500" />
+            Print
           </Button>
           <div className="ml-1 h-5 w-px bg-slate-200" />
           <Button
@@ -377,28 +608,54 @@ export function EstimateDetail({ estimateId, onClose }: Props) {
                           </Select>
                         </FieldRow>
                         <FieldRow label="Sales Rep">
-                          <Input
-                            value={(headerEdits.sales_rep_id as string) ?? (estimate.salesRepName ?? "")}
-                            onChange={(e) => patchHeader("sales_rep_id", e.target.value)}
-                            onBlur={saveHeader}
-                            className="h-8 text-sm"
-                            placeholder="Assign sales rep…"
-                          />
+                          <Select
+                            value={(headerEdits.sales_rep_id as string) ?? (estimate.salesRepId ?? "")}
+                            onValueChange={(v) => { patchHeader("sales_rep_id", v); saveHeader(); }}
+                          >
+                            <SelectTrigger className="h-8">
+                              <SelectValue placeholder="Assign sales rep…" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {(users ?? []).map((u) => (
+                                <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </FieldRow>
+                        <FieldRow label="Source">
+                          <Select
+                            value={(headerEdits.source as string) ?? (estimate.source ?? "")}
+                            onValueChange={(v) => { patchHeader("source", v); saveHeader(); }}
+                          >
+                            <SelectTrigger className="h-8">
+                              <SelectValue placeholder="Select source…" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {clientSources.map((s) => (
+                                <SelectItem key={s.id} value={s.value}>{s.value}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
                         </FieldRow>
                         <FieldRow label="Stage">
                           <Select
                             value={effectiveStage}
                             onValueChange={(v) => {
-                              patchHeader("stage", v);
-                              handleStage(v as EstimateStage);
+                              const s = v as EstimateStage;
+                              if (s === "won" || s === "lost") {
+                                setWonLostDialog(s);
+                              } else {
+                                patchHeader("stage", s);
+                                handleStage(s);
+                              }
                             }}
                           >
                             <SelectTrigger className="h-8 w-44">
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                              {STAGES.map((s) => (
-                                <SelectItem key={s} value={s}>{STAGE_LABEL[s]}</SelectItem>
+                              {stageList.map((s) => (
+                                <SelectItem key={s.stageKey} value={s.stageKey as EstimateStage}>{s.name}</SelectItem>
                               ))}
                             </SelectContent>
                           </Select>
@@ -493,7 +750,44 @@ export function EstimateDetail({ estimateId, onClose }: Props) {
                 </div>
               </div>
 
-              {/* Templates toolbar */}
+              {/* Proposal view tracking strip */}
+              {shareTokens.length > 0 && (() => {
+                const totalViews = shareTokens.reduce((s, t) => s + t.viewCount, 0);
+                const firstViewed = shareTokens
+                  .map((t) => t.firstViewedAt)
+                  .filter(Boolean)
+                  .sort()[0];
+                const accepted = shareTokens.find((t) => t.acceptedAt);
+                return (
+                  <div className="flex items-center gap-3 rounded-md border bg-slate-50 px-3 py-1.5 text-xs text-slate-500">
+                    <div className="flex items-center gap-1">
+                      <Send className="h-3 w-3 text-slate-400" />
+                      <span>{shareTokens.length} link{shareTokens.length !== 1 ? "s" : ""} sent</span>
+                    </div>
+                    {totalViews > 0 ? (
+                      <div className="flex items-center gap-1 text-brand-600 font-medium">
+                        <Eye className="h-3 w-3" />
+                        <span>Viewed {totalViews} time{totalViews !== 1 ? "s" : ""}</span>
+                        {firstViewed && (
+                          <span className="font-normal text-slate-400">
+                            — first opened {new Date(firstViewed).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                          </span>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="italic text-slate-400">Not yet opened</span>
+                    )}
+                    {accepted && (
+                      <div className="flex items-center gap-1 text-green-600 font-medium ml-auto">
+                        <CheckCircle2 className="h-3 w-3" />
+                        <span>Accepted by {accepted.acceptedByName}</span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {/* Templates + rate increase toolbar */}
               <div className="flex items-center gap-2">
                 <Select
                   onValueChange={async (templateId) => {
@@ -550,6 +844,17 @@ export function EstimateDetail({ estimateId, onClose }: Props) {
                     ))}
                   </SelectContent>
                 </Select>
+                {selectedLineItemIds.length > 0 && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 text-xs"
+                    onClick={() => setRateIncreaseOpen(true)}
+                  >
+                    <TrendingUp className="mr-1 h-3.5 w-3.5" />
+                    Rate Increase ({selectedLineItemIds.length})
+                  </Button>
+                )}
               </div>
 
               {/* Line item filter tabs */}
@@ -582,6 +887,8 @@ export function EstimateDetail({ estimateId, onClose }: Props) {
               <EstimateLineItemsGrid
                 estimateId={estimate.id}
                 items={visibleLineItems}
+                selectedIds={selectedLineItemIds}
+                onSelectionChange={setSelectedLineItemIds}
               />
 
               {/* Direct costs */}
@@ -606,9 +913,7 @@ export function EstimateDetail({ estimateId, onClose }: Props) {
           )}
 
           {activeTab === "attachments" && (
-            <div className="rounded-lg border bg-white p-6 shadow-sm flex flex-col items-center justify-center min-h-40 text-sm text-slate-400">
-              Attachments coming soon
-            </div>
+            <EstimateAttachmentsTab estimateId={estimate.id} />
           )}
 
           {activeTab === "audit" && (
@@ -638,6 +943,43 @@ export function EstimateDetail({ estimateId, onClose }: Props) {
           }}
         />
       )}
+
+      {wonLostDialog && (
+        <WonLostReasonDialog
+          stage={wonLostDialog}
+          open={!!wonLostDialog}
+          onConfirm={(reason) => {
+            const stage = wonLostDialog;
+            setWonLostDialog(null);
+            handleStage(stage, reason);
+            if (stage === "won") setConvertDialogOpen(true);
+          }}
+          onCancel={() => setWonLostDialog(null)}
+        />
+      )}
+
+      <RateIncreaseDialog
+        selectedCount={selectedLineItemIds.length}
+        open={rateIncreaseOpen}
+        onApply={(amount, isPercent) => {
+          setRateIncreaseOpen(false);
+          handleRateIncrease(amount, isPercent);
+        }}
+        onCancel={() => setRateIncreaseOpen(false)}
+      />
+
+      <SendEstimateDialog
+        estimateId={estimate.id}
+        estimateNumber={estimate.estimateNumber}
+        clientName={estimate.clientName ?? null}
+        clientEmail={estimate.clientEmail ?? null}
+        open={sendDialogOpen}
+        onClose={() => setSendDialogOpen(false)}
+        onSent={() => {
+          setSendDialogOpen(false);
+          handleStage("sent");
+        }}
+      />
     </div>
   );
 }

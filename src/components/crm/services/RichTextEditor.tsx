@@ -4,7 +4,12 @@ import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Underline from "@tiptap/extension-underline";
 import TextAlign from "@tiptap/extension-text-align";
-import { useEffect } from "react";
+import { forwardRef, useEffect, useImperativeHandle } from "react";
+
+export interface RichTextEditorHandle {
+  insertContent: (text: string) => void;
+  focus: () => void;
+}
 import {
   Bold,
   Italic,
@@ -47,7 +52,8 @@ function ToolbarButton({
   );
 }
 
-export function RichTextEditor({ value, onChange, placeholder, minHeight = 120 }: Props) {
+export const RichTextEditor = forwardRef<RichTextEditorHandle, Props>(
+function RichTextEditor({ value, onChange, placeholder, minHeight = 120 }, ref) {
   const editor = useEditor({
     extensions: [
       StarterKit.configure({ heading: false, codeBlock: false, code: false }),
@@ -67,6 +73,15 @@ export function RichTextEditor({ value, onChange, placeholder, minHeight = 120 }
       },
     },
   });
+
+  useImperativeHandle(ref, () => ({
+    insertContent: (text: string) => {
+      editor?.chain().focus().insertContent(text).run();
+    },
+    focus: () => {
+      editor?.commands.focus();
+    },
+  }), [editor]);
 
   // Sync external value changes (e.g. form reset)
   useEffect(() => {
@@ -164,4 +179,5 @@ export function RichTextEditor({ value, onChange, placeholder, minHeight = 120 }
       `}</style>
     </div>
   );
-}
+});
+RichTextEditor.displayName = "RichTextEditor";

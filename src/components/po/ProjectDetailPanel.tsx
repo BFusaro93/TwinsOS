@@ -1067,7 +1067,7 @@ function DetailsTab({
             <>
               <div className="text-slate-500 pt-1 border-t border-slate-100">Variance</div>
               <div className={`pt-1 border-t border-slate-100 font-medium ${hoursVariance > 0 ? "text-red-600" : hoursVariance < 0 ? "text-green-600" : "text-slate-500"}`}>
-                {hoursVariance > 0 ? "+" : ""}{hoursVariance} hrs
+                {hoursVariance > 0 ? "+" : ""}{hoursVariance.toFixed(2)} hrs
                 {hasBudget && project.budgetHours! > 0 && (
                   <span className="ml-1 text-xs font-normal text-slate-400">
                     ({Math.round((hoursVariance / project.budgetHours!) * 100)}%)

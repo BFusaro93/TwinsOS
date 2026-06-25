@@ -79,7 +79,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
   const [jobType, setJobType] = useState<JobType>(initialJobType ?? "one_time");
   const { data: contracts } = useContracts(defaultClientId ?? selectedClientId);
   const [contractId, setContractId] = useState<string | null>(null);
-  const [notes, setNotes] = useState("");
+  const [notesToCrew, setNotesToCrew] = useState("");
   const [isPending, setIsPending] = useState(false);
 
   const [startDate, setStartDate] = useState(todayStr());
@@ -94,7 +94,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
       const today = todayStr();
       setJobType(initialJobType ?? "one_time");
       setContractId(null);
-      setNotes("");
+      setNotesToCrew("");
       setStartDate(today);
       setCompleteByDate("");
       setSchedule("");
@@ -167,11 +167,15 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
         invoiceSeparately: false,
         callAhead: false,
         arrivalWindowHours: null,
-        startDateWindow: startDate || null,
-        endDateWindow: jobType === "waiting_list" ? completeByDate || null : null,
+        scheduledDate: (jobType !== "waiting_list" && jobType !== "recurring") ? startDate || null : null,
+        waitingListStart: jobType === "waiting_list" ? startDate || null : null,
+        waitingListEnd: jobType === "waiting_list" ? completeByDate || null : null,
+        startDateWindow: jobType === "recurring" ? startDate || null : null,
+        endDateWindow: null,
         createWorkOrder,
         isComplete: jobType === "one_time" ? isComplete : false,
-        notes: notes || null,
+        notes: null,
+        notesToCrew: notesToCrew || null,
         services: services.map((s, idx) => ({
           serviceName: s.serviceName,
           startDate: s.startDate || startDate || null,
@@ -317,16 +321,18 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
                 </Button>
               </div>
               <div className="rounded border overflow-hidden">
-                {/* Header — uses org brand color */}
+                {/* Header — uses org brand color. Recurring jobs: no per-row Start Date (use header "Start Recurring") */}
                 <div
                   className="grid text-white text-xs font-medium px-3 py-2"
                   style={{
-                    gridTemplateColumns: "2fr 1fr 1fr 1fr 1fr 1fr 1.5fr 28px",
+                    gridTemplateColumns: jobType === "recurring"
+                      ? "2fr 1fr 1fr 1fr 1fr 1.5fr 28px"
+                      : "2fr 1fr 1fr 1fr 1fr 1fr 1.5fr 28px",
                     backgroundColor: brandColor,
                   }}
                 >
                   <span>Service</span>
-                  <span>Start Date</span>
+                  {jobType !== "recurring" && <span>Start Date</span>}
                   <span>{showCompleteBy ? "Complete By" : "Qty"}</span>
                   <span>Rate ($)</span>
                   <span>B. Hrs</span>
@@ -338,7 +344,11 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
                   <div
                     key={i}
                     className="grid items-center gap-1.5 border-b last:border-0 bg-white px-3 py-2"
-                    style={{ gridTemplateColumns: "2fr 1fr 1fr 1fr 1fr 1fr 1.5fr 28px" }}
+                    style={{
+                      gridTemplateColumns: jobType === "recurring"
+                        ? "2fr 1fr 1fr 1fr 1fr 1.5fr 28px"
+                        : "2fr 1fr 1fr 1fr 1fr 1fr 1.5fr 28px",
+                    }}
                   >
                     <Select value={svc.serviceId || ""} onValueChange={(v) => pickService(i, v)}>
                       <SelectTrigger className="h-7 text-xs"><SelectValue placeholder="Select service…" /></SelectTrigger>
@@ -346,13 +356,21 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
                         {(crmServices ?? []).map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
                       </SelectContent>
                     </Select>
-                    <Input type="date" value={svc.startDate} onChange={(e) => updateService(i, { startDate: e.target.value })} className="h-7 text-xs" />
+                    {jobType !== "recurring" && (
+                      <Input type="date" value={svc.startDate} onChange={(e) => updateService(i, { startDate: e.target.value })} className="h-7 text-xs" />
+                    )}
                     {showCompleteBy ? (
                       <Input type="date" value={svc.completeByDate} onChange={(e) => updateService(i, { completeByDate: e.target.value })} className="h-7 text-xs" />
                     ) : (
                       <Input type="number" min="0" step="0.01" value={svc.qty} onChange={(e) => updateService(i, { qty: parseFloat(e.target.value) || 1 })} className="h-7 text-xs" />
                     )}
-                    <Input type="number" min="0" step="0.01" value={svc.rateCents / 100} onChange={(e) => updateService(i, { rateCents: Math.round(parseFloat(e.target.value || "0") * 100) })} className="h-7 text-xs" placeholder="0.00" />
+                    <Input
+                      type="number" min="0" step="0.01"
+                      value={svc.rateCents / 100}
+                      onFocus={(e) => e.target.select()}
+                      onChange={(e) => updateService(i, { rateCents: Math.round(parseFloat(e.target.value || "0") * 100) })}
+                      className="h-7 text-xs" placeholder="0.00"
+                    />
                     <Input type="number" min="0" step="0.25" value={svc.budgetedHours} onChange={(e) => updateService(i, { budgetedHours: parseFloat(e.target.value) || 0 })} className="h-7 text-xs" placeholder="0" />
                     <Input type="number" min="1" step="1" value={svc.teamSize} onChange={(e) => updateService(i, { teamSize: parseInt(e.target.value) || 1 })} className="h-7 text-xs" />
                     <span className="text-xs text-slate-700 font-medium text-right pr-1">{formatCurrency(svc.qty * svc.rateCents)}</span>
@@ -371,7 +389,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
             {/* Notes */}
             <div className="flex flex-col gap-1.5">
               <Label>Notes to Crew</Label>
-              <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Optional notes visible to the crew…" rows={2} />
+              <Textarea value={notesToCrew} onChange={(e) => setNotesToCrew(e.target.value)} placeholder="Optional notes visible to the crew…" rows={2} />
             </div>
           </div>
 

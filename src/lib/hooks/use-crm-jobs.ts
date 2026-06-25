@@ -40,6 +40,7 @@ function mapJob(row: any): CRMJob {
     lastServiceDate: row.last_service_date,
     notesToCrew: row.notes_to_crew,
     completionNotes: row.completion_notes,
+    invoiceDescription: row.invoice_description ?? null,
     contractId: row.contract_id ?? null,
     schedule: row.schedule ?? null,
     scheduleDays: row.schedule_days ?? [],
@@ -112,6 +113,7 @@ function mapService(row: any): CRMService {
     trackChemicals: row.track_chemicals ?? false,
     invoiceDescription: row.invoice_description ?? null,
     descriptionOnEstimate: row.description_on_estimate ?? null,
+    callScriptNotes: row.call_script_notes ?? null,
     taskColor: row.task_color ?? '#3B82F6',
     targetRateCents: row.target_rate_cents ?? 0,
     targetRateWithDriveCents: row.target_rate_with_drive_cents ?? 0,
@@ -185,11 +187,13 @@ export function useWaitingListJobs(startDate?: string, endDate?: string) {
           crm_job_services(*)
         `)
         .eq("job_type", "waiting_list")
+        .neq("job_type", "snow")
         .is("deleted_at", null)
         .order("waiting_list_start", { ascending: true });
 
-      if (startDate) q = q.gte("waiting_list_end", startDate);
-      if (endDate)   q = q.lte("waiting_list_start", endDate);
+      // Include jobs with null dates (not yet scheduled into a window) alongside date-filtered ones
+      if (startDate) q = q.or(`waiting_list_end.is.null,waiting_list_end.gte.${startDate}`);
+      if (endDate)   q = q.or(`waiting_list_start.is.null,waiting_list_start.lte.${endDate}`);
 
       const { data, error } = await q;
       if (error) throw error;
@@ -247,22 +251,59 @@ export function useUpdateJobStatus() {
       id,
       status,
       scheduledDate,
+      clientId,
     }: {
       id: string;
       status: string;
       scheduledDate: string;
+      clientId?: string;
     }) => {
       const supabase = createClient();
+
+      // Never mark multi-visit job types as completed via a direct status update —
+      // only their individual visits complete. Keep job at scheduled.
+      let resolvedStatus = status;
+      if (status === "completed") {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: jobRow } = await (supabase as any).from("crm_jobs").select("job_type").eq("id", id).single();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const multiVisitTypes = ["recurring", "waiting_list", "package", "snow", "project"];
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        if (jobRow && multiVisitTypes.includes((jobRow as any).job_type)) {
+          resolvedStatus = "scheduled";
+        }
+      }
+
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any)
         .from("crm_jobs")
-        .update({ status })
+        .update({ status: resolvedStatus })
         .eq("id", id);
       if (error) throw error;
+
+      // Log to client activity timeline
+      const resolvedClientId = clientId ?? await (async () => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data } = await (supabase as any).from("crm_jobs").select("client_id").eq("id", id).single();
+        return data?.client_id as string | null;
+      })();
+      if (resolvedClientId) {
+        const label = status.replace(/_/g, " ");
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (supabase as any).from("client_activity").insert({
+          client_id: resolvedClientId,
+          activity_type: "job",
+          subject: `Job ${label}`,
+          ref_id: id,
+          ref_table: "crm_jobs",
+        });
+      }
+
       return { scheduledDate };
     },
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: ["crm-jobs", "date", vars.scheduledDate] });
+      if (vars.clientId) qc.invalidateQueries({ queryKey: ["clients", vars.clientId, "activity"] });
     },
   });
 }
@@ -377,6 +418,26 @@ import type { NewClientJobFormValues, CRMJobService, CRMJobVisit, VisitStatus } 
 
 // ── visit helpers ─────────────────────────────────────────────────────────────
 
+// When a visit has no rate_cents / budgeted_hours of its own, fall back to the
+// sum of the parent job's services (the common case for auto-generated visits).
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function applyJobServiceFallback(visit: CRMJobVisit, row: any): CRMJobVisit {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const services: any[] = row.crm_jobs?.crm_job_services ?? [];
+  if (visit.rateCents == null) {
+    const total = services.reduce((sum: number, s: any) => sum + (s.rate_cents ?? 0) * (s.qty ?? 1), 0);
+    if (total > 0) visit.rateCents = total;
+    // Also try direct job rate_cents
+    if (visit.rateCents == null && row.crm_jobs?.rate_cents != null) visit.rateCents = row.crm_jobs.rate_cents;
+  }
+  if (visit.budgetedHours == null) {
+    const total = services.reduce((sum: number, s: any) => sum + (Number(s.budgeted_hours) ?? 0) * (s.qty ?? 1), 0);
+    if (total > 0) visit.budgetedHours = total;
+    if (visit.budgetedHours == null && row.crm_jobs?.budgeted_hours != null) visit.budgetedHours = Number(row.crm_jobs.budgeted_hours);
+  }
+  return visit;
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapVisit(row: any): CRMJobVisit {
   return {
@@ -396,6 +457,7 @@ function mapVisit(row: any): CRMJobVisit {
     orderNum: row.order_num ?? null,
     completionNotes: row.completion_notes ?? null,
     actualHours: row.actual_hours ?? null,
+    budgetedHours: row.budgeted_hours ?? null,
     completedAt: row.completed_at ?? null,
     priority: row.priority ?? 1,
     notesToCrew: row.notes_to_crew ?? null,
@@ -404,38 +466,71 @@ function mapVisit(row: any): CRMJobVisit {
     menCount: row.men_count ?? 0,
     qty: row.qty ?? null,
     rateCents: row.rate_cents ?? null,
-    jobComments: Array.isArray(row.job_comments) ? row.job_comments : [],
-    assignedEmployeeId: row.assigned_employee_id ?? null,
-    dispatchedAt: row.dispatched_at ?? null,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-    deletedAt: row.deleted_at ?? null,
-    job: row.crm_jobs ? mapJob(row.crm_jobs) : undefined,
+    jobComments: Array.isArray(row.job_comments)
+      ? row.job_comments
+      : typeof row.job_comments === "string" && row.job_comments
+        ? [{ id: "crew-note", authorName: "Crew", authorId: "", text: row.job_comments as string, createdAt: (row.updated_at ?? row.created_at) as string }]
+        : [],
+    assignedEmployeeId:  row.assigned_employee_id ?? null,
+    dispatchedAt:        row.dispatched_at ?? null,
+    clockedInAt:         row.clocked_in_at ?? null,
+    clockedOutAt:        row.clocked_out_at ?? null,
+    acknowledgedNotesAt: row.acknowledged_notes_at ?? null,
+    skipReason:          row.skip_reason ?? null,
+    createdAt:           row.created_at,
+    updatedAt:           row.updated_at,
+    deletedAt:           row.deleted_at ?? null,
+    job: row.crm_jobs ? mapJob({
+      ...row.crm_jobs,
+      // Fall back to client billing address when job has no service address set
+      service_address: row.crm_jobs.service_address ?? row.clients?.billing_address ?? null,
+      service_city:    row.crm_jobs.service_city    ?? row.clients?.billing_city    ?? null,
+      service_state:   row.crm_jobs.service_state   ?? row.clients?.billing_state   ?? null,
+      service_zip:     row.crm_jobs.service_zip     ?? row.clients?.billing_zip     ?? null,
+    }) : undefined,
   };
 }
 
-export function useVisitsForDate(date: string) {
+export function useVisitsForDate(fromDate: string, toDate?: string) {
   return useQuery({
-    queryKey: ['crm-job-visits', 'date', date],
+    queryKey: ['crm-job-visits', 'date', fromDate, toDate ?? fromDate],
     queryFn: async () => {
       const supabase = createClient();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data, error } = await (supabase as any)
+      let q = (supabase as any)
         .from('crm_job_visits')
         .select(`
           *,
-          clients(display_name, primary_phone),
+          clients(display_name, primary_phone, billing_address, billing_city, billing_state, billing_zip),
           crm_crews(name),
           crm_jobs(*, crm_job_services(*))
         `)
-        .eq('scheduled_date', date)
         .is('deleted_at', null)
         .order('priority', { ascending: true })
         .order('start_time', { ascending: true, nullsFirst: false });
+
+      if (toDate && toDate !== fromDate) {
+        q = q.gte('scheduled_date', fromDate).lte('scheduled_date', toDate);
+      } else {
+        q = q.eq('scheduled_date', fromDate);
+      }
+
+      const { data, error } = await q;
       if (error) throw error;
-      return (data.map(mapVisit)) as CRMJobVisit[];
+      const visits = (data.map(mapVisit)) as CRMJobVisit[];
+      // Filter out snow jobs. For cancelled/completed parent jobs, only hide the
+      // visit if the visit itself is still pending (scheduled/dispatched) — completed
+      // and skipped visits should always remain visible so they appear in the board's
+      // Completed / Skipped filter tabs.
+      const terminalVisitStatuses = new Set(['completed', 'skipped', 'cancelled']);
+      return visits.filter((v) => {
+        if (v.job?.jobType === 'snow') return false;
+        const parentDone = v.job?.status === 'cancelled' || v.job?.status === 'completed';
+        if (parentDone && !terminalVisitStatuses.has(v.status)) return false;
+        return true;
+      });
     },
-    enabled: !!date,
+    enabled: !!fromDate,
   });
 }
 
@@ -451,6 +546,7 @@ export function useCreateVisit() {
       endTime?: string | null;
       priority?: number;
       notesToCrew?: string | null;
+      invoiceDescription?: string | null;
     }) => {
       const supabase = createClient();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -465,6 +561,7 @@ export function useCreateVisit() {
           end_time: values.endTime ?? null,
           priority: values.priority ?? 1,
           notes_to_crew: values.notesToCrew ?? null,
+          invoice_description: values.invoiceDescription ?? null,
         })
         .select()
         .single();
@@ -475,18 +572,90 @@ export function useCreateVisit() {
   });
 }
 
+export function useDeleteVisit() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (visitId: string) => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase as any)
+        .from('crm_job_visits')
+        .update({ deleted_at: new Date().toISOString() })
+        .eq('id', visitId);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['crm-job-visits'] }),
+  });
+}
+
+export function useDeleteVisitsByDayOfWeek() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ jobId, dayOfWeek }: { jobId: string; dayOfWeek: number }) => {
+      // dayOfWeek: 0=Sun, 1=Mon, 2=Tue, 3=Wed, 4=Thu, 5=Fri, 6=Sat
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
+        .from('crm_job_visits')
+        .select('id, scheduled_date')
+        .eq('job_id', jobId)
+        .is('deleted_at', null)
+        .eq('status', 'scheduled');
+      if (error) throw error;
+      const ids = (data as { id: string; scheduled_date: string }[])
+        .filter((r) => new Date(r.scheduled_date + 'T00:00:00').getDay() === dayOfWeek)
+        .map((r) => r.id);
+      if (ids.length === 0) return 0;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error: delErr } = await (supabase as any)
+        .from('crm_job_visits')
+        .update({ deleted_at: new Date().toISOString() })
+        .in('id', ids);
+      if (delErr) throw delErr;
+      return ids.length;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['crm-job-visits'] }),
+  });
+}
+
 export function useUpdateVisitStatus() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, status }: { id: string; status: VisitStatus }) => {
+    mutationFn: async ({
+      id,
+      status,
+      jobId,
+      jobType,
+    }: {
+      id: string;
+      status: VisitStatus;
+      jobId?: string;
+      jobType?: string;
+    }) => {
       const supabase = createClient();
+      if (status === 'completed') {
+        // Use server route so both visit + job update atomically with no RLS ambiguity
+        const res = await fetch(`/api/crm/visits/${id}/complete`, { method: 'POST' });
+        if (!res.ok) {
+          const body = await res.json() as { error?: string };
+          throw new Error(body.error ?? 'Failed to complete visit');
+        }
+        const body = await res.json() as { clientId?: string };
+        return body;
+      }
+
       const patch: Record<string, unknown> = { status };
-      if (status === 'completed') patch.completed_at = new Date().toISOString();
+      if (status === 'dispatched') patch.dispatched_at = new Date().toISOString();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any).from('crm_job_visits').update(patch).eq('id', id);
       if (error) throw error;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['crm-job-visits'] }),
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ['crm-job-visits'] });
+      qc.invalidateQueries({ queryKey: ['crm-jobs'] });
+      const clientId = (data as { clientId?: string } | undefined)?.clientId;
+      if (clientId) qc.invalidateQueries({ queryKey: ['clients', clientId, 'activity'] });
+    },
   });
 }
 
@@ -496,6 +665,8 @@ export function useUpdateVisit() {
     mutationFn: async ({
       id,
       updates,
+      jobId,
+      jobType,
     }: {
       id: string;
       updates: Partial<{
@@ -510,6 +681,7 @@ export function useUpdateVisit() {
         rate_cents: number | null;
         notes_to_crew: string | null;
         notes_to_client: string | null;
+        completion_notes: string | null;
         invoice_description: string | null;
         job_comments: unknown;
         priority: number;
@@ -517,6 +689,8 @@ export function useUpdateVisit() {
         dispatched_at: string | null;
         completed_at: string | null;
       }>;
+      jobId?: string;
+      jobType?: string;
     }) => {
       const supabase = createClient();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -526,8 +700,26 @@ export function useUpdateVisit() {
         .update(updates as any)
         .eq('id', id);
       if (error) throw error;
+
+      // Cascade completion to parent job via server route
+      if (updates.status === 'completed' && id) {
+        const res = await fetch(`/api/crm/visits/${id}/complete`, { method: 'POST' });
+        if (!res.ok) {
+          const body = await res.json() as { error?: string };
+          throw new Error(body.error ?? 'Failed to complete job');
+        }
+      }
+
+      // Cascade crew assignment to parent job so it shows everywhere
+      if ('crew_id' in updates && jobId) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (supabase as any).from('crm_jobs').update({ crew_id: updates.crew_id }).eq('id', jobId);
+      }
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['crm-job-visits'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['crm-job-visits'] });
+      qc.invalidateQueries({ queryKey: ['crm-jobs'] });
+    },
   });
 }
 
@@ -589,11 +781,16 @@ export function useCreateClientJob() {
           invoice_separately: values.invoiceSeparately,
           call_ahead: values.callAhead,
           arrival_window_hours: values.arrivalWindowHours ?? null,
+          scheduled_date: values.scheduledDate || null,
+          waiting_list_start: values.waitingListStart || null,
+          waiting_list_end: values.waitingListEnd || null,
           start_date_window: values.startDateWindow || null,
           end_date_window: values.endDateWindow || null,
           create_work_order: values.createWorkOrder,
           is_complete: values.isComplete,
           notes: values.notes || null,
+          notes_to_crew: values.notesToCrew || null,
+          budgeted_hours: values.services.reduce((sum, s) => sum + (s.budgetedHours || 0), 0) || null,
         })
         .select()
         .single();
@@ -624,6 +821,20 @@ export function useCreateClientJob() {
       }
 
       const job = data as { id: string };
+
+      // Auto-create the first visit for jobs with a fixed scheduled date
+      // Recurring jobs get their first visit here; Generate Visits handles future ones
+      const autoVisitTypes = ['one_time', 'snow', 'project', 'package', 'recurring'];
+      if (values.scheduledDate && autoVisitTypes.includes(values.jobType)) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (supabase as any).from('crm_job_visits').insert({
+          job_id: job.id,
+          client_id: values.clientId,
+          scheduled_date: values.scheduledDate,
+          status: 'scheduled',
+        });
+      }
+
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await (supabase as any).from('client_activity').insert({
         client_id: values.clientId,
@@ -839,6 +1050,7 @@ export function useJobsList(filters?: {
   fromDate?: string;
   toDate?: string;
   clientId?: string;
+  activeOnly?: boolean;
 }) {
   return useQuery({
     queryKey: ["crm-jobs", "list", filters],
@@ -854,14 +1066,22 @@ export function useJobsList(filters?: {
           crm_job_services(*)
         `)
         .is("deleted_at", null)
+        .neq("job_type", "snow")
         .order("scheduled_date", { ascending: true, nullsFirst: false })
         .order("created_at", { ascending: false });
 
-      if (filters?.status)   q = q.eq("status", filters.status);
-      if (filters?.jobType)  q = q.eq("job_type", filters.jobType);
+      if (filters?.status)     q = q.eq("status", filters.status);
+      if (filters?.activeOnly) q = q.neq("status", "completed").neq("status", "cancelled");
+      if (filters?.jobType)    q = q.eq("job_type", filters.jobType);
       if (filters?.clientId) q = q.eq("client_id", filters.clientId);
-      if (filters?.fromDate) q = q.gte("scheduled_date", filters.fromDate);
-      if (filters?.toDate)   q = q.lte("scheduled_date", filters.toDate);
+      // Include unscheduled jobs (null scheduled_date) alongside the date range
+      if (filters?.fromDate && filters?.toDate) {
+        q = q.or(`scheduled_date.is.null,and(scheduled_date.gte.${filters.fromDate},scheduled_date.lte.${filters.toDate})`);
+      } else if (filters?.fromDate) {
+        q = q.or(`scheduled_date.is.null,scheduled_date.gte.${filters.fromDate}`);
+      } else if (filters?.toDate) {
+        q = q.or(`scheduled_date.is.null,scheduled_date.lte.${filters.toDate}`);
+      }
 
       const { data, error } = await q;
       if (error) throw error;
@@ -992,14 +1212,35 @@ export function useJobVisits(jobId: string) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
         .from('crm_job_visits')
-        .select('*, crm_crews(name)')
+        .select('*, crm_crews(name), crm_jobs(budgeted_hours, rate_cents, crm_job_services(rate_cents, budgeted_hours, qty))')
         .eq('job_id', jobId)
+        .is('deleted_at', null)
+        .order('scheduled_date', { ascending: true });
+      if (error) throw error;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return (data.map((row: any) => applyJobServiceFallback(mapVisit(row), row))) as CRMJobVisit[];
+    },
+    enabled: !!jobId,
+  });
+}
+
+export function useClientAllVisits(clientId: string) {
+  return useQuery({
+    queryKey: ['crm-job-visits', 'client', clientId],
+    queryFn: async () => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
+        .from('crm_job_visits')
+        .select('*, crm_crews(name), crm_jobs(budgeted_hours, rate_cents, crm_job_services(rate_cents, budgeted_hours, qty))')
+        .eq('client_id', clientId)
         .is('deleted_at', null)
         .order('scheduled_date', { ascending: false });
       if (error) throw error;
-      return (data.map(mapVisit)) as CRMJobVisit[];
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return (data.map((row: any) => applyJobServiceFallback(mapVisit(row), row))) as CRMJobVisit[];
     },
-    enabled: !!jobId,
+    enabled: !!clientId,
   });
 }
 
@@ -1166,6 +1407,193 @@ export function useDeleteCRMSchedule() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['crm-schedules'] });
+    },
+  });
+}
+
+export function useUpdateJobService() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, patch }: {
+      id: string;
+      patch: { qty?: number; rate_cents?: number | null };
+    }) => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase as any)
+        .from('crm_job_services')
+        .update(patch)
+        .eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['crm-job-detail'] });
+      qc.invalidateQueries({ queryKey: ['crm-jobs'] });
+    },
+  });
+}
+
+export function useAddJobService() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ jobId, clientId, serviceName, qty, rateCents, budgetedHours }: {
+      jobId: string;
+      clientId: string;
+      serviceName: string;
+      qty: number;
+      rateCents: number | null;
+      budgetedHours: number;
+    }) => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase as any).from('crm_job_services').insert({
+        job_id: jobId,
+        client_id: clientId,
+        service_name: serviceName,
+        qty,
+        rate_cents: rateCents,
+        budgeted_hours: budgetedHours,
+        team_size: 1,
+        days_count: 1,
+        included: true,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['crm-job-detail'] });
+      qc.invalidateQueries({ queryKey: ['crm-jobs'] });
+    },
+  });
+}
+
+export function useDeleteJobService() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id }: { id: string }) => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase as any).from('crm_job_services').delete().eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['crm-job-detail'] });
+      qc.invalidateQueries({ queryKey: ['crm-jobs'] });
+    },
+  });
+}
+
+// ── CRM Job Products ──────────────────────────────────────────────────────────
+
+export interface CRMJobProduct {
+  id: string;
+  jobId: string;
+  productId: string | null;
+  productName: string;
+  qty: number;
+  unitPriceCents: number;
+  unitCostCents: number | null;
+  notes: string | null;
+}
+
+function mapJobProduct(row: Record<string, unknown>): CRMJobProduct {
+  return {
+    id: row.id as string,
+    jobId: row.job_id as string,
+    productId: row.product_id as string | null,
+    productName: row.product_name as string,
+    qty: Number(row.qty),
+    unitPriceCents: Number(row.unit_price_cents),
+    unitCostCents: row.unit_cost_cents != null ? Number(row.unit_cost_cents) : null,
+    notes: row.notes as string | null,
+  };
+}
+
+export function useCRMJobProducts(jobId: string) {
+  return useQuery({
+    queryKey: ['crm-job-products', jobId],
+    queryFn: async () => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
+        .from('crm_job_products')
+        .select('*')
+        .eq('job_id', jobId)
+        .order('created_at');
+      if (error) throw error;
+      return (data as Record<string, unknown>[]).map(mapJobProduct);
+    },
+    enabled: !!jobId,
+  });
+}
+
+export function useAddCRMJobProduct() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (p: {
+      jobId: string;
+      productId: string | null;
+      productName: string;
+      qty: number;
+      unitPriceCents: number;
+      unitCostCents: number | null;
+    }) => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase as any).from('crm_job_products').insert({
+        job_id: p.jobId,
+        product_id: p.productId,
+        product_name: p.productName,
+        qty: p.qty,
+        unit_price_cents: p.unitPriceCents,
+        unit_cost_cents: p.unitCostCents,
+      });
+      if (error) throw error;
+    },
+    onSuccess: (_, v) => {
+      qc.invalidateQueries({ queryKey: ['crm-job-products', v.jobId] });
+      qc.invalidateQueries({ queryKey: ['crm-job-detail'] });
+    },
+  });
+}
+
+export function useUpdateCRMJobProduct() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (p: {
+      id: string;
+      jobId: string;
+      qty?: number;
+      unitPriceCents?: number;
+      notes?: string | null;
+    }) => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase as any).from('crm_job_products').update({
+        ...(p.qty !== undefined && { qty: p.qty }),
+        ...(p.unitPriceCents !== undefined && { unit_price_cents: p.unitPriceCents }),
+        ...(p.notes !== undefined && { notes: p.notes }),
+      }).eq('id', p.id);
+      if (error) throw error;
+    },
+    onSuccess: (_, v) => {
+      qc.invalidateQueries({ queryKey: ['crm-job-products', v.jobId] });
+      qc.invalidateQueries({ queryKey: ['crm-job-detail'] });
+    },
+  });
+}
+
+export function useDeleteCRMJobProduct() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (p: { id: string; jobId: string }) => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase as any).from('crm_job_products').delete().eq('id', p.id);
+      if (error) throw error;
+    },
+    onSuccess: (_, v) => {
+      qc.invalidateQueries({ queryKey: ['crm-job-products', v.jobId] });
+      qc.invalidateQueries({ queryKey: ['crm-job-detail'] });
     },
   });
 }

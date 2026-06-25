@@ -10,9 +10,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn, formatCurrency } from "@/lib/utils";
 import { bpsToPercent } from "@/lib/estimate-calc";
-import { Plus, FileText, Search, X, ChevronDown, RotateCcw } from "lucide-react";
+import { Plus, FileText, Search, X, ChevronDown, RotateCcw, Copy } from "lucide-react";
 import type { EstimateStage } from "@/types/crm-estimates";
 import { useUpdateEstimateStage } from "@/lib/hooks/use-estimates";
+import { DuplicateEstimateDialog } from "./DuplicateEstimateDialog";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { ColumnChooser } from "@/components/shared/ColumnChooser";
@@ -102,6 +103,7 @@ export function EstimatesList({ clientId }: Props) {
   const [activeFilterKey, setActiveFilterKey] = useState<FilterKey | null>(null);
   const [filterValue,     setFilterValue]     = useState("");
   const [selectedIds,     setSelectedIds]     = useState<Set<string>>(new Set());
+  const [duplicateTarget, setDuplicateTarget] = useState<{ id: string; description: string } | null>(null);
   const [visibleKeys,     setVisibleKeys]     = useState<string[]>(
     ESTIMATE_COLUMNS.filter((c) => c.key !== "prob" && c.key !== "valid_until").map((c) => c.key)
   );
@@ -240,7 +242,7 @@ export function EstimatesList({ clientId }: Props) {
       </div>
 
       {/* ── 3. Dark actions bar with stage tabs + search ── */}
-      <div className="flex items-center justify-between bg-[#3a3a3a] px-4 py-2">
+      <div className="flex items-center justify-between bg-[#4a4a4a] px-4 py-2">
         <div className="flex items-center gap-2">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -275,6 +277,17 @@ export function EstimatesList({ clientId }: Props) {
               </DropdownMenuItem>
               <DropdownMenuItem disabled={!someSelected} onSelect={() => bulkSetStage("won")}>
                 Mark as Won
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                disabled={selectedIds.size !== 1}
+                onSelect={() => {
+                  const id = Array.from(selectedIds)[0];
+                  const est = filtered.find((e) => e.id === id);
+                  if (est) setDuplicateTarget({ id: est.id, description: est.description ?? "" });
+                }}
+              >
+                <Copy className="mr-2 h-3.5 w-3.5" /> Copy Estimate
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
@@ -474,6 +487,16 @@ export function EstimatesList({ clientId }: Props) {
         onOpenChange={setDialogOpen}
         defaultClientId={clientId}
       />
+
+      {duplicateTarget && (
+        <DuplicateEstimateDialog
+          estimateId={duplicateTarget.id}
+          estimateDescription={duplicateTarget.description}
+          open={!!duplicateTarget}
+          onCancel={() => setDuplicateTarget(null)}
+          onSuccess={() => setDuplicateTarget(null)}
+        />
+      )}
     </div>
   );
 }

@@ -1,14 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { ColumnChooser } from "@/components/shared/ColumnChooser";
 import { useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   useVisitsForDate,
   useUpdateVisitStatus,
   useUpdateVisit,
   useCRMCrews,
+  useCRMJobProducts,
 } from "@/lib/hooks/use-crm-jobs";
-import { useCreateInvoice } from "@/lib/hooks/use-invoices";
+import { useCreateInvoiceFromJob } from "@/lib/hooks/use-invoices";
 import { WeekStrip } from "./WeekStrip";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
@@ -40,9 +43,33 @@ import {
   BarChart3,
   Columns3,
   Route,
+  RefreshCw,
   X as XIcon,
+  GripVertical,
+  ListChecks,
+  ChevronDown,
+  ArrowUpDown,
+  Download,
+  Phone,
+  Printer,
+  StickyNote,
+  Package,
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import type { CRMJobVisit, VisitStatus, JobComment } from "@/types/crm-jobs";
+import { useCrews, useUpdateCrewMember } from "@/lib/hooks/use-employees";
+import { useCRMServices } from "@/lib/hooks/use-crm-jobs";
 
 // ── status icon ───────────────────────────────────────────────────────────────
 
@@ -68,7 +95,7 @@ function StatusCycleButton({ visit }: { visit: CRMJobVisit }) {
     const i = STATUS_CYCLE.indexOf(visit.status);
     const next = STATUS_CYCLE[(i + 1) % STATUS_CYCLE.length];
     try {
-      await updateStatus({ id: visit.id, status: next });
+      await updateStatus({ id: visit.id, status: next, jobId: visit.jobId, jobType: visit.job?.jobType });
     } catch {
       toast.error("Failed to update status");
     }
@@ -85,6 +112,29 @@ function StatusCycleButton({ visit }: { visit: CRMJobVisit }) {
     </button>
   );
 }
+
+// ── column visibility ─────────────────────────────────────────────────────────
+
+type ColKey = "service" | "date" | "address" | "city" | "zip" | "assigned" | "last_svc" | "start" | "end" | "b_hrs" | "actual" | "men" | "qty" | "rate" | "amt" | "icons";
+
+const COL_DEFS: { key: ColKey; label: string }[] = [
+  { key: "service",  label: "Service" },
+  { key: "date",     label: "Date" },
+  { key: "address",  label: "Address" },
+  { key: "city",     label: "City" },
+  { key: "zip",      label: "Zip" },
+  { key: "assigned", label: "Assigned" },
+  { key: "last_svc", label: "Last Svc" },
+  { key: "start",    label: "Start" },
+  { key: "end",      label: "End" },
+  { key: "b_hrs",    label: "B Hrs" },
+  { key: "actual",   label: "Actual Hrs" },
+  { key: "men",      label: "Men" },
+  { key: "qty",      label: "Qty" },
+  { key: "rate",     label: "Rate" },
+  { key: "amt",      label: "Amount" },
+  { key: "icons",    label: "Notes/Icons" },
+];
 
 // ── job detail sheet ──────────────────────────────────────────────────────────
 
@@ -114,10 +164,11 @@ function JobDetailSheet({
 }) {
   const { mutateAsync: updateVisit, isPending } = useUpdateVisit();
   const router = useRouter();
-  const { mutateAsync: createInvoice, isPending: invoicing } = useCreateInvoice();
+  const { mutateAsync: createInvoice, isPending: invoicing } = useCreateInvoiceFromJob();
 
   const job  = visit.job;
   const services = job?.services ?? [];
+  const { data: jobProducts = [] } = useCRMJobProducts(visit.jobId);
   const serviceName = services.length > 0
     ? services.map((s) => s.serviceName).join(", ")
     : "Service Visit";
@@ -132,13 +183,19 @@ function JobDetailSheet({
   const [menCount,    setMenCount]    = useState(String(visit.menCount));
   const [qty,         setQty]         = useState(String(visit.qty ?? ""));
   const [rateCents,   setRateCents]   = useState(
-    String(visit.rateCents != null ? visit.rateCents / 100 : "")
+    String(visit.rateCents != null ? visit.rateCents / 100
+         : job?.rateCents != null ? job.rateCents / 100
+         : "")
   );
+
+  // Sync crewId when the visit prop updates (e.g. after drag-assign or propagate)
+  useEffect(() => { setCrewId(visit.crewId ?? ""); }, [visit.id, visit.crewId]);
 
   // Notes state
   const [newComment,    setNewComment]    = useState("");
   const [notesToClient, setNotesToClient] = useState(visit.notesToClient ?? "");
-  const [invoiceDesc,   setInvoiceDesc]   = useState(visit.invoiceDescription ?? "");
+  // Fall back to job-level master invoice description when visit has none
+  const [invoiceDesc,   setInvoiceDesc]   = useState(visit.invoiceDescription ?? job?.invoiceDescription ?? "");
 
   const effectiveRate = visit.rateCents ?? job?.rateCents ?? null;
   const amt = visit.rateCents != null ? visit.rateCents
@@ -166,7 +223,7 @@ function JobDetailSheet({
       updates.dispatched_at = new Date().toISOString();
     }
     try {
-      await updateVisit({ id: visit.id, updates });
+      await updateVisit({ id: visit.id, updates, jobId: visit.jobId, jobType: visit.job?.jobType });
       toast.success("Saved");
       onOpenChange(false);
     } catch {
@@ -197,10 +254,23 @@ function JobDetailSheet({
 
   async function handleInvoice() {
     try {
+      const lineItems = services.map((s) => ({
+        description: s.serviceName,
+        qty: s.qty ?? 1,
+        rateCents: s.rateCents ?? 0,
+        totalCents: (s.qty ?? 1) * (s.rateCents ?? 0),
+      }));
+      const subtotalCents = lineItems.reduce((sum, li) => sum + li.totalCents, 0);
       const invoice = await createInvoice({
+        jobId: visit.jobId,
         clientId: visit.clientId,
-        description: serviceName,
-        invoiceDate: visit.scheduledDate,
+        description: visit.invoiceDescription ?? job?.invoiceDescription ?? serviceName,
+        invoiceDate: visit.scheduledDate ?? new Date().toISOString().slice(0, 10),
+        lineItems,
+        subtotalCents,
+        taxRateBps: 0,
+        taxCents: 0,
+        totalCents: subtotalCents,
       });
       toast.success("Invoice created");
       onOpenChange(false);
@@ -216,23 +286,29 @@ function JobDetailSheet({
         side="right"
         className="w-[680px] sm:max-w-[680px] p-0 flex flex-col gap-0"
       >
-        {/* Header */}
-        <SheetHeader className="shrink-0 bg-slate-800 text-white px-5 py-4">
+        {/* Header — light gray, CMMS-style */}
+        <SheetHeader className="shrink-0 border-b bg-slate-50 px-5 py-4 pr-14">
           <div className="flex items-start justify-between gap-3">
-            <div>
-              <SheetTitle className="text-base font-bold text-white leading-tight">
+            <div className="min-w-0">
+              <SheetTitle className="text-base font-bold text-slate-900 leading-tight truncate">
                 {serviceName}
               </SheetTitle>
               {visit.clientName && (
-                <p className="text-sm text-slate-300 mt-0.5">for {visit.clientName}</p>
+                <p className="text-sm text-slate-500 mt-0.5">{visit.clientName}</p>
+              )}
+              {job?.serviceAddress && (
+                <div className="flex items-center gap-1.5 text-xs text-slate-400 mt-1">
+                  <MapPin className="h-3 w-3 shrink-0" />
+                  {job.serviceAddress}{job.serviceCity ? `, ${job.serviceCity}` : ""}{job.serviceZip ? ` ${job.serviceZip}` : ""}
+                </div>
               )}
             </div>
             <div className="flex items-center gap-2 shrink-0">
               {job?.id && (
                 <Button
                   size="sm"
-                  variant="ghost"
-                  className="h-7 text-xs text-slate-300 hover:text-white hover:bg-slate-700 px-2"
+                  variant="outline"
+                  className="h-7 text-xs px-2"
                   onClick={() => { onOpenChange(false); router.push(`/crm/scheduling/jobs/${job.id}`); }}
                 >
                   View Job →
@@ -251,12 +327,6 @@ function JobDetailSheet({
               )}
             </div>
           </div>
-          {job?.serviceAddress && (
-            <div className="flex items-center gap-1.5 text-xs text-slate-400 mt-1">
-              <MapPin className="h-3 w-3" />
-              {job.serviceAddress}{job.serviceCity ? `, ${job.serviceCity}` : ""}
-            </div>
-          )}
         </SheetHeader>
 
         {/* Body */}
@@ -367,16 +437,16 @@ function JobDetailSheet({
 
             {/* Notes tabs */}
             <Tabs defaultValue="job-notes" className="flex flex-col flex-1">
-              <div className="border-b bg-slate-700">
+              <div className="border-b bg-white">
                 <TabsList className="h-9 rounded-none bg-transparent justify-start px-4 gap-0">
                   {(["job-notes","job-comments","client-notes","invoice-desc"] as const).map((v, i) => {
-                    const cnt = v === "job-notes" ? visit.jobComments.length + (visit.notesToCrew ? 1 : 0) : 0;
+                    const cnt = v === "job-notes" ? visit.jobComments.length + ((visit.notesToCrew ?? visit.job?.notesToCrew) ? 1 : 0) : 0;
                     const labels = ["Job Notes","Job Comments","Notes to Client","Invoice Desc."];
                     return (
                       <TabsTrigger
                         key={v}
                         value={v}
-                        className="h-full rounded-none border-b-2 border-transparent px-4 py-0 text-xs font-medium text-slate-300 data-[state=active]:border-white data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:text-white"
+                        className="h-full rounded-none border-b-2 border-transparent px-4 py-0 text-xs font-medium text-slate-500 data-[state=active]:border-brand-500 data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:text-slate-900"
                       >
                         {labels[i]}{cnt > 0 ? ` (${cnt})` : ""}
                       </TabsTrigger>
@@ -387,9 +457,9 @@ function JobDetailSheet({
 
               {/* Job Notes */}
               <TabsContent value="job-notes" className="m-0 flex-1 p-4">
-                {visit.notesToCrew && (
+                {(visit.notesToCrew ?? visit.job?.notesToCrew) && (
                   <div className="mb-3 rounded border border-yellow-200 bg-yellow-50 px-3 py-2.5">
-                    <p className="text-xs text-slate-700 whitespace-pre-wrap">{visit.notesToCrew}</p>
+                    <p className="text-xs text-slate-700 whitespace-pre-wrap">{visit.notesToCrew ?? visit.job?.notesToCrew}</p>
                   </div>
                 )}
                 {visit.jobComments.length > 0 && (
@@ -402,7 +472,7 @@ function JobDetailSheet({
                     ))}
                   </div>
                 )}
-                {!visit.notesToCrew && visit.jobComments.length === 0 && (
+                {!(visit.notesToCrew ?? visit.job?.notesToCrew) && visit.jobComments.length === 0 && (
                   <p className="text-xs text-slate-400 italic">No job notes yet</p>
                 )}
               </TabsContent>
@@ -443,6 +513,11 @@ function JobDetailSheet({
 
               {/* Invoice Desc */}
               <TabsContent value="invoice-desc" className="m-0 p-4 space-y-3">
+                {!visit.invoiceDescription && job?.invoiceDescription && (
+                  <p className="text-[10px] text-slate-400 italic">
+                    Showing job-level description. Edit below to override for this visit only.
+                  </p>
+                )}
                 <Textarea
                   value={invoiceDesc}
                   onChange={(e) => setInvoiceDesc(e.target.value)}
@@ -453,11 +528,11 @@ function JobDetailSheet({
               </TabsContent>
             </Tabs>
 
-            {/* Products section */}
+            {/* Services section */}
             {services.length > 0 && (
               <div className="border-t">
-                <div className="bg-slate-700 px-4 py-2">
-                  <p className="text-xs font-semibold text-white">Products ({services.length})</p>
+                <div className="bg-slate-50 border-b px-4 py-2">
+                  <p className="text-xs font-semibold text-slate-600">Services ({services.length})</p>
                 </div>
                 <table className="w-full text-xs">
                   <thead>
@@ -479,6 +554,34 @@ function JobDetailSheet({
                         <td className="px-2 py-2 text-right font-medium text-slate-700">
                           {s.rateCents != null ? formatCurrency(s.rateCents * s.qty) : "—"}
                         </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            {/* Products (materials) section */}
+            {jobProducts.length > 0 && (
+              <div className="border-t">
+                <div className="bg-slate-50 border-b px-4 py-2">
+                  <p className="text-xs font-semibold text-slate-600">Products ({jobProducts.length})</p>
+                </div>
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b bg-slate-50 text-left text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                      <th className="px-4 py-2">Product</th>
+                      <th className="px-2 py-2 text-right">Qty</th>
+                      <th className="px-2 py-2 text-right">Unit Price</th>
+                      <th className="px-2 py-2 text-right">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {jobProducts.map((p) => (
+                      <tr key={p.id} className="border-b">
+                        <td className="px-4 py-2 text-slate-700">{p.productName}</td>
+                        <td className="px-2 py-2 text-right text-slate-500">{p.qty}</td>
+                        <td className="px-2 py-2 text-right text-slate-500">{formatCurrency(p.unitPriceCents)}</td>
+                        <td className="px-2 py-2 text-right font-medium text-slate-700">{formatCurrency(p.unitPriceCents * p.qty)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -589,9 +692,108 @@ function JobDetailSheet({
   );
 }
 
-// ── team assignment dialog ────────────────────────────────────────────────────
+// ── print dialog ──────────────────────────────────────────────────────────────
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+
+function PrintDialog({
+  open, onOpenChange, visits, crews, selectedDate,
+}: {
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+  visits: CRMJobVisit[];
+  crews: { id: string; name: string }[];
+  selectedDate: string;
+}) {
+  const byCrew = (crews).map((c) => ({
+    crew: c,
+    visits: visits.filter((v) => v.crewId === c.id),
+  })).filter((x) => x.visits.length > 0);
+  const unassigned = visits.filter((v) => !v.crewId);
+
+  function printRouteTable(cv: CRMJobVisit[]) {
+    return (
+      <table className="w-full text-xs border-collapse mt-2">
+        <thead>
+          <tr className="bg-slate-100">
+            <th className="border border-slate-300 px-2 py-1 text-left">#</th>
+            <th className="border border-slate-300 px-2 py-1 text-left">Client</th>
+            <th className="border border-slate-300 px-2 py-1 text-left">Address</th>
+            <th className="border border-slate-300 px-2 py-1 text-left">Service</th>
+            <th className="border border-slate-300 px-2 py-1 text-left">Time</th>
+            <th className="border border-slate-300 px-2 py-1 text-center">B Hrs</th>
+            <th className="border border-slate-300 px-2 py-1 text-left">Notes to Crew</th>
+          </tr>
+        </thead>
+        <tbody>
+          {cv.map((v, i) => {
+            const job = v.job;
+            const svc = (job?.services ?? []).map((s) => s.serviceName).join(", ");
+            const addr = [job?.serviceAddress, job?.serviceCity].filter(Boolean).join(", ");
+            return (
+              <tr key={v.id} className="border-b border-slate-200">
+                <td className="border border-slate-200 px-2 py-1 font-mono text-center">{i + 1}</td>
+                <td className="border border-slate-200 px-2 py-1 font-medium">{v.clientName ?? "—"}</td>
+                <td className="border border-slate-200 px-2 py-1">{addr || "—"}</td>
+                <td className="border border-slate-200 px-2 py-1">{svc || "—"}</td>
+                <td className="border border-slate-200 px-2 py-1">{v.startTime ?? "—"}</td>
+                <td className="border border-slate-200 px-2 py-1 text-center">{job?.budgetedHours?.toFixed(1) ?? "—"}</td>
+                <td className="border border-slate-200 px-2 py-1 italic text-slate-600">{(v as any).notesToCrew ?? ""}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    );
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-3xl p-0 gap-0 max-h-[90vh] flex flex-col">
+        <DialogHeader className="shrink-0 bg-[#4a4a4a] text-white px-5 py-3">
+          <DialogTitle className="text-sm font-semibold">
+            Print Route Sheets — {selectedDate}
+          </DialogTitle>
+        </DialogHeader>
+        <div className="flex-1 overflow-y-auto p-5 space-y-8">
+          {byCrew.length === 0 && unassigned.length === 0 && (
+            <p className="text-sm text-slate-400 text-center py-8">No visits to print for this date.</p>
+          )}
+          {byCrew.map(({ crew, visits: cv }) => (
+            <div key={crew.id}>
+              <div className="border-b-2 border-slate-800 pb-1 mb-2 flex items-baseline justify-between">
+                <h2 className="text-sm font-bold">{crew.name}</h2>
+                <span className="text-xs text-slate-500">{cv.length} stop{cv.length !== 1 ? "s" : ""} · {selectedDate}</span>
+              </div>
+              {printRouteTable(cv)}
+            </div>
+          ))}
+          {unassigned.length > 0 && (
+            <div>
+              <div className="border-b-2 border-amber-600 pb-1 mb-2 flex items-baseline justify-between">
+                <h2 className="text-sm font-bold text-amber-700">Unassigned</h2>
+                <span className="text-xs text-amber-600">{unassigned.length} stop{unassigned.length !== 1 ? "s" : ""} · {selectedDate}</span>
+              </div>
+              {printRouteTable(unassigned)}
+            </div>
+          )}
+        </div>
+        <div className="shrink-0 border-t bg-white px-5 py-3 flex items-center justify-between">
+          <p className="text-[11px] text-slate-400">Uses your browser&apos;s print dialog</p>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => onOpenChange(false)}>Close</Button>
+            <Button size="sm" className="h-8 text-xs bg-brand-500 hover:bg-brand-600 text-white" onClick={() => window.print()}>
+              <Printer className="mr-1.5 h-3.5 w-3.5" />
+              Print
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ── team assignment dialog ────────────────────────────────────────────────────
 
 function TeamAssignDialog({
   open,
@@ -607,17 +809,24 @@ function TeamAssignDialog({
   selectedDate: string;
 }) {
   const { mutateAsync: updateVisit } = useUpdateVisit();
+  const { mutateAsync: updateCrewMember } = useUpdateCrewMember();
+  const { data: crewsWithMembers } = useCrews(false);
   const [pending, setPending] = useState(false);
+  const [dragVisitId, setDragVisitId] = useState<string | null>(null);
+  const [dragMemberId, setDragMemberId] = useState<string | null>(null);
 
+  // Use crews-with-members data so member names show up; fall back to the prop
+  const richCrews = crewsWithMembers ?? [];
   const unassigned = visits.filter((v) => !v.crewId);
-  const byCrew = crews.map((c) => ({
+  const byCrew = (richCrews.length > 0 ? richCrews : crews).map((c) => ({
     crew: c,
     visits: visits.filter((v) => v.crewId === c.id),
+    members: (c as import("@/types/crm-employees").CRMCrew).members ?? [],
   }));
 
-  async function reassign(visitId: string, crewId: string | null) {
+  async function reassign(visitId: string, crewId: string | null, jobId?: string) {
     try {
-      await updateVisit({ id: visitId, updates: { crew_id: crewId } });
+      await updateVisit({ id: visitId, updates: { crew_id: crewId }, jobId });
     } catch {
       toast.error("Failed to reassign");
     }
@@ -647,7 +856,7 @@ function TeamAssignDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-3xl p-0 gap-0 max-h-[90vh] flex flex-col">
-        <DialogHeader className="shrink-0 bg-slate-800 text-white px-5 py-3">
+        <DialogHeader className="shrink-0 bg-[#4a4a4a] text-white px-5 py-3">
           <DialogTitle className="text-sm font-semibold">
             Team Assignment —{" "}
             <span className="text-red-300">{selectedDate}</span>
@@ -655,8 +864,12 @@ function TeamAssignDialog({
         </DialogHeader>
 
         <div className="flex flex-1 overflow-hidden">
-          {/* Unassigned pool */}
-          <div className="w-52 shrink-0 border-r bg-green-50 p-4">
+          {/* Unassigned pool — drop target to un-assign */}
+          <div
+            className="w-52 shrink-0 border-r bg-green-50 p-4"
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={() => { if (dragVisitId) { const jId = visits.find(v => v.id === dragVisitId)?.jobId; void reassign(dragVisitId, null, jId); setDragVisitId(null); } }}
+          >
             <p className="text-[10px] font-semibold uppercase text-green-700 tracking-wide mb-3">
               Unassigned ({unassigned.length})
             </p>
@@ -667,14 +880,20 @@ function TeamAssignDialog({
                 unassigned.map((v) => {
                   const svcName = v.job?.services?.[0]?.serviceName ?? "Visit";
                   return (
-                    <div key={v.id} className="rounded bg-white border border-green-200 px-2 py-1.5">
+                    <div
+                      key={v.id}
+                      draggable
+                      onDragStart={() => setDragVisitId(v.id)}
+                      onDragEnd={() => setDragVisitId(null)}
+                      className="rounded bg-white border border-green-200 px-2 py-1.5 cursor-grab active:cursor-grabbing"
+                    >
                       <p className="text-xs font-medium text-slate-700 truncate">{v.clientName ?? "—"}</p>
                       <p className="text-[10px] text-slate-400 truncate">{svcName}</p>
                       <div className="mt-1 flex flex-wrap gap-1">
                         {crews.map((c) => (
                           <button
                             key={c.id}
-                            onClick={() => reassign(v.id, c.id)}
+                            onClick={() => reassign(v.id, c.id, v.jobId)}
                             className="text-[9px] bg-slate-100 hover:bg-brand-100 hover:text-brand-700 text-slate-500 rounded px-1.5 py-0.5 transition-colors"
                           >
                             → {c.name}
@@ -691,21 +910,56 @@ function TeamAssignDialog({
           {/* Crew columns */}
           <div className="flex-1 overflow-x-auto">
             <div className="flex h-full min-w-max">
-              {byCrew.map(({ crew, visits: crewVisits }) => (
-                <div key={crew.id} className="w-48 shrink-0 border-r p-4">
-                  <p className="text-[10px] font-semibold uppercase text-slate-600 tracking-wide mb-3 truncate">
+              {byCrew.map(({ crew, visits: crewVisits, members }) => (
+                <div
+                  key={crew.id}
+                  className="w-52 shrink-0 border-r p-4"
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={() => {
+                    if (dragVisitId) { const jId = visits.find(v => v.id === dragVisitId)?.jobId; void reassign(dragVisitId, crew.id, jId); setDragVisitId(null); }
+                    if (dragMemberId) {
+                      void updateCrewMember({ id: dragMemberId, updates: { crew_id: crew.id } }).catch(() => toast.error("Failed to move member"));
+                      setDragMemberId(null);
+                    }
+                  }}
+                >
+                  <p className="text-[10px] font-semibold uppercase text-slate-600 tracking-wide truncate mb-1">
                     {crew.name} ({crewVisits.length})
                   </p>
-                  <div className="space-y-1.5">
+                  {/* Draggable member chips */}
+                  <div className="flex flex-wrap gap-1 mb-2 min-h-[20px]">
+                    {members.map((m) => (
+                      <div
+                        key={m.id}
+                        draggable
+                        onDragStart={() => setDragMemberId(m.id)}
+                        onDragEnd={() => setDragMemberId(null)}
+                        className="flex items-center gap-1 rounded-full bg-brand-100 border border-brand-200 px-2 py-0.5 text-[10px] text-brand-700 font-medium cursor-grab active:cursor-grabbing select-none"
+                        title="Drag to move to another crew"
+                      >
+                        {m.employeeName ?? m.employeeId}
+                      </div>
+                    ))}
+                    {members.length === 0 && (
+                      <p className="text-[10px] text-slate-300 italic">No members — drag here</p>
+                    )}
+                  </div>
+                  <div className="space-y-1.5 min-h-[40px]">
                     {crewVisits.map((v) => {
                       const svcName = v.job?.services?.[0]?.serviceName ?? "Visit";
                       return (
-                        <div key={v.id} className="rounded bg-slate-50 border px-2 py-1.5 group relative">
+                        <div
+                          key={v.id}
+                          draggable
+                          onDragStart={() => setDragVisitId(v.id)}
+                          onDragEnd={() => setDragVisitId(null)}
+                          className="rounded bg-slate-50 border px-2 py-1.5 group relative cursor-grab active:cursor-grabbing"
+                        >
                           <p className="text-xs font-medium text-slate-700 truncate">{v.clientName ?? "—"}</p>
                           <p className="text-[10px] text-slate-400 truncate">{svcName}</p>
                           <StatusIcon status={v.status} />
                           <button
-                            onClick={() => reassign(v.id, null)}
+                            onClick={() => reassign(v.id, null, v.jobId)}
                             className="absolute top-1 right-1 hidden group-hover:flex text-[9px] text-slate-400 hover:text-red-500"
                           >
                             ✕
@@ -756,12 +1010,28 @@ function VisitRow({
   selectedDate,
   onOpen,
   driveMinsToNext,
+  selected,
+  onToggleSelect,
+  onDragStart,
+  onDragOver,
+  onDragEnd,
+  isDragOver,
+  isVisible,
+  onReorder,
 }: {
   visit: CRMJobVisit;
   index: number;
   selectedDate: string;
   onOpen: (v: CRMJobVisit) => void;
   driveMinsToNext?: number;
+  selected: boolean;
+  onToggleSelect: (id: string) => void;
+  onDragStart: (id: string) => void;
+  onDragOver: (id: string) => void;
+  onDragEnd: () => void;
+  isDragOver: boolean;
+  isVisible: (col: ColKey) => boolean;
+  onReorder?: (id: string, newIndex: number) => void;
 }) {
   const job      = visit.job;
   const services = job?.services ?? [];
@@ -777,14 +1047,54 @@ function VisitRow({
     ? "bg-green-100 text-green-700 border-green-200"
     : "bg-slate-100 text-slate-500 border-slate-200";
 
+  // suppress unused warning — selectedDate is available for future use
+  void selectedDate;
+
   return (
     <tr
-      className="group border-b border-slate-100 text-xs hover:bg-blue-50 cursor-pointer"
+      className={cn(
+        "group border-b border-slate-100 text-xs cursor-pointer transition-colors",
+        isDragOver ? "bg-brand-50 border-brand-300" : selected ? "bg-blue-50 hover:bg-blue-100" : "hover:bg-slate-50"
+      )}
       onClick={() => onOpen(visit)}
+      draggable
+      onDragStart={() => onDragStart(visit.id)}
+      onDragOver={(e) => { e.preventDefault(); onDragOver(visit.id); }}
+      onDragEnd={onDragEnd}
     >
-      {/* Order */}
-      <td className="w-8 px-2 py-2 text-center font-mono">
-        <span className="text-slate-400">{visit.orderNum ?? index + 1}</span>
+      {/* Checkbox */}
+      <td className="w-8 px-2 py-2 text-center" onClick={(e) => e.stopPropagation()}>
+        <Checkbox checked={selected} onCheckedChange={() => onToggleSelect(visit.id)} className="h-3.5 w-3.5" />
+      </td>
+
+      {/* Drag handle + Order */}
+      <td className="w-10 px-1 py-2 text-center font-mono">
+        <div className="flex items-center justify-center gap-0.5">
+          <GripVertical className="h-3 w-3 text-slate-300 cursor-grab active:cursor-grabbing shrink-0" />
+          {onReorder ? (
+            <input
+              type="number"
+              defaultValue={index + 1}
+              key={index}
+              min={1}
+              className="w-7 text-center text-[10px] text-slate-600 bg-transparent border border-slate-200 rounded focus:outline-none focus:border-brand-400"
+              onClick={(e) => e.stopPropagation()}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  const val = parseInt((e.target as HTMLInputElement).value, 10);
+                  if (!isNaN(val)) onReorder(visit.id, val - 1);
+                  (e.target as HTMLInputElement).blur();
+                }
+              }}
+              onBlur={(e) => {
+                const val = parseInt(e.target.value, 10);
+                if (!isNaN(val)) onReorder(visit.id, val - 1);
+              }}
+            />
+          ) : (
+            <span className="text-slate-400 text-[10px]">{index + 1}</span>
+          )}
+        </div>
         {driveMinsToNext !== undefined && (
           <div className="text-[9px] text-blue-500 font-normal leading-tight whitespace-nowrap">
             ↓{driveMinsToNext}m
@@ -797,92 +1107,166 @@ function VisitRow({
         <StatusCycleButton visit={visit} />
       </td>
 
-      {/* Client + address */}
-      <td className="min-w-[160px] px-2 py-2">
-        <p className="font-semibold text-brand-600 truncate max-w-[160px]">{visit.clientName ?? "—"}</p>
-        {job?.serviceAddress && (
-          <p className="text-slate-400 truncate max-w-[160px] text-[10px]">{job.serviceAddress}</p>
-        )}
+      {/* Client */}
+      <td className="min-w-[140px] px-2 py-2">
+        <p className="font-semibold text-brand-600 truncate max-w-[140px]">{visit.clientName ?? "—"}</p>
       </td>
 
       {/* Service */}
-      <td className="min-w-[110px] px-2 py-2">
-        <span className={cn(
-          "inline-block rounded px-1.5 py-0.5 text-[10px] font-semibold border truncate max-w-[110px]",
-          serviceColor
-        )}>
-          {serviceName}
-        </span>
-      </td>
+      {isVisible("service") && (
+        <td className="min-w-[110px] px-2 py-2">
+          <span className={cn(
+            "inline-block rounded px-1.5 py-0.5 text-[10px] font-semibold border truncate max-w-[110px]",
+            serviceColor
+          )}>
+            {serviceName}
+          </span>
+        </td>
+      )}
 
       {/* Date */}
-      <td className="px-2 py-2 text-slate-500 whitespace-nowrap">{visit.scheduledDate}</td>
+      {isVisible("date") && (
+        <td className="px-2 py-2 text-slate-500 whitespace-nowrap">{visit.scheduledDate}</td>
+      )}
+
+      {/* Address */}
+      {isVisible("address") && (
+        <td className="min-w-[140px] px-2 py-2 text-slate-500 text-[10px]">
+          <p className="truncate max-w-[140px]">{job?.serviceAddress ?? "—"}</p>
+        </td>
+      )}
 
       {/* City */}
-      <td className="px-2 py-2 text-slate-500">{job?.serviceCity ?? "—"}</td>
+      {isVisible("city") && (
+        <td className="px-2 py-2 text-slate-500">{job?.serviceCity ?? "—"}</td>
+      )}
 
       {/* Zip */}
-      <td className="px-2 py-2 text-slate-400">{job?.serviceZip ?? "—"}</td>
+      {isVisible("zip") && (
+        <td className="px-2 py-2 text-slate-400">{job?.serviceZip ?? "—"}</td>
+      )}
 
       {/* Assigned */}
-      <td className="min-w-[90px] px-2 py-2 text-slate-600 font-medium">
-        {visit.crewName ?? <span className="text-slate-300 italic">—</span>}
-      </td>
+      {isVisible("assigned") && (
+        <td className="min-w-[90px] px-2 py-2 text-slate-600 font-medium">
+          {visit.crewName ?? <span className="text-slate-300 italic">—</span>}
+        </td>
+      )}
 
       {/* Last Svc */}
-      <td className="px-2 py-2 text-slate-400 whitespace-nowrap">{lastSvc}</td>
+      {isVisible("last_svc") && (
+        <td className="px-2 py-2 text-slate-400 whitespace-nowrap">{lastSvc}</td>
+      )}
 
       {/* Start */}
-      <td className="px-2 py-2 text-slate-400 whitespace-nowrap">{visit.startTime ?? "—"}</td>
+      {isVisible("start") && (
+        <td className="px-2 py-2 text-slate-400 whitespace-nowrap">{visit.startTime ?? "—"}</td>
+      )}
 
       {/* End */}
-      <td className="px-2 py-2 text-slate-400 whitespace-nowrap">{visit.endTime ?? "—"}</td>
+      {isVisible("end") && (
+        <td className="px-2 py-2 text-slate-400 whitespace-nowrap">{visit.endTime ?? "—"}</td>
+      )}
 
       {/* B Hrs */}
-      <td className="px-2 py-2 text-right text-slate-500">
-        {budgetedHours != null ? budgetedHours.toFixed(2) : "—"}
-      </td>
+      {isVisible("b_hrs") && (
+        <td className="px-2 py-2 text-right text-slate-500">
+          {budgetedHours != null ? budgetedHours.toFixed(2) : "—"}
+        </td>
+      )}
 
       {/* Actual */}
-      <td className="px-2 py-2 text-right text-slate-500">
-        {visit.actualHours != null ? visit.actualHours.toFixed(2) : "—"}
-      </td>
+      {isVisible("actual") && (
+        <td className="px-2 py-2 text-right text-slate-500">
+          <div className="flex flex-col items-end gap-0.5">
+            {visit.actualHours != null ? visit.actualHours.toFixed(2) : "—"}
+            {visit.clockedInAt && (
+              <span className="text-[10px] text-slate-400" title={`Clocked in: ${visit.clockedInAt}`}>
+                ⏱ {new Date(visit.clockedInAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                {visit.clockedOutAt && (
+                  <> – {new Date(visit.clockedOutAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</>
+                )}
+              </span>
+            )}
+          </div>
+        </td>
+      )}
 
       {/* Men */}
-      <td className="px-2 py-2 text-center text-slate-400">{visit.menCount}</td>
+      {isVisible("men") && (
+        <td className="px-2 py-2 text-center text-slate-400">{visit.menCount}</td>
+      )}
 
       {/* Qty */}
-      <td className="px-2 py-2 text-right text-slate-400">
-        {visit.qty != null ? visit.qty.toFixed(1) : "—"}
-      </td>
+      {isVisible("qty") && (
+        <td className="px-2 py-2 text-right text-slate-400">
+          {visit.qty != null ? visit.qty.toFixed(1) : "—"}
+        </td>
+      )}
 
       {/* Rate */}
-      <td className="px-2 py-2 text-right text-slate-500">
-        {effectiveRate != null ? formatCurrency(effectiveRate) : "—"}
-      </td>
+      {isVisible("rate") && (
+        <td className="px-2 py-2 text-right text-slate-500">
+          {effectiveRate != null ? formatCurrency(effectiveRate) : "—"}
+        </td>
+      )}
 
       {/* Amt */}
-      <td className="px-2 py-2 text-right font-medium text-slate-700">
-        {effectiveRate != null ? formatCurrency(effectiveRate) : "—"}
-      </td>
+      {isVisible("amt") && (
+        <td className="px-2 py-2 text-right font-medium text-slate-700">
+          {effectiveRate != null ? formatCurrency(effectiveRate) : "—"}
+        </td>
+      )}
+
+      {/* Icons */}
+      {isVisible("icons") && (
+        <td className="px-2 py-2">
+          <div className="flex items-center gap-1.5">
+            {(visit.notesToCrew || visit.job?.notesToCrew || visit.job?.notes) && (
+              <span title="Has notes"><StickyNote className="h-3 w-3 text-amber-400" /></span>
+            )}
+            {(visit.job?.productTotalCents ?? 0) > 0 && (
+              <span title="Has products"><Package className="h-3 w-3 text-purple-500" /></span>
+            )}
+            {visit.job?.callAhead && visit.job?.clientPhone && (
+              <a
+                href={`tel:${visit.job.clientPhone}`}
+                onClick={(e) => e.stopPropagation()}
+                title={`Call ahead: ${visit.job.clientPhone}`}
+                className="text-slate-300 hover:text-green-600 transition-colors"
+              >
+                <Phone className="h-3 w-3" />
+              </a>
+            )}
+          </div>
+        </td>
+      )}
     </tr>
   );
 }
 
 // ── totals row ─────────────────────────────────────────────────────────────────
 
-function TotalsRow({ visits }: { visits: CRMJobVisit[] }) {
+function TotalsRow({ visits, isVisible }: { visits: CRMJobVisit[]; isVisible: (col: ColKey) => boolean }) {
   const totalBHrs = visits.reduce((s, v) => s + (v.job?.budgetedHours ?? 0), 0);
-  const totalAct  = visits.reduce((s, v) => s + (v.actualHours ?? 0), 0);
-  const totalAmt  = visits.reduce((s, v) => s + (v.rateCents ?? v.job?.rateCents ?? 0), 0);
+  const totalAct  = visits.reduce((s, v) => s + ((v as any).actualHours ?? 0), 0);
+  const totalAmt  = visits.reduce((s, v) => s + ((v as any).rateCents ?? v.job?.rateCents ?? 0), 0);
+
+  // Fixed always-visible cols: checkbox(1), #(1), St(1), Client(1) = 4
+  // Toggleable cols that appear before B Hrs:
+  const preHrsKeys: ColKey[] = ["service", "date", "address", "city", "zip", "assigned", "last_svc", "start", "end"];
+  const labelSpan = 4 + preHrsKeys.filter((k) => isVisible(k)).length;
 
   return (
-    <tr className="bg-slate-700 text-[10px] font-semibold text-white">
-      <td colSpan={11} className="px-2 py-1.5 text-right text-slate-300">Totals</td>
-      <td className="px-2 py-1.5 text-right">{totalBHrs > 0 ? totalBHrs.toFixed(2) : "—"}</td>
-      <td className="px-2 py-1.5 text-right">{totalAct > 0 ? totalAct.toFixed(2) : "—"}</td>
-      <td colSpan={3} className="px-2 py-1.5" />
-      <td className="px-2 py-1.5 text-right">{totalAmt > 0 ? formatCurrency(totalAmt) : "—"}</td>
+    <tr className="bg-slate-100 text-[10px] font-semibold text-slate-700">
+      <td colSpan={labelSpan} className="px-2 py-1.5 text-right text-slate-500">Totals</td>
+      {isVisible("b_hrs")   && <td className="px-2 py-1.5 text-right">{totalBHrs > 0 ? totalBHrs.toFixed(2) : "—"}</td>}
+      {isVisible("actual")  && <td className="px-2 py-1.5 text-right">{totalAct  > 0 ? totalAct.toFixed(2)  : "—"}</td>}
+      {isVisible("men")     && <td />}
+      {isVisible("qty")     && <td />}
+      {isVisible("rate")    && <td />}
+      {isVisible("amt")     && <td className="px-2 py-1.5 text-right">{totalAmt > 0 ? formatCurrency(totalAmt) : "—"}</td>}
+      {isVisible("icons")   && <td />}
     </tr>
   );
 }
@@ -921,20 +1305,37 @@ function formatDisplayDate(dateStr: string): string {
 
 export function DispatchBoard() {
   const [selectedDate,    setSelectedDate]    = useState(() => toLocalDateString(new Date()));
-  const [crewFilter,      setCrewFilter]      = useState<string>("all");
+  const [endDate,         setEndDate]         = useState("");
+  const [crewFilters,     setCrewFilters]     = useState<string[]>([]);
   const [statusFilter,    setStatusFilter]    = useState<FilterTab>("all");
   const [search,          setSearch]          = useState("");
   const [detailVisit,     setDetailVisit]     = useState<CRMJobVisit | null>(null);
   const [teamAssignOpen,  setTeamAssignOpen]  = useState(false);
+  const [selectedIds,     setSelectedIds]     = useState<Set<string>>(new Set());
+  const [colFilterKey,    setColFilterKey]    = useState<string | null>(null);
+  const [colFilterValue,  setColFilterValue]  = useState("");
+  const [dragId,          setDragId]          = useState<string | null>(null);
+  const [dragOverId,      setDragOverId]      = useState<string | null>(null);
+  const [manualOrder,     setManualOrder]     = useState<string[] | null>(null);
+  const [visibleKeys,     setVisibleKeys]     = useState<string[]>(COL_DEFS.map((d) => d.key));
+  const [statsOpen,       setStatsOpen]       = useState(false);
+  const [printOpen,       setPrintOpen]       = useState(false);
+
+  // Move-to-day dialog state
+  const [moveDayDate, setMoveDayDate] = useState("");
+  const [moveDayOpen, setMoveDayOpen] = useState(false);
 
   // Route optimization state
   const [optimizing,         setOptimizing]         = useState(false);
-  const [optimizedOrder,     setOptimizedOrder]     = useState<string[] | null>(null); // ordered visit IDs
-  const [driveTimeMap,       setDriveTimeMap]       = useState<Map<string, number>>(new Map()); // visitId → minsToNext
+  const [optimizedOrder,     setOptimizedOrder]     = useState<string[] | null>(null);
+  const [driveTimeMap,       setDriveTimeMap]       = useState<Map<string, number>>(new Map());
   const [totalDriveMins,     setTotalDriveMins]     = useState<number | null>(null);
 
-  const { data: visits, isLoading } = useVisitsForDate(selectedDate);
+  const effectiveEnd = endDate || undefined;
+  const { data: visits, isLoading, refetch } = useVisitsForDate(selectedDate, effectiveEnd);
   const { data: crews }             = useCRMCrews();
+  const { data: allServices }       = useCRMServices();
+  const qc = useQueryClient();
 
   const allVisits = visits ?? [];
 
@@ -980,8 +1381,10 @@ export function DispatchBoard() {
     setTotalDriveMins(null);
   }
 
+  function isVisible(col: ColKey) { return visibleKeys.includes(col); }
+
   const filtered = allVisits.filter((v) => {
-    if (crewFilter !== "all" && v.crewId !== crewFilter) return false;
+    if (crewFilters.length > 0 && !crewFilters.includes(v.crewId ?? "")) return false;
     if (statusFilter !== "all" && v.status !== statusFilter) return false;
     if (search) {
       const q   = search.toLowerCase();
@@ -990,14 +1393,26 @@ export function DispatchBoard() {
       const svc = (v.job?.services ?? []).map((s) => s.serviceName).join(" ").toLowerCase();
       if (!cli.includes(q) && !cty.includes(q) && !svc.includes(q)) return false;
     }
+    if (colFilterKey && colFilterValue) {
+      const q = colFilterValue.toLowerCase();
+      switch (colFilterKey) {
+        case "client":  if (!(v.clientName ?? "").toLowerCase().includes(q)) return false; break;
+        case "service": if (!(v.job?.services ?? []).map((s) => s.serviceName).join(" ").toLowerCase().includes(q)) return false; break;
+        case "date":    if (!(v.scheduledDate ?? "").includes(q)) return false; break;
+        case "city":    if (!(v.job?.serviceCity ?? "").toLowerCase().includes(q)) return false; break;
+        case "zip":     if (!(v.job?.serviceZip ?? "").includes(q)) return false; break;
+        case "crew":    if (!(v.crewName ?? "").toLowerCase().includes(q)) return false; break;
+      }
+    }
     return true;
   });
 
-  // If an optimized order exists, re-sort filtered by that order
-  const displayVisits = optimizedOrder
+  // Sort priority: optimizedOrder > manualOrder > default
+  const activeOrder = optimizedOrder ?? manualOrder;
+  const displayVisits = activeOrder
     ? [...filtered].sort((a, b) => {
-        const ai = optimizedOrder.indexOf(a.id);
-        const bi = optimizedOrder.indexOf(b.id);
+        const ai = activeOrder.indexOf(a.id);
+        const bi = activeOrder.indexOf(b.id);
         if (ai === -1 && bi === -1) return 0;
         if (ai === -1) return 1;
         if (bi === -1) return -1;
@@ -1005,8 +1420,143 @@ export function DispatchBoard() {
       })
     : filtered;
 
+  function toggleSelect(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleSelectAll() {
+    if (selectedIds.size === displayVisits.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(displayVisits.map((v) => v.id)));
+    }
+  }
+
+  function handleReorder(id: string, newIndex: number) {
+    const cur = manualOrder ?? displayVisits.map((v) => v.id);
+    const from = cur.indexOf(id);
+    if (from === -1) return;
+    const clamped = Math.max(0, Math.min(newIndex, cur.length - 1));
+    const next = [...cur];
+    next.splice(from, 1);
+    next.splice(clamped, 0, id);
+    setManualOrder(next);
+    if (optimizedOrder) { setOptimizedOrder(null); setDriveTimeMap(new Map()); setTotalDriveMins(null); }
+  }
+
+  async function handleSaveOrder() {
+    const order = manualOrder ?? displayVisits.map((v) => v.id);
+    const { createClient } = await import("@/lib/supabase/client");
+    const supabase = createClient();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await Promise.all(order.map((id, i) => (supabase as any).from("crm_job_visits").update({ priority: i + 1 }).eq("id", id)));
+    setManualOrder(null);
+    toast.success("Route order saved");
+  }
+
+  function handleDragStart(id: string) {
+    setDragId(id);
+    // Initialize manual order from current display order if not set
+    if (!manualOrder) setManualOrder(displayVisits.map((v) => v.id));
+  }
+
+  function handleDragOver(overId: string) {
+    if (!dragId || dragId === overId) return;
+    setDragOverId(overId);
+    setManualOrder((prev) => {
+      const order = prev ?? displayVisits.map((v) => v.id);
+      const from = order.indexOf(dragId);
+      const to   = order.indexOf(overId);
+      if (from === -1 || to === -1) return order;
+      const next = [...order];
+      next.splice(from, 1);
+      next.splice(to, 0, dragId);
+      return next;
+    });
+    // Clear optimized order when manually reordering
+    if (optimizedOrder) { setOptimizedOrder(null); setDriveTimeMap(new Map()); setTotalDriveMins(null); }
+  }
+
+  function handleDragEnd() {
+    setDragId(null);
+    setDragOverId(null);
+  }
+
+  function handleReverseRoute() {
+    const cur = manualOrder ?? displayVisits.map((v) => v.id);
+    setManualOrder([...cur].reverse());
+    if (optimizedOrder) clearOptimization();
+    toast.success("Route order reversed");
+  }
+
+  function handleGroupStops() {
+    const sorted = [...displayVisits].sort((a, b) => {
+      const za = (a.job?.serviceZip ?? "").slice(0, 3);
+      const zb = (b.job?.serviceZip ?? "").slice(0, 3);
+      return za.localeCompare(zb);
+    });
+    setManualOrder(sorted.map((v) => v.id));
+    if (optimizedOrder) clearOptimization();
+    toast.success("Stops grouped by zip code area");
+  }
+
+  function handleExportCSV() {
+    const headers = ["#","Client","Service","Date","Address","City","Zip","Crew","Start","End","B Hrs","Actual","Men","Rate","Amount"];
+    const rows = displayVisits.map((v, i) => {
+      const job = v.job;
+      const svc = (job?.services ?? []).map((s) => s.serviceName).join("; ");
+      const rateCents = (v as any).rateCents ?? job?.rateCents ?? 0;
+      return [
+        i + 1,
+        v.clientName ?? "",
+        svc,
+        v.scheduledDate ?? "",
+        job?.serviceAddress ?? "",
+        job?.serviceCity ?? "",
+        job?.serviceZip ?? "",
+        v.crewName ?? "",
+        v.startTime ?? "",
+        v.endTime ?? "",
+        job?.budgetedHours?.toFixed(2) ?? "",
+        (v as any).actualHours?.toFixed(2) ?? "",
+        (v as any).menCount ?? "",
+        (rateCents / 100).toFixed(2),
+        (rateCents / 100).toFixed(2),
+      ];
+    });
+    const csv = [headers, ...rows]
+      .map((r) => r.map((x) => `"${String(x).replace(/"/g, '""')}"`).join(","))
+      .join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `dispatch-${selectedDate}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success(`Exported ${displayVisits.length} visit${displayVisits.length !== 1 ? "s" : ""}`);
+  }
+
   const completedCount  = filtered.filter((v) => v.status === "completed").length;
   const dispatchedCount = filtered.filter((v) => v.status === "dispatched").length;
+
+  const crewStatsList = (crews ?? []).map((c) => {
+    const cv = displayVisits.filter((v) => v.crewId === c.id);
+    return {
+      id: c.id,
+      name: c.name,
+      count: cv.length,
+      bHrs: cv.reduce((s, v) => s + (v.job?.budgetedHours ?? 0), 0),
+      amt: cv.reduce((s, v) => s + ((v as any).rateCents ?? v.job?.rateCents ?? 0), 0),
+    };
+  }).filter((s) => s.count > 0);
+  const unassignedStatCount  = displayVisits.filter((v) => !v.crewId).length;
+  const unassignedStatBHrs   = displayVisits.filter((v) => !v.crewId).reduce((s, v) => s + (v.job?.budgetedHours ?? 0), 0);
+  const unassignedStatAmt    = displayVisits.filter((v) => !v.crewId).reduce((s, v) => s + ((v as any).rateCents ?? v.job?.rateCents ?? 0), 0);
 
   return (
     <div className="flex h-full flex-col gap-4">
@@ -1016,132 +1566,431 @@ export function DispatchBoard() {
         description="Schedule and dispatch daily job visits"
       />
 
-      {/* Week strip */}
-      <WeekStrip selectedDate={selectedDate} onDateChange={(d) => { setSelectedDate(d); clearOptimization(); }} />
+      {/* Week strip + date range + actions */}
+      <div className="flex items-center gap-3 px-4 shrink-0">
+        <WeekStrip selectedDate={selectedDate} onDateChange={(d) => { setSelectedDate(d); clearOptimization(); }} />
 
-      {/* SA-style dark action bar */}
-      <div className="bg-[#4a4a4a] px-4 py-2 flex items-center justify-between gap-3 shrink-0">
-        <div className="flex items-center gap-3">
-          <span className="text-xs text-slate-300 font-medium whitespace-nowrap">
-            {formatDisplayDate(selectedDate)}
-          </span>
-
-          {/* Status filter tabs */}
-          <div className="flex items-center">
-            {FILTER_TABS.map((t) => {
-              const cnt = t.value === "all"
-                ? allVisits.length
-                : allVisits.filter((v) => v.status === t.value).length;
-              return (
-                <button
-                  key={t.value}
-                  onClick={() => setStatusFilter(t.value)}
-                  className={cn(
-                    "px-2.5 py-1 text-[10px] font-medium rounded transition-colors",
-                    statusFilter === t.value
-                      ? "bg-white text-slate-800"
-                      : "text-slate-300 hover:text-white"
-                  )}
-                >
-                  {t.label}
-                  {cnt > 0 && (
-                    <span className={cn(
-                      "ml-1 rounded-full px-1 text-[9px]",
-                      statusFilter === t.value ? "bg-slate-200 text-slate-700" : "bg-slate-600 text-slate-300"
-                    )}>
-                      {cnt}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
+        <div className="flex items-center gap-2 text-xs text-slate-500 ml-2">
+          <span className="font-medium">From</span>
+          <Input
+            type="date"
+            value={selectedDate}
+            onChange={(e) => { setSelectedDate(e.target.value); clearOptimization(); }}
+            className="h-7 w-36 text-xs"
+          />
+          <span className="font-medium">To</span>
+          <Input
+            type="date"
+            value={endDate}
+            onChange={(e) => { setEndDate(e.target.value); clearOptimization(); }}
+            className="h-7 w-36 text-xs"
+          />
+          {endDate && (
+            <button
+              className="text-slate-400 hover:text-slate-700"
+              onClick={() => setEndDate("")}
+              title="Clear end date"
+            >
+              <XIcon className="h-3.5 w-3.5" />
+            </button>
+          )}
         </div>
 
-        <div className="flex items-center gap-2">
-          {/* Search */}
-          <div className="relative">
-            <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-slate-400" />
-            <Input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search…"
-              className="h-7 w-40 pl-6 text-[11px] bg-[#5a5a5a] border-[#6a6a6a] text-white placeholder:text-slate-400 focus:bg-[#3a3a3a]"
-            />
-          </div>
-
-          {/* Crew filter */}
-          <Select value={crewFilter} onValueChange={setCrewFilter}>
-            <SelectTrigger className="h-7 w-36 text-[11px] bg-[#5a5a5a] border-[#6a6a6a] text-white">
-              <SelectValue placeholder="All Crews" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all" className="text-xs">All Crews</SelectItem>
-              {(crews ?? []).map((c) => (
-                <SelectItem key={c.id} value={c.id} className="text-xs">{c.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          <div className="w-px h-5 bg-slate-600" />
-
-          <Button size="sm" variant="ghost"
-            className="h-7 text-[11px] text-slate-300 hover:text-white hover:bg-slate-600 gap-1 px-2"
+        <div className="ml-auto flex items-center gap-2">
+          <Button size="sm" variant="outline" className="h-9 text-sm gap-1.5 px-3"
             onClick={() => setTeamAssignOpen(true)}
           >
-            <Users className="h-3.5 w-3.5" />
+            <Users className="h-4 w-4" />
             Team Assign
           </Button>
-
-          <Button size="sm" variant="ghost"
-            className={cn(
-              "h-7 text-[11px] gap-1 px-2",
-              optimizedOrder
-                ? "text-blue-300 hover:text-blue-100 hover:bg-slate-600"
-                : "text-slate-300 hover:text-white hover:bg-slate-600"
-            )}
+          <Button size="sm" variant="outline"
+            className={cn("h-9 text-sm gap-1.5 px-3", (optimizedOrder || manualOrder) && "border-brand-400 text-brand-600")}
             onClick={handleOptimizeRoute}
             disabled={optimizing}
           >
-            <Route className="h-3.5 w-3.5" />
+            <Route className="h-4 w-4" />
             {optimizing ? "Optimizing…" : optimizedOrder ? "Re-Optimize" : "Optimize Route"}
           </Button>
-
-          {optimizedOrder && (
-            <Button size="sm" variant="ghost"
-              className="h-7 text-[11px] text-red-400 hover:text-red-300 hover:bg-slate-600 gap-1 px-2"
-              onClick={clearOptimization}
+          {manualOrder && (
+            <Button size="sm" variant="outline"
+              className="h-9 text-sm gap-1.5 px-3 border-brand-400 text-brand-700"
+              onClick={handleSaveOrder}
             >
-              <XIcon className="h-3 w-3" />
-              Clear
+              Save Order
             </Button>
           )}
+          {(optimizedOrder || manualOrder) && (
+            <Button size="sm" variant="outline"
+              className="h-9 text-sm gap-1.5 px-3 text-red-500 border-red-200"
+              onClick={() => { clearOptimization(); setManualOrder(null); }}
+            >
+              <XIcon className="h-3.5 w-3.5" />
+              Clear Order
+            </Button>
+          )}
+        </div>
+      </div>
 
-          <Button size="sm" variant="ghost"
-            className="h-7 text-[11px] text-slate-300 hover:text-white hover:bg-slate-600 gap-1 px-2"
-          >
-            <MapPin className="h-3.5 w-3.5" />
-            Show Map
-          </Button>
+      {/* Select a Filter bar — ABOVE dark bar */}
+      <div className="flex items-center gap-1.5 border-b bg-white px-4 py-2 shrink-0">
+        <span className="shrink-0 text-xs text-slate-500 font-medium mr-1">Select a Filter:</span>
+        <div className="flex items-center gap-1 overflow-x-auto">
+          {(["client","service","date","city","zip","crew"] as const).map((key) => {
+            const label = key === "client" ? "Client" : key === "service" ? "Service" : key === "date" ? "Date" : key === "city" ? "City" : key === "zip" ? "Zip" : "Crew";
+            return (
+              <button
+                key={key}
+                onClick={() => { if (colFilterKey === key) { setColFilterKey(null); setColFilterValue(""); } else { setColFilterKey(key); setColFilterValue(""); } }}
+                className={cn(
+                  "rounded px-2 py-0.5 text-xs transition-colors whitespace-nowrap",
+                  colFilterKey === key ? "bg-brand-100 text-brand-700 font-medium" : "hover:bg-slate-100 text-slate-600"
+                )}
+              >
+                {label}
+                {colFilterKey === key && colFilterValue && (
+                  <span className="ml-1 text-brand-500">· {colFilterValue}</span>
+                )}
+              </button>
+            );
+          })}
 
-          <Button size="sm" variant="ghost"
-            className="h-7 text-[11px] text-slate-300 hover:text-white hover:bg-slate-600 gap-1 px-2"
+          {/* Service: popover with list */}
+          {colFilterKey === "service" && (
+            <Popover defaultOpen>
+              <PopoverTrigger className="sr-only" />
+              <PopoverContent className="w-56 p-1" align="start" onInteractOutside={() => { if (!colFilterValue) { setColFilterKey(null); } }}>
+                <p className="px-2 py-1 text-[10px] font-semibold uppercase text-slate-400 tracking-wide">Services</p>
+                {(allServices ?? []).length === 0 && (
+                  <p className="px-2 py-2 text-xs text-slate-400 italic">No services found</p>
+                )}
+                {(allServices ?? []).map((svc) => (
+                  <button
+                    key={svc.id}
+                    className={cn(
+                      "flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs hover:bg-slate-100",
+                      colFilterValue === svc.name && "bg-brand-50 text-brand-700 font-medium"
+                    )}
+                    onClick={() => setColFilterValue(colFilterValue === svc.name ? "" : svc.name)}
+                  >
+                    {svc.name}
+                  </button>
+                ))}
+                <div className="border-t mt-1 pt-1">
+                  <button
+                    className="flex w-full items-center gap-1.5 rounded px-2 py-1.5 text-xs text-slate-400 hover:bg-slate-100"
+                    onClick={() => { setColFilterKey(null); setColFilterValue(""); }}
+                  >
+                    <XIcon className="h-3 w-3" /> Clear filter
+                  </button>
+                </div>
+              </PopoverContent>
+            </Popover>
+          )}
+
+          {/* Other filters: text input */}
+          {colFilterKey && colFilterKey !== "service" && (
+            <>
+              <Input
+                autoFocus
+                value={colFilterValue}
+                onChange={(e) => setColFilterValue(e.target.value)}
+                placeholder={`Filter by ${colFilterKey}…`}
+                className="ml-2 h-6 w-44 text-xs"
+              />
+              <button onClick={() => { setColFilterKey(null); setColFilterValue(""); }} className="text-slate-400 hover:text-slate-600">
+                <XIcon className="h-3.5 w-3.5" />
+              </button>
+            </>
+          )}
+        </div>
+
+        {/* Action buttons — flush right of filter bar */}
+        <div className="ml-auto flex items-center gap-1.5 shrink-0">
+          <Button
+            size="sm" variant="outline"
+            className={cn("h-7 gap-1.5 px-2.5 text-xs", statsOpen && "border-brand-400 text-brand-700 bg-brand-50")}
+            onClick={() => setStatsOpen((o) => !o)}
+            title="Show crew stats"
           >
             <BarChart3 className="h-3.5 w-3.5" />
             Stats
           </Button>
-
-          <Button size="sm" variant="ghost"
-            className="h-7 text-[11px] text-slate-300 hover:text-white hover:bg-slate-600 gap-1 px-2"
-          >
-            <Columns3 className="h-3.5 w-3.5" />
-            Columns
+          <Button size="sm" variant="outline" className="h-7 gap-1.5 px-2.5 text-xs" onClick={handleReverseRoute} title="Reverse route order">
+            <ArrowUpDown className="h-3.5 w-3.5" />
+            Reverse
+          </Button>
+          <Button size="sm" variant="outline" className="h-7 gap-1.5 px-2.5 text-xs" onClick={handleGroupStops} title="Group stops by zip area">
+            <MapPin className="h-3.5 w-3.5" />
+            Group Stops
+          </Button>
+          <Button size="sm" variant="outline" className="h-7 gap-1.5 px-2.5 text-xs" onClick={handleExportCSV} title="Export to CSV">
+            <Download className="h-3.5 w-3.5" />
+            Export
+          </Button>
+          <Button size="sm" variant="outline" className="h-7 gap-1.5 px-2.5 text-xs" onClick={() => setPrintOpen(true)} title="Print route sheets">
+            <Printer className="h-3.5 w-3.5" />
+            Print
           </Button>
         </div>
       </div>
 
+      {/* Dark action bar */}
+      <div className="bg-[#4a4a4a] px-4 py-2 flex items-center gap-3 shrink-0">
+        {/* Refresh — far left */}
+        <button
+          onClick={() => { void refetch(); qc.invalidateQueries({ queryKey: ['crm-job-visits'] }); }}
+          disabled={isLoading}
+          title="Refresh"
+          className="h-7 w-7 flex items-center justify-center rounded bg-[#5a5a5a] border border-[#6a6a6a] text-slate-300 hover:text-white transition-colors shrink-0"
+        >
+          <RefreshCw className={cn("h-3.5 w-3.5", isLoading && "animate-spin")} />
+        </button>
+
+        {/* Status filter tabs */}
+        <div className="flex items-center">
+          {FILTER_TABS.map((t) => {
+            const cnt = t.value === "all"
+              ? allVisits.length
+              : allVisits.filter((v) => v.status === t.value).length;
+            return (
+              <button
+                key={t.value}
+                onClick={() => setStatusFilter(t.value)}
+                className={cn(
+                  "px-2.5 py-1 text-[10px] font-medium rounded transition-colors",
+                  statusFilter === t.value
+                    ? "bg-white text-slate-800"
+                    : "text-slate-300 hover:text-white"
+                )}
+              >
+                {t.label}
+                {cnt > 0 && (
+                  <span className={cn(
+                    "ml-1 rounded-full px-1 text-[9px]",
+                    statusFilter === t.value ? "bg-slate-200 text-slate-700" : "bg-slate-600 text-slate-300"
+                  )}>
+                    {cnt}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Multi-crew filter */}
+        <Popover>
+          <PopoverTrigger asChild>
+            <button className="h-7 flex items-center gap-1.5 rounded bg-[#5a5a5a] border border-[#6a6a6a] px-2.5 text-[10px] text-slate-200 hover:text-white transition-colors">
+              <Users className="h-3 w-3" />
+              {crewFilters.length === 0 ? "All Crews" : `${crewFilters.length} Crew${crewFilters.length > 1 ? "s" : ""}`}
+              <ChevronDown className="h-2.5 w-2.5 opacity-60" />
+            </button>
+          </PopoverTrigger>
+          <PopoverContent className="w-48 p-1" align="start">
+            <button
+              className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs hover:bg-slate-100"
+              onClick={() => setCrewFilters([])}
+            >
+              <Checkbox checked={crewFilters.length === 0} className="h-3.5 w-3.5" />
+              All Crews
+            </button>
+            {(crews ?? []).map((c) => (
+              <button
+                key={c.id}
+                className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs hover:bg-slate-100"
+                onClick={() => setCrewFilters((prev) =>
+                  prev.includes(c.id) ? prev.filter((x) => x !== c.id) : [...prev, c.id]
+                )}
+              >
+                <Checkbox checked={crewFilters.includes(c.id)} className="h-3.5 w-3.5" />
+                {c.name}
+              </button>
+            ))}
+          </PopoverContent>
+        </Popover>
+
+        {/* Actions — visible when rows selected */}
+        {selectedIds.size > 0 && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button className="h-7 flex items-center gap-1.5 rounded bg-brand-600 border border-brand-500 px-2.5 text-[10px] text-white hover:bg-brand-700 transition-colors font-medium">
+                <ListChecks className="h-3 w-3" />
+                Actions ({selectedIds.size})
+                <ChevronDown className="h-2.5 w-2.5 opacity-80" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-52">
+              {/* Change Status submenu */}
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger className="text-xs">
+                  <ListChecks className="mr-2 h-3.5 w-3.5 text-slate-400" />
+                  Change Status
+                </DropdownMenuSubTrigger>
+                <DropdownMenuSubContent>
+                  {STATUS_OPTIONS.map((opt) => (
+                    <DropdownMenuItem
+                      key={opt.value}
+                      className="text-xs"
+                      onSelect={async () => {
+                        const ids = [...selectedIds];
+                        await Promise.all(
+                          ids.map((id) =>
+                            fetch(`/api/crm/visits/${id}`, {
+                              method: "PATCH",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ status: opt.value }),
+                            })
+                          )
+                        );
+                        await qc.invalidateQueries({ queryKey: ["crm-job-visits"] });
+                        setSelectedIds(new Set());
+                        toast.success(`Updated ${ids.length} visit${ids.length > 1 ? "s" : ""} to ${opt.label}`);
+                      }}
+                    >
+                      {opt.label}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
+
+              {/* Re-assign Crew submenu */}
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger className="text-xs">
+                  <Users className="mr-2 h-3.5 w-3.5 text-slate-400" />
+                  Re-assign Crew
+                </DropdownMenuSubTrigger>
+                <DropdownMenuSubContent>
+                  <DropdownMenuItem
+                    className="text-xs"
+                    onSelect={async () => {
+                      const ids = [...selectedIds];
+                      await Promise.all(
+                        ids.map((id) =>
+                          fetch(`/api/crm/visits/${id}`, {
+                            method: "PATCH",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ crew_id: null }),
+                          })
+                        )
+                      );
+                      await qc.invalidateQueries({ queryKey: ["crm-job-visits"] });
+                      setSelectedIds(new Set());
+                      toast.success(`Unassigned ${ids.length} visit${ids.length > 1 ? "s" : ""}`);
+                    }}
+                  >
+                    Unassigned
+                  </DropdownMenuItem>
+                  {(crews ?? []).map((c) => (
+                    <DropdownMenuItem
+                      key={c.id}
+                      className="text-xs"
+                      onSelect={async () => {
+                        const ids = [...selectedIds];
+                        await Promise.all(
+                          ids.map((id) =>
+                            fetch(`/api/crm/visits/${id}`, {
+                              method: "PATCH",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ crew_id: c.id }),
+                            })
+                          )
+                        );
+                        await qc.invalidateQueries({ queryKey: ["crm-job-visits"] });
+                        setSelectedIds(new Set());
+                        toast.success(`Assigned ${ids.length} visit${ids.length > 1 ? "s" : ""} to ${c.name}`);
+                      }}
+                    >
+                      {c.name}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
+
+              <DropdownMenuSeparator />
+
+              {/* Move to Day */}
+              <DropdownMenuItem
+                className="text-xs"
+                onSelect={() => { setMoveDayDate(selectedDate); setMoveDayOpen(true); }}
+              >
+                <Calendar className="mr-2 h-3.5 w-3.5 text-slate-400" />
+                Move to Day…
+              </DropdownMenuItem>
+
+              {/* Manually Route — sets manual order to selected visits first */}
+              <DropdownMenuItem
+                className="text-xs"
+                onSelect={() => {
+                  const selectedArr = [...selectedIds];
+                  const rest = displayVisits.filter((v) => !selectedIds.has(v.id)).map((v) => v.id);
+                  setManualOrder([...selectedArr, ...rest]);
+                  setSelectedIds(new Set());
+                  toast.success("Selected visits moved to top of route");
+                }}
+              >
+                <Route className="mr-2 h-3.5 w-3.5 text-slate-400" />
+                Manually Route (Move to Top)
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
+
+        {/* Search */}
+        <div className="relative">
+          <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-slate-400" />
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search…"
+            className="h-7 w-44 pl-6 text-xs bg-white border-slate-200 focus-visible:ring-0"
+          />
+        </div>
+
+        {/* Columns selector — far right of dark bar */}
+        <div className="ml-auto">
+          <ColumnChooser
+            columns={COL_DEFS}
+            visibleKeys={visibleKeys}
+            onVisibleKeysChange={setVisibleKeys}
+          />
+        </div>
+      </div>
+
+      {/* Stats overlay panel */}
+      {statsOpen && (
+        <div className="bg-white border-b shadow-sm px-4 py-3 shrink-0">
+          <div className="flex items-start gap-3 overflow-x-auto pb-1">
+            {crewStatsList.map((s) => (
+              <div key={s.id} className="shrink-0 rounded border bg-slate-50 px-3 py-2 min-w-[130px]">
+                <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500 mb-1 truncate">{s.name}</p>
+                <p className="text-xl font-bold text-slate-800 leading-none">{s.count}</p>
+                <p className="text-[10px] text-slate-400 mt-0.5">jobs</p>
+                <div className="mt-1.5 flex flex-col gap-0.5 text-[10px]">
+                  <span className="text-slate-600">{s.bHrs.toFixed(1)} B.Hrs</span>
+                  <span className="text-green-700 font-semibold">{formatCurrency(s.amt)}</span>
+                </div>
+              </div>
+            ))}
+            {unassignedStatCount > 0 && (
+              <div className="shrink-0 rounded border border-dashed border-amber-300 bg-amber-50 px-3 py-2 min-w-[130px]">
+                <p className="text-[10px] font-bold uppercase tracking-wide text-amber-600 mb-1">Unassigned</p>
+                <p className="text-xl font-bold text-slate-800 leading-none">{unassignedStatCount}</p>
+                <p className="text-[10px] text-slate-400 mt-0.5">jobs</p>
+                <div className="mt-1.5 flex flex-col gap-0.5 text-[10px]">
+                  <span className="text-slate-600">{unassignedStatBHrs.toFixed(1)} B.Hrs</span>
+                  <span className="text-green-700 font-semibold">{formatCurrency(unassignedStatAmt)}</span>
+                </div>
+              </div>
+            )}
+            {crewStatsList.length === 0 && unassignedStatCount === 0 && (
+              <p className="text-xs text-slate-400 italic py-1">No visits to summarize</p>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Count bar */}
-      <div className="bg-white border-b px-4 py-1.5 flex items-center gap-4 text-[11px] shrink-0">
+      <div className="bg-slate-100 border-b px-4 py-1.5 flex items-center gap-4 text-[11px] shrink-0">
         <span className="font-semibold text-slate-700">
           {isLoading ? "Loading…" : `${filtered.length} Job${filtered.length !== 1 ? "s" : ""} Total`}
         </span>
@@ -1164,34 +2013,43 @@ export function DispatchBoard() {
         <table className="w-full min-w-[1200px] text-xs">
           <thead className="sticky top-0 z-10 bg-slate-50">
             <tr className="border-b text-left text-[10px] font-bold uppercase tracking-wide text-slate-400">
-              <th className="w-8  px-2 py-2.5">#</th>
+              <th className="w-8 px-2 py-2.5" onClick={toggleSelectAll}>
+                <Checkbox
+                  checked={displayVisits.length > 0 && selectedIds.size === displayVisits.length}
+                  className="h-3.5 w-3.5 cursor-pointer"
+                  onCheckedChange={toggleSelectAll}
+                />
+              </th>
+              <th className="w-10 px-1 py-2.5">#</th>
               <th className="w-8  px-2 py-2.5">St</th>
-              <th className="min-w-[160px] px-2 py-2.5">Client</th>
-              <th className="min-w-[110px] px-2 py-2.5">Service</th>
-              <th className="px-2 py-2.5">Date</th>
-              <th className="px-2 py-2.5">City</th>
-              <th className="px-2 py-2.5">Zip</th>
-              <th className="min-w-[90px]  px-2 py-2.5">Assigned</th>
-              <th className="px-2 py-2.5">Last Svc</th>
-              <th className="px-2 py-2.5">Start</th>
-              <th className="px-2 py-2.5">End</th>
-              <th className="px-2 py-2.5 text-right">B Hrs</th>
-              <th className="px-2 py-2.5 text-right">Actual</th>
-              <th className="px-2 py-2.5 text-center">Men</th>
-              <th className="px-2 py-2.5 text-right">Qty</th>
-              <th className="px-2 py-2.5 text-right">Rate</th>
-              <th className="px-2 py-2.5 text-right">Amt</th>
+              <th className="min-w-[140px] px-2 py-2.5">Client</th>
+              {isVisible("service")  && <th className="min-w-[110px] px-2 py-2.5">Service</th>}
+              {isVisible("date")     && <th className="px-2 py-2.5">Date</th>}
+              {isVisible("address")  && <th className="min-w-[140px] px-2 py-2.5">Address</th>}
+              {isVisible("city")     && <th className="px-2 py-2.5">City</th>}
+              {isVisible("zip")      && <th className="px-2 py-2.5">Zip</th>}
+              {isVisible("assigned") && <th className="min-w-[90px] px-2 py-2.5">Assigned</th>}
+              {isVisible("last_svc") && <th className="px-2 py-2.5">Last Svc</th>}
+              {isVisible("start")    && <th className="px-2 py-2.5">Start</th>}
+              {isVisible("end")      && <th className="px-2 py-2.5">End</th>}
+              {isVisible("b_hrs")    && <th className="px-2 py-2.5 text-right">B Hrs</th>}
+              {isVisible("actual")   && <th className="px-2 py-2.5 text-right">Actual</th>}
+              {isVisible("men")      && <th className="px-2 py-2.5 text-center">Men</th>}
+              {isVisible("qty")      && <th className="px-2 py-2.5 text-right">Qty</th>}
+              {isVisible("rate")     && <th className="px-2 py-2.5 text-right">Rate</th>}
+              {isVisible("amt")      && <th className="px-2 py-2.5 text-right">Amt</th>}
+              {isVisible("icons")    && <th className="px-2 py-2.5">Notes</th>}
             </tr>
           </thead>
           <tbody>
             {!isLoading && displayVisits.length > 0 && (
-              <TotalsRow visits={displayVisits} />
+              <TotalsRow visits={displayVisits} isVisible={isVisible} />
             )}
 
             {isLoading ? (
               Array.from({ length: 6 }).map((_, i) => (
                 <tr key={i} className="border-b">
-                  {Array.from({ length: 17 }).map((__, j) => (
+                  {Array.from({ length: 20 }).map((__, j) => (
                     <td key={j} className="px-2 py-2.5">
                       <Skeleton className="h-3 w-full" />
                     </td>
@@ -1200,8 +2058,8 @@ export function DispatchBoard() {
               ))
             ) : displayVisits.length === 0 ? (
               <tr>
-                <td colSpan={17} className="py-20 text-center text-sm text-slate-400">
-                  {search || crewFilter !== "all" || statusFilter !== "all"
+                <td colSpan={20} className="py-20 text-center text-sm text-slate-400">
+                  {search || crewFilters.length > 0 || statusFilter !== "all"
                     ? "No visits match the current filters"
                     : "No visits scheduled for this date"}
                 </td>
@@ -1215,6 +2073,14 @@ export function DispatchBoard() {
                   selectedDate={selectedDate}
                   onOpen={setDetailVisit}
                   driveMinsToNext={driveTimeMap.get(visit.id)}
+                  selected={selectedIds.has(visit.id)}
+                  onToggleSelect={toggleSelect}
+                  onDragStart={handleDragStart}
+                  onDragOver={handleDragOver}
+                  onDragEnd={handleDragEnd}
+                  isDragOver={dragOverId === visit.id}
+                  isVisible={isVisible}
+                  onReorder={handleReorder}
                 />
               ))
             )}
@@ -1231,6 +2097,67 @@ export function DispatchBoard() {
           crews={crews ?? []}
         />
       )}
+
+      {/* Move to Day dialog */}
+      <Dialog open={moveDayOpen} onOpenChange={setMoveDayOpen}>
+        <DialogContent className="max-w-xs p-5 gap-4">
+          <DialogHeader>
+            <DialogTitle className="text-sm">Move {selectedIds.size} Visit{selectedIds.size !== 1 ? "s" : ""} to Day</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <label className="block text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1">New Date</label>
+              <Input
+                type="date"
+                value={moveDayDate}
+                onChange={(e) => setMoveDayDate(e.target.value)}
+                className="h-8 text-sm"
+              />
+            </div>
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => setMoveDayOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                className="h-8 text-xs bg-brand-500 hover:bg-brand-600 text-white"
+                disabled={!moveDayDate}
+                onClick={async () => {
+                  const ids = [...selectedIds];
+                  try {
+                    const r = await fetch("/api/crm/visits/bulk-update", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ ids, updates: { scheduled_date: moveDayDate } }),
+                    });
+                    if (!r.ok) {
+                      const body = await r.json().catch(() => ({}));
+                      throw new Error((body as { error?: string }).error ?? `HTTP ${r.status}`);
+                    }
+                    await qc.invalidateQueries({ queryKey: ["crm-job-visits"] });
+                    setSelectedIds(new Set());
+                    setMoveDayOpen(false);
+                    toast.success(`Moved ${ids.length} visit${ids.length > 1 ? "s" : ""} to ${moveDayDate}`);
+                  } catch (err) {
+                    toast.error(`Failed to move visits: ${err instanceof Error ? err.message : "unknown error"}`);
+                  }
+                }}
+              >
+                Move
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Print dialog */}
+      <PrintDialog
+        open={printOpen}
+        onOpenChange={setPrintOpen}
+        visits={displayVisits}
+        crews={crews ?? []}
+        selectedDate={selectedDate}
+      />
 
       {/* Team assignment dialog */}
       <TeamAssignDialog

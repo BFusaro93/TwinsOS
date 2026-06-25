@@ -93,7 +93,7 @@ export function PhotoGallery({ projectId }: PhotoGalleryProps) {
               className={cn(
                 "rounded-full px-3 py-1 text-xs font-medium transition-colors",
                 fileType === f.value
-                  ? "bg-slate-800 text-white"
+                  ? "bg-[#2a2a2a] text-white"
                   : "border border-slate-200 text-slate-500 hover:border-slate-300 hover:text-slate-700",
               )}
             >
@@ -110,7 +110,7 @@ export function PhotoGallery({ projectId }: PhotoGalleryProps) {
               className={cn(
                 "rounded px-3 py-1.5 text-xs font-medium transition-colors",
                 tab === t.value
-                  ? "bg-slate-800 text-white"
+                  ? "bg-[#2a2a2a] text-white"
                   : "text-slate-500 hover:text-slate-700",
               )}
             >
@@ -126,7 +126,7 @@ export function PhotoGallery({ projectId }: PhotoGalleryProps) {
               size="sm"
               className={cn(
                 "gap-1.5 text-xs",
-                showBeforeAfter ? "border-slate-800 bg-slate-800 text-white" : "border-slate-200 text-slate-600",
+                showBeforeAfter ? "border-[#2a2a2a] bg-[#2a2a2a] text-white" : "border-slate-200 text-slate-600",
               )}
               onClick={() => setShowBeforeAfter((v) => !v)}
             >
@@ -142,7 +142,7 @@ export function PhotoGallery({ projectId }: PhotoGalleryProps) {
                 "gap-1.5 text-xs",
                 selectMode
                   ? "border-brand-600 bg-brand-600 text-white hover:bg-brand-700 hover:text-white"
-                  : "border-slate-700 bg-slate-800 text-white hover:bg-slate-700 hover:text-white",
+                  : "border-[#2a2a2a] bg-[#2a2a2a] text-white hover:bg-[#3a3a3a] hover:text-white",
               )}
               onClick={() => {
                 if (selectMode) { exitSelectMode(); } else { setSelectMode(true); setShowBeforeAfter(false); }
@@ -156,7 +156,7 @@ export function PhotoGallery({ projectId }: PhotoGalleryProps) {
             <Button
               size="sm"
               variant="outline"
-              className="gap-1.5 border-slate-700 bg-slate-800 text-xs text-white hover:bg-slate-700 hover:text-white"
+              className="gap-1.5 border-[#2a2a2a] bg-[#2a2a2a] text-xs text-white hover:bg-[#3a3a3a] hover:text-white"
               onClick={() => router.push(`/photos/jobs/${projectId}/upload`)}
             >
               <Camera className="h-3.5 w-3.5" />
@@ -181,7 +181,7 @@ export function PhotoGallery({ projectId }: PhotoGalleryProps) {
                 className={cn(
                   "rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors disabled:opacity-40",
                   flag === "before" ? "bg-amber-500 text-white hover:bg-amber-600"
-                  : flag === "during" ? "bg-sky-500 text-white hover:bg-sky-600"
+                  : flag === "during" ? "bg-slate-500 text-white hover:bg-slate-600"
                   : flag === "after"  ? "bg-emerald-600 text-white hover:bg-emerald-700"
                   : "bg-slate-600 text-white hover:bg-slate-700",
                 )}
@@ -247,7 +247,7 @@ export function PhotoGallery({ projectId }: PhotoGalleryProps) {
             <Button
               size="sm"
               variant="outline"
-              className="gap-1.5 border-slate-700 bg-slate-800 text-xs text-white hover:bg-slate-700 hover:text-white"
+              className="gap-1.5 border-[#2a2a2a] bg-[#2a2a2a] text-xs text-white hover:bg-[#3a3a3a] hover:text-white"
               onClick={() => router.push(`/photos/jobs/${projectId}/upload`)}
             >
               <Camera className="h-3.5 w-3.5" />
@@ -373,7 +373,7 @@ function PhotoThumbnail({
                   photo.beforeAfter === "before"
                     ? "bg-amber-500 text-white"
                     : photo.beforeAfter === "during"
-                    ? "bg-sky-500 text-white"
+                    ? "bg-slate-500 text-white"
                     : "bg-emerald-600 text-white",
                 )}
               >

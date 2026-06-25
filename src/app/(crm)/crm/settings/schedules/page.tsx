@@ -144,21 +144,35 @@ function formatDate(d: Date) {
 
 function MonthDayPicker({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
   const parts = value ? value.split('-') : ['', ''];
-  const month = parts[0] ?? '';
-  const day = parts[1] ?? '';
+  const [localMonth, setLocalMonth] = useState(parts[0] ?? '');
+  const [localDay, setLocalDay] = useState(parts[1] ?? '');
 
-  function update(m: string, d: string) {
-    if (m && d) onChange(`${m}-${d}`);
+  // Sync local state when external value resets (dialog open/close)
+  useEffect(() => {
+    const p = value ? value.split('-') : ['', ''];
+    setLocalMonth(p[0] ?? '');
+    setLocalDay(p[1] ?? '');
+  }, [value]);
+
+  function handleMonthChange(m: string) {
+    setLocalMonth(m);
+    if (m && localDay) onChange(`${m}-${localDay}`);
     else onChange('');
   }
 
-  const daysInMonth = month ? new Date(2024, parseInt(month), 0).getDate() : 31;
+  function handleDayChange(d: string) {
+    setLocalDay(d);
+    if (localMonth && d) onChange(`${localMonth}-${d}`);
+    else onChange('');
+  }
+
+  const daysInMonth = localMonth ? new Date(2024, parseInt(localMonth), 0).getDate() : 31;
 
   return (
     <div className="flex flex-col gap-1.5">
       <Label>{label}</Label>
       <div className="flex gap-2">
-        <Select value={month} onValueChange={(m) => update(m, day)}>
+        <Select value={localMonth} onValueChange={handleMonthChange}>
           <SelectTrigger className="flex-1"><SelectValue placeholder="Month" /></SelectTrigger>
           <SelectContent>
             {MONTHS.map((m, i) => (
@@ -166,7 +180,7 @@ function MonthDayPicker({ label, value, onChange }: { label: string; value: stri
             ))}
           </SelectContent>
         </Select>
-        <Select value={day} onValueChange={(d) => update(month, d)}>
+        <Select value={localDay} onValueChange={handleDayChange}>
           <SelectTrigger className="w-20"><SelectValue placeholder="Day" /></SelectTrigger>
           <SelectContent>
             {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((d) => (

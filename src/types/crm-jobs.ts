@@ -22,6 +22,7 @@ export interface CRMService {
   trackChemicals: boolean;
   invoiceDescription: string | null;
   descriptionOnEstimate: string | null;
+  callScriptNotes: string | null;
   taskColor: string;
   targetRateCents: number;
   targetRateWithDriveCents: number;
@@ -113,6 +114,7 @@ export interface CRMJob {
   lastServiceDate: string | null;
   notesToCrew: string | null;
   completionNotes: string | null;
+  invoiceDescription: string | null;
   projectId: string | null;
   priority: number;
   contractId: string | null;
@@ -189,11 +191,15 @@ export interface NewClientJobFormValues {
   invoiceSeparately: boolean;
   callAhead: boolean;
   arrivalWindowHours: number | null;
+  scheduledDate: string | null;
+  waitingListStart: string | null;
+  waitingListEnd: string | null;
   startDateWindow: string | null;
   endDateWindow: string | null;
   createWorkOrder: boolean;
   isComplete: boolean;
   notes: string | null;
+  notesToCrew: string | null;
   services: NewClientJobServiceValues[];
 }
 
@@ -224,6 +230,7 @@ export interface CRMJobVisit {
   orderNum: number | null
   completionNotes: string | null
   actualHours: number | null
+  budgetedHours: number | null
   completedAt: string | null
   priority: number
   notesToCrew: string | null
@@ -235,10 +242,37 @@ export interface CRMJobVisit {
   jobComments: JobComment[]
   assignedEmployeeId: string | null
   dispatchedAt: string | null
+  clockedInAt: string | null
+  clockedOutAt: string | null
+  acknowledgedNotesAt: string | null
+  skipReason: string | null
   createdAt: string
   updatedAt: string
   deletedAt: string | null
   job?: CRMJob
+  photos?: VisitPhoto[]
+}
+
+export interface VisitPhoto {
+  id: string
+  visitId: string
+  jobId: string
+  storagePath: string
+  caption: string | null
+  uploadedBy: string | null
+  createdAt: string
+}
+
+export interface CrewMemberTime {
+  id: string
+  visitId: string
+  crewMemberId: string
+  memberName?: string | null
+  memberRole?: string | null
+  clockedInAt: string | null
+  clockedOutAt: string | null
+  breakMinutes: number
+  lunchMinutes: number
 }
 
 export interface CRMSchedule {

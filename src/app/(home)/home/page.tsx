@@ -2,14 +2,62 @@
 
 import Link from "next/link";
 import { BarChart2, Wrench, NotepadText, Leaf, Truck, Users, ExternalLink, ClipboardList, Camera } from "lucide-react";
+import { useCurrentUserStore } from "@/stores";
 
 const INTERNAL_BOX =
+  "group flex flex-col items-center gap-5 rounded-2xl border-2 border-slate-200 bg-white p-10 shadow-sm transition-all duration-150 hover:border-brand-400 hover:shadow-lg";
+
+const CREW_BOX =
   "group flex flex-col items-center gap-5 rounded-2xl border-2 border-slate-200 bg-white p-10 shadow-sm transition-all duration-150 hover:border-brand-400 hover:shadow-lg";
 
 const EXTERNAL_BOX =
   "group flex flex-col items-center gap-4 rounded-2xl border-2 border-slate-200 bg-white p-8 shadow-sm transition-all duration-150 hover:border-slate-400 hover:shadow-lg";
 
+function CrewHome() {
+  return (
+    <div className="flex min-h-dvh flex-col items-center justify-center bg-slate-50 p-6">
+      <div className="mb-10 flex flex-col items-center gap-3">
+        <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-500 shadow-md">
+          <Leaf className="h-7 w-7 text-white" />
+        </div>
+        <h1 className="text-3xl font-bold tracking-tight text-slate-900">Equipt</h1>
+        <p className="text-sm text-slate-500">What would you like to do?</p>
+      </div>
+
+      {/* Primary tiles */}
+      <div className="grid w-full max-w-lg grid-cols-1 gap-5 sm:grid-cols-2">
+        <Link href="/dashboards/avb" className={CREW_BOX}>
+          <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-brand-50 text-brand-500 transition-colors group-hover:bg-brand-100">
+            <BarChart2 className="h-8 w-8" />
+          </div>
+          <div className="text-center">
+            <p className="text-lg font-semibold text-slate-900">Dashboards</p>
+            <p className="mt-1 text-sm text-slate-500">Reports &amp; analytics</p>
+          </div>
+        </Link>
+
+        <Link href="/photos/jobs" className={CREW_BOX}>
+          <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-brand-50 text-brand-500 transition-colors group-hover:bg-brand-100">
+            <Camera className="h-8 w-8" />
+          </div>
+          <div className="text-center">
+            <p className="text-lg font-semibold text-slate-900">Job Photos</p>
+            <p className="mt-1 text-sm text-slate-500">Field photo documentation</p>
+          </div>
+        </Link>
+      </div>
+
+    </div>
+  );
+}
+
 export default function HomePage() {
+  const { currentUser } = useCurrentUserStore();
+
+  if (currentUser.role === "crew") {
+    return <CrewHome />;
+  }
+
   return (
     <div className="flex min-h-dvh flex-col items-center justify-center bg-slate-50 p-6">
       {/* Logo / header */}

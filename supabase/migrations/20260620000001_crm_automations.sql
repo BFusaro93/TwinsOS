@@ -102,7 +102,7 @@ CREATE TABLE crm_sequence_enrollments (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   org_id uuid NOT NULL DEFAULT my_org_id() REFERENCES organizations(id),
   sequence_id uuid NOT NULL REFERENCES crm_automation_sequences(id) ON DELETE CASCADE,
-  client_id uuid NOT NULL REFERENCES crm_clients(id) ON DELETE CASCADE,
+  client_id uuid NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
   enrolled_at timestamptz NOT NULL DEFAULT now(),
   completed_at timestamptz,
   current_event_position int NOT NULL DEFAULT 0,

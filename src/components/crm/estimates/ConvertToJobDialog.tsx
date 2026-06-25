@@ -49,7 +49,9 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
   const [jobType,       setJobType]       = useState("one_time");
   const [scheduledDate, setScheduledDate] = useState("");
   const [crewId,        setCrewId]        = useState("");
-  const [notesToCrew,   setNotesToCrew]   = useState("");
+  const [notesToCrew,   setNotesToCrew]   = useState(() =>
+    lineItems.map((li) => li.jobNote).filter(Boolean).join("\n").trim()
+  );
 
   const { data: crews = [] } = useCRMCrews();
   const createJobs = useCreateJobsFromEstimate();

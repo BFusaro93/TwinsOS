@@ -25,20 +25,17 @@ import {
   useCreateCRMService,
   useUpdateCRMService,
   useCRMServices,
-  useServiceRateMatrix,
+} from "@/lib/hooks/use-crm-jobs";
+import {
+  useRateMatrix,
   useUpsertRateMatrixRow,
   useDeleteRateMatrixRow,
-} from "@/lib/hooks/use-crm-jobs";
-import type { CRMService, CRMServiceRateMatrixRow } from "@/types/crm-jobs";
+  useCustomFieldDefs,
+} from "@/lib/hooks/use-rate-matrix";
+import type { CRMService } from "@/types/crm-jobs";
 
 const UNITS = ["visit", "sqft", "lf", "cuyd", "acres", "hr", "each", "lb", "gal"];
 const CATEGORIES = ["lawn", "landscape", "snow", "irrigation", "tree", "chemical", "other"];
-const RATE_MATRIX_FIELDS = [
-  { value: "turf_sqft",    label: "Turf Sq Ft" },
-  { value: "total_sqft",   label: "Total Sq Ft" },
-  { value: "bed_sqft",     label: "Bed Sq Ft" },
-  { value: "property_sqft",label: "Property Sq Ft" },
-];
 
 type Tab = "details" | "descriptions" | "rate_matrix" | "sub_services" | "job_costing";
 
@@ -146,146 +143,147 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 interface RateMatrixTabProps {
   serviceId: string;
-  form: FormState;
-  setForm: (f: FormState) => void;
 }
 
-function RateMatrixTab({ serviceId, form, setForm }: RateMatrixTabProps) {
-  const { data: rows = [] } = useServiceRateMatrix(serviceId);
+function RateMatrixTab({ serviceId }: RateMatrixTabProps) {
+  const { data: rows = [] } = useRateMatrix(serviceId);
   const upsert = useUpsertRateMatrixRow();
   const deleteRow = useDeleteRateMatrixRow();
 
-  const [editing, setEditing] = useState<Partial<CRMServiceRateMatrixRow> & { _new?: boolean }>({});
+  const { data: fieldDefs = [] } = useCustomFieldDefs("property");
+  const numericFieldDefs = fieldDefs.filter((d) => d.fieldType === "number");
+
+  const currentFieldId = rows[0]?.customFieldId ?? "";
+  const [selectedFieldId, setSelectedFieldId] = useState<string>(currentFieldId);
+
+  useEffect(() => {
+    if (currentFieldId && !selectedFieldId) {
+      setSelectedFieldId(currentFieldId);
+    }
+  }, [currentFieldId, selectedFieldId]);
 
   function addRow() {
     const nextSort = rows.length;
     upsert.mutate({
       serviceId,
       row: {
-        from_qty: 0,
-        to_qty: 0,
+        custom_field_id: selectedFieldId || null,
+        calc_type: 1,
+        from_val: 0,
+        to_val: null,
         rate_cents: 0,
         budgeted_hours: 0,
         budgeted_cost_cents: 0,
         sort_order: nextSort,
+        is_tail_row: false,
+        tail_every_qty: null,
+        tail_over_qty: null,
       },
     });
   }
 
-  function saveRowField(row: CRMServiceRateMatrixRow, field: string, value: string) {
-    const numValue = field.endsWith("_cents")
-      ? parseCents(value)
-      : field === "budgeted_hours" || field === "from_qty" || field === "to_qty"
-      ? parseNum(value)
-      : value;
-
-    upsert.mutate({
-      serviceId,
-      row: { id: row.id, [field]: numValue },
-    });
+  function saveField(rowId: string, field: string, rawValue: string | boolean) {
+    let value: string | number | boolean | null = rawValue;
+    if (typeof rawValue === "string") {
+      if (field.endsWith("_cents")) {
+        value = parseCents(rawValue);
+      } else if (["from_val", "to_val", "budgeted_hours", "tail_every_qty", "tail_over_qty"].includes(field)) {
+        value = rawValue === "" ? null : parseNum(rawValue);
+      } else if (field === "calc_type") {
+        value = parseInt(rawValue, 10) as 0 | 1;
+      }
+    }
+    upsert.mutate({ serviceId, row: { id: rowId, [field]: value } });
   }
+
+  function handleFieldChange(newFieldId: string) {
+    setSelectedFieldId(newFieldId);
+    for (const row of rows) {
+      upsert.mutate({ serviceId, row: { id: row.id, custom_field_id: newFieldId || null } });
+    }
+  }
+
+  const inputCls =
+    "w-full rounded border border-slate-200 px-1.5 py-0.5 text-right text-xs focus:outline-none focus:border-brand-400";
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Rate Matrix Field selector */}
-      <div className="grid grid-cols-2 gap-3">
-        <Field label="Matrix Field (area measurement to look up)">
-          <Select
-            value={form.rateMatrixField || "none"}
-            onValueChange={(v) => setForm({ ...form, rateMatrixField: v === "none" ? "" : v })}
-          >
-            <SelectTrigger className="text-sm">
-              <SelectValue placeholder="No rate matrix" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="none">No rate matrix</SelectItem>
-              {RATE_MATRIX_FIELDS.map((f) => (
-                <SelectItem key={f.value} value={f.value}>{f.label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </Field>
-        <Field label="Matrix Calc">
-          <Select
-            value={form.rateMatrixCalc}
-            onValueChange={(v) => setForm({ ...form, rateMatrixCalc: v })}
-          >
-            <SelectTrigger className="text-sm">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="qty_x_rate_x_visits">QTY × Rate × Visits</SelectItem>
-              <SelectItem value="flat_per_visit">Flat Per Visit</SelectItem>
-              <SelectItem value="flat_total">Flat Total</SelectItem>
-            </SelectContent>
-          </Select>
-        </Field>
-      </div>
+      <Field label="Lookup field">
+        <Select
+          value={selectedFieldId || "none"}
+          onValueChange={(v) => handleFieldChange(v === "none" ? "" : v)}
+        >
+          <SelectTrigger className="text-sm">
+            <SelectValue placeholder="Select a numeric property field…" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="none">— None —</SelectItem>
+            {numericFieldDefs.map((d) => (
+              <SelectItem key={d.id} value={d.id}>{d.label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </Field>
 
-      {/* Tier table */}
       <div className="rounded-lg border overflow-hidden">
         <table className="w-full text-xs">
           <thead>
             <tr className="bg-slate-50 border-b font-semibold text-slate-500 uppercase tracking-wide">
               <th className="px-3 py-2 text-left">From</th>
               <th className="px-3 py-2 text-left">To</th>
+              <th className="px-3 py-2 text-left">Calc Type</th>
               <th className="px-3 py-2 text-right">Rate ($)</th>
-              <th className="px-3 py-2 text-right">B.Hrs</th>
-              <th className="px-3 py-2 text-right">B.Cost ($)</th>
+              <th className="px-3 py-2 text-right">Hours</th>
+              <th className="px-3 py-2 text-right">Cost ($)</th>
+              <th className="px-3 py-2 text-center">Tail?</th>
               <th className="px-3 py-2 w-8" />
             </tr>
           </thead>
           <tbody>
+            {rows.length === 0 && (
+              <tr>
+                <td colSpan={8} className="px-3 py-6 text-center text-slate-400 text-xs">
+                  No rows yet. Click Add Row to get started.
+                </td>
+              </tr>
+            )}
             {rows.map((row) => (
               <tr key={row.id} className="border-b last:border-0">
                 <td className="px-2 py-1.5">
-                  <input
-                    type="number"
-                    defaultValue={row.fromQty}
-                    onBlur={(e) => saveRowField(row, "from_qty", e.target.value)}
-                    className="w-full rounded border border-slate-200 px-1.5 py-0.5 text-right focus:outline-none focus:border-brand-400"
-                  />
+                  <input type="number" defaultValue={row.fromVal}
+                    onBlur={(e) => saveField(row.id, "from_val", e.target.value)} className={inputCls} />
                 </td>
                 <td className="px-2 py-1.5">
-                  <input
-                    type="number"
-                    defaultValue={row.toQty}
-                    onBlur={(e) => saveRowField(row, "to_qty", e.target.value)}
-                    className="w-full rounded border border-slate-200 px-1.5 py-0.5 text-right focus:outline-none focus:border-brand-400"
-                  />
+                  <input type="number" defaultValue={row.toVal ?? ""} placeholder="∞"
+                    onBlur={(e) => saveField(row.id, "to_val", e.target.value)} className={inputCls} />
                 </td>
                 <td className="px-2 py-1.5">
-                  <input
-                    type="number"
-                    step="0.01"
-                    defaultValue={(row.rateCents / 100).toFixed(2)}
-                    onBlur={(e) => saveRowField(row, "rate_cents", e.target.value)}
-                    className="w-full rounded border border-slate-200 px-1.5 py-0.5 text-right focus:outline-none focus:border-brand-400"
-                  />
+                  <select defaultValue={String(row.calcType)}
+                    onChange={(e) => saveField(row.id, "calc_type", e.target.value)}
+                    className="w-full rounded border border-slate-200 px-1.5 py-0.5 text-xs focus:outline-none focus:border-brand-400 bg-white">
+                    <option value="1">Per Unit</option>
+                    <option value="0">Fixed</option>
+                  </select>
                 </td>
                 <td className="px-2 py-1.5">
-                  <input
-                    type="number"
-                    step="0.01"
-                    defaultValue={row.budgetedHours}
-                    onBlur={(e) => saveRowField(row, "budgeted_hours", e.target.value)}
-                    className="w-full rounded border border-slate-200 px-1.5 py-0.5 text-right focus:outline-none focus:border-brand-400"
-                  />
+                  <input type="number" step="0.01" defaultValue={(row.rateCents / 100).toFixed(2)}
+                    onBlur={(e) => saveField(row.id, "rate_cents", e.target.value)} className={inputCls} />
                 </td>
                 <td className="px-2 py-1.5">
-                  <input
-                    type="number"
-                    step="0.01"
-                    defaultValue={(row.budgetedCostCents / 100).toFixed(2)}
-                    onBlur={(e) => saveRowField(row, "budgeted_cost_cents", e.target.value)}
-                    className="w-full rounded border border-slate-200 px-1.5 py-0.5 text-right focus:outline-none focus:border-brand-400"
-                  />
+                  <input type="number" step="0.01" defaultValue={row.budgetedHours}
+                    onBlur={(e) => saveField(row.id, "budgeted_hours", e.target.value)} className={inputCls} />
+                </td>
+                <td className="px-2 py-1.5">
+                  <input type="number" step="0.01" defaultValue={(row.budgetedCostCents / 100).toFixed(2)}
+                    onBlur={(e) => saveField(row.id, "budgeted_cost_cents", e.target.value)} className={inputCls} />
                 </td>
                 <td className="px-2 py-1.5 text-center">
-                  <button
-                    onClick={() => deleteRow.mutate({ id: row.id, serviceId })}
-                    className="rounded p-0.5 hover:bg-red-50"
-                  >
+                  <Checkbox checked={row.isTailRow}
+                    onCheckedChange={(v) => saveField(row.id, "is_tail_row", !!v)} />
+                </td>
+                <td className="px-2 py-1.5 text-center">
+                  <button onClick={() => deleteRow.mutate({ id: row.id, serviceId })}
+                    className="rounded p-0.5 hover:bg-red-50">
                     <Trash2 className="h-3.5 w-3.5 text-red-400" />
                   </button>
                 </td>
@@ -293,67 +291,19 @@ function RateMatrixTab({ serviceId, form, setForm }: RateMatrixTabProps) {
             ))}
           </tbody>
         </table>
-        <div className="p-2 border-t bg-slate-50">
-          <Button variant="ghost" size="sm" onClick={addRow} className="text-xs">
-            <Plus className="mr-1 h-3.5 w-3.5" /> Add Tier
+        <div className="p-2 border-t bg-slate-50 flex items-center gap-2">
+          <Button variant="ghost" size="sm" onClick={addRow} disabled={!selectedFieldId} className="text-xs">
+            <Plus className="mr-1 h-3.5 w-3.5" /> Add Row
           </Button>
+          {!selectedFieldId && (
+            <span className="text-xs text-slate-400">Select a lookup field first</span>
+          )}
         </div>
       </div>
 
-      {/* Tail rule */}
-      <div className="rounded-lg border p-3">
-        <p className="text-xs font-semibold text-slate-600 mb-2">Tail Rule (for properties over the last tier)</p>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Every X (qty) over...">
-            <Input
-              type="number"
-              value={form.matrixTailEveryQty}
-              onChange={(e) => setForm({ ...form, matrixTailEveryQty: e.target.value })}
-              placeholder="e.g. 1000"
-              className="text-sm"
-            />
-          </Field>
-          <Field label="...Y (base qty)">
-            <Input
-              type="number"
-              value={form.matrixTailOverQty}
-              onChange={(e) => setForm({ ...form, matrixTailOverQty: e.target.value })}
-              placeholder="e.g. 50000"
-              className="text-sm"
-            />
-          </Field>
-          <Field label="Tail Rate ($)">
-            <Input
-              type="number"
-              step="0.01"
-              value={form.matrixTailRateCents}
-              onChange={(e) => setForm({ ...form, matrixTailRateCents: e.target.value })}
-              placeholder="0.00"
-              className="text-sm"
-            />
-          </Field>
-          <Field label="Tail Hours">
-            <Input
-              type="number"
-              step="0.01"
-              value={form.matrixTailHours}
-              onChange={(e) => setForm({ ...form, matrixTailHours: e.target.value })}
-              placeholder="0.00"
-              className="text-sm"
-            />
-          </Field>
-          <Field label="Tail Cost ($)">
-            <Input
-              type="number"
-              step="0.01"
-              value={form.matrixTailCostCents}
-              onChange={(e) => setForm({ ...form, matrixTailCostCents: e.target.value })}
-              placeholder="0.00"
-              className="text-sm"
-            />
-          </Field>
-        </div>
-      </div>
+      <p className="text-xs text-slate-400">
+        Tail rows apply when a property value exceeds all standard range rows. Mark a row as Tail to use it as the overflow rule.
+      </p>
     </div>
   );
 }
@@ -850,7 +800,7 @@ export function ServiceDialog({ open, service, onClose }: Props) {
         {/* Rate Matrix Tab */}
         {tab === "rate_matrix" && activeService && (
           <div className="py-2">
-            <RateMatrixTab serviceId={activeService.id} form={form} setForm={setForm} />
+            <RateMatrixTab serviceId={activeService.id} />
           </div>
         )}
 

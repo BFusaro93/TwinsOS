@@ -346,7 +346,7 @@ function AddPaymentDialog({
             <div className="mx-6 mb-4 overflow-auto rounded border bg-white">
               <table className="w-full text-xs">
                 <thead>
-                  <tr className="bg-[#3a3a3a] text-white">
+                  <tr className="bg-[#4a4a4a] text-white">
                     <th className="w-28 px-3 py-2 text-left font-medium">Unpaid Invoice</th>
                     <th className="px-3 py-2 text-left font-medium">Pay in full</th>
                     <th className="px-3 py-2 text-right font-medium">Balance</th>
@@ -602,7 +602,7 @@ export function PaymentsList({ clientId }: Props) {
       </div>
 
       {/* Dark actions bar */}
-      <div className="flex items-center justify-between bg-[#3a3a3a] px-4 py-2">
+      <div className="flex items-center justify-between bg-[#4a4a4a] px-4 py-2">
         <div className="flex items-center gap-2">
           <button
             onClick={() => refetch()}
@@ -645,31 +645,17 @@ export function PaymentsList({ clientId }: Props) {
       {/* Table */}
       <div className="flex-1 overflow-auto bg-white">
         <table className="w-full text-xs">
-          <thead className="sticky top-0 border-b bg-white">
-            <tr className="text-left text-xs font-medium text-slate-500">
-              <th className="px-3 py-3 cursor-pointer hover:text-slate-700">
-                Date ↕
-              </th>
+          <thead className="sticky top-0 bg-slate-50 border-b z-10">
+            <tr className="text-left text-xs font-semibold uppercase tracking-wide text-slate-400">
+              <th className="px-3 py-3">Date</th>
               {!clientId && (
-                <th className="min-w-[200px] px-3 py-3 cursor-pointer hover:text-slate-700">
-                  Client ↑
-                </th>
+                <th className="min-w-[200px] px-3 py-3">Client</th>
               )}
-              <th className="px-3 py-3 text-right cursor-pointer hover:text-slate-700">
-                Amount ↕
-              </th>
-              <th className="px-3 py-3 text-right cursor-pointer hover:text-slate-700">
-                Unused Amt ↕
-              </th>
-              <th className="px-3 py-3 text-right cursor-pointer hover:text-slate-700">
-                Refunded Amt ↕
-              </th>
-              <th className="px-3 py-3 cursor-pointer hover:text-slate-700">
-                Reference # ↕
-              </th>
-              <th className="px-3 py-3 cursor-pointer hover:text-slate-700">
-                Payment Method ↕
-              </th>
+              <th className="px-3 py-3 text-right">Amount</th>
+              <th className="px-3 py-3 text-right">Unused Amt</th>
+              <th className="px-3 py-3 text-right">Refunded Amt</th>
+              <th className="px-3 py-3">Reference #</th>
+              <th className="px-3 py-3">Payment Method</th>
             </tr>
           </thead>
           <tbody>

@@ -153,38 +153,42 @@ export function ClientFilesTab({ clientId }: Props) {
       </div>
 
       {/* Drop zone + file list */}
-      <div
-        className={cn(
-          "flex-1 overflow-auto",
-          dragging && "bg-brand-50 outline-dashed outline-2 outline-brand-300"
-        )}
-        onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
-        onDragLeave={() => setDragging(false)}
-        onDrop={onDrop}
-      >
+      <div className="flex-1 overflow-auto p-4 flex flex-col gap-4">
+        {/* Persistent dashed drop zone */}
+        <div
+          className={cn(
+            "cursor-pointer flex flex-col items-center gap-2 rounded-lg border-2 border-dashed px-6 py-8 text-center transition-colors",
+            dragging
+              ? "border-brand-400 bg-brand-50 text-brand-600"
+              : "border-slate-200 text-slate-400 hover:border-slate-300 hover:bg-slate-50"
+          )}
+          onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+          onDragLeave={() => setDragging(false)}
+          onDrop={onDrop}
+          onClick={() => inputRef.current?.click()}
+        >
+          <Upload className={cn("h-6 w-6", dragging ? "text-brand-500" : "text-slate-300")} />
+          <p className="text-sm font-medium">
+            {dragging ? "Drop to upload" : "Drag & drop files here"}
+          </p>
+          <p className="text-xs">or click to browse</p>
+        </div>
+
+        {/* File list */}
         {isLoading ? (
-          <div className="space-y-2 p-4">
+          <div className="space-y-2">
             {Array.from({ length: 3 }).map((_, i) => (
               <Skeleton key={i} className="h-12 w-full" />
             ))}
           </div>
-        ) : (files ?? []).length === 0 ? (
-          <div className="flex flex-col items-center justify-center gap-3 py-16 text-center">
-            <Upload className="h-8 w-8 text-slate-300" />
-            <p className="text-sm text-slate-400">No files yet</p>
-            <p className="text-xs text-slate-300">Drag and drop files here, or click Upload Files above</p>
-          </div>
-        ) : (
-          <>
+        ) : (files ?? []).length > 0 ? (
+          <div className="rounded-lg border bg-white overflow-hidden">
             {(files ?? []).map((f) => (
               <FileRow key={f.id} file={f} onDeleted={refetch} />
             ))}
-            {dragging && (
-              <div className="flex items-center justify-center py-8 text-sm text-brand-600 font-medium">
-                Drop to upload
-              </div>
-            )}
-          </>
+          </div>
+        ) : (
+          <p className="text-center text-xs text-slate-400">No files uploaded yet</p>
         )}
       </div>
     </div>

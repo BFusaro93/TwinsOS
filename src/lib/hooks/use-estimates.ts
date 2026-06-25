@@ -7,6 +7,7 @@ import type {
   EstimateLineItem,
   EstimateDirectCost,
 } from "@/types/crm-estimates";
+import type { OverheadSettings } from "@/lib/hooks/use-overhead-settings";
 
 // ── mappers ───────────────────────────────────────────────────────────────────
 
@@ -34,6 +35,10 @@ function mapLineItem(row: any): EstimateLineItem {
     unitType: row.unit_type ?? null,
     productionRateSqftPerHr: row.production_rate_sqft_per_hr ? Number(row.production_rate_sqft_per_hr) : null,
     sortOrder: row.sort_order,
+    estimateDesc: row.estimate_desc ?? null,
+    jobNote: row.job_note ?? null,
+    invoiceDesc: row.invoice_desc ?? null,
+    internalNote: row.internal_note ?? null,
     deletedAt: row.deleted_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -89,6 +94,7 @@ function mapEstimate(row: any): Estimate {
     totalBudgetedHours: Number(row.total_budgeted_hours),
     probabilityBps: row.probability_bps ?? 0,
     notes: row.notes,
+    reason: row.reason ?? null,
     deletedAt: row.deleted_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -99,6 +105,7 @@ function mapEstimate(row: any): Estimate {
     clientState: row.clients?.billing_state ?? null,
     clientZip: row.clients?.billing_zip ?? null,
     clientPhone: row.clients?.primary_phone ?? null,
+    clientEmail: row.clients?.primary_email ?? null,
     clientSince: row.clients?.client_since ?? null,
     salesRepName: row.profiles?.name ?? null,
     lineItems: (row.estimate_line_items ?? []).map(mapLineItem),
@@ -116,7 +123,7 @@ export function useEstimates(clientId?: string) {
       const supabase = createClient() as any;
       let q = supabase
         .from("estimates")
-        .select("*, clients(display_name, billing_address, billing_city, billing_state, billing_zip, primary_phone, client_since), profiles!estimates_sales_rep_id_fkey(name)")
+        .select("*, clients(display_name, billing_address, billing_city, billing_state, billing_zip, primary_phone, primary_email, client_since), profiles!estimates_sales_rep_id_fkey(name)")
         .is("deleted_at", null)
         .order("created_at", { ascending: false });
       if (clientId) q = q.eq("client_id", clientId);
@@ -139,7 +146,7 @@ export function useEstimate(id: string) {
         .from("estimates")
         .select(`
           *,
-          clients(display_name, billing_address, billing_city, billing_state, billing_zip, primary_phone, client_since),
+          clients(display_name, billing_address, billing_city, billing_state, billing_zip, primary_phone, primary_email, client_since),
           profiles!estimates_sales_rep_id_fkey(name),
           estimate_line_items(*),
           estimate_direct_costs(*)
@@ -182,10 +189,22 @@ export function useCreateEstimate() {
         .select()
         .single();
       if (error) throw error;
+
+      // log to client activity timeline
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (supabase as any).from("client_activity").insert({
+        client_id: values.clientId,
+        activity_type: "estimate",
+        subject: `Estimate created: ${values.description}`,
+        ref_id: data.id,
+        ref_table: "estimates",
+      });
+
       return mapEstimate(data);
     },
-    onSuccess: () => {
+    onSuccess: (_d, vars) => {
       qc.invalidateQueries({ queryKey: ["estimates"] });
+      qc.invalidateQueries({ queryKey: ["clients", vars.clientId, "activity"] });
     },
   });
 }
@@ -223,18 +242,47 @@ export function useUpdateEstimate() {
 export function useUpdateEstimateStage() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, stage }: { id: string; stage: string }) => {
+    mutationFn: async ({ id, stage, clientId, reason }: { id: string; stage: string; clientId?: string; reason?: string }) => {
       const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: existing } = await (supabase as any)
+        .from("estimates")
+        .select("client_id, description")
+        .eq("id", id)
+        .single();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const patch: Record<string, unknown> = { stage };
+      if (reason !== undefined) patch.reason = reason;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any)
         .from("estimates")
-        .update({ stage })
+        .update(patch)
         .eq("id", id);
       if (error) throw error;
+
+      const resolvedClientId = clientId ?? existing?.client_id;
+      if (resolvedClientId) {
+        const stageLabel: Record<string, string> = {
+          sent: "Estimate sent to client",
+          won: "Estimate won",
+          lost: "Estimate lost",
+          approved: "Estimate approved",
+        };
+        const subject = stageLabel[stage] ?? `Estimate moved to ${stage}`;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (supabase as any).from("client_activity").insert({
+          client_id: resolvedClientId,
+          activity_type: "estimate",
+          subject,
+          ref_id: id,
+          ref_table: "estimates",
+        });
+      }
     },
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: ["estimates", "detail", vars.id] });
       qc.invalidateQueries({ queryKey: ["estimates"] });
+      if (vars.clientId) qc.invalidateQueries({ queryKey: ["clients", vars.clientId, "activity"] });
     },
   });
 }
@@ -335,6 +383,38 @@ export function useDeleteDirectCost() {
   });
 }
 
+// ── duplicate estimate ────────────────────────────────────────────────────────
+
+export function useDuplicateEstimate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      id,
+      description,
+      resetStatus,
+    }: {
+      id: string;
+      description: string;
+      resetStatus: boolean;
+    }) => {
+      const res = await fetch(`/api/crm/estimates/${id}/duplicate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ description, resetStatus }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error ?? "Failed to duplicate estimate");
+      }
+      const body = await res.json();
+      return body as { id: string };
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["estimates"] });
+    },
+  });
+}
+
 // ── save financials (recompute + persist) ─────────────────────────────────────
 
 export function useSaveEstimateFinancials() {
@@ -347,6 +427,7 @@ export function useSaveEstimateFinancials() {
       taxRateBps,
       overheadRateBps,
       discountCents,
+      perTypeOverhead,
     }: {
       id: string;
       lineItems: EstimateLineItem[];
@@ -354,6 +435,7 @@ export function useSaveEstimateFinancials() {
       taxRateBps: number;
       overheadRateBps: number;
       discountCents: number;
+      perTypeOverhead?: OverheadSettings;
     }) => {
       const subtotalCents = lineItems.reduce((s, li) => s + li.totalCents, 0);
       const totalCostCents = lineItems.reduce((s, li) => s + li.totalCostCents, 0);
@@ -361,7 +443,23 @@ export function useSaveEstimateFinancials() {
       const revenueCents = subtotalCents - discountCents;
       const taxCents = Math.round((revenueCents * taxRateBps) / 10000);
       const totalCents = revenueCents + taxCents;
-      const overheadCostCents = Math.round((totalCostCents * overheadRateBps) / 10000);
+      let overheadCostCents: number;
+      if (perTypeOverhead) {
+        const ohByType: Record<string, number> = {
+          labor: perTypeOverhead.laborOhBps,
+          labor_burden: perTypeOverhead.laborBurdenBps,
+          contract: perTypeOverhead.contractOhBps,
+          equipment: perTypeOverhead.equipmentOhBps,
+          materials: perTypeOverhead.materialsOhBps,
+          other: perTypeOverhead.otherOhBps,
+        };
+        overheadCostCents = directCosts.reduce((sum, dc) => {
+          const bps = ohByType[dc.costType] ?? 0;
+          return sum + Math.round((dc.totalCents * bps) / 10000);
+        }, 0);
+      } else {
+        overheadCostCents = Math.round((totalCostCents * overheadRateBps) / 10000);
+      }
       const grossProfitCents = revenueCents - totalCostCents - directTotal;
       const netProfitCents = grossProfitCents - overheadCostCents;
       const totalBudgetedHours = lineItems.reduce((s, li) => s + li.totalBudgetedHours, 0);
@@ -390,5 +488,44 @@ export function useSaveEstimateFinancials() {
       qc.invalidateQueries({ queryKey: ["estimates", "detail", vars.id] });
       qc.invalidateQueries({ queryKey: ["estimates"] });
     },
+  });
+}
+
+export interface EstimateShareTokenInfo {
+  id: string;
+  token: string;
+  firstViewedAt: string | null;
+  lastViewedAt: string | null;
+  viewCount: number;
+  acceptedAt: string | null;
+  acceptedByName: string | null;
+  expiresAt: string | null;
+}
+
+export function useEstimateShareTokens(estimateId: string) {
+  const supabase = createClient();
+  return useQuery({
+    queryKey: ["estimate-share-tokens", estimateId],
+    queryFn: async (): Promise<EstimateShareTokenInfo[]> => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
+        .from("estimate_share_tokens")
+        .select("id, token, first_viewed_at, last_viewed_at, view_count, accepted_at, accepted_by_name, expires_at")
+        .eq("estimate_id", estimateId)
+        .is("deleted_at", null)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return (data ?? []).map((r: Record<string, unknown>) => ({
+        id: r.id as string,
+        token: r.token as string,
+        firstViewedAt: r.first_viewed_at as string | null,
+        lastViewedAt: r.last_viewed_at as string | null,
+        viewCount: (r.view_count as number) ?? 0,
+        acceptedAt: r.accepted_at as string | null,
+        acceptedByName: r.accepted_by_name as string | null,
+        expiresAt: r.expires_at as string | null,
+      }));
+    },
+    enabled: !!estimateId,
   });
 }

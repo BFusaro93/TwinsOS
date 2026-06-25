@@ -8,12 +8,13 @@ import { JobDetail } from "./JobDetail";
 interface Props {
   jobId: string | null;
   onOpenChange: (open: boolean) => void;
+  initialEditing?: boolean;
 }
 
 const MIN_WIDTH = 560;
 const DEFAULT_WIDTH = Math.min(1100, typeof window !== "undefined" ? window.innerWidth * 0.75 : 1100);
 
-export function JobDetailSheet({ jobId, onOpenChange }: Props) {
+export function JobDetailSheet({ jobId, onOpenChange, initialEditing }: Props) {
   const [width, setWidth] = useState(DEFAULT_WIDTH);
   const dragging = useRef(false);
   const startX = useRef(0);
@@ -79,7 +80,7 @@ export function JobDetailSheet({ jobId, onOpenChange }: Props) {
           </div>
         </div>
         <div className="flex-1 overflow-y-auto bg-white">
-          <JobDetail jobId={jobId} />
+          <JobDetail jobId={jobId} initialEditing={initialEditing} />
         </div>
       </div>
     </>,

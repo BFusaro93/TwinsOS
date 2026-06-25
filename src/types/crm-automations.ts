@@ -1,18 +1,121 @@
 // ── Trigger & Condition types ─────────────────────────────────────────────────
 
 export type TriggerType =
+  // Client / Lead
+  | 'client_cancelled'
+  | 'client_source_updated'
   | 'client_created'
-  | 'client_status_changed'
-  | 'job_completed'
-  | 'job_created'
+  | 'client_reactivated'
+  | 'contract_about_to_expire'
+  | 'credit_card_charge_failed'
+  | 'credit_card_about_to_expire'
+  | 'credit_card_updated'
+  | 'has_opted_in_emails'
+  | 'lead_cancelled'
+  | 'lead_converted_to_client'
+  | 'lead_created'
+  // Date
+  | 'run_on_client_since_date'
+  | 'run_on_custom_field_date'
+  | 'run_on_date'
+  | 'run_on_day_of_week'
+  | 'run_on_time_range'
+  // Estimate
+  | 'estimate_created'
+  | 'estimate_lost'
   | 'estimate_sent'
-  | 'invoice_sent'
+  | 'estimate_won'
+  // Form
+  | 'form_submitted'
+  // Invoice
+  | 'invoice_past_due'
+  | 'invoice_created'
   | 'invoice_paid'
+  // Job
+  | 'job_cancelled'
+  | 'job_created'
+  | 'package_created'
+  | 'visit_date_changed'
+  | 'visit_moved_to_waiting_list'
+  | 'visit_cancelled'
+  | 'visit_completed'
+  | 'visit_dispatched'
+  | 'visit_skipped'
+  // Tag
+  | 'tag_added'
+  | 'tag_removed'
+  // Ticket
+  | 'calendar_event_completed'
+  | 'calendar_event_created'
+  | 'calendar_event_dispatched'
+  | 'calendar_event_skipped'
+  | 'ticket_past_due'
+  | 'ticket_closed'
+  | 'ticket_created'
+  | 'ticket_reopened'
+  // Legacy / keep for compatibility
+  | 'client_status_changed'
   | 'contract_signed'
+  | 'invoice_sent'
   | 'date_based'
   | 'manual';
 
 export type ConditionField =
+  // Client / Lead
+  | 'account_balance'
+  | 'account_type'
+  | 'billing_term'
+  | 'cancellation_reason'
+  | 'client_lead_status'
+  | 'client_since_date'
+  | 'client_source'
+  | 'csr'
+  | 'custom_field'
+  | 'does_not_have_ach'
+  | 'does_not_have_credit_card'
+  | 'has_ach'
+  | 'has_credit_card'
+  | 'is_opted_in_emails'
+  | 'map_code'
+  | 'opt_in_texts'
+  | 'payment_method_type'
+  | 'sales_person'
+  | 'service_zip_code'
+  // Date
+  | 'date_of_year_between'
+  // Estimate
+  | 'estimate_has_product'
+  | 'estimate_has_service'
+  | 'estimate_sales_rep'
+  | 'estimate_stage'
+  | 'estimate_status'
+  | 'estimate_total'
+  // Form
+  | 'has_completed_form'
+  // Invoice
+  | 'invoice_has_product'
+  | 'invoice_has_service'
+  | 'invoice_past_due_days'
+  | 'invoice_was_paid_days'
+  // Job
+  | 'client_currently_has_package'
+  | 'client_currently_has_recurring_job'
+  | 'client_does_not_have_package'
+  | 'client_does_not_have_recurring_job'
+  | 'client_has_ever_had_package'
+  | 'client_has_ever_had_recurring_job'
+  | 'client_has_not_ever_had_package'
+  | 'client_has_not_ever_had_recurring_job'
+  | 'last_visit_date'
+  | 'visit_requires_call_ahead'
+  // Tag
+  | 'does_not_have_tag'
+  | 'has_tag'
+  // Ticket
+  | 'calendar_event_category'
+  | 'ticket_category'
+  | 'ticket_past_due_days'
+  // Legacy
   | 'client_type'
   | 'client_status'
   | 'job_type'
@@ -29,8 +132,13 @@ export type ConditionOperator =
   | 'not_contains'
   | 'greater_than'
   | 'less_than'
+  | 'greater_than_or_equal'
+  | 'less_than_or_equal'
   | 'is_set'
-  | 'is_not_set';
+  | 'is_not_set'
+  | 'before'
+  | 'after'
+  | 'within_days';
 
 // ── Event types ───────────────────────────────────────────────────────────────
 

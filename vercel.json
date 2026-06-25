@@ -20,6 +20,10 @@
     {
       "path": "/api/cron/recurring-visits",
       "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/crm/estimates/expiry-notify",
+      "schedule": "0 8 * * *"
     }
   ]
 }

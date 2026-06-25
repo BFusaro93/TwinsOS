@@ -734,7 +734,7 @@ export function JobCostingDashboard() {
   }
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="flex h-full flex-col gap-4">
       <PageHeader
         title="Job Costing"
         description="Calculate hourly bid rates from labor, overhead, and profit targets"

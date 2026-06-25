@@ -309,7 +309,7 @@ export function RolesList() {
         <table className="w-full text-sm">
           <thead className="sticky top-0 border-b bg-slate-50">
             <tr className="text-left text-xs font-semibold text-slate-500">
-              <th className="w-8 px-4 py-3"><Checkbox /></th>
+              <th className="w-10 px-4 py-3"><input type="checkbox" className="rounded border-slate-300 accent-brand-500" /></th>
               <th className="px-4 py-3">Role Name</th>
               <th className="px-4 py-3">Description</th>
               <th className="px-4 py-3">Active</th>
@@ -342,7 +342,7 @@ export function RolesList() {
                   onClick={() => setDialogRole(role)}
                 >
                   <td className="px-4 py-2.5" onClick={(e) => e.stopPropagation()}>
-                    <Checkbox />
+                    <input type="checkbox" className="rounded border-slate-300 accent-brand-500" />
                   </td>
                   <td className="px-4 py-2.5">
                     <span className="text-brand-600 hover:underline font-medium">{role.name}</span>

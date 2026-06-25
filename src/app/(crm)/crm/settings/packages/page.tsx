@@ -14,7 +14,7 @@ export default function PackagesPage() {
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-slate-900">Package Programs</h1>
         <p className="text-slate-500 text-sm mt-1">
-          Define bundled service programs (e.g. 7-Step Fertilizer, Gold Maintenance). Monthly billing is handled via Contracts.
+          Define bundled service programs (e.g. 7-Step Fertilizer, Gold Maintenance). Packages can be included in a Contract or billed individually — either per visit as services are completed, or spread across monthly installments.
         </p>
       </div>
 

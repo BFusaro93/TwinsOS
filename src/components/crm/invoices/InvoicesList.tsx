@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { useInvoices, useUpdateInvoiceStatus, useCreateInvoice } from "@/lib/hooks/use-invoices";
 import { PermissionGate } from "@/components/shared/PermissionGate";
 import { Button } from "@/components/ui/button";
@@ -114,6 +115,11 @@ export function InvoicesList({ clientId }: Props) {
   const { mutateAsync: createInvoice } = useCreateInvoice();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [openInvoiceId, setOpenInvoiceId] = useState<string | null>(null);
+  const searchParams = useSearchParams();
+  useEffect(() => {
+    const id = searchParams.get("open");
+    if (id) setOpenInvoiceId(id);
+  }, [searchParams]);
   const [quickFilter, setQuickFilter] = useState<QuickFilter>("all");
   const [search, setSearch] = useState("");
   const [activeFilterKey, setActiveFilterKey] = useState<ActiveFilterKey | null>(null);
@@ -211,7 +217,7 @@ export function InvoicesList({ clientId }: Props) {
   const colSpan = visibleColumns.length + 2; // +checkbox +actions
 
   return (
-    <div className="flex h-full flex-col gap-0">
+    <div className="flex h-full flex-col gap-4">
 
       {/* ── Page header ── */}
       {!clientId && (
@@ -282,7 +288,7 @@ export function InvoicesList({ clientId }: Props) {
       </div>
 
       {/* ── Dark actions bar with quick-filter tabs (matches Payments dark bar) ── */}
-      <div className="flex items-center justify-between bg-[#3a3a3a] px-4 py-2">
+      <div className="flex items-center justify-between bg-[#4a4a4a] px-4 py-2">
         <div className="flex items-center gap-2">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>

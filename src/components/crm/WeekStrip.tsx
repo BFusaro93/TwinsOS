@@ -112,7 +112,6 @@ export function WeekStrip({ selectedDate, onDateChange }: Props) {
           onChange={(e) => e.target.value && onDateChange(e.target.value)}
           className="rounded border border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-brand-400"
         />
-        <span className="text-xs text-slate-500">{formatHeaderDate(selectedDate)}</span>
       </div>
 
       {/* Today shortcut */}

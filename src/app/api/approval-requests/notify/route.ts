@@ -95,7 +95,7 @@ export async function POST(request: Request) {
 
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://twins-os.vercel.app";
   const entityPath = entityType === "requisition" ? "po/requisitions" : "po/orders";
-  const deepLink = `${siteUrl}/dashboard/${entityPath}`;
+  const deepLink = `${siteUrl}/${entityPath}`;
 
   const resend = new Resend(process.env.RESEND_API_KEY!);
   const entityLabel = entityType === "requisition" ? "Purchase Requisition" : "Purchase Order";

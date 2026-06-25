@@ -359,6 +359,21 @@ export function useRecordPayment() {
       // sync client outstanding balance
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await (supabase.rpc as any)("sync_client_balance", { p_client_id: clientId });
+
+      // log to activity timeline
+      const label = isPrepayment
+        ? `Prepayment recorded: ${method}`
+        : invoiceId
+          ? `Payment received: ${method}`
+          : `Payment recorded: ${method}`;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (supabase as any).from("client_activity").insert({
+        client_id: clientId,
+        activity_type: "payment",
+        subject: label,
+        ref_id: invoiceId ?? null,
+        ref_table: invoiceId ? "crm_invoices" : null,
+      });
     },
     onSuccess: (_d, vars) => {
       qc.invalidateQueries({ queryKey: ["crm-invoices"] });
@@ -366,6 +381,7 @@ export function useRecordPayment() {
       qc.invalidateQueries({ queryKey: ["clients", vars.clientId] });
       qc.invalidateQueries({ queryKey: ["clients"] });
       qc.invalidateQueries({ queryKey: ["crm-payments", vars.clientId] });
+      qc.invalidateQueries({ queryKey: ["clients", vars.clientId, "activity"] });
     },
   });
 }
@@ -641,11 +657,22 @@ export function useCreateInvoiceFromJob() {
         .update({ sub_status: "invoiced" } as any)
         .eq("id", jobId);
 
+      // log to client activity timeline
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (supabase as any).from("client_activity").insert({
+        client_id: clientId,
+        activity_type: "invoice",
+        subject: `Invoice created: ${description}`,
+        ref_id: invoiceId,
+        ref_table: "crm_invoices",
+      });
+
       return mapInvoice(data);
     },
-    onSuccess: () => {
+    onSuccess: (_d, vars) => {
       qc.invalidateQueries({ queryKey: ["crm-invoices"] });
       qc.invalidateQueries({ queryKey: ["crm-jobs"] });
+      qc.invalidateQueries({ queryKey: ["clients", vars.clientId, "activity"] });
     },
   });
 }

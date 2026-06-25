@@ -219,6 +219,24 @@ export function useRemoveTicketLink() {
   });
 }
 
+export function useDeleteTicket() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase as any)
+        .from("crm_tickets")
+        .update({ deleted_at: new Date().toISOString() })
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["crm-tickets"] });
+    },
+  });
+}
+
 export function useCloseTicket() {
   const qc = useQueryClient();
   return useMutation({

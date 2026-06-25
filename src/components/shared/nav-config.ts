@@ -58,7 +58,7 @@ export const NAV_SECTIONS: NavSection[] = [
     label: "Maintenance",
     items: [
       { label: "Work Orders", href: "/cmms/work-orders", icon: ClipboardCheck, hideFromCrew: true },
-      { label: "Requests", href: "/cmms/requests", icon: Bell },
+      { label: "Requests", href: "/cmms/requests", icon: Bell, hideFromCrew: true },
       { label: "PM Schedules", href: "/cmms/pm-schedules", icon: CalendarClock, hideFromCrew: true },
       { label: "Vehicles", href: "/cmms/vehicles", icon: Truck, hideFromCrew: true },
       { label: "Assets", href: "/cmms/assets", icon: Cpu, hideFromCrew: true },

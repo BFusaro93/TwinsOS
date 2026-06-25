@@ -5,17 +5,24 @@ import { cn } from "@/lib/utils";
 import { bpsToPercent, centsToDisplay, computeLineItem } from "@/lib/estimate-calc";
 import { useUpsertLineItem, useDeleteLineItem } from "@/lib/hooks/use-estimates";
 import { useCRMServices } from "@/lib/hooks/use-crm-jobs";
+import { useProducts } from "@/lib/hooks/use-products";
 import { useOrgSettings } from "@/lib/hooks/use-org-settings";
 import { Button } from "@/components/ui/button";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Trash2, Copy, Plus, ChevronDown } from "lucide-react";
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Input } from "@/components/ui/input";
+import { Trash2, Copy, Plus, ChevronDown, ChevronRight, Pencil } from "lucide-react";
 import { toast } from "sonner";
+import { LineItemNotesPopover, type LineItemNotes } from "./LineItemNotesPopover";
+import { AddSubitemDialog } from "./AddSubitemDialog";
+import {
+  useLineItemSubitems,
+  useDeleteSubitem,
+  type LineItemSubitem,
+} from "@/lib/hooks/use-line-item-subitems";
 import type { EstimateLineItem, LineItemStatus } from "@/types/crm-estimates";
 
 const UNIT_TYPES = ["sqft", "lf", "cuyd", "acres", "hr", "each", "lb", "gal"];
@@ -59,6 +66,78 @@ const STATUS_COLOR: Record<LineItemStatus, string> = {
   lost:   "bg-red-100 text-red-600",
 };
 
+// ── sub-item rows ─────────────────────────────────────────────────────────────
+
+function SubitemRows({ lineItemId, onAddClick }: { lineItemId: string; onAddClick: () => void }) {
+  const { data: subitems = [], isLoading } = useLineItemSubitems(lineItemId);
+  const { mutateAsync: deleteSubitem } = useDeleteSubitem();
+  const [editingSubitem, setEditingSubitem] = useState<LineItemSubitem | null>(null);
+
+  async function handleDelete(s: LineItemSubitem) {
+    try { await deleteSubitem({ id: s.id, lineItemId }); }
+    catch { toast.error("Failed to delete sub-item"); }
+  }
+
+  return (
+    <>
+      {isLoading && (
+        <tr className="border-b border-slate-50 bg-slate-50/60">
+          <td colSpan={17} className="px-6 py-1.5 text-[10px] text-slate-400 italic">Loading…</td>
+        </tr>
+      )}
+      {subitems.map((s) => (
+        <tr key={s.id} className="group border-b border-slate-50 bg-slate-50/60 text-[11px]">
+          <td className="w-8 px-2 py-1" />
+          <td colSpan={2} className="border-l-2 border-brand-300 pl-6 py-1">
+            <span className="font-medium text-slate-700">{s.name}</span>
+            <span className="ml-2 rounded bg-slate-200 px-1 py-0.5 text-[10px] text-slate-500">
+              {s.type === "product" ? "Product" : "Subservice"}
+            </span>
+          </td>
+          <td className="w-12 px-2 py-1 text-right tabular-nums text-slate-600">{s.qty}</td>
+          <td colSpan={5} />
+          <td className="w-20 px-2 py-1 text-right tabular-nums text-slate-600">
+            ${(s.rateCents / 100).toFixed(2)}
+          </td>
+          <td className="w-20 px-2 py-1 text-right tabular-nums font-medium text-slate-700">
+            {centsToDisplay(s.totalCents)}
+          </td>
+          <td colSpan={4} />
+          <td className="px-2 py-1">
+            <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+              <button onClick={() => setEditingSubitem(s)} title="Edit"
+                className="rounded p-0.5 text-slate-400 hover:text-slate-600">
+                <Pencil className="h-3 w-3" />
+              </button>
+              <button onClick={() => handleDelete(s)} title="Delete"
+                className="rounded p-0.5 text-red-400 hover:text-red-600">
+                <Trash2 className="h-3 w-3" />
+              </button>
+            </div>
+          </td>
+          <td />
+        </tr>
+      ))}
+      <tr className="border-b border-slate-100 bg-slate-50/40">
+        <td colSpan={17} className="px-8 py-1">
+          <button onClick={onAddClick}
+            className="text-[11px] text-brand-600 hover:text-brand-700 hover:underline">
+            + Add Product / Service
+          </button>
+        </td>
+      </tr>
+      {editingSubitem && (
+        <AddSubitemDialog
+          lineItemId={lineItemId}
+          subitem={editingSubitem}
+          open={true}
+          onClose={() => setEditingSubitem(null)}
+        />
+      )}
+    </>
+  );
+}
+
 // ── single editable row ───────────────────────────────────────────────────────
 
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
@@ -69,15 +148,25 @@ function LineItemRow({
   estimateId,
   onDelete,
   onDuplicate,
+  selected,
+  onToggleSelect,
+  expanded,
+  onToggleExpand,
 }: {
   item: EstimateLineItem;
   estimateId: string;
   onDelete: (id: string) => void;
   onDuplicate: (item: EstimateLineItem) => void;
+  selected: boolean;
+  onToggleSelect: (id: string) => void;
+  expanded: boolean;
+  onToggleExpand: (id: string) => void;
 }) {
   const [row, setRow] = useState<RowState>(() => item);
   const [dirty, setDirty] = useState(false);
   const { mutateAsync: upsert, isPending } = useUpsertLineItem();
+  const [addSubitemOpen, setAddSubitemOpen] = useState(false);
+  const { data: subitems = [] } = useLineItemSubitems(item.id);
 
   function update<K extends keyof RowState>(key: K, val: RowState[K]) {
     setRow((prev) => {
@@ -121,6 +210,24 @@ function LineItemRow({
     }
   }
 
+  async function saveNotes(notes: LineItemNotes) {
+    try {
+      await upsert({
+        estimateId,
+        item: {
+          id: row.id,
+          estimate_desc: notes.estimateDesc,
+          job_note: notes.jobNote,
+          invoice_desc: notes.invoiceDesc,
+          internal_note: notes.internalNote,
+        },
+      });
+      setRow((r) => ({ ...r, ...notes }));
+    } catch {
+      toast.error("Failed to save notes");
+    }
+  }
+
   // Is budgeted hours auto-calculated (production rate active)?
   const isAutoHrs =
     !!row.productionRateSqftPerHr &&
@@ -131,7 +238,17 @@ function LineItemRow({
   return (
     <>
       {/* ── main row ──────────────────────────────────────────────────────── */}
-      <tr className="group border-b border-slate-100 bg-white text-xs hover:bg-slate-50">
+      <tr className={cn("group border-b border-slate-100 bg-white text-xs hover:bg-slate-50", selected && "bg-brand-50")}>
+        {/* Checkbox */}
+        <td className="w-8 px-2 py-1.5 text-center">
+          <input
+            type="checkbox"
+            checked={selected}
+            onChange={() => onToggleSelect(row.id)}
+            className="h-3.5 w-3.5 rounded border-slate-300 text-brand-500"
+          />
+        </td>
+
         {/* Status */}
         <td className="px-2 py-1.5">
           <select
@@ -150,9 +267,26 @@ function LineItemRow({
           </select>
         </td>
 
-        {/* Service name */}
+        {/* Service name + expand chevron */}
         <td className="min-w-[160px] px-2 py-1.5 font-semibold text-slate-900">
-          {row.serviceName}
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => onToggleExpand(item.id)}
+              title={expanded ? "Collapse sub-items" : "Expand sub-items"}
+              className="shrink-0 rounded p-0.5 text-slate-400 hover:text-slate-600"
+            >
+              {expanded
+                ? <ChevronDown className="h-3.5 w-3.5" />
+                : <ChevronRight className="h-3.5 w-3.5" />
+              }
+            </button>
+            {subitems.length > 0 && !expanded && (
+              <span className="rounded-full bg-slate-200 px-1.5 text-[9px] text-slate-500 font-normal">
+                {subitems.length}
+              </span>
+            )}
+            {row.serviceName}
+          </div>
         </td>
 
         {/* OCC (Visits) */}
@@ -268,6 +402,10 @@ function LineItemRow({
         {/* Actions */}
         <td className="px-2 py-1.5">
           <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+            <LineItemNotesPopover
+              notes={{ estimateDesc: row.estimateDesc ?? null, jobNote: row.jobNote ?? null, invoiceDesc: row.invoiceDesc ?? null, internalNote: row.internalNote ?? null }}
+              onSave={saveNotes}
+            />
             <button
               onClick={() => onDuplicate(row)}
               title="Duplicate"
@@ -302,15 +440,31 @@ function LineItemRow({
       {/* ── sub-row: production rate hint ─────────────────────────────────── */}
       {row.productionRateSqftPerHr && row.productionRateSqftPerHr > 0 && row.qty > 0 && row.unitType && row.unitType !== "hr" && row.unitType !== "each" && (
         <tr className="border-b border-slate-50 bg-blue-50/40 text-[10px] text-blue-500">
-          <td colSpan={2} />
+          <td colSpan={3} />
           <td colSpan={3} className="px-2 py-0.5 italic">
             {row.qty.toLocaleString()} {row.unitType} ÷ {row.productionRateSqftPerHr.toLocaleString()} {row.unitType}/hr
           </td>
           <td className="px-2 py-0.5 text-right text-blue-600 font-medium">
             = {row.budgetedHours.toFixed(2)} hrs/occ
           </td>
-          <td colSpan={10} />
+          <td colSpan={11} />
         </tr>
+      )}
+
+      {/* ── sub-items ─────────────────────────────────────────────────────── */}
+      {expanded && (
+        <SubitemRows
+          lineItemId={item.id}
+          onAddClick={() => setAddSubitemOpen(true)}
+        />
+      )}
+
+      {addSubitemOpen && (
+        <AddSubitemDialog
+          lineItemId={item.id}
+          open={true}
+          onClose={() => setAddSubitemOpen(false)}
+        />
       )}
     </>
   );
@@ -321,11 +475,17 @@ function LineItemRow({
 interface Props {
   estimateId: string;
   items: EstimateLineItem[];
+  selectedIds?: string[];
+  onSelectionChange?: (ids: string[]) => void;
 }
 
-export function EstimateLineItemsGrid({ estimateId, items }: Props) {
+export function EstimateLineItemsGrid({ estimateId, items, selectedIds = [], onSelectionChange }: Props) {
   const { data: services } = useCRMServices();
   const { data: orgSettings } = useOrgSettings();
+  const { data: productCatalog = [] } = useProducts();
+  const materialProducts = productCatalog.filter(
+    (p) => p.category === "stocked_material" || p.category === "project_material"
+  );
   const { mutateAsync: upsert } = useUpsertLineItem();
   const { mutateAsync: deleteItem } = useDeleteLineItem();
 
@@ -419,88 +579,177 @@ export function EstimateLineItemsGrid({ estimateId, items }: Props) {
     }
   }
 
-  return (
-    <div className="overflow-x-auto rounded-lg border bg-white shadow-sm">
-      <table className="w-full min-w-[1200px] text-xs">
-        <thead className="sticky top-0 text-white" style={{ backgroundColor: orgSettings?.brandColor ?? "#60ab45" }}>
-          <tr>
-            <th className="px-2 py-2 text-left font-medium">Status</th>
-            <th className="px-2 py-2 text-left font-medium">Service / Package</th>
-            <th className="px-2 py-2 text-center font-medium" title="Occurrences (visits)">OCC</th>
-            <th className="px-2 py-2 text-right font-medium">QTY</th>
-            <th className="px-2 py-2 text-left font-medium">Unit</th>
-            <th className="px-2 py-2 text-right font-medium" title="Hours per occurrence (auto-calculated in blue when production rate is set)">P/H</th>
-            <th className="px-2 py-2 text-right font-medium" title="Total budgeted hours">T.H.</th>
-            <th className="px-2 py-2 text-center font-medium" title="Calc type: × = qty×rate×visits, $ = fixed">Calc</th>
-            <th className="px-2 py-2 text-right font-medium" title="Price per occurrence">Rate</th>
-            <th className="px-2 py-2 text-right font-medium" title="Total price">TP</th>
-            <th className="px-2 py-2 text-right font-medium">GM%</th>
-            <th className="px-2 py-2 text-right font-medium">Cost</th>
-            <th className="px-2 py-2 text-right font-medium">T.Cost</th>
-            <th className="px-2 py-2 text-right font-medium" title="Adjusted rate override">Adj Rate</th>
-            <th className="px-2 py-2" />
-            <th className="px-2 py-2" />
-          </tr>
-        </thead>
-        <tbody>
-          {items.length === 0 && (
-            <tr>
-              <td colSpan={16} className="py-8 text-center text-slate-400 text-xs">
-                No line items yet — add a service below
-              </td>
-            </tr>
-          )}
-          {items.map((item) => (
-            <LineItemRow
-              key={item.id}
-              item={item}
-              estimateId={estimateId}
-              onDelete={handleDelete}
-              onDuplicate={handleDuplicate}
-            />
-          ))}
-        </tbody>
-      </table>
+  const [addOpen, setAddOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
 
-      {/* Add item */}
-      <div className="border-t p-3">
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="sm" className="h-8 text-xs">
-              <Plus className="mr-1 h-3.5 w-3.5" /> Add Item
-              <ChevronDown className="ml-1 h-3 w-3 text-slate-400" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="w-72">
-            {(services ?? []).filter((s) => s.isActive).map((s) => (
-              <DropdownMenuItem
-                key={s.id}
-                className="flex items-center justify-between text-xs"
-                onClick={() => addService({
-                  id: s.id,
-                  name: s.name,
-                  unit: s.unit ?? undefined,
-                  productionRate: s.productionRateSqftPerHr,
-                  rateCents: s.defaultRateCents,
-                })}
-              >
-                <span className="font-medium">{s.name}</span>
-                {s.productionRateSqftPerHr && (
-                  <span className="text-[10px] text-slate-400 ml-2 shrink-0">
-                    {s.productionRateSqftPerHr.toLocaleString()} {s.unit}/hr
-                  </span>
-                )}
-              </DropdownMenuItem>
-            ))}
-            {(services ?? []).filter((s) => s.isActive).length > 0 && <DropdownMenuSeparator />}
-            <DropdownMenuItem
-              className="text-xs text-slate-500"
-              onClick={() => addService({ name: "Custom Item" })}
+  function toggleExpand(id: string) {
+    setExpandedRows((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleSelect(id: string) {
+    if (!onSelectionChange) return;
+    onSelectionChange(
+      selectedIds.includes(id) ? selectedIds.filter((x) => x !== id) : [...selectedIds, id]
+    );
+  }
+
+  function toggleSelectAll() {
+    if (!onSelectionChange) return;
+    onSelectionChange(selectedIds.length === items.length ? [] : items.map((i) => i.id));
+  }
+
+  const activeServices = (services ?? []).filter((s) => s.isActive);
+  const lc = search.toLowerCase();
+  const filteredServices = lc
+    ? activeServices.filter((s) => s.name.toLowerCase().includes(lc))
+    : activeServices;
+  const filteredProducts = lc
+    ? materialProducts.filter((p) => p.name.toLowerCase().includes(lc))
+    : materialProducts;
+
+  const addItemButton = (
+    <Popover open={addOpen} onOpenChange={(o) => { setAddOpen(o); if (!o) setSearch(""); }}>
+      <PopoverTrigger asChild>
+        <Button variant="outline" size="sm" className="h-8 text-xs">
+          <Plus className="mr-1 h-3.5 w-3.5" /> Add Item
+          <ChevronDown className="ml-1 h-3 w-3 text-slate-400" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-80 p-0">
+        <div className="border-b px-2 py-1.5">
+          <Input
+            autoFocus
+            placeholder="Search services & products…"
+            className="h-7 text-xs"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+        <div className="max-h-72 overflow-y-auto py-1">
+          {filteredServices.length > 0 && (
+            <>
+              <div className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Services</div>
+              {filteredServices.map((s) => (
+                <button
+                  key={s.id}
+                  className="flex w-full items-center justify-between px-3 py-1.5 text-xs hover:bg-slate-50"
+                  onClick={() => {
+                    addService({ id: s.id, name: s.name, unit: s.unit ?? undefined, productionRate: s.productionRateSqftPerHr, rateCents: s.defaultRateCents });
+                    setAddOpen(false); setSearch("");
+                  }}
+                >
+                  <span className="font-medium text-slate-900">{s.name}</span>
+                  {s.productionRateSqftPerHr && (
+                    <span className="ml-2 shrink-0 text-[10px] text-slate-400">
+                      {s.productionRateSqftPerHr.toLocaleString()} {s.unit}/hr
+                    </span>
+                  )}
+                </button>
+              ))}
+            </>
+          )}
+          {filteredProducts.length > 0 && (
+            <>
+              <div className="mt-1 border-t px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Products / Materials</div>
+              {filteredProducts.map((p) => (
+                <button
+                  key={p.id}
+                  className="flex w-full items-center justify-between px-3 py-1.5 text-xs hover:bg-slate-50"
+                  onClick={() => {
+                    addService({ name: p.name, unit: "each", rateCents: p.price });
+                    setAddOpen(false); setSearch("");
+                  }}
+                >
+                  <span className="font-medium text-slate-900">{p.name}</span>
+                  {p.price > 0 && (
+                    <span className="ml-2 shrink-0 text-[10px] text-slate-400">
+                      ${(p.price / 100).toFixed(2)}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </>
+          )}
+          {filteredServices.length === 0 && filteredProducts.length === 0 && lc && (
+            <div className="px-3 py-3 text-xs text-slate-400">No results for &ldquo;{search}&rdquo;</div>
+          )}
+          <div className="mt-1 border-t">
+            <button
+              className="flex w-full items-center px-3 py-1.5 text-xs text-slate-500 hover:bg-slate-50"
+              onClick={() => { addService({ name: "Custom Item" }); setAddOpen(false); setSearch(""); }}
             >
               <Plus className="mr-1.5 h-3 w-3" /> Blank line item
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+            </button>
+          </div>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+
+  return (
+    <div className="rounded-lg border bg-white shadow-sm">
+      {/* Add Item toolbar — always visible at the top */}
+      <div className="flex items-center gap-2 border-b px-3 py-2 bg-slate-50">
+        {addItemButton}
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[1200px] text-xs">
+          <thead className="sticky top-0 text-white" style={{ backgroundColor: orgSettings?.brandColor ?? "#60ab45" }}>
+            <tr>
+              <th className="w-8 px-2 py-2 text-center">
+                <input
+                  type="checkbox"
+                  checked={items.length > 0 && selectedIds.length === items.length}
+                  onChange={toggleSelectAll}
+                  className="h-3.5 w-3.5 rounded border-slate-300"
+                />
+              </th>
+              <th className="px-2 py-2 text-left font-medium">Status</th>
+              <th className="px-2 py-2 text-left font-medium">Service / Package</th>
+              <th className="px-2 py-2 text-center font-medium" title="Occurrences (visits)">OCC</th>
+              <th className="px-2 py-2 text-right font-medium">QTY</th>
+              <th className="px-2 py-2 text-left font-medium">Unit</th>
+              <th className="px-2 py-2 text-right font-medium" title="Hours per occurrence (auto-calculated in blue when production rate is set)">P/H</th>
+              <th className="px-2 py-2 text-right font-medium" title="Total budgeted hours">T.H.</th>
+              <th className="px-2 py-2 text-center font-medium" title="Calc type: × = qty×rate×visits, $ = fixed">Calc</th>
+              <th className="px-2 py-2 text-right font-medium" title="Price per occurrence">Rate</th>
+              <th className="px-2 py-2 text-right font-medium" title="Total price">TP</th>
+              <th className="px-2 py-2 text-right font-medium">GM%</th>
+              <th className="px-2 py-2 text-right font-medium">Cost</th>
+              <th className="px-2 py-2 text-right font-medium">T.Cost</th>
+              <th className="px-2 py-2 text-right font-medium" title="Adjusted rate override">Adj Rate</th>
+              <th className="px-2 py-2" />
+              <th className="px-2 py-2" />
+            </tr>
+          </thead>
+          <tbody>
+            {items.length === 0 && (
+              <tr>
+                <td colSpan={17} className="py-8 text-center text-slate-400 text-xs">
+                  No line items yet — use Add Item above
+                </td>
+              </tr>
+            )}
+            {items.map((item) => (
+              <LineItemRow
+                key={item.id}
+                item={item}
+                estimateId={estimateId}
+                onDelete={handleDelete}
+                onDuplicate={handleDuplicate}
+                selected={selectedIds.includes(item.id)}
+                onToggleSelect={toggleSelect}
+                expanded={expandedRows.has(item.id)}
+                onToggleExpand={toggleExpand}
+              />
+            ))}
+          </tbody>
+        </table>
       </div>
     </div>
   );

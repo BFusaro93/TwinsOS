@@ -303,7 +303,7 @@ function BeforeAfterPicker({ value, onChange }: { value: BeforeAfterFlag; onChan
           className={cn("rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors",
             value === o.value
               ? o.value === "before" ? "bg-amber-500 text-white"
-                : o.value === "during" ? "bg-sky-500 text-white"
+                : o.value === "during" ? "bg-slate-500 text-white"
                 : o.value === "after" ? "bg-brand-500 text-white"
                 : "bg-slate-600 text-white"
               : "bg-slate-100 text-slate-500 hover:text-slate-700")}>

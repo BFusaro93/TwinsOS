@@ -99,11 +99,20 @@ await (supabase as any).from("crm_jobs").select("*" as any).eq("id", jobId).sing
 
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const windowEnd = addDays(today, lookaheadDays);
-  const fromStr = toISODate(today);
-  const toStr   = toISODate(windowEnd);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const jobAny = job as any;
+
+  // For recurring jobs: start generating from the job's scheduled_date (the "start recurring" date)
+  // if it's in the future; otherwise start from today.
+  const jobStartDate = jobAny.scheduled_date
+    ? new Date(jobAny.scheduled_date + 'T00:00:00')
+    : today;
+  const windowStart = jobStartDate > today ? jobStartDate : today;
+
+  const fromStr = toISODate(windowStart);
+  const toStr   = toISODate(windowEnd);
+
   const effectiveEnd = jobAny.recurrence_end
     ? new Date(Math.min(windowEnd.getTime(), new Date(jobAny.recurrence_end as string).getTime()))
     : windowEnd;
@@ -117,6 +126,7 @@ await (supabase as any).from("crm_jobs").select("*" as any).eq("id", jobId).sing
     .lte("scheduled_date", toStr)
     .is("deleted_at", null);
 
+
   const existingSet = new Set((existing ?? []).map((v: { scheduled_date: string }) => v.scheduled_date));
 
   const j = jobAny as {
@@ -125,17 +135,54 @@ await (supabase as any).from("crm_jobs").select("*" as any).eq("id", jobId).sing
     priority: number; notes_to_crew: string | null;
   };
 
-  const rules = parseSchedule(j.schedule, j.schedule_days ?? []);
+  // Try to resolve the schedule from the crm_schedules table using the stored name.
+  // This avoids fragile regex parsing of user-defined schedule names.
+  let rules: OccurrenceRule[] = [];
+  if (j.schedule) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: scheduleRow } = await (supabase as any)
+      .from("crm_schedules")
+      .select("frequency, day_of_week")
+      .eq("org_id", j.org_id)
+      .eq("name", j.schedule)
+      .is("deleted_at", null)
+      .maybeSingle();
+
+    if (scheduleRow) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const sr = scheduleRow as any;
+      const dayIndex = DAY_INDEX[(sr.day_of_week as string).toLowerCase()];
+      if (dayIndex !== undefined) {
+        const freq = (sr.frequency as string).toLowerCase();
+        if (freq === "weekly") {
+          rules = [{ frequency: "weekly", dayIndex }];
+        } else if (freq === "bi_weekly" || freq === "biweekly") {
+          rules = [{ frequency: "biweekly", dayIndex, biweeklyParity: "even" }];
+        } else if (freq === "every_3_weeks") {
+          // Approximate as biweekly — 3-week cadence not natively supported yet
+          rules = [{ frequency: "biweekly", dayIndex, biweeklyParity: "even" }];
+        }
+        // every_4_weeks / monthly: fall through to name-based parsing below
+      }
+    }
+  }
+
+  // Fall back to name-based parsing if schedule record not found
+  if (rules.length === 0) {
+    rules = parseSchedule(j.schedule, j.schedule_days ?? []);
+  }
   const toInsert: object[] = [];
 
   for (const rule of rules) {
-    for (const d of occurrencesInRange(rule, today, effectiveEnd)) {
+    for (const d of occurrencesInRange(rule, windowStart, effectiveEnd)) {
       const dateStr = toISODate(d);
       if (!existingSet.has(dateStr)) {
         toInsert.push({
           org_id: j.org_id, job_id: jobId, client_id: j.client_id,
           crew_id: j.crew_id ?? null, scheduled_date: dateStr,
           priority: j.priority ?? 1, notes_to_crew: j.notes_to_crew ?? null,
+          budgeted_hours: (jobAny.budgeted_hours ?? null),
+          rate_cents: (jobAny.rate_cents ?? null),
         });
         existingSet.add(dateStr);
       }

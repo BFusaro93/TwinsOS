@@ -1,17 +1,18 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   useTickets,
   useCreateTicket,
+  useUpdateTicket,
 } from "@/lib/hooks/use-tickets";
 import { useClients } from "@/lib/hooks/use-clients";
+import { useEmployees } from "@/lib/hooks/use-employees";
 import { TicketDetailSheet } from "./TicketDetailSheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
   DialogContent,
@@ -19,6 +20,13 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Select,
   SelectContent,
@@ -28,8 +36,11 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
-import { Plus, Search } from "lucide-react";
+import { ChevronDown, Plus, RotateCcw, Search, UserCheck, X } from "lucide-react";
+import { toast } from "sonner";
+import { useOrgList } from "@/lib/hooks/use-org-lists";
 import type {
   CRMTicket,
   TicketStatus,
@@ -39,9 +50,17 @@ import type {
 } from "@/types/crm-tickets";
 
 const STATUS_CLASS: Record<TicketStatus, string> = {
-  open: "border border-red-400 text-red-600",
-  closed: "bg-green-100 text-green-700",
+  open:    "border border-red-400 text-red-600",
+  on_hold: "border border-orange-400 text-orange-600",
   pending: "bg-yellow-100 text-yellow-700",
+  closed:  "bg-green-100 text-green-700",
+};
+
+const STATUS_LABEL: Record<TicketStatus, string> = {
+  open:    "Open",
+  on_hold: "On Hold",
+  pending: "Pending",
+  closed:  "Closed",
 };
 
 const PRIORITY_CLASS: Record<TicketPriority, string> = {
@@ -54,7 +73,7 @@ const PRIORITY_CLASS: Record<TicketPriority, string> = {
 function StatusBadge({ status }: { status: TicketStatus }) {
   return (
     <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase", STATUS_CLASS[status])}>
-      {status}
+      {STATUS_LABEL[status] ?? status}
     </span>
   );
 }
@@ -77,10 +96,11 @@ function formatDate(d: string | null): string {
 // ── filter options ────────────────────────────────────────────────────────────
 
 const STATUS_TABS: Array<{ label: string; value: TicketStatus | "all" }> = [
-  { label: "All", value: "all" },
-  { label: "Open", value: "open" },
+  { label: "All",     value: "all" },
+  { label: "Open",    value: "open" },
+  { label: "On Hold", value: "on_hold" },
   { label: "Pending", value: "pending" },
-  { label: "Closed", value: "closed" },
+  { label: "Closed",  value: "closed" },
 ];
 
 const PRIORITY_OPTIONS: Array<{ label: string; value: TicketPriority | "all" }> = [
@@ -91,15 +111,7 @@ const PRIORITY_OPTIONS: Array<{ label: string; value: TicketPriority | "all" }> 
   { label: "Low", value: "low" },
 ];
 
-const CATEGORIES = [
-  "Uncategorized",
-  "Estimate",
-  "Billing",
-  "Client Portal Message",
-  "Need to Contact Customer",
-];
-
-const CATEGORY_OPTIONS = [{ label: "All Categories", value: "all" }, ...CATEGORIES.map((c) => ({ label: c, value: c }))];
+const FALLBACK_CATEGORIES = ["Uncategorized", "Estimate", "Billing", "Change Service", "Complaint", "Other"];
 
 // ── NewTicketDialog ───────────────────────────────────────────────────────────
 
@@ -111,7 +123,12 @@ interface NewTicketDialogProps {
 
 export function NewTicketDialog({ open, onOpenChange, defaultClientId }: NewTicketDialogProps) {
   const { data: clients } = useClients();
+  const { data: employees } = useEmployees();
   const createTicket = useCreateTicket();
+  const { data: categoryOptions } = useOrgList("ticket_categories");
+  const dialogCategories = categoryOptions && categoryOptions.length > 0
+    ? categoryOptions.map((o) => o.value)
+    : FALLBACK_CATEGORIES;
 
   const [form, setForm] = useState<NewTicketFormValues>({
     type: "note",
@@ -207,10 +224,8 @@ export function NewTicketDialog({ open, onOpenChange, defaultClientId }: NewTick
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {CATEGORIES.map((c) => (
-                  <SelectItem key={c} value={c}>
-                    {c}
-                  </SelectItem>
+                {dialogCategories.map((c) => (
+                  <SelectItem key={c} value={c}>{c}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -249,6 +264,7 @@ export function NewTicketDialog({ open, onOpenChange, defaultClientId }: NewTick
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="open">Open</SelectItem>
+                  <SelectItem value="on_hold">On Hold</SelectItem>
                   <SelectItem value="pending">Pending</SelectItem>
                   <SelectItem value="closed">Closed</SelectItem>
                 </SelectContent>
@@ -277,12 +293,23 @@ export function NewTicketDialog({ open, onOpenChange, defaultClientId }: NewTick
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label>Assigned To</Label>
-              <Input
-                value={form.assignedTo}
-                onChange={(e) => set("assignedTo", e.target.value)}
-                className="h-9 text-sm"
-                placeholder="Name…"
-              />
+              <Select
+                value={form.assignedTo || "unassigned"}
+                onValueChange={(v) => set("assignedTo", v === "unassigned" ? "" : v)}
+              >
+                <SelectTrigger className="h-9 text-sm">
+                  <SelectValue placeholder="Select employee…" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="unassigned">Unassigned</SelectItem>
+                  {(employees ?? []).map((e) => {
+                    const name = `${e.firstName} ${e.lastName}`;
+                    return (
+                      <SelectItem key={e.id} value={name}>{name}</SelectItem>
+                    );
+                  })}
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="space-y-1.5">
@@ -310,6 +337,18 @@ export function NewTicketDialog({ open, onOpenChange, defaultClientId }: NewTick
   );
 }
 
+// ── column filter config ──────────────────────────────────────────────────────
+
+type ColFilterKey = "subject" | "client" | "category" | "assigned" | "priority";
+
+const COL_FILTERS: { key: ColFilterKey; label: string }[] = [
+  { key: "subject",  label: "Subject" },
+  { key: "client",   label: "Account" },
+  { key: "category", label: "Category" },
+  { key: "assigned", label: "Assignment" },
+  { key: "priority", label: "Priority" },
+];
+
 // ── TicketsList ───────────────────────────────────────────────────────────────
 
 interface Props {
@@ -317,30 +356,118 @@ interface Props {
 }
 
 export function TicketsList({ clientId }: Props) {
+  const { data: categoryOptions } = useOrgList("ticket_categories");
+  const categories = categoryOptions && categoryOptions.length > 0
+    ? categoryOptions.map((o) => o.value)
+    : FALLBACK_CATEGORIES;
+
   const [statusFilter, setStatusFilter] = useState<TicketStatus | "all">("all");
   const [priorityFilter, setPriorityFilter] = useState<TicketPriority | "all">("all");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [search, setSearch] = useState("");
+  const [activeColFilter, setActiveColFilter] = useState<ColFilterKey | null>(null);
+  const [colFilterValue, setColFilterValue] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedTicket, setSelectedTicket] = useState<CRMTicket | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [reassignOpen, setReassignOpen] = useState(false);
+  const [reassignName, setReassignName] = useState("");
+  const { data: employees } = useEmployees();
 
-  const { data: tickets, isLoading } = useTickets({
-    status: statusFilter === "all" ? undefined : statusFilter,
-    clientId,
-  });
+  const { data: tickets, isLoading, refetch } = useTickets({ clientId });
+  const updateTicket = useUpdateTicket();
 
-  const filtered = (tickets ?? []).filter((t) => {
-    if (priorityFilter !== "all" && t.priority !== priorityFilter) return false;
-    if (categoryFilter !== "all" && t.category !== categoryFilter) return false;
-    if (!search) return true;
-    const q = search.toLowerCase();
-    return (
-      (t.subject ?? "").toLowerCase().includes(q) ||
-      (t.clientName ?? "").toLowerCase().includes(q)
-    );
-  });
+  const all = tickets ?? [];
 
-  const colCount = clientId ? 8 : 9;
+  const stats = useMemo(() => ({
+    open:    all.filter((t) => t.status === "open").length,
+    on_hold: all.filter((t) => t.status === "on_hold").length,
+    pending: all.filter((t) => t.status === "pending").length,
+    closed:  all.filter((t) => t.status === "closed").length,
+    total:   all.length,
+  }), [all]);
+
+  const STATUS_QUICK: Array<{ key: TicketStatus | "all"; label: string }> = [
+    { key: "all",     label: "All" },
+    { key: "open",    label: "Open" },
+    { key: "on_hold", label: "On Hold" },
+    { key: "pending", label: "Pending" },
+    { key: "closed",  label: "Closed" },
+  ];
+
+  const quickCounts: Record<TicketStatus | "all", number> = {
+    all:     stats.total,
+    open:    stats.open,
+    on_hold: stats.on_hold,
+    pending: stats.pending,
+    closed:  stats.closed,
+  };
+
+  const filtered = useMemo(() => {
+    let list = all;
+    if (statusFilter !== "all") list = list.filter((t) => t.status === statusFilter);
+    if (priorityFilter !== "all") list = list.filter((t) => t.priority === priorityFilter);
+    if (categoryFilter !== "all") list = list.filter((t) => t.category === categoryFilter);
+
+    if (activeColFilter && colFilterValue.trim()) {
+      const fv = colFilterValue.toLowerCase();
+      list = list.filter((t) => {
+        switch (activeColFilter) {
+          case "subject":  return (t.subject ?? "").toLowerCase().includes(fv);
+          case "client":   return (t.clientName ?? "").toLowerCase().includes(fv);
+          case "category": return (t.category ?? "").toLowerCase().includes(fv);
+          case "assigned": return (t.assignedTo ?? "").toLowerCase().includes(fv);
+          case "priority": return t.priority.toLowerCase().includes(fv);
+          default:         return true;
+        }
+      });
+    }
+
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      list = list.filter((t) =>
+        (t.subject ?? "").toLowerCase().includes(q) ||
+        (t.clientName ?? "").toLowerCase().includes(q)
+      );
+    }
+
+    return list;
+  }, [all, statusFilter, priorityFilter, categoryFilter, activeColFilter, colFilterValue, search]);
+
+  const colCount = clientId ? 9 : 10; // +1 for checkbox
+
+  const allSelected = filtered.length > 0 && filtered.every((t) => selectedIds.has(t.id));
+  const someSelected = selectedIds.size > 0;
+
+  function toggleAll() {
+    if (allSelected) setSelectedIds(new Set());
+    else setSelectedIds(new Set(filtered.map((t) => t.id)));
+  }
+
+  function toggleOne(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+
+  async function bulkSetStatus(status: TicketStatus) {
+    const ids = Array.from(selectedIds);
+    await Promise.all(ids.map((id) => updateTicket.mutateAsync({ id, updates: { status } })));
+    toast.success(`${ids.length} ticket${ids.length > 1 ? "s" : ""} marked ${status}`);
+    setSelectedIds(new Set());
+  }
+
+  async function bulkReassign() {
+    if (!reassignName.trim()) return;
+    const ids = Array.from(selectedIds);
+    await Promise.all(ids.map((id) => updateTicket.mutateAsync({ id, updates: { assignedTo: reassignName.trim() } })));
+    toast.success(`${ids.length} ticket${ids.length > 1 ? "s" : ""} reassigned to ${reassignName.trim()}`);
+    setSelectedIds(new Set());
+    setReassignOpen(false);
+    setReassignName("");
+  }
 
   return (
     <div className="flex h-full flex-col gap-4">
@@ -348,89 +475,185 @@ export function TicketsList({ clientId }: Props) {
       <PageHeader
         title="Tickets"
         description="Support and service tickets"
-      />
-
-      {/* Top bar */}
-      <div className="flex items-center gap-3 flex-wrap px-4">
-        <span className="sr-only">Tickets</span>
-
-        {/* Status tabs */}
-        <div className="flex gap-1 rounded-lg border bg-slate-50 p-0.5">
-          {STATUS_TABS.map((tab) => (
-            <button
-              key={tab.value}
-              type="button"
-              onClick={() => setStatusFilter(tab.value)}
-              className={cn(
-                "rounded-md px-3 py-1 text-xs font-medium transition-colors",
-                statusFilter === tab.value
-                  ? "bg-white text-slate-900 shadow-sm"
-                  : "text-slate-500 hover:text-slate-700"
-              )}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-
-        {/* Priority filter */}
-        <Select
-          value={priorityFilter}
-          onValueChange={(v) => setPriorityFilter(v as TicketPriority | "all")}
-        >
-          <SelectTrigger className="h-8 text-xs w-36">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {PRIORITY_OPTIONS.map((o) => (
-              <SelectItem key={o.value} value={o.value}>
-                {o.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        {/* Category filter */}
-        <Select
-          value={categoryFilter}
-          onValueChange={(v) => setCategoryFilter(v)}
-        >
-          <SelectTrigger className="h-8 text-xs w-40">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {CATEGORY_OPTIONS.map((o) => (
-              <SelectItem key={o.value} value={o.value}>
-                {o.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        {/* Search */}
-        <div className="relative max-w-xs flex-1">
-          <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
-          <Input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search tickets…"
-            className="h-8 pl-8 text-sm"
-          />
-        </div>
-
-        <div className="ml-auto">
+        action={
           <Button size="sm" className="h-8 text-xs" onClick={() => setDialogOpen(true)}>
             <Plus className="mr-1 h-3.5 w-3.5" />
             Add Ticket
           </Button>
+        }
+      />
+
+      {/* Stat cards */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+        {[
+          { label: "Total",   value: stats.total,   color: "text-slate-900" },
+          { label: "Open",    value: stats.open,    color: "text-red-600" },
+          { label: "On Hold", value: stats.on_hold, color: "text-orange-600" },
+          { label: "Pending", value: stats.pending, color: "text-yellow-600" },
+          { label: "Closed",  value: stats.closed,  color: "text-green-600" },
+        ].map((s) => (
+          <div key={s.label} className="rounded-lg border bg-white p-4 shadow-sm text-center">
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">{s.label}</p>
+            <p className={`mt-1 text-2xl font-bold ${s.color}`}>{s.value}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* White column filter bar */}
+      <div className="flex items-center gap-1.5 border-b bg-white px-4 py-2">
+        <span className="shrink-0 text-xs font-medium text-slate-500 mr-1">Select a Filter:</span>
+        <div className="flex items-center gap-1 overflow-x-auto">
+          {COL_FILTERS.map(({ key, label }) => (
+            <button
+              key={key}
+              onClick={() => {
+                if (activeColFilter === key) { setActiveColFilter(null); setColFilterValue(""); }
+                else { setActiveColFilter(key); setColFilterValue(""); }
+              }}
+              className={cn(
+                "rounded px-2 py-0.5 text-xs transition-colors whitespace-nowrap",
+                activeColFilter === key
+                  ? "bg-brand-100 text-brand-700 font-medium"
+                  : "hover:bg-slate-100 text-slate-600"
+              )}
+            >
+              {label}
+            </button>
+          ))}
+          {activeColFilter && (
+            <>
+              <Input
+                autoFocus
+                value={colFilterValue}
+                onChange={(e) => setColFilterValue(e.target.value)}
+                placeholder={`Filter by ${COL_FILTERS.find((f) => f.key === activeColFilter)?.label}…`}
+                className="ml-2 h-6 w-48 text-xs"
+              />
+              <button
+                onClick={() => { setActiveColFilter(null); setColFilterValue(""); }}
+                className="text-slate-400 hover:text-slate-600"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Dark actions bar */}
+      <div className="flex items-center justify-between bg-[#4a4a4a] px-4 py-2">
+        <div className="flex items-center gap-2">
+          {/* Actions dropdown */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 bg-[#5a5a5a] border-[#6a6a6a] text-white hover:bg-[#6a6a6a] text-xs px-3"
+              >
+                Actions
+                {someSelected && (
+                  <span className="ml-1 rounded-full bg-white/20 px-1.5 text-[10px]">{selectedIds.size}</span>
+                )}
+                <ChevronDown className="ml-1 h-3 w-3" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-48">
+              <DropdownMenuItem onSelect={() => setDialogOpen(true)}>
+                <Plus className="mr-2 h-3.5 w-3.5" />
+                Add Ticket
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                disabled={!someSelected}
+                onSelect={() => bulkSetStatus("open")}
+              >
+                Mark Open
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={!someSelected}
+                onSelect={() => bulkSetStatus("pending")}
+              >
+                Mark Pending
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={!someSelected}
+                onSelect={() => bulkSetStatus("closed")}
+              >
+                Mark Closed
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                disabled={!someSelected}
+                onSelect={() => setReassignOpen(true)}
+              >
+                <UserCheck className="mr-2 h-3.5 w-3.5" />
+                Reassign
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          {/* Refresh */}
+          <button
+            onClick={() => refetch()}
+            className="flex h-7 w-7 items-center justify-center rounded border border-[#6a6a6a] bg-[#5a5a5a] text-white hover:bg-[#6a6a6a]"
+            title="Refresh"
+          >
+            <RotateCcw className="h-3.5 w-3.5" />
+          </button>
+
+          {/* Quick-filter tabs */}
+          <div className="ml-2 flex items-center gap-1 overflow-x-auto">
+            {STATUS_QUICK.map(({ key, label }) => (
+              <button
+                key={key}
+                onClick={() => setStatusFilter(key)}
+                className={cn(
+                  "flex items-center gap-1 rounded px-3 py-1 text-xs font-medium transition-colors whitespace-nowrap",
+                  statusFilter === key
+                    ? "bg-white text-slate-800"
+                    : "text-slate-300 hover:text-white"
+                )}
+              >
+                {label}
+                {quickCounts[key] > 0 && (
+                  <span className={cn(
+                    "rounded-full px-1.5 py-0.5 text-[10px] font-semibold",
+                    statusFilter === key ? "bg-slate-200 text-slate-700" : "bg-white/20 text-white"
+                  )}>
+                    {quickCounts[key]}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+
+          {/* Search */}
+          <div className="relative ml-2">
+            <Search className="absolute left-2.5 top-1/2 h-3 w-3 -translate-y-1/2 text-slate-400" />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search…"
+              className="h-7 w-44 pl-7 text-xs bg-white border-slate-200 focus-visible:ring-0"
+            />
+          </div>
         </div>
       </div>
 
       {/* Table */}
-      <div className="flex-1 overflow-auto rounded-lg border bg-white shadow-sm">
+      <div className="flex-1 overflow-auto bg-white">
         <table className="w-full text-sm">
-          <thead className="sticky top-0 bg-slate-50">
-            <tr className="border-b text-left text-xs font-semibold uppercase tracking-wide text-slate-400">
+          <thead className="sticky top-0 bg-slate-50 border-b z-10">
+            <tr className="text-left text-xs font-semibold uppercase tracking-wide text-slate-400">
+              <th className="w-10 px-4 py-3">
+                <input
+                  type="checkbox"
+                  checked={allSelected}
+                  onChange={toggleAll}
+                  className="rounded border-slate-300 accent-brand-500"
+                />
+              </th>
               <th className="px-4 py-3">Ticket #</th>
               <th className="px-4 py-3">Status</th>
               <th className="px-4 py-3">Priority</th>
@@ -463,9 +686,17 @@ export function TicketsList({ clientId }: Props) {
               filtered.map((t) => (
                 <tr
                   key={t.id}
-                  className="border-b hover:bg-slate-50 cursor-pointer"
+                  className={cn("border-b hover:bg-slate-50 cursor-pointer", selectedIds.has(t.id) && "bg-brand-50")}
                   onClick={() => setSelectedTicket(t)}
                 >
+                  <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(t.id)}
+                      onChange={() => toggleOne(t.id)}
+                      className="rounded border-slate-300 accent-brand-500"
+                    />
+                  </td>
                   <td className="px-4 py-3 font-mono text-xs font-bold text-slate-700">
                     #{t.ticketNumber}
                   </td>
@@ -504,6 +735,39 @@ export function TicketsList({ clientId }: Props) {
         ticket={selectedTicket}
         onClose={() => setSelectedTicket(null)}
       />
+
+      {/* Reassign dialog */}
+      {reassignOpen && (
+        <Dialog open={reassignOpen} onOpenChange={setReassignOpen}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <DialogTitle>Reassign {selectedIds.size} Ticket{selectedIds.size > 1 ? "s" : ""}</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-1.5 py-2">
+              <Label>Assign To</Label>
+              <Select value={reassignName} onValueChange={setReassignName}>
+                <SelectTrigger className="h-9 text-sm">
+                  <SelectValue placeholder="Select employee…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {(employees ?? []).map((e) => {
+                    const name = `${e.firstName} ${e.lastName}`;
+                    return (
+                      <SelectItem key={e.id} value={name}>{name}</SelectItem>
+                    );
+                  })}
+                </SelectContent>
+              </Select>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" size="sm" onClick={() => { setReassignOpen(false); setReassignName(""); }}>Cancel</Button>
+              <Button size="sm" onClick={bulkReassign} disabled={!reassignName || updateTicket.isPending}>
+                {updateTicket.isPending ? "Saving…" : "Reassign"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }

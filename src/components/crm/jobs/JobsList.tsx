@@ -274,7 +274,7 @@ function ServiceRow({
           type="date"
           value={svc.startDate ?? ""}
           onChange={(e) => onChange({ startDate: e.target.value || null })}
-          className="h-7 text-xs w-32"
+          className="h-7 text-xs w-36"
         />
       </td>
       {(showCompleteBy || showStartRecurring) && (
@@ -313,6 +313,7 @@ function ServiceRow({
           value={svc.rateCents / 100}
           min={0}
           step={0.01}
+          onFocus={(e) => e.target.select()}
           onChange={(e) => onChange({ rateCents: Math.round(Number(e.target.value) * 100) })}
           className="h-7 text-xs w-20"
           placeholder="0.00"
@@ -326,15 +327,6 @@ function ServiceRow({
           step={0.25}
           onChange={(e) => onChange({ budgetedHours: Number(e.target.value) })}
           className="h-7 text-xs w-16"
-        />
-      </td>
-      <td className="px-2 py-1.5">
-        <Input
-          type="number"
-          value={svc.teamSize}
-          min={1}
-          onChange={(e) => onChange({ teamSize: Number(e.target.value) })}
-          className="h-7 text-xs w-14"
         />
       </td>
       <td className="px-2 py-1.5">
@@ -382,11 +374,15 @@ function defaultForm(clientId: string, jobType: JobType): NewClientJobFormValues
     invoiceSeparately: false,
     callAhead: false,
     arrivalWindowHours: null,
+    scheduledDate: null,
+    waitingListStart: null,
+    waitingListEnd: null,
     startDateWindow: null,
     endDateWindow: null,
     createWorkOrder: false,
     isComplete: false,
     notes: null,
+    notesToCrew: null,
     services: [blankService(0)],
   };
 }
@@ -724,7 +720,6 @@ function NewJobDialog({
                     <th className="px-2 py-2 text-left">Qty</th>
                     <th className="px-2 py-2 text-left">Rate</th>
                     <th className="px-2 py-2 text-left">B.Hrs</th>
-                    <th className="px-2 py-2 text-left">Team</th>
                     <th className="px-2 py-2 text-left">Days</th>
                   </tr>
                 </thead>

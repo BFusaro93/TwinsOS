@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import { useStickyState } from "@/lib/hooks/use-sticky-state";
 import {
   CalendarClock,
   CalendarDays,
+  ClipboardCheck,
   Maximize2,
   Minimize2,
   Plus,
@@ -21,6 +22,7 @@ import { EmptyState } from "@/components/shared/EmptyState";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { WorkOrderListPanel } from "./WorkOrderListPanel";
 import { WorkOrderDetailPanel } from "./WorkOrderDetailPanel";
+import { VehicleDetailPanel } from "./VehicleDetailPanel";
 import { NewWorkOrderDialog } from "./NewWorkOrderDialog";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
@@ -35,6 +37,9 @@ import {
 } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useWorkOrders } from "@/lib/hooks/use-work-orders";
+import { useVehicles } from "@/lib/hooks/use-vehicles";
+import { useMeters } from "@/lib/hooks/use-meters";
+import { ServiceRemindersView } from "./ServiceRemindersView";
 import { useCMMSStore } from "@/stores";
 import { useSort } from "@/lib/hooks/use-sort";
 import { SortableTableHead } from "@/components/shared/SortableTableHead";
@@ -358,7 +363,21 @@ export function WorkOrderListPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [viewMode, setViewMode] = useState<"list" | "table" | "upcoming">("list");
+  const [viewMode, setViewMode] = useState<"list" | "table" | "upcoming" | "service">("list");
+  const [sheetVehicleId, setSheetVehicleId] = useState<string | null>(null);
+  const { data: vehicles = [], isLoading: vehiclesLoading } = useVehicles();
+  const sheetVehicle = sheetVehicleId ? (vehicles.find((v) => v.id === sheetVehicleId) ?? null) : null;
+  const { data: meters } = useMeters();
+  const currentMilesMap = React.useMemo(() => {
+    const map = new Map<string, number>();
+    for (const m of meters ?? []) {
+      if (m.unit?.toLowerCase() === "miles" || m.unit?.toLowerCase() === "mi") {
+        const existing = map.get(m.assetId);
+        if (existing == null || m.currentValue > existing) map.set(m.assetId, m.currentValue);
+      }
+    }
+    return map;
+  }, [meters]);
   const [sheetWOId, setSheetWOId] = useState<string | null>(null);
   const [visibleKeys, setVisibleKeys] = useState<string[]>(WO_COLUMNS.map((c) => c.key));
   const [showFuture, setShowFuture] = useStickyState<boolean>("wo-show-future", false);
@@ -637,13 +656,25 @@ export function WorkOrderListPage() {
                 variant="ghost"
                 size="sm"
                 className={cn(
-                  "rounded-l-none px-3",
+                  "rounded-none border-r px-3",
                   viewMode === "upcoming" && "bg-violet-50 font-semibold text-violet-700"
                 )}
                 onClick={() => setViewMode("upcoming")}
               >
                 <CalendarClock className="mr-1.5 h-3.5 w-3.5" />
                 Upcoming
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className={cn(
+                  "rounded-l-none px-3",
+                  viewMode === "service" && "bg-amber-50 font-semibold text-amber-700"
+                )}
+                onClick={() => setViewMode("service")}
+              >
+                <ClipboardCheck className="mr-1.5 h-3.5 w-3.5" />
+                Service
               </Button>
             </div>
 
@@ -681,12 +712,26 @@ export function WorkOrderListPage() {
         />
       )}
 
+      {viewMode === "service" && (
+        <ServiceRemindersView
+          vehicles={vehicles}
+          isLoading={vehiclesLoading}
+          currentMilesMap={currentMilesMap}
+          onRowClick={(v) => setSheetVehicleId(v.id)}
+        />
+      )}
+
       {/* Detail sheet — used by both table view and upcoming view */}
       <Sheet open={!!sheetWO} onOpenChange={(o) => { if (!o) setSheetWOId(null); }}>
-        <SheetContent
-          className="flex w-full flex-col overflow-hidden p-0 md:w-[580px] md:max-w-[580px]"
-        >
+        <SheetContent className="flex w-full flex-col overflow-hidden p-0 md:w-[580px] md:max-w-[580px]">
           {sheetWO && <WorkOrderDetailPanel workOrder={sheetWO} />}
+        </SheetContent>
+      </Sheet>
+
+      {/* Vehicle detail sheet — used by service view */}
+      <Sheet open={!!sheetVehicle} onOpenChange={(o) => { if (!o) setSheetVehicleId(null); }}>
+        <SheetContent className="flex w-full flex-col overflow-hidden p-0 md:w-[580px] md:max-w-[580px]">
+          {sheetVehicle && <VehicleDetailPanel vehicle={sheetVehicle} />}
         </SheetContent>
       </Sheet>
 

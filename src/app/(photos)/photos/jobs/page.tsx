@@ -418,9 +418,6 @@ export default function PhotoJobsPage() {
                     isSelected ? "border-l-2 border-brand-500 bg-brand-50/60 hover:bg-brand-50/60" : "border-l-2 border-transparent",
                   )}
                 >
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#2a2a2a]">
-                    <Camera className="h-4 w-4 text-white" />
-                  </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
                       <p className="truncate text-sm font-medium text-slate-900">{job.name}</p>
@@ -551,7 +548,7 @@ export default function PhotoJobsPage() {
             {(["active", "pending", "archived"] as ArchiveFilter[]).map((f) => (
               <button key={f} onClick={() => setArchiveFilter(f)}
                 className={cn("rounded-full px-3 py-1 text-xs font-medium capitalize transition-colors",
-                  archiveFilter === f ? "bg-slate-700 text-white" : "border border-slate-200 bg-white text-slate-600 hover:border-slate-300")}>
+                  archiveFilter === f ? "bg-[#2a2a2a] text-white" : "border border-slate-200 bg-white text-slate-600 hover:border-slate-300")}>
                 {f}
               </button>
             ))}
@@ -589,9 +586,6 @@ export default function PhotoJobsPage() {
                 return (
                   <div key={job.id} className="group flex w-full items-center gap-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition-shadow hover:shadow-md">
                     <button className="flex flex-1 items-center gap-4 text-left min-w-0" onClick={() => router.push(`/photos/jobs/${job.id}`)}>
-                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-[#2a2a2a]">
-                        <Camera className="h-5 w-5 text-white" />
-                      </div>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
                           <p className="truncate font-medium text-slate-900">{job.name}</p>

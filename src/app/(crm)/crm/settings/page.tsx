@@ -39,6 +39,8 @@ import {
 } from "@/lib/hooks/use-crm-jobs";
 import type { CRMService } from "@/types/crm-jobs";
 import { RolesList } from "@/components/crm/roles/RolesList";
+import { EstimateStagesEditor } from "@/components/crm/settings/EstimateStagesEditor";
+import { OverheadSettingsEditor } from "@/components/crm/settings/OverheadSettingsEditor";
 
 // ── AccordionSection ──────────────────────────────────────────────────────────
 
@@ -278,16 +280,47 @@ function CategoryListEditor({
 // ── GeneralTab ────────────────────────────────────────────────────────────────
 
 function GeneralTab() {
-  const [orgName, setOrgName] = useState("Twins Lawn Service");
-  const [address, setAddress] = useState("");
+  const { data: org, isLoading } = useOrgSettings();
+  const { mutateAsync: updateOrg, isPending: saving } = useUpdateOrgSettings();
+
+  const [orgName, setOrgName] = useState("");
+  const [street, setStreet] = useState("");
   const [city, setCity] = useState("");
   const [state, setState] = useState("");
   const [zip, setZip] = useState("");
   const [phone, setPhone] = useState("");
-  const [email, setEmail] = useState("");
 
-  function handleSave() {
-    toast.success("Saved");
+  // Populate fields once org data loads
+  useEffect(() => {
+    if (!org) return;
+    setOrgName(org.name ?? "");
+    setStreet(org.address?.street ?? "");
+    setCity(org.address?.city ?? "");
+    setState(org.address?.state ?? "");
+    setZip(org.address?.zip ?? "");
+    setPhone(org.address?.phone ?? "");
+  }, [org?.id]); // only fire once on load, not on every change
+
+  async function handleSave() {
+    try {
+      await updateOrg({
+        name: orgName.trim(),
+        address: {
+          street: street.trim(),
+          city: city.trim(),
+          state: state.trim(),
+          zip: zip.trim(),
+          phone: phone.trim(),
+        },
+      });
+      toast.success("Company info saved");
+    } catch {
+      toast.error("Failed to save");
+    }
+  }
+
+  if (isLoading) {
+    return <div className="rounded-lg border bg-white shadow-sm p-6 text-sm text-slate-400">Loading…</div>;
   }
 
   return (
@@ -298,23 +331,13 @@ function GeneralTab() {
       </div>
       <div className="border-t px-6 py-4">
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          <div className="flex flex-col gap-1.5">
+          <div className="flex flex-col gap-1.5 md:col-span-2">
             <Label htmlFor="org-name">Organization Name</Label>
             <Input
               id="org-name"
               value={orgName}
               onChange={(e) => setOrgName(e.target.value)}
               placeholder="Your company name"
-            />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="email">Email</Label>
-            <Input
-              id="email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="contact@yourcompany.com"
             />
           </div>
           <div className="flex flex-col gap-1.5">
@@ -327,11 +350,11 @@ function GeneralTab() {
             />
           </div>
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="address">Street Address</Label>
+            <Label htmlFor="street">Street Address</Label>
             <Input
-              id="address"
-              value={address}
-              onChange={(e) => setAddress(e.target.value)}
+              id="street"
+              value={street}
+              onChange={(e) => setStreet(e.target.value)}
               placeholder="123 Main St"
             />
           </div>
@@ -366,7 +389,9 @@ function GeneralTab() {
           </div>
         </div>
         <div className="mt-6 flex justify-end">
-          <Button onClick={handleSave}>Save Changes</Button>
+          <Button onClick={() => void handleSave()} disabled={saving}>
+            {saving ? "Saving…" : "Save Changes"}
+          </Button>
         </div>
       </div>
     </div>
@@ -395,7 +420,7 @@ function OrgListEditor({ listName, addPlaceholder }: { listName: string; addPlac
       toast.success("Added");
       setNewValue("");
       setAdding(false);
-    } catch { toast.error("Failed to add"); }
+    } catch (err) { toast.error(`Failed to add: ${err instanceof Error ? err.message : JSON.stringify(err)}`); }
   }
 
   async function handleDelete(id: string) {
@@ -454,16 +479,9 @@ function CRMTab() {
     "Decision maker",
     "Other",
   ]);
-  const ticketCategories = useCategoryList([
-    "Uncategorized",
-    "Estimate",
-    "Billing",
-    "Client Portal Message",
-    "Need to Contact Customer",
-  ]);
-  const tags = useCategoryList([], false);
-
   const { data: clientSources = [] } = useOrgList("client_sources");
+  const { data: clientTags = [] } = useOrgList("client_tags");
+  const { data: ticketCategoryItems = [] } = useOrgList("ticket_categories");
 
   return (
     <div className="rounded-lg border bg-white shadow-sm">
@@ -480,11 +498,11 @@ function CRMTab() {
       <AccordionSection title="Contact Types" count={contactTypes.items.length}>
         <CategoryListEditor {...contactTypes} addPlaceholder="e.g. Property manager" />
       </AccordionSection>
-      <AccordionSection title="Ticket Categories" count={ticketCategories.items.length}>
-        <CategoryListEditor {...ticketCategories} addPlaceholder="e.g. Complaint" />
+      <AccordionSection title="Ticket Categories" count={ticketCategoryItems.length}>
+        <OrgListEditor listName="ticket_categories" addPlaceholder="e.g. Complaint" />
       </AccordionSection>
-      <AccordionSection title="Tags" count={tags.items.length}>
-        <CategoryListEditor {...tags} addPlaceholder="e.g. VIP" />
+      <AccordionSection title="Tags" count={clientTags.length}>
+        <OrgListEditor listName="client_tags" addPlaceholder="e.g. VIP" />
       </AccordionSection>
       <AccordionSection title="Custom Client Fields" count={0} defaultOpen={false} description="Define takeoff fields and custom data points collected on every client (used in estimate rate matrices)">
         <CustomFieldDefsEditor />
@@ -631,33 +649,18 @@ function CustomFieldDefsEditor() {
 // ── EstimatesTab ──────────────────────────────────────────────────────────────
 
 function EstimatesTab() {
-  const estimateStages = useCategoryList([
-    "Draft",
-    "Quote",
-    "Sent",
-    "Approved",
-    "Won",
-    "Lost",
-    "Invoiced",
-  ]);
-  const estimateReasons = useCategoryList([
-    "New service",
-    "Upsell",
-    "Renewal",
-    "Referral",
-  ]);
+  const { data: estimateReasonItems = [] } = useOrgList("estimate_reasons");
 
   return (
     <div className="rounded-lg border bg-white shadow-sm">
-      <AccordionSection
-        title="Estimate Stages"
-        count={estimateStages.items.length}
-        defaultOpen
-      >
-        <CategoryListEditor {...estimateStages} addPlaceholder="e.g. Pending Review" />
+      <AccordionSection title="Estimate Stages" count={0} defaultOpen>
+        <EstimateStagesEditor />
       </AccordionSection>
-      <AccordionSection title="Estimate Reasons" count={estimateReasons.items.length}>
-        <CategoryListEditor {...estimateReasons} addPlaceholder="e.g. Seasonal" />
+      <AccordionSection title="Estimate Reasons" count={estimateReasonItems.length}>
+        <OrgListEditor listName="estimate_reasons" addPlaceholder="e.g. Seasonal" />
+      </AccordionSection>
+      <AccordionSection title="Overhead Recovery" count={0}>
+        <OverheadSettingsEditor />
       </AccordionSection>
       <AccordionSection title="Templates" count={0}>
         <p className="text-sm text-slate-500">

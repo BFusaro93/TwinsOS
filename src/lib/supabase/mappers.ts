@@ -167,10 +167,10 @@ export function mapProjectSubcontractCost(row: ProjectSubcontractCostRow): impor
     deletedAt: row.deleted_at,
     projectId: row.project_id,
     vendorId: row.vendor_id,
-    vendorName: row.vendor_name,
+    vendorName: row.vendor_name ?? "",
     description: row.description,
     costType: row.cost_type as import("@/types").SubcontractCostType,
-    amount: row.amount,
+    amount: row.amount ?? 0,
     costDate: row.cost_date,
     notes: row.notes,
   };

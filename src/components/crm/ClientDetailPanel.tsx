@@ -13,9 +13,15 @@ import {
   useUpdateClient,
   useAddClientContact,
   useAddClientProperty,
+  useAddClientTag,
+  useRemoveClientTag,
+  useOrgTags,
+  useCancelClient,
+  useActivateClient,
 } from "@/lib/hooks/use-clients";
+import { TagEditor } from "@/components/crm/TagEditor";
 import { useTicket } from "@/lib/hooks/use-tickets";
-import { useClientJobs } from "@/lib/hooks/use-crm-jobs";
+import { useClientJobs, useUpdateJobStatus, useJobVisits, useClientAllVisits } from "@/lib/hooks/use-crm-jobs";
 import { useInvoices, usePayments } from "@/lib/hooks/use-invoices";
 import { useEstimates } from "@/lib/hooks/use-estimates";
 import { useContracts } from "@/lib/hooks/use-contracts";
@@ -66,20 +72,25 @@ import {
   Plus,
   ChevronRight,
   UserCheck,
+  UserCircle,
   Pencil,
+  Eye,
   Send,
   ChevronDown,
   MoreHorizontal,
   Ticket,
   Map,
   Ban,
+  CheckCircle,
   ClipboardList,
   History,
+  Calendar,
   Maximize2,
   Minimize2,
+  X,
 } from "lucide-react";
-import type { Client } from "@/types/crm";
-import type { CRMJob } from "@/types/crm-jobs";
+import type { Client, ContactPhone, PhoneType } from "@/types/crm";
+import type { CRMJob, CRMJobVisit } from "@/types/crm-jobs";
 
 // Contact types — configurable via Settings in a future sprint
 const CONTACT_TYPES = [
@@ -103,29 +114,53 @@ const STATUS_COLOR: Record<string, string> = {
 
 function BalanceCard({ client }: { client: Client }) {
   const outstanding = client.balanceOutstandingCents;
-  const isRed = outstanding > 0;
+  const uninvoiced  = client.balanceUninvoicedCents;
+  const credits     = client.balanceCreditsCents;
+  const prepay      = client.balancePrepaymentsCents;
+  const isRed   = outstanding > 0;
+  const isGreen = outstanding < 0;
+
+  const pillBg = isRed ? "bg-red-500" : isGreen ? "bg-green-600" : "bg-gray-500";
 
   return (
-    <div className={`rounded-lg border p-4 ${isRed ? "border-red-200 bg-red-50" : "border-slate-200 bg-slate-50"}`}>
-      <p className={`text-2xl font-bold ${isRed ? "text-red-600" : "text-slate-700"}`}>
-        {formatCurrency(outstanding)}
-      </p>
-      <p className={`text-xs font-medium ${isRed ? "text-red-500" : "text-slate-500"}`}>
-        Outstanding
-      </p>
-      <div className="mt-3 space-y-1 text-xs text-slate-500">
-        <div className="flex justify-between">
-          <span>Uninvoiced</span>
-          <span>{formatCurrency(client.balanceUninvoicedCents)}</span>
+    /*
+     * The pill bleeds left (-ml-3) and upward (-mt-3) past the gray box edges.
+     * The gray box uses a fixed paddingTop (76px) to reserve enough vertical
+     * space for the pill so sub-rows are never clipped.
+     * ml-3 + mt-3 on the wrapper create the bleed gutter.
+     */
+    <div className="relative ml-3">
+      {/* Gray container — extends 12px above, right, and below the pill */}
+      <div className="rounded-lg bg-[#4a4a4a] pr-3 pb-3 pl-3" style={{ paddingTop: "92px" }}>
+        <div className="space-y-2">
+          <div className="flex justify-between text-xs">
+            <span className="text-white/60">Uninvoiced</span>
+            <span className={uninvoiced > 0 ? "font-medium text-amber-300" : "text-white/40"}>
+              {uninvoiced > 0 ? formatCurrency(uninvoiced) : "$0.00"}
+            </span>
+          </div>
+          <div className="flex justify-between text-xs">
+            <span className="text-white/60">Credits</span>
+            <span className={credits > 0 ? "font-medium text-green-300" : "text-white/40"}>
+              {credits > 0 ? formatCurrency(credits) : "$0.00"}
+            </span>
+          </div>
+          <div className="flex justify-between text-xs">
+            <span className="text-white/60">Prepayments</span>
+            <span className={prepay > 0 ? "font-medium text-blue-300" : "text-white/40"}>
+              {prepay > 0 ? formatCurrency(prepay) : "$0.00"}
+            </span>
+          </div>
         </div>
-        <div className="flex justify-between">
-          <span>Credits</span>
-          <span>{formatCurrency(client.balanceCreditsCents)}</span>
-        </div>
-        <div className="flex justify-between">
-          <span>Prepayments</span>
-          <span>{formatCurrency(client.balancePrepaymentsCents)}</span>
-        </div>
+      </div>
+      {/* Colored pill — sits 12px inside the gray top (matches right gap), bleeds 12px left */}
+      <div className={`absolute top-3 -left-3 right-3 rounded-lg ${pillBg} px-4 py-3 text-center shadow-md`}>
+        <p className="text-xl font-bold tabular-nums text-white leading-tight">
+          {isGreen ? "−" : ""}{formatCurrency(Math.abs(outstanding))}
+        </p>
+        <p className="text-[10px] font-semibold uppercase tracking-wide text-white/75 mt-0.5">
+          {isRed ? "Balance Due" : isGreen ? "Credit" : "Current"}
+        </p>
       </div>
     </div>
   );
@@ -135,7 +170,7 @@ function InfoRow({ label, value }: { label: string; value?: string | null }) {
   if (!value) return null;
   return (
     <div className="flex items-start gap-2 text-sm">
-      <span className="w-32 shrink-0 text-slate-400">{label}</span>
+      <span className="shrink-0 text-slate-400">{label}</span>
       <span className="text-slate-700">{value}</span>
     </div>
   );
@@ -185,6 +220,64 @@ function PaymentDetailDialog({ payment, onClose }: { payment: CRMPayment | null;
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>Close</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ── CancelClientDialog ────────────────────────────────────────────────────────
+
+const CANCEL_REASONS = ["Price", "Moved", "Unhappy with service", "No longer needs service", "Other"];
+
+function CancelClientDialog({ clientId, clientName, open, onOpenChange }: {
+  clientId: string; clientName: string; open: boolean; onOpenChange: (o: boolean) => void;
+}) {
+  const { mutateAsync: cancel, isPending } = useCancelClient();
+  const [reason, setReason] = useState("");
+  const [custom, setCustom] = useState("");
+
+  async function confirm() {
+    const finalReason = reason === "Other" ? custom.trim() : reason;
+    if (!finalReason) { toast.error("Select a cancellation reason"); return; }
+    try {
+      await cancel({ clientId, reason: finalReason });
+      toast.success(`${clientName} cancelled`);
+      onOpenChange(false);
+    } catch { toast.error("Failed to cancel client"); }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader><DialogTitle>Cancel Client</DialogTitle></DialogHeader>
+        <p className="text-sm text-slate-600">
+          Cancel <span className="font-medium">{clientName}</span>? A cancellation reason is required for reporting.
+        </p>
+        <div className="space-y-3">
+          <div>
+            <label className="text-xs font-medium text-slate-500">Reason <span className="text-red-500">*</span></label>
+            <Select value={reason} onValueChange={setReason}>
+              <SelectTrigger className="mt-1"><SelectValue placeholder="Select reason…" /></SelectTrigger>
+              <SelectContent>
+                {CANCEL_REASONS.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          {reason === "Other" && (
+            <input
+              className="w-full rounded-md border px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-brand-400"
+              placeholder="Describe reason…"
+              value={custom}
+              onChange={(e) => setCustom(e.target.value)}
+            />
+          )}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>Back</Button>
+          <Button variant="destructive" onClick={() => void confirm()} disabled={isPending}>
+            {isPending ? "Cancelling…" : "Cancel Client"}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -272,6 +365,32 @@ function EditClientDialog({ client, open, onOpenChange }: { client: Client; open
 
   const [editTab, setEditTab] = useState("personal");
   const [billingSameAsService, setBillingSameAsService] = useState(client.billingSameAsService ?? true);
+  const [clientPhones, setClientPhones] = useState<ContactPhone[]>(
+    client.phones?.length > 0
+      ? client.phones
+      : client.primaryPhone
+        ? [{ phone: client.primaryPhone, type: "cell" as PhoneType, isPrimary: true }]
+        : [{ phone: "", type: "cell" as PhoneType, isPrimary: true }]
+  );
+
+  function addClientPhone() {
+    setClientPhones((prev) => [...prev, { phone: "", type: "cell" as PhoneType, isPrimary: false }]);
+  }
+
+  function removeClientPhone(idx: number) {
+    setClientPhones((prev) => {
+      const next = prev.filter((_, i) => i !== idx);
+      if (next.length > 0 && !next.some((p) => p.isPrimary)) next[0] = { ...next[0], isPrimary: true };
+      return next;
+    });
+  }
+
+  function patchClientPhone(idx: number, field: keyof ContactPhone, value: string | boolean) {
+    setClientPhones((prev) => prev.map((p, i) => {
+      if (i !== idx) return field === "isPrimary" && value ? { ...p, isPrimary: false } : p;
+      return { ...p, [field]: value };
+    }));
+  }
 
   const [form, setForm] = useState({
     displayName: client.displayName,
@@ -302,6 +421,7 @@ function EditClientDialog({ client, open, onOpenChange }: { client: Client; open
     priority: client.priority ?? "normal",
     clientSince: client.clientSince ?? "",
     isTaxable: client.isTaxable,
+    doNotMarket: client.doNotMarket,
     officeNotes: client.officeNotes ?? "",
     // built-in takeoffs
     turfSqft: client.turfSqft != null ? String(client.turfSqft) : "",
@@ -338,6 +458,9 @@ function EditClientDialog({ client, open, onOpenChange }: { client: Client; open
         ? { billingAddress: form.serviceAddress || null, billingCity: form.serviceCity || null, billingState: form.serviceState || null, billingZip: form.serviceZip || null }
         : { billingAddress: form.billingAddress || null, billingCity: form.billingCity || null, billingState: form.billingState || null, billingZip: form.billingZip || null };
 
+      const validClientPhones = clientPhones.filter((p) => p.phone.trim());
+      const primaryClientPhone = validClientPhones.find((p) => p.isPrimary) ?? validClientPhones[0] ?? null;
+
       await update({
         id: client.id,
         updates: {
@@ -345,6 +468,8 @@ function EditClientDialog({ client, open, onOpenChange }: { client: Client; open
           ...serviceAddr,
           ...billingAddr,
           billingSameAsService,
+          phones: validClientPhones,
+          primaryPhone: primaryClientPhone?.phone ?? null,
           firstName: form.firstName || null,
           lastName: form.lastName || null,
           // unified payment method — stored in both columns for compat
@@ -415,15 +540,61 @@ function EditClientDialog({ client, open, onOpenChange }: { client: Client; open
                   <Input value={form.lastName} onChange={(e) => patch("lastName", e.target.value)} />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="flex flex-col gap-1.5">
-                  <Label>Phone</Label>
-                  <Input type="tel" value={form.primaryPhone} onChange={(e) => patch("primaryPhone", e.target.value)} />
+              <div className="flex flex-col gap-1.5">
+                <div className="flex items-center justify-between">
+                  <Label>Phone Numbers</Label>
+                  <button
+                    type="button"
+                    onClick={addClientPhone}
+                    className="flex items-center gap-1 text-xs text-brand-600 hover:text-brand-700"
+                  >
+                    <Plus className="h-3 w-3" /> Add
+                  </button>
                 </div>
-                <div className="flex flex-col gap-1.5">
-                  <Label>Email</Label>
-                  <Input type="email" value={form.primaryEmail} onChange={(e) => patch("primaryEmail", e.target.value)} />
+                <div className="space-y-2">
+                  {clientPhones.map((p, idx) => (
+                    <div key={idx} className="flex items-center gap-2">
+                      <Input
+                        type="tel"
+                        value={p.phone}
+                        onChange={(e) => patchClientPhone(idx, "phone", e.target.value)}
+                        placeholder="Phone number"
+                        className="flex-1"
+                      />
+                      <Select value={p.type} onValueChange={(v) => patchClientPhone(idx, "type", v)}>
+                        <SelectTrigger className="w-24"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {PHONE_TYPES.map((t) => (
+                            <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <button
+                        type="button"
+                        title={p.isPrimary ? "Primary" : "Set as primary"}
+                        onClick={() => patchClientPhone(idx, "isPrimary", true)}
+                        className={`shrink-0 rounded p-1 text-sm font-medium transition-colors ${
+                          p.isPrimary ? "bg-brand-100 text-brand-700" : "text-slate-300 hover:text-brand-600"
+                        }`}
+                      >
+                        ★
+                      </button>
+                      {clientPhones.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => removeClientPhone(idx)}
+                          className="shrink-0 rounded p-1 text-slate-400 hover:text-red-500"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  ))}
                 </div>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label>Email</Label>
+                <Input type="email" value={form.primaryEmail} onChange={(e) => patch("primaryEmail", e.target.value)} />
               </div>
 
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 pt-1">Service Address</p>
@@ -630,6 +801,16 @@ function EditClientDialog({ client, open, onOpenChange }: { client: Client; open
                 />
                 <label htmlFor="isTaxable" className="text-sm cursor-pointer">Client is taxable</label>
               </div>
+              <div className="flex items-center gap-2 pt-1">
+                <input
+                  type="checkbox"
+                  id="doNotMarket"
+                  checked={form.doNotMarket}
+                  onChange={(e) => patch("doNotMarket", e.target.checked)}
+                  className="accent-brand-500"
+                />
+                <label htmlFor="doNotMarket" className="text-sm cursor-pointer">Do not market</label>
+              </div>
             </TabsContent>
 
             {/* ── Custom Fields ── */}
@@ -732,59 +913,96 @@ function EditClientDialog({ client, open, onOpenChange }: { client: Client; open
 
 // ── AddContactDialog ──────────────────────────────────────────────────────────
 
+const PHONE_TYPES: { value: PhoneType; label: string }[] = [
+  { value: "cell",  label: "Cell" },
+  { value: "home",  label: "Home" },
+  { value: "work",  label: "Work" },
+  { value: "fax",   label: "Fax" },
+  { value: "other", label: "Other" },
+];
+
 function AddContactDialog({ clientId, open, onOpenChange }: { clientId: string; open: boolean; onOpenChange: (o: boolean) => void }) {
   const { mutateAsync: addContact, isPending } = useAddClientContact();
-  const [form, setForm] = useState({
-    firstName: "", lastName: "", contactType: "", email: "",
-    phone: "", phoneType: "cell" as const,
-    isPrimary: false, okToEmail: false, notes: "",
-  });
+  const [firstName, setFirstName]   = useState("");
+  const [lastName, setLastName]     = useState("");
+  const [contactType, setContactType] = useState("");
+  const [email, setEmail]           = useState("");
+  const [isPrimary, setIsPrimary]   = useState(false);
+  const [okToEmail, setOkToEmail]   = useState(false);
+  const [notes, setNotes]           = useState("");
+  const [phones, setPhones]         = useState<ContactPhone[]>([{ phone: "", type: "cell", isPrimary: true }]);
 
-  function patch(k: keyof typeof form, v: string | boolean) {
-    setForm((p) => ({ ...p, [k]: v }));
+  function addPhone() {
+    setPhones((prev) => [...prev, { phone: "", type: "cell", isPrimary: false }]);
+  }
+
+  function removePhone(idx: number) {
+    setPhones((prev) => {
+      const next = prev.filter((_, i) => i !== idx);
+      // Ensure at least one is primary
+      if (next.length > 0 && !next.some((p) => p.isPrimary)) {
+        next[0] = { ...next[0], isPrimary: true };
+      }
+      return next;
+    });
+  }
+
+  function patchPhone(idx: number, field: keyof ContactPhone, value: string | boolean) {
+    setPhones((prev) => prev.map((p, i) => {
+      if (i !== idx) return field === "isPrimary" && value ? { ...p, isPrimary: false } : p;
+      return { ...p, [field]: value };
+    }));
+  }
+
+  function handleClose() {
+    setFirstName(""); setLastName(""); setContactType(""); setEmail("");
+    setIsPrimary(false); setOkToEmail(false); setNotes("");
+    setPhones([{ phone: "", type: "cell", isPrimary: true }]);
+    onOpenChange(false);
   }
 
   async function handleSave() {
-    if (!form.firstName.trim()) { toast.error("First name is required"); return; }
+    if (!firstName.trim()) { toast.error("First name is required"); return; }
+    const validPhones = phones.filter((p) => p.phone.trim());
     try {
       await addContact({
         clientId,
         contact: {
-          firstName: form.firstName.trim(),
-          lastName: form.lastName.trim() || null,
-          contactType: form.contactType || null,
-          email: form.email.trim() || null,
-          phone: form.phone.trim() || null,
-          phoneType: form.phoneType || null,
-          isPrimary: form.isPrimary,
-          okToEmail: form.okToEmail,
-          notes: form.notes.trim() || null,
+          firstName: firstName.trim(),
+          lastName: lastName.trim() || null,
+          contactType: contactType || null,
+          email: email.trim() || null,
+          phones: validPhones,
+          phone: validPhones[0]?.phone ?? null,
+          phoneType: validPhones[0]?.type ?? null,
+          isPrimary,
+          okToEmail,
+          notes: notes.trim() || null,
         },
       });
       toast.success("Contact added");
-      setForm({ firstName: "", lastName: "", contactType: "", email: "", phone: "", phoneType: "cell", isPrimary: false, okToEmail: false, notes: "" });
-      onOpenChange(false);
+      handleClose();
     } catch { toast.error("Failed to add contact"); }
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="max-w-md">
         <DialogHeader><DialogTitle>Add Contact</DialogTitle></DialogHeader>
         <div className="grid gap-3 py-1">
           <div className="grid grid-cols-2 gap-3">
             <div className="flex flex-col gap-1.5">
-              <Label>First Name *</Label>
-              <Input value={form.firstName} onChange={(e) => patch("firstName", e.target.value)} autoFocus />
+              <Label>First Name <span className="text-red-500">*</span></Label>
+              <Input value={firstName} onChange={(e) => setFirstName(e.target.value)} autoFocus />
             </div>
             <div className="flex flex-col gap-1.5">
               <Label>Last Name</Label>
-              <Input value={form.lastName} onChange={(e) => patch("lastName", e.target.value)} />
+              <Input value={lastName} onChange={(e) => setLastName(e.target.value)} />
             </div>
           </div>
           <div className="flex flex-col gap-1.5">
             <Label>Contact Type</Label>
-            <Select value={form.contactType} onValueChange={(v) => patch("contactType", v)}>
+            <Select value={contactType} onValueChange={setContactType}>
               <SelectTrigger><SelectValue placeholder="Select type…" /></SelectTrigger>
               <SelectContent>
                 {CONTACT_TYPES.map((t) => (
@@ -795,39 +1013,78 @@ function AddContactDialog({ clientId, open, onOpenChange }: { clientId: string; 
           </div>
           <div className="flex flex-col gap-1.5">
             <Label>Email</Label>
-            <Input type="email" value={form.email} onChange={(e) => patch("email", e.target.value)} />
+            <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
           </div>
-          <div className="grid grid-cols-3 gap-2">
-            <div className="col-span-2 flex flex-col gap-1.5">
-              <Label>Phone</Label>
-              <Input type="tel" value={form.phone} onChange={(e) => patch("phone", e.target.value)} />
+
+          {/* Multi-phone */}
+          <div className="flex flex-col gap-1.5">
+            <div className="flex items-center justify-between">
+              <Label>Phone Numbers</Label>
+              <button
+                type="button"
+                onClick={addPhone}
+                className="flex items-center gap-1 text-xs text-brand-600 hover:text-brand-700"
+              >
+                <Plus className="h-3 w-3" /> Add
+              </button>
             </div>
-            <div className="flex flex-col gap-1.5">
-              <Label>Type</Label>
-              <Select value={form.phoneType} onValueChange={(v) => patch("phoneType", v)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="cell">Cell</SelectItem>
-                  <SelectItem value="home">Home</SelectItem>
-                  <SelectItem value="work">Work</SelectItem>
-                  <SelectItem value="other">Other</SelectItem>
-                </SelectContent>
-              </Select>
+            <div className="space-y-2">
+              {phones.map((p, idx) => (
+                <div key={idx} className="flex items-center gap-2">
+                  <Input
+                    type="tel"
+                    value={p.phone}
+                    onChange={(e) => patchPhone(idx, "phone", e.target.value)}
+                    placeholder="Phone number"
+                    className="flex-1"
+                  />
+                  <Select value={p.type} onValueChange={(v) => patchPhone(idx, "type", v)}>
+                    <SelectTrigger className="w-24"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {PHONE_TYPES.map((t) => (
+                        <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <button
+                    type="button"
+                    title={p.isPrimary ? "Primary" : "Set as primary"}
+                    onClick={() => patchPhone(idx, "isPrimary", true)}
+                    className={`shrink-0 rounded p-1 text-xs font-medium transition-colors ${
+                      p.isPrimary
+                        ? "bg-brand-100 text-brand-700"
+                        : "text-slate-400 hover:text-brand-600"
+                    }`}
+                  >
+                    ★
+                  </button>
+                  {phones.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => removePhone(idx)}
+                      className="shrink-0 rounded p-1 text-slate-400 hover:text-red-500"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+              ))}
             </div>
           </div>
+
           <div className="flex gap-4 text-sm">
-            <label className="flex items-center gap-1.5 cursor-pointer">
-              <input type="checkbox" checked={form.isPrimary} onChange={(e) => patch("isPrimary", e.target.checked)} className="rounded" />
+            <label className="flex cursor-pointer items-center gap-1.5">
+              <input type="checkbox" checked={isPrimary} onChange={(e) => setIsPrimary(e.target.checked)} className="rounded border-slate-300 accent-brand-500" />
               Primary contact
             </label>
-            <label className="flex items-center gap-1.5 cursor-pointer">
-              <input type="checkbox" checked={form.okToEmail} onChange={(e) => patch("okToEmail", e.target.checked)} className="rounded" />
+            <label className="flex cursor-pointer items-center gap-1.5">
+              <input type="checkbox" checked={okToEmail} onChange={(e) => setOkToEmail(e.target.checked)} className="rounded border-slate-300 accent-brand-500" />
               OK to email
             </label>
           </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button variant="outline" onClick={handleClose}>Cancel</Button>
           <Button onClick={handleSave} disabled={isPending}>{isPending ? "Saving…" : "Save"}</Button>
         </DialogFooter>
       </DialogContent>
@@ -998,26 +1255,29 @@ function jobBorderColor(job: CRMJob): string {
 // ── HomeTab ───────────────────────────────────────────────────────────────────
 
 function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; isLead?: boolean; onSwitchTab?: (tab: string) => void }) {
-  const [jobFilter, setJobFilter] = useState<"all" | "upcoming" | "history">("all");
+  const [jobFilter, setJobFilter] = useState<"active" | "completed">("active");
+  const [clientVisitsModal, setClientVisitsModal] = useState<"upcoming" | "history" | null>(null);
   const [newEstimateOpen, setNewEstimateOpen] = useState(false);
   const [newJobOpen, setNewJobOpen] = useState(false);
   const [newJobType, setNewJobType] = useState<import("@/types/crm-jobs").JobType>("one_time");
   const [newContractOpen, setNewContractOpen] = useState(false);
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
+  const [jobEditMode, setJobEditMode] = useState(false);
+  const [visitsModal, setVisitsModal] = useState<{ job: CRMJob; jobName: string; mode: "upcoming" | "history" } | null>(null);
   const [selectedEstimateId, setSelectedEstimateId] = useState<string | null>(null);
   const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null);
   const [selectedPaymentId, setSelectedPaymentId] = useState<string | null>(null);
 
   const { data: allJobs } = useClientJobs(clientId);
+  const updateJobStatus = useUpdateJobStatus();
   const { data: invoices } = useInvoices(clientId);
   const { data: payments } = usePayments(clientId);
   const { data: estimates } = useEstimates(clientId);
   const { data: contracts } = useContracts(clientId);
 
   const jobs = (allJobs ?? []).filter((j) => {
-    if (jobFilter === "upcoming") return j.status !== "completed" && j.status !== "cancelled";
-    if (jobFilter === "history") return j.status === "completed";
-    return true;
+    if (jobFilter === "active") return j.status !== "completed" && j.status !== "cancelled";
+    return j.status === "completed" || j.status === "cancelled";
   });
 
   // Merge invoices + payments sorted by date desc
@@ -1062,7 +1322,7 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
             <Plus className="mr-0.5 h-3 w-3" /> Add an Estimate
           </Button>
         </div>
-        <div className="flex-1 overflow-y-auto divide-y">
+        <div className="divide-y">
           {(estimates ?? []).length === 0 ? (
             <p className="px-4 py-8 text-xs text-slate-400 text-center">No estimates yet</p>
           ) : (
@@ -1102,17 +1362,27 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
 
   return (
     <>
-    <div className="grid h-full grid-cols-3 gap-0 overflow-hidden divide-x">
+    <div className="grid min-h-[600px] bg-white px-3" style={{ gridTemplateColumns: "1fr 10px 1fr 10px 1fr" }}>
       {/* Left — Jobs */}
-      <div className="flex flex-col overflow-hidden">
-        <div className="flex items-center justify-between border-b px-4 py-2.5">
-          <div className="flex items-center gap-1.5">
-            <span className="font-semibold text-sm text-slate-800">Jobs</span>
-            <Badge variant="secondary" className="text-xs">{(allJobs ?? []).length}</Badge>
+      <div className="flex flex-col bg-white">
+        <div className="flex items-center justify-between bg-[#4a4a4a] px-4 py-2">
+          <div className="flex items-center gap-2">
+            <span className="font-semibold text-sm text-white">Jobs</span>
+            <span className="rounded-full bg-white/20 px-1.5 py-0.5 text-[10px] font-medium text-white">{(allJobs ?? []).length}</span>
+            <span className="text-white/30 text-xs">|</span>
+            <button
+              onClick={() => setClientVisitsModal("upcoming")}
+              className="text-[11px] text-white/70 hover:text-white"
+            >All Upcoming</button>
+            <span className="text-white/30 text-xs">|</span>
+            <button
+              onClick={() => setClientVisitsModal("history")}
+              className="text-[11px] text-white/70 hover:text-white"
+            >All History</button>
           </div>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="sm" className="h-6 px-2 text-xs text-brand-600">
+              <Button variant="ghost" size="sm" className="h-6 px-2 text-xs text-white/80 hover:text-white hover:bg-white/10">
                 <Plus className="mr-0.5 h-3 w-3" /> Add a Job
               </Button>
             </DropdownMenuTrigger>
@@ -1135,101 +1405,164 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
           </DropdownMenu>
         </div>
 
-        {/* Filter chips */}
-        <div className="flex gap-1 border-b px-4 py-1.5">
-          {(["all", "upcoming", "history"] as const).map((f) => (
+        {/* Active / Completed tabs */}
+        <div className="flex border-b">
+          {([
+            ["active", "Active", (allJobs ?? []).filter((j) => j.status !== "completed" && j.status !== "cancelled").length],
+            ["completed", "Completed", (allJobs ?? []).filter((j) => j.status === "completed" || j.status === "cancelled").length],
+          ] as const).map(([f, label, count]) => (
             <button
               key={f}
               onClick={() => setJobFilter(f)}
-              className={`rounded px-2 py-0.5 text-xs capitalize font-medium transition-colors ${
+              className={`flex items-center gap-1 px-4 py-1.5 text-xs font-medium border-b-2 transition-colors ${
                 jobFilter === f
-                  ? "bg-brand-100 text-brand-700"
-                  : "text-slate-500 hover:text-slate-700"
+                  ? "border-brand-500 text-brand-700"
+                  : "border-transparent text-slate-500 hover:text-slate-700"
               }`}
             >
-              {f}
+              {label}
+              {count > 0 && (
+                <span className={`rounded-full px-1.5 text-[10px] ${jobFilter === f ? "bg-brand-100 text-brand-700" : "bg-slate-100 text-slate-500"}`}>
+                  {count}
+                </span>
+              )}
             </button>
           ))}
         </div>
 
-        <div className="flex-1 overflow-y-auto">
+        <div>
           {jobs.length === 0 ? (
             <p className="px-4 py-6 text-xs text-slate-400 text-center">No jobs</p>
           ) : (
             <div className="divide-y">
               {jobs.map((job) => (
-                <button
+                <div
                   key={job.id}
-                  onClick={() => setSelectedJobId(job.id)}
-                  className={`w-full text-left border-l-4 px-3 py-2.5 hover:bg-slate-50 ${jobBorderColor(job)}`}
+                  className={`flex items-stretch border-l-4 hover:bg-slate-50 ${jobBorderColor(job)}`}
                 >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className="text-xs font-semibold capitalize text-slate-800">
-                        {job.jobType.replace("_", " ")}
-                      </p>
-                      {(job.services ?? []).slice(0, 3).map((svc) => (
-                        <p key={svc.id} className="truncate text-xs text-slate-500">
-                          {svc.serviceName}
+                  {/* Clickable main area */}
+                  <button
+                    onClick={() => { setJobEditMode(false); setSelectedJobId(job.id); }}
+                    className="min-w-0 flex-1 px-4 py-3 text-left"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold capitalize text-slate-800 mb-0.5">
+                          {job.jobType.replace("_", " ")}
                         </p>
-                      ))}
+                        {(job.services ?? []).slice(0, 3).map((svc) => (
+                          <p key={svc.id} className="truncate text-xs text-slate-500">
+                            {svc.serviceName}
+                          </p>
+                        ))}
+                      </div>
+                      <div className="shrink-0 text-right">
+                        {job.rateCents != null && (
+                          <p className="text-xs font-medium text-slate-700">
+                            {formatCurrency(job.rateCents)}
+                          </p>
+                        )}
+                        {job.scheduledDate && (
+                          <p className="text-[10px] text-slate-400">
+                            {new Date(job.scheduledDate).toLocaleDateString()}
+                          </p>
+                        )}
+                      </div>
                     </div>
-                    <div className="shrink-0 text-right">
-                      {job.rateCents != null && (
-                        <p className="text-xs font-medium text-slate-700">
-                          {formatCurrency(job.rateCents)}
-                        </p>
-                      )}
-                      {job.scheduledDate && (
-                        <p className="text-[10px] text-slate-400">
-                          {new Date(job.scheduledDate).toLocaleDateString()}
-                        </p>
-                      )}
-                    </div>
+                  </button>
+
+                  {/* More dropdown */}
+                  <div className="flex items-center pr-2">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <button
+                          className="flex items-center gap-1 rounded border border-slate-300 bg-white px-3 py-0.5 text-[10px] font-semibold tracking-wide text-slate-600 hover:bg-slate-100"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          MORE <ChevronDown className="h-3 w-3" />
+                        </button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-48">
+                        <DropdownMenuItem onClick={() => { setJobEditMode(true); setSelectedJobId(job.id); }}>
+                          <Pencil className="mr-2 h-3.5 w-3.5" /> Edit Job
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => { setJobEditMode(false); setSelectedJobId(job.id); }}>
+                          <Eye className="mr-2 h-3.5 w-3.5" /> View Details
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem onClick={() => setVisitsModal({ job, jobName: (job.services ?? []).map((s) => s.serviceName).join(", ") || job.jobType, mode: "upcoming" })}>
+                          <Calendar className="mr-2 h-3.5 w-3.5" /> View Upcoming
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setVisitsModal({ job, jobName: (job.services ?? []).map((s) => s.serviceName).join(", ") || job.jobType, mode: "history" })}>
+                          <History className="mr-2 h-3.5 w-3.5" /> View History
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        {job.status !== "cancelled" && (
+                          <DropdownMenuItem
+                            className="text-red-600 focus:text-red-600"
+                            onClick={async () => {
+                              if (!confirm("Cancel this job?")) return;
+                              try {
+                                await updateJobStatus.mutateAsync({ id: job.id, status: "cancelled", scheduledDate: job.scheduledDate ?? "", clientId });
+                                toast.success("Job cancelled");
+                              } catch {
+                                toast.error("Failed to cancel job");
+                              }
+                            }}
+                          >
+                            <Ban className="mr-2 h-3.5 w-3.5" /> Cancel Job
+                          </DropdownMenuItem>
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </div>
-                </button>
+                </div>
               ))}
             </div>
           )}
         </div>
       </div>
 
+      {/* Divider column */}
+      <div className="flex justify-center bg-white"><div className="w-px h-full bg-slate-200" /></div>
+
       {/* Middle — Accounting */}
-      <div className="flex flex-col overflow-hidden">
-        <div className="flex items-center justify-between border-b px-4 py-2.5">
-          <span className="font-semibold text-sm text-slate-800">Accounting</span>
-          <Button variant="ghost" size="sm" className="h-6 px-2 text-xs text-brand-600">
+      <div className="flex flex-col bg-white">
+        <div className="flex items-center justify-between bg-[#4a4a4a] px-4 py-2">
+          <span className="font-semibold text-sm text-white">Accounting</span>
+          <Button variant="ghost" size="sm" className="h-6 px-2 text-xs text-white/80 hover:text-white hover:bg-white/10">
             <Plus className="mr-0.5 h-3 w-3" /> Add a Transaction
           </Button>
         </div>
 
-        <div className="flex-1 overflow-y-auto divide-y">
+        <div className="divide-y">
           {accountingRows.length === 0 ? (
             <p className="px-4 py-6 text-xs text-slate-400 text-center">No transactions</p>
           ) : (
             accountingRows.map((row) =>
               row.kind === "invoice" ? (
-                <div key={`inv-${row.id}`} className="border-l-4 border-l-yellow-400 px-3 py-2.5 hover:bg-slate-50 cursor-pointer"
+                <div key={`inv-${row.id}`} className="border-l-4 border-l-yellow-400 px-4 py-3 hover:bg-slate-50 cursor-pointer"
                   onClick={() => setSelectedInvoiceId(row.id)}>
                   <div className="flex items-start justify-between gap-2">
-                    <button
-                      className="text-xs font-semibold text-slate-800 hover:text-brand-600"
-                    >
+                    <p className="text-xs font-semibold text-slate-800">
                       Invoice #{row.invoiceNumber}
-                    </button>
+                    </p>
                     <p className="shrink-0 text-[10px] text-slate-400">
                       {new Date(row.date).toLocaleDateString()}
                     </p>
                   </div>
-                  <p className="text-xs text-slate-500">
-                    Amt: {formatCurrency(row.totalCents)} | Bal: {formatCurrency(row.balanceCents)}
-                  </p>
+                  <div className="mt-0.5 flex gap-3 text-xs text-slate-500">
+                    <span>Amt: {formatCurrency(row.totalCents)}</span>
+                    <span className={row.balanceCents > 0 ? "font-medium text-red-500" : "text-slate-400"}>
+                      Bal: {formatCurrency(row.balanceCents)}
+                    </span>
+                  </div>
                 </div>
               ) : (
                 <button
                   key={`pmt-${row.id}`}
                   onClick={() => setSelectedPaymentId(row.id)}
-                  className="w-full text-left border-l-4 border-l-green-400 px-3 py-2.5 hover:bg-green-50 transition-colors"
+                  className="w-full text-left border-l-4 border-l-green-400 px-4 py-3 hover:bg-green-50 transition-colors"
                 >
                   <div className="flex items-start justify-between gap-2">
                     <p className="text-xs font-semibold text-slate-800">Payment</p>
@@ -1237,8 +1570,8 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
                       {new Date(row.date).toLocaleDateString()}
                     </p>
                   </div>
-                  <p className="text-xs font-medium text-green-600">
-                    {formatCurrency(row.amountCents)}
+                  <p className="mt-0.5 text-xs font-medium text-green-600">
+                    ({formatCurrency(row.amountCents)})
                   </p>
                 </button>
               )
@@ -1247,42 +1580,44 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
         </div>
       </div>
 
+      {/* Divider column */}
+      <div className="flex justify-center bg-white"><div className="w-px h-full bg-slate-200" /></div>
+
       {/* Right — Estimates + Contracts */}
-      <div className="flex flex-col overflow-hidden divide-y">
+      <div className="flex flex-col bg-white divide-y">
         {/* Estimates */}
-        <div className="flex flex-col overflow-hidden" style={{ flex: "1 1 50%" }}>
-          <div className="flex items-center justify-between border-b px-4 py-2.5">
+        <div className="flex flex-col">
+          <div className="flex items-center justify-between bg-[#4a4a4a] px-4 py-2">
             <div className="flex items-center gap-1.5">
-              <span className="font-semibold text-sm text-slate-800">
-                Open Estimates ({openEstimates.length})
-              </span>
-              <button className="text-xs text-brand-600 hover:underline">All</button>
+              <span className="font-semibold text-sm text-white">Open Estimates</span>
+              <span className="rounded-full bg-white/20 px-1.5 py-0.5 text-[10px] font-medium text-white">{openEstimates.length}</span>
+              <button className="text-[11px] text-white/70 hover:text-white">All</button>
             </div>
-            <Button variant="ghost" size="sm" className="h-6 px-2 text-xs text-brand-600"
+            <Button variant="ghost" size="sm" className="h-6 px-2 text-xs text-white/80 hover:text-white hover:bg-white/10"
               onClick={() => setNewEstimateOpen(true)}>
               <Plus className="mr-0.5 h-3 w-3" /> Add an Estimate
             </Button>
           </div>
 
-          <div className="flex-1 overflow-y-auto divide-y">
+          <div className="divide-y">
             {openEstimates.length === 0 ? (
               <p className="px-4 py-6 text-xs text-slate-400 text-center">No open estimates</p>
             ) : (
               openEstimates.map((est) => (
-                <button key={est.id} className="w-full text-left px-3 py-2 hover:bg-slate-50"
+                <button key={est.id} className="w-full text-left px-4 py-3 hover:bg-slate-50"
                   onClick={() => setSelectedEstimateId(est.id)}>
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
-                      <Badge variant="outline" className="text-[10px] capitalize mb-0.5">
+                      <Badge variant="outline" className="text-[10px] capitalize mb-1">
                         {est.stage}
                       </Badge>
                       <p className="truncate text-xs text-slate-700">{est.description}</p>
                     </div>
                     <div className="shrink-0 text-right">
-                      <p className="text-xs font-medium text-slate-700">
+                      <p className="text-xs font-semibold text-slate-700">
                         {formatCurrency(est.totalCents)}
                       </p>
-                      <p className="text-[10px] text-slate-400">
+                      <p className="text-[10px] text-slate-400 mt-0.5">
                         {new Date(est.estimateDate).toLocaleDateString()}
                       </p>
                     </div>
@@ -1294,26 +1629,25 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
         </div>
 
         {/* Contracts */}
-        <div className="flex flex-col overflow-hidden" style={{ flex: "1 1 50%" }}>
-          <div className="flex items-center justify-between border-b px-4 py-2.5">
+        <div className="flex flex-col">
+          <div className="flex items-center justify-between bg-[#4a4a4a] px-4 py-2">
             <div className="flex items-center gap-1.5">
-              <span className="font-semibold text-sm text-slate-800">
-                Contracts ({(contracts ?? []).length})
-              </span>
-              <button className="text-xs text-brand-600 hover:underline" onClick={() => onSwitchTab?.("contracts")}>All</button>
+              <span className="font-semibold text-sm text-white">Contracts</span>
+              <span className="rounded-full bg-white/20 px-1.5 py-0.5 text-[10px] font-medium text-white">{(contracts ?? []).length}</span>
+              <button className="text-[11px] text-white/70 hover:text-white" onClick={() => onSwitchTab?.("contracts")}>All</button>
             </div>
-            <Button variant="ghost" size="sm" className="h-6 px-2 text-xs text-brand-600"
+            <Button variant="ghost" size="sm" className="h-6 px-2 text-xs text-white/80 hover:text-white hover:bg-white/10"
               onClick={() => setNewContractOpen(true)}>
               <Plus className="mr-0.5 h-3 w-3" /> Add a Contract
             </Button>
           </div>
 
-          <div className="flex-1 overflow-y-auto divide-y">
+          <div className="divide-y">
             {(contracts ?? []).length === 0 ? (
               <p className="px-4 py-6 text-xs text-slate-400 text-center">No contracts</p>
             ) : (
               (contracts ?? []).map((contract) => (
-                <div key={contract.id} className="px-3 py-2 hover:bg-slate-50">
+                <div key={contract.id} className="px-4 py-3 hover:bg-slate-50">
                   <div className="flex items-start justify-between gap-2">
                     <p className="truncate text-xs font-semibold text-slate-700">{contract.title}</p>
                     <Badge variant="secondary" className="shrink-0 text-[10px]">
@@ -1343,7 +1677,8 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
     </div>
     <JobDetailSheet
       jobId={selectedJobId}
-      onOpenChange={(open) => !open && setSelectedJobId(null)}
+      initialEditing={jobEditMode}
+      onOpenChange={(open) => { if (!open) { setSelectedJobId(null); setJobEditMode(false); } }}
     />
     <EstimateDetailSheet
       estimateId={selectedEstimateId}
@@ -1369,7 +1704,293 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
       onOpenChange={setNewContractOpen}
       clientId={clientId}
     />
+    {visitsModal && (
+      <JobVisitsModal
+        job={visitsModal.job}
+        jobName={visitsModal.jobName}
+        mode={visitsModal.mode}
+        onClose={() => setVisitsModal(null)}
+        onOpenJob={(id) => { setVisitsModal(null); setJobEditMode(false); setSelectedJobId(id); }}
+      />
+    )}
+    {clientVisitsModal && (
+      <ClientAllVisitsModal
+        clientId={clientId}
+        mode={clientVisitsModal}
+        onClose={() => setClientVisitsModal(null)}
+        onOpenJob={(id) => { setClientVisitsModal(null); setJobEditMode(false); setSelectedJobId(id); }}
+      />
+    )}
     </>
+  );
+}
+
+// ── JobVisitsModal ────────────────────────────────────────────────────────────
+
+function fmtDate(iso: string) {
+  return new Date(iso + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "2-digit", day: "2-digit", year: "numeric" });
+}
+
+function JobVisitsModal({
+  job,
+  jobName,
+  mode,
+  onClose,
+  onOpenJob,
+}: {
+  job: CRMJob;
+  jobName: string;
+  mode: "upcoming" | "history";
+  onClose: () => void;
+  onOpenJob: (id: string) => void;
+}) {
+  const isWaitingList = job.jobType === "waiting_list";
+  const { data: visits = [], isLoading } = useJobVisits(isWaitingList ? "" : job.id);
+  const today = new Date().toISOString().slice(0, 10);
+
+  const filtered = visits.filter((v: CRMJobVisit) => {
+    if (v.deletedAt) return false;
+    if (mode === "upcoming") return v.scheduledDate >= today && v.status !== "completed" && v.status !== "cancelled";
+    return v.scheduledDate < today || v.status === "completed";
+  }).sort((a: CRMJobVisit, b: CRMJobVisit) =>
+    mode === "upcoming"
+      ? a.scheduledDate.localeCompare(b.scheduledDate)
+      : b.scheduledDate.localeCompare(a.scheduledDate)
+  );
+
+  // Waiting list services rendered as rows (date range, not visit dates)
+  const waitingListRows = isWaitingList ? (job.services ?? []) : [];
+  const dateRangeStr = (job.waitingListStart && job.waitingListEnd)
+    ? `${fmtDate(job.waitingListStart)} – ${fmtDate(job.waitingListEnd)}`
+    : job.waitingListStart ? `From ${fmtDate(job.waitingListStart)}` : "Date range not set";
+
+  const title = mode === "upcoming" ? `${jobName} — Upcoming` : `${jobName} — History`;
+  const isEmpty = isWaitingList ? (mode === "history" || waitingListRows.length === 0) : filtered.length === 0;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+      <div className="relative flex max-h-[80vh] w-full max-w-4xl flex-col rounded-lg bg-white shadow-2xl">
+        {/* Header — neutral gray, no blue */}
+        <div className="flex items-center justify-between border-b bg-neutral-700 px-6 py-3 rounded-t-lg">
+          <h2 className="text-base font-semibold text-white">{title}</h2>
+          <button onClick={onClose} className="text-neutral-300 hover:text-white">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {/* Table */}
+        <div className="overflow-auto flex-1">
+          {isLoading && !isWaitingList ? (
+            <div className="p-6 text-sm text-neutral-400 text-center">Loading…</div>
+          ) : isEmpty ? (
+            <div className="p-6 text-sm text-neutral-400 text-center">
+              No {mode === "upcoming" ? "upcoming" : "history"} found.
+            </div>
+          ) : (
+            <table className="w-full text-xs">
+              <thead className="sticky top-0 bg-neutral-600 text-white">
+                <tr>
+                  <th className="px-4 py-2 text-left font-medium w-6"></th>
+                  <th className="px-4 py-2 text-left font-medium">Date of Service</th>
+                  <th className="px-4 py-2 text-left font-medium">Description</th>
+                  <th className="px-4 py-2 text-left font-medium">Assigned To</th>
+                  {mode === "history" && <th className="px-4 py-2 text-right font-medium">Men</th>}
+                  <th className="px-4 py-2 text-right font-medium">
+                    {mode === "upcoming" ? "B. Hrs." : "Time"}
+                  </th>
+                  <th className="px-4 py-2 text-right font-medium">Amount</th>
+                  {mode === "upcoming" && <th className="px-4 py-2 text-center font-medium">Priority</th>}
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {isWaitingList ? waitingListRows.map((svc) => {
+                  const hrs = svc.budgetedHours > 0 ? `${svc.budgetedHours}hrs` : (job.budgetedHours != null ? `${job.budgetedHours}hrs` : "—");
+                  const amt = svc.rateCents != null ? `$${(svc.rateCents / 100).toFixed(2)}` : "—";
+                  return (
+                    <tr key={svc.id} className="cursor-pointer hover:bg-neutral-50" onClick={() => { onClose(); onOpenJob(job.id); }}>
+                      <td className="px-4 py-2.5 text-center">
+                        <div className="inline-flex gap-0.5">
+                          <div className="h-3.5 w-1.5 rounded-sm bg-blue-400" />
+                          <div className="h-3.5 w-1.5 rounded-sm bg-blue-400" />
+                        </div>
+                      </td>
+                      <td className="px-4 py-2.5 text-neutral-700 whitespace-nowrap">{dateRangeStr}</td>
+                      <td className="px-4 py-2.5 text-neutral-700">{svc.serviceName}</td>
+                      <td className="px-4 py-2.5 text-neutral-500">{svc.assignedTo ?? "—"}</td>
+                      <td className="px-4 py-2.5 text-right text-neutral-700">{hrs}</td>
+                      <td className="px-4 py-2.5 text-right font-medium text-neutral-800">{amt}</td>
+                      <td className="px-4 py-2.5 text-center">
+                        <span className="inline-block rounded bg-neutral-100 px-1.5 py-0.5 text-[10px] font-medium text-neutral-500">
+                          {job.priority ?? 1}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                }) : filtered.map((v: CRMJobVisit) => {
+                  const isCompleted = v.status === "completed";
+                  const isCancelled = v.status === "cancelled";
+                  // Fall back to job-level budgeted hours if visit doesn't have its own
+                  const hours = mode === "history"
+                    ? (v.actualHours != null ? `${v.actualHours}hrs` : "0hrs")
+                    : (v.budgetedHours != null ? `${v.budgetedHours}hrs` : job.budgetedHours != null ? `${job.budgetedHours}hrs` : "—");
+                  const amount = v.rateCents != null ? `$${(v.rateCents / 100).toFixed(2)}` : (job.rateCents != null ? `$${(job.rateCents / 100).toFixed(2)}` : "—");
+                  const dateStr = fmtDate(v.scheduledDate);
+
+                  return (
+                    <tr key={v.id} className="cursor-pointer hover:bg-neutral-50" onClick={() => { onClose(); onOpenJob(job.id); }}>
+                      <td className="px-4 py-2.5 text-center">
+                        {isCompleted && <CheckCircle className="h-3.5 w-3.5 text-green-500 inline" />}
+                        {isCancelled && <Ban className="h-3.5 w-3.5 text-red-400 inline" />}
+                        {!isCompleted && !isCancelled && (
+                          <div className="h-3.5 w-3.5 rounded-sm bg-neutral-200 inline-block" />
+                        )}
+                      </td>
+                      <td className="px-4 py-2.5 text-neutral-700">{dateStr}</td>
+                      <td className="px-4 py-2.5 text-neutral-700">{v.invoiceDescription ?? jobName}</td>
+                      <td className="px-4 py-2.5 text-neutral-500">{v.crewName ?? "—"}</td>
+                      {mode === "history" && (
+                        <td className="px-4 py-2.5 text-right text-neutral-700">{v.menCount}</td>
+                      )}
+                      <td className="px-4 py-2.5 text-right text-neutral-700">{hours}</td>
+                      <td className="px-4 py-2.5 text-right font-medium text-neutral-800">{amount}</td>
+                      {mode === "upcoming" && (
+                        <td className="px-4 py-2.5 text-center">
+                          <span className={`inline-block rounded px-1.5 py-0.5 text-[10px] font-medium ${
+                            v.priority >= 3 ? "bg-red-100 text-red-700" :
+                            v.priority === 2 ? "bg-yellow-100 text-yellow-700" :
+                            "bg-neutral-100 text-neutral-500"
+                          }`}>{v.priority}</span>
+                        </td>
+                      )}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
+
+        {/* Footer count */}
+        <div className="border-t px-6 py-2 text-xs text-neutral-400">
+          {isWaitingList ? `${waitingListRows.length} service${waitingListRows.length !== 1 ? "s" : ""}` : `${filtered.length} ${mode === "upcoming" ? "upcoming visit" : "visit"}${filtered.length !== 1 ? "s" : ""}`}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ClientAllVisitsModal({
+  clientId,
+  mode,
+  onClose,
+  onOpenJob,
+}: {
+  clientId: string;
+  mode: "upcoming" | "history";
+  onClose: () => void;
+  onOpenJob: (id: string) => void;
+}) {
+  const { data: visits = [], isLoading } = useClientAllVisits(clientId);
+  const today = new Date().toISOString().slice(0, 10);
+
+  const filtered = visits
+    .filter((v: CRMJobVisit) =>
+      mode === "upcoming"
+        ? v.scheduledDate >= today && v.status !== "completed" && v.status !== "cancelled"
+        : v.status === "completed" || v.scheduledDate < today
+    )
+    .sort((a: CRMJobVisit, b: CRMJobVisit) =>
+      mode === "upcoming"
+        ? a.scheduledDate.localeCompare(b.scheduledDate)
+        : b.scheduledDate.localeCompare(a.scheduledDate)
+    );
+
+  const title = mode === "upcoming" ? "All Upcoming" : "All History";
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+      <div className="flex flex-col bg-white rounded-lg shadow-2xl w-[900px] max-h-[80vh]">
+        {/* Header */}
+        <div className="flex items-center justify-between border-b px-6 py-3">
+          <h2 className="text-base font-semibold text-neutral-800">{title}</h2>
+          <button onClick={onClose} className="text-neutral-400 hover:text-neutral-600">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {/* Table */}
+        <div className="overflow-auto flex-1">
+          {isLoading ? (
+            <div className="p-6 text-sm text-neutral-400 text-center">Loading…</div>
+          ) : filtered.length === 0 ? (
+            <div className="p-6 text-sm text-neutral-400 text-center">
+              No {mode === "upcoming" ? "upcoming visits" : "visit history"} found.
+            </div>
+          ) : (
+            <table className="w-full text-xs">
+              <thead className="sticky top-0 bg-neutral-600 text-white">
+                <tr>
+                  <th className="px-4 py-2 text-left font-medium w-6"></th>
+                  <th className="px-4 py-2 text-left font-medium">Date of Service</th>
+                  <th className="px-4 py-2 text-left font-medium">Description</th>
+                  <th className="px-4 py-2 text-left font-medium">Assigned To</th>
+                  {mode === "history" && <th className="px-4 py-2 text-right font-medium">Men</th>}
+                  <th className="px-4 py-2 text-right font-medium">{mode === "upcoming" ? "B. Hrs." : "Time"}</th>
+                  <th className="px-4 py-2 text-right font-medium">Amount</th>
+                  {mode === "upcoming" && <th className="px-4 py-2 text-center font-medium">Priority</th>}
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {filtered.map((v: CRMJobVisit) => {
+                  const isCompleted = v.status === "completed";
+                  const isCancelled = v.status === "cancelled";
+                  const hours = mode === "history"
+                    ? (v.actualHours != null ? `${v.actualHours}hrs` : "0hrs")
+                    : (v.budgetedHours != null ? `${v.budgetedHours}hrs` : "—");
+                  const amount = v.rateCents != null ? `$${(v.rateCents / 100).toFixed(2)}` : "—";
+                  return (
+                    <tr
+                      key={v.id}
+                      className="cursor-pointer hover:bg-neutral-50"
+                      onClick={() => { onClose(); onOpenJob(v.jobId); }}
+                    >
+                      <td className="px-4 py-2.5 text-center">
+                        {isCompleted && <CheckCircle className="h-3.5 w-3.5 text-green-500 inline" />}
+                        {isCancelled && <Ban className="h-3.5 w-3.5 text-red-400 inline" />}
+                        {!isCompleted && !isCancelled && (
+                          <div className="h-3.5 w-3.5 rounded-sm bg-neutral-200 inline-block" />
+                        )}
+                      </td>
+                      <td className="px-4 py-2.5 text-neutral-700">{fmtDate(v.scheduledDate)}</td>
+                      <td className="px-4 py-2.5 text-neutral-700">{v.invoiceDescription ?? "—"}</td>
+                      <td className="px-4 py-2.5 text-neutral-500">{v.crewName ?? "—"}</td>
+                      {mode === "history" && (
+                        <td className="px-4 py-2.5 text-right text-neutral-700">{v.menCount}</td>
+                      )}
+                      <td className="px-4 py-2.5 text-right text-neutral-700">{hours}</td>
+                      <td className="px-4 py-2.5 text-right font-medium text-neutral-800">{amount}</td>
+                      {mode === "upcoming" && (
+                        <td className="px-4 py-2.5 text-center">
+                          <span className={`inline-block rounded px-1.5 py-0.5 text-[10px] font-medium ${
+                            v.priority >= 3 ? "bg-red-100 text-red-700" :
+                            v.priority === 2 ? "bg-yellow-100 text-yellow-700" :
+                            "bg-neutral-100 text-neutral-500"
+                          }`}>{v.priority}</span>
+                        </td>
+                      )}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
+
+        <div className="border-t px-6 py-2 text-xs text-neutral-400">
+          {filtered.length} {mode === "upcoming" ? "upcoming visit" : "visit"}{filtered.length !== 1 ? "s" : ""}
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -1394,7 +2015,12 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
   const [linkParentOpen, setLinkParentOpen] = useState(false);
   const [newTicketOpen, setNewTicketOpen] = useState(false);
   const [openTicketId, setOpenTicketId] = useState<string | null>(null);
+  const [cancelOpen, setCancelOpen] = useState(false);
   const { mutateAsync: convertLead, isPending: converting } = useConvertLeadToClient();
+  const { mutateAsync: activate } = useActivateClient();
+  const { mutate: addTag } = useAddClientTag();
+  const { mutate: removeTag } = useRemoveClientTag();
+  const orgTags = useOrgTags();
   const { data: openTicket } = useTicket(openTicketId ?? "");
   const router = useRouter();
   const isLead = client?.status === "lead";
@@ -1426,59 +2052,91 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
     .join(", ");
 
   return (
-    <div className="flex h-full flex-col overflow-hidden">
+    <div className="flex h-full flex-col overflow-y-auto">
       {/* Header */}
-      <div className="border-b px-6 py-4">
-        <div className="flex items-start justify-between gap-4">
-          <div className="min-w-0">
+      <div className="border-b px-6 py-3">
+        <div className="flex items-stretch justify-between gap-4">
+          {/* Left column — stretches to match balance card height */}
+          <div className="min-w-0 flex-1 flex flex-col">
+            {/* Name + status row */}
             <div className="flex items-center gap-2">
               {client.accountType === "commercial" ? (
                 <Building2 className="h-4 w-4 shrink-0 text-slate-400" />
               ) : (
                 <Home className="h-4 w-4 shrink-0 text-slate-400" />
               )}
-              <h2 className="truncate text-xl font-semibold text-slate-900">{client.displayName}</h2>
+              <h2 className="truncate text-lg font-semibold text-slate-900">{client.displayName}</h2>
               <Badge className={`shrink-0 capitalize border ${STATUS_COLOR[client.status]}`}>
                 {client.status}
               </Badge>
-            </div>
-
-            <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1">
-              {client.primaryPhone && (
-                <a
-                  href={`tel:${client.primaryPhone}`}
-                  className="flex items-center gap-1 text-sm text-slate-500 hover:text-brand-600"
-                >
-                  <Phone className="h-3.5 w-3.5" />
-                  {client.primaryPhone}
-                </a>
+              {client.priority && client.priority !== "normal" && (
+                <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+                  client.priority === "high" ? "bg-red-100 text-red-700" : "bg-slate-100 text-slate-500"
+                }`}>
+                  {client.priority}
+                </span>
               )}
-              {client.primaryEmail && (
-                <a
-                  href={`mailto:${client.primaryEmail}`}
-                  className="flex items-center gap-1 text-sm text-slate-500 hover:text-brand-600"
-                >
-                  <Mail className="h-3.5 w-3.5" />
-                  {client.primaryEmail}
-                </a>
-              )}
-              {address && (
-                <span className="flex items-center gap-1 text-sm text-slate-500">
-                  <MapPin className="h-3.5 w-3.5" />
-                  {address}
+              {client.doNotMarket && (
+                <span className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide bg-orange-100 text-orange-700">
+                  Do Not Market
                 </span>
               )}
             </div>
 
-            {(client.tags ?? []).length > 0 && (
-              <div className="mt-2 flex flex-wrap gap-1">
-                {client.tags!.map((tag) => (
-                  <Badge key={tag} variant="secondary" className="text-xs">
-                    {tag}
-                  </Badge>
-                ))}
+            {/* Info row: address on left, contact details on right */}
+            <div className="mt-1.5 flex gap-8">
+              {/* Left — billing address (two lines) */}
+              {(client.billingAddress || client.billingCity) && (
+                <div className="flex items-start gap-1 text-sm text-slate-500 leading-snug">
+                  <MapPin className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                  <div>
+                    {client.billingAddress && <div>{client.billingAddress}</div>}
+                    <div>{[client.billingCity, client.billingState, client.billingZip].filter(Boolean).join(", ")}</div>
+                  </div>
+                </div>
+              )}
+
+              {/* Right — phone, email, salesperson */}
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-0.5">
+                {client.primaryPhone && (
+                  <a href={`tel:${client.primaryPhone}`} className="flex items-center gap-1 text-sm text-slate-500 hover:text-brand-600">
+                    <Phone className="h-3.5 w-3.5" />{client.primaryPhone}
+                  </a>
+                )}
+                {client.primaryEmail && (
+                  <a href={`mailto:${client.primaryEmail}`} className="flex items-center gap-1 text-sm text-slate-500 hover:text-brand-600">
+                    <Mail className="h-3.5 w-3.5" />{client.primaryEmail}
+                  </a>
+                )}
+                {client.salesRepName && (
+                  <span className="flex items-center gap-1 text-sm text-slate-500">
+                    <UserCircle className="h-3.5 w-3.5" />{client.salesRepName}
+                  </span>
+                )}
               </div>
-            )}
+            </div>
+
+            {/* Spacer pushes tags + source to the bottom of the left column */}
+            <div className="flex-1" />
+
+            {/* Tags + source/client since — bottom-aligned with the balance card */}
+            <div className="flex flex-col gap-2">
+              <TagEditor
+                tags={client.tags ?? []}
+                suggestions={orgTags}
+                onAdd={(tag) => addTag({ clientId, tag })}
+                onRemove={(tag) => removeTag({ clientId, tag })}
+              />
+              <div className="flex flex-wrap gap-x-6 gap-y-0.5">
+                {client.priority && <InfoRow label="Priority" value={client.priority.charAt(0).toUpperCase() + client.priority.slice(1)} />}
+                {client.source && <InfoRow label="Source" value={client.source} />}
+                {client.clientSince && (
+                  <InfoRow label="Client since" value={new Date(client.clientSince).toLocaleDateString()} />
+                )}
+                {client.paymentMethod && <InfoRow label="Payment" value={client.paymentMethod} />}
+                {client.mapCode && <InfoRow label="Map code" value={client.mapCode} />}
+              </div>
+            </div>
           </div>
 
           <div className="flex flex-col items-end gap-2 shrink-0">
@@ -1579,29 +2237,26 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
                       <ClipboardList className="mr-2 h-3.5 w-3.5" /> Account Statement
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem className="text-red-600 focus:text-red-600">
-                      <Ban className="mr-2 h-3.5 w-3.5" /> Cancel Client
-                    </DropdownMenuItem>
+                    {client.status === "cancelled" ? (
+                      <DropdownMenuItem onClick={async () => { try { await activate(clientId); toast.success("Client reactivated"); } catch { toast.error("Failed to activate"); } }}>
+                        <CheckCircle className="mr-2 h-3.5 w-3.5 text-green-600" /> Activate Client
+                      </DropdownMenuItem>
+                    ) : (
+                      <DropdownMenuItem className="text-red-600 focus:text-red-600" onClick={() => setCancelOpen(true)}>
+                        <Ban className="mr-2 h-3.5 w-3.5" /> Cancel Client
+                      </DropdownMenuItem>
+                    )}
                   </DropdownMenuContent>
                 </DropdownMenu>
               </div>
             </div>
 
-            <div className="w-48">
+            <div className="w-48 mt-4">
               <BalanceCard client={client} />
             </div>
           </div>
         </div>
 
-        {/* Quick info strip */}
-        <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1">
-          {client.source && <InfoRow label="Source" value={client.source} />}
-          {client.clientSince && (
-            <InfoRow label="Client since" value={new Date(client.clientSince).toLocaleDateString()} />
-          )}
-          {client.paymentMethod && <InfoRow label="Payment" value={client.paymentMethod} />}
-          {client.mapCode && <InfoRow label="Map code" value={client.mapCode} />}
-        </div>
       </div>
 
       {/* Parent account banner — shown when this client has a parent */}
@@ -1675,10 +2330,11 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
         </div>
       )}
 
-      {/* Sub-panels: Properties + Contacts quick view */}
-      <div className="grid grid-cols-2 border-b">
+      {/* Sub-panels: Properties + Contacts + Office Notes */}
+      <div className="border-b bg-slate-50/60 px-6 py-4">
+        <div className="grid grid-cols-3 gap-4">
         {/* Properties */}
-        <div className="border-r bg-slate-50/60 px-4 py-3">
+        <div className="rounded-lg border border-slate-200 bg-white px-4 py-3">
           <div className="mb-2 flex items-center justify-between">
             <span className="text-xs font-semibold text-slate-600">
               Related Properties
@@ -1724,7 +2380,7 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
         </div>
 
         {/* Contacts */}
-        <div className="bg-slate-50/60 px-4 py-3">
+        <div className="rounded-lg border border-slate-200 bg-white px-4 py-3">
           <div className="mb-2 flex items-center justify-between">
             <span className="text-xs font-semibold text-slate-600">
               Contacts
@@ -1762,8 +2418,10 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
                       </Badge>
                     )}
                   </div>
-                  {c.phone && <span className="text-slate-400">{c.phone}</span>}
-                  {c.email && <span className="ml-2 text-slate-400">{c.email}</span>}
+                  {(c.phones?.length > 0 ? c.phones : c.phone ? [{ phone: c.phone, type: c.phoneType ?? "cell", isPrimary: true }] : []).map((p, i) => (
+                    <span key={i} className="text-slate-400 mr-2">{p.phone} <span className="text-[9px] text-slate-300 capitalize">({p.type})</span></span>
+                  ))}
+                  {c.email && <span className="block text-slate-400">{c.email}</span>}
                 </div>
               ))}
               {(contacts ?? []).length > 4 && (
@@ -1772,6 +2430,25 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
             </div>
           )}
         </div>
+
+        {/* Office Notes */}
+        <div className="rounded-lg border border-slate-200 bg-white px-4 py-3">
+          <div className="mb-2 flex items-center justify-between">
+            <span className="text-xs font-semibold text-slate-600">Office Notes</span>
+            <button
+              className="text-[10px] text-brand-600 hover:underline"
+              onClick={() => setEditOpen(true)}
+            >
+              Edit
+            </button>
+          </div>
+          {client.officeNotes ? (
+            <p className="text-xs text-slate-700 whitespace-pre-line leading-relaxed">{client.officeNotes}</p>
+          ) : (
+            <p className="text-xs text-slate-400 italic">No office notes</p>
+          )}
+        </div>
+        </div>{/* end grid */}
       </div>
 
       {/* Lead conversion banner */}
@@ -1793,8 +2470,8 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
       )}
 
       {/* Tabs */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-1 flex-col overflow-hidden">
-        <TabsList className="shrink-0 justify-start rounded-none border-b bg-white px-4 py-0 h-10 gap-1">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col">
+        <TabsList className="sticky top-0 z-10 shrink-0 justify-start rounded-none border-b bg-white px-4 py-0 h-10 gap-1">
           {(
             [
               { value: "home",      label: "Home" },
@@ -1816,31 +2493,31 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
           ))}
         </TabsList>
 
-        <TabsContent value="home" className="flex-1 overflow-hidden m-0">
+        <TabsContent value="home" className="m-0 pt-2">
           <HomeTab clientId={clientId} isLead={isLead} onSwitchTab={setActiveTab} />
         </TabsContent>
 
-        <TabsContent value="activity" className="flex-1 overflow-hidden m-0">
+        <TabsContent value="activity" className="m-0 min-h-[500px]">
           <ActivityTimeline clientId={clientId} onTicketClick={(id) => setOpenTicketId(id)} />
         </TabsContent>
 
-        <TabsContent value="tickets" className="flex-1 overflow-auto m-0 p-4">
+        <TabsContent value="tickets" className="m-0 p-4">
           <TicketsList clientId={clientId} />
         </TabsContent>
 
-        <TabsContent value="contracts" className="flex-1 overflow-auto m-0 p-4">
+        <TabsContent value="contracts" className="m-0 p-4">
           <ContractsList clientId={clientId} />
         </TabsContent>
 
-        <TabsContent value="files" className="flex-1 overflow-auto m-0">
+        <TabsContent value="files" className="m-0">
           <ClientFilesTab clientId={clientId} />
         </TabsContent>
 
-        <TabsContent value="audit" className="flex-1 overflow-auto m-0 p-4">
+        <TabsContent value="audit" className="m-0 p-4">
           <AuditTrailTab recordType="client" recordId={clientId} />
         </TabsContent>
 
-        <TabsContent value="details" className="flex-1 overflow-auto m-0 p-6">
+        <TabsContent value="details" className="m-0 p-6">
           <div className="grid grid-cols-2 gap-x-8 gap-y-4">
             <div>
               <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">
@@ -1877,6 +2554,12 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
       {client && (
         <EditClientDialog client={client} open={editOpen} onOpenChange={setEditOpen} />
       )}
+      <CancelClientDialog
+        clientId={clientId}
+        clientName={client.displayName}
+        open={cancelOpen}
+        onOpenChange={setCancelOpen}
+      />
 
       <AddContactDialog clientId={clientId} open={addContactOpen} onOpenChange={setAddContactOpen} />
       <AddPropertyDialog clientId={clientId} open={addPropertyOpen} onOpenChange={setAddPropertyOpen} />

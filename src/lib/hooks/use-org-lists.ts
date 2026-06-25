@@ -24,6 +24,14 @@ function mapOption(row: any): OrgListOption {
   };
 }
 
+async function getOrgId(): Promise<string> {
+  const supabase = createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  const orgId = user?.user_metadata?.org_id as string | undefined;
+  if (!orgId) throw new Error("No org_id in session");
+  return orgId;
+}
+
 export function useOrgList(listName: string) {
   return useQuery({
     queryKey: ["crm_list_options", listName],
@@ -48,10 +56,11 @@ export function useAddOrgListItem() {
   return useMutation({
     mutationFn: async ({ listName, value }: { listName: string; value: string }) => {
       const supabase = createClient();
+      const orgId = await getOrgId();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any)
         .from("crm_list_options")
-        .insert({ list_name: listName, value });
+        .insert({ org_id: orgId, list_name: listName, value });
       if (error) throw error;
     },
     onSuccess: (_data, { listName }) => {

@@ -33,7 +33,7 @@ export default function CRMLayout({ children }: { children: React.ReactNode }) {
             className="absolute inset-0 bg-black/50 touch-none"
             onClick={() => setSidebarOpen(false)}
           />
-          <div className="relative z-10 h-full w-[220px] overflow-y-auto overscroll-contain">
+          <div className="relative z-10 h-full w-[260px] overflow-y-auto overscroll-contain">
             <CRMSidebar />
           </div>
         </div>

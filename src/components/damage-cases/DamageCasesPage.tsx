@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import dynamic from "next/dynamic";
-import { Plus, ShieldAlert } from "lucide-react";
+import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -22,6 +22,7 @@ import { DamageCaseDetailPanel } from "./DamageCaseDetailPanel";
 import { NewDamageCaseDialog } from "./NewDamageCaseDialog";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { DAMAGE_CASE_STATUS_LABELS, DAMAGE_CASE_TYPE_LABELS } from "@/lib/constants";
+import { PageHeader } from "@/components/shared/PageHeader";
 
 const DamageCasesChart = dynamic(
   () => import("./DamageCasesChart").then((m) => ({ default: m.DamageCasesChart })),
@@ -58,18 +59,16 @@ export function DamageCasesPage() {
   });
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <ShieldAlert className="h-5 w-5 text-red-500" />
-          <h1 className="text-xl font-bold">Damage Cases</h1>
-        </div>
-        <Button onClick={() => setNewCaseOpen(true)}>
-          <Plus className="h-4 w-4 mr-1.5" />
-          Open Case
-        </Button>
-      </div>
+    <div className="flex h-full flex-col gap-4">
+      <PageHeader
+        title="Damage Cases"
+        action={
+          <Button size="sm" onClick={() => setNewCaseOpen(true)}>
+            <Plus className="h-4 w-4 mr-1.5" />
+            Open Case
+          </Button>
+        }
+      />
 
       <Tabs defaultValue="cases">
         <TabsList>

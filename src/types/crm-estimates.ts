@@ -40,6 +40,11 @@ export interface EstimateLineItem {
   unitType: string | null;               // sqft, lf, cuyd, hr, each, acres
   productionRateSqftPerHr: number | null; // from service record — drives budgetedHours auto-calc
   sortOrder: number;
+  // per-line-item notes (Sprint 3a)
+  estimateDesc: string | null;  // shown on client-facing estimate document
+  jobNote: string | null;       // carries to job notes_to_crew on convert
+  invoiceDesc: string | null;   // carries to invoice line item description
+  internalNote: string | null;  // private, not visible to client
   deletedAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -94,6 +99,7 @@ export interface Estimate {
   totalBudgetedHours: number;
   probabilityBps: number;  // 0–10000 bps (0–100%)
   notes: string | null;
+  reason: string | null;  // won/lost reason (Sprint 3a)
   deletedAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -105,6 +111,7 @@ export interface Estimate {
   clientState?: string | null;
   clientZip?: string | null;
   clientPhone?: string | null;
+  clientEmail?: string | null;
   clientSince?: string | null;
   salesRepName?: string;
   lineItems?: EstimateLineItem[];
@@ -149,6 +156,7 @@ export interface NewEstimateFormValues {
   clientId: string;
   description: string;
   salesRepId: string;
+  source: string;
   estimateDate: string;
   validUntilDate: string;
   stage: EstimateStage;

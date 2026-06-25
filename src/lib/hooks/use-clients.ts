@@ -2,11 +2,13 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
+import { useOrgList } from "@/lib/hooks/use-org-lists";
 import type {
   Client,
   ClientContact,
   ClientProperty,
   ClientActivity,
+  ContactPhone,
   NewClientFormValues,
 } from "@/types/crm";
 
@@ -23,6 +25,11 @@ function mapClient(row: any): Client {
     accountType: row.account_type,
     status: row.status,
     primaryPhone: row.primary_phone,
+    phones: Array.isArray(row.phones) && row.phones.length > 0
+      ? row.phones
+      : row.primary_phone
+        ? [{ phone: row.primary_phone, type: "cell", isPrimary: true }]
+        : [],
     primaryEmail: row.primary_email,
     billingAddress: row.billing_address,
     billingCity: row.billing_city,
@@ -65,6 +72,10 @@ function mapClient(row: any): Client {
     balanceUninvoicedCents: row.balance_uninvoiced_cents ?? 0,
     balanceCreditsCents: row.balance_credits_cents ?? 0,
     balancePrepaymentsCents: row.balance_prepay_cents ?? 0,
+    cancellationReason: row.cancellation_reason ?? null,
+    revenuePotentialCents: row.revenue_potential_cents ?? 0,
+    doNotMarket: row.do_not_market ?? false,
+    closedAt: row.closed_at ?? null,
     parentClientId: row.parent_client_id,
     deletedAt: row.deleted_at,
     createdAt: row.created_at,
@@ -76,6 +87,12 @@ function mapClient(row: any): Client {
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapContact(row: any): ClientContact {
+  // Normalise phones: prefer the new JSONB array; fall back to legacy single-phone fields
+  const phones: ContactPhone[] = Array.isArray(row.phones) && row.phones.length > 0
+    ? row.phones
+    : row.phone
+      ? [{ phone: row.phone, type: row.phone_type ?? "cell", isPrimary: true }]
+      : [];
   return {
     id: row.id,
     orgId: row.org_id,
@@ -83,6 +100,7 @@ function mapContact(row: any): ClientContact {
     firstName: row.first_name,
     lastName: row.last_name,
     contactType: row.contact_type,
+    phones,
     phone: row.phone,
     phoneType: row.phone_type,
     email: row.email,
@@ -356,6 +374,7 @@ export function useUpdateClient() {
           last_name: updates.lastName,
           account_type: updates.accountType,
           status: updates.status,
+          phones: updates.phones as unknown as import("@/types/supabase").Json ?? undefined,
           primary_phone: updates.primaryPhone,
           primary_email: updates.primaryEmail,
           billing_address: updates.billingAddress,
@@ -450,17 +469,20 @@ export function useAddClientContact() {
     }) => {
       const supabase = createClient();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const primaryPhone = contact.phones?.[0] ?? null;
       const { error } = await (supabase as any).from("client_contacts").insert({
-        client_id: clientId,
-        first_name: contact.firstName,
-        last_name: contact.lastName,
+        client_id:    clientId,
+        first_name:   contact.firstName,
+        last_name:    contact.lastName,
         contact_type: contact.contactType,
-        phone: contact.phone,
-        phone_type: contact.phoneType,
-        email: contact.email,
-        is_primary: contact.isPrimary,
-        ok_to_email: contact.okToEmail,
-        notes: contact.notes,
+        phones:       contact.phones ?? [],
+        // keep legacy fields in sync with the primary phone for backwards compat
+        phone:        primaryPhone?.phone ?? contact.phone ?? null,
+        phone_type:   primaryPhone?.type  ?? contact.phoneType ?? null,
+        email:        contact.email,
+        is_primary:   contact.isPrimary,
+        ok_to_email:  contact.okToEmail,
+        notes:        contact.notes,
       });
       if (error) throw error;
     },
@@ -540,6 +562,198 @@ export function useConvertLeadToClient() {
         .from("clients")
         .update({ status: "active" })
         .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["clients"] });
+    },
+  });
+}
+
+// ── tags ──────────────────────────────────────────────────────────────────────
+
+/** Org-defined tag list from Settings → Tags (crm_list_options where list_name = 'client_tags'). */
+export function useOrgTags(): string[] {
+  const { data } = useOrgList("client_tags");
+  return (data ?? []).map((o) => o.value);
+}
+
+export function useAddClientTag() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ clientId, tag }: { clientId: string; tag: string }) => {
+      const supabase = createClient();
+      const { error } = await supabase
+        .from("client_tags")
+        .upsert({ client_id: clientId, tag }, { onConflict: "org_id,client_id,tag", ignoreDuplicates: true });
+      if (error) throw error;
+    },
+    onSuccess: (_d, { clientId }) => {
+      qc.invalidateQueries({ queryKey: ["clients"] });
+      qc.invalidateQueries({ queryKey: ["clients", clientId] });
+    },
+  });
+}
+
+export function useRemoveClientTag() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ clientId, tag }: { clientId: string; tag: string }) => {
+      const supabase = createClient();
+      const { error } = await supabase
+        .from("client_tags")
+        .delete()
+        .eq("client_id", clientId)
+        .eq("tag", tag);
+      if (error) throw error;
+    },
+    onSuccess: (_d, { clientId }) => {
+      qc.invalidateQueries({ queryKey: ["clients"] });
+      qc.invalidateQueries({ queryKey: ["clients", clientId] });
+    },
+  });
+}
+
+/** Add a tag to many clients at once (upserts, skips duplicates). */
+export function useBulkAddTag() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ clientIds, tag }: { clientIds: string[]; tag: string }) => {
+      const supabase = createClient();
+      const rows = clientIds.map((client_id) => ({ client_id, tag }));
+      const { error } = await supabase
+        .from("client_tags")
+        .upsert(rows, { onConflict: "org_id,client_id,tag", ignoreDuplicates: true });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["clients"] });
+    },
+  });
+}
+
+/** Remove a tag from many clients at once. */
+export function useBulkRemoveTag() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ clientIds, tag }: { clientIds: string[]; tag: string }) => {
+      const supabase = createClient();
+      const { error } = await supabase
+        .from("client_tags")
+        .delete()
+        .in("client_id", clientIds)
+        .eq("tag", tag);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["clients"] });
+    },
+  });
+}
+
+/** Cancel a single client — sets status + cancellation_reason. */
+export function useCancelClient() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ clientId, reason }: { clientId: string; reason: string }) => {
+      const supabase = createClient();
+      const { error } = await supabase
+        .from("clients")
+        .update({ status: "cancelled", cancellation_reason: reason })
+        .eq("id", clientId);
+      if (error) throw error;
+    },
+    onSuccess: (_d, { clientId }) => {
+      qc.invalidateQueries({ queryKey: ["clients"] });
+      qc.invalidateQueries({ queryKey: ["clients", clientId] });
+    },
+  });
+}
+
+/** Activate a single client — sets status = active. */
+export function useActivateClient() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (clientId: string) => {
+      const supabase = createClient();
+      const { error } = await supabase
+        .from("clients")
+        .update({ status: "active", cancellation_reason: null, closed_at: null })
+        .eq("id", clientId);
+      if (error) throw error;
+    },
+    onSuccess: (_d, clientId) => {
+      qc.invalidateQueries({ queryKey: ["clients"] });
+      qc.invalidateQueries({ queryKey: ["clients", clientId] });
+    },
+  });
+}
+
+/** Close a lead as lost — sets closed_at and status to inactive. */
+export function useCloseLeadAsLost() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ clientId, reason }: { clientId: string; reason: string }) => {
+      const supabase = createClient();
+      const { error } = await supabase
+        .from("clients")
+        .update({ status: "inactive", cancellation_reason: reason, closed_at: new Date().toISOString() })
+        .eq("id", clientId);
+      if (error) throw error;
+    },
+    onSuccess: (_d, { clientId }) => {
+      qc.invalidateQueries({ queryKey: ["clients"] });
+      qc.invalidateQueries({ queryKey: ["clients", clientId] });
+    },
+  });
+}
+
+/** Bulk update a field across many clients. */
+export function useBulkUpdateClients() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ clientIds, patch }: { clientIds: string[]; patch: Record<string, unknown> }) => {
+      const supabase = createClient();
+      const { error } = await supabase
+        .from("clients")
+        .update(patch)
+        .in("id", clientIds);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["clients"] });
+    },
+  });
+}
+
+/** Bulk cancel many clients with a shared reason. */
+export function useBulkCancelClients() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ clientIds, reason }: { clientIds: string[]; reason: string }) => {
+      const supabase = createClient();
+      const { error } = await supabase
+        .from("clients")
+        .update({ status: "cancelled", cancellation_reason: reason })
+        .in("id", clientIds);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["clients"] });
+    },
+  });
+}
+
+/** Bulk activate many clients. */
+export function useBulkActivateClients() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (clientIds: string[]) => {
+      const supabase = createClient();
+      const { error } = await supabase
+        .from("clients")
+        .update({ status: "active", cancellation_reason: null, closed_at: null })
+        .in("id", clientIds);
       if (error) throw error;
     },
     onSuccess: () => {

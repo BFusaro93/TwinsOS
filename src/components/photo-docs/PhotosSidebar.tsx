@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { useUIStore, useCurrentUserStore } from "@/stores";
 import { useSettingsStore } from "@/stores/settings-store";
-import { Camera, FileImage, ArrowLeft, Leaf, Briefcase, Wrench, CalendarDays, ClipboardList } from "lucide-react";
+import { Camera, FileImage, ArrowLeft, Leaf, Briefcase, Wrench, CalendarDays, ClipboardList, Bell } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 interface PhotoNavItem {
@@ -24,6 +24,7 @@ const FIELD_NAV: PhotoNavItem[] = [
   { label: "Morning Checklist",  href: "/photos/field/crew-checklist",  icon: ClipboardList },
   { label: "Time Off Request",   href: "/photos/field/time-off",        icon: CalendarDays },
   { label: "Repair Request",     href: "/photos/field/repair-request",  icon: Wrench },
+  { label: "WO Request",         href: "/cmms/requests",                icon: Bell },
 ];
 
 // Roles with access to the PO/Projects side (Projects nav item)

@@ -53,17 +53,18 @@ const in30 = new Date(Date.now() + 30 * 86400_000).toISOString().slice(0, 10);
 export function JobsList() {
   const router = useRouter();
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
+  const [viewMode, setViewMode] = useState<"active" | "completed">("active");
   const [typeFilter, setTypeFilter] = useState("all");
   const [fromDate, setFromDate] = useState(today);
   const [toDate, setToDate] = useState(in30);
   const [newJobOpen, setNewJobOpen] = useState(false);
 
   const { data: jobs = [], isLoading } = useJobsList({
-    status:   statusFilter !== "all" ? statusFilter : undefined,
-    jobType:  typeFilter   !== "all" ? typeFilter   : undefined,
-    fromDate: fromDate || undefined,
-    toDate:   toDate   || undefined,
+    status:     viewMode === "completed" ? "completed" : undefined,
+    activeOnly: viewMode === "active",
+    jobType:    typeFilter !== "all" ? typeFilter : undefined,
+    fromDate:   viewMode === "active" ? (fromDate || undefined) : undefined,
+    toDate:     viewMode === "active" ? (toDate   || undefined) : undefined,
   });
 
   const filteredJobs = search
@@ -77,17 +78,24 @@ export function JobsList() {
       )
     : jobs;
 
-  // group by date
+  // group by date — completed view uses updatedAt so jobs without scheduledDate still sort sensibly
   const grouped = filteredJobs.reduce<Record<string, CRMJob[]>>((acc, job) => {
-    const key = job.scheduledDate ?? "Unscheduled";
+    let key: string;
+    if (viewMode === "completed") {
+      key = job.updatedAt ? job.updatedAt.slice(0, 10) : (job.scheduledDate ?? "Unknown");
+    } else {
+      key = job.scheduledDate ?? "Unscheduled";
+    }
     if (!acc[key]) acc[key] = [];
     acc[key].push(job);
     return acc;
   }, {});
 
   const dateKeys = Object.keys(grouped).sort((a, b) => {
-    if (a === "Unscheduled") return 1;
-    if (b === "Unscheduled") return -1;
+    if (a === "Unscheduled" || a === "Unknown") return 1;
+    if (b === "Unscheduled" || b === "Unknown") return -1;
+    // completed view: most recent first
+    if (viewMode === "completed") return b.localeCompare(a);
     return a.localeCompare(b);
   });
 
@@ -120,46 +128,52 @@ export function JobsList() {
           </div>
         }
       />
-      <div className="px-6">
 
       {/* Stat cards */}
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
         {[
-          { label: "Total Jobs",   value: stats.total,                             color: "text-slate-800" },
-          { label: "Scheduled",    value: stats.scheduled,                         color: "text-blue-700" },
-          { label: "In Progress",  value: stats.inProgress,                        color: "text-yellow-700" },
-          { label: "Completed",    value: stats.completed,                         color: "text-green-700" },
-          { label: "Revenue",      value: formatCurrency(stats.revenue),           color: "text-slate-800" },
+          { label: "Total Jobs",  value: stats.total,               color: "text-slate-900" },
+          { label: "Scheduled",   value: stats.scheduled,           color: "text-blue-700" },
+          { label: "In Progress", value: stats.inProgress,          color: "text-yellow-700" },
+          { label: "Completed",   value: stats.completed,           color: "text-green-700" },
+          { label: "Revenue",     value: formatCurrency(stats.revenue), color: "text-slate-900" },
         ].map((s) => (
-          <div key={s.label} className="rounded-lg border bg-white p-3 shadow-sm">
-            <p className="text-[11px] text-slate-400 uppercase tracking-wide font-medium">{s.label}</p>
-            <p className={`text-xl font-bold mt-0.5 ${s.color}`}>{s.value}</p>
+          <div key={s.label} className="rounded-lg border bg-white p-4 shadow-sm text-center">
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">{s.label}</p>
+            <p className={`mt-1 text-2xl font-bold ${s.color}`}>{s.value}</p>
           </div>
         ))}
       </div>
 
-      {/* Filters */}
+      {/* Active / Completed toggle + filters */}
       <div className="flex flex-wrap items-center gap-2">
-        <div className="relative w-56">
+        {/* View mode tabs */}
+        <div className="flex rounded-md border overflow-hidden text-sm shrink-0">
+          {(["active", "completed"] as const).map((mode) => (
+            <button
+              key={mode}
+              onClick={() => setViewMode(mode)}
+              className={cn(
+                "px-3 py-1.5 capitalize transition-colors",
+                viewMode === mode
+                  ? "bg-slate-800 text-white"
+                  : "bg-white text-slate-600 hover:bg-slate-50"
+              )}
+            >
+              {mode === "active" ? "Active" : "Completed"}
+            </button>
+          ))}
+        </div>
+
+        <div className="relative min-w-[200px] flex-1 max-w-xs">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search client, crew, service…"
+            placeholder="Search client, crew or service…"
             className="pl-8"
           />
         </div>
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-36 text-sm">
-            <SelectValue placeholder="Status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Statuses</SelectItem>
-            {Object.entries(STATUS_LABEL).map(([v, l]) => (
-              <SelectItem key={v} value={v}>{l}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
         <Select value={typeFilter} onValueChange={setTypeFilter}>
           <SelectTrigger className="w-36 text-sm">
             <SelectValue placeholder="Type" />
@@ -171,27 +185,29 @@ export function JobsList() {
             ))}
           </SelectContent>
         </Select>
-        <div className="flex items-center gap-1 text-sm text-slate-500">
-          <Input
-            type="date"
-            value={fromDate}
-            onChange={(e) => setFromDate(e.target.value)}
-            className="w-36 text-sm"
-          />
-          <span>–</span>
-          <Input
-            type="date"
-            value={toDate}
-            onChange={(e) => setToDate(e.target.value)}
-            className="w-36 text-sm"
-          />
-        </div>
-        {(statusFilter !== "all" || typeFilter !== "all" || search) && (
+        {viewMode === "active" && (
+          <div className="flex items-center gap-1 text-sm text-slate-500">
+            <Input
+              type="date"
+              value={fromDate}
+              onChange={(e) => setFromDate(e.target.value)}
+              className="w-36 text-sm"
+            />
+            <span>–</span>
+            <Input
+              type="date"
+              value={toDate}
+              onChange={(e) => setToDate(e.target.value)}
+              className="w-36 text-sm"
+            />
+          </div>
+        )}
+        {(typeFilter !== "all" || search) && (
           <Button
             variant="ghost"
             size="sm"
             className="text-xs text-slate-500"
-            onClick={() => { setStatusFilter("all"); setTypeFilter("all"); setSearch(""); }}
+            onClick={() => { setTypeFilter("all"); setSearch(""); }}
           >
             Clear filters
           </Button>
@@ -250,7 +266,6 @@ export function JobsList() {
         open={newJobOpen}
         onOpenChange={setNewJobOpen}
       />
-      </div>
     </div>
   );
 }

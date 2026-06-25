@@ -31,6 +31,7 @@ import {
 } from "@/components/ui/select";
 import { Plus, Users, X, Search } from "lucide-react";
 import { PermissionGate } from "@/components/shared/PermissionGate";
+import { PageHeader } from "@/components/shared/PageHeader";
 import { toast } from "sonner";
 import type { CRMCrew, CRMCrewMember } from "@/types/crm-employees";
 
@@ -618,19 +619,18 @@ export function CrewsList() {
   ];
 
   return (
-    <div className="flex h-full flex-col">
-      {/* Header */}
-      <div className="flex items-center justify-between border-b bg-white px-6 py-4">
-        <div>
-          <h1 className="text-xl font-semibold text-slate-900">Teams</h1>
-          <p className="text-sm text-slate-500">Assign employees to crews and crews to dispatch jobs</p>
-        </div>
-        <PermissionGate permission="sched_teams">
-          <Button size="sm" onClick={() => setDialogCrew("new")}>
-            <Plus className="mr-1.5 h-4 w-4" /> Add Team
-          </Button>
-        </PermissionGate>
-      </div>
+    <div className="flex h-full flex-col gap-4">
+      <PageHeader
+        title="Teams"
+        description="Assign employees to crews and dispatch jobs"
+        action={
+          <PermissionGate permission="sched_teams">
+            <Button size="sm" onClick={() => setDialogCrew("new")}>
+              <Plus className="mr-1.5 h-4 w-4" /> Add Team
+            </Button>
+          </PermissionGate>
+        }
+      />
 
       {/* Dark toolbar (SA style) */}
       <div className="border-b bg-[#4a4a4a] px-4 py-2 flex items-center">
@@ -663,8 +663,8 @@ export function CrewsList() {
         <table className="w-full text-sm">
           <thead className="sticky top-0 border-b bg-slate-50">
             <tr className="text-left text-xs font-semibold text-slate-500">
-              <th className="w-8 px-4 py-3">
-                <Checkbox />
+              <th className="w-10 px-4 py-3">
+                <input type="checkbox" className="rounded border-slate-300 accent-brand-500" />
               </th>
               <th className="px-4 py-3">Description</th>
               <th className="px-4 py-3">Team Code</th>
@@ -702,7 +702,7 @@ export function CrewsList() {
                   onClick={() => setDialogCrew(crew)}
                 >
                   <td className="px-4 py-2.5" onClick={(e) => e.stopPropagation()}>
-                    <Checkbox />
+                    <input type="checkbox" className="rounded border-slate-300 accent-brand-500" />
                   </td>
                   <td className="px-4 py-2.5">
                     <span className="text-brand-600 hover:underline font-medium">

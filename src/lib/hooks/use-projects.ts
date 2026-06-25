@@ -25,13 +25,18 @@ export function useProjects(includeArchived = false) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let q = (supabase as any)
         .from("projects")
-        .select("*")
+        .select("*, po_line_items(total_cost)")
         .is("deleted_at", null)
         .order("name");
       if (!includeArchived) q = q.eq("is_archived", false);
       const { data, error } = await q;
       if (error) throw error;
-      return data.map(mapProject) as Project[];
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return data.map((row: any) => {
+        const lineItems: { total_cost: number }[] = row.po_line_items ?? [];
+        const computedTotal = lineItems.reduce((sum, li) => sum + (li.total_cost ?? 0), 0);
+        return mapProject({ ...row, total_cost: computedTotal });
+      }) as Project[];
     },
   });
 }

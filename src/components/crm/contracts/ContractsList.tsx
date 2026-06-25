@@ -838,7 +838,7 @@ export function ContractsList({ clientId }: Props) {
       )}
 
       {/* Dark actions bar */}
-      <div className="flex items-center gap-2 bg-[#3a3a3a] px-4 py-2">
+      <div className="flex items-center gap-2 bg-[#4a4a4a] px-4 py-2">
         {/* Actions dropdown */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -928,14 +928,16 @@ export function ContractsList({ clientId }: Props) {
       </div>
 
       {/* Table */}
-      <div className="flex-1 overflow-auto rounded-lg border bg-white shadow-sm">
+      <div className="flex-1 overflow-auto bg-white">
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-slate-50 border-b z-10">
-            <tr className="text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-              <th className="w-8 px-3 py-3">
-                <Checkbox
+            <tr className="text-left text-xs font-semibold uppercase tracking-wide text-slate-400">
+              <th className="w-10 px-3 py-3">
+                <input
+                  type="checkbox"
+                  className="rounded border-slate-300 accent-brand-500"
                   checked={selected.size === filtered.length && filtered.length > 0}
-                  onCheckedChange={(v) => v ? selectAll() : clearSelection()}
+                  onChange={(e) => e.target.checked ? selectAll() : clearSelection()}
                 />
               </th>
               <th className="w-8 px-2 py-3" />
@@ -977,9 +979,11 @@ export function ContractsList({ clientId }: Props) {
                   )}
                 >
                   <td className="px-3 py-2.5">
-                    <Checkbox
+                    <input
+                      type="checkbox"
+                      className="rounded border-slate-300 accent-brand-500"
                       checked={selected.has(c.id)}
-                      onCheckedChange={() => toggleSelect(c.id)}
+                      onChange={() => toggleSelect(c.id)}
                     />
                   </td>
                   <td className="px-2 py-2.5">

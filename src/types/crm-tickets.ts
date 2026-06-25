@@ -1,5 +1,5 @@
 export type TicketType = 'note' | 'call' | 'event';
-export type TicketStatus = 'open' | 'closed' | 'pending';
+export type TicketStatus = 'open' | 'on_hold' | 'pending' | 'closed';
 export type TicketPriority = 'low' | 'normal' | 'high' | 'urgent';
 
 export interface CRMTicket {

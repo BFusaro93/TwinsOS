@@ -39,6 +39,7 @@ import {
   Briefcase,
   Package,
   CalendarClock,
+  FileEdit,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -93,10 +94,10 @@ const CRM_NAV: NavSection[] = [
   {
     label: "Communication",
     items: [
-      { label: "Automations",     href: "/crm/communication/automations",  icon: Zap,          comingSoon: true },
-      { label: "Forms",           href: "/crm/communication/forms",        icon: FormInput,     comingSoon: true },
-      { label: "Email Activity",  href: "/crm/communication/email",        icon: Mail,          comingSoon: true },
-      { label: "Sales Campaigns", href: "/crm/communication/campaigns",    icon: Megaphone,     comingSoon: true },
+      { label: "Automations",     href: "/crm/communication/automations",  icon: Zap },
+      { label: "Forms",           href: "/crm/communication/forms",        icon: FormInput },
+      { label: "Email Activity",  href: "/crm/communication/email",        icon: Mail },
+      { label: "Sales Campaigns", href: "/crm/communication/campaigns",    icon: Megaphone },
     ],
   },
   {
@@ -110,13 +111,14 @@ const CRM_NAV: NavSection[] = [
   {
     label: "Administration",
     items: [
-      { label: "Reports",  href: "/crm/admin/reports",  icon: BarChart3, comingSoon: true },
-      { label: "Services",   href: "/crm/settings/services",   icon: Layers },
-      { label: "Schedules",  href: "/crm/settings/schedules",  icon: CalendarClock },
-      { label: "Packages",   href: "/crm/settings/packages",   icon: Package },
-      { label: "Settings", href: "/crm/settings",        icon: Settings },
-      { label: "Support",           href: "/crm/admin/support",             icon: HelpCircle, comingSoon: true },
-      { label: "Docs",              href: "/docs",                          icon: Library },
+      { label: "Reports",   href: "/crm/admin/reports",        icon: BarChart3 },
+      { label: "Services",  href: "/crm/settings/services",    icon: Layers },
+      { label: "Schedules", href: "/crm/settings/schedules",   icon: CalendarClock },
+      { label: "Packages",  href: "/crm/settings/packages",    icon: Package },
+      { label: "Documents", href: "/crm/settings/documents",   icon: FileEdit },
+      { label: "Settings",  href: "/crm/settings",             icon: Settings },
+      { label: "Support",   href: "/crm/support",              icon: HelpCircle,   comingSoon: true },
+      { label: "Docs",      href: "/crm/docs",                 icon: Library,      comingSoon: true },
     ],
   },
 ];
@@ -131,7 +133,7 @@ export function CRMSidebar() {
     <aside
       className={cn(
         "flex h-full flex-col bg-[#1e1e1e] transition-all duration-200",
-        sidebarCollapsed ? "w-16" : "w-[220px]"
+        sidebarCollapsed ? "w-16" : "w-[260px]"
       )}
     >
       {/* Logo */}
@@ -159,11 +161,11 @@ export function CRMSidebar() {
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 overflow-y-auto py-3">
+      <nav className="flex-1 overflow-y-auto py-4">
         {CRM_NAV.map((section) => (
-          <div key={section.label} className="mb-3">
+          <div key={section.label} className="mb-4">
             {!sidebarCollapsed && (
-              <p className="mb-1 px-4 text-[10px] font-semibold uppercase tracking-widest text-slate-500">
+              <p className="mb-1 px-4 text-[10px] font-semibold uppercase tracking-widest text-slate-400">
                 {section.label}
               </p>
             )}
@@ -181,7 +183,7 @@ export function CRMSidebar() {
                   key={item.href}
                   href={item.comingSoon ? "#" : item.href}
                   className={cn(
-                    "flex items-center gap-3 px-4 py-1.5 text-sm transition-colors",
+                    "flex items-center gap-3 px-4 py-2 text-sm transition-colors",
                     isActive
                       ? "border-l-2 border-brand-400 bg-white/5 text-brand-400"
                       : item.comingSoon

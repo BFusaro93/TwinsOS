@@ -30,6 +30,7 @@ export interface Client {
   accountType: AccountType;
   status: ClientStatus;
   primaryPhone: string | null;
+  phones: ContactPhone[];
   primaryEmail: string | null;
   billingAddress: string | null;
   billingCity: string | null;
@@ -72,6 +73,10 @@ export interface Client {
   balancePrepaymentsCents: number;
   defaultPaymentMethod: string | null;
   officeNotes: string | null;
+  cancellationReason: string | null;
+  revenuePotentialCents: number;
+  doNotMarket: boolean;
+  closedAt: string | null;
   parentClientId: string | null;
   deletedAt: string | null;
   createdAt: string;
@@ -118,6 +123,8 @@ export interface ClientContact {
   firstName: string;
   lastName: string | null;
   contactType: string | null;
+  phones: ContactPhone[];
+  // legacy single-phone fields — kept for backwards compat on old records
   phone: string | null;
   phoneType: string | null;
   email: string | null;
@@ -126,6 +133,14 @@ export interface ClientContact {
   notes: string | null;
   deletedAt: string | null;
   createdAt: string;
+}
+
+export type PhoneType = "cell" | "home" | "work" | "fax" | "other";
+
+export interface ContactPhone {
+  phone: string;
+  type: PhoneType;
+  isPrimary: boolean;
 }
 
 export interface ClientActivity {
