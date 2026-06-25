@@ -40,6 +40,7 @@ import {
   Package,
   CalendarClock,
   FileEdit,
+  Phone,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -69,6 +70,7 @@ const CRM_NAV: NavSection[] = [
       { label: "Leads",     href: "/crm/leads",     icon: UserSearch },
       { label: "Estimates",  href: "/crm/estimates",           icon: ClipboardSignature },
       { label: "Tickets",   href: "/crm/tickets",   icon: Ticket },
+      { label: "Calls",     href: "/crm/calls",     icon: Phone },
     ],
   },
   {

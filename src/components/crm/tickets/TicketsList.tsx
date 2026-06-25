@@ -119,9 +119,10 @@ interface NewTicketDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   defaultClientId?: string;
+  defaultType?: TicketType;
 }
 
-export function NewTicketDialog({ open, onOpenChange, defaultClientId }: NewTicketDialogProps) {
+export function NewTicketDialog({ open, onOpenChange, defaultClientId, defaultType = "note" }: NewTicketDialogProps) {
   const { data: clients } = useClients();
   const { data: employees } = useEmployees();
   const createTicket = useCreateTicket();
@@ -131,7 +132,7 @@ export function NewTicketDialog({ open, onOpenChange, defaultClientId }: NewTick
     : FALLBACK_CATEGORIES;
 
   const [form, setForm] = useState<NewTicketFormValues>({
-    type: "note",
+    type: defaultType,
     clientId: defaultClientId ?? null,
     category: "Uncategorized",
     subject: "",
@@ -150,7 +151,7 @@ export function NewTicketDialog({ open, onOpenChange, defaultClientId }: NewTick
     await createTicket.mutateAsync(form);
     onOpenChange(false);
     setForm({
-      type: "note",
+      type: defaultType,
       clientId: defaultClientId ?? null,
       category: "Uncategorized",
       subject: "",
@@ -353,9 +354,12 @@ const COL_FILTERS: { key: ColFilterKey; label: string }[] = [
 
 interface Props {
   clientId?: string;
+  typeFilter?: TicketType;
+  title?: string;
+  description?: string;
 }
 
-export function TicketsList({ clientId }: Props) {
+export function TicketsList({ clientId, typeFilter, title = "Tickets", description = "Support and service tickets" }: Props) {
   const { data: categoryOptions } = useOrgList("ticket_categories");
   const categories = categoryOptions && categoryOptions.length > 0
     ? categoryOptions.map((o) => o.value)
@@ -405,6 +409,7 @@ export function TicketsList({ clientId }: Props) {
 
   const filtered = useMemo(() => {
     let list = all;
+    if (typeFilter) list = list.filter((t) => t.type === typeFilter);
     if (statusFilter !== "all") list = list.filter((t) => t.status === statusFilter);
     if (priorityFilter !== "all") list = list.filter((t) => t.priority === priorityFilter);
     if (categoryFilter !== "all") list = list.filter((t) => t.category === categoryFilter);
@@ -473,12 +478,12 @@ export function TicketsList({ clientId }: Props) {
     <div className="flex h-full flex-col gap-4">
       {/* Page header */}
       <PageHeader
-        title="Tickets"
-        description="Support and service tickets"
+        title={title}
+        description={description}
         action={
           <Button size="sm" className="h-8 text-xs" onClick={() => setDialogOpen(true)}>
             <Plus className="mr-1 h-3.5 w-3.5" />
-            Add Ticket
+            Add {typeFilter === "call" ? "Call" : typeFilter === "event" ? "Event" : "Ticket"}
           </Button>
         }
       />
@@ -561,7 +566,7 @@ export function TicketsList({ clientId }: Props) {
             <DropdownMenuContent align="start" className="w-48">
               <DropdownMenuItem onSelect={() => setDialogOpen(true)}>
                 <Plus className="mr-2 h-3.5 w-3.5" />
-                Add Ticket
+                Add {typeFilter === "call" ? "Call" : typeFilter === "event" ? "Event" : "Ticket"}
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
@@ -729,6 +734,7 @@ export function TicketsList({ clientId }: Props) {
         open={dialogOpen}
         onOpenChange={setDialogOpen}
         defaultClientId={clientId}
+        defaultType={typeFilter}
       />
 
       <TicketDetailSheet
