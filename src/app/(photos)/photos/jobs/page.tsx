@@ -13,7 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { cn, formatDate, formatAddress } from "@/lib/utils";
+import { cn, formatDate, formatAddress, getInitials, getAvatarColor } from "@/lib/utils";
 import { PhotoModuleGuard } from "@/modules/photo-docs/components/PhotoModuleGuard";
 import { PhotoGallery } from "@/modules/photo-docs/components/PhotoGallery";
 import { usePhotoAccess } from "@/modules/photo-docs/hooks/usePhotoAccess";
@@ -418,6 +418,9 @@ export default function PhotoJobsPage() {
                     isSelected ? "border-l-2 border-brand-500 bg-brand-50/60 hover:bg-brand-50/60" : "border-l-2 border-transparent",
                   )}
                 >
+                  <div className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white", getAvatarColor(job.customerName || job.name))}>
+                    {getInitials(job.customerName || job.name)}
+                  </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
                       <p className="truncate text-sm font-medium text-slate-900">{job.name}</p>
