@@ -117,10 +117,18 @@ const EQUIPT_QUICK_ADD = [
   { label: "Vendor",       href: "/vendors" },
 ];
 
+const CREW_QUICK_ADD = [
+  { label: "Requisition", href: "/po/requisitions" },
+  { label: "Work Order",  href: "/cmms/work-orders" },
+];
+
 function QuickAddMenu() {
   const pathname = usePathname();
+  const { currentUser } = useCurrentUserStore();
   const isCRM = pathname.startsWith("/crm");
-  const items = isCRM ? CRM_QUICK_ADD : EQUIPT_QUICK_ADD;
+  const items = currentUser.role === "crew"
+    ? CREW_QUICK_ADD
+    : isCRM ? CRM_QUICK_ADD : EQUIPT_QUICK_ADD;
 
   return (
     <DropdownMenu>
