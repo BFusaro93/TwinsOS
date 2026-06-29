@@ -80,7 +80,7 @@ export function CommentsSection({ recordType, recordId, dark = false }: Comments
           rows={2}
           className={`flex-1 resize-none bg-transparent text-sm placeholder:text-slate-500 focus:outline-none ${dark ? "text-white" : "text-slate-900 placeholder:text-slate-400"}`}
           onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
+            if (e.key === "Enter" && (e.shiftKey || e.metaKey || e.ctrlKey)) {
               e.preventDefault();
               handleSend();
             }
@@ -90,6 +90,7 @@ export function CommentsSection({ recordType, recordId, dark = false }: Comments
           size="sm"
           disabled={!draft.trim() || sending}
           onClick={handleSend}
+          title="Send (Shift+Enter)"
           className="self-end"
         >
           <Send className="h-3.5 w-3.5" />

@@ -120,7 +120,7 @@ export async function POST(request: Request) {
           </p>
           <a
             href="${deepLink}"
-            style="display:inline-block;padding:12px 24px;background:#16a34a;color:#fff;text-decoration:none;border-radius:6px;font-weight:600"
+            style="display:inline-block;padding:12px 24px;background:#60ab45;color:#fff;text-decoration:none;border-radius:6px;font-weight:600"
           >
             Review &amp; Approve
           </a>

@@ -218,7 +218,7 @@ async function handleRun(request: Request) {
                     <h2 style="margin:0 0 8px;font-size:20px;color:#0f172a">New Maintenance Request</h2>
                     <p style="margin:0 0 4px;color:#475569">Hi ${p.name ?? "there"},</p>
                     <p style="margin:0 0 24px;color:#475569">Automation <strong>${auto.name}</strong> created: <strong>${mr.request_number} — ${acTitle}</strong>.</p>
-                    <a href="${link}" style="display:inline-block;padding:12px 24px;background:#7c3aed;color:#fff;text-decoration:none;border-radius:6px;font-weight:600">Review Request</a>
+                    <a href="${link}" style="display:inline-block;padding:12px 24px;background:#60ab45;color:#fff;text-decoration:none;border-radius:6px;font-weight:600">Review Request</a>
                   </div>`,
                 })
               )
@@ -353,9 +353,203 @@ async function handleRun(request: Request) {
     });
   }
 
+  // ── CRM sequence enrollment processor ────────────────────────────────────
+  const crmFired: { enrollmentId: string; action: string }[] = [];
+  const crmSkipped: { enrollmentId: string; reason: string }[] = [];
+
+  try {
+    const now = new Date().toISOString();
+
+    let enrollQuery = (adminClient as AdminClient)
+      .from("crm_sequence_enrollments")
+      .select("id, org_id, sequence_id, client_id, estimate_id, next_event_position")
+      .lte("next_fire_at", now)
+      .is("completed_at", null)
+      .is("stopped_at", null)
+      .is("deleted_at", null)
+      .limit(50);
+
+    if (callerOrgId) {
+      enrollQuery = enrollQuery.eq("org_id", callerOrgId);
+    }
+
+    const { data: enrollments, error: enrollErr } = await enrollQuery;
+    if (enrollErr) {
+      console.error("[crm-processor] enrollment query error:", enrollErr.message);
+    }
+
+    for (const enrollment of enrollments ?? []) {
+      const { id: enrollId, org_id: orgId, sequence_id, client_id, estimate_id, next_event_position } = enrollment;
+
+      // Fetch all events for this sequence ordered by position
+      const { data: events } = await (adminClient as AdminClient)
+        .from("crm_sequence_events")
+        .select("id, event_type, config, position")
+        .eq("sequence_id", sequence_id)
+        .eq("is_active", true)
+        .is("deleted_at", null)
+        .order("position", { ascending: true });
+
+      const currentEvent = (events ?? []).find((e: { position: number }) => e.position === next_event_position);
+
+      if (!currentEvent) {
+        // No more events — mark complete
+        await (adminClient as AdminClient)
+          .from("crm_sequence_enrollments")
+          .update({ completed_at: now, updated_at: now })
+          .eq("id", enrollId);
+        crmFired.push({ enrollmentId: enrollId, action: "completed" });
+        continue;
+      }
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const eventConfig = (currentEvent.config ?? {}) as Record<string, any>;
+
+      if (currentEvent.event_type === "wait") {
+        // Advance past the wait to the next event position
+        const nextPos = next_event_position + 1;
+        const nextEvent = (events ?? []).find((e: { position: number }) => e.position === nextPos);
+        let newFireAt = now;
+        if (nextEvent?.event_type === "wait") {
+          const days = (nextEvent.config as Record<string, number>)?.days ?? 0;
+          const d = new Date();
+          d.setDate(d.getDate() + days);
+          newFireAt = d.toISOString();
+        }
+        await (adminClient as AdminClient)
+          .from("crm_sequence_enrollments")
+          .update({ next_event_position: nextPos, next_fire_at: newFireAt, updated_at: now })
+          .eq("id", enrollId);
+        crmFired.push({ enrollmentId: enrollId, action: `wait advanced to position ${nextPos}` });
+        continue;
+      }
+
+      if (currentEvent.event_type === "email") {
+        const resendKey = process.env.RESEND_API_KEY;
+        if (!resendKey) {
+          crmSkipped.push({ enrollmentId: enrollId, reason: "RESEND_API_KEY not configured" });
+          continue;
+        }
+
+        // Fetch client
+        const { data: client } = await (adminClient as AdminClient)
+          .from("clients")
+          .select("display_name, primary_email")
+          .eq("id", client_id)
+          .single();
+
+        if (!client?.primary_email) {
+          crmSkipped.push({ enrollmentId: enrollId, reason: "client has no primary_email" });
+          continue;
+        }
+
+        // Fetch org for branding
+        const { data: orgRow } = await (adminClient as AdminClient)
+          .from("organizations")
+          .select("name, brand_color")
+          .eq("id", orgId)
+          .single();
+
+        // Fetch estimate if present
+        let estimateNumber: string | null = null;
+        if (estimate_id) {
+          const { data: estRow } = await (adminClient as AdminClient)
+            .from("estimates")
+            .select("estimate_number")
+            .eq("id", estimate_id)
+            .single();
+          if (estRow?.estimate_number != null) {
+            estimateNumber = String(estRow.estimate_number).padStart(5, "0");
+          }
+        }
+
+        const clientDisplayName = (client.display_name as string) ?? "";
+        const clientFirstName = clientDisplayName.split(" ")[0] ?? clientDisplayName;
+        const orgName = (orgRow?.name as string) ?? "Your Service Provider";
+
+        // Resolve merge tags
+        const mergeTags: Record<string, string> = {
+          "[clientfirstname]": clientFirstName,
+          "[clientfullname]":  clientDisplayName,
+          "[companyname]":     orgName,
+          "[quotenumber]":     estimateNumber ?? "",
+        };
+
+        const resolveBody = (template: string) =>
+          template.replace(/\[(\w+)\]/gi, (match) => mergeTags[match.toLowerCase()] ?? match);
+
+        const subject  = resolveBody(eventConfig.subject  ?? "(no subject)");
+        const bodyHtml = resolveBody(eventConfig.bodyHtml ?? "");
+
+        const resend = new Resend(resendKey);
+        const { data: sent, error: sendErr } = await resend.emails.send({
+          from: "Twins Lawn Service <noreply@twinslawnservice.com>",
+          to: client.primary_email as string,
+          subject,
+          html: bodyHtml,
+        });
+
+        if (sendErr) {
+          console.error("[crm-processor] Resend error:", sendErr);
+          crmSkipped.push({ enrollmentId: enrollId, reason: `email send failed: ${String(sendErr)}` });
+          continue;
+        }
+
+        // Log to estimate_emails if estimate_id present
+        if (estimate_id) {
+          await (adminClient as AdminClient).from("estimate_emails").insert({
+            org_id:     orgId,
+            estimate_id,
+            to_email:   client.primary_email,
+            to_name:    clientDisplayName || null,
+            subject,
+            body_html:  bodyHtml,
+            resend_id:  sent?.id ?? null,
+            email_type: "automation",
+          });
+        }
+
+        // Advance to next event
+        const nextPos = next_event_position + 1;
+        const nextEvent = (events ?? []).find((e: { position: number }) => e.position === nextPos);
+
+        if (!nextEvent) {
+          // No more events — complete
+          await (adminClient as AdminClient)
+            .from("crm_sequence_enrollments")
+            .update({ completed_at: now, updated_at: now })
+            .eq("id", enrollId);
+          crmFired.push({ enrollmentId: enrollId, action: `email sent → completed` });
+        } else if (nextEvent.event_type === "wait") {
+          const days = (nextEvent.config as Record<string, number>)?.days ?? 0;
+          const d = new Date();
+          d.setDate(d.getDate() + days);
+          await (adminClient as AdminClient)
+            .from("crm_sequence_enrollments")
+            .update({ next_event_position: nextPos + 1, next_fire_at: d.toISOString(), updated_at: now })
+            .eq("id", enrollId);
+          crmFired.push({ enrollmentId: enrollId, action: `email sent → wait ${days}d` });
+        } else {
+          await (adminClient as AdminClient)
+            .from("crm_sequence_enrollments")
+            .update({ next_event_position: nextPos, next_fire_at: now, updated_at: now })
+            .eq("id", enrollId);
+          crmFired.push({ enrollmentId: enrollId, action: `email sent → position ${nextPos}` });
+        }
+        continue;
+      }
+
+      // Unsupported event type — skip without blocking
+      crmSkipped.push({ enrollmentId: enrollId, reason: `unsupported event_type: ${currentEvent.event_type}` });
+    }
+  } catch (crmErr) {
+    console.error("[crm-processor] fatal error:", crmErr);
+  }
+
   return NextResponse.json({
     fired: fired.length,
     skipped: skipped.length,
     details: { fired, skipped },
+    crm: { fired: crmFired.length, skipped: crmSkipped.length, details: { fired: crmFired, skipped: crmSkipped } },
   });
 }

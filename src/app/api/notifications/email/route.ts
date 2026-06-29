@@ -276,7 +276,7 @@ export async function POST(request: Request) {
           <h2 style="margin:0 0 8px;font-size:20px;color:#0f172a">${heading}</h2>
           ${adminNote}<p style="margin:0 0 4px;color:#475569">${hi}</p>
           <p style="margin:0 0 24px;color:#475569">${callerName} ${verb} <strong>${num}${title ? ` — ${title}` : ""}</strong>.</p>
-          <a href="${link}" style="display:inline-block;padding:12px 24px;background:#16a34a;color:#fff;text-decoration:none;border-radius:6px;font-weight:600">View Work Order</a>
+          <a href="${link}" style="display:inline-block;padding:12px 24px;background:#60ab45;color:#fff;text-decoration:none;border-radius:6px;font-weight:600">View Work Order</a>
         </div>`,
       };
     }
@@ -292,7 +292,7 @@ export async function POST(request: Request) {
           <h2 style="margin:0 0 8px;font-size:20px;color:#0f172a">Work Order Status Changed</h2>
           ${adminNote}<p style="margin:0 0 4px;color:#475569">${hi}</p>
           <p style="margin:0 0 24px;color:#475569"><strong>${num}${title ? ` — ${title}` : ""}</strong> status was changed to <strong>${status}</strong> by ${callerName}.</p>
-          <a href="${link}" style="display:inline-block;padding:12px 24px;background:#16a34a;color:#fff;text-decoration:none;border-radius:6px;font-weight:600">View Work Order</a>
+          <a href="${link}" style="display:inline-block;padding:12px 24px;background:#60ab45;color:#fff;text-decoration:none;border-radius:6px;font-weight:600">View Work Order</a>
         </div>`,
       };
     }
@@ -309,7 +309,7 @@ export async function POST(request: Request) {
           ${adminNote}<p style="margin:0 0 4px;color:#475569">${hi}</p>
           <p style="margin:0 0 8px;color:#475569">${callerName} commented on <strong>${num}${title ? ` — ${title}` : ""}</strong>:</p>
           ${commentBody ? `<blockquote style="margin:0 0 24px;padding:12px 16px;background:#f8fafc;border-left:4px solid #e2e8f0;border-radius:4px;color:#374151;font-style:italic">${commentBody}</blockquote>` : ""}
-          <a href="${link}" style="display:inline-block;padding:12px 24px;background:#16a34a;color:#fff;text-decoration:none;border-radius:6px;font-weight:600">View Work Order</a>
+          <a href="${link}" style="display:inline-block;padding:12px 24px;background:#60ab45;color:#fff;text-decoration:none;border-radius:6px;font-weight:600">View Work Order</a>
         </div>`,
       };
     }
@@ -319,7 +319,7 @@ export async function POST(request: Request) {
       const num = ((entity.requisition_number ?? entity.po_number ?? "Request")) as string;
       const entityLabel = entityType === "requisition" ? "Purchase Requisition" : "Purchase Order";
       const link = entityType === "requisition" ? `${SITE_URL}/po/requisitions?id=${entity.id as string}` : `${SITE_URL}/po/orders?id=${entity.id as string}`;
-      const color = isApproved ? "#16a34a" : "#dc2626";
+      const color = isApproved ? "#60ab45" : "#dc2626";
       const verb  = isApproved ? "approved" : "rejected";
       return {
         subject: `${entityLabel} ${verb}: ${num}`,
@@ -342,7 +342,7 @@ export async function POST(request: Request) {
           <h2 style="margin:0 0 8px;font-size:20px;color:#0f172a">New Maintenance Request</h2>
           <p style="margin:0 0 4px;color:#475569">${hi}</p>
           <p style="margin:0 0 24px;color:#475569">${callerName} submitted: <strong>${num ? `${num} — ` : ""}${title}</strong>.</p>
-          <a href="${link}" style="display:inline-block;padding:12px 24px;background:#7c3aed;color:#fff;text-decoration:none;border-radius:6px;font-weight:600">Review Request</a>
+          <a href="${link}" style="display:inline-block;padding:12px 24px;background:#60ab45;color:#fff;text-decoration:none;border-radius:6px;font-weight:600">Review Request</a>
         </div>`,
       };
     }

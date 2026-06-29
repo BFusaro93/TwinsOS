@@ -150,7 +150,7 @@ export async function POST(req: NextRequest) {
                 <h2 style="margin:0 0 8px;font-size:20px;color:#0f172a">New Maintenance Request</h2>
                 <p style="margin:0 0 4px;color:#475569">Hi ${p.name ?? "there"},</p>
                 <p style="margin:0 0 24px;color:#475569">${requestedBy} submitted: <strong>${requestNumber} — ${title}</strong>.</p>
-                <a href="${link}" style="display:inline-block;padding:12px 24px;background:#7c3aed;color:#fff;text-decoration:none;border-radius:6px;font-weight:600">Review Request</a>
+                <a href="${link}" style="display:inline-block;padding:12px 24px;background:#60ab45;color:#fff;text-decoration:none;border-radius:6px;font-weight:600">Review Request</a>
               </div>`,
             })
           )
