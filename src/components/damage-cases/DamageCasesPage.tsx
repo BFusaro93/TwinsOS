@@ -150,7 +150,7 @@ export function DamageCasesPage() {
       {/* Detail sheet */}
       <Sheet open={!!selectedId} onOpenChange={(open) => { if (!open) setSelectedId(null); }}>
         <SheetContent className="w-full sm:max-w-2xl p-0 overflow-hidden">
-          {selectedId && <DamageCaseDetailPanel caseId={selectedId} />}
+          {selectedId && <DamageCaseDetailPanel caseId={selectedId} onClose={() => setSelectedId(null)} />}
         </SheetContent>
       </Sheet>
 

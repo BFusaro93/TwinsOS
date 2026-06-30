@@ -1,17 +1,18 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, Trash2, Link2, Pencil } from "lucide-react";
+import { Plus, Trash2, Link2, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { EditButton } from "@/components/shared/EditButton";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Check, ChevronsUpDown, X } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { useDamageCase, useUpdateDamageCase, useDeleteDamageCaseExpense } from "@/lib/hooks/use-damage-cases";
+import { useDamageCase, useUpdateDamageCase, useDeleteDamageCaseExpense, useDeleteDamageCase } from "@/lib/hooks/use-damage-cases";
 import { usePurchaseOrders } from "@/lib/hooks/use-purchase-orders";
 import { AddExpenseDialog } from "./AddExpenseDialog";
 import { NewDamageCaseDialog } from "./NewDamageCaseDialog";
@@ -37,11 +38,13 @@ const TYPE_COLORS: Record<string, string> = {
 
 interface Props {
   caseId: string;
+  onClose?: () => void;
 }
 
-export function DamageCaseDetailPanel({ caseId }: Props) {
+export function DamageCaseDetailPanel({ caseId, onClose }: Props) {
   const { data, isLoading } = useDamageCase(caseId);
   const updateCase = useUpdateDamageCase();
+  const deleteCase = useDeleteDamageCase();
   const deleteExpense = useDeleteDamageCaseExpense();
   const { data: allPOs = [] } = usePurchaseOrders();
   const [addExpenseOpen, setAddExpenseOpen] = useState(false);
@@ -64,32 +67,22 @@ export function DamageCaseDetailPanel({ caseId }: Props) {
 
   return (
     <div className="flex flex-col h-full overflow-y-auto">
-      {/* Header — pr-12 reserves space for Sheet's absolute close button */}
-      <div className="px-6 pt-6 pb-4 border-b space-y-3 pr-12">
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-mono text-muted-foreground">{data.caseNumber}</span>
-          <Badge className={TYPE_COLORS[data.caseType]}>{DAMAGE_CASE_TYPE_LABELS[data.caseType]}</Badge>
-          <Button size="icon" variant="ghost" className="ml-auto h-7 w-7 text-muted-foreground" onClick={() => setEditOpen(true)}>
-            <Pencil className="h-3.5 w-3.5" />
-          </Button>
-        </div>
+      {/* Header — pr-12 reserves space for Sheet's built-in close button */}
+      <div className="flex items-center justify-between border-b px-6 py-4 pr-12">
         <div>
-          <h2 className="text-lg font-semibold">{data.customerName}</h2>
+          <p className="text-xs font-mono text-muted-foreground">{data.caseNumber}</p>
+          <h2 className="text-base font-semibold text-slate-900">{data.customerName}</h2>
           {data.propertyAddress && (
-            <p className="text-sm text-muted-foreground">{data.propertyAddress}</p>
+            <p className="text-sm text-slate-500">{data.propertyAddress}</p>
           )}
         </div>
-
-        <div className="flex items-center gap-4 flex-wrap">
-          <div className="text-sm">
-            <span className="text-muted-foreground">Incident Date: </span>
-            <span className="font-medium">{formatDate(data.dateOfIncident)}</span>
-          </div>
+        <div className="flex items-center gap-2">
+          <Badge className={TYPE_COLORS[data.caseType]}>{DAMAGE_CASE_TYPE_LABELS[data.caseType]}</Badge>
           <Select
             value={data.status}
             onValueChange={(v) => updateCase.mutate({ id: data.id, status: v as DamageCaseStatus })}
           >
-            <SelectTrigger className="w-36 h-8 text-xs">
+            <SelectTrigger className="w-32 h-8 text-xs">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -98,17 +91,36 @@ export function DamageCaseDetailPanel({ caseId }: Props) {
               ))}
             </SelectContent>
           </Select>
+          <Button variant="outline" size="sm" className="gap-1.5" onClick={() => window.print()}>
+            <Download className="h-3.5 w-3.5" />
+            PDF
+          </Button>
+          <EditButton onClick={() => setEditOpen(true)} />
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 text-slate-400 hover:bg-red-50 hover:text-red-500"
+            onClick={async () => { await deleteCase.mutateAsync(data.id); onClose?.(); }}
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
         </div>
+      </div>
 
+      {/* Body info */}
+      <div className="px-6 py-3 border-b space-y-2">
         <div className="text-sm">
-          <span className="text-muted-foreground">Description</span>
-          <p className="mt-0.5">{data.description}</p>
+          <span className="text-muted-foreground">Incident Date: </span>
+          <span className="font-medium">{formatDate(data.dateOfIncident)}</span>
         </div>
-
+        <div className="text-sm">
+          <span className="text-muted-foreground">Description: </span>
+          <span>{data.description}</span>
+        </div>
         {data.resolutionNotes && (
           <div className="text-sm">
-            <span className="text-muted-foreground">Resolution Notes</span>
-            <p className="mt-0.5">{data.resolutionNotes}</p>
+            <span className="text-muted-foreground">Resolution Notes: </span>
+            <span>{data.resolutionNotes}</span>
           </div>
         )}
       </div>
