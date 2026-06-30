@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, Trash2, Link2 } from "lucide-react";
+import { Plus, Trash2, Link2, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -14,8 +14,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { useDamageCase, useUpdateDamageCase, useDeleteDamageCaseExpense } from "@/lib/hooks/use-damage-cases";
 import { usePurchaseOrders } from "@/lib/hooks/use-purchase-orders";
 import { AddExpenseDialog } from "./AddExpenseDialog";
+import { NewDamageCaseDialog } from "./NewDamageCaseDialog";
 import { CommentsSection } from "@/components/shared/CommentsSection";
 import { AuditTrailTab } from "@/components/shared/AuditTrailTab";
+import { AttachmentsSection } from "@/components/shared/AttachmentsSection";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { DAMAGE_CASE_STATUS_LABELS, DAMAGE_CASE_TYPE_LABELS } from "@/lib/constants";
@@ -43,6 +45,7 @@ export function DamageCaseDetailPanel({ caseId }: Props) {
   const deleteExpense = useDeleteDamageCaseExpense();
   const { data: allPOs = [] } = usePurchaseOrders();
   const [addExpenseOpen, setAddExpenseOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
   const [poPickerOpen, setPoPickerOpen] = useState(false);
 
   if (isLoading) {
@@ -66,6 +69,9 @@ export function DamageCaseDetailPanel({ caseId }: Props) {
         <div className="flex items-center gap-2">
           <span className="text-xs font-mono text-muted-foreground">{data.caseNumber}</span>
           <Badge className={TYPE_COLORS[data.caseType]}>{DAMAGE_CASE_TYPE_LABELS[data.caseType]}</Badge>
+          <Button size="icon" variant="ghost" className="ml-auto h-7 w-7 text-muted-foreground" onClick={() => setEditOpen(true)}>
+            <Pencil className="h-3.5 w-3.5" />
+          </Button>
         </div>
         <div>
           <h2 className="text-lg font-semibold">{data.customerName}</h2>
@@ -168,7 +174,7 @@ export function DamageCaseDetailPanel({ caseId }: Props) {
       <Tabs defaultValue="expenses" className="flex-1 flex flex-col min-h-0">
         <div className="shrink-0 overflow-x-auto border-b px-4 md:px-6">
           <TabsList className="h-10 bg-transparent p-0">
-            {(["expenses", "comments", "audit trail"] as const).map((v) => (
+            {(["expenses", "files", "comments", "audit trail"] as const).map((v) => (
               <TabsTrigger
                 key={v}
                 value={v === "audit trail" ? "audit" : v}
@@ -236,6 +242,10 @@ export function DamageCaseDetailPanel({ caseId }: Props) {
           )}
         </TabsContent>
 
+        <TabsContent value="files" className="flex-1 overflow-y-auto p-6 mt-0">
+          <AttachmentsSection recordType="damage_case" recordId={data.id} />
+        </TabsContent>
+
         <TabsContent value="comments" className="flex-1 overflow-y-auto p-6 mt-0">
           <CommentsSection recordType="damage_case" recordId={data.id} />
         </TabsContent>
@@ -246,6 +256,19 @@ export function DamageCaseDetailPanel({ caseId }: Props) {
       </Tabs>
 
       <AddExpenseDialog damageCaseId={data.id} open={addExpenseOpen} onOpenChange={setAddExpenseOpen} />
+      <NewDamageCaseDialog
+        open={editOpen}
+        onOpenChange={setEditOpen}
+        editCase={{
+          id: data.id,
+          caseType: data.caseType,
+          customerName: data.customerName,
+          propertyAddress: data.propertyAddress,
+          dateOfIncident: data.dateOfIncident,
+          description: data.description,
+          resolutionNotes: data.resolutionNotes,
+        }}
+      />
     </div>
   );
 }
