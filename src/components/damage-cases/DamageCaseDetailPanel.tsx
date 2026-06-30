@@ -4,11 +4,12 @@ import { useState } from "react";
 import { Plus, Trash2, Link2, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { EditButton } from "@/components/shared/EditButton";
+import { StatusBadge } from "@/components/shared/StatusBadge";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Check, ChevronsUpDown, X } from "lucide-react";
+import { Check, ChevronDown, ChevronsUpDown, X } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -78,19 +79,25 @@ export function DamageCaseDetailPanel({ caseId, onClose }: Props) {
         </div>
         <div className="flex items-center gap-2">
           <Badge className={TYPE_COLORS[data.caseType]}>{DAMAGE_CASE_TYPE_LABELS[data.caseType]}</Badge>
-          <Select
-            value={data.status}
-            onValueChange={(v) => updateCase.mutate({ id: data.id, status: v as DamageCaseStatus })}
-          >
-            <SelectTrigger className="w-32 h-8 text-xs">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button type="button" className="inline-flex items-center gap-1 rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400">
+                <StatusBadge variant={data.status as Parameters<typeof StatusBadge>[0]["variant"]} label={DAMAGE_CASE_STATUS_LABELS[data.status]} />
+                <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-44">
               {Object.entries(DAMAGE_CASE_STATUS_LABELS).map(([value, label]) => (
-                <SelectItem key={value} value={value}>{label}</SelectItem>
+                <DropdownMenuItem
+                  key={value}
+                  onSelect={() => updateCase.mutate({ id: data.id, status: value as DamageCaseStatus })}
+                  className={value === data.status ? "font-medium text-brand-600" : ""}
+                >
+                  {label}
+                </DropdownMenuItem>
               ))}
-            </SelectContent>
-          </Select>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Button variant="outline" size="sm" className="gap-1.5" onClick={() => window.print()}>
             <Download className="h-3.5 w-3.5" />
             PDF

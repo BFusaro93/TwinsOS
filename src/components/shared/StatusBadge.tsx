@@ -47,6 +47,8 @@ const statusBadgeVariants = cva("border font-medium text-xs", {
       // Maintenance Request Status
       in_review: "border-yellow-200 bg-yellow-100 text-yellow-800",
       converted: "border-green-200 bg-green-100 text-green-800",
+      // Damage Case Status
+      resolved: "border-teal-200 bg-teal-100 text-teal-800",
     },
   },
 });
