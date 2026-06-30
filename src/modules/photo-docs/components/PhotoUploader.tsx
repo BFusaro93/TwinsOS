@@ -59,8 +59,8 @@ export function PhotoUploader({ projectId }: PhotoUploaderProps) {
           preview: type === "image" ? await fileToDataUrl(file).catch(() => null) : null,
           fileType: type,
           displayName: "",
-          beforeAfter: type === "image" ? globalBeforeAfter : "none" as BeforeAfterFlag,
-          tags: type === "image" ? [...globalTags] : [],
+          beforeAfter: type !== "other" ? globalBeforeAfter : "none" as BeforeAfterFlag,
+          tags: type !== "other" ? [...globalTags] : [],
           notes: "",
         };
       }),
@@ -172,7 +172,7 @@ export function PhotoUploader({ projectId }: PhotoUploaderProps) {
       {/* Global defaults (images only) */}
       {pending.length === 0 && (
         <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-          <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Default for photos</p>
+          <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Default tags</p>
           <BeforeAfterPicker value={globalBeforeAfter} onChange={setGlobalBeforeAfter} />
           <div className="mt-3">
             <Label className="mb-1.5 block text-xs text-slate-500">Tags</Label>
@@ -244,7 +244,7 @@ export function PhotoUploader({ projectId }: PhotoUploaderProps) {
                       />
                     )}
 
-                    {!prog && isImage && (
+                    {!prog && p.fileType !== "other" && (
                       <>
                         <BeforeAfterPicker value={p.beforeAfter} onChange={(v) => updatePending(i, { beforeAfter: v })} />
                         <TagPicker selected={p.tags} onToggle={(tag) => toggleTag(i, tag)} />
