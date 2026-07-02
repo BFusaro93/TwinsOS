@@ -39,6 +39,9 @@ function mapLineItem(row: any): EstimateLineItem {
     jobNote: row.job_note ?? null,
     invoiceDesc: row.invoice_desc ?? null,
     internalNote: row.internal_note ?? null,
+    rowType: (row.row_type as 'item' | 'section') ?? 'item',
+    sectionName: row.section_name ?? null,
+    tier: (row.tier as 'basic' | 'standard' | 'premium' | null) ?? null,
     deletedAt: row.deleted_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -95,6 +98,14 @@ function mapEstimate(row: any): Estimate {
     probabilityBps: row.probability_bps ?? 0,
     notes: row.notes,
     reason: row.reason ?? null,
+    depositRequiredCents: row.deposit_required_cents ?? 0,
+    depositCollectedCents: row.deposit_collected_cents ?? 0,
+    depositMethod: (row.deposit_method as Estimate['depositMethod']) ?? null,
+    depositReference: (row.deposit_reference as string | null) ?? null,
+    depositNotes: (row.deposit_notes as string | null) ?? null,
+    depositCollectedAt: (row.deposit_collected_at as string | null) ?? null,
+    tiersEnabled: row.tiers_enabled ?? false,
+    tierLabels: (row.tier_labels as { basic: string; standard: string; premium: string }) ?? { basic: 'Basic', standard: 'Standard', premium: 'Premium' },
     deletedAt: row.deleted_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -488,6 +499,95 @@ export function useSaveEstimateFinancials() {
       qc.invalidateQueries({ queryKey: ["estimates", "detail", vars.id] });
       qc.invalidateQueries({ queryKey: ["estimates"] });
     },
+  });
+}
+
+// ── AI draft line items ───────────────────────────────────────────────────────
+
+export interface AIDraftLineItem {
+  serviceName: string;
+  serviceId: string | null;
+  qty: number;
+  rateCents: number;
+  unitType: string;
+  visits: number;
+  estimateDesc: string;
+}
+
+export function useAIDraftLineItems() {
+  return useMutation({
+    mutationFn: async ({
+      estimateId,
+      prompt,
+    }: {
+      estimateId: string;
+      prompt: string;
+    }) => {
+      const res = await fetch(`/api/crm/estimates/${estimateId}/ai-draft`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error((body as { error?: string }).error ?? "AI draft failed");
+      }
+      return res.json() as Promise<AIDraftLineItem[]>;
+    },
+  });
+}
+
+export interface EstimateVersion {
+  id: string;
+  versionNumber: number;
+  sentToEmail: string | null;
+  createdAt: string;
+  snapshot: {
+    estimateNumber: number;
+    description: string | null;
+    subtotalCents: number;
+    taxCents: number;
+    discountCents: number;
+    totalCents: number;
+    notes: string | null;
+    validUntil: string | null;
+    lineItems: {
+      id: string;
+      serviceName: string | null;
+      qty: number;
+      rateCents: number;
+      visits: number;
+      totalCents: number;
+      unitType: string | null;
+      estimateDesc: string | null;
+      status: string;
+      rowType: string;
+      sectionName: string | null;
+    }[];
+  };
+}
+
+export function useEstimateVersions(estimateId: string) {
+  const supabase = createClient();
+  return useQuery({
+    queryKey: ["estimate-versions", estimateId],
+    queryFn: async (): Promise<EstimateVersion[]> => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
+        .from("estimate_versions")
+        .select("*")
+        .eq("estimate_id", estimateId)
+        .order("version_number", { ascending: false });
+      if (error) throw error;
+      return (data ?? []).map((r: Record<string, unknown>) => ({
+        id: r.id as string,
+        versionNumber: r.version_number as number,
+        sentToEmail: r.sent_to_email as string | null,
+        createdAt: r.created_at as string,
+        snapshot: r.snapshot as EstimateVersion["snapshot"],
+      }));
+    },
+    enabled: !!estimateId,
   });
 }
 

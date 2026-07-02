@@ -4,8 +4,9 @@
     {
       "name": "TwinsOS",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
-      "port": 3000
+      "runtimeArgs": ["run", "dev:test"],
+      "port": 3000,
+      "autoPort": true
     }
   ]
 }

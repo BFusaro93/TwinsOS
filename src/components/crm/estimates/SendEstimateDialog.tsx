@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, KeyboardEvent } from "react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
@@ -48,6 +48,9 @@ export function SendEstimateDialog({
   const [bodyHtml, setBodyHtml] = useState(DEFAULT_TEMPLATE_BODY);
   const [sending, setSending]   = useState(false);
   const [tab, setTab]           = useState<"compose" | "preview">("compose");
+  const [ccEmails, setCcEmails] = useState<string[]>([]);
+  const [ccInput, setCcInput]   = useState("");
+  const ccInputRef = useRef<HTMLInputElement>(null);
 
   // Load template when selected
   useEffect(() => {
@@ -79,6 +82,36 @@ export function SendEstimateDialog({
       .replace(/\[companyphonenumber\]/gi, "(555) 000-0000");
   }
 
+  function isValidEmail(email: string) {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  }
+
+  function commitCcInput() {
+    const trimmed = ccInput.trim().replace(/,+$/, "");
+    if (!trimmed) return;
+    if (!isValidEmail(trimmed)) {
+      toast.error(`"${trimmed}" is not a valid email address`);
+      return;
+    }
+    if (!ccEmails.includes(trimmed)) {
+      setCcEmails((prev) => [...prev, trimmed]);
+    }
+    setCcInput("");
+  }
+
+  function handleCcKeyDown(e: KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Enter" || e.key === "," || e.key === "Tab") {
+      e.preventDefault();
+      commitCcInput();
+    } else if (e.key === "Backspace" && ccInput === "" && ccEmails.length > 0) {
+      setCcEmails((prev) => prev.slice(0, -1));
+    }
+  }
+
+  function removeCcEmail(email: string) {
+    setCcEmails((prev) => prev.filter((e) => e !== email));
+  }
+
   async function handleSend() {
     if (!clientEmail) {
       toast.error("Client has no email address on file");
@@ -89,7 +122,7 @@ export function SendEstimateDialog({
       const res = await fetch(`/api/crm/estimates/${estimateId}/send-email`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ subject, bodyHtml, expiresInDays: 30 }),
+        body: JSON.stringify({ subject, bodyHtml, expiresInDays: 30, ccEmails }),
       });
       if (!res.ok) {
         const data = await res.json();
@@ -121,6 +154,40 @@ export function SendEstimateDialog({
               ? <span className="text-slate-400">&lt;{clientEmail}&gt;</span>
               : <Badge variant="destructive" className="text-[10px]">No email on file</Badge>
             }
+          </div>
+
+          {/* CC */}
+          <div
+            className="flex flex-wrap items-center gap-1.5 rounded-md border bg-white px-3 py-2 text-sm cursor-text min-h-[38px]"
+            onClick={() => ccInputRef.current?.focus()}
+          >
+            <span className="text-slate-400 text-xs font-medium w-8 shrink-0">CC</span>
+            {ccEmails.map((email) => (
+              <span
+                key={email}
+                className="flex items-center gap-1 bg-slate-100 text-slate-700 rounded px-1.5 py-0.5 text-xs"
+              >
+                {email}
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); removeCcEmail(email); }}
+                  className="text-slate-400 hover:text-slate-700 leading-none"
+                  aria-label={`Remove ${email}`}
+                >
+                  ×
+                </button>
+              </span>
+            ))}
+            <input
+              ref={ccInputRef}
+              type="text"
+              value={ccInput}
+              onChange={(e) => setCcInput(e.target.value)}
+              onKeyDown={handleCcKeyDown}
+              onBlur={commitCcInput}
+              placeholder={ccEmails.length === 0 ? "Add CC recipients…" : ""}
+              className="flex-1 min-w-[160px] text-xs outline-none bg-transparent placeholder:text-slate-400"
+            />
           </div>
 
           {/* Template picker */}

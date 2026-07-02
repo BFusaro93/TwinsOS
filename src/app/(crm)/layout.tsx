@@ -6,6 +6,7 @@ import { CRMSidebar } from "@/components/crm/CRMSidebar";
 import { TopBar } from "@/components/shared/TopBar";
 import { RealtimeSync } from "@/components/shared/RealtimeSync";
 import { SettingsLoader } from "@/components/shared/SettingsLoader";
+import { QuickAddOverlay } from "@/components/crm/QuickAddOverlay";
 import { useUIStore } from "@/stores";
 
 export default function CRMLayout({ children }: { children: React.ReactNode }) {
@@ -41,6 +42,7 @@ export default function CRMLayout({ children }: { children: React.ReactNode }) {
 
       <div className="flex flex-1 flex-col overflow-hidden">
         <TopBar />
+        <QuickAddOverlay />
         <main className="flex-1 overflow-auto p-4 md:p-6">{children}</main>
       </div>
     </div>

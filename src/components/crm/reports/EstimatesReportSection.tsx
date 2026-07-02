@@ -102,13 +102,13 @@ function useEstimatesReportData(rangeStart: string) {
 
       const [estRes, liRes] = await Promise.all([
         sb
-          .from("crm_estimates")
-          .select("id, estimate_number, stage, total_price_cents, created_at, description, clients(display_name)")
+          .from("estimates")
+          .select("id, estimate_number, stage, total_price_cents:total_cents, created_at, description, clients(display_name)")
           .is("deleted_at", null)
           .gte("created_at", rangeStart),
         sb
           .from("estimate_line_items")
-          .select("id, estimate_id, service_name, status, qty, rate_cents, total_cents, direct_cost_cents, estimates:crm_estimates(stage, created_at)")
+          .select("id, estimate_id, service_name, status, qty, rate_cents, total_cents, direct_cost_cents:total_cost_cents, estimates(stage, created_at)")
           .is("deleted_at", null),
       ]);
 

@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PhoneInput } from "@/components/shared/PhoneInput";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -113,10 +114,9 @@ export function NewClientDialog({ open, onOpenChange, onCreated }: Props) {
             <div className="grid grid-cols-2 gap-3">
               <div className="flex flex-col gap-1.5">
                 <Label>Phone</Label>
-                <Input
+                <PhoneInput
                   value={primaryPhone}
-                  onChange={(e) => setPrimaryPhone(e.target.value)}
-                  type="tel"
+                  onChange={setPrimaryPhone}
                   placeholder="(978) 555-0100"
                 />
               </div>

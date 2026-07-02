@@ -9,6 +9,9 @@ import {
   useSaveEstimateFinancials,
   useUpsertLineItem,
   useEstimateShareTokens,
+  useEstimateVersions,
+  type AIDraftLineItem,
+  type EstimateVersion,
 } from "@/lib/hooks/use-estimates";
 import { useCreateInvoiceFromEstimate } from "@/lib/hooks/use-invoices";
 import { useEstimateTemplates } from "@/lib/hooks/use-estimate-templates";
@@ -19,6 +22,7 @@ import { computeLineItem } from "@/lib/estimate-calc";
 import { EstimateLineItemsGrid } from "./EstimateLineItemsGrid";
 import { EstimateDirectCostsGrid } from "./EstimateDirectCostsGrid";
 import { EstimateSummaryPanel } from "./EstimateSummaryPanel";
+import { AIDraftDialog } from "./AIDraftDialog";
 import { ConvertToJobDialog } from "./ConvertToJobDialog";
 import { WonLostReasonDialog } from "./WonLostReasonDialog";
 import { RateIncreaseDialog } from "./RateIncreaseDialog";
@@ -58,6 +62,7 @@ import {
   Eye,
   Printer,
   Send,
+  Sparkles,
 } from "lucide-react";
 import {
   useAttachments,
@@ -101,7 +106,7 @@ const LINE_ITEM_TABS: { value: LineItemStatus | "all"; label: string }[] = [
   { value: "lost",  label: "Lost" },
 ];
 
-type Tab = "details" | "notes" | "attachments" | "audit";
+type Tab = "details" | "notes" | "attachments" | "audit" | "versions";
 
 // ── Attachments tab ────────────────────────────────────────────────────────────
 
@@ -210,6 +215,98 @@ function EstimateAttachmentsTab({ estimateId }: { estimateId: string }) {
   );
 }
 
+// ── EstimateVersionCard ────────────────────────────────────────────────────────
+
+function EstimateVersionCard({ version }: { version: EstimateVersion }) {
+  const [expanded, setExpanded] = useState(false);
+  const { snapshot } = version;
+  const sentDate = new Date(version.createdAt).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+
+  return (
+    <div className="rounded-lg border bg-white shadow-sm overflow-hidden">
+      <button
+        className="flex w-full items-center justify-between px-4 py-3 hover:bg-slate-50 transition-colors text-left"
+        onClick={() => setExpanded((p) => !p)}
+      >
+        <div className="flex items-center gap-3">
+          <span className="text-sm font-semibold text-slate-800">
+            Version {version.versionNumber}
+          </span>
+          <span className="text-xs text-slate-400">{sentDate}</span>
+          {version.sentToEmail && (
+            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-500">
+              Sent to {version.sentToEmail}
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-3">
+          <span className="text-sm font-semibold text-slate-700">
+            {formatCurrency(snapshot.totalCents)}
+          </span>
+          <span className={cn("text-xs text-slate-400 transition-transform", expanded && "rotate-180")}>
+            ▾
+          </span>
+        </div>
+      </button>
+
+      {expanded && (
+        <div className="border-t px-4 py-3 overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="text-left text-slate-400 border-b">
+                <th className="pb-1.5 pr-3 font-medium">Service</th>
+                <th className="pb-1.5 pr-3 font-medium text-right">Qty</th>
+                <th className="pb-1.5 pr-3 font-medium">Unit</th>
+                <th className="pb-1.5 pr-3 font-medium text-right">Visits</th>
+                <th className="pb-1.5 pr-3 font-medium text-right">Rate</th>
+                <th className="pb-1.5 font-medium text-right">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {snapshot.lineItems.map((li) => {
+                if (li.rowType === "section") {
+                  return (
+                    <tr key={li.id} className="bg-slate-50">
+                      <td colSpan={6} className="py-1.5 pr-3 font-semibold text-slate-600 uppercase tracking-wide text-[10px]">
+                        {li.sectionName ?? "Section"}
+                      </td>
+                    </tr>
+                  );
+                }
+                return (
+                  <tr key={li.id} className="border-b last:border-0">
+                    <td className="py-1.5 pr-3 text-slate-800">
+                      <div>{li.serviceName ?? "—"}</div>
+                      {li.estimateDesc && (
+                        <div className="text-[10px] text-slate-400">{li.estimateDesc}</div>
+                      )}
+                    </td>
+                    <td className="py-1.5 pr-3 text-right text-slate-600">{li.qty}</td>
+                    <td className="py-1.5 pr-3 text-slate-500">{li.unitType ?? "—"}</td>
+                    <td className="py-1.5 pr-3 text-right text-slate-600">{li.visits}</td>
+                    <td className="py-1.5 pr-3 text-right text-slate-600">{formatCurrency(li.rateCents)}</td>
+                    <td className="py-1.5 text-right font-medium text-slate-800">{formatCurrency(li.totalCents)}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+            <tfoot>
+              <tr className="border-t">
+                <td colSpan={5} className="pt-2 text-right text-slate-500 font-medium pr-3">Total</td>
+                <td className="pt-2 text-right font-semibold text-slate-800">{formatCurrency(snapshot.totalCents)}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 interface Props {
   estimateId: string;
   onClose?: () => void;
@@ -227,9 +324,9 @@ export function EstimateDetail({ estimateId, onClose }: Props) {
   const { mutateAsync: upsertLineItem } = useUpsertLineItem();
   const { mutateAsync: createInvoice, isPending: creatingInvoice } = useCreateInvoiceFromEstimate();
 
-  const { data: clientSources = [] } = useOrgList("client_sources");
 
   const { data: shareTokens = [] } = useEstimateShareTokens(estimate?.id ?? "");
+  const { data: versions = [] } = useEstimateVersions(estimate?.id ?? "");
   const { data: dbStages = [], isLoading: stagesLoading } = useEstimateStages();
   const seedStages = useSeedDefaultStages();
 
@@ -256,6 +353,7 @@ export function EstimateDetail({ estimateId, onClose }: Props) {
   const [wonLostDialog, setWonLostDialog] = useState<"won" | "lost" | null>(null);
   const [rateIncreaseOpen, setRateIncreaseOpen] = useState(false);
   const [sendDialogOpen, setSendDialogOpen] = useState(false);
+  const [aiDraftOpen, setAiDraftOpen] = useState(false);
   const [selectedLineItemIds, setSelectedLineItemIds] = useState<string[]>([]);
 
   function patchHeader(key: string, val: string | boolean | number) {
@@ -329,6 +427,53 @@ export function EstimateDetail({ estimateId, onClose }: Props) {
       setSelectedLineItemIds([]);
     } catch {
       toast.error("Rate increase failed");
+    }
+  }
+
+  async function handleAIAddItems(items: AIDraftLineItem[]) {
+    if (!estimate || !items.length) return;
+    setSaving(true);
+    try {
+      const existingCount = (estimate.lineItems ?? []).filter((li) => !li.deletedAt).length;
+      await Promise.all(
+        items.map((item, idx) => {
+          const computed = computeLineItem({
+            calcType: 1,
+            qty: item.qty,
+            rateCents: item.rateCents,
+            visits: item.visits,
+            budgetedHours: 0,
+            costCents: 0,
+            adjRateCents: null,
+            unitType: item.unitType,
+          });
+          return upsertLineItem({
+            estimateId: estimate.id,
+            item: {
+              service_id: item.serviceId ?? null,
+              service_name: item.serviceName,
+              estimate_desc: item.estimateDesc || null,
+              status: "quote",
+              calc_type: 1,
+              qty: item.qty,
+              rate_cents: item.rateCents,
+              visits: item.visits,
+              budgeted_hours: 0,
+              cost_cents: 0,
+              adj_rate_cents: null,
+              sort_order: existingCount + idx,
+              unit_type: item.unitType,
+              ...computed,
+            },
+          });
+        })
+      );
+      await handleSaveFinancials();
+      toast.success(`Added ${items.length} line item${items.length !== 1 ? "s" : ""} from AI draft`);
+    } catch {
+      toast.error("Failed to add AI-drafted items");
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -508,7 +653,7 @@ export function EstimateDetail({ estimateId, onClose }: Props) {
 
       {/* ── tabs ────────────────────────────────────────────────────── */}
       <div className="flex gap-0 border-b bg-white px-6">
-        {(["details", "notes", "attachments", "audit"] as Tab[]).map((t) => (
+        {(["details", "notes", "attachments", "audit", "versions"] as Tab[]).map((t) => (
           <button
             key={t}
             onClick={() => setActiveTab(t)}
@@ -519,7 +664,7 @@ export function EstimateDetail({ estimateId, onClose }: Props) {
                 : "border-transparent text-slate-500 hover:text-slate-800"
             )}
           >
-            {t === "audit" ? "Audit Trail" : t.charAt(0).toUpperCase() + t.slice(1)}
+            {t === "audit" ? "Audit Trail" : t === "versions" ? `Versions${versions.length > 0 ? ` (${versions.length})` : ""}` : t.charAt(0).toUpperCase() + t.slice(1)}
           </button>
         ))}
       </div>
@@ -618,21 +763,6 @@ export function EstimateDetail({ estimateId, onClose }: Props) {
                             <SelectContent>
                               {(users ?? []).map((u) => (
                                 <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </FieldRow>
-                        <FieldRow label="Source">
-                          <Select
-                            value={(headerEdits.source as string) ?? (estimate.source ?? "")}
-                            onValueChange={(v) => { patchHeader("source", v); saveHeader(); }}
-                          >
-                            <SelectTrigger className="h-8">
-                              <SelectValue placeholder="Select source…" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {clientSources.map((s) => (
-                                <SelectItem key={s.id} value={s.value}>{s.value}</SelectItem>
                               ))}
                             </SelectContent>
                           </Select>
@@ -744,6 +874,82 @@ export function EstimateDetail({ estimateId, onClose }: Props) {
                             placeholder="Work Order Number"
                           />
                         </FieldRow>
+                        <FieldRow label="Deposit Required">
+                          <div className="flex flex-col gap-1">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-xs text-slate-400">$</span>
+                              <Input
+                                type="number"
+                                min={0}
+                                step={1}
+                                value={
+                                  headerEdits.deposit_required_cents !== undefined
+                                    ? String(Math.round((headerEdits.deposit_required_cents as number) / 100))
+                                    : String(Math.round(estimate.depositRequiredCents / 100))
+                                }
+                                onChange={(e) =>
+                                  patchHeader("deposit_required_cents", Math.round(Number(e.target.value) * 100))
+                                }
+                                onBlur={saveHeader}
+                                className="h-8 w-28"
+                                placeholder="0"
+                              />
+                            </div>
+                            {estimate.depositCollectedCents > 0 && (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-medium text-green-700">
+                                Collected {formatCurrency(estimate.depositCollectedCents)}
+                                {estimate.depositMethod ? ` via ${estimate.depositMethod}` : ""}
+                                {estimate.depositCollectedAt
+                                  ? ` on ${new Date(estimate.depositCollectedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`
+                                  : ""}
+                              </span>
+                            )}
+                          </div>
+                        </FieldRow>
+                        <FieldRow label="Tiered Proposal">
+                          <div className="flex flex-col gap-1">
+                            <div className="flex items-center gap-2 h-8">
+                              <Checkbox
+                                checked={
+                                  headerEdits.tiers_enabled !== undefined
+                                    ? Boolean(headerEdits.tiers_enabled)
+                                    : estimate.tiersEnabled
+                                }
+                                onCheckedChange={(v) => {
+                                  patchHeader("tiers_enabled", Boolean(v));
+                                  saveHeader();
+                                }}
+                              />
+                              <span className="text-xs text-slate-500">Enable Good/Better/Best tiers</span>
+                            </div>
+                            {(headerEdits.tiers_enabled !== undefined
+                              ? Boolean(headerEdits.tiers_enabled)
+                              : estimate.tiersEnabled) && (
+                              <div className="flex gap-2 mt-1">
+                                {(["basic", "standard", "premium"] as const).map((t) => (
+                                  <Input
+                                    key={t}
+                                    value={
+                                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                                      (headerEdits.tier_labels as any)?.[t] ?? estimate.tierLabels[t]
+                                    }
+                                    onChange={(e) =>
+                                      patchHeader("tier_labels", {
+                                        ...estimate.tierLabels,
+                                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                                        ...(headerEdits.tier_labels as any ?? {}),
+                                        [t]: e.target.value,
+                                      })
+                                    }
+                                    onBlur={saveHeader}
+                                    className="h-7 text-xs"
+                                    placeholder={t.charAt(0).toUpperCase() + t.slice(1)}
+                                  />
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </FieldRow>
                       </div>
                     </div>
                   </div>
@@ -789,6 +995,15 @@ export function EstimateDetail({ estimateId, onClose }: Props) {
 
               {/* Templates + rate increase toolbar */}
               <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 text-xs"
+                  onClick={() => setAiDraftOpen(true)}
+                >
+                  <Sparkles className="mr-1 h-3.5 w-3.5 text-brand-500" />
+                  Draft with AI
+                </Button>
                 <Select
                   onValueChange={async (templateId) => {
                     if (!estimate || !templateId) return;
@@ -889,6 +1104,7 @@ export function EstimateDetail({ estimateId, onClose }: Props) {
                 items={visibleLineItems}
                 selectedIds={selectedLineItemIds}
                 onSelectionChange={setSelectedLineItemIds}
+                tiersEnabled={estimate.tiersEnabled}
               />
 
               {/* Direct costs */}
@@ -921,6 +1137,18 @@ export function EstimateDetail({ estimateId, onClose }: Props) {
               <AuditTrailTab recordType="estimate" recordId={estimate.id} />
             </div>
           )}
+
+          {activeTab === "versions" && (
+            <div className="flex flex-col gap-3">
+              {versions.length === 0 ? (
+                <div className="rounded-lg border bg-white p-8 text-center text-sm text-slate-400">
+                  No versions yet — a snapshot is saved each time the estimate is sent.
+                </div>
+              ) : versions.map((v) => (
+                <EstimateVersionCard key={v.id} version={v} />
+              ))}
+            </div>
+          )}
         </div>
 
         {/* ── right: summary panel ── */}
@@ -932,6 +1160,13 @@ export function EstimateDetail({ estimateId, onClose }: Props) {
           />
         </div>
       </div>
+
+      <AIDraftDialog
+        estimateId={estimate.id}
+        open={aiDraftOpen}
+        onOpenChange={setAiDraftOpen}
+        onAddItems={handleAIAddItems}
+      />
 
       {convertDialogOpen && (
         <ConvertToJobDialog

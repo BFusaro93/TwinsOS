@@ -492,6 +492,59 @@ export function useAddClientContact() {
   });
 }
 
+export function useUpdateClientContact() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      id,
+      clientId,
+      contact,
+    }: {
+      id: string;
+      clientId: string;
+      contact: Omit<ClientContact, "id" | "orgId" | "clientId" | "createdAt" | "deletedAt">;
+    }) => {
+      const supabase = createClient();
+      const primaryPhone = contact.phones?.[0] ?? null;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase as any).from("client_contacts").update({
+        first_name:   contact.firstName,
+        last_name:    contact.lastName,
+        contact_type: contact.contactType,
+        phones:       contact.phones ?? [],
+        phone:        primaryPhone?.phone ?? contact.phone ?? null,
+        phone_type:   primaryPhone?.type  ?? contact.phoneType ?? null,
+        email:        contact.email,
+        is_primary:   contact.isPrimary,
+        ok_to_email:  contact.okToEmail,
+        notes:        contact.notes,
+        updated_at:   new Date().toISOString(),
+      }).eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: (_data, { clientId }) => {
+      qc.invalidateQueries({ queryKey: ["clients", clientId, "contacts"] });
+    },
+  });
+}
+
+export function useDeleteClientContact() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id }: { id: string; clientId: string }) => {
+      const supabase = createClient();
+      const { error } = await supabase
+        .from("client_contacts")
+        .update({ deleted_at: new Date().toISOString() })
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: (_data, { clientId }) => {
+      qc.invalidateQueries({ queryKey: ["clients", clientId, "contacts"] });
+    },
+  });
+}
+
 // ── leads ─────────────────────────────────────────────────────────────────────
 
 export function useLeads() {

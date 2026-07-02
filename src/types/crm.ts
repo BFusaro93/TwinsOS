@@ -8,6 +8,7 @@ export type ActivityType =
   | 'email'
   | 'invoice'
   | 'payment'
+  | 'job'
   | 'job_visit'
   | 'estimate'
   | 'contract'

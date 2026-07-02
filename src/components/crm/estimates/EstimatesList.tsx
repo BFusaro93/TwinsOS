@@ -10,9 +10,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn, formatCurrency } from "@/lib/utils";
 import { bpsToPercent } from "@/lib/estimate-calc";
-import { Plus, FileText, Search, X, ChevronDown, RotateCcw, Copy } from "lucide-react";
+import { Plus, FileText, Search, X, ChevronDown, RotateCcw, Copy, List, Columns } from "lucide-react";
 import type { EstimateStage } from "@/types/crm-estimates";
 import { useUpdateEstimateStage } from "@/lib/hooks/use-estimates";
+import { useEstimateStages } from "@/lib/hooks/use-estimate-stages";
+import { EstimatesPipelineView } from "./EstimatesPipelineView";
 import { DuplicateEstimateDialog } from "./DuplicateEstimateDialog";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -104,6 +106,8 @@ export function EstimatesList({ clientId }: Props) {
   const [filterValue,     setFilterValue]     = useState("");
   const [selectedIds,     setSelectedIds]     = useState<Set<string>>(new Set());
   const [duplicateTarget, setDuplicateTarget] = useState<{ id: string; description: string } | null>(null);
+  const [viewMode, setViewMode] = useState<"list" | "pipeline">("list");
+  const { data: estimateStages = [] } = useEstimateStages();
   const [visibleKeys,     setVisibleKeys]     = useState<string[]>(
     ESTIMATE_COLUMNS.filter((c) => c.key !== "prob" && c.key !== "valid_until").map((c) => c.key)
   );
@@ -346,14 +350,53 @@ export function EstimatesList({ clientId }: Props) {
           </div>
         </div>
 
-        <ColumnChooser
-          columns={clientId ? ESTIMATE_COLUMNS.filter((c) => c.key !== "client") : ESTIMATE_COLUMNS}
-          visibleKeys={visibleKeys}
-          onVisibleKeysChange={setVisibleKeys}
-        />
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => setViewMode("list")}
+            title="List view"
+            className={cn(
+              "flex h-7 w-7 items-center justify-center rounded border transition-colors",
+              viewMode === "list"
+                ? "border-white bg-white text-slate-700"
+                : "border-[#6a6a6a] bg-[#5a5a5a] text-white hover:bg-[#6a6a6a]"
+            )}
+          >
+            <List className="h-3.5 w-3.5" />
+          </button>
+          <button
+            onClick={() => setViewMode("pipeline")}
+            title="Pipeline view"
+            className={cn(
+              "flex h-7 w-7 items-center justify-center rounded border transition-colors",
+              viewMode === "pipeline"
+                ? "border-white bg-white text-slate-700"
+                : "border-[#6a6a6a] bg-[#5a5a5a] text-white hover:bg-[#6a6a6a]"
+            )}
+          >
+            <Columns className="h-3.5 w-3.5" />
+          </button>
+        </div>
+
+        {viewMode === "list" && (
+          <ColumnChooser
+            columns={clientId ? ESTIMATE_COLUMNS.filter((c) => c.key !== "client") : ESTIMATE_COLUMNS}
+            visibleKeys={visibleKeys}
+            onVisibleKeysChange={setVisibleKeys}
+          />
+        )}
       </div>
 
+      {/* Pipeline view */}
+      {viewMode === "pipeline" && (
+        <EstimatesPipelineView
+          estimates={filtered}
+          stages={estimateStages}
+          onEstimateClick={(id) => router.push(`/crm/estimates/${id}`)}
+        />
+      )}
+
       {/* Table */}
+      {viewMode === "list" && (
       <div className="flex-1 overflow-auto bg-white">
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-slate-50 border-b z-10">
@@ -481,6 +524,7 @@ export function EstimatesList({ clientId }: Props) {
           </tbody>
         </table>
       </div>
+      )}
 
       <NewEstimateDialog
         open={dialogOpen}

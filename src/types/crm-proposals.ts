@@ -79,6 +79,10 @@ export interface ProposalData {
   discountCents: number;
   totalCents: number;
 
+  tiersEnabled: boolean;
+  tierLabels: { basic: string; standard: string; premium: string };
+  depositRequiredCents: number;
+  depositCollectedCents: number;
   lineItems: ProposalLineItem[];
 }
 
@@ -92,4 +96,5 @@ export interface ProposalLineItem {
   visits: number;
   totalCents: number;
   status: string;
+  tier: string | null;
 }

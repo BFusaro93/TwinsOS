@@ -178,7 +178,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
         notesToCrew: notesToCrew || null,
         services: services.map((s, idx) => ({
           serviceName: s.serviceName,
-          startDate: s.startDate || startDate || null,
+          startDate: jobType === "one_time" ? (startDate || null) : (s.startDate || startDate || null),
           completeByDate: jobType === "waiting_list" ? (s.completeByDate || completeByDate || null) : null,
           startRecurring: jobType === "recurring" ? startDate || null : null,
           assignedTo: null,
@@ -204,6 +204,8 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
   }
 
   const showCompleteBy = jobType === "waiting_list";
+  // one_time jobs have a single "Job Date" at the top — no per-service date column needed
+  const showServiceDate = jobType !== "recurring" && jobType !== "one_time";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -297,7 +299,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
             {(jobType === "one_time" || jobType === "package" || jobType === "snow" || jobType === "project") && (
               <div className="grid grid-cols-2 gap-3">
                 <div className="flex flex-col gap-1.5">
-                  <Label>Start Date</Label>
+                  <Label>{jobType === "one_time" ? "Job Date" : "Start Date"}</Label>
                   <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
                 </div>
                 {jobType === "one_time" && (
@@ -325,14 +327,14 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
                 <div
                   className="grid text-white text-xs font-medium px-3 py-2"
                   style={{
-                    gridTemplateColumns: jobType === "recurring"
-                      ? "2fr 1fr 1fr 1fr 1fr 1.5fr 28px"
-                      : "2fr 1fr 1fr 1fr 1fr 1fr 1.5fr 28px",
+                    gridTemplateColumns: showServiceDate
+                      ? "2fr 1fr 1fr 1fr 1fr 1fr 1.5fr 28px"
+                      : "2fr 1fr 1fr 1fr 1fr 1.5fr 28px",
                     backgroundColor: brandColor,
                   }}
                 >
                   <span>Service</span>
-                  {jobType !== "recurring" && <span>Start Date</span>}
+                  {showServiceDate && <span>Start Date</span>}
                   <span>{showCompleteBy ? "Complete By" : "Qty"}</span>
                   <span>Rate ($)</span>
                   <span>B. Hrs</span>
@@ -345,9 +347,9 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
                     key={i}
                     className="grid items-center gap-1.5 border-b last:border-0 bg-white px-3 py-2"
                     style={{
-                      gridTemplateColumns: jobType === "recurring"
-                        ? "2fr 1fr 1fr 1fr 1fr 1.5fr 28px"
-                        : "2fr 1fr 1fr 1fr 1fr 1fr 1.5fr 28px",
+                      gridTemplateColumns: showServiceDate
+                        ? "2fr 1fr 1fr 1fr 1fr 1fr 1.5fr 28px"
+                        : "2fr 1fr 1fr 1fr 1fr 1.5fr 28px",
                     }}
                   >
                     <Select value={svc.serviceId || ""} onValueChange={(v) => pickService(i, v)}>
@@ -356,7 +358,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
                         {(crmServices ?? []).map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
                       </SelectContent>
                     </Select>
-                    {jobType !== "recurring" && (
+                    {showServiceDate && (
                       <Input type="date" value={svc.startDate} onChange={(e) => updateService(i, { startDate: e.target.value })} className="h-7 text-xs" />
                     )}
                     {showCompleteBy ? (

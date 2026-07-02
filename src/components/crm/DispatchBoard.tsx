@@ -173,10 +173,15 @@ function JobDetailSheet({
     ? services.map((s) => s.serviceName).join(", ")
     : "Service Visit";
 
+  // Service total as fallback when neither visit nor job has an explicit rate
+  const serviceTotal = (job?.services ?? []).reduce(
+    (s, svc) => s + (svc.rateCents ?? 0) * (svc.qty ?? 1), 0
+  );
+
   // Form state — reset when visit changes
   const [status,      setStatus]      = useState<VisitStatus>(visit.status);
   const [subStatus,   setSubStatus]   = useState(visit.subStatus ?? "");
-  const [crewId,      setCrewId]      = useState(visit.crewId ?? "");
+  const [crewId,      setCrewId]      = useState(visit.crewId ?? job?.crewId ?? "");
   const [startTime,   setStartTime]   = useState(visit.startTime ?? "");
   const [endTime,     setEndTime]     = useState(visit.endTime ?? "");
   const [actualHours, setActualHours] = useState(String(visit.actualHours ?? ""));
@@ -185,11 +190,12 @@ function JobDetailSheet({
   const [rateCents,   setRateCents]   = useState(
     String(visit.rateCents != null ? visit.rateCents / 100
          : job?.rateCents != null ? job.rateCents / 100
+         : serviceTotal > 0 ? serviceTotal / 100
          : "")
   );
 
   // Sync crewId when the visit prop updates (e.g. after drag-assign or propagate)
-  useEffect(() => { setCrewId(visit.crewId ?? ""); }, [visit.id, visit.crewId]);
+  useEffect(() => { setCrewId(visit.crewId ?? job?.crewId ?? ""); }, [visit.id, visit.crewId, job?.crewId]);
 
   // Notes state
   const [newComment,    setNewComment]    = useState("");
@@ -197,9 +203,10 @@ function JobDetailSheet({
   // Fall back to job-level master invoice description when visit has none
   const [invoiceDesc,   setInvoiceDesc]   = useState(visit.invoiceDescription ?? job?.invoiceDescription ?? "");
 
-  const effectiveRate = visit.rateCents ?? job?.rateCents ?? null;
+  const effectiveRate = visit.rateCents ?? job?.rateCents ?? (serviceTotal > 0 ? serviceTotal : null);
   const amt = visit.rateCents != null ? visit.rateCents
-            : job?.rateCents ?? 0;
+            : job?.rateCents != null ? job.rateCents
+            : serviceTotal;
   const budgetedHours = job?.budgetedHours;
 
   async function handleSave() {
@@ -492,8 +499,14 @@ function JobDetailSheet({
                 <Textarea
                   value={newComment}
                   onChange={(e) => setNewComment(e.target.value)}
-                  placeholder="Add a comment…"
+                  placeholder="Add a comment… (Shift+Enter to send)"
                   className="h-24 resize-none text-xs"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && (e.shiftKey || e.metaKey || e.ctrlKey)) {
+                      e.preventDefault();
+                      void addComment();
+                    }
+                  }}
                 />
                 <Button size="sm" className="h-7 text-xs" onClick={addComment}>
                   Add Comment
@@ -1036,7 +1049,9 @@ function VisitRow({
   const job      = visit.job;
   const services = job?.services ?? [];
   const serviceName = services.length > 0 ? services.map((s) => s.serviceName).join(", ") : "—";
-  const effectiveRate = visit.rateCents ?? job?.rateCents ?? null;
+  const serviceTotal = services.reduce((s, svc) => s + (svc.rateCents ?? 0) * (svc.qty ?? 1), 0);
+  const effectiveRate = visit.rateCents ?? job?.rateCents ?? (serviceTotal > 0 ? serviceTotal : null);
+  const effectiveCrew = visit.crewName ?? job?.crewName ?? null;
   const budgetedHours = job?.budgetedHours;
 
   const lastSvc = job?.lastServiceDate
@@ -1149,7 +1164,7 @@ function VisitRow({
       {/* Assigned */}
       {isVisible("assigned") && (
         <td className="min-w-[90px] px-2 py-2 text-slate-600 font-medium">
-          {visit.crewName ?? <span className="text-slate-300 italic">—</span>}
+          {effectiveCrew ?? <span className="text-slate-300 italic">—</span>}
         </td>
       )}
 
@@ -1228,9 +1243,9 @@ function VisitRow({
             {(visit.job?.productTotalCents ?? 0) > 0 && (
               <span title="Has products"><Package className="h-3 w-3 text-purple-500" /></span>
             )}
-            {visit.job?.callAhead && visit.job?.clientPhone && (
+            {visit.job?.callAhead && visit.clientPhone && (
               <a
-                href={`tel:${visit.job.clientPhone}`}
+                href={`tel:${visit.clientPhone}`}
                 onClick={(e) => e.stopPropagation()}
                 title={`Call ahead: ${visit.job.clientPhone}`}
                 className="text-slate-300 hover:text-green-600 transition-colors"
@@ -1833,16 +1848,26 @@ export function DispatchBoard() {
                       className="text-xs"
                       onSelect={async () => {
                         const ids = [...selectedIds];
-                        await Promise.all(
-                          ids.map((id) =>
-                            fetch(`/api/crm/visits/${id}`, {
-                              method: "PATCH",
-                              headers: { "Content-Type": "application/json" },
-                              body: JSON.stringify({ status: opt.value }),
-                            })
-                          )
-                        );
+                        if (opt.value === "completed") {
+                          // Use the complete route so the parent job status is also updated
+                          await Promise.all(
+                            ids.map((id) =>
+                              fetch(`/api/crm/visits/${id}/complete`, { method: "POST" })
+                            )
+                          );
+                        } else {
+                          await Promise.all(
+                            ids.map((id) =>
+                              fetch(`/api/crm/visits/${id}`, {
+                                method: "PATCH",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ status: opt.value }),
+                              })
+                            )
+                          );
+                        }
                         await qc.invalidateQueries({ queryKey: ["crm-job-visits"] });
+                        await qc.invalidateQueries({ queryKey: ["crm-jobs"] });
                         setSelectedIds(new Set());
                         toast.success(`Updated ${ids.length} visit${ids.length > 1 ? "s" : ""} to ${opt.label}`);
                       }}

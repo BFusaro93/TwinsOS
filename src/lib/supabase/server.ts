@@ -1,4 +1,5 @@
 import { createServerClient } from "@supabase/ssr";
+import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
 import type { Database } from "@/types/supabase";
 
@@ -31,5 +32,17 @@ export async function createClient() {
         },
       },
     }
+  );
+}
+
+/**
+ * Service-role client — bypasses RLS. Only use in server contexts where the
+ * caller has already verified the user's identity (e.g. portal routes that
+ * call getPortalContext() first).
+ */
+export function createServiceClient() {
+  return createSupabaseClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
   );
 }

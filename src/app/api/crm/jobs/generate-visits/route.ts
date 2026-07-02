@@ -36,18 +36,19 @@ function parseSchedule(schedule: string | null, scheduleDays: string[]): Occurre
       .map((dayIndex) => ({ frequency: "weekly" as const, dayIndex }));
   }
   const lower = schedule.toLowerCase();
-  const weeklyMatch = lower.match(/^weekly\s*-\s*(\w+)$/);
+  // Match both "weekly - monday" and "weekly monday" formats
+  const weeklyMatch = lower.match(/^weekly\s*(?:-\s*)?(\w+)$/);
   if (weeklyMatch) {
     const dayIndex = DAY_INDEX[weeklyMatch[1]];
     if (dayIndex !== undefined) return [{ frequency: "weekly", dayIndex }];
   }
-  const biMatch = lower.match(/^bi-?weekly\s*-\s*(\w+)\s*-\s*(even|odd)\s+weeks?$/);
+  const biMatch = lower.match(/^bi-?weekly\s*(?:-\s*)?(\w+)\s*(?:-\s*)?(even|odd)\s+weeks?$/);
   if (biMatch) {
     const dayIndex = DAY_INDEX[biMatch[1]];
     const parity = biMatch[2] as "even" | "odd";
     if (dayIndex !== undefined) return [{ frequency: "biweekly", dayIndex, biweeklyParity: parity }];
   }
-  const biGeneric = lower.match(/^bi-?weekly\s*-\s*(\w+)$/);
+  const biGeneric = lower.match(/^bi-?weekly\s*(?:-\s*)?(\w+)$/);
   if (biGeneric) {
     const dayIndex = DAY_INDEX[biGeneric[1]];
     if (dayIndex !== undefined) return [{ frequency: "biweekly", dayIndex, biweeklyParity: "even" }];
@@ -88,6 +89,10 @@ export async function POST(request: Request) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: profile } = await (supabase as any).from("profiles").select("org_id").eq("id", user.id).single();
+  const sessionOrgId: string | null = (profile as any)?.org_id ?? null;
+
   const body = await request.json() as { jobId: string; lookaheadDays?: number };
   const { jobId, lookaheadDays = LOOKAHEAD_DAYS } = body;
   if (!jobId) return NextResponse.json({ error: "jobId required" }, { status: 400 });
@@ -98,7 +103,10 @@ await (supabase as any).from("crm_jobs").select("*" as any).eq("id", jobId).sing
   if (jobErr || !job) return NextResponse.json({ error: "Job not found" }, { status: 404 });
 
   const today = new Date(); today.setHours(0, 0, 0, 0);
-  const windowEnd = addDays(today, lookaheadDays);
+  // Generate only through the end of the current calendar year — visits are
+  // regenerated each year so customers who don't renew are never pre-scheduled.
+  const yearEnd = new Date(today.getFullYear(), 11, 31);
+  const windowEnd = yearEnd;
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const jobAny = job as any;
@@ -130,20 +138,24 @@ await (supabase as any).from("crm_jobs").select("*" as any).eq("id", jobId).sing
   const existingSet = new Set((existing ?? []).map((v: { scheduled_date: string }) => v.scheduled_date));
 
   const j = jobAny as {
-    org_id: string; client_id: string; crew_id: string | null;
+    org_id: string | null; client_id: string; crew_id: string | null;
     schedule: string | null; schedule_days: string[];
     priority: number; notes_to_crew: string | null;
   };
+  // Jobs created via browser client may not have org_id populated; fall back to session org.
+  const effectiveOrgId: string | null = j.org_id ?? sessionOrgId;
 
   // Try to resolve the schedule from the crm_schedules table using the stored name.
   // This avoids fragile regex parsing of user-defined schedule names.
+  // Note: RLS scopes to the authenticated user's org; we don't filter by org_id here
+  // because crm_jobs.org_id may be null for jobs created via the browser client.
   let rules: OccurrenceRule[] = [];
+  let seasonFilter: { start: string; end: string } | null = null;
   if (j.schedule) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: scheduleRow } = await (supabase as any)
       .from("crm_schedules")
-      .select("frequency, day_of_week")
-      .eq("org_id", j.org_id)
+      .select("frequency, day_of_week, season_start, season_end")
       .eq("name", j.schedule)
       .is("deleted_at", null)
       .maybeSingle();
@@ -159,10 +171,18 @@ await (supabase as any).from("crm_jobs").select("*" as any).eq("id", jobId).sing
         } else if (freq === "bi_weekly" || freq === "biweekly") {
           rules = [{ frequency: "biweekly", dayIndex, biweeklyParity: "even" }];
         } else if (freq === "every_3_weeks") {
-          // Approximate as biweekly — 3-week cadence not natively supported yet
           rules = [{ frequency: "biweekly", dayIndex, biweeklyParity: "even" }];
         }
         // every_4_weeks / monthly: fall through to name-based parsing below
+      }
+
+      // Narrow the generation window to the schedule's season (MM-DD format).
+      // Season applies per-calendar-year — e.g. "05-01" to "11-01" means only
+      // generate visits that fall within that month/day range each year.
+      const seasonStart: string | null = sr.season_start ?? null;
+      const seasonEnd: string | null   = sr.season_end ?? null;
+      if (seasonStart && seasonEnd) {
+        seasonFilter = { start: seasonStart, end: seasonEnd };
       }
     }
   }
@@ -176,16 +196,23 @@ await (supabase as any).from("crm_jobs").select("*" as any).eq("id", jobId).sing
   for (const rule of rules) {
     for (const d of occurrencesInRange(rule, windowStart, effectiveEnd)) {
       const dateStr = toISODate(d);
-      if (!existingSet.has(dateStr)) {
-        toInsert.push({
-          org_id: j.org_id, job_id: jobId, client_id: j.client_id,
-          crew_id: j.crew_id ?? null, scheduled_date: dateStr,
-          priority: j.priority ?? 1, notes_to_crew: j.notes_to_crew ?? null,
-          budgeted_hours: (jobAny.budgeted_hours ?? null),
-          rate_cents: (jobAny.rate_cents ?? null),
-        });
-        existingSet.add(dateStr);
+      if (existingSet.has(dateStr)) continue;
+
+      // Apply season window: only generate visits whose MM-DD falls within the season.
+      if (seasonFilter) {
+        const mmdd = dateStr.slice(5); // "MM-DD"
+        const inSeason = seasonFilter.start <= seasonFilter.end
+          ? mmdd >= seasonFilter.start && mmdd <= seasonFilter.end
+          : mmdd >= seasonFilter.start || mmdd <= seasonFilter.end; // wraps year boundary
+        if (!inSeason) continue;
       }
+
+      toInsert.push({
+        job_id: jobId, client_id: j.client_id,
+        crew_id: j.crew_id ?? null, scheduled_date: dateStr,
+        priority: j.priority ?? 1, notes_to_crew: j.notes_to_crew ?? null,
+      });
+      existingSet.add(dateStr);
     }
   }
 

@@ -104,7 +104,7 @@ export function useInvoices(clientId?: string) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let q = (supabase as any)
         .from("crm_invoices")
-        .select("*, clients(display_name)")
+        .select("*, clients(display_name), crm_invoice_line_items(id, name, description, total_cents, is_taxable)")
         .is("deleted_at", null)
         .order("invoice_date", { ascending: false });
       if (clientId) q = q.eq("client_id", clientId);
@@ -230,13 +230,95 @@ export function useCreateInvoice() {
           invoice_date: values.invoiceDate,
           due_date: values.dueDate ?? null,
           status: "draft",
+          invoice_number: null, // number assigned explicitly on save, not on open
         })
         .select()
         .single();
       if (error) throw error;
       return mapInvoice(data);
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["crm-invoices"] }),
+    onSuccess: (_d, vars) => {
+      qc.invalidateQueries({ queryKey: ["crm-invoices"] });
+      qc.invalidateQueries({ queryKey: ["clients", vars.clientId, "activity"] });
+    },
+  });
+}
+
+// ── assign invoice number (called on explicit save of a draft) ────────────────
+
+export function useAssignInvoiceNumber() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, clientId }: { id: string; clientId: string }) => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: num, error } = await (supabase.rpc as any)("assign_invoice_number", { p_invoice_id: id });
+      if (error) throw error;
+      // Now that we have a real number, log to activity timeline
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (supabase as any).from("client_activity").insert({
+        client_id: clientId,
+        activity_type: "invoice",
+        subject: `Invoice #${num}`,
+        ref_id: id,
+        ref_table: "crm_invoices",
+      });
+      return num as number;
+    },
+    onSuccess: (_d, vars) => {
+      qc.invalidateQueries({ queryKey: ["crm-invoices", "detail", vars.id] });
+      qc.invalidateQueries({ queryKey: ["crm-invoices"] });
+      qc.invalidateQueries({ queryKey: ["clients", vars.clientId, "activity"] });
+    },
+  });
+}
+
+// ── soft-delete invoice (used to discard unsaved drafts) ──────────────────────
+
+export function useDeleteInvoice() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, clientId }: { id: string; clientId: string }) => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase as any)
+        .from("crm_invoices")
+        .update({ deleted_at: new Date().toISOString() })
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: (_d, vars) => {
+      qc.invalidateQueries({ queryKey: ["crm-invoices"] });
+      qc.invalidateQueries({ queryKey: ["clients", vars.clientId] });
+    },
+  });
+}
+
+// ── void invoice ────────────────────────────────────────────────────────────────
+// Voiding is different from deleting: the record stays (audit trail, any recorded
+// payments remain visible) but it's excluded from balances/AR going forward.
+
+export function useVoidInvoice() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, clientId }: { id: string; clientId: string }) => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase as any)
+        .from("crm_invoices")
+        .update({ status: "void", balance_cents: 0 })
+        .eq("id", id);
+      if (error) throw error;
+      // Re-sync the client's outstanding balance now that this invoice is excluded
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (supabase.rpc as any)("sync_client_balance", { p_client_id: clientId });
+    },
+    onSuccess: (_d, vars) => {
+      qc.invalidateQueries({ queryKey: ["crm-invoices", "detail", vars.id] });
+      qc.invalidateQueries({ queryKey: ["crm-invoices"] });
+      qc.invalidateQueries({ queryKey: ["clients", vars.clientId] });
+      qc.invalidateQueries({ queryKey: ["clients"] });
+    },
   });
 }
 
@@ -292,11 +374,32 @@ export function useUpdateInvoiceHeader() {
 
 // ── record payment ────────────────────────────────────────────────────────────
 
+// ── shared invoice balance helper ─────────────────────────────────────────────
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function applyPaymentToInvoice(supabase: any, invoiceId: string, deltaCents: number) {
+  const { data: inv, error: invErr } = await supabase
+    .from("crm_invoices")
+    .select("total_cents, amount_paid_cents")
+    .eq("id", invoiceId)
+    .single();
+  if (invErr) throw invErr;
+
+  const newPaid = Math.max(0, inv.amount_paid_cents + deltaCents);
+  const newBalance = Math.max(0, inv.total_cents - newPaid);
+  const newStatus = newBalance <= 0 ? "paid" : newPaid > 0 ? "partial" : "sent";
+
+  const { error: updErr } = await supabase
+    .from("crm_invoices")
+    .update({ amount_paid_cents: newPaid, balance_cents: newBalance, status: newStatus })
+    .eq("id", invoiceId);
+  if (updErr) throw updErr;
+}
+
 export function useRecordPayment() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({
-      invoiceId,
       clientId,
       amountCents,
       paymentDate,
@@ -304,8 +407,8 @@ export function useRecordPayment() {
       reference,
       memo,
       isPrepayment,
+      allocations,
     }: {
-      invoiceId?: string;
       clientId: string;
       amountCents: number;
       paymentDate: string;
@@ -313,13 +416,16 @@ export function useRecordPayment() {
       reference?: string;
       memo?: string;
       isPrepayment?: boolean;
+      allocations?: { invoiceId: string; amountCents: number }[];
     }) => {
       const supabase = createClient();
+      const activeAllocations = (allocations ?? []).filter((a) => a.amountCents > 0);
+      const primaryInvoiceId = activeAllocations.length === 1 ? activeAllocations[0].invoiceId : null;
 
-      // insert payment
+      // insert payment row
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error: pmtErr } = await (supabase as any).from("crm_payments").insert({
-        invoice_id: invoiceId ?? null,
+        invoice_id: primaryInvoiceId,
         client_id: clientId,
         amount_cents: amountCents,
         payment_date: paymentDate,
@@ -330,40 +436,19 @@ export function useRecordPayment() {
       });
       if (pmtErr) throw pmtErr;
 
-      // if linked to an invoice, recompute its balance
-      if (invoiceId) {
+      // apply to each allocated invoice
+      for (const alloc of activeAllocations) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data: inv, error: invErr } = await (supabase as any)
-          .from("crm_invoices")
-          .select("total_cents, amount_paid_cents")
-          .eq("id", invoiceId)
-          .single();
-        if (invErr) throw invErr;
-
-        const newPaid = inv.amount_paid_cents + amountCents;
-        const newBalance = inv.total_cents - newPaid;
-        const newStatus =
-          newBalance <= 0 ? "paid" : newPaid > 0 ? "partial" : "sent";
-
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { error: updErr } = await (supabase as any)
-          .from("crm_invoices")
-          .update({
-            amount_paid_cents: newPaid,
-            balance_cents: Math.max(0, newBalance),
-            status: newStatus,
-          })
-          .eq("id", invoiceId);
-        if (updErr) throw updErr;
+        await applyPaymentToInvoice(supabase as any, alloc.invoiceId, alloc.amountCents);
       }
-      // sync client outstanding balance
+
+      // sync client balance
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await (supabase.rpc as any)("sync_client_balance", { p_client_id: clientId });
 
-      // log to activity timeline
       const label = isPrepayment
         ? `Prepayment recorded: ${method}`
-        : invoiceId
+        : activeAllocations.length > 0
           ? `Payment received: ${method}`
           : `Payment recorded: ${method}`;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -371,19 +456,158 @@ export function useRecordPayment() {
         client_id: clientId,
         activity_type: "payment",
         subject: label,
-        ref_id: invoiceId ?? null,
-        ref_table: invoiceId ? "crm_invoices" : null,
+        ref_id: primaryInvoiceId,
+        ref_table: primaryInvoiceId ? "crm_invoices" : null,
       });
     },
     onSuccess: (_d, vars) => {
       qc.invalidateQueries({ queryKey: ["crm-invoices"] });
-      if (vars.invoiceId) qc.invalidateQueries({ queryKey: ["crm-invoices", "detail", vars.invoiceId] });
       qc.invalidateQueries({ queryKey: ["clients", vars.clientId] });
       qc.invalidateQueries({ queryKey: ["clients"] });
-      qc.invalidateQueries({ queryKey: ["crm-payments", vars.clientId] });
+      qc.invalidateQueries({ queryKey: ["crm-payments"] });
       qc.invalidateQueries({ queryKey: ["clients", vars.clientId, "activity"] });
     },
   });
+}
+
+// ── update payment ────────────────────────────────────────────────────────────
+
+export function useUpdatePayment() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      id,
+      clientId,
+      amountCents,
+      paymentDate,
+      method,
+      reference,
+      memo,
+      allocations,
+    }: {
+      id: string;
+      clientId: string;
+      amountCents: number;
+      paymentDate: string;
+      method: string;
+      reference?: string;
+      memo?: string;
+      allocations?: { invoiceId: string; amountCents: number }[];
+    }) => {
+      const supabase = createClient();
+
+      // load current payment to know old invoice linkage and amount
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: old, error: oldErr } = await (supabase as any)
+        .from("crm_payments")
+        .select("invoice_id, amount_cents")
+        .eq("id", id)
+        .single();
+      if (oldErr) throw oldErr;
+
+      // reverse old allocation on the previously linked invoice
+      if (old.invoice_id) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await applyPaymentToInvoice(supabase as any, old.invoice_id, -old.amount_cents);
+      }
+
+      const activeAllocations = (allocations ?? []).filter((a) => a.amountCents > 0);
+      const primaryInvoiceId = activeAllocations.length === 1 ? activeAllocations[0].invoiceId : null;
+
+      // apply new allocations to invoices
+      for (const alloc of activeAllocations) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await applyPaymentToInvoice(supabase as any, alloc.invoiceId, alloc.amountCents);
+      }
+
+      // update payment row
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase as any).from("crm_payments").update({
+        invoice_id: primaryInvoiceId,
+        amount_cents: amountCents,
+        payment_date: paymentDate,
+        method,
+        reference: reference ?? null,
+        memo: memo ?? null,
+      }).eq("id", id);
+      if (error) throw error;
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (supabase.rpc as any)("sync_client_balance", { p_client_id: clientId });
+    },
+    onSuccess: (_d, vars) => {
+      qc.invalidateQueries({ queryKey: ["crm-payments"] });
+      qc.invalidateQueries({ queryKey: ["crm-invoices"] });
+      qc.invalidateQueries({ queryKey: ["clients", vars.clientId] });
+      qc.invalidateQueries({ queryKey: ["clients"] });
+    },
+  });
+}
+
+// ── refund payment ────────────────────────────────────────────────────────────
+
+export function useRefundPayment() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      id,
+      clientId,
+      refundAmountCents,
+      invoiceId,
+    }: {
+      id: string;
+      clientId: string;
+      refundAmountCents: number;
+      invoiceId?: string | null;
+    }) => {
+      const supabase = createClient();
+
+      // load current payment
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: pmt, error: pmtErr } = await (supabase as any)
+        .from("crm_payments")
+        .select("refunded_amount_cents, amount_cents")
+        .eq("id", id)
+        .single();
+      if (pmtErr) throw pmtErr;
+
+      const newRefunded = pmt.refunded_amount_cents + refundAmountCents;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase as any)
+        .from("crm_payments")
+        .update({ refunded_amount_cents: newRefunded })
+        .eq("id", id);
+      if (error) throw error;
+
+      // reverse allocation on invoice if linked
+      if (invoiceId) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await applyPaymentToInvoice(supabase as any, invoiceId, -refundAmountCents);
+      }
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (supabase.rpc as any)("sync_client_balance", { p_client_id: clientId });
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (supabase as any).from("client_activity").insert({
+        client_id: clientId,
+        activity_type: "payment",
+        subject: `Refund issued: ${formatCents(refundAmountCents)}`,
+        ref_id: id,
+        ref_table: "crm_payments",
+      });
+    },
+    onSuccess: (_d, vars) => {
+      qc.invalidateQueries({ queryKey: ["crm-payments"] });
+      qc.invalidateQueries({ queryKey: ["crm-invoices"] });
+      qc.invalidateQueries({ queryKey: ["clients", vars.clientId] });
+      qc.invalidateQueries({ queryKey: ["clients"] });
+    },
+  });
+}
+
+function formatCents(cents: number) {
+  return `$${(cents / 100).toFixed(2)}`;
 }
 
 // ── upsert line item ──────────────────────────────────────────────────────────
@@ -662,7 +886,8 @@ export function useCreateInvoiceFromJob() {
       await (supabase as any).from("client_activity").insert({
         client_id: clientId,
         activity_type: "invoice",
-        subject: `Invoice created: ${description}`,
+        subject: `Invoice #${data.invoice_number}`,
+        amount_cents: data.total_cents ?? 0,
         ref_id: invoiceId,
         ref_table: "crm_invoices",
       });

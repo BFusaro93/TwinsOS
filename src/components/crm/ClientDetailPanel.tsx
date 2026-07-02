@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import {
   useClient,
@@ -12,6 +12,8 @@ import {
   useConvertLeadToClient,
   useUpdateClient,
   useAddClientContact,
+  useUpdateClientContact,
+  useDeleteClientContact,
   useAddClientProperty,
   useAddClientTag,
   useRemoveClientTag,
@@ -21,7 +23,7 @@ import {
 } from "@/lib/hooks/use-clients";
 import { TagEditor } from "@/components/crm/TagEditor";
 import { useTicket } from "@/lib/hooks/use-tickets";
-import { useClientJobs, useUpdateJobStatus, useJobVisits, useClientAllVisits } from "@/lib/hooks/use-crm-jobs";
+import { useClientJobs, useUpdateJobStatus, useJobVisits, useClientAllVisits, useAllCRMServices } from "@/lib/hooks/use-crm-jobs";
 import { useInvoices, usePayments } from "@/lib/hooks/use-invoices";
 import { useEstimates } from "@/lib/hooks/use-estimates";
 import { useContracts } from "@/lib/hooks/use-contracts";
@@ -29,6 +31,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PhoneInput } from "@/components/shared/PhoneInput";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -50,6 +53,8 @@ import { EstimateDetailSheet } from "./estimates/EstimateDetailSheet";
 import { JobDetailSheet } from "./jobs/JobDetailSheet";
 import { NewJobDialog } from "./jobs/NewJobDialog";
 import { InvoiceDetailSheet } from "./invoices/InvoiceDetailSheet";
+import { NewInvoiceSheet } from "./invoices/NewInvoiceSheet";
+import { AddPaymentDialog, RefundDialog } from "./payments/PaymentsList";
 import { ContractsList } from "./contracts/ContractsList";
 import { NewContractDialog } from "./contracts/NewContractDialog";
 import { ClientFilesTab } from "./ClientFilesTab";
@@ -61,7 +66,7 @@ import {
 import { useOrgList } from "@/lib/hooks/use-org-lists";
 import { formatCurrency } from "@/lib/utils";
 import { useOrgSettings } from "@/lib/hooks/use-org-settings";
-import type { CRMPayment } from "@/types/crm-invoices";
+import type { CRMPayment, CRMInvoice } from "@/types/crm-invoices";
 import { toast } from "sonner";
 import {
   Phone,
@@ -88,8 +93,9 @@ import {
   Maximize2,
   Minimize2,
   X,
+  ExternalLink,
 } from "lucide-react";
-import type { Client, ContactPhone, PhoneType } from "@/types/crm";
+import type { Client, ClientContact, ContactPhone, PhoneType } from "@/types/crm";
 import type { CRMJob, CRMJobVisit } from "@/types/crm-jobs";
 
 // Contact types — configurable via Settings in a future sprint
@@ -178,51 +184,89 @@ function InfoRow({ label, value }: { label: string; value?: string | null }) {
 
 // ── PaymentDetailDialog ───────────────────────────────────────────────────────
 
-function PaymentDetailDialog({ payment, onClose }: { payment: CRMPayment | null; onClose: () => void }) {
-  if (!payment) return null;
+function PaymentDetailDialog({
+  payment,
+  onClose,
+}: {
+  payment: CRMPayment | null;
+  onClose: () => void;
+}) {
+  const [editOpen, setEditOpen] = useState(false);
+  const [refundOpen, setRefundOpen] = useState(false);
+  const { data: invoices } = useInvoices(payment?.clientId ?? undefined);
+
+  // All invoices with any amount paid — best approximation of what this payment touched
+  const paidInvoices = useMemo(
+    () => (invoices ?? []).filter((inv) => inv.amountPaidCents > 0 && inv.status !== "void"),
+    [invoices]
+  );
+
+  if (!payment && !editOpen && !refundOpen) return null;
   return (
-    <Dialog open={!!payment} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-sm">
-        <DialogHeader>
-          <DialogTitle>Payment Details</DialogTitle>
-        </DialogHeader>
-        <div className="text-sm space-y-3 py-1">
-          <div className="flex justify-between">
-            <span className="text-slate-400">Amount</span>
-            <span className="font-semibold text-green-600">{formatCurrency(payment.amountCents)}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-slate-400">Date</span>
-            <span>{new Date(payment.paymentDate + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-slate-400">Method</span>
-            <span>{payment.method}</span>
-          </div>
-          {payment.reference && (
-            <div className="flex justify-between">
-              <span className="text-slate-400">Reference / Check #</span>
-              <span>{payment.reference}</span>
+    <>
+      <Dialog open={!!payment && !editOpen && !refundOpen} onOpenChange={(o) => !o && onClose()}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Payment Details</DialogTitle>
+          </DialogHeader>
+          {payment && (
+            <div className="text-sm space-y-3 py-1">
+              <div className="flex justify-between">
+                <span className="text-slate-400">Amount</span>
+                <span className="font-semibold text-green-600">{formatCurrency(payment.amountCents)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Date</span>
+                <span>{new Date(payment.paymentDate + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Method</span>
+                <span>{payment.method}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Reference / Check #</span>
+                <span>{payment.reference || <span className="text-slate-300">—</span>}</span>
+              </div>
+              {paidInvoices.length > 0 && (
+                <div className="flex justify-between items-start">
+                  <span className="text-slate-400 shrink-0">Applied to</span>
+                  <span className="text-right">
+                    {paidInvoices.map((inv) => (
+                      <span key={inv.id} className="block">
+                        #{inv.invoiceNumber} &mdash; {formatCurrency(inv.amountPaidCents)}
+                      </span>
+                    ))}
+                  </span>
+                </div>
+              )}
+              {payment.memo && (
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Memo</span>
+                  <span className="text-right max-w-[180px]">{payment.memo}</span>
+                </div>
+              )}
             </div>
           )}
-          {payment.invoiceNumber && (
-            <div className="flex justify-between">
-              <span className="text-slate-400">Invoice #</span>
-              <span>#{payment.invoiceNumber}</span>
-            </div>
-          )}
-          {payment.memo && (
-            <div className="flex justify-between">
-              <span className="text-slate-400">Memo</span>
-              <span className="text-right max-w-[180px]">{payment.memo}</span>
-            </div>
-          )}
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Close</Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" size="sm" onClick={() => setEditOpen(true)}>Edit</Button>
+            <Button variant="outline" size="sm" className="text-red-600 border-red-200 hover:bg-red-50"
+              onClick={() => setRefundOpen(true)}>Refund</Button>
+            <Button variant="outline" size="sm" onClick={onClose}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <AddPaymentDialog
+        open={editOpen}
+        onOpenChange={(o) => { if (!o) { setEditOpen(false); onClose(); } }}
+        payment={payment}
+      />
+
+      <RefundDialog
+        payment={refundOpen ? payment : null}
+        onClose={() => { setRefundOpen(false); onClose(); }}
+      />
+    </>
   );
 }
 
@@ -442,6 +486,57 @@ function EditClientDialog({ client, open, onOpenChange }: { client: Client; open
     return map;
   });
 
+  // Reset all form state when a different client is opened
+  useEffect(() => {
+    setEditTab("personal");
+    setBillingSameAsService(client.billingSameAsService ?? true);
+    setClientPhones(
+      client.phones?.length > 0
+        ? client.phones
+        : client.primaryPhone
+          ? [{ phone: client.primaryPhone, type: "cell" as PhoneType, isPrimary: true }]
+          : [{ phone: "", type: "cell" as PhoneType, isPrimary: true }]
+    );
+    setForm({
+      displayName: client.displayName,
+      firstName: client.firstName ?? "",
+      lastName: client.lastName ?? "",
+      primaryPhone: client.primaryPhone ?? "",
+      primaryEmail: client.primaryEmail ?? "",
+      serviceAddress: client.serviceAddress ?? "",
+      serviceCity: client.serviceCity ?? "",
+      serviceState: client.serviceState ?? "",
+      serviceZip: client.serviceZip ?? "",
+      billingAddress: client.billingAddress ?? "",
+      billingCity: client.billingCity ?? "",
+      billingState: client.billingState ?? "",
+      billingZip: client.billingZip ?? "",
+      billingEmail: client.billingEmail ?? "",
+      source: client.source ?? "",
+      referredBy: client.referredBy ?? "",
+      paymentMethod: client.defaultPaymentMethod ?? client.paymentMethod ?? "",
+      notesToCrew: client.notesToCrew ?? "",
+      invoiceFrequency: client.invoiceFrequency,
+      defaultTaxRateBps: client.defaultTaxRateBps,
+      defaultTerms: client.defaultTerms,
+      invoiceDelivery: client.invoiceDelivery ?? "email",
+      accountType: client.accountType,
+      priority: client.priority ?? "normal",
+      clientSince: client.clientSince ?? "",
+      isTaxable: client.isTaxable,
+      doNotMarket: client.doNotMarket,
+      officeNotes: client.officeNotes ?? "",
+      turfSqft: client.turfSqft != null ? String(client.turfSqft) : "",
+      mulchBedSqft: client.mulchBedSqft != null ? String(client.mulchBedSqft) : "",
+      grossSqft: client.grossSqft != null ? String(client.grossSqft) : "",
+      linearFtPerimeter: client.linearFtPerimeter != null ? String(client.linearFtPerimeter) : "",
+      linearFtEdging: client.linearFtEdging != null ? String(client.linearFtEdging) : "",
+      yardsOfMulch: client.yardsOfMulch != null ? String(client.yardsOfMulch) : "",
+      gateCode: client.gateCode ?? "",
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [client.id]);
+
   function patch(k: keyof typeof form, v: string | number | boolean) {
     setForm((p) => ({ ...p, [k]: v }));
   }
@@ -554,10 +649,9 @@ function EditClientDialog({ client, open, onOpenChange }: { client: Client; open
                 <div className="space-y-2">
                   {clientPhones.map((p, idx) => (
                     <div key={idx} className="flex items-center gap-2">
-                      <Input
-                        type="tel"
+                      <PhoneInput
                         value={p.phone}
-                        onChange={(e) => patchClientPhone(idx, "phone", e.target.value)}
+                        onChange={(v) => patchClientPhone(idx, "phone", v)}
                         placeholder="Phone number"
                         className="flex-1"
                       />
@@ -921,8 +1015,22 @@ const PHONE_TYPES: { value: PhoneType; label: string }[] = [
   { value: "other", label: "Other" },
 ];
 
-function AddContactDialog({ clientId, open, onOpenChange }: { clientId: string; open: boolean; onOpenChange: (o: boolean) => void }) {
-  const { mutateAsync: addContact, isPending } = useAddClientContact();
+function ContactDialog({
+  clientId,
+  open,
+  onOpenChange,
+  contact,
+}: {
+  clientId: string;
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+  contact?: ClientContact | null;
+}) {
+  const isEditing = !!contact;
+  const { mutateAsync: addContact, isPending: isAdding } = useAddClientContact();
+  const { mutateAsync: updateContact, isPending: isUpdating } = useUpdateClientContact();
+  const { mutateAsync: deleteContact, isPending: isDeleting } = useDeleteClientContact();
+  const isPending = isAdding || isUpdating;
   const [firstName, setFirstName]   = useState("");
   const [lastName, setLastName]     = useState("");
   const [contactType, setContactType] = useState("");
@@ -931,6 +1039,30 @@ function AddContactDialog({ clientId, open, onOpenChange }: { clientId: string; 
   const [okToEmail, setOkToEmail]   = useState(false);
   const [notes, setNotes]           = useState("");
   const [phones, setPhones]         = useState<ContactPhone[]>([{ phone: "", type: "cell", isPrimary: true }]);
+
+  useEffect(() => {
+    if (!open) return;
+    if (contact) {
+      setFirstName(contact.firstName ?? "");
+      setLastName(contact.lastName ?? "");
+      setContactType(contact.contactType ?? "");
+      setEmail(contact.email ?? "");
+      setIsPrimary(contact.isPrimary ?? false);
+      setOkToEmail(contact.okToEmail ?? false);
+      setNotes(contact.notes ?? "");
+      setPhones(
+        contact.phones?.length
+          ? contact.phones
+          : contact.phone
+            ? [{ phone: contact.phone, type: (contact.phoneType as PhoneType) ?? "cell", isPrimary: true }]
+            : [{ phone: "", type: "cell", isPrimary: true }]
+      );
+    } else {
+      setFirstName(""); setLastName(""); setContactType(""); setEmail("");
+      setIsPrimary(false); setOkToEmail(false); setNotes("");
+      setPhones([{ phone: "", type: "cell", isPrimary: true }]);
+    }
+  }, [open, contact]);
 
   function addPhone() {
     setPhones((prev) => [...prev, { phone: "", type: "cell", isPrimary: false }]);
@@ -964,31 +1096,44 @@ function AddContactDialog({ clientId, open, onOpenChange }: { clientId: string; 
   async function handleSave() {
     if (!firstName.trim()) { toast.error("First name is required"); return; }
     const validPhones = phones.filter((p) => p.phone.trim());
+    const payload = {
+      firstName: firstName.trim(),
+      lastName: lastName.trim() || null,
+      contactType: contactType || null,
+      email: email.trim() || null,
+      phones: validPhones,
+      phone: validPhones[0]?.phone ?? null,
+      phoneType: validPhones[0]?.type ?? null,
+      isPrimary,
+      okToEmail,
+      notes: notes.trim() || null,
+    };
     try {
-      await addContact({
-        clientId,
-        contact: {
-          firstName: firstName.trim(),
-          lastName: lastName.trim() || null,
-          contactType: contactType || null,
-          email: email.trim() || null,
-          phones: validPhones,
-          phone: validPhones[0]?.phone ?? null,
-          phoneType: validPhones[0]?.type ?? null,
-          isPrimary,
-          okToEmail,
-          notes: notes.trim() || null,
-        },
-      });
-      toast.success("Contact added");
+      if (isEditing && contact) {
+        await updateContact({ id: contact.id, clientId, contact: payload });
+        toast.success("Contact updated");
+      } else {
+        await addContact({ clientId, contact: payload });
+        toast.success("Contact added");
+      }
       handleClose();
-    } catch { toast.error("Failed to add contact"); }
+    } catch { toast.error(isEditing ? "Failed to update contact" : "Failed to add contact"); }
+  }
+
+  async function handleDelete() {
+    if (!contact) return;
+    if (!confirm(`Remove ${contact.firstName}${contact.lastName ? ` ${contact.lastName}` : ""} as a contact?`)) return;
+    try {
+      await deleteContact({ id: contact.id, clientId });
+      toast.success("Contact removed");
+      handleClose();
+    } catch { toast.error("Failed to remove contact"); }
   }
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="max-w-md">
-        <DialogHeader><DialogTitle>Add Contact</DialogTitle></DialogHeader>
+        <DialogHeader><DialogTitle>{isEditing ? "Edit Contact" : "Add Contact"}</DialogTitle></DialogHeader>
         <div className="grid gap-3 py-1">
           <div className="grid grid-cols-2 gap-3">
             <div className="flex flex-col gap-1.5">
@@ -1031,10 +1176,9 @@ function AddContactDialog({ clientId, open, onOpenChange }: { clientId: string; 
             <div className="space-y-2">
               {phones.map((p, idx) => (
                 <div key={idx} className="flex items-center gap-2">
-                  <Input
-                    type="tel"
+                  <PhoneInput
                     value={p.phone}
-                    onChange={(e) => patchPhone(idx, "phone", e.target.value)}
+                    onChange={(v) => patchPhone(idx, "phone", v)}
                     placeholder="Phone number"
                     className="flex-1"
                   />
@@ -1083,9 +1227,16 @@ function AddContactDialog({ clientId, open, onOpenChange }: { clientId: string; 
             </label>
           </div>
         </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={handleClose}>Cancel</Button>
-          <Button onClick={handleSave} disabled={isPending}>{isPending ? "Saving…" : "Save"}</Button>
+        <DialogFooter className={isEditing ? "sm:justify-between" : undefined}>
+          {isEditing && (
+            <Button variant="ghost" className="text-red-500 hover:text-red-600 hover:bg-red-50" onClick={handleDelete} disabled={isDeleting}>
+              {isDeleting ? "Removing…" : "Remove Contact"}
+            </Button>
+          )}
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={handleClose}>Cancel</Button>
+            <Button onClick={handleSave} disabled={isPending}>{isPending ? "Saving…" : "Save"}</Button>
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -1267,6 +1418,10 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
   const [selectedEstimateId, setSelectedEstimateId] = useState<string | null>(null);
   const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null);
   const [selectedPaymentId, setSelectedPaymentId] = useState<string | null>(null);
+  const [addPaymentOpen, setAddPaymentOpen] = useState(false);
+  const [addInvoiceOpen, setAddInvoiceOpen] = useState(false);
+  const [showAllAccounting, setShowAllAccounting] = useState(false);
+  const [allAccountingOpen, setAllAccountingOpen] = useState(false);
 
   const { data: allJobs } = useClientJobs(clientId);
   const updateJobStatus = useUpdateJobStatus();
@@ -1301,8 +1456,9 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
       amountCents: pmt.amountCents,
     })),
   ]
-    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-    .slice(0, 15);
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  const ACCOUNTING_PAGE = 15;
+  const accountingRowsVisible = accountingRows.slice(0, ACCOUNTING_PAGE);
 
   const openEstimates = (estimates ?? []).filter(
     (e) => e.stage !== "won" && e.stage !== "lost"
@@ -1529,53 +1685,67 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
       {/* Middle — Accounting */}
       <div className="flex flex-col bg-white">
         <div className="flex items-center justify-between bg-[#4a4a4a] px-4 py-2">
-          <span className="font-semibold text-sm text-white">Accounting</span>
-          <Button variant="ghost" size="sm" className="h-6 px-2 text-xs text-white/80 hover:text-white hover:bg-white/10">
-            <Plus className="mr-0.5 h-3 w-3" /> Add a Transaction
-          </Button>
+          <div className="flex items-center gap-1.5">
+            <span className="font-semibold text-sm text-white">Accounting</span>
+            <button
+              className="text-[11px] text-white/70 hover:text-white"
+              onClick={() => setAllAccountingOpen(true)}
+            >
+              All
+            </button>
+          </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="sm" className="h-6 px-2 text-xs text-white/80 hover:text-white hover:bg-white/10">
+                <Plus className="mr-0.5 h-3 w-3" /> Add a Transaction
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-44">
+              <DropdownMenuItem onSelect={() => setAddInvoiceOpen(true)}>Invoice</DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => setAddPaymentOpen(true)}>Payment</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
 
-        <div className="divide-y">
+        <div className="divide-y overflow-y-auto">
           {accountingRows.length === 0 ? (
             <p className="px-4 py-6 text-xs text-slate-400 text-center">No transactions</p>
           ) : (
-            accountingRows.map((row) =>
-              row.kind === "invoice" ? (
-                <div key={`inv-${row.id}`} className="border-l-4 border-l-yellow-400 px-4 py-3 hover:bg-slate-50 cursor-pointer"
-                  onClick={() => setSelectedInvoiceId(row.id)}>
-                  <div className="flex items-start justify-between gap-2">
-                    <p className="text-xs font-semibold text-slate-800">
-                      Invoice #{row.invoiceNumber}
-                    </p>
-                    <p className="shrink-0 text-[10px] text-slate-400">
-                      {new Date(row.date).toLocaleDateString()}
-                    </p>
+            <>
+              {accountingRowsVisible.map((row) => {
+                const pmt = row.kind === "payment" ? (payments ?? []).find((p) => p.id === row.id) : null;
+                return row.kind === "invoice" ? (
+                  <div key={`inv-${row.id}`} className="border-l-4 border-l-yellow-400 px-4 py-3 hover:bg-slate-50 cursor-pointer"
+                    onClick={() => setSelectedInvoiceId(row.id)}>
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="text-xs font-semibold text-slate-800">Invoice #{row.invoiceNumber}</p>
+                      <p className="shrink-0 text-[10px] text-slate-400">{new Date(row.date + "T12:00:00").toLocaleDateString()}</p>
+                    </div>
+                    <div className="mt-0.5 flex gap-3 text-xs text-slate-500">
+                      <span>Amt: {formatCurrency(row.totalCents)}</span>
+                      <span className={row.balanceCents > 0 ? "font-medium text-red-500" : "text-slate-400"}>
+                        Bal: {formatCurrency(row.balanceCents)}
+                      </span>
+                    </div>
                   </div>
-                  <div className="mt-0.5 flex gap-3 text-xs text-slate-500">
-                    <span>Amt: {formatCurrency(row.totalCents)}</span>
-                    <span className={row.balanceCents > 0 ? "font-medium text-red-500" : "text-slate-400"}>
-                      Bal: {formatCurrency(row.balanceCents)}
-                    </span>
-                  </div>
-                </div>
-              ) : (
-                <button
-                  key={`pmt-${row.id}`}
-                  onClick={() => setSelectedPaymentId(row.id)}
-                  className="w-full text-left border-l-4 border-l-green-400 px-4 py-3 hover:bg-green-50 transition-colors"
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <p className="text-xs font-semibold text-slate-800">Payment</p>
-                    <p className="shrink-0 text-[10px] text-slate-400">
-                      {new Date(row.date).toLocaleDateString()}
-                    </p>
-                  </div>
-                  <p className="mt-0.5 text-xs font-medium text-green-600">
-                    ({formatCurrency(row.amountCents)})
-                  </p>
-                </button>
-              )
-            )
+                ) : (
+                  <button
+                    key={`pmt-${row.id}`}
+                    onClick={() => setSelectedPaymentId(row.id)}
+                    className="w-full text-left border-l-4 border-l-green-400 px-4 py-3 hover:bg-green-50 transition-colors"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="text-xs font-semibold text-slate-800">Payment{pmt?.method ? ` · ${pmt.method}` : ""}</p>
+                      <p className="shrink-0 text-[10px] text-slate-400">{new Date(row.date + "T12:00:00").toLocaleDateString()}</p>
+                    </div>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <p className="text-xs font-medium text-green-600">({formatCurrency(row.amountCents)})</p>
+                      {pmt?.reference && <p className="text-[10px] text-slate-400">#{pmt.reference}</p>}
+                    </div>
+                  </button>
+                );
+              })}
+            </>
           )}
         </div>
       </div>
@@ -1704,6 +1874,25 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
       onOpenChange={setNewContractOpen}
       clientId={clientId}
     />
+    <AddPaymentDialog
+      open={addPaymentOpen}
+      onOpenChange={setAddPaymentOpen}
+      defaultClientId={clientId}
+    />
+    <NewInvoiceSheet
+      open={addInvoiceOpen}
+      onClose={() => setAddInvoiceOpen(false)}
+      defaultClientId={clientId}
+    />
+    {allAccountingOpen && (
+      <AllAccountingModal
+        invoices={invoices ?? []}
+        payments={payments ?? []}
+        onClose={() => setAllAccountingOpen(false)}
+        onOpenInvoice={(id) => { setAllAccountingOpen(false); setSelectedInvoiceId(id); }}
+        onOpenPayment={(id) => { setAllAccountingOpen(false); setSelectedPaymentId(id); }}
+      />
+    )}
     {visitsModal && (
       <JobVisitsModal
         job={visitsModal.job}
@@ -1746,6 +1935,15 @@ function JobVisitsModal({
 }) {
   const isWaitingList = job.jobType === "waiting_list";
   const { data: visits = [], isLoading } = useJobVisits(isWaitingList ? "" : job.id);
+  const { data: allServices = [] } = useAllCRMServices();
+  const serviceCodeMap = useMemo(() => {
+    const m: Record<string, string> = {};
+    allServices.forEach((s) => { if (s.id && s.code) m[s.id] = s.code; });
+    return m;
+  }, [allServices]);
+  const serviceLabel = useMemo(() => {
+    return (job.services ?? []).map((s) => serviceCodeMap[s.serviceId ?? ""] ?? s.serviceName).join(", ") || jobName;
+  }, [job.services, serviceCodeMap, jobName]);
   const today = new Date().toISOString().slice(0, 10);
 
   const filtered = visits.filter((v: CRMJobVisit) => {
@@ -1792,7 +1990,7 @@ function JobVisitsModal({
                 <tr>
                   <th className="px-4 py-2 text-left font-medium w-6"></th>
                   <th className="px-4 py-2 text-left font-medium">Date of Service</th>
-                  <th className="px-4 py-2 text-left font-medium">Description</th>
+                  <th className="px-4 py-2 text-left font-medium">Service</th>
                   <th className="px-4 py-2 text-left font-medium">Assigned To</th>
                   {mode === "history" && <th className="px-4 py-2 text-right font-medium">Men</th>}
                   <th className="px-4 py-2 text-right font-medium">
@@ -1846,7 +2044,7 @@ function JobVisitsModal({
                         )}
                       </td>
                       <td className="px-4 py-2.5 text-neutral-700">{dateStr}</td>
-                      <td className="px-4 py-2.5 text-neutral-700">{v.invoiceDescription ?? jobName}</td>
+                      <td className="px-4 py-2.5 text-neutral-700">{serviceLabel}</td>
                       <td className="px-4 py-2.5 text-neutral-500">{v.crewName ?? "—"}</td>
                       {mode === "history" && (
                         <td className="px-4 py-2.5 text-right text-neutral-700">{v.menCount}</td>
@@ -1879,6 +2077,223 @@ function JobVisitsModal({
   );
 }
 
+function AllContactsModal({
+  contacts,
+  onClose,
+  onOpenContact,
+  onAddContact,
+}: {
+  contacts: ClientContact[];
+  onClose: () => void;
+  onOpenContact: (c: ClientContact) => void;
+  onAddContact: () => void;
+}) {
+  const [search, setSearch] = useState("");
+
+  const filtered = contacts.filter((c) => {
+    if (!search.trim()) return true;
+    const q = search.toLowerCase();
+    return (
+      `${c.firstName} ${c.lastName ?? ""}`.toLowerCase().includes(q) ||
+      (c.email ?? "").toLowerCase().includes(q) ||
+      (c.contactType ?? "").toLowerCase().includes(q) ||
+      (c.phone ?? "").includes(q)
+    );
+  });
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+      <div className="flex flex-col bg-white rounded-lg shadow-2xl w-[700px] max-h-[80vh]">
+        <div className="flex items-center justify-between border-b px-6 py-3">
+          <h2 className="text-base font-semibold text-neutral-800">All Contacts</h2>
+          <div className="flex items-center gap-3">
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search name, email, type…"
+              className="text-xs border border-neutral-200 rounded px-2.5 py-1.5 w-56 focus:outline-none focus:ring-1 focus:ring-neutral-400"
+            />
+            <Button variant="outline" size="sm" className="h-7 px-2 text-xs" onClick={onAddContact}>
+              <Plus className="mr-1 h-3 w-3" /> Add Contact
+            </Button>
+            <button onClick={onClose} className="text-neutral-400 hover:text-neutral-600">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+
+        <div className="overflow-auto flex-1">
+          {filtered.length === 0 ? (
+            <div className="p-6 text-sm text-neutral-400 text-center">No contacts found.</div>
+          ) : (
+            <table className="w-full text-xs">
+              <thead className="sticky top-0 bg-neutral-600 text-white">
+                <tr>
+                  <th className="px-4 py-2 text-left font-medium">Name</th>
+                  <th className="px-4 py-2 text-left font-medium">Type</th>
+                  <th className="px-4 py-2 text-left font-medium">Phone</th>
+                  <th className="px-4 py-2 text-left font-medium">Email</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {filtered.map((c) => (
+                  <tr
+                    key={c.id}
+                    className="cursor-pointer hover:bg-neutral-50"
+                    onClick={() => onOpenContact(c)}
+                  >
+                    <td className="px-4 py-2.5 font-medium text-neutral-800">
+                      {c.firstName} {c.lastName}
+                      {c.isPrimary && (
+                        <Badge variant="secondary" className="ml-1.5 text-[9px] h-4 px-1.5">Primary</Badge>
+                      )}
+                    </td>
+                    <td className="px-4 py-2.5 text-neutral-500 capitalize">{c.contactType ?? "—"}</td>
+                    <td className="px-4 py-2.5 text-neutral-600">
+                      {(c.phones?.length > 0 ? c.phones : c.phone ? [{ phone: c.phone, type: c.phoneType ?? "cell", isPrimary: true }] : [])
+                        .map((p) => p.phone).join(", ") || "—"}
+                    </td>
+                    <td className="px-4 py-2.5 text-neutral-600">{c.email ?? "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+
+        <div className="border-t px-6 py-2 text-xs text-neutral-400">
+          {filtered.length} contact{filtered.length !== 1 ? "s" : ""}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AllAccountingModal({
+  invoices,
+  payments,
+  onClose,
+  onOpenInvoice,
+  onOpenPayment,
+}: {
+  invoices: CRMInvoice[];
+  payments: CRMPayment[];
+  onClose: () => void;
+  onOpenInvoice: (id: string) => void;
+  onOpenPayment: (id: string) => void;
+}) {
+  const [search, setSearch] = useState("");
+
+  type Row =
+    | { kind: "invoice"; id: string; invoiceNumber: number; date: string; totalCents: number; balanceCents: number; status: string }
+    | { kind: "payment"; id: string; date: string; amountCents: number; method: string; reference: string | null };
+
+  const rows: Row[] = [
+    ...invoices.map((inv) => ({
+      kind: "invoice" as const,
+      id: inv.id,
+      invoiceNumber: inv.invoiceNumber,
+      date: inv.invoiceDate,
+      totalCents: inv.totalCents,
+      balanceCents: inv.balanceCents,
+      status: inv.status,
+    })),
+    ...payments.map((pmt) => ({
+      kind: "payment" as const,
+      id: pmt.id,
+      date: pmt.paymentDate,
+      amountCents: pmt.amountCents,
+      method: pmt.method,
+      reference: pmt.reference,
+    })),
+  ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+  const filtered = rows.filter((r) => {
+    if (!search.trim()) return true;
+    const q = search.toLowerCase();
+    if (r.kind === "invoice") return String(r.invoiceNumber).includes(q) || r.status.includes(q);
+    return r.method.toLowerCase().includes(q) || (r.reference ?? "").toLowerCase().includes(q);
+  });
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+      <div className="flex flex-col bg-white rounded-lg shadow-2xl w-[900px] max-h-[80vh]">
+        <div className="flex items-center justify-between border-b px-6 py-3">
+          <h2 className="text-base font-semibold text-neutral-800">All Accounting</h2>
+          <div className="flex items-center gap-3">
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search invoice #, method, reference…"
+              className="text-xs border border-neutral-200 rounded px-2.5 py-1.5 w-56 focus:outline-none focus:ring-1 focus:ring-neutral-400"
+            />
+            <button onClick={onClose} className="text-neutral-400 hover:text-neutral-600">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+
+        <div className="overflow-auto flex-1">
+          {filtered.length === 0 ? (
+            <div className="p-6 text-sm text-neutral-400 text-center">No transactions found.</div>
+          ) : (
+            <table className="w-full text-xs">
+              <thead className="sticky top-0 bg-neutral-600 text-white">
+                <tr>
+                  <th className="px-4 py-2 text-left font-medium">Date</th>
+                  <th className="px-4 py-2 text-left font-medium">Type</th>
+                  <th className="px-4 py-2 text-left font-medium">Details</th>
+                  <th className="px-4 py-2 text-right font-medium">Amount</th>
+                  <th className="px-4 py-2 text-right font-medium">Balance</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {filtered.map((row) =>
+                  row.kind === "invoice" ? (
+                    <tr
+                      key={`inv-${row.id}`}
+                      className="cursor-pointer hover:bg-neutral-50 border-l-4 border-l-yellow-400"
+                      onClick={() => onOpenInvoice(row.id)}
+                    >
+                      <td className="px-4 py-2.5 text-neutral-700">{new Date(row.date + "T12:00:00").toLocaleDateString()}</td>
+                      <td className="px-4 py-2.5 text-neutral-500">Invoice</td>
+                      <td className="px-4 py-2.5 font-medium text-neutral-800">#{row.invoiceNumber}</td>
+                      <td className="px-4 py-2.5 text-right text-neutral-800">{formatCurrency(row.totalCents)}</td>
+                      <td className={`px-4 py-2.5 text-right font-medium ${row.balanceCents > 0 ? "text-red-500" : "text-neutral-400"}`}>
+                        {formatCurrency(row.balanceCents)}
+                      </td>
+                    </tr>
+                  ) : (
+                    <tr
+                      key={`pmt-${row.id}`}
+                      className="cursor-pointer hover:bg-neutral-50 border-l-4 border-l-green-400"
+                      onClick={() => onOpenPayment(row.id)}
+                    >
+                      <td className="px-4 py-2.5 text-neutral-700">{new Date(row.date + "T12:00:00").toLocaleDateString()}</td>
+                      <td className="px-4 py-2.5 text-neutral-500">Payment</td>
+                      <td className="px-4 py-2.5 text-neutral-600">
+                        {row.method}{row.reference ? ` · #${row.reference}` : ""}
+                      </td>
+                      <td className="px-4 py-2.5 text-right font-medium text-green-600">({formatCurrency(row.amountCents)})</td>
+                      <td className="px-4 py-2.5 text-right text-neutral-400">—</td>
+                    </tr>
+                  )
+                )}
+              </tbody>
+            </table>
+          )}
+        </div>
+
+        <div className="border-t px-6 py-2 text-xs text-neutral-400">
+          {filtered.length} transaction{filtered.length !== 1 ? "s" : ""}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ClientAllVisitsModal({
   clientId,
   mode,
@@ -1891,7 +2306,33 @@ function ClientAllVisitsModal({
   onOpenJob: (id: string) => void;
 }) {
   const { data: visits = [], isLoading } = useClientAllVisits(clientId);
+  const { data: allServices = [] } = useAllCRMServices();
+  const serviceCodeMap = useMemo(() => {
+    const byId: Record<string, string> = {};
+    const byName: Record<string, string> = {};
+    allServices.forEach((s) => {
+      if (s.code) {
+        if (s.id) byId[s.id] = s.code;
+        if (s.name) byName[s.name.toLowerCase()] = s.code;
+      }
+    });
+    return { byId, byName };
+  }, [allServices]);
+
+  function visitServiceLabel(v: CRMJobVisit): string {
+    const names = v.serviceNames ?? [];
+    const ids = v.serviceIds ?? [];
+    if (names.length === 0) return v.invoiceDescription ?? "—";
+    return names.map((name, i) => {
+      const id = ids[i];
+      return (id && serviceCodeMap.byId[id])
+        || serviceCodeMap.byName[name.toLowerCase()]
+        || name;
+    }).join(", ");
+  }
+
   const today = new Date().toISOString().slice(0, 10);
+  const [historySearch, setHistorySearch] = useState("");
 
   const filtered = visits
     .filter((v: CRMJobVisit) =>
@@ -1899,6 +2340,15 @@ function ClientAllVisitsModal({
         ? v.scheduledDate >= today && v.status !== "completed" && v.status !== "cancelled"
         : v.status === "completed" || v.scheduledDate < today
     )
+    .filter((v: CRMJobVisit) => {
+      if (!historySearch.trim()) return true;
+      const q = historySearch.toLowerCase();
+      return (
+        visitServiceLabel(v).toLowerCase().includes(q) ||
+        v.crewName?.toLowerCase().includes(q) ||
+        v.scheduledDate?.includes(q)
+      );
+    })
     .sort((a: CRMJobVisit, b: CRMJobVisit) =>
       mode === "upcoming"
         ? a.scheduledDate.localeCompare(b.scheduledDate)
@@ -1913,9 +2363,18 @@ function ClientAllVisitsModal({
         {/* Header */}
         <div className="flex items-center justify-between border-b px-6 py-3">
           <h2 className="text-base font-semibold text-neutral-800">{title}</h2>
-          <button onClick={onClose} className="text-neutral-400 hover:text-neutral-600">
-            <X className="h-4 w-4" />
-          </button>
+          <div className="flex items-center gap-3">
+              <input
+                type="text"
+                value={historySearch}
+                onChange={(e) => setHistorySearch(e.target.value)}
+                placeholder="Search service, crew, date…"
+                className="text-xs border border-neutral-200 rounded px-2.5 py-1.5 w-52 focus:outline-none focus:ring-1 focus:ring-neutral-400"
+              />
+            <button onClick={onClose} className="text-neutral-400 hover:text-neutral-600">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
         </div>
 
         {/* Table */}
@@ -1932,7 +2391,7 @@ function ClientAllVisitsModal({
                 <tr>
                   <th className="px-4 py-2 text-left font-medium w-6"></th>
                   <th className="px-4 py-2 text-left font-medium">Date of Service</th>
-                  <th className="px-4 py-2 text-left font-medium">Description</th>
+                  <th className="px-4 py-2 text-left font-medium">Service</th>
                   <th className="px-4 py-2 text-left font-medium">Assigned To</th>
                   {mode === "history" && <th className="px-4 py-2 text-right font-medium">Men</th>}
                   <th className="px-4 py-2 text-right font-medium">{mode === "upcoming" ? "B. Hrs." : "Time"}</th>
@@ -1962,7 +2421,7 @@ function ClientAllVisitsModal({
                         )}
                       </td>
                       <td className="px-4 py-2.5 text-neutral-700">{fmtDate(v.scheduledDate)}</td>
-                      <td className="px-4 py-2.5 text-neutral-700">{v.invoiceDescription ?? "—"}</td>
+                      <td className="px-4 py-2.5 text-neutral-700">{visitServiceLabel(v)}</td>
                       <td className="px-4 py-2.5 text-neutral-500">{v.crewName ?? "—"}</td>
                       {mode === "history" && (
                         <td className="px-4 py-2.5 text-right text-neutral-700">{v.menCount}</td>
@@ -2011,11 +2470,14 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
   const [activeTab, setActiveTab] = useState("home");
   const [editOpen, setEditOpen] = useState(false);
   const [addContactOpen, setAddContactOpen] = useState(false);
+  const [editContact, setEditContact] = useState<ClientContact | null>(null);
+  const [allContactsOpen, setAllContactsOpen] = useState(false);
   const [addPropertyOpen, setAddPropertyOpen] = useState(false);
   const [linkParentOpen, setLinkParentOpen] = useState(false);
   const [newTicketOpen, setNewTicketOpen] = useState(false);
   const [openTicketId, setOpenTicketId] = useState<string | null>(null);
   const [cancelOpen, setCancelOpen] = useState(false);
+  const [portalInviteOpen, setPortalInviteOpen] = useState(false);
   const { mutateAsync: convertLead, isPending: converting } = useConvertLeadToClient();
   const { mutateAsync: activate } = useActivateClient();
   const { mutate: addTag } = useAddClientTag();
@@ -2066,18 +2528,16 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
                 <Home className="h-4 w-4 shrink-0 text-slate-400" />
               )}
               <h2 className="truncate text-lg font-semibold text-slate-900">{client.displayName}</h2>
-              <Badge className={`shrink-0 capitalize border ${STATUS_COLOR[client.status]}`}>
+              <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide border ${STATUS_COLOR[client.status]}`}>
                 {client.status}
-              </Badge>
-              {client.priority && client.priority !== "normal" && (
-                <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
-                  client.priority === "high" ? "bg-red-100 text-red-700" : "bg-slate-100 text-slate-500"
-                }`}>
+              </span>
+              {client.priority === "high" && (
+                <span className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide border bg-red-100 text-red-700 border-red-200">
                   {client.priority}
                 </span>
               )}
               {client.doNotMarket && (
-                <span className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide bg-orange-100 text-orange-700">
+                <span className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide border bg-orange-100 text-orange-700 border-orange-200">
                   Do Not Market
                 </span>
               )}
@@ -2228,6 +2688,9 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
                     </DropdownMenuItem>
                     <DropdownMenuItem onClick={() => setNewTicketOpen(true)}>
                       <Ticket className="mr-2 h-3.5 w-3.5" /> Add Ticket
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setPortalInviteOpen(true)}>
+                      <ExternalLink className="mr-2 h-3.5 w-3.5" /> Send Portal Invite
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem onClick={() => setActiveTab("audit")}>
@@ -2390,7 +2853,7 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
             </span>
             <div className="flex items-center gap-1">
               {(contacts ?? []).length > 0 && (
-                <button className="text-[10px] text-brand-600 hover:underline">All</button>
+                <button className="text-[10px] text-brand-600 hover:underline" onClick={() => setAllContactsOpen(true)}>All</button>
               )}
               <Button
                 variant="ghost"
@@ -2406,8 +2869,12 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
             <p className="text-xs text-slate-400 italic">No contacts yet</p>
           ) : (
             <div className="space-y-1.5">
-              {(contacts ?? []).slice(0, 4).map((c) => (
-                <div key={c.id} className="rounded border border-slate-200 bg-white px-2.5 py-1.5 text-xs shadow-sm">
+              {(contacts ?? []).slice(0, 2).map((c) => (
+                <div
+                  key={c.id}
+                  className="rounded border border-slate-200 bg-white px-2.5 py-1.5 text-xs shadow-sm cursor-pointer hover:border-brand-300 hover:bg-brand-50/30"
+                  onClick={() => setEditContact(c)}
+                >
                   <div className="flex items-center justify-between gap-1">
                     <span className="font-medium text-slate-700">
                       {c.firstName} {c.lastName}
@@ -2424,8 +2891,13 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
                   {c.email && <span className="block text-slate-400">{c.email}</span>}
                 </div>
               ))}
-              {(contacts ?? []).length > 4 && (
-                <p className="text-xs text-slate-400">+{(contacts ?? []).length - 4} more</p>
+              {(contacts ?? []).length > 2 && (
+                <button
+                  className="text-xs text-brand-600 hover:underline"
+                  onClick={() => setAllContactsOpen(true)}
+                >
+                  +{(contacts ?? []).length - 2} more
+                </button>
               )}
             </div>
           )}
@@ -2561,7 +3033,27 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
         onOpenChange={setCancelOpen}
       />
 
-      <AddContactDialog clientId={clientId} open={addContactOpen} onOpenChange={setAddContactOpen} />
+      <PortalInviteDialog
+        clientId={clientId}
+        defaultEmail={client.primaryEmail ?? ""}
+        open={portalInviteOpen}
+        onOpenChange={setPortalInviteOpen}
+      />
+      <ContactDialog clientId={clientId} open={addContactOpen} onOpenChange={setAddContactOpen} />
+      <ContactDialog
+        clientId={clientId}
+        open={!!editContact}
+        onOpenChange={(o) => { if (!o) setEditContact(null); }}
+        contact={editContact}
+      />
+      {allContactsOpen && (
+        <AllContactsModal
+          contacts={contacts ?? []}
+          onClose={() => setAllContactsOpen(false)}
+          onOpenContact={(c) => { setAllContactsOpen(false); setEditContact(c); }}
+          onAddContact={() => { setAllContactsOpen(false); setAddContactOpen(true); }}
+        />
+      )}
       <AddPropertyDialog clientId={clientId} open={addPropertyOpen} onOpenChange={setAddPropertyOpen} />
       <NewTicketDialog open={newTicketOpen} onOpenChange={setNewTicketOpen} defaultClientId={clientId} />
       <LinkParentDialog
@@ -2576,5 +3068,146 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
         onClose={() => setOpenTicketId(null)}
       />
     </div>
+  );
+}
+
+// ── PortalInviteDialog ────────────────────────────────────────────────────────
+
+function PortalInviteDialog({
+  clientId,
+  defaultEmail,
+  open,
+  onOpenChange,
+}: {
+  clientId: string;
+  defaultEmail: string;
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+}) {
+  const [email, setEmail] = useState(defaultEmail);
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<{ url: string } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [hasExisting, setHasExisting] = useState(false);
+  const [resetting, setResetting] = useState(false);
+
+  // Sync whenever the dialog opens or the client's email changes
+  useEffect(() => {
+    if (open) setEmail(defaultEmail);
+  }, [open, defaultEmail]);
+
+  async function sendInvite() {
+    setLoading(true);
+    setError(null);
+    setHasExisting(false);
+    const res = await fetch(`/api/crm/clients/${clientId}/portal-invite`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email }),
+    });
+    const data = await res.json();
+    setLoading(false);
+    if (res.status === 409) {
+      setHasExisting(true);
+      setError("This client already has a portal account.");
+    } else if (!res.ok) {
+      setError(data.error ?? "Failed to create invite");
+    } else {
+      setResult({ url: data.inviteUrl });
+    }
+  }
+
+  async function resetAndInvite() {
+    setResetting(true);
+    setError(null);
+    const res = await fetch(`/api/crm/clients/${clientId}/portal-reset`, { method: "DELETE" });
+    if (!res.ok) {
+      const d = await res.json();
+      setError(d.error ?? "Failed to reset portal access");
+      setResetting(false);
+      return;
+    }
+    setHasExisting(false);
+    setResetting(false);
+    sendInvite();
+  }
+
+  function handleClose() {
+    setResult(null);
+    setError(null);
+    setHasExisting(false);
+    onOpenChange(false);
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={handleClose}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <ExternalLink className="h-4 w-4" />
+            Send Client Portal Invite
+          </DialogTitle>
+        </DialogHeader>
+
+        {result ? (
+          <div className="flex flex-col gap-4 py-2">
+            <p className="text-sm text-slate-600">Invite created. Share this link with your client:</p>
+            <div className="flex items-center gap-2">
+              <input
+                readOnly
+                value={result.url}
+                className="flex-1 h-9 rounded-md border border-slate-200 bg-slate-50 px-3 text-xs font-mono text-slate-700"
+              />
+              <button
+                onClick={() => { navigator.clipboard.writeText(result.url); toast.success("Link copied"); }}
+                className="h-9 px-3 rounded-md bg-brand-500 text-white text-xs font-medium hover:bg-brand-600"
+              >
+                Copy
+              </button>
+            </div>
+            <p className="text-xs text-slate-400">Link expires in 7 days. Once accepted, the client can log in at /portal/login.</p>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-4 py-2">
+            <p className="text-sm text-slate-600">
+              An invite link will be generated. The client sets their password and gets access to view invoices, services, and estimates.
+            </p>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium text-slate-700">Client Email</label>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => { setEmail(e.target.value); setError(null); setHasExisting(false); }}
+                placeholder="client@example.com"
+                className="h-9 rounded-md border border-slate-200 px-3 text-sm outline-none focus:ring-2 focus:ring-brand-500"
+              />
+            </div>
+            {error && (
+              <div className="flex flex-col gap-2 bg-red-50 border border-red-200 rounded-md px-3 py-2">
+                <p className="text-sm text-red-600">{error}</p>
+                {hasExisting && (
+                  <button
+                    onClick={resetAndInvite}
+                    disabled={resetting}
+                    className="self-start text-xs font-medium text-red-700 underline hover:no-underline disabled:opacity-50"
+                  >
+                    {resetting ? "Resetting…" : "Revoke existing access and send new invite"}
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        <DialogFooter>
+          <Button variant="outline" onClick={handleClose}>Close</Button>
+          {!result && (
+            <Button onClick={sendInvite} disabled={loading || resetting || !email}>
+              {loading ? "Creating…" : "Generate Invite Link"}
+            </Button>
+          )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

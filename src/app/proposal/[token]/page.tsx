@@ -120,10 +120,24 @@ export default function ProposalPage() {
   const [error, setError] = useState<string | null>(null);
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [selectedTier, setSelectedTier] = useState<'basic' | 'standard' | 'premium'>('standard');
   const [acceptedByName, setAcceptedByName] = useState("");
   const [signatureData, setSignatureData] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [accepted, setAccepted] = useState(false);
+
+  // Deposit step state
+  const [depositStep, setDepositStep] = useState<'idle' | 'deposit' | 'done'>('idle');
+  const [depositMethod, setDepositMethod] = useState<'cash' | 'check' | 'ach' | 'credit_card' | 'other' | null>(null);
+  const [depositReference, setDepositReference] = useState("");
+  const [depositNotes, setDepositNotes] = useState("");
+  // Pending accept payload — held while deposit step is shown
+  const [pendingAcceptPayload, setPendingAcceptPayload] = useState<{
+    acceptedByName: string;
+    signatureData?: string;
+    acceptedLineItemIds?: string[];
+    selectedTier?: string;
+  } | null>(null);
 
   // Load proposal
   useEffect(() => {
@@ -148,38 +162,91 @@ export default function ProposalPage() {
     });
   }
 
-  // Live subtotal from selected items
-  const selectedTotal = proposal?.lineItems
-    .filter((li) => selectedIds.has(li.id))
-    .reduce((sum, li) => sum + li.totalCents, 0) ?? 0;
+  // When tiers enabled, filter items by selected tier (null = all tiers, or matching tier)
+  const visibleLineItems = proposal
+    ? proposal.tiersEnabled
+      ? proposal.lineItems.filter((li) => li.tier === null || li.tier === selectedTier)
+      : proposal.lineItems
+    : [];
+
+  // Live subtotal from visible items (tier-filtered) or selected items (checkbox mode)
+  const selectedTotal = proposal?.tiersEnabled
+    ? visibleLineItems.reduce((sum, li) => sum + li.totalCents, 0)
+    : (proposal?.lineItems
+        .filter((li) => selectedIds.has(li.id))
+        .reduce((sum, li) => sum + li.totalCents, 0) ?? 0);
 
   const taxAmount = proposal
     ? Math.round(selectedTotal * (proposal.taxRateBps / 10000))
     : 0;
 
-  async function handleAccept() {
-    if (!acceptedByName.trim()) return;
+  async function submitAccept(extraDepositFields?: {
+    depositMethod?: 'cash' | 'check' | 'ach' | 'credit_card' | 'other';
+    depositReference?: string;
+    depositNotes?: string;
+    depositAmount?: number;
+  }) {
+    const payload = pendingAcceptPayload ?? {
+      acceptedByName: acceptedByName.trim(),
+      signatureData: signatureData ?? undefined,
+      acceptedLineItemIds: proposal?.tiersEnabled ? undefined : Array.from(selectedIds),
+      selectedTier: proposal?.tiersEnabled ? selectedTier : undefined,
+    };
     setSubmitting(true);
     try {
       const res = await fetch(`/api/public/proposals/${token}/accept`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          acceptedByName: acceptedByName.trim(),
-          signatureData: signatureData ?? undefined,
-          acceptedLineItemIds: Array.from(selectedIds),
-        }),
+        body: JSON.stringify({ ...payload, ...extraDepositFields }),
       });
       if (!res.ok) {
-        const data = await res.json();
+        const data = await res.json() as { error?: string };
         throw new Error(data.error ?? "Failed to accept");
       }
+      setDepositStep('done');
       setAccepted(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
       setSubmitting(false);
     }
+  }
+
+  async function handleAccept() {
+    if (!acceptedByName.trim()) return;
+
+    // If deposit is required and not yet collected, show the deposit step
+    if (
+      proposal &&
+      proposal.depositRequiredCents > 0 &&
+      proposal.depositCollectedCents === 0 &&
+      depositStep === 'idle'
+    ) {
+      setPendingAcceptPayload({
+        acceptedByName: acceptedByName.trim(),
+        signatureData: signatureData ?? undefined,
+        acceptedLineItemIds: proposal.tiersEnabled ? undefined : Array.from(selectedIds),
+        selectedTier: proposal.tiersEnabled ? selectedTier : undefined,
+      });
+      setDepositStep('deposit');
+      return;
+    }
+
+    await submitAccept();
+  }
+
+  async function handleDepositSubmit() {
+    if (!depositMethod) return;
+    await submitAccept({
+      depositMethod,
+      depositReference: depositReference.trim() || undefined,
+      depositNotes: depositNotes.trim() || undefined,
+      depositAmount: proposal?.depositRequiredCents,
+    });
+  }
+
+  async function handleDepositSkip() {
+    await submitAccept();
   }
 
   // ── Loading / error states ──────────────────────────────────────────────────
@@ -267,42 +334,100 @@ export default function ProposalPage() {
         </div>
       )}
 
+      {/* Tier selector — only shown when tiersEnabled */}
+      {proposal.tiersEnabled && (
+        <div className="mb-6">
+          <p className="mb-3 text-sm font-semibold text-slate-700">Choose Your Package</p>
+          <div className="grid grid-cols-3 gap-3">
+            {(["basic", "standard", "premium"] as const).map((tier) => {
+              const label = proposal.tierLabels[tier];
+              const tierItems = proposal.lineItems.filter((li) => li.tier === null || li.tier === tier);
+              const tierTotal = tierItems.reduce((s, li) => s + li.totalCents, 0);
+              const isSelected = selectedTier === tier;
+              return (
+                <button
+                  key={tier}
+                  onClick={() => setSelectedTier(tier)}
+                  className={`rounded-lg border-2 p-4 text-left transition-all ${
+                    isSelected ? "shadow-md" : "border-slate-200 bg-white hover:border-slate-300"
+                  }`}
+                  style={isSelected ? { borderColor: brand, backgroundColor: brand + "08" } : {}}
+                >
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{label}</p>
+                  <p className="mt-1 text-lg font-bold text-slate-800">{cents(tierTotal)}</p>
+                  {isSelected && (
+                    <p className="mt-1 text-[10px] font-medium" style={{ color: brand }}>Selected ✓</p>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Line items */}
       <div className="mb-6 rounded-lg border bg-white shadow-sm overflow-hidden">
         <div className="px-4 py-3 border-b" style={{ backgroundColor: brand }}>
           <p className="text-sm font-semibold text-white">Services Included</p>
-          <p className="text-xs text-white/70">Check the services you&apos;d like to include</p>
+          {!proposal.tiersEnabled && (
+            <p className="text-xs text-white/70">Check the services you&apos;d like to include</p>
+          )}
         </div>
         <div className="divide-y">
-          {proposal.lineItems.map((li: ProposalLineItem) => (
-            <label
-              key={li.id}
-              className={`flex cursor-pointer items-start gap-3 px-4 py-3 transition-colors hover:bg-slate-50 ${selectedIds.has(li.id) ? "bg-green-50/50" : ""}`}
-            >
-              <input
-                type="checkbox"
-                checked={selectedIds.has(li.id)}
-                onChange={() => toggleItem(li.id)}
-                className="mt-0.5 h-4 w-4 rounded border-slate-300 cursor-pointer"
-                style={{ accentColor: brand }}
-              />
-              <div className="flex-1 min-w-0">
-                <p className="font-medium text-slate-800">{li.serviceName ?? "Service"}</p>
-                {li.estimateDesc && (
-                  <p
-                    className="mt-0.5 text-sm text-slate-500"
-                    dangerouslySetInnerHTML={{ __html: li.estimateDesc }}
-                  />
-                )}
-                <p className="mt-1 text-xs text-slate-400">
-                  {li.visits > 1 ? `${li.visits} visits × ` : ""}
-                  {li.qty > 1 ? `${li.qty.toLocaleString()} ${li.unitType ?? ""} × ` : ""}
-                  {cents(li.rateCents)}/visit
-                </p>
+          {visibleLineItems.map((li: ProposalLineItem) =>
+            proposal.tiersEnabled ? (
+              <div key={li.id} className="flex items-start gap-3 px-4 py-3">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <p className="font-medium text-slate-800">{li.serviceName ?? "Service"}</p>
+                    {li.tier === null && (
+                      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-500">Included in all</span>
+                    )}
+                  </div>
+                  {li.estimateDesc && (
+                    <p
+                      className="mt-0.5 text-sm text-slate-500"
+                      dangerouslySetInnerHTML={{ __html: li.estimateDesc }}
+                    />
+                  )}
+                  <p className="mt-1 text-xs text-slate-400">
+                    {li.visits > 1 ? `${li.visits} visits × ` : ""}
+                    {li.qty > 1 ? `${li.qty.toLocaleString()} ${li.unitType ?? ""} × ` : ""}
+                    {cents(li.rateCents)}/visit
+                  </p>
+                </div>
+                <p className="shrink-0 font-semibold text-slate-700">{cents(li.totalCents)}</p>
               </div>
-              <p className="shrink-0 font-semibold text-slate-700">{cents(li.totalCents)}</p>
-            </label>
-          ))}
+            ) : (
+              <label
+                key={li.id}
+                className={`flex cursor-pointer items-start gap-3 px-4 py-3 transition-colors hover:bg-slate-50 ${selectedIds.has(li.id) ? "bg-green-50/50" : ""}`}
+              >
+                <input
+                  type="checkbox"
+                  checked={selectedIds.has(li.id)}
+                  onChange={() => toggleItem(li.id)}
+                  className="mt-0.5 h-4 w-4 rounded border-slate-300 cursor-pointer"
+                  style={{ accentColor: brand }}
+                />
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium text-slate-800">{li.serviceName ?? "Service"}</p>
+                  {li.estimateDesc && (
+                    <p
+                      className="mt-0.5 text-sm text-slate-500"
+                      dangerouslySetInnerHTML={{ __html: li.estimateDesc }}
+                    />
+                  )}
+                  <p className="mt-1 text-xs text-slate-400">
+                    {li.visits > 1 ? `${li.visits} visits × ` : ""}
+                    {li.qty > 1 ? `${li.qty.toLocaleString()} ${li.unitType ?? ""} × ` : ""}
+                    {cents(li.rateCents)}/visit
+                  </p>
+                </div>
+                <p className="shrink-0 font-semibold text-slate-700">{cents(li.totalCents)}</p>
+              </label>
+            )
+          )}
         </div>
       </div>
 
@@ -338,7 +463,103 @@ export default function ProposalPage() {
         </div>
       )}
 
+      {/* Deposit step — shown instead of accept section when deposit is required */}
+      {depositStep === 'deposit' && proposal && (
+        <div className="rounded-lg border bg-white p-6 shadow-sm space-y-5">
+          <div>
+            <h2 className="text-lg font-bold text-slate-800">Deposit Required</h2>
+            <p className="text-sm text-slate-500 mt-1">
+              {cents(proposal.depositRequiredCents)} due to confirm your project
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Payment Method</Label>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+              {(["check", "cash", "ach", "credit_card", "other"] as const).map((method) => (
+                <label
+                  key={method}
+                  className={`flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2.5 text-sm transition-all ${
+                    depositMethod === method
+                      ? "border-2 font-medium"
+                      : "border-slate-200 bg-white hover:border-slate-300"
+                  }`}
+                  style={depositMethod === method ? { borderColor: brand, backgroundColor: brand + "08", color: brand } : {}}
+                >
+                  <input
+                    type="radio"
+                    name="depositMethod"
+                    value={method}
+                    checked={depositMethod === method}
+                    onChange={() => setDepositMethod(method)}
+                    className="sr-only"
+                  />
+                  {{
+                    check: "Check",
+                    cash: "Cash",
+                    ach: "ACH",
+                    credit_card: "Credit Card",
+                    other: "Other",
+                  }[method]}
+                </label>
+              ))}
+              {/* Stripe placeholder */}
+              <div className="flex cursor-not-allowed items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-400">
+                Pay with Card
+                <span className="ml-1 rounded bg-slate-200 px-1 py-0.5 text-[10px] text-slate-500">coming soon</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="deposit-reference">Reference # <span className="text-slate-400 font-normal">(optional)</span></Label>
+            <Input
+              id="deposit-reference"
+              value={depositReference}
+              onChange={(e) => setDepositReference(e.target.value)}
+              placeholder="Check number, transaction ID, etc."
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="deposit-notes">Notes <span className="text-slate-400 font-normal">(optional)</span></Label>
+            <Input
+              id="deposit-notes"
+              value={depositNotes}
+              onChange={(e) => setDepositNotes(e.target.value)}
+              placeholder="Any additional notes"
+            />
+          </div>
+
+          {error && <p className="text-sm text-red-600">{error}</p>}
+
+          <div className="flex gap-3">
+            <Button
+              className="flex-1 h-11 text-base font-semibold"
+              style={{ backgroundColor: brand, borderColor: brand }}
+              disabled={!depositMethod || submitting}
+              onClick={handleDepositSubmit}
+            >
+              {submitting ? (
+                <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Submitting…</>
+              ) : (
+                "Submit Deposit & Accept"
+              )}
+            </Button>
+            <Button
+              variant="outline"
+              className="h-11 px-5"
+              disabled={submitting}
+              onClick={handleDepositSkip}
+            >
+              Skip for now
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* Accept section */}
+      {depositStep === 'idle' && (
       <div className="rounded-lg border bg-white p-6 shadow-sm space-y-5">
         <div>
           <h2 className="text-lg font-bold text-slate-800">Accept This Proposal</h2>
@@ -369,7 +590,7 @@ export default function ProposalPage() {
         <Button
           className="w-full h-11 text-base font-semibold"
           style={{ backgroundColor: brand, borderColor: brand }}
-          disabled={!acceptedByName.trim() || submitting || selectedIds.size === 0}
+          disabled={!acceptedByName.trim() || submitting || (!proposal.tiersEnabled && selectedIds.size === 0)}
           onClick={handleAccept}
         >
           {submitting ? (
@@ -382,6 +603,7 @@ export default function ProposalPage() {
           This is a legally binding acceptance. A confirmation email will be sent to you.
         </p>
       </div>
+      )}
 
       {/* Footer */}
       <div className="mt-8 text-center text-xs text-slate-400">

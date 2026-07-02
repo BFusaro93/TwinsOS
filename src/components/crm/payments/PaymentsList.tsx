@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useMemo } from "react";
-import { usePayments, useRecordPayment, useInvoices } from "@/lib/hooks/use-invoices";
+import { useState, useMemo, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
+import { usePayments, useRecordPayment, useUpdatePayment, useRefundPayment, useInvoices } from "@/lib/hooks/use-invoices";
 import { useClients } from "@/lib/hooks/use-clients";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,7 +23,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { formatCurrency } from "@/lib/utils";
-import { Plus, RotateCcw, Search, X } from "lucide-react";
+import { Plus, RotateCcw, Search, X, ChevronDown } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { ColumnChooser } from "@/components/shared/ColumnChooser";
 import type { ColumnDef } from "@/components/shared/ColumnChooser";
@@ -65,36 +66,133 @@ interface InvoiceAllocation {
   amountCents: number;
 }
 
-function AddPaymentDialog({
+function ClientSearchField({
+  value,
+  onChange,
+  clients,
+}: {
+  value: string;
+  onChange: (id: string) => void;
+  clients: { id: string; displayName: string; billingAddress?: string | null }[];
+}) {
+  const [query, setQuery] = useState(() => clients.find((c) => c.id === value)?.displayName ?? "");
+  const [open, setOpen] = useState(false);
+
+  const filtered = open
+    ? (query.trim().length > 0
+        ? clients.filter((c) => c.displayName.toLowerCase().includes(query.toLowerCase()))
+        : clients
+      ).slice(0, 10)
+    : [];
+
+  function select(c: { id: string; displayName: string }) {
+    setQuery(c.displayName);
+    onChange(c.id);
+    setOpen(false);
+  }
+
+  return (
+    <div className="relative">
+      <div className="relative">
+        <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400 pointer-events-none" />
+        <Input
+          className="h-8 text-sm pl-8 pr-8"
+          value={query}
+          onChange={(e) => { setQuery(e.target.value); onChange(""); setOpen(true); }}
+          onFocus={() => setOpen(true)}
+          onBlur={() => setTimeout(() => setOpen(false), 160)}
+          placeholder="Search clients…"
+        />
+        <ChevronDown className="absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400 pointer-events-none" />
+      </div>
+      {open && filtered.length > 0 && (
+        <div className="absolute z-50 mt-1 w-full rounded-md border bg-white shadow-lg text-sm max-h-52 overflow-y-auto">
+          {filtered.map((c) => (
+            <button
+              key={c.id}
+              type="button"
+              className="w-full text-left px-3 py-2 hover:bg-slate-50"
+              onMouseDown={() => select(c)}
+            >
+              <span className="font-medium">{c.displayName}</span>
+              {c.billingAddress && (
+                <span className="ml-2 text-xs text-slate-400">{c.billingAddress}</span>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+import type { CRMPayment } from "@/types/crm-invoices";
+
+export function AddPaymentDialog({
   open,
   onOpenChange,
   defaultClientId,
+  payment,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   defaultClientId?: string;
+  payment?: CRMPayment | null;
 }) {
+  const isEdit = !!payment;
   const { data: clients } = useClients();
-  const { mutateAsync: record, isPending } = useRecordPayment();
+  const { mutateAsync: record, isPending: isRecording } = useRecordPayment();
+  const { mutateAsync: update, isPending: isUpdating } = useUpdatePayment();
+  const isPending = isRecording || isUpdating;
 
-  const [clientId, setClientId] = useState(defaultClientId ?? "");
-  const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split("T")[0]);
-  const [amount, setAmount] = useState("");
-  const [checkNumber, setCheckNumber] = useState("");
-  const [method, setMethod] = useState<string>("Check");
-  const [memo, setMemo] = useState("");
-  const [isPrepayment, setIsPrepayment] = useState(false);
+  function todayLocal() {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  }
+
+  const [clientId, setClientId] = useState(payment?.clientId ?? defaultClientId ?? "");
+  const [paymentDate, setPaymentDate] = useState(payment?.paymentDate ?? todayLocal());
+  const [amount, setAmount] = useState(payment ? (payment.amountCents / 100).toFixed(2) : "");
+  const [checkNumber, setCheckNumber] = useState(payment?.reference ?? "");
+  const [method, setMethod] = useState<string>(payment?.method ?? "Check");
+  const [memo, setMemo] = useState(payment?.memo ?? "");
+  const [isPrepayment, setIsPrepayment] = useState(payment?.isPrepayment ?? false);
   const [autoAllocate, setAutoAllocate] = useState(false);
   const [allocations, setAllocations] = useState<InvoiceAllocation[]>([]);
 
+  // sync state when payment prop changes (edit mode re-open)
+  useEffect(() => {
+    if (payment) {
+      setClientId(payment.clientId);
+      setPaymentDate(payment.paymentDate);
+      setAmount((payment.amountCents / 100).toFixed(2));
+      setCheckNumber(payment.reference ?? "");
+      setMethod(payment.method);
+      setMemo(payment.memo ?? "");
+      setIsPrepayment(payment.isPrepayment);
+    }
+  }, [payment?.id]);
+
   const { data: invoices } = useInvoices(clientId || undefined);
+
+  // In create mode: only show unpaid invoices.
+  // In edit mode: show all non-voided invoices (paid or unpaid, but must have totalCents > 0)
+  // so that any invoice previously allocated to this payment remains visible and editable.
+  const allocationInvoices = useMemo(() => {
+    const all = invoices ?? [];
+    if (isEdit) return all.filter((inv) => inv.status !== "void" && inv.totalCents > 0);
+    return all.filter((inv) => inv.status !== "paid" && inv.status !== "void" && inv.totalCents > 0);
+  }, [invoices, isEdit]);
+
   const openInvoices = useMemo(
     () => (invoices ?? []).filter((inv) => inv.status !== "paid" && inv.status !== "void"),
     [invoices]
   );
 
-  // derive account balance from open invoices
-  const accountBalanceCents = openInvoices.reduce((s, inv) => s + (inv.balanceCents ?? inv.totalCents), 0);
+  // derive account balance — only meaningful when a client is selected
+  const accountBalanceCents = clientId
+    ? openInvoices.reduce((s, inv) => s + (inv.balanceCents ?? inv.totalCents), 0)
+    : 0;
 
   const amountCents = Math.round(parseFloat(amount || "0") * 100);
   const amountApplied = allocations.reduce((s, a) => s + a.amountCents, 0);
@@ -106,26 +204,40 @@ function AddPaymentDialog({
     setAllocations([]);
   }
 
-  // initialise allocations when open invoices load
+  // initialise allocations when invoice list loads
   useMemo(() => {
     if (!clientId) return;
     setAllocations(
-      openInvoices.map((inv) => ({
-        invoiceId: inv.id,
-        invoiceNumber: inv.invoiceNumber,
-        balanceCents: inv.balanceCents ?? inv.totalCents,
-        totalCents: inv.totalCents,
-        invoiceDate: inv.invoiceDate,
-        payInFull: false,
-        amountCents: 0,
-      }))
+      allocationInvoices.map((inv) => {
+        // In edit mode, pre-fill the amount for the invoice this payment is linked to.
+        // For multi-invoice payments we don't store the split, so we use the invoice's
+        // amount_paid as the best approximation of what this payment contributed.
+        let prefilledCents = 0;
+        if (isEdit && payment) {
+          if (inv.id === payment.invoiceId) {
+            // primary linked invoice — pre-fill with min(payment amount, invoice total)
+            prefilledCents = Math.min(payment.amountCents, inv.totalCents);
+          } else if (inv.status === "paid" && inv.amountPaidCents) {
+            // other paid invoices — prefill with their paid amount as best guess
+            prefilledCents = inv.amountPaidCents;
+          }
+        }
+        const balCents = inv.balanceCents ?? inv.totalCents;
+        return {
+          invoiceId: inv.id,
+          invoiceNumber: inv.invoiceNumber,
+          balanceCents: balCents,
+          totalCents: inv.totalCents,
+          invoiceDate: inv.invoiceDate,
+          payInFull: prefilledCents > 0 && prefilledCents >= balCents,
+          amountCents: prefilledCents,
+        };
+      })
     );
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [openInvoices.length, clientId]);
+  }, [allocationInvoices.map(i => `${i.id}:${i.balanceCents}`).join(","), clientId]);
 
-  function handleAutoAllocate(checked: boolean) {
-    setAutoAllocate(checked);
-    if (!checked) return;
+  function runAllocation() {
     let remaining = amountCents;
     setAllocations((prev) =>
       prev.map((a) => {
@@ -136,8 +248,13 @@ function AddPaymentDialog({
     );
   }
 
+  function handleAutoAllocate(checked: boolean) {
+    setAutoAllocate(checked);
+    if (checked) runAllocation();
+  }
+
   function handleAllocateClick() {
-    handleAutoAllocate(true);
+    runAllocation();
   }
 
   function togglePayInFull(idx: number, checked: boolean) {
@@ -161,7 +278,7 @@ function AddPaymentDialog({
 
   function resetForm() {
     setClientId(defaultClientId ?? "");
-    setPaymentDate(new Date().toISOString().split("T")[0]);
+    setPaymentDate(todayLocal());
     setAmount("");
     setCheckNumber("");
     setMethod("Check");
@@ -176,26 +293,43 @@ function AddPaymentDialog({
       toast.error("Client and amount are required");
       return;
     }
-    const primaryAllocation = allocations.find((a) => a.amountCents > 0);
+    const activeAllocations = allocations
+      .filter((a) => a.amountCents > 0)
+      .map((a) => ({ invoiceId: a.invoiceId, amountCents: a.amountCents }));
     try {
-      await record({
-        invoiceId: primaryAllocation?.invoiceId,
-        clientId,
-        amountCents,
-        paymentDate,
-        method,
-        reference: checkNumber || undefined,
-        memo: memo || undefined,
-        isPrepayment,
-      });
-      toast.success("Payment recorded");
-      if (andNew) {
-        resetForm();
-      } else {
+      if (isEdit && payment) {
+        await update({
+          id: payment.id,
+          clientId,
+          amountCents,
+          paymentDate,
+          method,
+          reference: checkNumber || undefined,
+          memo: memo || undefined,
+          allocations: activeAllocations,
+        });
+        toast.success("Payment updated");
         onOpenChange(false);
-        resetForm();
+      } else {
+        await record({
+          clientId,
+          amountCents,
+          paymentDate,
+          method,
+          reference: checkNumber || undefined,
+          memo: memo || undefined,
+          isPrepayment,
+          allocations: activeAllocations,
+        });
+        toast.success("Payment recorded");
+        if (andNew) {
+          resetForm();
+        } else {
+          onOpenChange(false);
+          resetForm();
+        }
       }
-    } catch { toast.error("Failed to record payment"); }
+    } catch { toast.error(isEdit ? "Failed to update payment" : "Failed to record payment"); }
   }
 
   const selectedClient = (clients ?? []).find((c) => c.id === clientId);
@@ -204,7 +338,7 @@ function AddPaymentDialog({
     <Dialog open={open} onOpenChange={(o) => { if (!o) resetForm(); onOpenChange(o); }}>
       <DialogContent className="max-w-3xl p-0 gap-0">
         <DialogHeader className="px-6 py-4 border-b">
-          <DialogTitle className="text-lg font-semibold">Add Payment</DialogTitle>
+          <DialogTitle className="text-lg font-semibold">{isEdit ? "Edit Payment" : "Add Payment"}</DialogTitle>
         </DialogHeader>
 
         <div className="flex gap-0">
@@ -217,7 +351,7 @@ function AddPaymentDialog({
 
             <div className="grid grid-cols-[120px_1fr] items-center gap-x-4 gap-y-3">
               <Label className="text-right text-sm font-medium">Client</Label>
-              {defaultClientId && selectedClient ? (
+              {(defaultClientId || isEdit) && selectedClient ? (
                 <div className="text-sm text-slate-700">
                   {selectedClient.displayName}
                   {selectedClient.billingAddress && (
@@ -225,19 +359,11 @@ function AddPaymentDialog({
                   )}
                 </div>
               ) : (
-                <Select value={clientId} onValueChange={handleClientChange}>
-                  <SelectTrigger className="h-8 text-sm">
-                    <SelectValue placeholder="Select client…" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {(clients ?? []).map((c) => (
-                      <SelectItem key={c.id} value={c.id}>
-                        {c.displayName}
-                        {c.billingAddress ? ` : ${c.billingAddress}` : ""}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <ClientSearchField
+                  value={clientId}
+                  onChange={handleClientChange}
+                  clients={clients ?? []}
+                />
               )}
 
               <Label className="text-right text-sm font-medium">Date</Label>
@@ -308,8 +434,9 @@ function AddPaymentDialog({
                 onChange={(e) => setMemo(e.target.value)}
               />
 
-              <Label className="text-right text-sm font-medium">Is a pre-payment?</Label>
+              <Label htmlFor="prepayment-check" className="text-right text-sm font-medium cursor-pointer whitespace-nowrap">Is a pre-payment?</Label>
               <Checkbox
+                id="prepayment-check"
                 checked={isPrepayment}
                 onCheckedChange={(c) => setIsPrepayment(!!c)}
               />
@@ -339,7 +466,7 @@ function AddPaymentDialog({
         {clientId && (
           <div className="border-t">
             <div className="mx-6 mt-4 mb-1 rounded bg-[#4a4a4a] px-3 py-1.5 text-sm font-semibold text-white flex items-center justify-between">
-              <span>({openInvoices.length} of {openInvoices.length} in 1 page)</span>
+              <span>({allocationInvoices.length} of {allocationInvoices.length} in 1 page)</span>
               <span className="text-xs text-slate-300">Page Size: 30</span>
             </div>
 
@@ -348,17 +475,18 @@ function AddPaymentDialog({
                 <thead>
                   <tr className="bg-[#4a4a4a] text-white">
                     <th className="w-28 px-3 py-2 text-left font-medium">Unpaid Invoice</th>
-                    <th className="px-3 py-2 text-left font-medium">Pay in full</th>
+                    <th className="w-12 px-3 py-2 text-center font-medium">Pay in full</th>
+                    <th className="w-24 px-3 py-2 text-left font-medium">Amount</th>
                     <th className="px-3 py-2 text-right font-medium">Balance</th>
                     <th className="px-3 py-2 text-right font-medium">Date</th>
                     <th className="px-3 py-2 text-left font-medium">Job Details</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {openInvoices.length === 0 ? (
+                  {allocationInvoices.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="py-4 text-center text-slate-400">
-                        No open invoices
+                      <td colSpan={6} className="py-4 text-center text-slate-400">
+                        No invoices
                       </td>
                     </tr>
                   ) : (
@@ -367,22 +495,22 @@ function AddPaymentDialog({
                         <td className="px-3 py-2 font-medium text-slate-700">
                           #{a.invoiceNumber}
                         </td>
+                        <td className="px-3 py-2 text-center">
+                          <Checkbox
+                            checked={a.payInFull}
+                            onCheckedChange={(c) => togglePayInFull(idx, !!c)}
+                          />
+                        </td>
                         <td className="px-3 py-2">
-                          <div className="flex items-center gap-1.5">
-                            <Checkbox
-                              checked={a.payInFull}
-                              onCheckedChange={(c) => togglePayInFull(idx, !!c)}
-                            />
-                            <Input
-                              type="number"
-                              step="0.01"
-                              min="0"
-                              className="h-6 w-20 text-xs px-1.5"
-                              value={a.amountCents > 0 ? (a.amountCents / 100).toFixed(2) : ""}
-                              onChange={(e) => setAllocationAmount(idx, e.target.value)}
-                              placeholder="0.00"
-                            />
-                          </div>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            className="h-6 w-20 text-xs px-1.5"
+                            value={a.amountCents > 0 ? (a.amountCents / 100).toFixed(2) : ""}
+                            onChange={(e) => setAllocationAmount(idx, e.target.value)}
+                            placeholder="0.00"
+                          />
                         </td>
                         <td className="px-3 py-2 text-right font-medium">
                           {formatCurrency(a.balanceCents)}
@@ -409,15 +537,17 @@ function AddPaymentDialog({
 
         {/* Footer */}
         <div className="flex items-center justify-center gap-3 border-t bg-slate-50 px-6 py-4">
+          {!isEdit && (
+            <Button
+              className="bg-[#4a4a4a] hover:bg-[#3a3a3a] text-white px-6"
+              onClick={() => submit(true)}
+              disabled={isPending}
+            >
+              Save &amp; New
+            </Button>
+          )}
           <Button
-            className="bg-slate-700 hover:bg-slate-800 text-white px-6"
-            onClick={() => submit(true)}
-            disabled={isPending}
-          >
-            Save &amp; New
-          </Button>
-          <Button
-            className="bg-slate-700 hover:bg-slate-800 text-white px-6"
+            className="bg-[#4a4a4a] hover:bg-[#3a3a3a] text-white px-6"
             onClick={() => submit(false)}
             disabled={isPending}
           >
@@ -497,13 +627,21 @@ interface Props {
 
 export function PaymentsList({ clientId }: Props) {
   const { data: payments, isLoading, refetch } = usePayments(clientId);
+  const searchParams = useSearchParams();
   const [activeTab, setActiveTab] = useState<Tab>("last30");
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [editPayment, setEditPayment] = useState<CRMPayment | null>(null);
+  const [refundPayment, setRefundPayment] = useState<CRMPayment | null>(null);
+
+  // Auto-open the Add Payment dialog when navigated here with ?new=1
+  useEffect(() => {
+    if (searchParams.get("new") === "1") setDialogOpen(true);
+  }, [searchParams]);
   const [activeFilter, setActiveFilter] = useState<FilterField | null>(null);
   const [filterValue, setFilterValue] = useState("");
   const [search, setSearch] = useState("");
   const [visibleKeys, setVisibleKeys] = useState<string[]>(PAYMENT_COLUMNS.map((c) => c.key));
-  const [viewPayment, setViewPayment] = useState<(typeof filtered)[number] | null>(null);
+  const [viewPayment, setViewPayment] = useState<CRMPayment | null>(null);
 
   const today = new Date();
   const thirtyDaysAgo = new Date(today);
@@ -677,7 +815,7 @@ export function PaymentsList({ clientId }: Props) {
               </tr>
             ) : (
               filtered.map((p) => (
-                <tr key={p.id} className="cursor-pointer border-b hover:bg-slate-50" onClick={() => setViewPayment(p)}>
+                <tr key={p.id} className="group cursor-pointer border-b hover:bg-slate-50" onClick={() => setViewPayment(p)}>
                   <td className="px-3 py-2.5 text-slate-700 font-medium">
                     {new Date(p.paymentDate + "T12:00:00").toLocaleDateString("en-US", {
                       month: "numeric", day: "numeric", year: "numeric",
@@ -706,6 +844,22 @@ export function PaymentsList({ clientId }: Props) {
                   <td className="px-3 py-2.5 text-slate-700 text-xs">
                     {p.method}
                   </td>
+                  <td className="px-3 py-2.5 text-right">
+                    <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button
+                        className="rounded px-2 py-0.5 text-xs bg-slate-100 hover:bg-slate-200 text-slate-600"
+                        onClick={(e) => { e.stopPropagation(); setEditPayment(p); }}
+                      >
+                        Edit
+                      </button>
+                      <button
+                        className="rounded px-2 py-0.5 text-xs bg-red-50 hover:bg-red-100 text-red-600"
+                        onClick={(e) => { e.stopPropagation(); setRefundPayment(p); }}
+                      >
+                        Refund
+                      </button>
+                    </div>
+                  </td>
                 </tr>
               ))
             )}
@@ -717,6 +871,17 @@ export function PaymentsList({ clientId }: Props) {
         open={dialogOpen}
         onOpenChange={setDialogOpen}
         defaultClientId={clientId}
+      />
+
+      <AddPaymentDialog
+        open={!!editPayment}
+        onOpenChange={(o) => { if (!o) setEditPayment(null); }}
+        payment={editPayment}
+      />
+
+      <RefundDialog
+        payment={refundPayment}
+        onClose={() => setRefundPayment(null)}
       />
 
       {/* Payment detail dialog */}
@@ -765,8 +930,90 @@ export function PaymentsList({ clientId }: Props) {
               )}
             </div>
           )}
+          <div className="flex gap-2 pt-2">
+            <Button size="sm" variant="outline" onClick={() => { setEditPayment(viewPayment); setViewPayment(null); }}>
+              Edit
+            </Button>
+            <Button size="sm" variant="outline" className="text-red-600 border-red-200 hover:bg-red-50"
+              onClick={() => { setRefundPayment(viewPayment); setViewPayment(null); }}>
+              Refund
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+// ── RefundDialog ───────────────────────────────────────────────────────────────
+
+export function RefundDialog({ payment, onClose }: { payment: CRMPayment | null; onClose: () => void }) {
+  const { mutateAsync: refund, isPending } = useRefundPayment();
+  const [refundAmount, setRefundAmount] = useState("");
+
+  useEffect(() => {
+    if (payment) setRefundAmount((payment.amountCents / 100).toFixed(2));
+  }, [payment?.id]);
+
+  if (!payment) return null;
+
+  const maxRefund = payment.amountCents - payment.refundedAmountCents;
+
+  async function submit() {
+    if (!payment) return;
+    const cents = Math.round(parseFloat(refundAmount || "0") * 100);
+    if (cents <= 0) { toast.error("Enter a refund amount"); return; }
+    if (cents > maxRefund) { toast.error(`Max refundable: ${formatCurrency(maxRefund)}`); return; }
+    try {
+      await refund({ id: payment.id, clientId: payment.clientId, refundAmountCents: cents, invoiceId: payment.invoiceId });
+      toast.success("Refund recorded");
+      onClose();
+    } catch { toast.error("Failed to record refund"); }
+  }
+
+  return (
+    <Dialog open={!!payment} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Issue Refund</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 py-1 text-sm">
+          <div className="rounded bg-slate-50 p-3 space-y-1">
+            <div className="flex justify-between text-slate-500">
+              <span>Original payment</span>
+              <span className="font-medium text-slate-800">{formatCurrency(payment.amountCents)}</span>
+            </div>
+            {payment.refundedAmountCents > 0 && (
+              <div className="flex justify-between text-slate-500">
+                <span>Previously refunded</span>
+                <span className="text-red-500">({formatCurrency(payment.refundedAmountCents)})</span>
+              </div>
+            )}
+            <div className="flex justify-between border-t pt-1">
+              <span className="text-slate-500">Max refundable</span>
+              <span className="font-semibold">{formatCurrency(maxRefund)}</span>
+            </div>
+          </div>
+          <div>
+            <Label className="text-xs mb-1.5 block">Refund Amount</Label>
+            <Input
+              type="number"
+              step="0.01"
+              min="0"
+              max={(maxRefund / 100).toFixed(2)}
+              className="h-8 text-sm"
+              value={refundAmount}
+              onChange={(e) => setRefundAmount(e.target.value)}
+            />
+          </div>
+        </div>
+        <div className="flex gap-2 justify-end pt-2">
+          <Button variant="outline" size="sm" onClick={onClose}>Cancel</Button>
+          <Button size="sm" className="bg-red-600 hover:bg-red-700 text-white" onClick={submit} disabled={isPending}>
+            {isPending ? "Processing…" : "Issue Refund"}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }

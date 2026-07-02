@@ -77,7 +77,7 @@ function useReportData() {
         sb.from("clients").select("id, status").is("deleted_at", null),
         sb.from("crm_invoices").select("id, total_cents, paid_cents, due_date, created_at, status").is("deleted_at", null),
         sb.from("crm_jobs").select("id, status, created_at").is("deleted_at", null),
-        sb.from("crm_estimates").select("id, stage, total_price_cents").is("deleted_at", null),
+        sb.from("estimates").select("id, stage, total_price_cents:total_cents").is("deleted_at", null),
       ]);
 
       // Clients

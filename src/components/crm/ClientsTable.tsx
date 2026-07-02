@@ -741,7 +741,7 @@ export function ClientsTable({ onSelect }: Props) {
                     </td>
                     <td className="px-4 py-2.5 text-slate-600">{client.primaryPhone ?? "—"}</td>
                     <td className="px-4 py-2.5 text-slate-500">
-                      {[client.billingCity, client.billingState].filter(Boolean).join(", ") || "—"}
+                      {[client.serviceAddress, client.serviceCity, client.serviceState].filter(Boolean).join(", ") || "—"}
                     </td>
                     <td className="px-4 py-2.5 text-right">
                       {client.balanceOutstandingCents > 0

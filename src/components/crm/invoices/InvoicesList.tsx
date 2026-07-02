@@ -2,17 +2,18 @@
 
 import { useMemo, useState, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
-import { useInvoices, useUpdateInvoiceStatus, useCreateInvoice } from "@/lib/hooks/use-invoices";
+import { useInvoices, useUpdateInvoiceStatus } from "@/lib/hooks/use-invoices";
 import { PermissionGate } from "@/components/shared/PermissionGate";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn, formatCurrency } from "@/lib/utils";
-import { Plus, FileText, Search, ChevronDown, X, RotateCcw } from "lucide-react";
+import { Plus, FileText, Search, ChevronDown, X, RotateCcw, GitMerge, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 import { toast } from "sonner";
 import type { InvoiceStatus, CRMInvoice } from "@/types/crm-invoices";
 import { InvoiceDetailSheet } from "./InvoiceDetailSheet";
-import { NewInvoiceDialog } from "./NewInvoiceDialog";
+import { NewInvoiceSheet } from "./NewInvoiceSheet";
+import { MergeInvoicesDialog } from "./MergeInvoicesDialog";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { ColumnChooser } from "@/components/shared/ColumnChooser";
 import type { ColumnDef } from "@/components/shared/ColumnChooser";
@@ -51,8 +52,10 @@ function formatDate(d: string) {
 }
 
 function isOverdue(inv: CRMInvoice) {
-  if (!inv.dueDate || inv.balanceCents <= 0) return false;
-  return new Date(inv.dueDate + "T23:59:59") < new Date();
+  if (inv.balanceCents <= 0) return false;
+  const effectiveDue = inv.dueDate ?? (inv.terms === "due_on_receipt" ? inv.invoiceDate : null);
+  if (!effectiveDue) return false;
+  return new Date(effectiveDue + "T23:59:59") < new Date();
 }
 
 type ActiveFilterKey =
@@ -112,8 +115,7 @@ interface Props {
 export function InvoicesList({ clientId }: Props) {
   const { data: invoices, isLoading, refetch: refetchInvoices } = useInvoices(clientId);
   const { mutateAsync: updateStatus } = useUpdateInvoiceStatus();
-  const { mutateAsync: createInvoice } = useCreateInvoice();
-  const [dialogOpen, setDialogOpen] = useState(false);
+  const [newSheetOpen, setNewSheetOpen] = useState(false);
   const [openInvoiceId, setOpenInvoiceId] = useState<string | null>(null);
   const searchParams = useSearchParams();
   useEffect(() => {
@@ -125,6 +127,9 @@ export function InvoicesList({ clientId }: Props) {
   const [activeFilterKey, setActiveFilterKey] = useState<ActiveFilterKey | null>(null);
   const [filterValue, setFilterValue] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [mergeOpen, setMergeOpen] = useState(false);
+  const [sortKey, setSortKey] = useState<string>("date");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [visibleKeys, setVisibleKeys] = useState<string[]>(
     INVOICE_COLUMNS.map((c) => c.key)
   );
@@ -166,8 +171,34 @@ export function InvoicesList({ clientId }: Props) {
         }
       });
     }
+    // Sort
+    list = [...list].sort((a, b) => {
+      let av: number | string = 0, bv: number | string = 0;
+      switch (sortKey) {
+        case "number":  av = a.invoiceNumber; bv = b.invoiceNumber; break;
+        case "client":  av = a.clientName ?? ""; bv = b.clientName ?? ""; break;
+        case "date":    av = a.invoiceDate ?? ""; bv = b.invoiceDate ?? ""; break;
+        case "due":     av = a.dueDate ?? "9999-99-99"; bv = b.dueDate ?? "9999-99-99"; break;
+        case "total":   av = a.totalCents; bv = b.totalCents; break;
+        case "balance": av = a.balanceCents; bv = b.balanceCents; break;
+      }
+      const cmp = av < bv ? -1 : av > bv ? 1 : 0;
+      return sortDir === "asc" ? cmp : -cmp;
+    });
     return list;
-  }, [allInvoices, quickFilter, search, activeFilterKey, filterValue]);
+  }, [allInvoices, quickFilter, search, activeFilterKey, filterValue, sortKey, sortDir]);
+
+  function toggleSort(key: string) {
+    if (sortKey === key) setSortDir((d) => d === "asc" ? "desc" : "asc");
+    else { setSortKey(key); setSortDir("asc"); }
+  }
+
+  function SortIcon({ col }: { col: string }) {
+    if (sortKey !== col) return <ArrowUpDown className="ml-1 inline h-3 w-3 text-slate-300" />;
+    return sortDir === "asc"
+      ? <ArrowUp className="ml-1 inline h-3 w-3 text-slate-600" />
+      : <ArrowDown className="ml-1 inline h-3 w-3 text-slate-600" />;
+  }
 
   async function markVoid(inv: CRMInvoice) {
     if (!confirm(`Void invoice #${inv.invoiceNumber}?`)) return;
@@ -226,7 +257,7 @@ export function InvoicesList({ clientId }: Props) {
           description={!isLoading ? `${allInvoices.length} invoices` : undefined}
           action={
             <PermissionGate permission="acct_add_modify_invoices">
-              <Button size="sm" onClick={() => setDialogOpen(true)}>
+              <Button size="sm" onClick={() => setNewSheetOpen(true)}>
                 <Plus className="mr-1.5 h-4 w-4" /> Add Invoice
               </Button>
             </PermissionGate>
@@ -273,13 +304,7 @@ export function InvoicesList({ clientId }: Props) {
         {clientId && (
           <div className="ml-auto">
             <PermissionGate permission="acct_add_modify_invoices">
-              <Button size="sm" className="h-7 text-xs" onClick={async () => {
-                try {
-                  const today = new Date().toISOString().split("T")[0];
-                  const inv = await createInvoice({ clientId, description: "", invoiceDate: today });
-                  setOpenInvoiceId(inv.id);
-                } catch { toast.error("Failed to create invoice"); }
-              }}>
+              <Button size="sm" className="h-7 text-xs" onClick={() => setNewSheetOpen(true)}>
                 <Plus className="mr-1 h-3 w-3" /> Add Invoice
               </Button>
             </PermissionGate>
@@ -326,6 +351,15 @@ export function InvoicesList({ clientId }: Props) {
                 onSelect={() => bulkUpdateStatus("paid")}
               >
                 Mark as Paid
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                disabled={selectedIds.size < 2}
+                onSelect={() => setMergeOpen(true)}
+                className="flex items-center gap-2"
+              >
+                <GitMerge className="h-3.5 w-3.5" />
+                Merge Invoices
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
@@ -410,11 +444,20 @@ export function InvoicesList({ clientId }: Props) {
                   onChange={toggleAll}
                 />
               </th>
-              {visibleColumns.map((col) => (
-                <th key={col.key} className={cn("px-4 py-3", col.key === "total" || col.key === "balance" ? "text-right" : "")}>
-                  {col.label}
-                </th>
-              ))}
+              {visibleColumns.map((col) => {
+                const sortable = ["number","client","date","due","total","balance"].includes(col.key);
+                const isRight = col.key === "total" || col.key === "balance";
+                return (
+                  <th
+                    key={col.key}
+                    className={cn("px-4 py-3", isRight ? "text-right" : "", sortable ? "cursor-pointer select-none hover:text-slate-600" : "")}
+                    onClick={sortable ? () => toggleSort(col.key) : undefined}
+                  >
+                    {col.label}
+                    {sortable && <SortIcon col={col.key} />}
+                  </th>
+                );
+              })}
               <th className="px-4 py-3" />
             </tr>
           </thead>
@@ -475,7 +518,11 @@ export function InvoicesList({ clientId }: Props) {
                       case "due":
                         return (
                           <td key={col.key} className={cn("px-4 py-3 text-xs", isOverdue(inv) ? "text-red-600 font-medium" : "text-slate-500")}>
-                            {inv.dueDate ? formatDate(inv.dueDate) : "—"}
+                            {inv.dueDate
+                              ? formatDate(inv.dueDate)
+                              : inv.terms === "due_on_receipt" && inv.invoiceDate
+                                ? formatDate(inv.invoiceDate)
+                                : "—"}
                           </td>
                         );
                       case "total":
@@ -508,16 +555,21 @@ export function InvoicesList({ clientId }: Props) {
         </table>
       </div>
 
-      <NewInvoiceDialog
-        open={dialogOpen}
-        onOpenChange={setDialogOpen}
+      <NewInvoiceSheet
+        open={newSheetOpen}
+        onClose={() => setNewSheetOpen(false)}
         defaultClientId={clientId}
-        onCreated={(id) => { setDialogOpen(false); setOpenInvoiceId(id); }}
       />
       <InvoiceDetailSheet
         invoiceId={openInvoiceId}
         onOpenChange={(open) => !open && setOpenInvoiceId(null)}
       />
+      {mergeOpen && (
+        <MergeInvoicesDialog
+          invoices={allInvoices.filter((i) => selectedIds.has(i.id))}
+          onClose={() => { setMergeOpen(false); setSelectedIds(new Set()); }}
+        />
+      )}
     </div>
   );
 }

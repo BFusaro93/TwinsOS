@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useEffect } from "react";
 import { useAllCRMSchedules, useCreateCRMSchedule, useUpdateCRMSchedule, useDeleteCRMSchedule } from "@/lib/hooks/use-crm-jobs";
+import { useOrgSettings } from "@/lib/hooks/use-org-settings";
 import type { CRMSchedule } from "@/types/crm-jobs";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -231,6 +232,8 @@ function ScheduleDialog({ open, schedule, onClose }: ScheduleDialogProps) {
   const [form, setForm] = useState<ScheduleFormValues>(defaultForm);
   const createSchedule = useCreateCRMSchedule();
   const updateSchedule = useUpdateCRMSchedule();
+  const { data: orgSettings } = useOrgSettings();
+  const brandColor = orgSettings?.brandColor ?? "#1e293b";
 
   // Populate form whenever the dialog opens or the schedule prop changes
   useEffect(() => {
@@ -365,7 +368,7 @@ function ScheduleDialog({ open, schedule, onClose }: ScheduleDialogProps) {
 
           {/* Right: date preview */}
           <div className="w-52 shrink-0 flex flex-col rounded-lg border overflow-hidden self-start">
-            <div className="bg-slate-800 text-white text-xs font-semibold px-3 py-2 flex items-center gap-1.5">
+            <div className="text-white text-xs font-semibold px-3 py-2 flex items-center gap-1.5" style={{ backgroundColor: brandColor }}>
               <CalendarDays className="h-3.5 w-3.5" /> Upcoming Dates
             </div>
             <div className="divide-y text-xs max-h-80 overflow-y-auto">

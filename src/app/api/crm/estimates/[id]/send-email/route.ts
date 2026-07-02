@@ -5,6 +5,15 @@ import { Resend } from "resend";
 
 const FROM = "Twins Lawn Service <noreply@twinslawnservice.com>";
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function getNextVersionNumber(supabase: any, estimateId: string): Promise<number> {
+  const { count } = await supabase
+    .from("estimate_versions")
+    .select("*", { count: "exact", head: true })
+    .eq("estimate_id", estimateId);
+  return (count ?? 0) + 1;
+}
+
 function resolveMergeTags(
   template: string,
   vars: Record<string, string>,
@@ -36,6 +45,7 @@ export async function POST(
     subject: string;
     bodyHtml: string;
     expiresInDays?: number;
+    ccEmails?: string[];
   };
 
   if (!body.subject?.trim() || !body.bodyHtml?.trim()) {
@@ -119,6 +129,49 @@ export async function POST(
   const resolvedSubject = resolveMergeTags(body.subject, mergeVars);
   const resolvedBody    = resolveMergeTags(body.bodyHtml, mergeVars);
 
+  // Snapshot estimate state at time of send
+  const versionNumber = await getNextVersionNumber(supabase, estimateId);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const lineItems = ((est.estimate_line_items ?? []) as any[])
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    .filter((li: any) => !li.deleted_at)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    .sort((a: any, b: any) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await (supabase as any).from("estimate_versions").insert({
+    org_id: est.org_id,
+    estimate_id: estimateId,
+    version_number: versionNumber,
+    sent_to_email: clientEmail,
+    created_by: user.id,
+    snapshot: {
+      estimateNumber: est.estimate_number,
+      description: est.description,
+      stage: est.stage,
+      subtotalCents: est.subtotal_cents,
+      taxCents: est.tax_cents,
+      discountCents: est.discount_cents,
+      totalCents: est.total_cents,
+      notes: est.notes,
+      validUntil: est.valid_until,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      lineItems: lineItems.map((li: any) => ({
+        id: li.id,
+        serviceName: li.service_name,
+        qty: li.qty,
+        rateCents: li.rate_cents,
+        visits: li.visits,
+        totalCents: li.total_cents,
+        unitType: li.unit_type,
+        estimateDesc: li.estimate_desc,
+        status: li.status,
+        rowType: li.row_type ?? "item",
+        sectionName: li.section_name,
+      })),
+    },
+  });
+
   // Send via Resend
   const resend = new Resend(process.env.RESEND_API_KEY!);
   const { data: sent, error: sendErr } = await resend.emails.send({
@@ -126,6 +179,7 @@ export async function POST(
     to: clientEmail,
     subject: resolvedSubject,
     html: resolvedBody,
+    ...(body.ccEmails && body.ccEmails.length > 0 ? { cc: body.ccEmails } : {}),
   });
 
   if (sendErr) {
@@ -144,6 +198,7 @@ export async function POST(
     body_html: resolvedBody,
     resend_id: sent?.id ?? null,
     email_type: "estimate",
+    cc_emails: body.ccEmails ?? [],
   });
 
   // Move estimate to "sent"
@@ -162,6 +217,72 @@ export async function POST(
       related_estimate_id: estimateId,
       occurred_at: new Date().toISOString(),
     });
+  }
+
+  // ── Enroll client in estimate_sent automation sequences ───────────────────
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: triggers } = await (supabase as any)
+      .from("crm_sequence_triggers")
+      .select("sequence_id, crm_automation_sequences(is_active, automation_id, crm_automations(is_active, org_id))")
+      .eq("trigger_type", "estimate_sent");
+
+    for (const trigger of triggers ?? []) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const seq = trigger.crm_automation_sequences as any;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const auto = seq?.crm_automations as any;
+      if (!seq?.is_active || !auto?.is_active) continue;
+      if (auto?.org_id !== est.org_id) continue;
+
+      // Don't re-enroll if already enrolled and not completed/stopped
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: existing } = await (supabase as any)
+        .from("crm_sequence_enrollments")
+        .select("id")
+        .eq("sequence_id", trigger.sequence_id)
+        .eq("estimate_id", estimateId)
+        .is("completed_at", null)
+        .is("stopped_at", null)
+        .is("deleted_at", null)
+        .maybeSingle();
+      if (existing) continue;
+
+      // Find first event to compute next_fire_at
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: firstEvent } = await (supabase as any)
+        .from("crm_sequence_events")
+        .select("id, event_type, config, position")
+        .eq("sequence_id", trigger.sequence_id)
+        .eq("is_active", true)
+        .is("deleted_at", null)
+        .order("position", { ascending: true })
+        .limit(1)
+        .maybeSingle();
+
+      let nextFireAt = new Date().toISOString();
+      if (firstEvent?.event_type === "wait") {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const days = (firstEvent.config as any)?.days ?? 0;
+        const d = new Date();
+        d.setDate(d.getDate() + days);
+        nextFireAt = d.toISOString();
+      }
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (supabase as any).from("crm_sequence_enrollments").insert({
+        org_id: est.org_id,
+        sequence_id: trigger.sequence_id,
+        client_id: est.client_id,
+        estimate_id: estimateId,
+        enrolled_at: new Date().toISOString(),
+        next_event_position: firstEvent?.event_type === "wait" ? 1 : 0,
+        next_fire_at: nextFireAt,
+      });
+    }
+  } catch (enrollErr) {
+    // best-effort — don't fail the send if enrollment errors
+    console.error("[send-estimate] Enrollment error:", enrollErr);
   }
 
   return NextResponse.json({ ok: true, proposalUrl });

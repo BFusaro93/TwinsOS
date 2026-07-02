@@ -69,6 +69,7 @@ function mapJob(row: any): CRMJob {
     totalCents: row.total_cents ?? 0,
     notes: row.notes ?? null,
     projectId: row.project_id,
+    estimateId: row.estimate_id ?? null,
     priority: row.priority ?? 1,
     deletedAt: row.deleted_at,
     createdAt: row.created_at,
@@ -435,6 +436,10 @@ function applyJobServiceFallback(visit: CRMJobVisit, row: any): CRMJobVisit {
     if (total > 0) visit.budgetedHours = total;
     if (visit.budgetedHours == null && row.crm_jobs?.budgeted_hours != null) visit.budgetedHours = Number(row.crm_jobs.budgeted_hours);
   }
+  if (services.length > 0) {
+    visit.serviceNames = services.map((s: any) => s.service_name as string).filter(Boolean);
+    visit.serviceIds = services.map((s: any) => (s.service_id as string | null) ?? null);
+  }
   return visit;
 }
 
@@ -503,7 +508,7 @@ export function useVisitsForDate(fromDate: string, toDate?: string) {
           *,
           clients(display_name, primary_phone, billing_address, billing_city, billing_state, billing_zip),
           crm_crews(name),
-          crm_jobs(*, crm_job_services(*))
+          crm_jobs(*, crm_crews(name), crm_job_services(*))
         `)
         .is('deleted_at', null)
         .order('priority', { ascending: true })
@@ -654,7 +659,12 @@ export function useUpdateVisitStatus() {
       qc.invalidateQueries({ queryKey: ['crm-job-visits'] });
       qc.invalidateQueries({ queryKey: ['crm-jobs'] });
       const clientId = (data as { clientId?: string } | undefined)?.clientId;
-      if (clientId) qc.invalidateQueries({ queryKey: ['clients', clientId, 'activity'] });
+      if (clientId) {
+        qc.invalidateQueries({ queryKey: ['clients', clientId, 'activity'] });
+        qc.invalidateQueries({ queryKey: ['clients', clientId] });
+        qc.invalidateQueries({ queryKey: ['crm-invoices'] });
+      }
+      qc.invalidateQueries({ queryKey: ['clients'] });
     },
   });
 }
@@ -1212,7 +1222,7 @@ export function useJobVisits(jobId: string) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
         .from('crm_job_visits')
-        .select('*, crm_crews(name), crm_jobs(budgeted_hours, rate_cents, crm_job_services(rate_cents, budgeted_hours, qty))')
+        .select('*, crm_crews(name), crm_jobs(budgeted_hours, rate_cents, crm_job_services(rate_cents, budgeted_hours, qty, service_name, service_id))')
         .eq('job_id', jobId)
         .is('deleted_at', null)
         .order('scheduled_date', { ascending: true });
@@ -1232,7 +1242,7 @@ export function useClientAllVisits(clientId: string) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
         .from('crm_job_visits')
-        .select('*, crm_crews(name), crm_jobs(budgeted_hours, rate_cents, crm_job_services(rate_cents, budgeted_hours, qty))')
+        .select('*, crm_crews(name), crm_jobs(budgeted_hours, rate_cents, crm_job_services(rate_cents, budgeted_hours, qty, service_name, service_id))')
         .eq('client_id', clientId)
         .is('deleted_at', null)
         .order('scheduled_date', { ascending: false });

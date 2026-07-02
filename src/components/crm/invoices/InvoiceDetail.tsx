@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   useInvoice,
   useUpsertInvoiceLineItem,
@@ -10,6 +10,9 @@ import {
   useUpdateInvoiceHeader,
   useRecordPayment,
   useSetInvoiceLock,
+  useAssignInvoiceNumber,
+  useDeleteInvoice,
+  useVoidInvoice,
 } from "@/lib/hooks/use-invoices";
 import { useCRMServices } from "@/lib/hooks/use-crm-jobs";
 import { useOrgSettings } from "@/lib/hooks/use-org-settings";
@@ -39,9 +42,10 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn, formatCurrency } from "@/lib/utils";
 import { centsToDisplay } from "@/lib/estimate-calc";
-import { Plus, Trash2, Save, DollarSign, ChevronDown, Mail, Printer, Lock, Unlock } from "lucide-react";
+import { Plus, Trash2, Save, DollarSign, ChevronDown, Mail, Printer, Lock, Unlock, Search, MoreVertical, Ban } from "lucide-react";
 import { toast } from "sonner";
 import type { InvoiceStatus, InvoiceLineItem, PaymentMethod, CRMPayment } from "@/types/crm-invoices";
 import { AuditTrailTab } from "@/components/shared/AuditTrailTab";
@@ -369,7 +373,7 @@ function RecordPaymentDialog({
     const cents = Math.round(parseFloat(amount) * 100);
     if (!cents || cents <= 0) { toast.error("Enter a valid amount"); return; }
     try {
-      await record({ invoiceId, clientId, amountCents: cents, paymentDate: date, method, reference: ref || undefined });
+      await record({ clientId, amountCents: cents, paymentDate: date, method, reference: ref || undefined, allocations: invoiceId ? [{ invoiceId, amountCents: cents }] : [] });
       toast.success("Payment recorded");
       onOpenChange(false);
     } catch { toast.error("Failed to record payment"); }
@@ -443,17 +447,33 @@ function PaymentDetailDialog({ payment, open, onOpenChange }: {
 
 // ── main detail ───────────────────────────────────────────────────────────────
 
-export function InvoiceDetail({ invoiceId, onClose }: { invoiceId: string; onClose?: () => void }) {
+export function InvoiceDetail({
+  invoiceId,
+  onClose,
+  onDiscard,
+  onSaved,
+}: {
+  invoiceId: string;
+  onClose?: () => void;
+  onDiscard?: () => void;
+  onSaved?: () => void;
+}) {
   const { data: invoice, isLoading, error: invoiceError } = useInvoice(invoiceId);
   const { mutateAsync: upsertItem } = useUpsertInvoiceLineItem();
   const { mutateAsync: updateStatus } = useUpdateInvoiceStatus();
   const { mutateAsync: updateFinancials } = useUpdateInvoiceFinancials();
   const { mutateAsync: updateHeader } = useUpdateInvoiceHeader();
   const { mutateAsync: setLock } = useSetInvoiceLock();
+  const { mutateAsync: assignNumber } = useAssignInvoiceNumber();
+  const { mutateAsync: deleteInvoice } = useDeleteInvoice();
+  const { mutateAsync: voidInvoice } = useVoidInvoice();
   const { data: savedServices } = useCRMServices();
   const { data: orgSettings } = useOrgSettings();
 
   const [activeTab, setActiveTab] = useState<"invoice" | "audit">("invoice");
+  const [lineItemPickerOpen, setLineItemPickerOpen] = useState(false);
+  const [lineItemSearch, setLineItemSearch] = useState("");
+  const lineItemSearchRef = useRef<HTMLInputElement>(null);
   const [paymentOpen, setPaymentOpen] = useState(false);
   const [selectedPayment, setSelectedPayment] = useState<CRMPayment | null>(null);
   const [saving, setSaving] = useState(false);
@@ -462,6 +482,10 @@ export function InvoiceDetail({ invoiceId, onClose }: { invoiceId: string; onClo
   const [invoiceDate, setInvoiceDate] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [invoiceNumber, setInvoiceNumber] = useState<number | "">("");
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [confirmVoidOpen, setConfirmVoidOpen] = useState(false);
+  const [voiding, setVoiding] = useState(false);
 
   useEffect(() => {
     if (!invoice) return;
@@ -472,9 +496,16 @@ export function InvoiceDetail({ invoiceId, onClose }: { invoiceId: string; onClo
         ? (invoice.clientDefaultTaxRateBps ?? 0)
         : orgDefaultBps;
     setTaxRateBps(resolved);
-    setTerms(invoice.terms ?? invoice.clientDefaultTerms ?? "due_on_receipt");
+    const resolvedTerms = invoice.terms ?? invoice.clientDefaultTerms ?? "due_on_receipt";
+    setTerms(resolvedTerms);
     setInvoiceDate(invoice.invoiceDate ?? "");
-    setDueDate(invoice.dueDate ?? "");
+    // For "due on receipt" invoices that have no explicit due_date saved, derive it from the invoice date
+    const resolvedDue = invoice.dueDate
+      ? invoice.dueDate
+      : resolvedTerms === "due_on_receipt" && invoice.invoiceDate
+        ? invoice.invoiceDate
+        : "";
+    setDueDate(resolvedDue);
     setInvoiceNumber(invoice.invoiceNumber);
   }, [invoice?.id]);
 
@@ -565,6 +596,10 @@ export function InvoiceDetail({ invoiceId, onClose }: { invoiceId: string; onClo
   async function handleSave() {
     setSaving(true);
     try {
+      // If this is a fresh draft (no number yet), assign one now
+      if (invoice!.invoiceNumber == null) {
+        await assignNumber({ id: invoice!.id, clientId: invoice!.clientId });
+      }
       await Promise.all([
         updateFinancials({
           id: invoice!.id,
@@ -576,7 +611,7 @@ export function InvoiceDetail({ invoiceId, onClose }: { invoiceId: string; onClo
         updateHeader({
           id: invoice!.id,
           patch: {
-            invoice_number: invoiceNumber === "" ? invoice!.invoiceNumber : Number(invoiceNumber),
+            invoice_number: invoiceNumber === "" ? undefined : Number(invoiceNumber),
             invoice_date: invoiceDate || invoice!.invoiceDate,
             due_date: dueDate || null,
             terms,
@@ -584,8 +619,40 @@ export function InvoiceDetail({ invoiceId, onClose }: { invoiceId: string; onClo
         }),
       ]);
       toast.success("Invoice saved");
+      onSaved?.();
     } catch { toast.error("Save failed"); }
     finally { setSaving(false); }
+  }
+
+  async function handleDiscard() {
+    if (!invoice) { onDiscard?.(); return; }
+    try {
+      await deleteInvoice({ id: invoice.id, clientId: invoice.clientId });
+    } catch { /* best-effort */ }
+    onDiscard?.();
+  }
+
+  async function handleDelete() {
+    if (!invoice) return;
+    setDeleting(true);
+    try {
+      await deleteInvoice({ id: invoice.id, clientId: invoice.clientId });
+      toast.success("Invoice deleted");
+      setConfirmDeleteOpen(false);
+      onDiscard?.();
+    } catch { toast.error("Failed to delete invoice"); }
+    finally { setDeleting(false); }
+  }
+
+  async function handleVoid() {
+    if (!invoice) return;
+    setVoiding(true);
+    try {
+      await voidInvoice({ id: invoice.id, clientId: invoice.clientId });
+      toast.success("Invoice voided");
+      setConfirmVoidOpen(false);
+    } catch { toast.error("Failed to void invoice"); }
+    finally { setVoiding(false); }
   }
 
   const displayAddress = invoice.serviceAddress ?? invoice.clientAddress;
@@ -596,10 +663,17 @@ export function InvoiceDetail({ invoiceId, onClose }: { invoiceId: string; onClo
       <div className="flex items-center justify-between border-b bg-white px-8 py-3 shadow-sm">
         <div className="flex items-center gap-3">
           <div>
-            <h1 className="text-base font-semibold text-slate-900">Invoice #{invoice.invoiceNumber}</h1>
+            <h1 className="text-base font-semibold text-slate-900">
+              {invoice.invoiceNumber != null ? `Invoice #${invoice.invoiceNumber}` : "Draft Invoice"}
+            </h1>
             <p className="text-xs text-slate-400">{invoice.clientName}</p>
           </div>
           <Badge className={cn("text-[10px] capitalize", STATUS_COLOR[invoice.status])}>{invoice.status}</Badge>
+          {invoice.invoiceNumber == null && (
+            <span className="rounded-full bg-yellow-100 px-2 py-0.5 text-[10px] font-semibold text-yellow-700">
+              Unsaved — click Save to assign invoice #
+            </span>
+          )}
           {invoice.locked && (
             <span className="flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
               <Lock className="h-3 w-3" /> Locked
@@ -607,6 +681,12 @@ export function InvoiceDetail({ invoiceId, onClose }: { invoiceId: string; onClo
           )}
         </div>
         <div className="flex items-center gap-2">
+          {onDiscard && invoice.invoiceNumber == null && (
+            <Button variant="ghost" size="sm" className="h-8 text-xs text-slate-500 hover:text-red-600"
+              onClick={handleDiscard}>
+              Discard
+            </Button>
+          )}
           <Button variant="outline" size="sm" className="h-8 text-xs"
             onClick={handleToggleLock}
             title={invoice.locked ? "Unlock invoice to make changes" : "Lock invoice"}>
@@ -632,8 +712,82 @@ export function InvoiceDetail({ invoiceId, onClose }: { invoiceId: string; onClo
           <Button size="sm" className="h-8 text-xs" onClick={handleSave} disabled={saving || invoice.locked}>
             <Save className="mr-1 h-3.5 w-3.5" />{saving ? "Saving…" : "Save Invoice"}
           </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="icon" className="h-8 w-8">
+                <MoreVertical className="h-3.5 w-3.5 text-slate-500" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              {invoice.status !== "void" && (
+                <DropdownMenuItem onSelect={() => setConfirmVoidOpen(true)}>
+                  <Ban className="mr-2 h-3.5 w-3.5 text-slate-500" /> Void Invoice
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                className="text-red-600 focus:text-red-600"
+                onSelect={() => setConfirmDeleteOpen(true)}
+              >
+                <Trash2 className="mr-2 h-3.5 w-3.5" /> Delete Invoice
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
+
+      {/* Void confirmation */}
+      <Dialog open={confirmVoidOpen} onOpenChange={setConfirmVoidOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Void Invoice?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-slate-600">
+            {invoice.invoiceNumber != null
+              ? `Invoice #${invoice.invoiceNumber} will be marked void and its balance removed from the client's account.`
+              : "This draft invoice will be marked void."}
+            {" "}The record and any payment history stay intact for your audit trail.
+            {invoice.amountPaidCents > 0 && (
+              <span className="mt-2 block font-medium text-red-600">
+                This invoice has {formatCurrency(invoice.amountPaidCents)} in recorded payments. Voiding it will
+                not reverse those payments — refund them first if that money needs to go back to the client.
+              </span>
+            )}
+          </p>
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setConfirmVoidOpen(false)}>Cancel</Button>
+            <Button variant="destructive" size="sm" onClick={handleVoid} disabled={voiding}>
+              {voiding ? "Voiding…" : "Void Invoice"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete confirmation */}
+      <Dialog open={confirmDeleteOpen} onOpenChange={setConfirmDeleteOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Delete Invoice?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-slate-600">
+            {invoice.invoiceNumber != null
+              ? `This will delete Invoice #${invoice.invoiceNumber}.`
+              : "This will delete this draft invoice."}
+            {invoice.amountPaidCents > 0 && (
+              <span className="mt-2 block font-medium text-red-600">
+                This invoice has {formatCurrency(invoice.amountPaidCents)} in recorded payments. Deleting it will
+                not reverse those payments — consider voiding it instead.
+              </span>
+            )}
+          </p>
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setConfirmDeleteOpen(false)}>Cancel</Button>
+            <Button variant="destructive" size="sm" onClick={handleDelete} disabled={deleting}>
+              {deleting ? "Deleting…" : "Delete"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Tabs */}
       <div className="flex border-b bg-white px-8">
@@ -673,7 +827,15 @@ export function InvoiceDetail({ invoiceId, onClose }: { invoiceId: string; onClo
             {invoice.clientName && (
               <span className="text-brand-200 text-xs">for {invoice.clientName}</span>
             )}
-            <Select value={invoice.status} onValueChange={(v) => updateStatus({ id: invoice.id, status: v })}>
+            <Select
+              value={invoice.status}
+              onValueChange={(v) => {
+                // Voiding needs to zero the balance and resync the client's total,
+                // so route it through the confirm dialog instead of a bare status write.
+                if (v === "void") { setConfirmVoidOpen(true); return; }
+                updateStatus({ id: invoice.id, status: v });
+              }}
+            >
               <SelectTrigger className="h-6 w-28 text-xs bg-brand-700 border-brand-500 text-white ml-auto">
                 <SelectValue />
               </SelectTrigger>
@@ -851,39 +1013,82 @@ export function InvoiceDetail({ invoiceId, onClose }: { invoiceId: string; onClo
 
             {/* Add item + totals */}
             <div className="border-t p-4 flex items-start justify-between gap-4 bg-slate-50">
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
+              <Popover
+                open={lineItemPickerOpen}
+                onOpenChange={(o) => {
+                  setLineItemPickerOpen(o);
+                  if (!o) setLineItemSearch("");
+                  else setTimeout(() => lineItemSearchRef.current?.focus(), 50);
+                }}
+              >
+                <PopoverTrigger asChild>
                   <Button variant="outline" size="sm" className="h-8 text-xs">
                     <Plus className="mr-1 h-3.5 w-3.5" /> Add Line Item
                     <ChevronDown className="ml-1 h-3 w-3 text-slate-400" />
                   </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="w-72">
-                  {(savedServices ?? []).map((svc) => (
-                    <DropdownMenuItem
-                      key={svc.id}
-                      className="flex items-center justify-between text-xs"
-                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                      onClick={() => addLineItem(svc.name, svc.name, svc.defaultRateCents ?? 0, (svc as any).isTaxable ?? false)}
-                    >
-                      <span className="font-medium">{svc.name}</span>
-                      <div className="flex items-center gap-2 ml-2 shrink-0">
-                        {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-                        {(svc as any).isTaxable && (
-                          <span className="text-[10px] text-amber-600 bg-amber-50 rounded px-1">Tax</span>
-                        )}
-                        {(svc.defaultRateCents ?? 0) > 0 && (
-                          <span className="text-slate-400">${((svc.defaultRateCents ?? 0)/100).toFixed(2)}</span>
-                        )}
-                      </div>
-                    </DropdownMenuItem>
-                  ))}
-                  {(savedServices ?? []).length > 0 && <DropdownMenuSeparator />}
-                  <DropdownMenuItem className="text-xs text-slate-500" onClick={() => addLineItem(undefined, "")}>
-                    <Plus className="mr-1.5 h-3 w-3" /> Blank line item
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+                </PopoverTrigger>
+                <PopoverContent align="start" className="w-72 p-0">
+                  {/* Search input */}
+                  <div className="flex items-center gap-2 border-b px-3 py-2">
+                    <Search className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+                    <input
+                      ref={lineItemSearchRef}
+                      value={lineItemSearch}
+                      onChange={(e) => setLineItemSearch(e.target.value)}
+                      placeholder="Search services…"
+                      className="flex-1 bg-transparent text-xs outline-none placeholder:text-slate-400"
+                    />
+                  </div>
+                  {/* Results */}
+                  <div className="max-h-60 overflow-y-auto py-1">
+                    {(savedServices ?? [])
+                      .filter((svc) =>
+                        !lineItemSearch ||
+                        svc.name.toLowerCase().includes(lineItemSearch.toLowerCase())
+                      )
+                      .map((svc) => (
+                        <button
+                          key={svc.id}
+                          className="flex w-full items-center justify-between px-3 py-2 text-xs hover:bg-slate-50 text-left"
+                          onClick={() => {
+                            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                            addLineItem(svc.name, svc.name, svc.defaultRateCents ?? 0, (svc as any).isTaxable ?? false);
+                            setLineItemPickerOpen(false);
+                            setLineItemSearch("");
+                          }}
+                        >
+                          <span className="font-medium text-slate-800">{svc.name}</span>
+                          <div className="flex items-center gap-2 ml-2 shrink-0">
+                            {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                            {(svc as any).isTaxable && (
+                              <span className="text-[10px] text-amber-600 bg-amber-50 rounded px-1">Tax</span>
+                            )}
+                            {(svc.defaultRateCents ?? 0) > 0 && (
+                              <span className="text-slate-400">${((svc.defaultRateCents ?? 0) / 100).toFixed(2)}</span>
+                            )}
+                          </div>
+                        </button>
+                      ))}
+                    {(savedServices ?? []).filter((svc) =>
+                      !lineItemSearch || svc.name.toLowerCase().includes(lineItemSearch.toLowerCase())
+                    ).length === 0 && lineItemSearch && (
+                      <p className="px-3 py-2 text-xs text-slate-400">No services match &ldquo;{lineItemSearch}&rdquo;</p>
+                    )}
+                    <div className="border-t mt-1 pt-1">
+                      <button
+                        className="flex w-full items-center gap-1.5 px-3 py-2 text-xs text-slate-500 hover:bg-slate-50"
+                        onClick={() => {
+                          addLineItem(undefined, "");
+                          setLineItemPickerOpen(false);
+                          setLineItemSearch("");
+                        }}
+                      >
+                        <Plus className="h-3 w-3" /> Blank line item
+                      </button>
+                    </div>
+                  </div>
+                </PopoverContent>
+              </Popover>
 
               {/* Totals */}
               <div className="text-xs text-right space-y-1 min-w-[220px]">

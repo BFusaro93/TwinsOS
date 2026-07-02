@@ -41,6 +41,7 @@ import type { CRMService } from "@/types/crm-jobs";
 import { RolesList } from "@/components/crm/roles/RolesList";
 import { EstimateStagesEditor } from "@/components/crm/settings/EstimateStagesEditor";
 import { OverheadSettingsEditor } from "@/components/crm/settings/OverheadSettingsEditor";
+import { ClientPortalTab } from "@/components/crm/settings/ClientPortalSettings";
 
 // ── AccordionSection ──────────────────────────────────────────────────────────
 
@@ -689,6 +690,7 @@ function ServiceRow({
   const { mutateAsync: deleteService } = useDeleteCRMService();
   const [editing, setEditing] = useState(false);
   const [nameDraft, setNameDraft] = useState(service.name);
+  const [codeDraft, setCodeDraft] = useState(service.code ?? "");
   const [rateDraft, setRateDraft] = useState(
     service.defaultRateCents != null
       ? String((service.defaultRateCents / 100).toFixed(2))
@@ -700,12 +702,13 @@ function ServiceRow({
   async function handleSave() {
     const rateCents = rateDraft !== "" ? Math.round(parseFloat(rateDraft) * 100) : null;
     if (!nameDraft.trim()) { toast.error("Service name is required"); return; }
+    if (!codeDraft.trim()) { toast.error("Service code is required"); return; }
     if (rateDraft !== "" && (isNaN(rateCents!) || rateCents! < 0)) {
       toast.error("Enter a valid rate"); return;
     }
     setSaving(true);
     try {
-      await updateService({ id: service.id, patch: { name: nameDraft.trim(), default_rate_cents: rateCents ?? null } });
+      await updateService({ id: service.id, patch: { name: nameDraft.trim(), code: codeDraft.trim().toUpperCase(), default_rate_cents: rateCents ?? null } });
       toast.success("Service updated");
       setEditing(false);
       onSaved();
@@ -731,12 +734,19 @@ function ServiceRow({
 
   if (editing) {
     return (
-      <div className="flex items-center gap-2 py-2">
+      <div className="flex items-center gap-2 py-2 flex-wrap">
         <Input
-          className="h-8 w-48 text-sm"
+          className="h-8 w-40 text-sm"
           value={nameDraft}
           onChange={(e) => setNameDraft(e.target.value)}
           placeholder="Service name"
+        />
+        <Input
+          className="h-8 w-24 text-sm uppercase"
+          value={codeDraft}
+          onChange={(e) => setCodeDraft(e.target.value.toUpperCase())}
+          placeholder="Code *"
+          title="Short code, e.g. MOWING"
         />
         <Input
           className="h-8 w-28 text-sm"
@@ -760,6 +770,9 @@ function ServiceRow({
   return (
     <div className="flex items-center gap-3 py-2">
       <span className="flex-1 text-sm text-slate-800">{service.name}</span>
+      {service.code && (
+        <span className="rounded bg-slate-100 px-1.5 py-0.5 text-xs font-mono text-slate-600">{service.code}</span>
+      )}
       {service.defaultRateCents != null && (
         <span className="text-xs text-slate-500">
           ${(service.defaultRateCents / 100).toFixed(2)}/hr
@@ -789,20 +802,23 @@ function ServiceRow({
 function AddServiceForm({ onAdded }: { onAdded: () => void }) {
   const { mutateAsync: createService } = useCreateCRMService();
   const [name, setName] = useState("");
+  const [code, setCode] = useState("");
   const [rate, setRate] = useState("");
   const [saving, setSaving] = useState(false);
 
   async function handleAdd() {
     if (!name.trim()) { toast.error("Service name is required"); return; }
+    if (!code.trim()) { toast.error("Service code is required"); return; }
     const rateCents = rate !== "" ? Math.round(parseFloat(rate) * 100) : undefined;
     if (rate !== "" && (isNaN(rateCents!) || rateCents! < 0)) {
       toast.error("Enter a valid rate"); return;
     }
     setSaving(true);
     try {
-      await createService({ name: name.trim(), defaultRateCents: rateCents, productionRatePerManHour: undefined });
+      await createService({ name: name.trim(), code: code.trim().toUpperCase(), defaultRateCents: rateCents, productionRatePerManHour: undefined });
       toast.success("Service added");
       setName("");
+      setCode("");
       setRate("");
       onAdded();
     } catch {
@@ -813,12 +829,19 @@ function AddServiceForm({ onAdded }: { onAdded: () => void }) {
   }
 
   return (
-    <div className="flex items-center gap-2 border-t pt-3 mt-1">
+    <div className="flex items-center gap-2 border-t pt-3 mt-1 flex-wrap">
       <Input
-        className="h-8 w-48 text-sm"
+        className="h-8 w-40 text-sm"
         value={name}
         onChange={(e) => setName(e.target.value)}
         placeholder="e.g. Lawn Mowing"
+      />
+      <Input
+        className="h-8 w-24 text-sm uppercase"
+        value={code}
+        onChange={(e) => setCode(e.target.value.toUpperCase())}
+        placeholder="Code *"
+        title="Short code, e.g. MOWING"
       />
       <Input
         className="h-8 w-28 text-sm"
@@ -1222,6 +1245,7 @@ const TAB_KEYS = [
   "accounting",
   "chemical_tracking",
   "integrations",
+  "client_portal",
 ] as const;
 
 type TabKey = (typeof TAB_KEYS)[number];
@@ -1236,6 +1260,7 @@ function tabLabel(tab: TabKey): string {
     case "accounting":        return "Accounting";
     case "chemical_tracking": return "Chemical Tracking";
     case "integrations":      return "Integrations";
+    case "client_portal":     return "Client Portal";
   }
 }
 
@@ -1284,6 +1309,9 @@ export default function CRMSettingsPage() {
           </TabsContent>
           <TabsContent value="integrations" className="mt-0">
             <IntegrationsTab />
+          </TabsContent>
+          <TabsContent value="client_portal" className="mt-0">
+            <ClientPortalTab />
           </TabsContent>
         </div>
       </Tabs>

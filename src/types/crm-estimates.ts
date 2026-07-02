@@ -45,6 +45,9 @@ export interface EstimateLineItem {
   jobNote: string | null;       // carries to job notes_to_crew on convert
   invoiceDesc: string | null;   // carries to invoice line item description
   internalNote: string | null;  // private, not visible to client
+  rowType: 'item' | 'section';
+  sectionName: string | null;
+  tier: 'basic' | 'standard' | 'premium' | null;
   deletedAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -100,6 +103,14 @@ export interface Estimate {
   probabilityBps: number;  // 0–10000 bps (0–100%)
   notes: string | null;
   reason: string | null;  // won/lost reason (Sprint 3a)
+  depositRequiredCents: number;
+  depositCollectedCents: number;
+  depositMethod: 'cash' | 'check' | 'ach' | 'credit_card' | 'stripe' | 'other' | null;
+  depositReference: string | null;
+  depositNotes: string | null;
+  depositCollectedAt: string | null;
+  tiersEnabled: boolean;
+  tierLabels: { basic: string; standard: string; premium: string };
   deletedAt: string | null;
   createdAt: string;
   updatedAt: string;

@@ -144,6 +144,7 @@ export interface CRMJob {
   taxCents: number;
   totalCents: number;
   notes: string | null;
+  estimateId: string | null;
   deletedAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -251,6 +252,8 @@ export interface CRMJobVisit {
   deletedAt: string | null
   job?: CRMJob
   photos?: VisitPhoto[]
+  serviceNames?: string[] | null
+  serviceIds?: (string | null)[] | null
 }
 
 export interface VisitPhoto {

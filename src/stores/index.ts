@@ -3,3 +3,4 @@ export { usePOStore } from "./po-store";
 export { useCMMSStore } from "./cmms-store";
 export { useSettingsStore } from "./settings-store";
 export { useCurrentUserStore } from "./current-user-store";
+export { useQuickAddStore } from "./quick-add-store";

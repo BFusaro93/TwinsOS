@@ -79,6 +79,7 @@ function StatusBadge({ status }: { status: TicketStatus }) {
 }
 
 function PriorityBadge({ priority }: { priority: TicketPriority }) {
+  if (priority !== "urgent" && priority !== "high") return null;
   return (
     <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-medium capitalize", PRIORITY_CLASS[priority])}>
       {priority}
@@ -130,6 +131,15 @@ export function NewTicketDialog({ open, onOpenChange, defaultClientId, defaultTy
   const dialogCategories = categoryOptions && categoryOptions.length > 0
     ? categoryOptions.map((o) => o.value)
     : FALLBACK_CATEGORIES;
+  const [clientSearch, setClientSearch] = useState("");
+  const [clientDropOpen, setClientDropOpen] = useState(false);
+
+  const filteredClients = useMemo(() => {
+    const all = clients ?? [];
+    if (!clientSearch.trim()) return all;
+    const q = clientSearch.toLowerCase();
+    return all.filter((c) => c.displayName.toLowerCase().includes(q));
+  }, [clients, clientSearch]);
 
   const [form, setForm] = useState<NewTicketFormValues>({
     type: defaultType,
@@ -200,22 +210,59 @@ export function NewTicketDialog({ open, onOpenChange, defaultClientId, defaultTy
 
           <div className="space-y-1.5">
             <Label>Client</Label>
-            <Select
-              value={form.clientId ?? "none"}
-              onValueChange={(v) => set("clientId", v === "none" ? null : v)}
-            >
-              <SelectTrigger className="h-9 text-sm">
-                <SelectValue placeholder="Select client…" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">No client</SelectItem>
-                {(clients ?? []).map((c) => (
-                  <SelectItem key={c.id} value={c.id}>
-                    {c.displayName}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setClientDropOpen((o) => !o)}
+                className="flex h-9 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
+              >
+                <span className={form.clientId ? "text-slate-900" : "text-slate-400"}>
+                  {form.clientId
+                    ? (clients ?? []).find((c) => c.id === form.clientId)?.displayName ?? "Select client…"
+                    : "Select client…"}
+                </span>
+                <ChevronDown className="h-4 w-4 text-slate-400 shrink-0" />
+              </button>
+              {clientDropOpen && (
+                <div className="absolute z-50 mt-1 w-full rounded-md border bg-white shadow-lg">
+                  <div className="relative border-b">
+                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                    <input
+                      autoFocus
+                      value={clientSearch}
+                      onChange={(e) => setClientSearch(e.target.value)}
+                      placeholder="Search clients…"
+                      className="w-full py-1.5 pl-9 pr-2 text-sm focus:outline-none"
+                    />
+                  </div>
+                  <div className="max-h-48 overflow-y-auto py-1">
+                    <button
+                      type="button"
+                      className="w-full px-3 py-1.5 text-left text-sm text-slate-500 hover:bg-slate-50"
+                      onClick={() => { set("clientId", null); setClientDropOpen(false); setClientSearch(""); }}
+                    >
+                      No client
+                    </button>
+                    {filteredClients.map((c) => (
+                      <button
+                        key={c.id}
+                        type="button"
+                        className={cn(
+                          "w-full px-3 py-1.5 text-left text-sm hover:bg-slate-50",
+                          form.clientId === c.id ? "bg-brand-50 text-brand-700 font-medium" : "text-slate-800"
+                        )}
+                        onClick={() => { set("clientId", c.id); setClientDropOpen(false); setClientSearch(""); }}
+                      >
+                        {c.displayName}
+                      </button>
+                    ))}
+                    {filteredClients.length === 0 && (
+                      <p className="px-3 py-2 text-sm text-slate-400">No clients found</p>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="space-y-1.5">
@@ -383,13 +430,24 @@ export function TicketsList({ clientId, typeFilter, title = "Tickets", descripti
 
   const all = tickets ?? [];
 
-  const stats = useMemo(() => ({
-    open:    all.filter((t) => t.status === "open").length,
-    on_hold: all.filter((t) => t.status === "on_hold").length,
-    pending: all.filter((t) => t.status === "pending").length,
-    closed:  all.filter((t) => t.status === "closed").length,
-    total:   all.length,
-  }), [all]);
+  const stats = useMemo(() => {
+    const now = new Date();
+    const weekStart = new Date(now);
+    weekStart.setDate(now.getDate() - now.getDay());
+    weekStart.setHours(0, 0, 0, 0);
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const typeFiltered = typeFilter ? all.filter((t) => t.type === typeFilter) : all;
+    return {
+      open:      all.filter((t) => t.status === "open").length,
+      on_hold:   all.filter((t) => t.status === "on_hold").length,
+      pending:   all.filter((t) => t.status === "pending").length,
+      closed:    all.filter((t) => t.status === "closed").length,
+      total:     all.length,
+      thisWeek:  typeFiltered.filter((t) => t.createdAt && new Date(t.createdAt) >= weekStart).length,
+      thisMonth: typeFiltered.filter((t) => t.createdAt && new Date(t.createdAt) >= monthStart).length,
+      typeTotal: typeFiltered.length,
+    };
+  }, [all, typeFilter]);
 
   const STATUS_QUICK: Array<{ key: TicketStatus | "all"; label: string }> = [
     { key: "all",     label: "All" },
@@ -490,13 +548,22 @@ export function TicketsList({ clientId, typeFilter, title = "Tickets", descripti
 
       {/* Stat cards */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
-        {[
-          { label: "Total",   value: stats.total,   color: "text-slate-900" },
-          { label: "Open",    value: stats.open,    color: "text-red-600" },
-          { label: "On Hold", value: stats.on_hold, color: "text-orange-600" },
-          { label: "Pending", value: stats.pending, color: "text-yellow-600" },
-          { label: "Closed",  value: stats.closed,  color: "text-green-600" },
-        ].map((s) => (
+        {(typeFilter === "call"
+          ? [
+              { label: "Total Calls",  value: stats.typeTotal,  color: "text-slate-900" },
+              { label: "This Week",    value: stats.thisWeek,   color: "text-blue-600" },
+              { label: "This Month",   value: stats.thisMonth,  color: "text-indigo-600" },
+              { label: "Open",         value: stats.open,       color: "text-red-600" },
+              { label: "Closed",       value: stats.closed,     color: "text-green-600" },
+            ]
+          : [
+              { label: "Total",   value: stats.total,   color: "text-slate-900" },
+              { label: "Open",    value: stats.open,    color: "text-red-600" },
+              { label: "On Hold", value: stats.on_hold, color: "text-orange-600" },
+              { label: "Pending", value: stats.pending, color: "text-yellow-600" },
+              { label: "Closed",  value: stats.closed,  color: "text-green-600" },
+            ]
+        ).map((s) => (
           <div key={s.label} className="rounded-lg border bg-white p-4 shadow-sm text-center">
             <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">{s.label}</p>
             <p className={`mt-1 text-2xl font-bold ${s.color}`}>{s.value}</p>

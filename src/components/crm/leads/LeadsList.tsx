@@ -10,6 +10,7 @@ import {
 } from "@/lib/hooks/use-clients";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PhoneInput } from "@/components/shared/PhoneInput";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -107,7 +108,7 @@ function NewLeadDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (o
             </div>
             <div className="flex flex-col gap-1.5">
               <Label>Phone</Label>
-              <Input type="tel" value={form.primaryPhone} onChange={(e) => patch("primaryPhone", e.target.value)} placeholder="(555) 000-0000" />
+              <PhoneInput value={form.primaryPhone} onChange={(v) => patch("primaryPhone", v)} placeholder="(555) 000-0000" />
             </div>
             <div className="flex flex-col gap-1.5">
               <Label>Email</Label>
@@ -316,7 +317,9 @@ export function LeadsList({ newDialogOpen, onNewDialogOpenChange }: LeadsListPro
                   </td>
                   <td className="px-4 py-2.5 text-slate-600">{lead.primaryPhone ?? "—"}</td>
                   <td className="px-4 py-2.5 text-slate-600">{lead.primaryEmail ?? "—"}</td>
-                  <td className="px-4 py-2.5 text-slate-500">{lead.billingCity ?? "—"}</td>
+                  <td className="px-4 py-2.5 text-slate-500">
+                    {[lead.serviceAddress, lead.serviceCity, lead.serviceState].filter(Boolean).join(", ") || "—"}
+                  </td>
                   <td className="px-4 py-2.5 text-slate-500">{lead.source ?? "—"}</td>
                   <td className="px-4 py-2.5 text-right">
                     <LeadRevenuePotential leadId={lead.id} />

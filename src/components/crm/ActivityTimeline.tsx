@@ -20,6 +20,7 @@ const TYPE_META: Record<string, { icon: React.ElementType; color: string; label:
   email:     { icon: Mail,          color: "bg-indigo-100 text-indigo-600",  label: "Email" },
   invoice:   { icon: FileText,      color: "bg-amber-100 text-amber-700",    label: "Invoice" },
   payment:   { icon: DollarSign,    color: "bg-green-100 text-green-700",    label: "Payment" },
+  job:       { icon: Calendar,      color: "bg-teal-100 text-teal-700",      label: "Job" },
   job_visit: { icon: Calendar,      color: "bg-teal-100 text-teal-700",      label: "Visit" },
   estimate:  { icon: ClipboardList, color: "bg-purple-100 text-purple-700",  label: "Estimate" },
   contract:  { icon: FileText,      color: "bg-orange-100 text-orange-700",  label: "Contract" },
@@ -32,7 +33,7 @@ type FilterTab = "all" | "notes" | "visits" | "transactions" | "estimates";
 const FILTER_TABS: { value: FilterTab; label: string; types?: string[] }[] = [
   { value: "all",          label: "All History" },
   { value: "notes",        label: "Notes",        types: ["note", "call", "email", "ticket"] },
-  { value: "visits",       label: "Visits",       types: ["job_visit"] },
+  { value: "visits",       label: "Visits",       types: ["job_visit", "job"] },
   { value: "transactions", label: "Transactions", types: ["invoice", "payment"] },
   { value: "estimates",    label: "Estimates",    types: ["estimate", "contract"] },
 ];
@@ -47,6 +48,8 @@ function formatTime(iso: string) {
 function activityHref(item: ClientActivity): string | null {
   if (item.activityType === "invoice" && item.refId) return `/crm/accounting/invoices/${item.refId}`;
   if (item.activityType === "estimate" && item.refId) return `/crm/estimates/${item.refId}`;
+  if ((item.activityType === "job" || item.activityType === "job_visit") && item.refId)
+    return `/crm/clients/${item.clientId}?tab=jobs`;
   return null;
 }
 
@@ -76,8 +79,12 @@ function ActivityRow({ item, onTicketClick }: { item: ClientActivity; onTicketCl
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              {item.subject && <p className="truncate text-sm font-medium text-slate-800">{item.subject}</p>}
-              {!item.subject && <span className="text-xs font-medium text-slate-500 capitalize">{meta.label}</span>}
+              {item.subject && !item.subject.startsWith("Invoice created:") && (
+                <p className="truncate text-sm font-medium text-slate-800">{item.subject}</p>
+              )}
+              {(!item.subject || item.subject.startsWith("Invoice created:")) && (
+                <span className="text-xs font-medium text-slate-500 capitalize">{meta.label}</span>
+              )}
             </div>
             {item.body && <p className="text-sm text-slate-600 whitespace-pre-line mt-0.5">{item.body}</p>}
             {item.sentTo && <p className="text-xs text-slate-400">To: {item.sentTo}</p>}
