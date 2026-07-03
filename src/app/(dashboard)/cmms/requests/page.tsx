@@ -1,5 +1,10 @@
+import { Suspense } from "react";
 import { RequestListPage } from "@/components/cmms/RequestListPage";
 
 export default function RequestsPage() {
-  return <RequestListPage />;
+  return (
+    <Suspense>
+      <RequestListPage />
+    </Suspense>
+  );
 }
