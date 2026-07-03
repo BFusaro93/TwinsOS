@@ -66,9 +66,11 @@ export function useCreateProject() {
       input: Omit<Project, "id" | "orgId" | "createdBy" | "createdAt" | "updatedAt" | "deletedAt" | "totalCost" | "isArchived" | "progressPct" | "clientId" | "clientName"> & { clientId?: string | null; progressPct?: number }
     ) => {
       const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
       const { data, error } = await supabase
         .from("projects")
         .insert({
+          created_by: user?.id ?? null,
           name: input.name,
           customer_name: input.customerName,
           address: input.address,

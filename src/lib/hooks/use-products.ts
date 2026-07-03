@@ -137,6 +137,7 @@ export function useCreateProduct() {
       input: Omit<ProductItem, "id" | "orgId" | "createdBy" | "createdAt" | "updatedAt" | "deletedAt">
     ) => {
       const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
       const { data, error } = await supabase
         .from("product_items")
         .insert({
@@ -155,6 +156,7 @@ export function useCreateProduct() {
           cost_layers: input.costLayers as unknown as import("@/types/supabase").Json,
           minimum_stock: input.minimumStock ?? 0,
           part_category: input.partCategory ?? null,
+          created_by: user?.id ?? null,
         })
         .select()
         .single();
@@ -174,6 +176,7 @@ export function useCreateProduct() {
           vendor_name: input.vendorName || "",
           product_item_id: data.id,
           is_inventory: input.isInventory,
+          created_by: user?.id ?? null,
         });
       }
 
@@ -308,7 +311,7 @@ export function useBulkImportProducts() {
       const { data: profile } = await supabase.from("profiles").select("org_id").eq("id", user!.id).single();
 
       for (const row of inserts) {
-        const { error } = await supabase.from("product_items").insert(row);
+        const { error } = await supabase.from("product_items").insert({ ...row, created_by: user?.id ?? null });
         if (error?.code === "23505" && row.part_number) {
           // Duplicate part_number — update the existing record instead
           await supabase.from("product_items").update({

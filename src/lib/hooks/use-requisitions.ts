@@ -82,6 +82,7 @@ export function useCreateRequisition() {
       const { data: req, error: reqErr } = await (supabase as any)
         .from("requisitions")
         .insert({
+          created_by: user?.id ?? null,
           requisition_number: requisitionNumber,
           title: input.title,
           requested_by_id: user?.id ?? null,

@@ -60,9 +60,11 @@ export function useCreateGoodsReceipt() {
   return useMutation({
     mutationFn: async (input: Omit<GoodsReceipt, "id" | "orgId" | "createdBy" | "createdAt" | "updatedAt" | "deletedAt">) => {
       const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
       const { data: header, error: headerError } = await supabase
         .from("goods_receipts")
         .insert({
+          created_by: user?.id ?? null,
           receipt_number: input.receiptNumber,
           purchase_order_id: input.purchaseOrderId,
           po_number: input.poNumber,

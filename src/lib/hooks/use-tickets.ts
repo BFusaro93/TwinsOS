@@ -72,10 +72,12 @@ export function useCreateTicket() {
   return useMutation({
     mutationFn: async (values: NewTicketFormValues) => {
       const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
         .from("crm_tickets")
         .insert({
+          created_by: user?.id ?? null,
           type: values.type,
           client_id: values.clientId || null,
           category: values.category || null,

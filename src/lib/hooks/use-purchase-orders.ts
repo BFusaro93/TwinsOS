@@ -70,10 +70,12 @@ export function useCreatePurchaseOrder() {
       po: Omit<PurchaseOrder, "id" | "orgId" | "createdBy" | "createdAt" | "updatedAt" | "deletedAt">
     ) => {
       const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
 
       const { data: created, error: poErr } = await supabase
         .from("purchase_orders")
         .insert({
+          created_by: user?.id ?? null,
           po_number: po.poNumber,
           po_date: po.poDate,
           invoice_number: po.invoiceNumber,

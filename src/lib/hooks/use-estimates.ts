@@ -186,10 +186,12 @@ export function useCreateEstimate() {
       stage?: string;
     }) => {
       const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
         .from("estimates")
         .insert({
+          created_by: user?.id ?? null,
           client_id: values.clientId,
           description: values.description,
           sales_rep_id: values.salesRepId ?? null,

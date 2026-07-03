@@ -335,7 +335,7 @@ export async function POST(request: Request) {
     if (notifType === "new_maintenance_request") {
       const title = (entity.title ?? "Maintenance Request") as string;
       const num   = (entity.request_number ?? "") as string;
-      const link  = `${SITE_URL}/cmms/work-orders?id=${entity.id as string}`;
+      const link  = `${SITE_URL}/cmms/requests?id=${entity.id as string}`;
       return {
         subject: `New maintenance request: ${title}`,
         html: `<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px 24px">

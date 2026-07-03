@@ -165,10 +165,12 @@ export function useCreateInvoiceFromEstimate() {
       totalCents: number;
     }) => {
       const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: inv, error: invErr } = await (supabase as any)
         .from("crm_invoices")
         .insert({
+          created_by: user?.id ?? null,
           client_id: clientId,
           estimate_id: estimateId,
           description,
@@ -221,10 +223,12 @@ export function useCreateInvoice() {
       dueDate?: string;
     }) => {
       const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
         .from("crm_invoices")
         .insert({
+          created_by: user?.id ?? null,
           client_id: values.clientId,
           description: values.description,
           invoice_date: values.invoiceDate,
@@ -419,12 +423,14 @@ export function useRecordPayment() {
       allocations?: { invoiceId: string; amountCents: number }[];
     }) => {
       const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
       const activeAllocations = (allocations ?? []).filter((a) => a.amountCents > 0);
       const primaryInvoiceId = activeAllocations.length === 1 ? activeAllocations[0].invoiceId : null;
 
       // insert payment row
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error: pmtErr } = await (supabase as any).from("crm_payments").insert({
+        created_by: user?.id ?? null,
         invoice_id: primaryInvoiceId,
         client_id: clientId,
         amount_cents: amountCents,
@@ -837,11 +843,13 @@ export function useCreateInvoiceFromJob() {
       totalCents: number;
     }) => {
       const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
         .from("crm_invoices")
         .insert({
+          created_by: user?.id ?? null,
           client_id: clientId,
           description,
           invoice_date: invoiceDate,

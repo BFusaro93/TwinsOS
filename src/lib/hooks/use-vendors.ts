@@ -44,9 +44,11 @@ export function useCreateVendor() {
       input: Omit<Vendor, "id" | "orgId" | "createdBy" | "createdAt" | "updatedAt" | "deletedAt">
     ) => {
       const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
       const { data, error } = await supabase
         .from("vendors")
         .insert({
+          created_by: user?.id ?? null,
           name: input.name,
           contact_name: input.contactName,
           email: input.email,

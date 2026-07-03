@@ -138,7 +138,7 @@ export async function POST(req: NextRequest) {
         const resend = new Resend(resendKey);
         const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://twins-os.vercel.app";
         const subject = `New maintenance request: ${title}`;
-        const link = `${siteUrl}/cmms/work-orders`;
+        const link = `${siteUrl}/cmms/requests?id=${mr.id as string}`;
 
         await Promise.allSettled(
           eligible.map((p) =>

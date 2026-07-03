@@ -36,7 +36,9 @@ export function useCreatePMSchedule() {
   return useMutation({
     mutationFn: async (input: Omit<PMSchedule, "id" | "orgId" | "createdBy" | "createdAt" | "updatedAt" | "deletedAt">) => {
       const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
       const { data, error } = await supabase.from("pm_schedules").insert({
+        created_by: user?.id ?? null,
         title: input.title,
         asset_id: input.assetId,
         asset_name: input.assetName,

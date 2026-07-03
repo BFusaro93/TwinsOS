@@ -281,7 +281,7 @@ export function RequestDetailPanel({ request }: RequestDetailPanelProps) {
           },
           {
             value: "history",
-            label: "History",
+            label: "Audit Trail",
             content: <HistoryTab request={request} />,
           },
           {

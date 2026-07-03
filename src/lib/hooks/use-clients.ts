@@ -335,9 +335,11 @@ export function useCreateClient() {
   return useMutation({
     mutationFn: async (values: NewClientFormValues) => {
       const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
       const { data, error } = await supabase
         .from("clients")
         .insert({
+          created_by: user?.id ?? null,
           display_name: values.displayName,
           account_type: values.accountType,
           primary_phone: values.primaryPhone || null,
@@ -580,9 +582,11 @@ export function useCreateLead() {
       notes?: string;
     }) => {
       const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
       const { data, error } = await supabase
         .from("clients")
         .insert({
+          created_by: user?.id ?? null,
           display_name: values.displayName,
           account_type: values.accountType ?? "residential",
           primary_phone: values.primaryPhone || null,

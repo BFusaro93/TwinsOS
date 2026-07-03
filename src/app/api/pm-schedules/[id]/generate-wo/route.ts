@@ -24,7 +24,7 @@ export async function POST(
   }
   const { data: profile } = await userClient
     .from("profiles")
-    .select("org_id, role")
+    .select("org_id, role, name")
     .eq("id", user.id)
     .single();
   if (!profile) {
@@ -245,6 +245,31 @@ export async function POST(
       last_completed_date: new Date().toISOString().slice(0, 10),
     })
     .eq("id", scheduleId);
+
+  // The update above runs through the service-role client, so fn_audit_log()
+  // can't see the acting user via auth.uid() and the generic field-diff
+  // description is noisy for a routine automatic bump. Rewrite the entry the
+  // trigger just wrote with proper attribution and a clean description.
+  const { data: scheduleAudit } = await adminClient
+    .from("audit_log")
+    .select("id")
+    .eq("record_type", "pm_schedule")
+    .eq("record_id", scheduleId)
+    .eq("action", "updated")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .single();
+
+  if (scheduleAudit) {
+    await adminClient
+      .from("audit_log")
+      .update({
+        created_by: user.id,
+        changed_by_name: profile.name ?? "system",
+        description: `Work orders generated — next due date advanced to ${nextDue}`,
+      })
+      .eq("id", scheduleAudit.id);
+  }
 
   return NextResponse.json({ parentWorkOrderId: primaryWOId });
 }

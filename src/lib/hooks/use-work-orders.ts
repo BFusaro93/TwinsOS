@@ -42,7 +42,9 @@ export function useCreateWorkOrder() {
   return useMutation({
     mutationFn: async (input: Omit<WorkOrder, "id" | "orgId" | "createdBy" | "createdAt" | "updatedAt" | "deletedAt">) => {
       const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
       const { data, error } = await supabase.from("work_orders").insert({
+        created_by: user?.id ?? null,
         title: input.title,
         description: input.description,
         status: input.status,

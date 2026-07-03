@@ -49,6 +49,7 @@ export function useCreatePart() {
       input: Omit<Part, "id" | "orgId" | "createdBy" | "createdAt" | "updatedAt" | "deletedAt">
     ) => {
       const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
       const vendor = input.vendorId
         ? { vendor_id: input.vendorId, vendor_name: input.vendorName }
         : { vendor_id: null, vendor_name: null };
@@ -71,6 +72,7 @@ export function useCreatePart() {
           picture_url: input.pictureUrl,
           product_item_id: input.productItemId,
           cost_layers: input.costLayers as unknown as import("@/types/supabase").Json,
+          created_by: user?.id ?? null,
         })
         .select()
         .single();
@@ -97,6 +99,7 @@ export function useCreatePart() {
             minimum_stock: input.minimumStock,
             part_category: input.category || null,
             cost_layers: [] as unknown as import("@/types/supabase").Json,
+            created_by: user?.id ?? null,
           })
           .select("id")
           .single();

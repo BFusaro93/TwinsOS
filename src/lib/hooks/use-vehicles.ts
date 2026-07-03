@@ -43,8 +43,10 @@ export function useCreateVehicle() {
   return useMutation({
     mutationFn: async (input: Omit<Vehicle, "id" | "orgId" | "createdBy" | "createdAt" | "updatedAt" | "deletedAt">) => {
       const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any).from("vehicles").insert({
+        created_by: user?.id ?? null,
         name: input.name,
         asset_tag: input.assetTag,
         equipment_number: input.equipmentNumber,

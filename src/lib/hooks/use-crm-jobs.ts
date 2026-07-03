@@ -766,10 +766,12 @@ export function useCreateClientJob() {
   return useMutation({
     mutationFn: async (values: NewClientJobFormValues) => {
       const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
         .from('crm_jobs')
         .insert({
+          created_by: user?.id ?? null,
           client_id: values.clientId,
           job_type: values.jobType,
           status: 'scheduled',
@@ -1123,11 +1125,13 @@ export function useCreateJobsFromEstimate() {
       services: { serviceName: string; serviceId: string | null; qty: number; rateCents: number | null; totalCents: number }[];
     }) => {
       const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
         .from("crm_jobs")
         .insert({
+          created_by: user?.id ?? null,
           client_id: clientId,
           job_type: jobType,
           status: scheduledDate ? "scheduled" : "hold",

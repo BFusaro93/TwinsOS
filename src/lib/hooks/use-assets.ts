@@ -41,7 +41,9 @@ export function useCreateAsset() {
   return useMutation({
     mutationFn: async (input: Omit<Asset, "id" | "orgId" | "createdBy" | "createdAt" | "updatedAt" | "deletedAt">) => {
       const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
       const { data, error } = await supabase.from("assets").insert({
+        created_by: user?.id ?? null,
         name: input.name,
         asset_tag: input.assetTag,
         equipment_number: input.equipmentNumber,
