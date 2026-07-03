@@ -21,6 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { VendorCombobox } from "@/components/shared/VendorCombobox";
 import { useVendors } from "@/lib/hooks/use-vendors";
 import { useAssets, useCreateAsset, useUpdateAsset } from "@/lib/hooks/use-assets";
 import { useVehicles } from "@/lib/hooks/use-vehicles";
@@ -470,18 +471,13 @@ export function NewAssetDialog({ open, onOpenChange, initialData, mode = "edit",
 
             <div className="grid gap-1.5">
               <Label htmlFor="purchase-vendor">Purchase Vendor</Label>
-              <Select value={purchaseVendorId} onValueChange={setPurchaseVendorId}>
-                <SelectTrigger id="purchase-vendor">
-                  <SelectValue placeholder="Select a vendor" />
-                </SelectTrigger>
-                <SelectContent>
-                  {vendors?.map((v) => (
-                    <SelectItem key={v.id} value={v.id}>
-                      {v.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <VendorCombobox
+                id="purchase-vendor"
+                vendors={vendors ?? []}
+                value={purchaseVendorId || "none"}
+                onValueChange={(v) => setPurchaseVendorId(v === "none" ? "" : v)}
+                noneLabel="Select a vendor"
+              />
             </div>
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

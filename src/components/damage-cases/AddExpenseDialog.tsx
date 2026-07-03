@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useCreateDamageCaseExpense } from "@/lib/hooks/use-damage-cases";
 import { useVendors } from "@/lib/hooks/use-vendors";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { VendorCombobox } from "@/components/shared/VendorCombobox";
 
 interface Props {
   damageCaseId: string;
@@ -58,17 +58,12 @@ export function AddExpenseDialog({ damageCaseId, open, onOpenChange }: Props) {
           </div>
           <div className="space-y-1.5">
             <Label>Vendor</Label>
-            <Select value={vendorId} onValueChange={setVendorId}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select vendor…" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">— None —</SelectItem>
-                {vendors.map((v) => (
-                  <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <VendorCombobox
+              vendors={vendors}
+              value={vendorId}
+              onValueChange={setVendorId}
+              noneLabel="— None —"
+            />
             {vendorId === "none" && (
               <Input
                 className="mt-1.5"

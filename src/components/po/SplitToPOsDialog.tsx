@@ -11,15 +11,9 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { formatCurrency } from "@/lib/utils";
+import { VendorCombobox } from "@/components/shared/VendorCombobox";
 import { useVendors } from "@/lib/hooks/use-vendors";
 import { useProducts } from "@/lib/hooks/use-products";
 import { useParts } from "@/lib/hooks/use-parts";
@@ -194,24 +188,12 @@ export function SplitToPOsDialog({
                     {formatCurrency(a.lineItem.unitCost)}
                   </td>
                   <td className="py-2 align-top">
-                    <Select
+                    <VendorCombobox
+                      vendors={vendors}
                       value={a.vendorId}
                       onValueChange={(val) => setVendor(a.lineItem.id, val)}
-                    >
-                      <SelectTrigger className="h-8 text-xs">
-                        <SelectValue placeholder="Select vendor…" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none" className="text-xs text-slate-400">
-                          Unassigned
-                        </SelectItem>
-                        {vendors.map((v) => (
-                          <SelectItem key={v.id} value={v.id} className="text-xs">
-                            {v.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                      noneLabel="Unassigned"
+                    />
                   </td>
                 </tr>
               ))}

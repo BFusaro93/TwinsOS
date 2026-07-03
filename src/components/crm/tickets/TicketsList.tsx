@@ -419,7 +419,7 @@ export function TicketsList({ clientId, typeFilter, title = "Tickets", descripti
   const [activeColFilter, setActiveColFilter] = useState<ColFilterKey | null>(null);
   const [colFilterValue, setColFilterValue] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [selectedTicket, setSelectedTicket] = useState<CRMTicket | null>(null);
+  const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [reassignOpen, setReassignOpen] = useState(false);
   const [reassignName, setReassignName] = useState("");
@@ -429,6 +429,7 @@ export function TicketsList({ clientId, typeFilter, title = "Tickets", descripti
   const updateTicket = useUpdateTicket();
 
   const all = tickets ?? [];
+  const selectedTicket = selectedTicketId ? all.find((t) => t.id === selectedTicketId) ?? null : null;
 
   const stats = useMemo(() => {
     const now = new Date();
@@ -759,7 +760,7 @@ export function TicketsList({ clientId, typeFilter, title = "Tickets", descripti
                 <tr
                   key={t.id}
                   className={cn("border-b hover:bg-slate-50 cursor-pointer", selectedIds.has(t.id) && "bg-brand-50")}
-                  onClick={() => setSelectedTicket(t)}
+                  onClick={() => setSelectedTicketId(t.id)}
                 >
                   <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                     <input
@@ -806,7 +807,7 @@ export function TicketsList({ clientId, typeFilter, title = "Tickets", descripti
 
       <TicketDetailSheet
         ticket={selectedTicket}
-        onClose={() => setSelectedTicket(null)}
+        onClose={() => setSelectedTicketId(null)}
       />
 
       {/* Reassign dialog */}

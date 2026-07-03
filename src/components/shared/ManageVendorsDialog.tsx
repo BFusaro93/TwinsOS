@@ -11,13 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { VendorCombobox } from "@/components/shared/VendorCombobox";
 import { X } from "lucide-react";
 import { useVendors } from "@/lib/hooks/use-vendors";
 
@@ -44,7 +38,6 @@ export function ManageVendorsDialog({
   const { data: allVendors } = useVendors();
   const [primary, setPrimary] = useState<VendorRef | null>(primaryVendor);
   const [alternates, setAlternates] = useState<VendorRef[]>(alternateVendors);
-  const [selectKey, setSelectKey] = useState(0);
 
   // Sync local state when dialog opens with new props
   useEffect(() => {
@@ -82,7 +75,6 @@ export function ManageVendorsDialog({
     } else {
       setAlternates((prev) => [...prev, ref]);
     }
-    setSelectKey((k) => k + 1);
   }
 
   function handleSave() {
@@ -143,18 +135,13 @@ export function ManageVendorsDialog({
           {availableVendors.length > 0 && (
             <div>
               <p className="mb-1.5 text-xs font-medium text-slate-500">Add Vendor</p>
-              <Select key={selectKey} onValueChange={handleAdd} value="">
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select a vendor..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {availableVendors.map((v) => (
-                    <SelectItem key={v.id} value={v.id}>
-                      {v.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <VendorCombobox
+                vendors={availableVendors}
+                value=""
+                onValueChange={handleAdd}
+                required
+                noneLabel="Select a vendor..."
+              />
             </div>
           )}
         </div>

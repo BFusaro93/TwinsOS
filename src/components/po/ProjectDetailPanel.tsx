@@ -64,6 +64,7 @@ import {
   useDeleteProjectSubcontractCost,
 } from "@/lib/hooks/use-project-subcontract-costs";
 import { useVendors } from "@/lib/hooks/use-vendors";
+import { VendorCombobox } from "@/components/shared/VendorCombobox";
 import { usePOStore } from "@/stores";
 import type { PrefillItem } from "./NewRequisitionDialog";
 import type { POPrefillItem } from "./NewPODialog";
@@ -598,7 +599,7 @@ function SubcontractsTab({ project }: { project: Project }) {
   }
 
   function handleVendorChange(vendorId: string) {
-    if (vendorId === "__manual__") {
+    if (vendorId === "none") {
       setForm((f) => ({ ...f, vendorId: "", vendorName: "" }));
       return;
     }
@@ -730,16 +731,12 @@ function SubcontractsTab({ project }: { project: Project }) {
             {/* Vendor */}
             <div className="flex flex-col gap-1">
               <label className="text-xs font-medium text-slate-600">Vendor</label>
-              <select
-                className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
-                value={form.vendorId || "__manual__"}
-                onChange={(e) => handleVendorChange(e.target.value)}
-              >
-                <option value="__manual__">— Type vendor name —</option>
-                {vendors.map((v) => (
-                  <option key={v.id} value={v.id}>{v.name}</option>
-                ))}
-              </select>
+              <VendorCombobox
+                vendors={vendors}
+                value={form.vendorId || "none"}
+                onValueChange={handleVendorChange}
+                noneLabel="— Type vendor name —"
+              />
               {(!form.vendorId) && (
                 <Input
                   placeholder="Vendor name"
