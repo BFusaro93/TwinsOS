@@ -431,7 +431,7 @@ export function NewPODialog({ open, onOpenChange, initialData, prefillData, onCr
       }}
     />
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex flex-col sm:max-w-[680px]">
+      <DialogContent className="flex flex-col sm:max-w-[900px]">
         <DialogHeader className="shrink-0">
           <DialogTitle>{isEditing ? "Edit Purchase Order" : "New Purchase Order"}</DialogTitle>
           <DialogDescription>Create a purchase order to send to a vendor.</DialogDescription>
