@@ -28,6 +28,7 @@ export interface Client {
   displayName: string;
   firstName: string | null;
   lastName: string | null;
+  accountNumber: string | null;
   accountType: AccountType;
   status: ClientStatus;
   primaryPhone: string | null;
@@ -51,6 +52,7 @@ export interface Client {
   salesRepName: string | null;
   source: string | null;
   referredBy: string | null;
+  referredByClientId: string | null;
   clientSince: string | null;
   turfSqft: number | null;
   mulchBedSqft: number | null;
