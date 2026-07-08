@@ -3,6 +3,14 @@
 import { useState } from "react";
 import { formatCurrency } from "@/lib/utils";
 import { bpsToPercent } from "@/lib/estimate-calc";
+import { useDiscounts } from "@/lib/hooks/use-crm-discounts";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import type { Estimate } from "@/types/crm-estimates";
 
 interface RecalcParams {
@@ -86,17 +94,31 @@ function RateRow({
 export function EstimateSummaryPanel({ estimate, onRecalculate, recalcPending }: Props) {
   const lineItems   = estimate.lineItems ?? [];
   const directCosts = estimate.directCosts ?? [];
+  const { data: discounts = [] } = useDiscounts();
+  const activeDiscounts = discounts.filter((d) => d.isActive);
 
   // Editable financial settings — initialized from estimate
   const [taxRateStr,      setTaxRateStr]      = useState(String((estimate.taxRateBps / 100).toFixed(2)));
   const [overheadRateStr, setOverheadRateStr] = useState(String((estimate.overheadRateBps / 100).toFixed(2)));
   const [discountStr,     setDiscountStr]     = useState(String((estimate.discountCents / 100).toFixed(2)));
 
-  async function handleRecalc() {
+  async function handleRecalc(discountOverrideStr?: string) {
     const taxRateBps      = Math.round((parseFloat(taxRateStr) || 0) * 100);
     const overheadRateBps = Math.round((parseFloat(overheadRateStr) || 0) * 100);
-    const discountCents   = Math.round((parseFloat(discountStr) || 0) * 100);
+    const discountCents   = Math.round((parseFloat(discountOverrideStr ?? discountStr) || 0) * 100);
     await onRecalculate({ taxRateBps, overheadRateBps, discountCents });
+  }
+
+  function applyNamedDiscount(discountId: string) {
+    if (!discountId || discountId === "custom") return;
+    const d = activeDiscounts.find((item) => item.id === discountId);
+    if (!d) return;
+    const cents = d.discountType === "percent"
+      ? Math.round(estimate.subtotalCents * ((d.percentBps ?? 0) / 10000))
+      : (d.flatCents ?? 0);
+    const str = (cents / 100).toFixed(2);
+    setDiscountStr(str);
+    void handleRecalc(str);
   }
 
   // Cost breakdown by type (from direct costs)
@@ -154,9 +176,27 @@ export function EstimateSummaryPanel({ estimate, onRecalculate, recalcPending }:
           label="Discount"
           value={discountStr}
           onChange={setDiscountStr}
-          onBlur={handleRecalc}
+          onBlur={() => handleRecalc()}
           suffix="$"
         />
+        {activeDiscounts.length > 0 && (
+          <div className="mt-1.5">
+            <Select onValueChange={applyNamedDiscount}>
+              <SelectTrigger className="h-7 text-xs">
+                <SelectValue placeholder="Apply a saved discount…" />
+              </SelectTrigger>
+              <SelectContent>
+                {activeDiscounts.map((d) => (
+                  <SelectItem key={d.id} value={d.id} className="text-xs">
+                    {d.name} — {d.discountType === "percent"
+                      ? `${((d.percentBps ?? 0) / 100).toFixed(2)}%`
+                      : formatCurrency(d.flatCents ?? 0)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
         {recalcPending && (
           <p className="mt-1 text-[10px] text-brand-500 text-right">Recalculating…</p>
         )}

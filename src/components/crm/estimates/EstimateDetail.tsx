@@ -43,6 +43,7 @@ import {
 import { cn, formatCurrency } from "@/lib/utils";
 import { toast } from "sonner";
 import { AuditTrailTab } from "@/components/shared/AuditTrailTab";
+import { EstimatePhotosTab } from "./EstimatePhotosTab";
 import {
   ArrowLeft,
   Save,
@@ -106,7 +107,7 @@ const LINE_ITEM_TABS: { value: LineItemStatus | "all"; label: string }[] = [
   { value: "lost",  label: "Lost" },
 ];
 
-type Tab = "details" | "notes" | "attachments" | "audit" | "versions";
+type Tab = "details" | "notes" | "photos" | "attachments" | "audit" | "versions";
 
 // ── Attachments tab ────────────────────────────────────────────────────────────
 
@@ -653,7 +654,7 @@ export function EstimateDetail({ estimateId, onClose }: Props) {
 
       {/* ── tabs ────────────────────────────────────────────────────── */}
       <div className="flex gap-0 border-b bg-white px-6">
-        {(["details", "notes", "attachments", "audit", "versions"] as Tab[]).map((t) => (
+        {(["details", "notes", "photos", "attachments", "audit", "versions"] as Tab[]).map((t) => (
           <button
             key={t}
             onClick={() => setActiveTab(t)}
@@ -1126,6 +1127,10 @@ export function EstimateDetail({ estimateId, onClose }: Props) {
                 className="w-full rounded border border-slate-200 p-2 text-sm focus:border-brand-400 focus:outline-none resize-none"
               />
             </div>
+          )}
+
+          {activeTab === "photos" && (
+            <EstimatePhotosTab estimateId={estimate.id} />
           )}
 
           {activeTab === "attachments" && (
