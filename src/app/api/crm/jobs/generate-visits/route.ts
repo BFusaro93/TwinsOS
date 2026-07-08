@@ -56,6 +56,39 @@ function parseSchedule(schedule: string | null, scheduleDays: string[]): Occurre
   return [];
 }
 
+const WEEK_OF_MONTH_ORDINAL: Record<string, number> = {
+  first: 1, second: 2, third: 3, fourth: 4, last: -1,
+};
+
+/** The Nth (or last, ordinal=-1) occurrence of `weekdayIndex` (0=Sun..6=Sat) in the given month. */
+function nthWeekdayOfMonth(year: number, month: number, weekdayIndex: number, ordinal: number): Date {
+  if (ordinal === -1) {
+    const lastDay = new Date(year, month + 1, 0);
+    const diff = (lastDay.getDay() - weekdayIndex + 7) % 7;
+    lastDay.setDate(lastDay.getDate() - diff);
+    return lastDay;
+  }
+  const firstDay = new Date(year, month, 1);
+  const diff = (weekdayIndex - firstDay.getDay() + 7) % 7;
+  return new Date(year, month, 1 + diff + (ordinal - 1) * 7);
+}
+
+/** True calendar-month recurrence — "1st Monday of every month" etc. */
+function monthlyOccurrencesInRange(dayIndex: number, weekOfMonth: string, from: Date, to: Date): Date[] {
+  const ordinal = WEEK_OF_MONTH_ORDINAL[weekOfMonth] ?? 1;
+  const dates: Date[] = [];
+  let year = from.getFullYear();
+  let month = from.getMonth();
+  while (true) {
+    const d = nthWeekdayOfMonth(year, month, dayIndex, ordinal);
+    if (d > to) break;
+    if (d >= from) dates.push(d);
+    month++;
+    if (month > 11) { month = 0; year++; }
+  }
+  return dates;
+}
+
 function occurrencesInRange(rule: OccurrenceRule, from: Date, to: Date): Date[] {
   const dates: Date[] = [];
   const cursor = new Date(from);
@@ -150,12 +183,13 @@ await (supabase as any).from("crm_jobs").select("*" as any).eq("id", jobId).sing
   // Note: RLS scopes to the authenticated user's org; we don't filter by org_id here
   // because crm_jobs.org_id may be null for jobs created via the browser client.
   let rules: OccurrenceRule[] = [];
+  let monthlyDates: Date[] = [];
   let seasonFilter: { start: string; end: string } | null = null;
   if (j.schedule) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: scheduleRow } = await (supabase as any)
       .from("crm_schedules")
-      .select("frequency, day_of_week, season_start, season_end")
+      .select("frequency, day_of_week, season_start, season_end, week_of_month")
       .eq("name", j.schedule)
       .is("deleted_at", null)
       .maybeSingle();
@@ -172,8 +206,10 @@ await (supabase as any).from("crm_jobs").select("*" as any).eq("id", jobId).sing
           rules = [{ frequency: "biweekly", dayIndex, biweeklyParity: "even" }];
         } else if (freq === "every_3_weeks") {
           rules = [{ frequency: "biweekly", dayIndex, biweeklyParity: "even" }];
+        } else if (freq === "monthly") {
+          monthlyDates = monthlyOccurrencesInRange(dayIndex, sr.week_of_month ?? "first", windowStart, effectiveEnd);
         }
-        // every_4_weeks / monthly: fall through to name-based parsing below
+        // every_4_weeks: fall through to name-based parsing below
       }
 
       // Narrow the generation window to the schedule's season (MM-DD format).
@@ -188,32 +224,31 @@ await (supabase as any).from("crm_jobs").select("*" as any).eq("id", jobId).sing
   }
 
   // Fall back to name-based parsing if schedule record not found
-  if (rules.length === 0) {
+  if (rules.length === 0 && monthlyDates.length === 0) {
     rules = parseSchedule(j.schedule, j.schedule_days ?? []);
   }
   const toInsert: object[] = [];
+  const allOccurrences = [...rules.flatMap((rule) => occurrencesInRange(rule, windowStart, effectiveEnd)), ...monthlyDates];
 
-  for (const rule of rules) {
-    for (const d of occurrencesInRange(rule, windowStart, effectiveEnd)) {
-      const dateStr = toISODate(d);
-      if (existingSet.has(dateStr)) continue;
+  for (const d of allOccurrences) {
+    const dateStr = toISODate(d);
+    if (existingSet.has(dateStr)) continue;
 
-      // Apply season window: only generate visits whose MM-DD falls within the season.
-      if (seasonFilter) {
-        const mmdd = dateStr.slice(5); // "MM-DD"
-        const inSeason = seasonFilter.start <= seasonFilter.end
-          ? mmdd >= seasonFilter.start && mmdd <= seasonFilter.end
-          : mmdd >= seasonFilter.start || mmdd <= seasonFilter.end; // wraps year boundary
-        if (!inSeason) continue;
-      }
-
-      toInsert.push({
-        job_id: jobId, client_id: j.client_id,
-        crew_id: j.crew_id ?? null, scheduled_date: dateStr,
-        priority: j.priority ?? 1, notes_to_crew: j.notes_to_crew ?? null,
-      });
-      existingSet.add(dateStr);
+    // Apply season window: only generate visits whose MM-DD falls within the season.
+    if (seasonFilter) {
+      const mmdd = dateStr.slice(5); // "MM-DD"
+      const inSeason = seasonFilter.start <= seasonFilter.end
+        ? mmdd >= seasonFilter.start && mmdd <= seasonFilter.end
+        : mmdd >= seasonFilter.start || mmdd <= seasonFilter.end; // wraps year boundary
+      if (!inSeason) continue;
     }
+
+    toInsert.push({
+      job_id: jobId, client_id: j.client_id,
+      crew_id: j.crew_id ?? null, scheduled_date: dateStr,
+      priority: j.priority ?? 1, notes_to_crew: j.notes_to_crew ?? null,
+    });
+    existingSet.add(dateStr);
   }
 
   if (toInsert.length === 0) {

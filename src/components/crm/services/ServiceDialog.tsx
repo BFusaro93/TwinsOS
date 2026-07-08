@@ -32,10 +32,13 @@ import {
   useDeleteRateMatrixRow,
   useCustomFieldDefs,
 } from "@/lib/hooks/use-rate-matrix";
+import { useOrgList } from "@/lib/hooks/use-org-lists";
 import type { CRMService } from "@/types/crm-jobs";
 
 const UNITS = ["visit", "sqft", "lf", "cuyd", "acres", "hr", "each", "lb", "gal"];
-const CATEGORIES = ["lawn", "landscape", "snow", "irrigation", "tree", "chemical", "other"];
+// Fallback shown only until the org has configured its own list under
+// Settings > Services > Service Categories.
+const FALLBACK_CATEGORIES = ["lawn", "landscape", "snow", "irrigation", "tree", "chemical", "other"];
 
 type Tab = "details" | "descriptions" | "rate_matrix" | "sub_services" | "job_costing";
 
@@ -492,6 +495,10 @@ export function ServiceDialog({ open, service, onClose }: Props) {
   const { data: allServices = [] } = useCRMServices();
   const createService = useCreateCRMService();
   const updateService = useUpdateCRMService();
+  const { data: categoryOptions } = useOrgList("service_categories");
+  const categories = categoryOptions && categoryOptions.length > 0
+    ? categoryOptions.map((o) => o.value)
+    : FALLBACK_CATEGORIES;
 
   useEffect(() => {
     if (open) {
@@ -617,7 +624,7 @@ export function ServiceDialog({ open, service, onClose }: Props) {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {CATEGORIES.map((c) => (
+                    {categories.map((c) => (
                       <SelectItem key={c} value={c} className="capitalize">{c}</SelectItem>
                     ))}
                   </SelectContent>

@@ -58,6 +58,29 @@ const DAY_JS: Record<CRMSchedule['dayOfWeek'], number> = {
   Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6,
 };
 
+type WeekOfMonth = NonNullable<CRMSchedule['weekOfMonth']>;
+const WEEK_OF_MONTH_OPTIONS: WeekOfMonth[] = ['first', 'second', 'third', 'fourth', 'last'];
+const WEEK_OF_MONTH_LABELS: Record<WeekOfMonth, string> = {
+  first: '1st', second: '2nd', third: '3rd', fourth: '4th', last: 'Last',
+};
+const WEEK_OF_MONTH_ORDINAL: Record<WeekOfMonth, number> = {
+  first: 1, second: 2, third: 3, fourth: 4, last: -1,
+};
+
+/** The Nth (or last) occurrence of `weekdayIndex` (0=Sun..6=Sat) in the given month. */
+function nthWeekdayOfMonth(year: number, month: number, weekdayIndex: number, ordinal: number): Date {
+  if (ordinal === -1) {
+    const lastDay = new Date(year, month + 1, 0);
+    const diff = (lastDay.getDay() - weekdayIndex + 7) % 7;
+    lastDay.setDate(lastDay.getDate() - diff);
+    return lastDay;
+  }
+  const firstDay = new Date(year, month, 1);
+  const diff = (weekdayIndex - firstDay.getDay() + 7) % 7;
+  const day = 1 + diff + (ordinal - 1) * 7;
+  return new Date(year, month, day);
+}
+
 const MONTHS = [
   'January','February','March','April','May','June',
   'July','August','September','October','November','December',
@@ -65,7 +88,49 @@ const MONTHS = [
 
 // ── schedule date calculator ──────────────────────────────────────────────────
 
+function inSeasonWindow(d: Date, seasonStart: string | null, seasonEnd: string | null): boolean {
+  if (!seasonStart && !seasonEnd) return true;
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  const md = `${mm}-${dd}`;
+  const start = seasonStart ?? '01-01';
+  const end = seasonEnd ?? '12-31';
+  return start <= end ? (md >= start && md <= end) : (md >= start || md <= end);
+}
+
+/**
+ * True calendar-month recurrence — "1st Monday of every month" etc.
+ * Distinct from the interval-based frequencies below because a fixed N-day
+ * step (e.g. 30 days) drifts across weekdays since it isn't a multiple of 7.
+ */
+function computeMonthlyDates(sched: CRMSchedule, count: number): Date[] {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const targetDay = DAY_JS[sched.dayOfWeek];
+  const ordinal = WEEK_OF_MONTH_ORDINAL[sched.weekOfMonth ?? 'first'];
+
+  const results: Date[] = [];
+  let year = today.getFullYear();
+  let month = today.getMonth();
+  const maxTries = count * 6;
+  let tries = 0;
+
+  while (results.length < count && tries < maxTries) {
+    tries++;
+    const d = nthWeekdayOfMonth(year, month, targetDay, ordinal);
+    if (d >= today && inSeasonWindow(d, sched.seasonStart, sched.seasonEnd)) {
+      results.push(d);
+    }
+    month++;
+    if (month > 11) { month = 0; year++; }
+  }
+
+  return results;
+}
+
 function computeUpcomingDates(sched: CRMSchedule, count = 20): Date[] {
+  if (sched.frequency === 'monthly') return computeMonthlyDates(sched, count);
+
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const targetDay = DAY_JS[sched.dayOfWeek];
@@ -204,10 +269,11 @@ interface ScheduleFormValues {
   anchorDate: string;
   seasonStart: string;
   seasonEnd: string;
+  weekOfMonth: CRMSchedule['weekOfMonth'];
 }
 
 function defaultForm(): ScheduleFormValues {
-  return { name: '', frequency: 'weekly', dayOfWeek: 'Mon', weekPattern: null, anchorDate: '', seasonStart: '', seasonEnd: '' };
+  return { name: '', frequency: 'weekly', dayOfWeek: 'Mon', weekPattern: null, anchorDate: '', seasonStart: '', seasonEnd: '', weekOfMonth: null };
 }
 
 function scheduleToForm(s: CRMSchedule): ScheduleFormValues {
@@ -219,6 +285,7 @@ function scheduleToForm(s: CRMSchedule): ScheduleFormValues {
     anchorDate: s.anchorDate ?? '',
     seasonStart: s.seasonStart ?? '',
     seasonEnd: s.seasonEnd ?? '',
+    weekOfMonth: s.weekOfMonth ?? 'first',
   };
 }
 
@@ -249,6 +316,9 @@ function ScheduleDialog({ open, schedule, onClose }: ScheduleDialogProps) {
         next.weekPattern = null;
         next.anchorDate = '';
       }
+      if (key === 'frequency' && value === 'monthly' && !next.weekOfMonth) {
+        next.weekOfMonth = 'first';
+      }
       if (key === 'weekPattern' && (value === 'any' || value === null)) {
         next.anchorDate = '';
       }
@@ -266,6 +336,7 @@ function ScheduleDialog({ open, schedule, onClose }: ScheduleDialogProps) {
       anchorDate: form.anchorDate || null,
       seasonStart: form.seasonStart || null,
       seasonEnd: form.seasonEnd || null,
+      weekOfMonth: form.frequency === 'monthly' ? (form.weekOfMonth ?? 'first') : null,
     };
     if (schedule) {
       await updateSchedule.mutateAsync({ id: schedule.id, patch: payload });
@@ -276,6 +347,7 @@ function ScheduleDialog({ open, schedule, onClose }: ScheduleDialogProps) {
   }
 
   const isBiWeekly = form.frequency === 'bi_weekly';
+  const isMonthly = form.frequency === 'monthly';
   const showAnchor = isBiWeekly && (form.weekPattern === 'even' || form.weekPattern === 'odd');
   const isPending = createSchedule.isPending || updateSchedule.isPending;
 
@@ -285,6 +357,7 @@ function ScheduleDialog({ open, schedule, onClose }: ScheduleDialogProps) {
     frequency: form.frequency, dayOfWeek: form.dayOfWeek,
     weekPattern: form.weekPattern, anchorDate: form.anchorDate || null,
     seasonStart: form.seasonStart || null, seasonEnd: form.seasonEnd || null,
+    weekOfMonth: form.weekOfMonth,
   };
   const previewDates = useMemo(() => computeUpcomingDates(previewSched, 12), [form]);
 
@@ -325,6 +398,21 @@ function ScheduleDialog({ open, schedule, onClose }: ScheduleDialogProps) {
                 </Select>
               </div>
             </div>
+
+            {isMonthly && (
+              <div className="space-y-1.5">
+                <Label>Which Week</Label>
+                <Select value={form.weekOfMonth ?? 'first'} onValueChange={(v) => setField('weekOfMonth', v as CRMSchedule['weekOfMonth'])}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {WEEK_OF_MONTH_OPTIONS.map((w) => (
+                      <SelectItem key={w} value={w}>{WEEK_OF_MONTH_LABELS[w]} {form.dayOfWeek}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-slate-500">E.g. &ldquo;1st Monday&rdquo; of every month.</p>
+              </div>
+            )}
 
             {isBiWeekly && (
               <div className="space-y-1.5">
@@ -481,7 +569,11 @@ export default function SchedulesPage() {
               <tr key={s.id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50">
                 <td className="px-4 py-3 font-medium text-slate-900">{s.name}</td>
                 <td className="px-4 py-3 text-slate-600">{FREQUENCY_LABELS[s.frequency]}</td>
-                <td className="px-4 py-3 text-slate-600">{s.dayOfWeek}</td>
+                <td className="px-4 py-3 text-slate-600">
+                  {s.frequency === 'monthly' && s.weekOfMonth
+                    ? `${WEEK_OF_MONTH_LABELS[s.weekOfMonth]} ${s.dayOfWeek}`
+                    : s.dayOfWeek}
+                </td>
                 <td className="px-4 py-3 text-slate-600 text-xs">
                   {s.seasonStart && s.seasonEnd
                     ? `${s.seasonStart} – ${s.seasonEnd}`

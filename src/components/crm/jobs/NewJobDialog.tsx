@@ -23,6 +23,8 @@ import { useCreateClientJob, useCRMServices, useCRMSchedules } from "@/lib/hooks
 import { useClients } from "@/lib/hooks/use-clients";
 import { useContracts } from "@/lib/hooks/use-contracts";
 import { useOrgSettings } from "@/lib/hooks/use-org-settings";
+import { usePackages } from "@/lib/hooks/use-packages";
+import { computePackageVisitSchedule } from "@/lib/package-schedule";
 import { formatCurrency } from "@/lib/utils";
 import { Plus, X } from "lucide-react";
 import { toast } from "sonner";
@@ -74,6 +76,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
   const { data: crmServices } = useCRMServices();
   const { data: crmSchedules } = useCRMSchedules();
   const { data: orgSettings } = useOrgSettings();
+  const { data: crmPackages } = usePackages(false);
 
   const [selectedClientId, setSelectedClientId] = useState(defaultClientId ?? "");
   const [jobType, setJobType] = useState<JobType>(initialJobType ?? "one_time");
@@ -85,6 +88,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
   const [startDate, setStartDate] = useState(todayStr());
   const [completeByDate, setCompleteByDate] = useState("");
   const [schedule, setSchedule] = useState("");
+  const [packageId, setPackageId] = useState("");
   const [isComplete, setIsComplete] = useState(false);
   const [createWorkOrder, setCreateWorkOrder] = useState(false);
   const [services, setServices] = useState<ServiceRow[]>([blankServiceRow(todayStr())]);
@@ -98,11 +102,48 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
       setStartDate(today);
       setCompleteByDate("");
       setSchedule("");
+      setPackageId("");
       setIsComplete(false);
       setCreateWorkOrder(false);
       setServices([blankServiceRow(today)]);
     }
   }, [open, initialJobType]);
+
+  function pickPackage(id: string) {
+    setPackageId(id);
+    const pkg = (crmPackages ?? []).find((p) => p.id === id);
+    if (!pkg) return;
+
+    const visitSchedule = computePackageVisitSchedule(pkg.services ?? []);
+    const dated = visitSchedule.filter((v) => v.scheduledDate);
+    if (dated.length > 0) {
+      const earliest = dated.reduce((min, v) => (v.scheduledDate! < min ? v.scheduledDate! : min), dated[0].scheduledDate!);
+      const latest = dated.reduce((max, v) => {
+        const end = v.service.endDate ? new Date(v.service.endDate + "T00:00:00") : v.scheduledDate!;
+        return end > max ? end : max;
+      }, earliest);
+      setStartDate(earliest.toISOString().slice(0, 10));
+      setCompleteByDate(latest.toISOString().slice(0, 10));
+    }
+
+    setServices(
+      visitSchedule.length > 0
+        ? visitSchedule.map(({ service, scheduledDate }) => {
+            const matchingService = (crmServices ?? []).find((s) => s.id === service.serviceId);
+            return {
+              serviceId: service.serviceId ?? "",
+              serviceName: service.serviceName,
+              startDate: scheduledDate ? scheduledDate.toISOString().slice(0, 10) : "",
+              completeByDate: service.endDate ?? "",
+              qty: 1,
+              rateCents: service.defaultRateCents ?? matchingService?.defaultRateCents ?? 0,
+              budgetedHours: service.defaultBHrs ?? matchingService?.defaultBHrs ?? 0,
+              teamSize: 1,
+            };
+          })
+        : [blankServiceRow(startDate)]
+    );
+  }
 
   function updateService(i: number, updates: Partial<ServiceRow>) {
     setServices((prev) => prev.map((s, idx) => idx === i ? { ...s, ...updates } : s));
@@ -139,9 +180,12 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
   const grossProfitCents = serviceTotalCents - laborCostCents;
   const marginPct = serviceTotalCents > 0 ? (grossProfitCents / serviceTotalCents) * 100 : 0;
 
+  const selectedPackage = (crmPackages ?? []).find((p) => p.id === packageId) ?? null;
+
   async function handleSubmit() {
     if (!effectiveClientId) { toast.error("Client is required"); return; }
     if (jobType === "recurring" && !schedule) { toast.error("Schedule is required for recurring jobs"); return; }
+    if (jobType === "package" && !packageId) { toast.error("Package is required for package jobs"); return; }
     if (services.some((s) => !s.serviceName)) { toast.error("Select a service for each row"); return; }
 
     setIsPending(true);
@@ -152,7 +196,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
         contractId: contractId ?? null,
         schedule: schedule || null,
         scheduleDays: [],
-        packageName: null,
+        packageName: jobType === "package" ? (selectedPackage?.name ?? null) : null,
         packageRenewal: null,
         packageDiscount: null,
         conflictDays: [],
@@ -167,9 +211,9 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
         invoiceSeparately: false,
         callAhead: false,
         arrivalWindowHours: null,
-        scheduledDate: (jobType !== "waiting_list" && jobType !== "recurring") ? startDate || null : null,
-        waitingListStart: jobType === "waiting_list" ? startDate || null : null,
-        waitingListEnd: jobType === "waiting_list" ? completeByDate || null : null,
+        scheduledDate: (jobType !== "waiting_list" && jobType !== "package" && jobType !== "recurring") ? startDate || null : null,
+        waitingListStart: (jobType === "waiting_list" || jobType === "package") ? startDate || null : null,
+        waitingListEnd: (jobType === "waiting_list" || jobType === "package") ? completeByDate || null : null,
         startDateWindow: jobType === "recurring" ? startDate || null : null,
         endDateWindow: null,
         createWorkOrder,
@@ -179,7 +223,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
         services: services.map((s, idx) => ({
           serviceName: s.serviceName,
           startDate: jobType === "one_time" ? (startDate || null) : (s.startDate || startDate || null),
-          completeByDate: jobType === "waiting_list" ? (s.completeByDate || completeByDate || null) : null,
+          completeByDate: (jobType === "waiting_list" || jobType === "package") ? (s.completeByDate || completeByDate || null) : null,
           startRecurring: jobType === "recurring" ? startDate || null : null,
           assignedTo: null,
           qty: s.qty,
@@ -203,7 +247,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
     }
   }
 
-  const showCompleteBy = jobType === "waiting_list";
+  const showCompleteBy = jobType === "waiting_list" || jobType === "package";
   // one_time jobs have a single "Job Date" at the top — no per-service date column needed
   const showServiceDate = jobType !== "recurring" && jobType !== "one_time";
 
@@ -283,7 +327,32 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
               </div>
             )}
 
-            {jobType === "waiting_list" && (
+            {jobType === "package" && (
+              <div className="flex flex-col gap-1.5">
+                <Label>Package *</Label>
+                {(crmPackages ?? []).length > 0 ? (
+                  <Select value={packageId} onValueChange={pickPackage}>
+                    <SelectTrigger><SelectValue placeholder="Select a package…" /></SelectTrigger>
+                    <SelectContent>
+                      {(crmPackages ?? []).map((p) => (
+                        <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <p className="text-xs text-slate-400">
+                    No packages configured yet. Add one in CRM Settings → Packages.
+                  </p>
+                )}
+                {packageId && (
+                  <p className="text-xs text-slate-400">
+                    Visits and dates below are pulled from the package&rsquo;s schedule — adjust any row for this client if needed.
+                  </p>
+                )}
+              </div>
+            )}
+
+            {(jobType === "waiting_list" || jobType === "package") && (
               <div className="grid grid-cols-2 gap-3">
                 <div className="flex flex-col gap-1.5">
                   <Label>Start Date</Label>
@@ -295,8 +364,13 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
                 </div>
               </div>
             )}
+            {jobType === "package" && (
+              <p className="text-xs text-slate-400 -mt-2">
+                Package jobs are scheduled within this date range and go to the Waiting List for opportunistic dispatch, rather than a fixed date.
+              </p>
+            )}
 
-            {(jobType === "one_time" || jobType === "package" || jobType === "snow" || jobType === "project") && (
+            {(jobType === "one_time" || jobType === "snow" || jobType === "project") && (
               <div className="grid grid-cols-2 gap-3">
                 <div className="flex flex-col gap-1.5">
                   <Label>{jobType === "one_time" ? "Job Date" : "Start Date"}</Label>

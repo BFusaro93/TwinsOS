@@ -15,6 +15,12 @@ function mapPackageService(row: any): CRMPackageService {
     visitsIncluded: row.visits_included,
     sortOrder: row.sort_order,
     createdAt: row.created_at,
+    name: row.name ?? null,
+    startDate: row.start_date ?? null,
+    endDate: row.end_date ?? null,
+    minDays: row.min_days ?? null,
+    defaultBHrs: row.default_b_hrs ?? null,
+    defaultRateCents: row.default_rate_cents ?? null,
   };
 }
 

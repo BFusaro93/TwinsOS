@@ -233,7 +233,7 @@ export function useCustomFieldDefs(entityType?: "client" | "property") {
       const supabase = createClient();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let q = (supabase as any)
-        .from("crm_custom_field_defs")
+        .from("crm_rate_matrix_field_defs")
         .select("*")
         .is("deleted_at", null)
         .order("label");

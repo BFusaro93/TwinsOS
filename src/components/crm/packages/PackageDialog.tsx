@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
@@ -16,11 +16,13 @@ import { Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { formatCurrency } from "@/lib/utils";
 import {
-  useCreatePackage, useUpdatePackage,
+  usePackages, useCreatePackage, useUpdatePackage,
   useUpsertPackageService, useDeletePackageService,
 } from "@/lib/hooks/use-packages";
 import { useCRMServices } from "@/lib/hooks/use-crm-jobs";
-import type { CRMPackage } from "@/types/crm-packages";
+import { computePackageVisitSchedule, type PackageVisitSchedule } from "@/lib/package-schedule";
+import type { CRMPackage, CRMPackageService } from "@/types/crm-packages";
+import type { CRMService } from "@/types/crm-jobs";
 
 const FREQ_OPTIONS = [
   { value: "weekly",    label: "Weekly" },
@@ -36,7 +38,7 @@ type Tab = "details" | "services";
 
 interface Props {
   open: boolean;
-  pkg: CRMPackage | null;
+  packageId: string | null;
   onClose: () => void;
 }
 
@@ -75,9 +77,158 @@ function pkgToForm(p: CRMPackage): FormState {
   };
 }
 
-export function PackageDialog({ open, pkg, onClose }: Props) {
+// ── PackageServiceRow ────────────────────────────────────────────────────────
+// One numbered visit in the program — every field saves independently
+// (on blur for text/number, on change for date/select) rather than requiring
+// a separate save step, matching how other inline-edit lists in this app work.
+
+function PackageServiceRow({
+  svc,
+  services,
+  schedule,
+  onDelete,
+}: {
+  svc: CRMPackageService;
+  services: CRMService[];
+  schedule: PackageVisitSchedule | null;
+  onDelete: () => void;
+}) {
+  const upsertSvc = useUpsertPackageService();
+
+  const [name, setName] = useState(svc.name ?? "");
+  const [serviceId, setServiceId] = useState(svc.serviceId ?? "");
+  const [startDate, setStartDate] = useState(svc.startDate ?? "");
+  const [endDate, setEndDate] = useState(svc.endDate ?? "");
+  const [minDays, setMinDays] = useState(svc.minDays != null ? String(svc.minDays) : "");
+  const [defaultBHrs, setDefaultBHrs] = useState(svc.defaultBHrs != null ? String(svc.defaultBHrs) : "");
+  const [defaultRate, setDefaultRate] = useState(svc.defaultRateCents != null ? (svc.defaultRateCents / 100).toFixed(2) : "");
+
+  // Sync local drafts when the underlying row changes from elsewhere (e.g. after save)
+  useEffect(() => {
+    setName(svc.name ?? "");
+    setServiceId(svc.serviceId ?? "");
+    setStartDate(svc.startDate ?? "");
+    setEndDate(svc.endDate ?? "");
+    setMinDays(svc.minDays != null ? String(svc.minDays) : "");
+    setDefaultBHrs(svc.defaultBHrs != null ? String(svc.defaultBHrs) : "");
+    setDefaultRate(svc.defaultRateCents != null ? (svc.defaultRateCents / 100).toFixed(2) : "");
+  }, [svc]);
+
+  function save(overrides: Partial<{
+    name: string; serviceId: string; startDate: string; endDate: string;
+    minDays: string; defaultBHrs: string; defaultRate: string;
+  }>) {
+    const next = {
+      name: overrides.name ?? name,
+      serviceId: overrides.serviceId ?? serviceId,
+      startDate: overrides.startDate ?? startDate,
+      endDate: overrides.endDate ?? endDate,
+      minDays: overrides.minDays ?? minDays,
+      defaultBHrs: overrides.defaultBHrs ?? defaultBHrs,
+      defaultRate: overrides.defaultRate ?? defaultRate,
+    };
+    const selected = services.find((s) => s.id === next.serviceId);
+    upsertSvc.mutate({
+      packageId: svc.packageId,
+      row: {
+        id: svc.id,
+        name: next.name.trim() || null,
+        service_id: next.serviceId || null,
+        service_name: selected?.name ?? svc.serviceName,
+        visits_included: svc.visitsIncluded,
+        sort_order: svc.sortOrder,
+        start_date: next.startDate || null,
+        end_date: next.endDate || null,
+        min_days: next.minDays !== "" ? parseInt(next.minDays) : null,
+        default_b_hrs: next.defaultBHrs !== "" ? parseFloat(next.defaultBHrs) : null,
+        default_rate_cents: next.defaultRate !== "" ? Math.round(parseFloat(next.defaultRate) * 100) : null,
+      },
+    });
+  }
+
+  const cellInput = "h-8 text-sm border-0 bg-transparent px-1 focus-visible:ring-1 focus-visible:ring-brand-400 rounded";
+
+  return (
+    <tr className="border-b last:border-0">
+      <td className="px-1 py-1.5">
+        <Input value={name} onChange={(e) => setName(e.target.value)}
+          onBlur={() => save({ name })} className={cellInput} placeholder={`Visit ${svc.sortOrder + 1}`} />
+      </td>
+      <td className="px-1 py-1.5 min-w-[160px]">
+        <Select value={serviceId} onValueChange={(v) => { setServiceId(v); save({ serviceId: v }); }}>
+          <SelectTrigger className="h-8 text-sm border-0 bg-transparent px-1"><SelectValue placeholder="Pick a service…" /></SelectTrigger>
+          <SelectContent>
+            {services.map((s) => (
+              <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </td>
+      <td className="px-1 py-1.5">
+        <Input type="date" value={startDate}
+          onChange={(e) => { setStartDate(e.target.value); save({ startDate: e.target.value }); }}
+          className={cellInput} />
+      </td>
+      <td className="px-1 py-1.5">
+        <Input type="date" value={endDate}
+          onChange={(e) => { setEndDate(e.target.value); save({ endDate: e.target.value }); }}
+          className={cellInput} />
+      </td>
+      <td className="px-1 py-1.5">
+        <Input type="number" min="0" value={minDays}
+          onChange={(e) => setMinDays(e.target.value)} onBlur={() => save({ minDays })}
+          className={`${cellInput} text-center`} />
+      </td>
+      <td className="px-1 py-1.5">
+        <Input type="number" min="0" step="0.1" value={defaultBHrs}
+          onChange={(e) => setDefaultBHrs(e.target.value)} onBlur={() => save({ defaultBHrs })}
+          className={`${cellInput} text-center`} />
+      </td>
+      <td className="px-1 py-1.5">
+        <Input type="number" min="0" step="0.01" value={defaultRate}
+          onChange={(e) => setDefaultRate(e.target.value)} onBlur={() => save({ defaultRate })}
+          className={`${cellInput} text-center`} />
+      </td>
+      <td className="px-3 py-1.5">
+        {schedule?.scheduledDate ? (
+          <span className={schedule.conflict ? "text-red-600 font-medium" : "text-slate-700"}>
+            {schedule.scheduledDate.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+            {schedule.conflict && (
+              <span className="block text-[10px] font-normal text-red-500">after end date — conflict</span>
+            )}
+          </span>
+        ) : (
+          <span className="text-slate-300">—</span>
+        )}
+      </td>
+      <td className="px-2 py-1.5 text-center">
+        <button onClick={onDelete} className="rounded p-0.5 hover:bg-red-50">
+          <Trash2 className="h-3.5 w-3.5 text-red-400" />
+        </button>
+      </td>
+    </tr>
+  );
+}
+
+export function PackageDialog({ open, packageId, onClose }: Props) {
   const [tab, setTab] = useState<Tab>("details");
   const [form, setForm] = useState<FormState>(emptyForm());
+
+  // Re-derived from the live query (not a frozen prop) so the Services table
+  // reflects new/edited/deleted rows immediately after each save, instead of
+  // only after closing and reopening the dialog.
+  const [activePackageId, setActivePackageId] = useState<string | null>(packageId);
+  const { data: packages = [] } = usePackages(true);
+  const pkg = activePackageId ? packages.find((p) => p.id === activePackageId) ?? null : null;
+
+  // Computed schedule preview: each visit's earliest date that satisfies both
+  // its own window and the min-days gap from the previous visit. Recomputes
+  // live as dates/min-days are edited.
+  const visitSchedule = useMemo(() => computePackageVisitSchedule(pkg?.services ?? []), [pkg?.services]);
+  const scheduleByServiceId = useMemo(
+    () => new Map(visitSchedule.map((s) => [s.service.id, s])),
+    [visitSchedule]
+  );
 
   const { data: services = [] } = useCRMServices();
   const createPkg = useCreatePackage();
@@ -85,18 +236,15 @@ export function PackageDialog({ open, pkg, onClose }: Props) {
   const upsertSvc = useUpsertPackageService();
   const deleteSvc = useDeletePackageService();
 
-  // new service row being added
-  const [newServiceId, setNewServiceId] = useState("");
-  const [newVisits, setNewVisits] = useState("1");
-
   useEffect(() => {
     if (open) {
       setTab("details");
-      setForm(pkg ? pkgToForm(pkg) : emptyForm());
-      setNewServiceId("");
-      setNewVisits("1");
+      setActivePackageId(packageId);
+      const initial = packageId ? packages.find((p) => p.id === packageId) ?? null : null;
+      setForm(initial ? pkgToForm(initial) : emptyForm());
     }
-  }, [open, pkg]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, packageId]);
 
   function toggleDay(day: string) {
     setForm((p) => ({
@@ -122,32 +270,36 @@ export function PackageDialog({ open, pkg, onClose }: Props) {
     try {
       if (pkg) {
         await updatePkg.mutateAsync({ id: pkg.id, patch });
+        toast.success("Package updated");
+        onClose();
       } else {
-        await createPkg.mutateAsync(patch);
+        const created = await createPkg.mutateAsync(patch);
+        toast.success("Package created — add its services below");
+        // Stay open on the newly created package so services can be added
+        // right away, instead of requiring a reopen.
+        setActivePackageId(created.id);
+        setTab("services");
       }
-      toast.success(pkg ? "Package updated" : "Package created");
-      onClose();
     } catch {
       toast.error("Failed to save package");
     }
   }
 
   async function handleAddService() {
-    if (!pkg || !newServiceId) return;
-    const svc = services.find((s) => s.id === newServiceId);
-    if (!svc) return;
+    if (!pkg || services.length === 0) return;
+    const firstService = services[0];
+    const nextIndex = (pkg.services?.length ?? 0) + 1;
     try {
       await upsertSvc.mutateAsync({
         packageId: pkg.id,
         row: {
-          service_id: svc.id,
-          service_name: svc.name,
-          visits_included: parseInt(newVisits) || 1,
+          name: `Visit ${nextIndex}`,
+          service_id: firstService.id,
+          service_name: firstService.name,
+          visits_included: 1,
           sort_order: (pkg.services?.length ?? 0),
         },
       });
-      setNewServiceId("");
-      setNewVisits("1");
     } catch {
       toast.error("Failed to add service");
     }
@@ -277,62 +429,51 @@ export function PackageDialog({ open, pkg, onClose }: Props) {
         {tab === "services" && pkg && (
           <div className="flex flex-col gap-3 py-2">
             <p className="text-xs text-slate-500">
-              Define which services are included in this package and how many visits of each are covered per season.
+              Each row is one numbered visit in the program (e.g. &ldquo;Visit 1&rdquo; = Step 1 of 5). Give it a
+              service, the date window it should fall within, and the minimum days required before the next visit.
+              The <span className="font-medium text-slate-600">Scheduled</span> column shows the earliest date each
+              visit can actually happen, given its window and the spacing from the visit before it.
             </p>
 
-            {/* Existing services */}
-            <div className="rounded-lg border overflow-hidden">
+            <div className="rounded-lg border overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="bg-slate-50 border-b text-xs font-semibold text-slate-500 uppercase tracking-wide">
-                    <th className="px-4 py-2.5 text-left">Service</th>
-                    <th className="px-4 py-2.5 text-center">Visits Included</th>
-                    <th className="px-4 py-2.5 w-8" />
+                    <th className="px-3 py-2.5 text-left">Name</th>
+                    <th className="px-3 py-2.5 text-left">Service</th>
+                    <th className="px-3 py-2.5 text-left">Start</th>
+                    <th className="px-3 py-2.5 text-left">End</th>
+                    <th className="px-3 py-2.5 text-center w-20">Min Days</th>
+                    <th className="px-3 py-2.5 text-center w-24">Def. B. Hrs</th>
+                    <th className="px-3 py-2.5 text-center w-24">Def. Rate</th>
+                    <th className="px-3 py-2.5 text-left w-32">Scheduled</th>
+                    <th className="px-3 py-2.5 w-8" />
                   </tr>
                 </thead>
                 <tbody>
                   {(pkg.services ?? []).length === 0 && (
-                    <tr><td colSpan={3} className="px-4 py-6 text-center text-slate-400 text-sm">No services added yet.</td></tr>
+                    <tr><td colSpan={9} className="px-4 py-6 text-center text-slate-400 text-sm">No visits added yet.</td></tr>
                   )}
                   {(pkg.services ?? []).map((s) => (
-                    <tr key={s.id} className="border-b last:border-0">
-                      <td className="px-4 py-2.5 font-medium text-slate-800">{s.serviceName}</td>
-                      <td className="px-4 py-2.5 text-center text-slate-600">{s.visitsIncluded}</td>
-                      <td className="px-4 py-2.5 text-center">
-                        <button onClick={() => deleteSvc.mutate(s.id)}
-                          className="rounded p-0.5 hover:bg-red-50">
-                          <Trash2 className="h-3.5 w-3.5 text-red-400" />
-                        </button>
-                      </td>
-                    </tr>
+                    <PackageServiceRow
+                      key={s.id}
+                      svc={s}
+                      services={services}
+                      schedule={scheduleByServiceId.get(s.id) ?? null}
+                      onDelete={() => deleteSvc.mutate(s.id)}
+                    />
                   ))}
                 </tbody>
               </table>
             </div>
 
-            {/* Add service row */}
-            <div className="flex items-end gap-2 rounded-lg border bg-slate-50 p-3">
-              <div className="flex-1 flex flex-col gap-1">
-                <Label className="text-xs text-slate-500">Service</Label>
-                <Select value={newServiceId} onValueChange={setNewServiceId}>
-                  <SelectTrigger className="text-sm bg-white"><SelectValue placeholder="Pick a service…" /></SelectTrigger>
-                  <SelectContent>
-                    {services.map((s) => (
-                      <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="w-28 flex flex-col gap-1">
-                <Label className="text-xs text-slate-500">Visits</Label>
-                <Input type="number" min="1" value={newVisits}
-                  onChange={(e) => setNewVisits(e.target.value)} className="text-sm bg-white" />
-              </div>
-              <Button size="sm" onClick={handleAddService}
-                disabled={!newServiceId || upsertSvc.isPending}>
-                <Plus className="mr-1 h-3.5 w-3.5" /> Add
-              </Button>
-            </div>
+            <Button size="sm" variant="outline" onClick={handleAddService}
+              disabled={services.length === 0 || upsertSvc.isPending} className="self-start">
+              <Plus className="mr-1 h-3.5 w-3.5" /> Add Visit
+            </Button>
+            {services.length === 0 && (
+              <p className="text-xs text-amber-600">No services defined yet — add services under CRM Settings → Services first.</p>
+            )}
           </div>
         )}
 

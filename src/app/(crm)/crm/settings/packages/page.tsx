@@ -3,11 +3,10 @@
 import { useState } from "react";
 import { PackagesList } from "@/components/crm/packages/PackagesList";
 import { PackageDialog } from "@/components/crm/packages/PackageDialog";
-import type { CRMPackage } from "@/types/crm-packages";
 
 export default function PackagesPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [editing, setEditing] = useState<CRMPackage | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   return (
     <div className="p-6 max-w-6xl mx-auto">
@@ -19,14 +18,14 @@ export default function PackagesPage() {
       </div>
 
       <PackagesList
-        onAdd={() => { setEditing(null); setDialogOpen(true); }}
-        onEdit={(pkg) => { setEditing(pkg); setDialogOpen(true); }}
+        onAdd={() => { setEditingId(null); setDialogOpen(true); }}
+        onEdit={(pkg) => { setEditingId(pkg.id); setDialogOpen(true); }}
       />
 
       <PackageDialog
         open={dialogOpen}
-        pkg={editing}
-        onClose={() => { setDialogOpen(false); setEditing(null); }}
+        packageId={editingId}
+        onClose={() => { setDialogOpen(false); setEditingId(null); }}
       />
     </div>
   );

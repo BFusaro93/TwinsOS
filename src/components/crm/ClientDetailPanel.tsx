@@ -58,6 +58,8 @@ import { AddPaymentDialog, RefundDialog } from "./payments/PaymentsList";
 import { ContractsList } from "./contracts/ContractsList";
 import { NewContractDialog } from "./contracts/NewContractDialog";
 import { ClientFilesTab } from "./ClientFilesTab";
+import { ClientProjectsTab } from "./ClientProjectsTab";
+import { ClientPhotosTab } from "./ClientPhotosTab";
 import {
   useCustomFieldDefs,
   useClientCustomFieldValues,
@@ -94,6 +96,7 @@ import {
   Minimize2,
   X,
   ExternalLink,
+  Search,
 } from "lucide-react";
 import type { Client, ClientContact, ContactPhone, PhoneType } from "@/types/crm";
 import type { CRMJob, CRMJobVisit } from "@/types/crm-jobs";
@@ -349,11 +352,15 @@ export function EditClientDialogExport({ client, open, onOpenChange }: { client:
 function ClientCombobox({
   value,
   onChange,
+  onSelectId,
   clients,
   placeholder = "Search clients or type name…",
 }: {
   value: string;
   onChange: (v: string) => void;
+  /** Called with a client's id when picked from the list, or null once the
+   * text no longer matches that pick (free text — no real client link). */
+  onSelectId?: (id: string | null) => void;
   clients: Client[];
   placeholder?: string;
 }) {
@@ -369,9 +376,11 @@ function ClientCombobox({
 
   return (
     <div className="relative">
+      <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
       <Input
+        className="pl-8"
         value={query}
-        onChange={(e) => { setQuery(e.target.value); onChange(e.target.value); setOpen(true); }}
+        onChange={(e) => { setQuery(e.target.value); onChange(e.target.value); onSelectId?.(null); setOpen(true); }}
         onFocus={() => setOpen(true)}
         onBlur={() => setTimeout(() => setOpen(false), 160)}
         placeholder={placeholder}
@@ -383,7 +392,7 @@ function ClientCombobox({
               key={c.id}
               type="button"
               className="w-full text-left px-3 py-2 hover:bg-slate-50 flex items-center justify-between"
-              onMouseDown={() => { setQuery(c.displayName); onChange(c.displayName); setOpen(false); }}
+              onMouseDown={() => { setQuery(c.displayName); onChange(c.displayName); onSelectId?.(c.id); setOpen(false); }}
             >
               <span>{c.displayName}</span>
               {c.status === "lead" && (
@@ -440,6 +449,7 @@ function EditClientDialog({ client, open, onOpenChange }: { client: Client; open
     displayName: client.displayName,
     firstName: client.firstName ?? "",
     lastName: client.lastName ?? "",
+    accountNumber: client.accountNumber ?? "",
     primaryPhone: client.primaryPhone ?? "",
     primaryEmail: client.primaryEmail ?? "",
     // service address
@@ -455,6 +465,7 @@ function EditClientDialog({ client, open, onOpenChange }: { client: Client; open
     billingEmail: client.billingEmail ?? "",
     source: client.source ?? "",
     referredBy: client.referredBy ?? "",
+    referredByClientId: client.referredByClientId ?? null as string | null,
     paymentMethod: client.defaultPaymentMethod ?? client.paymentMethod ?? "",
     notesToCrew: client.notesToCrew ?? "",
     invoiceFrequency: client.invoiceFrequency,
@@ -501,6 +512,7 @@ function EditClientDialog({ client, open, onOpenChange }: { client: Client; open
       displayName: client.displayName,
       firstName: client.firstName ?? "",
       lastName: client.lastName ?? "",
+      accountNumber: client.accountNumber ?? "",
       primaryPhone: client.primaryPhone ?? "",
       primaryEmail: client.primaryEmail ?? "",
       serviceAddress: client.serviceAddress ?? "",
@@ -514,6 +526,7 @@ function EditClientDialog({ client, open, onOpenChange }: { client: Client; open
       billingEmail: client.billingEmail ?? "",
       source: client.source ?? "",
       referredBy: client.referredBy ?? "",
+      referredByClientId: client.referredByClientId ?? null,
       paymentMethod: client.defaultPaymentMethod ?? client.paymentMethod ?? "",
       notesToCrew: client.notesToCrew ?? "",
       invoiceFrequency: client.invoiceFrequency,
@@ -537,7 +550,7 @@ function EditClientDialog({ client, open, onOpenChange }: { client: Client; open
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [client.id]);
 
-  function patch(k: keyof typeof form, v: string | number | boolean) {
+  function patch(k: keyof typeof form, v: string | number | boolean | null) {
     setForm((p) => ({ ...p, [k]: v }));
   }
 
@@ -567,6 +580,7 @@ function EditClientDialog({ client, open, onOpenChange }: { client: Client; open
           primaryPhone: primaryClientPhone?.phone ?? null,
           firstName: form.firstName || null,
           lastName: form.lastName || null,
+          accountNumber: form.accountNumber || null,
           // unified payment method — stored in both columns for compat
           paymentMethod: form.paymentMethod || null,
           defaultPaymentMethod: form.paymentMethod || null,
@@ -756,7 +770,15 @@ function EditClientDialog({ client, open, onOpenChange }: { client: Client; open
 
             {/* ── Details ── */}
             <TabsContent value="details" className="mt-0 space-y-3">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-3 gap-3">
+                <div className="flex flex-col gap-1.5">
+                  <Label>Account #</Label>
+                  <Input
+                    value={form.accountNumber}
+                    onChange={(e) => patch("accountNumber", e.target.value)}
+                    placeholder="Auto-assigned"
+                  />
+                </div>
                 <div className="flex flex-col gap-1.5">
                   <Label>Account Type</Label>
                   <Select value={form.accountType} onValueChange={(v) => patch("accountType", v)}>
@@ -802,8 +824,15 @@ function EditClientDialog({ client, open, onOpenChange }: { client: Client; open
                 <ClientCombobox
                   value={form.referredBy}
                   onChange={(v) => patch("referredBy", v)}
+                  onSelectId={(id) => patch("referredByClientId", id)}
                   clients={allClients.filter((c) => c.id !== client.id)}
+                  placeholder="Search clients, or type a name…"
                 />
+                {form.referredByClientId ? (
+                  <p className="text-xs text-green-600">Linked to this client — will count toward their referral stats.</p>
+                ) : form.referredBy ? (
+                  <p className="text-xs text-slate-400">Freeform name — not linked to a client record.</p>
+                ) : null}
               </div>
             </TabsContent>
 
@@ -2528,6 +2557,9 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
                 <Home className="h-4 w-4 shrink-0 text-slate-400" />
               )}
               <h2 className="truncate text-lg font-semibold text-slate-900">{client.displayName}</h2>
+              {client.accountNumber && (
+                <span className="shrink-0 font-mono text-xs text-slate-400">#{client.accountNumber}</span>
+              )}
               <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide border ${STATUS_COLOR[client.status]}`}>
                 {client.status}
               </span>
@@ -2627,7 +2659,7 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
               <div className="flex items-center">
                 <Button
                   size="sm"
-                  className="h-7 rounded-r-none border-r-0 px-3 text-xs"
+                  className="h-7 rounded-r-none border-r-0 px-3 text-xs bg-brand-500 hover:bg-brand-600 text-white"
                   onClick={() => {
                     if (client.primaryEmail) window.location.href = `mailto:${client.primaryEmail}`;
                     else toast.error("No email on file");
@@ -2638,7 +2670,7 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
                 </Button>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button size="sm" className="h-7 rounded-l-none border-l border-l-white/20 px-1.5 text-xs">
+                    <Button size="sm" className="h-7 rounded-l-none border-l border-l-white/20 px-1.5 text-xs bg-brand-500 hover:bg-brand-600 text-white">
                       <ChevronDown className="h-3.5 w-3.5" />
                     </Button>
                   </DropdownMenuTrigger>
@@ -2950,6 +2982,8 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
               { value: "activity",  label: "Activity" },
               { value: "tickets",   label: "Tickets" },
               ...(!isLead ? [{ value: "contracts", label: "Contracts" }] : []),
+              { value: "projects",  label: "Projects" },
+              { value: "photos",    label: "Photos" },
               { value: "files",     label: "Files" },
               { value: "details",   label: "Details" },
               { value: "audit",     label: "Audit Trail" },
@@ -2979,6 +3013,14 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
 
         <TabsContent value="contracts" className="m-0 p-4">
           <ContractsList clientId={clientId} />
+        </TabsContent>
+
+        <TabsContent value="projects" className="m-0 p-4">
+          <ClientProjectsTab clientId={clientId} clientName={client.displayName} />
+        </TabsContent>
+
+        <TabsContent value="photos" className="m-0 p-4">
+          <ClientPhotosTab clientName={client.displayName} />
         </TabsContent>
 
         <TabsContent value="files" className="m-0">
@@ -3015,6 +3057,8 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
                 <InfoRow label="Mulch bed sq ft" value={client.mulchBedSqft?.toLocaleString()} />
                 <InfoRow label="Gross sq ft" value={client.grossSqft?.toLocaleString()} />
                 <InfoRow label="Perimeter ft" value={client.linearFtPerimeter?.toLocaleString()} />
+                <InfoRow label="Linear ft edging" value={client.linearFtEdging?.toLocaleString()} />
+                <InfoRow label="Yards of mulch" value={client.yardsOfMulch?.toLocaleString()} />
                 <InfoRow label="Gate code" value={client.gateCode} />
                 <InfoRow label="Notes to crew" value={client.notesToCrew} />
               </div>

@@ -288,6 +288,8 @@ export interface CRMSchedule {
   anchorDate: string | null;
   seasonStart: string | null; // 'MM-DD', e.g. '04-01'
   seasonEnd: string | null;   // 'MM-DD', e.g. '11-30'
+  /** Only meaningful when frequency === 'monthly' — e.g. "first" + Mon = "1st Monday of every month" */
+  weekOfMonth: 'first' | 'second' | 'third' | 'fourth' | 'last' | null;
   isActive: boolean;
 }
 

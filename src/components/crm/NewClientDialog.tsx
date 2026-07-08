@@ -22,11 +22,12 @@ import {
 import { useCreateClient, useClient } from "@/lib/hooks/use-clients";
 import { EditClientDialogExport } from "./ClientDetailPanel";
 import { toast } from "sonner";
+import type { Client } from "@/types/crm";
 
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onCreated?: (id: string) => void;
+  onCreated?: (client: Client) => void;
 }
 
 export function NewClientDialog({ open, onOpenChange, onCreated }: Props) {
@@ -62,7 +63,7 @@ export function NewClientDialog({ open, onOpenChange, onCreated }: Props) {
       // Close quick-create dialog, open full edit dialog
       onOpenChange(false);
       setEditOpen(true);
-      onCreated?.(client.id);
+      onCreated?.(client);
     } catch {
       toast.error("Failed to create client");
     }

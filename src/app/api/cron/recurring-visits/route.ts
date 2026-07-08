@@ -95,6 +95,58 @@ function parseSchedule(schedule: string | null, scheduleDays: string[]): Occurre
   return [];
 }
 
+const WEEK_OF_MONTH_ORDINAL: Record<string, number> = {
+  first: 1, second: 2, third: 3, fourth: 4, last: -1,
+};
+
+/** The Nth (or last, ordinal=-1) occurrence of `weekdayIndex` (0=Sun..6=Sat) in the given month. */
+function nthWeekdayOfMonth(year: number, month: number, weekdayIndex: number, ordinal: number): Date {
+  if (ordinal === -1) {
+    const lastDay = new Date(year, month + 1, 0);
+    const diff = (lastDay.getDay() - weekdayIndex + 7) % 7;
+    lastDay.setDate(lastDay.getDate() - diff);
+    return lastDay;
+  }
+  const firstDay = new Date(year, month, 1);
+  const diff = (weekdayIndex - firstDay.getDay() + 7) % 7;
+  return new Date(year, month, 1 + diff + (ordinal - 1) * 7);
+}
+
+/**
+ * True calendar-month recurrence — "1st Monday of every month" etc. Optional
+ * season window (MM-DD) narrows which months' occurrences are included.
+ */
+function monthlyOccurrencesInRange(
+  dayIndex: number,
+  weekOfMonth: string,
+  from: Date,
+  to: Date,
+  season?: { start: string; end: string } | null
+): Date[] {
+  const ordinal = WEEK_OF_MONTH_ORDINAL[weekOfMonth] ?? 1;
+  const dates: Date[] = [];
+  let year = from.getFullYear();
+  let month = from.getMonth();
+  while (true) {
+    const d = nthWeekdayOfMonth(year, month, dayIndex, ordinal);
+    if (d > to) break;
+    if (d >= from) {
+      if (!season) {
+        dates.push(d);
+      } else {
+        const mmdd = `${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+        const inSeason = season.start <= season.end
+          ? mmdd >= season.start && mmdd <= season.end
+          : mmdd >= season.start || mmdd <= season.end;
+        if (inSeason) dates.push(d);
+      }
+    }
+    month++;
+    if (month > 11) { month = 0; year++; }
+  }
+  return dates;
+}
+
 /**
  * Return all occurrence dates in [fromDate, toDate] that match the rule.
  */
@@ -170,6 +222,26 @@ export async function GET(request: Request) {
     return NextResponse.json({ generated: 0, message: "No recurring jobs found." });
   }
 
+  // ── load named schedules for monthly ("1st Monday") resolution ────────────
+  // Weekly/bi-weekly jobs keep using the regex-based parseSchedule() below —
+  // this lookup only covers monthly, which parseSchedule can't express.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: scheduleRows } = await (supabase as any)
+    .from("crm_schedules")
+    .select("name, frequency, day_of_week, week_of_month, season_start, season_end")
+    .eq("frequency", "monthly")
+    .is("deleted_at", null);
+  const monthlySchedulesByName = new Map<string, { dayIndex: number; weekOfMonth: string; season: { start: string; end: string } | null }>();
+  for (const sr of (scheduleRows ?? []) as { name: string; day_of_week: string; week_of_month: string | null; season_start: string | null; season_end: string | null }[]) {
+    const dayIndex = DAY_INDEX[sr.day_of_week.toLowerCase()];
+    if (dayIndex === undefined) continue;
+    monthlySchedulesByName.set(sr.name, {
+      dayIndex,
+      weekOfMonth: sr.week_of_month ?? "first",
+      season: sr.season_start && sr.season_end ? { start: sr.season_start, end: sr.season_end } : null,
+    });
+  }
+
   // ── for each job, load existing visits in the window (idempotency) ────────
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const jobIds = (jobs as any[]).map((j) => j.id as string);
@@ -220,27 +292,26 @@ export async function GET(request: Request) {
       continue;
     }
 
-    const rules = parseSchedule(job.schedule, job.schedule_days ?? []);
-    if (rules.length === 0) continue;
+    const monthlySchedule = job.schedule ? monthlySchedulesByName.get(job.schedule) : undefined;
+    const dates: Date[] = monthlySchedule
+      ? monthlyOccurrencesInRange(monthlySchedule.dayIndex, monthlySchedule.weekOfMonth, today, effectiveEnd, monthlySchedule.season)
+      : parseSchedule(job.schedule, job.schedule_days ?? []).flatMap((rule) => occurrencesInRange(rule, today, effectiveEnd));
 
-    for (const rule of rules) {
-      const dates = occurrencesInRange(rule, today, effectiveEnd);
-      for (const d of dates) {
-        const dateStr = toISODate(d);
-        const key = `${job.id}|${dateStr}`;
-        if (!existingSet.has(key)) {
-          toInsert.push({
-            org_id:         job.org_id,
-            job_id:         job.id,
-            client_id:      job.client_id,
-            crew_id:        job.crew_id ?? null,
-            scheduled_date: dateStr,
-            priority:       job.priority ?? 1,
-            notes_to_crew:  job.notes_to_crew ?? null,
-          });
-          // Mark as pending so parallel rules on the same job don't duplicate
-          existingSet.add(key);
-        }
+    for (const d of dates) {
+      const dateStr = toISODate(d);
+      const key = `${job.id}|${dateStr}`;
+      if (!existingSet.has(key)) {
+        toInsert.push({
+          org_id:         job.org_id,
+          job_id:         job.id,
+          client_id:      job.client_id,
+          crew_id:        job.crew_id ?? null,
+          scheduled_date: dateStr,
+          priority:       job.priority ?? 1,
+          notes_to_crew:  job.notes_to_crew ?? null,
+        });
+        // Mark as pending so parallel rules on the same job don't duplicate
+        existingSet.add(key);
       }
     }
   }

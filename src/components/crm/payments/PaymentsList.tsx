@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
-import { usePayments, useRecordPayment, useUpdatePayment, useRefundPayment, useInvoices } from "@/lib/hooks/use-invoices";
+import { usePayments, useRecordPayment, useUpdatePayment, useRefundPayment, useInvoices, usePaymentAllocations } from "@/lib/hooks/use-invoices";
 import { useClients } from "@/lib/hooks/use-clients";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,8 +23,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { formatCurrency } from "@/lib/utils";
-import { Plus, RotateCcw, Search, X, ChevronDown } from "lucide-react";
+import { Plus, RotateCcw, Search, X } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
+import { ClientCombobox } from "@/components/shared/ClientCombobox";
 import { ColumnChooser } from "@/components/shared/ColumnChooser";
 import type { ColumnDef } from "@/components/shared/ColumnChooser";
 
@@ -64,66 +65,6 @@ interface InvoiceAllocation {
   invoiceDate: string;
   payInFull: boolean;
   amountCents: number;
-}
-
-function ClientSearchField({
-  value,
-  onChange,
-  clients,
-}: {
-  value: string;
-  onChange: (id: string) => void;
-  clients: { id: string; displayName: string; billingAddress?: string | null }[];
-}) {
-  const [query, setQuery] = useState(() => clients.find((c) => c.id === value)?.displayName ?? "");
-  const [open, setOpen] = useState(false);
-
-  const filtered = open
-    ? (query.trim().length > 0
-        ? clients.filter((c) => c.displayName.toLowerCase().includes(query.toLowerCase()))
-        : clients
-      ).slice(0, 10)
-    : [];
-
-  function select(c: { id: string; displayName: string }) {
-    setQuery(c.displayName);
-    onChange(c.id);
-    setOpen(false);
-  }
-
-  return (
-    <div className="relative">
-      <div className="relative">
-        <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400 pointer-events-none" />
-        <Input
-          className="h-8 text-sm pl-8 pr-8"
-          value={query}
-          onChange={(e) => { setQuery(e.target.value); onChange(""); setOpen(true); }}
-          onFocus={() => setOpen(true)}
-          onBlur={() => setTimeout(() => setOpen(false), 160)}
-          placeholder="Search clients…"
-        />
-        <ChevronDown className="absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400 pointer-events-none" />
-      </div>
-      {open && filtered.length > 0 && (
-        <div className="absolute z-50 mt-1 w-full rounded-md border bg-white shadow-lg text-sm max-h-52 overflow-y-auto">
-          {filtered.map((c) => (
-            <button
-              key={c.id}
-              type="button"
-              className="w-full text-left px-3 py-2 hover:bg-slate-50"
-              onMouseDown={() => select(c)}
-            >
-              <span className="font-medium">{c.displayName}</span>
-              {c.billingAddress && (
-                <span className="ml-2 text-xs text-slate-400">{c.billingAddress}</span>
-              )}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
 }
 
 import type { CRMPayment } from "@/types/crm-invoices";
@@ -174,6 +115,7 @@ export function AddPaymentDialog({
   }, [payment?.id]);
 
   const { data: invoices } = useInvoices(clientId || undefined);
+  const { data: existingAllocations } = usePaymentAllocations(isEdit ? payment?.id : undefined);
 
   // In create mode: only show unpaid invoices.
   // In edit mode: show all non-voided invoices (paid or unpaid, but must have totalCents > 0)
@@ -207,19 +149,25 @@ export function AddPaymentDialog({
   // initialise allocations when invoice list loads
   useMemo(() => {
     if (!clientId) return;
+    // In edit mode, restore the exact split recorded when the payment was made.
+    // Payments recorded before per-invoice allocations were tracked have no
+    // rows here — for those (only) we fall back to the single invoice the
+    // payment was linked to, never to guessing based on other invoices'
+    // paid status (that produced wrong allocations for clients with more
+    // than one paid invoice).
+    const hasExactAllocations = isEdit && (existingAllocations?.length ?? 0) > 0;
+    const exactByInvoiceId = new Map((existingAllocations ?? []).map((a) => [a.invoice_id, a.amount_cents]));
+
     setAllocations(
       allocationInvoices.map((inv) => {
-        // In edit mode, pre-fill the amount for the invoice this payment is linked to.
-        // For multi-invoice payments we don't store the split, so we use the invoice's
-        // amount_paid as the best approximation of what this payment contributed.
         let prefilledCents = 0;
         if (isEdit && payment) {
-          if (inv.id === payment.invoiceId) {
-            // primary linked invoice — pre-fill with min(payment amount, invoice total)
+          if (hasExactAllocations) {
+            prefilledCents = exactByInvoiceId.get(inv.id) ?? 0;
+          } else if (inv.id === payment.invoiceId) {
+            // legacy payment predating crm_payment_allocations — only the
+            // single linked invoice is known, not the rest of any split
             prefilledCents = Math.min(payment.amountCents, inv.totalCents);
-          } else if (inv.status === "paid" && inv.amountPaidCents) {
-            // other paid invoices — prefill with their paid amount as best guess
-            prefilledCents = inv.amountPaidCents;
           }
         }
         const balCents = inv.balanceCents ?? inv.totalCents;
@@ -235,7 +183,7 @@ export function AddPaymentDialog({
       })
     );
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [allocationInvoices.map(i => `${i.id}:${i.balanceCents}`).join(","), clientId]);
+  }, [allocationInvoices.map(i => `${i.id}:${i.balanceCents}`).join(","), clientId, existingAllocations]);
 
   function runAllocation() {
     let remaining = amountCents;
@@ -351,7 +299,7 @@ export function AddPaymentDialog({
 
             <div className="grid grid-cols-[120px_1fr] items-center gap-x-4 gap-y-3">
               <Label className="text-right text-sm font-medium">Client</Label>
-              {(defaultClientId || isEdit) && selectedClient ? (
+              {isEdit && selectedClient ? (
                 <div className="text-sm text-slate-700">
                   {selectedClient.displayName}
                   {selectedClient.billingAddress && (
@@ -359,10 +307,11 @@ export function AddPaymentDialog({
                   )}
                 </div>
               ) : (
-                <ClientSearchField
+                <ClientCombobox
                   value={clientId}
-                  onChange={handleClientChange}
+                  onValueChange={handleClientChange}
                   clients={clients ?? []}
+                  noneLabel="Search clients..."
                 />
               )}
 

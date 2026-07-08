@@ -86,7 +86,11 @@ export default function ClientsPage() {
         )}
       </div>
 
-      <NewClientDialog open={newOpen} onOpenChange={setNewOpen} />
+      <NewClientDialog
+        open={newOpen}
+        onOpenChange={setNewOpen}
+        onCreated={(client) => { setSelected(client); setViewMode("list"); }}
+      />
     </div>
   );
 }

@@ -400,6 +400,13 @@ export type Database = {
             foreignKeyName: "assets_purchase_vendor_id_fkey"
             columns: ["purchase_vendor_id"]
             isOneToOne: false
+            referencedRelation: "rpt_vendors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "assets_purchase_vendor_id_fkey"
+            columns: ["purchase_vendor_id"]
+            isOneToOne: false
             referencedRelation: "vendors"
             referencedColumns: ["id"]
           },
@@ -793,6 +800,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "client_activity_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_clients"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "client_activity_created_by_fkey"
             columns: ["created_by"]
             isOneToOne: false
@@ -872,6 +886,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "client_contacts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_clients"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "client_contacts_created_by_fkey"
             columns: ["created_by"]
             isOneToOne: false
@@ -883,6 +904,74 @@ export type Database = {
             columns: ["org_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      client_files: {
+        Row: {
+          client_id: string
+          created_at: string
+          deleted_at: string | null
+          id: string
+          mime_type: string | null
+          name: string
+          org_id: string
+          size_bytes: number | null
+          storage_path: string
+          uploaded_by: string | null
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          mime_type?: string | null
+          name: string
+          org_id: string
+          size_bytes?: number | null
+          storage_path: string
+          uploaded_by?: string | null
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          mime_type?: string | null
+          name?: string
+          org_id?: string
+          size_bytes?: number | null
+          storage_path?: string
+          uploaded_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_files_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_files_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_files_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_files_uploaded_by_fkey"
+            columns: ["uploaded_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -927,6 +1016,13 @@ export type Database = {
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_portal_invites_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_clients"
             referencedColumns: ["id"]
           },
           {
@@ -1025,6 +1121,13 @@ export type Database = {
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_portal_users_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_clients"
             referencedColumns: ["id"]
           },
           {
@@ -1127,6 +1230,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "client_properties_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_clients"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "client_properties_created_by_fkey"
             columns: ["created_by"]
             isOneToOne: false
@@ -1176,6 +1286,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "client_tags_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_clients"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "client_tags_created_by_fkey"
             columns: ["created_by"]
             isOneToOne: false
@@ -1193,6 +1310,7 @@ export type Database = {
       }
       clients: {
         Row: {
+          account_number: string | null
           account_type: string
           balance_credits_cents: number
           balance_outstanding_cents: number
@@ -1212,7 +1330,7 @@ export type Database = {
           created_by: string | null
           default_payment_method: string | null
           default_tax_rate_bps: number
-          default_terms: string
+          default_terms: string | null
           deleted_at: string | null
           display_name: string
           do_not_market: boolean
@@ -1228,6 +1346,7 @@ export type Database = {
           map_code: string | null
           mulch_bed_sqft: number | null
           notes_to_crew: string | null
+          office_notes: string | null
           ok_to_email: boolean
           org_id: string
           parent_client_id: string | null
@@ -1237,6 +1356,7 @@ export type Database = {
           primary_phone: string | null
           priority: string | null
           referred_by: string | null
+          referred_by_client_id: string | null
           revenue_potential_cents: number
           sales_rep_id: string | null
           sales_tax_code: string | null
@@ -1247,6 +1367,7 @@ export type Database = {
           yards_of_mulch: number | null
         }
         Insert: {
+          account_number?: string | null
           account_type?: string
           balance_credits_cents?: number
           balance_outstanding_cents?: number
@@ -1266,7 +1387,7 @@ export type Database = {
           created_by?: string | null
           default_payment_method?: string | null
           default_tax_rate_bps?: number
-          default_terms?: string
+          default_terms?: string | null
           deleted_at?: string | null
           display_name: string
           do_not_market?: boolean
@@ -1282,6 +1403,7 @@ export type Database = {
           map_code?: string | null
           mulch_bed_sqft?: number | null
           notes_to_crew?: string | null
+          office_notes?: string | null
           ok_to_email?: boolean
           org_id?: string
           parent_client_id?: string | null
@@ -1291,6 +1413,7 @@ export type Database = {
           primary_phone?: string | null
           priority?: string | null
           referred_by?: string | null
+          referred_by_client_id?: string | null
           revenue_potential_cents?: number
           sales_rep_id?: string | null
           sales_tax_code?: string | null
@@ -1301,6 +1424,7 @@ export type Database = {
           yards_of_mulch?: number | null
         }
         Update: {
+          account_number?: string | null
           account_type?: string
           balance_credits_cents?: number
           balance_outstanding_cents?: number
@@ -1320,7 +1444,7 @@ export type Database = {
           created_by?: string | null
           default_payment_method?: string | null
           default_tax_rate_bps?: number
-          default_terms?: string
+          default_terms?: string | null
           deleted_at?: string | null
           display_name?: string
           do_not_market?: boolean
@@ -1336,6 +1460,7 @@ export type Database = {
           map_code?: string | null
           mulch_bed_sqft?: number | null
           notes_to_crew?: string | null
+          office_notes?: string | null
           ok_to_email?: boolean
           org_id?: string
           parent_client_id?: string | null
@@ -1345,6 +1470,7 @@ export type Database = {
           primary_phone?: string | null
           priority?: string | null
           referred_by?: string | null
+          referred_by_client_id?: string | null
           revenue_potential_cents?: number
           sales_rep_id?: string | null
           sales_tax_code?: string | null
@@ -1374,6 +1500,27 @@ export type Database = {
             columns: ["parent_client_id"]
             isOneToOne: false
             referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "clients_parent_client_id_fkey"
+            columns: ["parent_client_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "clients_referred_by_client_id_fkey"
+            columns: ["referred_by_client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "clients_referred_by_client_id_fkey"
+            columns: ["referred_by_client_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_clients"
             referencedColumns: ["id"]
           },
           {
@@ -1556,6 +1703,65 @@ export type Database = {
           },
         ]
       }
+      crm_client_custom_field_values: {
+        Row: {
+          client_id: string
+          field_def_id: string
+          id: string
+          org_id: string
+          updated_at: string
+          value_number: number | null
+          value_text: string | null
+        }
+        Insert: {
+          client_id: string
+          field_def_id: string
+          id?: string
+          org_id: string
+          updated_at?: string
+          value_number?: number | null
+          value_text?: string | null
+        }
+        Update: {
+          client_id?: string
+          field_def_id?: string
+          id?: string
+          org_id?: string
+          updated_at?: string
+          value_number?: number | null
+          value_text?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_client_custom_field_values_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_client_custom_field_values_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_client_custom_field_values_field_def_id_fkey"
+            columns: ["field_def_id"]
+            isOneToOne: false
+            referencedRelation: "crm_custom_field_defs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_client_custom_field_values_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       crm_contract_notes: {
         Row: {
           body: string
@@ -1593,6 +1799,13 @@ export type Database = {
             columns: ["contract_id"]
             isOneToOne: false
             referencedRelation: "crm_contracts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_contract_notes_contract_id_fkey"
+            columns: ["contract_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_contracts"
             referencedColumns: ["id"]
           },
           {
@@ -1713,6 +1926,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "crm_contracts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_clients"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "crm_contracts_created_by_fkey"
             columns: ["created_by"]
             isOneToOne: false
@@ -1724,6 +1944,13 @@ export type Database = {
             columns: ["estimate_id"]
             isOneToOne: false
             referencedRelation: "estimates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_contracts_estimate_id_fkey"
+            columns: ["estimate_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_estimates"
             referencedColumns: ["id"]
           },
           {
@@ -1787,13 +2014,22 @@ export type Database = {
             referencedRelation: "crm_job_visits"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "crm_crew_member_times_visit_id_fkey"
+            columns: ["visit_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_job_visits"
+            referencedColumns: ["id"]
+          },
         ]
       }
       crm_crew_members: {
         Row: {
           created_at: string
           crew_id: string
+          days_of_week: number[]
           id: string
+          labor_burden_cents_per_hour: number
           name: string
           org_id: string
           role: string | null
@@ -1801,7 +2037,9 @@ export type Database = {
         Insert: {
           created_at?: string
           crew_id: string
+          days_of_week?: number[]
           id?: string
+          labor_burden_cents_per_hour?: number
           name: string
           org_id?: string
           role?: string | null
@@ -1809,7 +2047,9 @@ export type Database = {
         Update: {
           created_at?: string
           crew_id?: string
+          days_of_week?: number[]
           id?: string
+          labor_burden_cents_per_hour?: number
           name?: string
           org_id?: string
           role?: string | null
@@ -1833,38 +2073,77 @@ export type Database = {
       }
       crm_crews: {
         Row: {
+          code: string | null
           color: string | null
           created_at: string
           created_by: string | null
           deleted_at: string | null
+          foreman_id: string | null
           id: string
           is_active: boolean
+          map_codes: string | null
+          map_icon_color: string | null
           name: string
           org_id: string
+          route_sheet_format: string | null
+          show_in_calendar: boolean
+          starting_address: string | null
+          starting_city: string | null
+          starting_lat: number | null
+          starting_lng: number | null
+          starting_state: string | null
+          starting_zip: string | null
+          tags: string[] | null
           updated_at: string
           user_id: string | null
         }
         Insert: {
+          code?: string | null
           color?: string | null
           created_at?: string
           created_by?: string | null
           deleted_at?: string | null
+          foreman_id?: string | null
           id?: string
           is_active?: boolean
+          map_codes?: string | null
+          map_icon_color?: string | null
           name: string
           org_id?: string
+          route_sheet_format?: string | null
+          show_in_calendar?: boolean
+          starting_address?: string | null
+          starting_city?: string | null
+          starting_lat?: number | null
+          starting_lng?: number | null
+          starting_state?: string | null
+          starting_zip?: string | null
+          tags?: string[] | null
           updated_at?: string
           user_id?: string | null
         }
         Update: {
+          code?: string | null
           color?: string | null
           created_at?: string
           created_by?: string | null
           deleted_at?: string | null
+          foreman_id?: string | null
           id?: string
           is_active?: boolean
+          map_codes?: string | null
+          map_icon_color?: string | null
           name?: string
           org_id?: string
+          route_sheet_format?: string | null
+          show_in_calendar?: boolean
+          starting_address?: string | null
+          starting_city?: string | null
+          starting_lat?: number | null
+          starting_lng?: number | null
+          starting_state?: string | null
+          starting_zip?: string | null
+          tags?: string[] | null
           updated_at?: string
           user_id?: string | null
         }
@@ -1874,6 +2153,20 @@ export type Database = {
             columns: ["created_by"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_crews_foreman_id_fkey"
+            columns: ["foreman_id"]
+            isOneToOne: false
+            referencedRelation: "crm_employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_crews_foreman_id_fkey"
+            columns: ["foreman_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_employees"
             referencedColumns: ["id"]
           },
           {
@@ -1889,40 +2182,235 @@ export type Database = {
         Row: {
           created_at: string
           deleted_at: string | null
-          entity_type: string
-          field_key: string
-          field_label: string
           field_type: string
           id: string
-          options: Json | null
+          name: string
           org_id: string
           sort_order: number
+          unit: string | null
         }
         Insert: {
           created_at?: string
           deleted_at?: string | null
-          entity_type?: string
-          field_key: string
-          field_label: string
           field_type?: string
           id?: string
-          options?: Json | null
+          name: string
           org_id: string
           sort_order?: number
+          unit?: string | null
         }
         Update: {
           created_at?: string
           deleted_at?: string | null
-          entity_type?: string
-          field_key?: string
-          field_label?: string
           field_type?: string
           id?: string
-          options?: Json | null
+          name?: string
           org_id?: string
           sort_order?: number
+          unit?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_custom_field_defs_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      crm_custom_reports: {
+        Row: {
+          config: Json
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          description: string | null
+          id: string
+          name: string
+          org_id: string
+          updated_at: string
+        }
+        Insert: {
+          config?: Json
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          description?: string | null
+          id?: string
+          name: string
+          org_id?: string
+          updated_at?: string
+        }
+        Update: {
+          config?: Json
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          description?: string | null
+          id?: string
+          name?: string
+          org_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_custom_reports_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      crm_discounts: {
+        Row: {
+          created_at: string
+          deleted_at: string | null
+          discount_type: string
+          flat_cents: number | null
+          id: string
+          is_active: boolean
+          name: string
+          org_id: string
+          percent_bps: number | null
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          deleted_at?: string | null
+          discount_type?: string
+          flat_cents?: number | null
+          id?: string
+          is_active?: boolean
+          name: string
+          org_id?: string
+          percent_bps?: number | null
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          deleted_at?: string | null
+          discount_type?: string
+          flat_cents?: number | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          org_id?: string
+          percent_bps?: number | null
+          sort_order?: number
+          updated_at?: string
         }
         Relationships: []
+      }
+      crm_document_blocks: {
+        Row: {
+          block_type: string
+          content: string | null
+          created_at: string
+          id: string
+          order_index: number
+          org_id: string
+          settings: Json
+          template_id: string
+          updated_at: string
+        }
+        Insert: {
+          block_type: string
+          content?: string | null
+          created_at?: string
+          id?: string
+          order_index?: number
+          org_id: string
+          settings?: Json
+          template_id: string
+          updated_at?: string
+        }
+        Update: {
+          block_type?: string
+          content?: string | null
+          created_at?: string
+          id?: string
+          order_index?: number
+          org_id?: string
+          settings?: Json
+          template_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_document_blocks_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_document_blocks_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "crm_document_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      crm_document_templates: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          description: string | null
+          doc_type: string
+          id: string
+          include_pdf: boolean
+          is_default: boolean
+          name: string
+          org_id: string
+          status: string
+          subject: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          description?: string | null
+          doc_type: string
+          id?: string
+          include_pdf?: boolean
+          is_default?: boolean
+          name: string
+          org_id: string
+          status?: string
+          subject?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          description?: string | null
+          doc_type?: string
+          id?: string
+          include_pdf?: boolean
+          is_default?: boolean
+          name?: string
+          org_id?: string
+          status?: string
+          subject?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_document_templates_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       crm_email_templates: {
         Row: {
@@ -1964,6 +2452,266 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "crm_email_templates_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      crm_employees: {
+        Row: {
+          address: string | null
+          applicator_license: string | null
+          birth_date: string | null
+          cell_phone: string | null
+          citizenship: string | null
+          city: string | null
+          commission_pct: number
+          compensation_type: string | null
+          covered_by_insurance: boolean
+          created_at: string
+          created_by: string | null
+          crm_role_id: string | null
+          date_hired: string | null
+          date_released: string | null
+          deleted_at: string | null
+          driver_license: string | null
+          eligible_overtime: boolean
+          email: string | null
+          emergency_contact: string | null
+          emergency_phone: string | null
+          employment_status: string
+          field_time_clock: boolean
+          first_name: string
+          hourly_rate_cents: number
+          i9_expiration_date: string | null
+          i9_number: string | null
+          id: string
+          insurance_eligibility: string | null
+          is_active: boolean
+          is_certified_driver: boolean
+          is_sales_rep: boolean
+          last_name: string
+          last_pay_raise_cents: number
+          last_pay_raise_date: string | null
+          license_expiration: string | null
+          manager_id: string | null
+          map_codes: string | null
+          map_icon_color: string | null
+          marital_status: string | null
+          middle_initial: string | null
+          notes: string | null
+          num_dependants: number
+          office_time_clock: boolean
+          org_id: string
+          overtime_rate_cents: number
+          pager: string | null
+          payment_frequency: string | null
+          phone: string | null
+          print_on_check_as: string | null
+          reason_for_release: string | null
+          rehire_date: string | null
+          resource_code: string | null
+          resource_pin: string | null
+          resource_tags: string[] | null
+          route_sheet_format: string | null
+          send_text_alerts: boolean
+          show_in_calendar: boolean
+          show_in_selection: boolean
+          sick_days: number
+          spouse_name: string | null
+          spouse_phone: string | null
+          starting_address: string | null
+          starting_city: string | null
+          starting_lat: number | null
+          starting_lng: number | null
+          starting_state: string | null
+          starting_zip: string | null
+          state: string | null
+          updated_at: string
+          user_id: string | null
+          user_role: string | null
+          user_type: string
+          vacation_days: number
+          zip: string | null
+        }
+        Insert: {
+          address?: string | null
+          applicator_license?: string | null
+          birth_date?: string | null
+          cell_phone?: string | null
+          citizenship?: string | null
+          city?: string | null
+          commission_pct?: number
+          compensation_type?: string | null
+          covered_by_insurance?: boolean
+          created_at?: string
+          created_by?: string | null
+          crm_role_id?: string | null
+          date_hired?: string | null
+          date_released?: string | null
+          deleted_at?: string | null
+          driver_license?: string | null
+          eligible_overtime?: boolean
+          email?: string | null
+          emergency_contact?: string | null
+          emergency_phone?: string | null
+          employment_status?: string
+          field_time_clock?: boolean
+          first_name: string
+          hourly_rate_cents?: number
+          i9_expiration_date?: string | null
+          i9_number?: string | null
+          id?: string
+          insurance_eligibility?: string | null
+          is_active?: boolean
+          is_certified_driver?: boolean
+          is_sales_rep?: boolean
+          last_name: string
+          last_pay_raise_cents?: number
+          last_pay_raise_date?: string | null
+          license_expiration?: string | null
+          manager_id?: string | null
+          map_codes?: string | null
+          map_icon_color?: string | null
+          marital_status?: string | null
+          middle_initial?: string | null
+          notes?: string | null
+          num_dependants?: number
+          office_time_clock?: boolean
+          org_id?: string
+          overtime_rate_cents?: number
+          pager?: string | null
+          payment_frequency?: string | null
+          phone?: string | null
+          print_on_check_as?: string | null
+          reason_for_release?: string | null
+          rehire_date?: string | null
+          resource_code?: string | null
+          resource_pin?: string | null
+          resource_tags?: string[] | null
+          route_sheet_format?: string | null
+          send_text_alerts?: boolean
+          show_in_calendar?: boolean
+          show_in_selection?: boolean
+          sick_days?: number
+          spouse_name?: string | null
+          spouse_phone?: string | null
+          starting_address?: string | null
+          starting_city?: string | null
+          starting_lat?: number | null
+          starting_lng?: number | null
+          starting_state?: string | null
+          starting_zip?: string | null
+          state?: string | null
+          updated_at?: string
+          user_id?: string | null
+          user_role?: string | null
+          user_type?: string
+          vacation_days?: number
+          zip?: string | null
+        }
+        Update: {
+          address?: string | null
+          applicator_license?: string | null
+          birth_date?: string | null
+          cell_phone?: string | null
+          citizenship?: string | null
+          city?: string | null
+          commission_pct?: number
+          compensation_type?: string | null
+          covered_by_insurance?: boolean
+          created_at?: string
+          created_by?: string | null
+          crm_role_id?: string | null
+          date_hired?: string | null
+          date_released?: string | null
+          deleted_at?: string | null
+          driver_license?: string | null
+          eligible_overtime?: boolean
+          email?: string | null
+          emergency_contact?: string | null
+          emergency_phone?: string | null
+          employment_status?: string
+          field_time_clock?: boolean
+          first_name?: string
+          hourly_rate_cents?: number
+          i9_expiration_date?: string | null
+          i9_number?: string | null
+          id?: string
+          insurance_eligibility?: string | null
+          is_active?: boolean
+          is_certified_driver?: boolean
+          is_sales_rep?: boolean
+          last_name?: string
+          last_pay_raise_cents?: number
+          last_pay_raise_date?: string | null
+          license_expiration?: string | null
+          manager_id?: string | null
+          map_codes?: string | null
+          map_icon_color?: string | null
+          marital_status?: string | null
+          middle_initial?: string | null
+          notes?: string | null
+          num_dependants?: number
+          office_time_clock?: boolean
+          org_id?: string
+          overtime_rate_cents?: number
+          pager?: string | null
+          payment_frequency?: string | null
+          phone?: string | null
+          print_on_check_as?: string | null
+          reason_for_release?: string | null
+          rehire_date?: string | null
+          resource_code?: string | null
+          resource_pin?: string | null
+          resource_tags?: string[] | null
+          route_sheet_format?: string | null
+          send_text_alerts?: boolean
+          show_in_calendar?: boolean
+          show_in_selection?: boolean
+          sick_days?: number
+          spouse_name?: string | null
+          spouse_phone?: string | null
+          starting_address?: string | null
+          starting_city?: string | null
+          starting_lat?: number | null
+          starting_lng?: number | null
+          starting_state?: string | null
+          starting_zip?: string | null
+          state?: string | null
+          updated_at?: string
+          user_id?: string | null
+          user_role?: string | null
+          user_type?: string
+          vacation_days?: number
+          zip?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_employees_crm_role_id_fkey"
+            columns: ["crm_role_id"]
+            isOneToOne: false
+            referencedRelation: "crm_roles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_employees_manager_id_fkey"
+            columns: ["manager_id"]
+            isOneToOne: false
+            referencedRelation: "crm_employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_employees_manager_id_fkey"
+            columns: ["manager_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_employees_org_id_fkey"
             columns: ["org_id"]
             isOneToOne: false
             referencedRelation: "organizations"
@@ -2157,6 +2905,13 @@ export type Database = {
             columns: ["related_client_id"]
             isOneToOne: false
             referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_form_responses_related_client_id_fkey"
+            columns: ["related_client_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_clients"
             referencedColumns: ["id"]
           },
           {
@@ -2362,6 +3117,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "crm_invoice_line_items_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_invoices"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "crm_invoice_line_items_org_id_fkey"
             columns: ["org_id"]
             isOneToOne: false
@@ -2473,10 +3235,24 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "crm_invoices_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_clients"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "crm_invoices_contract_id_fkey"
             columns: ["contract_id"]
             isOneToOne: false
             referencedRelation: "crm_contracts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_invoices_contract_id_fkey"
+            columns: ["contract_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_contracts"
             referencedColumns: ["id"]
           },
           {
@@ -2494,10 +3270,24 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "crm_invoices_crm_job_id_fkey"
+            columns: ["crm_job_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_jobs"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "crm_invoices_estimate_id_fkey"
             columns: ["estimate_id"]
             isOneToOne: false
             referencedRelation: "estimates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_invoices_estimate_id_fkey"
+            columns: ["estimate_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_estimates"
             referencedColumns: ["id"]
           },
           {
@@ -2561,6 +3351,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "crm_job_materials_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_jobs"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "crm_job_materials_org_id_fkey"
             columns: ["org_id"]
             isOneToOne: false
@@ -2572,6 +3369,13 @@ export type Database = {
             columns: ["visit_id"]
             isOneToOne: false
             referencedRelation: "crm_job_visits"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_job_materials_visit_id_fkey"
+            columns: ["visit_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_job_visits"
             referencedColumns: ["id"]
           },
         ]
@@ -2628,6 +3432,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "crm_job_products_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_jobs"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "crm_job_products_org_id_fkey"
             columns: ["org_id"]
             isOneToOne: false
@@ -2639,6 +3450,13 @@ export type Database = {
             columns: ["product_id"]
             isOneToOne: false
             referencedRelation: "product_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_job_products_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_products"
             referencedColumns: ["id"]
           },
         ]
@@ -2716,6 +3534,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "crm_job_services_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_jobs"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "crm_job_services_org_id_fkey"
             columns: ["org_id"]
             isOneToOne: false
@@ -2729,12 +3554,20 @@ export type Database = {
             referencedRelation: "crm_services"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "crm_job_services_service_id_fkey"
+            columns: ["service_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_services"
+            referencedColumns: ["id"]
+          },
         ]
       }
       crm_job_visits: {
         Row: {
           acknowledged_notes_at: string | null
           actual_hours: number | null
+          actual_labor_cost_cents: number
           assigned_employee_id: string | null
           budgeted_hours: number | null
           client_id: string
@@ -2770,6 +3603,7 @@ export type Database = {
         Insert: {
           acknowledged_notes_at?: string | null
           actual_hours?: number | null
+          actual_labor_cost_cents?: number
           assigned_employee_id?: string | null
           budgeted_hours?: number | null
           client_id: string
@@ -2805,6 +3639,7 @@ export type Database = {
         Update: {
           acknowledged_notes_at?: string | null
           actual_hours?: number | null
+          actual_labor_cost_cents?: number
           assigned_employee_id?: string | null
           budgeted_hours?: number | null
           client_id?: string
@@ -2846,6 +3681,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "crm_job_visits_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_clients"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "crm_job_visits_created_by_fkey"
             columns: ["created_by"]
             isOneToOne: false
@@ -2864,6 +3706,13 @@ export type Database = {
             columns: ["job_id"]
             isOneToOne: false
             referencedRelation: "crm_jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_job_visits_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_jobs"
             referencedColumns: ["id"]
           },
         ]
@@ -3088,10 +3937,24 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "crm_jobs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_clients"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "crm_jobs_contract_id_fkey"
             columns: ["contract_id"]
             isOneToOne: false
             referencedRelation: "crm_contracts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_jobs_contract_id_fkey"
+            columns: ["contract_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_contracts"
             referencedColumns: ["id"]
           },
           {
@@ -3198,6 +4061,211 @@ export type Database = {
         }
         Relationships: []
       }
+      crm_package_services: {
+        Row: {
+          created_at: string
+          default_b_hrs: number | null
+          default_rate_cents: number | null
+          end_date: string | null
+          id: string
+          min_days: number | null
+          name: string | null
+          org_id: string
+          package_id: string
+          service_id: string | null
+          service_name: string
+          sort_order: number
+          start_date: string | null
+          visits_included: number
+        }
+        Insert: {
+          created_at?: string
+          default_b_hrs?: number | null
+          default_rate_cents?: number | null
+          end_date?: string | null
+          id?: string
+          min_days?: number | null
+          name?: string | null
+          org_id?: string
+          package_id: string
+          service_id?: string | null
+          service_name: string
+          sort_order?: number
+          start_date?: string | null
+          visits_included?: number
+        }
+        Update: {
+          created_at?: string
+          default_b_hrs?: number | null
+          default_rate_cents?: number | null
+          end_date?: string | null
+          id?: string
+          min_days?: number | null
+          name?: string | null
+          org_id?: string
+          package_id?: string
+          service_id?: string | null
+          service_name?: string
+          sort_order?: number
+          start_date?: string | null
+          visits_included?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_package_services_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_package_services_package_id_fkey"
+            columns: ["package_id"]
+            isOneToOne: false
+            referencedRelation: "crm_packages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_package_services_service_id_fkey"
+            columns: ["service_id"]
+            isOneToOne: false
+            referencedRelation: "crm_services"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_package_services_service_id_fkey"
+            columns: ["service_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_services"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      crm_packages: {
+        Row: {
+          code: string | null
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          description: string | null
+          id: string
+          is_active: boolean
+          monthly_amount_cents: number
+          name: string
+          org_id: string
+          schedule_days: string[]
+          schedule_frequency: string
+          season_months: number
+          updated_at: string
+          visits_per_season: number
+        }
+        Insert: {
+          code?: string | null
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          monthly_amount_cents?: number
+          name: string
+          org_id?: string
+          schedule_days?: string[]
+          schedule_frequency?: string
+          season_months?: number
+          updated_at?: string
+          visits_per_season?: number
+        }
+        Update: {
+          code?: string | null
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          monthly_amount_cents?: number
+          name?: string
+          org_id?: string
+          schedule_days?: string[]
+          schedule_frequency?: string
+          season_months?: number
+          updated_at?: string
+          visits_per_season?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_packages_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      crm_payment_allocations: {
+        Row: {
+          amount_cents: number
+          created_at: string
+          id: string
+          invoice_id: string
+          org_id: string
+          payment_id: string
+        }
+        Insert: {
+          amount_cents: number
+          created_at?: string
+          id?: string
+          invoice_id: string
+          org_id?: string
+          payment_id: string
+        }
+        Update: {
+          amount_cents?: number
+          created_at?: string
+          id?: string
+          invoice_id?: string
+          org_id?: string
+          payment_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_payment_allocations_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "crm_invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_payment_allocations_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_payment_allocations_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_payment_allocations_payment_id_fkey"
+            columns: ["payment_id"]
+            isOneToOne: false
+            referencedRelation: "crm_payments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_payment_allocations_payment_id_fkey"
+            columns: ["payment_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_payments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       crm_payments: {
         Row: {
           amount_cents: number
@@ -3265,6 +4333,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "crm_payments_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_clients"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "crm_payments_created_by_fkey"
             columns: ["created_by"]
             isOneToOne: false
@@ -3276,6 +4351,13 @@ export type Database = {
             columns: ["invoice_id"]
             isOneToOne: false
             referencedRelation: "crm_invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_payments_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_invoices"
             referencedColumns: ["id"]
           },
           {
@@ -3320,7 +4402,7 @@ export type Database = {
             foreignKeyName: "crm_property_custom_field_values_field_def_id_fkey"
             columns: ["field_def_id"]
             isOneToOne: false
-            referencedRelation: "crm_custom_field_defs"
+            referencedRelation: "crm_rate_matrix_field_defs"
             referencedColumns: ["id"]
           },
           {
@@ -3331,6 +4413,45 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      crm_rate_matrix_field_defs: {
+        Row: {
+          created_at: string
+          deleted_at: string | null
+          entity_type: string
+          field_key: string
+          field_label: string
+          field_type: string
+          id: string
+          options: Json | null
+          org_id: string
+          sort_order: number
+        }
+        Insert: {
+          created_at?: string
+          deleted_at?: string | null
+          entity_type?: string
+          field_key: string
+          field_label: string
+          field_type?: string
+          id?: string
+          options?: Json | null
+          org_id: string
+          sort_order?: number
+        }
+        Update: {
+          created_at?: string
+          deleted_at?: string | null
+          entity_type?: string
+          field_key?: string
+          field_label?: string
+          field_type?: string
+          id?: string
+          options?: Json | null
+          org_id?: string
+          sort_order?: number
+        }
+        Relationships: []
       }
       crm_reports: {
         Row: {
@@ -3352,6 +4473,112 @@ export type Database = {
           updated_at?: string | null
         }
         Relationships: []
+      }
+      crm_roles: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          description: string | null
+          id: string
+          is_active: boolean
+          name: string
+          org_id: string
+          permissions: Json
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          name: string
+          org_id?: string
+          permissions?: Json
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          org_id?: string
+          permissions?: Json
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_roles_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      crm_schedules: {
+        Row: {
+          anchor_date: string | null
+          created_at: string
+          day_of_week: string
+          deleted_at: string | null
+          frequency: string
+          id: string
+          is_active: boolean
+          name: string
+          org_id: string
+          season_end: string | null
+          season_start: string | null
+          updated_at: string
+          week_of_month: string | null
+          week_pattern: string | null
+        }
+        Insert: {
+          anchor_date?: string | null
+          created_at?: string
+          day_of_week: string
+          deleted_at?: string | null
+          frequency: string
+          id?: string
+          is_active?: boolean
+          name: string
+          org_id?: string
+          season_end?: string | null
+          season_start?: string | null
+          updated_at?: string
+          week_of_month?: string | null
+          week_pattern?: string | null
+        }
+        Update: {
+          anchor_date?: string | null
+          created_at?: string
+          day_of_week?: string
+          deleted_at?: string | null
+          frequency?: string
+          id?: string
+          is_active?: boolean
+          name?: string
+          org_id?: string
+          season_end?: string | null
+          season_start?: string | null
+          updated_at?: string
+          week_of_month?: string | null
+          week_pattern?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_schedules_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       crm_sequence_enrollments: {
         Row: {
@@ -3414,10 +4641,24 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "crm_sequence_enrollments_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_clients"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "crm_sequence_enrollments_estimate_id_fkey"
             columns: ["estimate_id"]
             isOneToOne: false
             referencedRelation: "estimates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_sequence_enrollments_estimate_id_fkey"
+            columns: ["estimate_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_estimates"
             referencedColumns: ["id"]
           },
           {
@@ -3691,7 +4932,7 @@ export type Database = {
             foreignKeyName: "crm_service_rate_matrix_custom_field_id_fkey"
             columns: ["custom_field_id"]
             isOneToOne: false
-            referencedRelation: "crm_custom_field_defs"
+            referencedRelation: "crm_rate_matrix_field_defs"
             referencedColumns: ["id"]
           },
           {
@@ -3699,6 +4940,13 @@ export type Database = {
             columns: ["service_id"]
             isOneToOne: false
             referencedRelation: "crm_services"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_service_rate_matrix_service_id_fkey"
+            columns: ["service_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_services"
             referencedColumns: ["id"]
           },
         ]
@@ -3710,14 +4958,35 @@ export type Database = {
           code: string | null
           created_at: string
           created_by: string | null
+          default_b_cost_cents: number
+          default_b_hrs: number
           default_rate_cents: number | null
           deleted_at: string | null
+          description_on_estimate: string | null
           id: string
+          invoice_description: string | null
           is_active: boolean
           is_taxable: boolean
+          matrix_tail_cost_cents: number | null
+          matrix_tail_every_qty: number | null
+          matrix_tail_hours: number | null
+          matrix_tail_over_qty: number | null
+          matrix_tail_rate_cents: number | null
           name: string
+          only_for_estimates: boolean
           org_id: string
+          parent_service_id: string | null
           production_rate_sqft_per_hr: number | null
+          rate_matrix_calc: string | null
+          rate_matrix_field: string | null
+          service_mode: string
+          show_in_snow_dispatch: boolean
+          target_rate_cents: number
+          target_rate_cents_per_hr: number
+          target_rate_with_drive_cents: number
+          target_rate_with_drive_cents_per_hr: number
+          task_color: string | null
+          track_chemicals: boolean
           unit: string | null
           updated_at: string
         }
@@ -3727,14 +4996,35 @@ export type Database = {
           code?: string | null
           created_at?: string
           created_by?: string | null
+          default_b_cost_cents?: number
+          default_b_hrs?: number
           default_rate_cents?: number | null
           deleted_at?: string | null
+          description_on_estimate?: string | null
           id?: string
+          invoice_description?: string | null
           is_active?: boolean
           is_taxable?: boolean
+          matrix_tail_cost_cents?: number | null
+          matrix_tail_every_qty?: number | null
+          matrix_tail_hours?: number | null
+          matrix_tail_over_qty?: number | null
+          matrix_tail_rate_cents?: number | null
           name: string
+          only_for_estimates?: boolean
           org_id?: string
+          parent_service_id?: string | null
           production_rate_sqft_per_hr?: number | null
+          rate_matrix_calc?: string | null
+          rate_matrix_field?: string | null
+          service_mode?: string
+          show_in_snow_dispatch?: boolean
+          target_rate_cents?: number
+          target_rate_cents_per_hr?: number
+          target_rate_with_drive_cents?: number
+          target_rate_with_drive_cents_per_hr?: number
+          task_color?: string | null
+          track_chemicals?: boolean
           unit?: string | null
           updated_at?: string
         }
@@ -3744,14 +5034,35 @@ export type Database = {
           code?: string | null
           created_at?: string
           created_by?: string | null
+          default_b_cost_cents?: number
+          default_b_hrs?: number
           default_rate_cents?: number | null
           deleted_at?: string | null
+          description_on_estimate?: string | null
           id?: string
+          invoice_description?: string | null
           is_active?: boolean
           is_taxable?: boolean
+          matrix_tail_cost_cents?: number | null
+          matrix_tail_every_qty?: number | null
+          matrix_tail_hours?: number | null
+          matrix_tail_over_qty?: number | null
+          matrix_tail_rate_cents?: number | null
           name?: string
+          only_for_estimates?: boolean
           org_id?: string
+          parent_service_id?: string | null
           production_rate_sqft_per_hr?: number | null
+          rate_matrix_calc?: string | null
+          rate_matrix_field?: string | null
+          service_mode?: string
+          show_in_snow_dispatch?: boolean
+          target_rate_cents?: number
+          target_rate_cents_per_hr?: number
+          target_rate_with_drive_cents?: number
+          target_rate_with_drive_cents_per_hr?: number
+          task_color?: string | null
+          track_chemicals?: boolean
           unit?: string | null
           updated_at?: string
         }
@@ -3768,6 +5079,20 @@ export type Database = {
             columns: ["org_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_services_parent_service_id_fkey"
+            columns: ["parent_service_id"]
+            isOneToOne: false
+            referencedRelation: "crm_services"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_services_parent_service_id_fkey"
+            columns: ["parent_service_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_services"
             referencedColumns: ["id"]
           },
         ]
@@ -3839,6 +5164,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "crm_tickets_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_clients"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "crm_tickets_created_by_fkey"
             columns: ["created_by"]
             isOneToOne: false
@@ -3887,6 +5219,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "crm_visit_photos_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_jobs"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "crm_visit_photos_uploaded_by_fkey"
             columns: ["uploaded_by"]
             isOneToOne: false
@@ -3898,6 +5237,13 @@ export type Database = {
             columns: ["visit_id"]
             isOneToOne: false
             referencedRelation: "crm_job_visits"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_visit_photos_visit_id_fkey"
+            columns: ["visit_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_job_visits"
             referencedColumns: ["id"]
           },
         ]
@@ -3968,6 +5314,13 @@ export type Database = {
             columns: ["purchase_order_id"]
             isOneToOne: false
             referencedRelation: "purchase_orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "damage_case_expenses_vendor_id_fkey"
+            columns: ["vendor_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_vendors"
             referencedColumns: ["id"]
           },
           {
@@ -4100,6 +5453,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "estimate_direct_costs_estimate_id_fkey"
+            columns: ["estimate_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_estimates"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "estimate_direct_costs_org_id_fkey"
             columns: ["org_id"]
             isOneToOne: false
@@ -4151,6 +5511,13 @@ export type Database = {
             columns: ["estimate_id"]
             isOneToOne: false
             referencedRelation: "estimates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estimate_emails_estimate_id_fkey"
+            columns: ["estimate_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_estimates"
             referencedColumns: ["id"]
           },
           {
@@ -4229,6 +5596,13 @@ export type Database = {
             columns: ["line_item_id"]
             isOneToOne: false
             referencedRelation: "estimate_line_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estimate_line_item_subitems_line_item_id_fkey"
+            columns: ["line_item_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_estimate_line_items"
             referencedColumns: ["id"]
           },
         ]
@@ -4342,6 +5716,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "estimate_line_items_estimate_id_fkey"
+            columns: ["estimate_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_estimates"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "estimate_line_items_org_id_fkey"
             columns: ["org_id"]
             isOneToOne: false
@@ -4353,6 +5734,77 @@ export type Database = {
             columns: ["service_id"]
             isOneToOne: false
             referencedRelation: "crm_services"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estimate_line_items_service_id_fkey"
+            columns: ["service_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_services"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      estimate_photos: {
+        Row: {
+          caption: string | null
+          created_at: string
+          deleted_at: string | null
+          estimate_id: string
+          file_name: string
+          file_size: number | null
+          id: string
+          mime_type: string | null
+          org_id: string
+          storage_path: string
+          uploaded_by: string | null
+        }
+        Insert: {
+          caption?: string | null
+          created_at?: string
+          deleted_at?: string | null
+          estimate_id: string
+          file_name?: string
+          file_size?: number | null
+          id?: string
+          mime_type?: string | null
+          org_id?: string
+          storage_path: string
+          uploaded_by?: string | null
+        }
+        Update: {
+          caption?: string | null
+          created_at?: string
+          deleted_at?: string | null
+          estimate_id?: string
+          file_name?: string
+          file_size?: number | null
+          id?: string
+          mime_type?: string | null
+          org_id?: string
+          storage_path?: string
+          uploaded_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "estimate_photos_estimate_id_fkey"
+            columns: ["estimate_id"]
+            isOneToOne: false
+            referencedRelation: "estimates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estimate_photos_estimate_id_fkey"
+            columns: ["estimate_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_estimates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estimate_photos_uploaded_by_fkey"
+            columns: ["uploaded_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -4412,6 +5864,13 @@ export type Database = {
             columns: ["estimate_id"]
             isOneToOne: false
             referencedRelation: "estimates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estimate_share_tokens_estimate_id_fkey"
+            columns: ["estimate_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_estimates"
             referencedColumns: ["id"]
           },
           {
@@ -4482,6 +5941,13 @@ export type Database = {
             columns: ["service_id"]
             isOneToOne: false
             referencedRelation: "crm_services"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estimate_template_items_service_id_fkey"
+            columns: ["service_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_services"
             referencedColumns: ["id"]
           },
           {
@@ -4577,6 +6043,13 @@ export type Database = {
             columns: ["estimate_id"]
             isOneToOne: false
             referencedRelation: "estimates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estimate_versions_estimate_id_fkey"
+            columns: ["estimate_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_estimates"
             referencedColumns: ["id"]
           },
           {
@@ -4727,6 +6200,13 @@ export type Database = {
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estimates_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_clients"
             referencedColumns: ["id"]
           },
           {
@@ -5461,11 +6941,17 @@ export type Database = {
       }
       organizations: {
         Row: {
+          account_number_next: number
+          account_number_prefix: string
+          account_number_suffix: string
           address: Json
           brand_color: string
           cost_method: string
           created_at: string
           customizations: Json
+          default_billing_terms: string
+          default_invoice_delivery: string
+          default_invoice_frequency: string
           id: string
           name: string
           plan: string
@@ -5475,11 +6961,17 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          account_number_next?: number
+          account_number_prefix?: string
+          account_number_suffix?: string
           address?: Json
           brand_color?: string
           cost_method?: string
           created_at?: string
           customizations?: Json
+          default_billing_terms?: string
+          default_invoice_delivery?: string
+          default_invoice_frequency?: string
           id?: string
           name: string
           plan?: string
@@ -5489,11 +6981,17 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          account_number_next?: number
+          account_number_prefix?: string
+          account_number_suffix?: string
           address?: Json
           brand_color?: string
           cost_method?: string
           created_at?: string
           customizations?: Json
+          default_billing_terms?: string
+          default_invoice_delivery?: string
+          default_invoice_frequency?: string
           id?: string
           name?: string
           plan?: string
@@ -5607,6 +7105,20 @@ export type Database = {
             columns: ["product_item_id"]
             isOneToOne: false
             referencedRelation: "product_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "parts_product_item_id_fkey"
+            columns: ["product_item_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "parts_vendor_id_fkey"
+            columns: ["vendor_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_vendors"
             referencedColumns: ["id"]
           },
           {
@@ -6085,6 +7597,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "po_line_items_product_item_id_fkey"
+            columns: ["product_item_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_products"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "po_line_items_project_id_fkey"
             columns: ["project_id"]
             isOneToOne: false
@@ -6176,6 +7695,13 @@ export type Database = {
             columns: ["org_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_items_vendor_id_fkey"
+            columns: ["vendor_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_vendors"
             referencedColumns: ["id"]
           },
           {
@@ -6303,6 +7829,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "project_direct_items_product_item_id_fkey"
+            columns: ["product_item_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_products"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "project_direct_items_project_id_fkey"
             columns: ["project_id"]
             isOneToOne: false
@@ -6373,6 +7906,13 @@ export type Database = {
             columns: ["project_id"]
             isOneToOne: false
             referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_subcontract_costs_vendor_id_fkey"
+            columns: ["vendor_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_vendors"
             referencedColumns: ["id"]
           },
           {
@@ -6582,6 +8122,13 @@ export type Database = {
             foreignKeyName: "purchase_orders_vendor_id_fkey"
             columns: ["vendor_id"]
             isOneToOne: false
+            referencedRelation: "rpt_vendors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "purchase_orders_vendor_id_fkey"
+            columns: ["vendor_id"]
+            isOneToOne: false
             referencedRelation: "vendors"
             referencedColumns: ["id"]
           },
@@ -6656,6 +8203,13 @@ export type Database = {
             columns: ["product_item_id"]
             isOneToOne: false
             referencedRelation: "product_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "requisition_line_items_product_item_id_fkey"
+            columns: ["product_item_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_products"
             referencedColumns: ["id"]
           },
           {
@@ -6771,6 +8325,13 @@ export type Database = {
             columns: ["requested_by_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "requisitions_vendor_id_fkey"
+            columns: ["vendor_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_vendors"
             referencedColumns: ["id"]
           },
           {
@@ -6964,6 +8525,13 @@ export type Database = {
             columns: ["org_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vehicles_purchase_vendor_id_fkey"
+            columns: ["purchase_vendor_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_vendors"
             referencedColumns: ["id"]
           },
           {
@@ -7250,6 +8818,13 @@ export type Database = {
             foreignKeyName: "wo_vendor_charges_vendor_id_fkey"
             columns: ["vendor_id"]
             isOneToOne: false
+            referencedRelation: "rpt_vendors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "wo_vendor_charges_vendor_id_fkey"
+            columns: ["vendor_id"]
+            isOneToOne: false
             referencedRelation: "vendors"
             referencedColumns: ["id"]
           },
@@ -7400,12 +8975,495 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      rpt_client_activity: {
+        Row: {
+          activity_type: string | null
+          amount_cents: number | null
+          body: string | null
+          client_name: string | null
+          client_status: string | null
+          created_at: string | null
+          id: string | null
+          occurred_at: string | null
+          sent_to: string | null
+          status: string | null
+          subject: string | null
+        }
+        Relationships: []
+      }
+      rpt_client_contacts: {
+        Row: {
+          balance_outstanding_cents: number | null
+          client_name: string | null
+          client_status: string | null
+          contact_type: string | null
+          created_at: string | null
+          email: string | null
+          first_name: string | null
+          id: string | null
+          is_primary: boolean | null
+          last_name: string | null
+          ok_to_email: boolean | null
+          phone: string | null
+          phone_type: string | null
+          sales_rep: string | null
+        }
+        Relationships: []
+      }
+      rpt_clients: {
+        Row: {
+          account_type: string | null
+          balance_credits_cents: number | null
+          balance_outstanding_cents: number | null
+          balance_prepay_cents: number | null
+          balance_uninvoiced_cents: number | null
+          billing_address: string | null
+          billing_city: string | null
+          billing_state: string | null
+          billing_terms: string | null
+          billing_zip: string | null
+          cancellation_reason: string | null
+          client_since: string | null
+          closed_at: string | null
+          created_at: string | null
+          display_name: string | null
+          first_name: string | null
+          gross_sqft: number | null
+          id: string | null
+          invoice_frequency: string | null
+          is_taxable: boolean | null
+          map_code: string | null
+          payment_method: string | null
+          primary_email: string | null
+          primary_phone: string | null
+          referred_by: string | null
+          sales_rep: string | null
+          source: string | null
+          status: string | null
+          turf_sqft: number | null
+        }
+        Relationships: []
+      }
+      rpt_contracts: {
+        Row: {
+          auto_generate: boolean | null
+          billing_day_of_month: number | null
+          billing_frequency: string | null
+          client_name: string | null
+          created_at: string | null
+          end_date: string | null
+          id: string | null
+          is_active: boolean | null
+          last_billed_date: string | null
+          monthly_amount_cents: number | null
+          sales_rep: string | null
+          source: string | null
+          start_date: string | null
+          status: string | null
+          title: string | null
+        }
+        Relationships: []
+      }
+      rpt_employees: {
+        Row: {
+          applicator_license: string | null
+          cell_phone: string | null
+          city: string | null
+          compensation_type: string | null
+          date_hired: string | null
+          email: string | null
+          emergency_contact: string | null
+          emergency_phone: string | null
+          employment_status: string | null
+          first_name: string | null
+          full_name: string | null
+          hourly_rate_cents: number | null
+          id: string | null
+          is_active: boolean | null
+          is_sales_rep: boolean | null
+          last_name: string | null
+          phone: string | null
+          resource_code: string | null
+          state: string | null
+          user_type: string | null
+        }
+        Insert: {
+          applicator_license?: string | null
+          cell_phone?: string | null
+          city?: string | null
+          compensation_type?: string | null
+          date_hired?: string | null
+          email?: string | null
+          emergency_contact?: string | null
+          emergency_phone?: string | null
+          employment_status?: string | null
+          first_name?: string | null
+          full_name?: never
+          hourly_rate_cents?: number | null
+          id?: string | null
+          is_active?: boolean | null
+          is_sales_rep?: boolean | null
+          last_name?: string | null
+          phone?: string | null
+          resource_code?: string | null
+          state?: string | null
+          user_type?: string | null
+        }
+        Update: {
+          applicator_license?: string | null
+          cell_phone?: string | null
+          city?: string | null
+          compensation_type?: string | null
+          date_hired?: string | null
+          email?: string | null
+          emergency_contact?: string | null
+          emergency_phone?: string | null
+          employment_status?: string | null
+          first_name?: string | null
+          full_name?: never
+          hourly_rate_cents?: number | null
+          id?: string | null
+          is_active?: boolean | null
+          is_sales_rep?: boolean | null
+          last_name?: string | null
+          phone?: string | null
+          resource_code?: string | null
+          state?: string | null
+          user_type?: string | null
+        }
+        Relationships: []
+      }
+      rpt_estimate_line_items: {
+        Row: {
+          budgeted_hours: number | null
+          client_name: string | null
+          cost_cents: number | null
+          estimate_date: string | null
+          estimate_number: number | null
+          estimate_stage: string | null
+          id: string | null
+          margin_pct: number | null
+          qty: number | null
+          rate_cents: number | null
+          sales_rep: string | null
+          service_name: string | null
+          status: string | null
+          total_budgeted_hours: number | null
+          total_cents: number | null
+          total_cost_cents: number | null
+          visits: number | null
+        }
+        Relationships: []
+      }
+      rpt_estimates: {
+        Row: {
+          age_days: number | null
+          client_name: string | null
+          client_status: string | null
+          created_at: string | null
+          description: string | null
+          discount_cents: number | null
+          estimate_date: string | null
+          estimate_number: number | null
+          gross_profit_cents: number | null
+          id: string | null
+          net_profit_cents: number | null
+          probability_pct: number | null
+          reason: string | null
+          sales_rep: string | null
+          source: string | null
+          stage: string | null
+          subtotal_cents: number | null
+          tax_cents: number | null
+          total_budgeted_hours: number | null
+          total_cents: number | null
+          updated_at: string | null
+          valid_until_date: string | null
+        }
+        Relationships: []
+      }
+      rpt_invoice_line_items: {
+        Row: {
+          client_name: string | null
+          description: string | null
+          hours: number | null
+          id: string | null
+          invoice_date: string | null
+          invoice_number: number | null
+          invoice_status: string | null
+          is_taxable: boolean | null
+          men: number | null
+          name: string | null
+          qty: number | null
+          rate_cents: number | null
+          service_date: string | null
+          total_cents: number | null
+        }
+        Relationships: []
+      }
+      rpt_invoices: {
+        Row: {
+          amount_paid_cents: number | null
+          balance_cents: number | null
+          billing_city: string | null
+          billing_zip: string | null
+          client_name: string | null
+          created_at: string | null
+          days_overdue: number | null
+          description: string | null
+          discount_cents: number | null
+          due_date: string | null
+          id: string | null
+          invoice_date: string | null
+          invoice_number: number | null
+          payment_method: string | null
+          po_number: string | null
+          sales_rep: string | null
+          service_address: string | null
+          status: string | null
+          subtotal_cents: number | null
+          tax_cents: number | null
+          terms: string | null
+          total_cents: number | null
+          under_contract: boolean | null
+        }
+        Relationships: []
+      }
+      rpt_job_visits: {
+        Row: {
+          actual_hours: number | null
+          actual_labor_cost_cents: number | null
+          budgeted_hours: number | null
+          client_name: string | null
+          clocked_in_at: string | null
+          clocked_out_at: string | null
+          completed_at: string | null
+          crew_name: string | null
+          id: string | null
+          man_hours: number | null
+          men_count: number | null
+          rate_cents: number | null
+          rev_per_man_hr_cents: number | null
+          revenue_cents: number | null
+          sales_rep: string | null
+          scheduled_date: string | null
+          service_city: string | null
+          service_names: string | null
+          service_zip: string | null
+          skip_reason: string | null
+          status: string | null
+          sub_status: string | null
+          variance_hours: number | null
+        }
+        Relationships: []
+      }
+      rpt_jobs: {
+        Row: {
+          actual_hours: number | null
+          budgeted_hours: number | null
+          client_name: string | null
+          created_at: string | null
+          crew_name: string | null
+          date_sold: string | null
+          id: string | null
+          is_complete: boolean | null
+          job_number: number | null
+          job_type: string | null
+          man_count: number | null
+          package_name: string | null
+          product_total_cents: number | null
+          rate_cents: number | null
+          sales_rep: string | null
+          scheduled_date: string | null
+          service_address: string | null
+          service_city: string | null
+          service_names: string | null
+          service_total_cents: number | null
+          service_zip: string | null
+          source: string | null
+          status: string | null
+          sub_status: string | null
+          tax_cents: number | null
+          total_cents: number | null
+          under_contract: boolean | null
+        }
+        Relationships: []
+      }
+      rpt_payments: {
+        Row: {
+          amount_cents: number | null
+          applied_amount_cents: number | null
+          billing_zip: string | null
+          client_name: string | null
+          created_at: string | null
+          id: string | null
+          invoice_number: number | null
+          is_prepayment: boolean | null
+          memo: string | null
+          method: string | null
+          payment_date: string | null
+          reference: string | null
+          refunded_amount_cents: number | null
+          unused_amount_cents: number | null
+        }
+        Relationships: []
+      }
+      rpt_products: {
+        Row: {
+          category: string | null
+          id: string | null
+          is_inventory: boolean | null
+          minimum_stock: number | null
+          name: string | null
+          part_category: string | null
+          part_number: string | null
+          price: number | null
+          quantity_on_hand: number | null
+          unit_cost: number | null
+          vendor_name: string | null
+        }
+        Insert: {
+          category?: string | null
+          id?: string | null
+          is_inventory?: boolean | null
+          minimum_stock?: number | null
+          name?: string | null
+          part_category?: string | null
+          part_number?: string | null
+          price?: number | null
+          quantity_on_hand?: number | null
+          unit_cost?: number | null
+          vendor_name?: string | null
+        }
+        Update: {
+          category?: string | null
+          id?: string | null
+          is_inventory?: boolean | null
+          minimum_stock?: number | null
+          name?: string | null
+          part_category?: string | null
+          part_number?: string | null
+          price?: number | null
+          quantity_on_hand?: number | null
+          unit_cost?: number | null
+          vendor_name?: string | null
+        }
+        Relationships: []
+      }
+      rpt_services: {
+        Row: {
+          category: string | null
+          code: string | null
+          default_rate_cents: number | null
+          id: string | null
+          is_active: boolean | null
+          is_taxable: boolean | null
+          name: string | null
+          production_rate_sqft_per_hr: number | null
+          target_rate_cents_per_hr: number | null
+          target_rate_with_drive_cents_per_hr: number | null
+          unit: string | null
+        }
+        Insert: {
+          category?: string | null
+          code?: string | null
+          default_rate_cents?: number | null
+          id?: string | null
+          is_active?: boolean | null
+          is_taxable?: boolean | null
+          name?: string | null
+          production_rate_sqft_per_hr?: number | null
+          target_rate_cents_per_hr?: number | null
+          target_rate_with_drive_cents_per_hr?: number | null
+          unit?: string | null
+        }
+        Update: {
+          category?: string | null
+          code?: string | null
+          default_rate_cents?: number | null
+          id?: string | null
+          is_active?: boolean | null
+          is_taxable?: boolean | null
+          name?: string | null
+          production_rate_sqft_per_hr?: number | null
+          target_rate_cents_per_hr?: number | null
+          target_rate_with_drive_cents_per_hr?: number | null
+          unit?: string | null
+        }
+        Relationships: []
+      }
+      rpt_timesheets: {
+        Row: {
+          break_minutes: number | null
+          client_name: string | null
+          clocked_in_at: string | null
+          clocked_out_at: string | null
+          crew_name: string | null
+          hours: number | null
+          id: string | null
+          labor_burden_cents_per_hour: number | null
+          labor_cost_cents: number | null
+          lunch_minutes: number | null
+          member_name: string | null
+          visit_status: string | null
+          work_date: string | null
+        }
+        Relationships: []
+      }
+      rpt_vendors: {
+        Row: {
+          address: string | null
+          contact_name: string | null
+          email: string | null
+          id: string | null
+          is_active: boolean | null
+          name: string | null
+          phone: string | null
+          vendor_type: string | null
+          w9_status: string | null
+        }
+        Insert: {
+          address?: string | null
+          contact_name?: string | null
+          email?: string | null
+          id?: string | null
+          is_active?: boolean | null
+          name?: string | null
+          phone?: string | null
+          vendor_type?: string | null
+          w9_status?: string | null
+        }
+        Update: {
+          address?: string | null
+          contact_name?: string | null
+          email?: string | null
+          id?: string | null
+          is_active?: boolean | null
+          name?: string | null
+          phone?: string | null
+          vendor_type?: string | null
+          w9_status?: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       adjust_part_quantity: {
         Args: { p_delta: number; p_part_id: string }
         Returns: undefined
+      }
+      crm_run_report: {
+        Args: {
+          p_aggregates?: Json
+          p_columns: string[]
+          p_dataset: string
+          p_filters?: Json
+          p_group_by?: string[]
+          p_limit?: number
+          p_sort_column?: string
+          p_sort_dir?: string
+        }
+        Returns: Json
       }
       insert_audit_entry: {
         Args: {

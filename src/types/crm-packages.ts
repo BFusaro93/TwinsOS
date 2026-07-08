@@ -26,4 +26,13 @@ export interface CRMPackageService {
   visitsIncluded: number;
   sortOrder: number;
   createdAt: string;
+  /** Display label distinct from the service, e.g. "Visit 1" */
+  name: string | null;
+  /** Window this visit should be scheduled within */
+  startDate: string | null;
+  endDate: string | null;
+  /** Minimum days that must elapse before/between this visit and adjacent ones */
+  minDays: number | null;
+  defaultBHrs: number | null;
+  defaultRateCents: number | null;
 }

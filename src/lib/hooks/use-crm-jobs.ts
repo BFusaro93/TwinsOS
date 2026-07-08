@@ -116,8 +116,8 @@ function mapService(row: any): CRMService {
     descriptionOnEstimate: row.description_on_estimate ?? null,
     callScriptNotes: row.call_script_notes ?? null,
     taskColor: row.task_color ?? '#3B82F6',
-    targetRateCents: row.target_rate_cents ?? 0,
-    targetRateWithDriveCents: row.target_rate_with_drive_cents ?? 0,
+    targetRateCents: row.target_rate_cents_per_hr ?? 0,
+    targetRateWithDriveCents: row.target_rate_with_drive_cents_per_hr ?? 0,
     rateMatrixField: row.rate_matrix_field ?? null,
     rateMatrixCalc: row.rate_matrix_calc ?? 'qty_x_rate_x_visits',
     matrixTailEveryQty: row.matrix_tail_every_qty ? Number(row.matrix_tail_every_qty) : null,
@@ -187,8 +187,7 @@ export function useWaitingListJobs(startDate?: string, endDate?: string) {
           crm_crews(name),
           crm_job_services(*)
         `)
-        .eq("job_type", "waiting_list")
-        .neq("job_type", "snow")
+        .in("job_type", ["waiting_list", "package"])
         .is("deleted_at", null)
         .order("waiting_list_start", { ascending: true });
 
@@ -1290,6 +1289,7 @@ function mapSchedule(row: any): CRMSchedule {
     anchorDate: row.anchor_date ?? null,
     seasonStart: row.season_start ?? null,
     seasonEnd: row.season_end ?? null,
+    weekOfMonth: row.week_of_month ?? null,
     isActive: row.is_active,
   };
 }
@@ -1340,6 +1340,7 @@ export function useCreateCRMSchedule() {
       anchorDate: string | null;
       seasonStart: string | null;
       seasonEnd: string | null;
+      weekOfMonth?: CRMSchedule['weekOfMonth'];
     }) => {
       const supabase = createClient();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1353,6 +1354,7 @@ export function useCreateCRMSchedule() {
           anchor_date: values.anchorDate ?? null,
           season_start: values.seasonStart ?? null,
           season_end: values.seasonEnd ?? null,
+          week_of_month: values.weekOfMonth ?? null,
         })
         .select()
         .single();
@@ -1381,6 +1383,7 @@ export function useUpdateCRMSchedule() {
         anchorDate?: string | null;
         seasonStart?: string | null;
         seasonEnd?: string | null;
+        weekOfMonth?: CRMSchedule['weekOfMonth'];
         isActive?: boolean;
       };
     }) => {
@@ -1393,6 +1396,7 @@ export function useUpdateCRMSchedule() {
       if (patch.anchorDate !== undefined)  dbPatch.anchor_date = patch.anchorDate;
       if (patch.seasonStart !== undefined) dbPatch.season_start = patch.seasonStart;
       if (patch.seasonEnd !== undefined)   dbPatch.season_end = patch.seasonEnd;
+      if (patch.weekOfMonth !== undefined) dbPatch.week_of_month = patch.weekOfMonth;
       if (patch.isActive !== undefined)    dbPatch.is_active = patch.isActive;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any)

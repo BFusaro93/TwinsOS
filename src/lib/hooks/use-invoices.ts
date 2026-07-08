@@ -429,7 +429,7 @@ export function useRecordPayment() {
 
       // insert payment row
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error: pmtErr } = await (supabase as any).from("crm_payments").insert({
+      const { data: inserted, error: pmtErr } = await (supabase as any).from("crm_payments").insert({
         created_by: user?.id ?? null,
         invoice_id: primaryInvoiceId,
         client_id: clientId,
@@ -439,13 +439,25 @@ export function useRecordPayment() {
         reference: reference ?? null,
         memo: memo ?? null,
         is_prepayment: isPrepayment ?? false,
-      });
+      }).select("id").single();
       if (pmtErr) throw pmtErr;
 
-      // apply to each allocated invoice
+      // apply to each allocated invoice, and record the exact split so it can
+      // be reconstructed (not guessed) if this payment is edited later
       for (const alloc of activeAllocations) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         await applyPaymentToInvoice(supabase as any, alloc.invoiceId, alloc.amountCents);
+      }
+      if (activeAllocations.length > 0) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error: allocErr } = await (supabase as any).from("crm_payment_allocations").insert(
+          activeAllocations.map((a) => ({
+            payment_id: inserted.id,
+            invoice_id: a.invoiceId,
+            amount_cents: a.amountCents,
+          }))
+        );
+        if (allocErr) throw allocErr;
       }
 
       // sync client balance
@@ -502,19 +514,36 @@ export function useUpdatePayment() {
     }) => {
       const supabase = createClient();
 
-      // load current payment to know old invoice linkage and amount
+      // Reverse the ORIGINAL allocations, not a guess. Historical payments
+      // recorded before crm_payment_allocations existed fall back to the
+      // single invoice_id the old code stored (only ever set for
+      // single-invoice payments — multi-invoice payments predating this
+      // table simply couldn't be reversed precisely; this is the best
+      // recoverable behavior for that legacy data).
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: old, error: oldErr } = await (supabase as any)
-        .from("crm_payments")
+      const { data: oldAllocations, error: oldAllocErr } = await (supabase as any)
+        .from("crm_payment_allocations")
         .select("invoice_id, amount_cents")
-        .eq("id", id)
-        .single();
-      if (oldErr) throw oldErr;
+        .eq("payment_id", id);
+      if (oldAllocErr) throw oldAllocErr;
 
-      // reverse old allocation on the previously linked invoice
-      if (old.invoice_id) {
+      if (oldAllocations && oldAllocations.length > 0) {
+        for (const a of oldAllocations as { invoice_id: string; amount_cents: number }[]) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          await applyPaymentToInvoice(supabase as any, a.invoice_id, -a.amount_cents);
+        }
+      } else {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await applyPaymentToInvoice(supabase as any, old.invoice_id, -old.amount_cents);
+        const { data: old, error: oldErr } = await (supabase as any)
+          .from("crm_payments")
+          .select("invoice_id, amount_cents")
+          .eq("id", id)
+          .single();
+        if (oldErr) throw oldErr;
+        if (old.invoice_id) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          await applyPaymentToInvoice(supabase as any, old.invoice_id, -old.amount_cents);
+        }
       }
 
       const activeAllocations = (allocations ?? []).filter((a) => a.amountCents > 0);
@@ -537,6 +566,22 @@ export function useUpdatePayment() {
         memo: memo ?? null,
       }).eq("id", id);
       if (error) throw error;
+
+      // replace allocation rows with the new split
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error: delErr } = await (supabase as any).from("crm_payment_allocations").delete().eq("payment_id", id);
+      if (delErr) throw delErr;
+      if (activeAllocations.length > 0) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error: allocErr } = await (supabase as any).from("crm_payment_allocations").insert(
+          activeAllocations.map((a) => ({
+            payment_id: id,
+            invoice_id: a.invoiceId,
+            amount_cents: a.amountCents,
+          }))
+        );
+        if (allocErr) throw allocErr;
+      }
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await (supabase.rpc as any)("sync_client_balance", { p_client_id: clientId });
@@ -809,6 +854,28 @@ export function usePayments(clientId?: string) {
       if (error) throw error;
       return data.map(mapPaymentFull) as CRMPayment[];
     },
+  });
+}
+
+/**
+ * The exact per-invoice split recorded for a payment. Empty for payments
+ * created before crm_payment_allocations existed — callers should fall back
+ * to the payment's single invoiceId (if any) in that case, not guess further.
+ */
+export function usePaymentAllocations(paymentId: string | undefined) {
+  return useQuery({
+    queryKey: ["crm-payment-allocations", paymentId],
+    queryFn: async () => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
+        .from("crm_payment_allocations")
+        .select("invoice_id, amount_cents")
+        .eq("payment_id", paymentId);
+      if (error) throw error;
+      return (data ?? []) as { invoice_id: string; amount_cents: number }[];
+    },
+    enabled: !!paymentId,
   });
 }
 
