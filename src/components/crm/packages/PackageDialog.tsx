@@ -262,7 +262,7 @@ export function PackageDialog({ open, packageId, onClose }: Props) {
       description: form.description.trim() || null,
       monthly_amount_cents: Math.round((parseFloat(form.monthlyAmountCents) || 0) * 100),
       season_months: parseInt(form.seasonMonths) || 12,
-      visits_per_season: parseInt(form.visitsPerSeason) || 1,
+      visits_per_season: pkg ? (pkg.services?.length || 1) : (parseInt(form.visitsPerSeason) || 1),
       schedule_frequency: form.scheduleFrequency,
       schedule_days: form.scheduleDays,
       is_active: form.isActive,
@@ -287,15 +287,14 @@ export function PackageDialog({ open, packageId, onClose }: Props) {
 
   async function handleAddService() {
     if (!pkg || services.length === 0) return;
-    const firstService = services[0];
     const nextIndex = (pkg.services?.length ?? 0) + 1;
     try {
       await upsertSvc.mutateAsync({
         packageId: pkg.id,
         row: {
           name: `Visit ${nextIndex}`,
-          service_id: firstService.id,
-          service_name: firstService.name,
+          service_id: null,
+          service_name: "",
           visits_included: 1,
           sort_order: (pkg.services?.length ?? 0),
         },
@@ -310,7 +309,7 @@ export function PackageDialog({ open, packageId, onClose }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{pkg ? `Edit: ${pkg.name}` : "New Package Program"}</DialogTitle>
         </DialogHeader>
@@ -383,9 +382,13 @@ export function PackageDialog({ open, packageId, onClose }: Props) {
               <div className="grid grid-cols-2 gap-3">
                 <div className="flex flex-col gap-1">
                   <Label className="text-xs text-slate-500">Visits per Season</Label>
-                  <Input type="number" value={form.visitsPerSeason}
-                    onChange={(e) => setForm({ ...form, visitsPerSeason: e.target.value })}
-                    min="1" className="text-sm" />
+                  {pkg ? (
+                    <p className="text-sm font-semibold text-slate-800 mt-1.5">
+                      {pkg.services?.length ?? 0} <span className="font-normal text-slate-400">(from Services tab)</span>
+                    </p>
+                  ) : (
+                    <p className="text-xs text-slate-400 mt-1.5">Add services after creating the package</p>
+                  )}
                 </div>
                 <div className="flex flex-col gap-1">
                   <Label className="text-xs text-slate-500">Frequency</Label>

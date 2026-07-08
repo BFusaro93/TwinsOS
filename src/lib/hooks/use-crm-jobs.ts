@@ -835,7 +835,7 @@ export function useCreateClientJob() {
 
       // Auto-create the first visit for jobs with a fixed scheduled date
       // Recurring jobs get their first visit here; Generate Visits handles future ones
-      const autoVisitTypes = ['one_time', 'snow', 'project', 'package', 'recurring'];
+      const autoVisitTypes = ['one_time', 'snow', 'project', 'recurring'];
       if (values.scheduledDate && autoVisitTypes.includes(values.jobType)) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         await (supabase as any).from('crm_job_visits').insert({
@@ -844,6 +844,24 @@ export function useCreateClientJob() {
           scheduled_date: values.scheduledDate,
           status: 'scheduled',
         });
+      }
+
+      // Package jobs don't have a single scheduledDate — each service row
+      // already carries its own resolved date from the package's visit
+      // schedule (see NewJobDialog.pickPackage). Create one visit per dated row.
+      if (values.jobType === 'package') {
+        const visitRows = values.services
+          .filter((s) => s.startDate)
+          .map((s) => ({
+            job_id: job.id,
+            client_id: values.clientId,
+            scheduled_date: s.startDate,
+            status: 'scheduled',
+          }));
+        if (visitRows.length > 0) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          await (supabase as any).from('crm_job_visits').insert(visitRows);
+        }
       }
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any

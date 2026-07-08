@@ -58,8 +58,6 @@ import { AddPaymentDialog, RefundDialog } from "./payments/PaymentsList";
 import { ContractsList } from "./contracts/ContractsList";
 import { NewContractDialog } from "./contracts/NewContractDialog";
 import { ClientFilesTab } from "./ClientFilesTab";
-import { ClientProjectsTab } from "./ClientProjectsTab";
-import { ClientPhotosTab } from "./ClientPhotosTab";
 import {
   useCustomFieldDefs,
   useClientCustomFieldValues,
@@ -3013,14 +3011,6 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
 
         <TabsContent value="contracts" className="m-0 p-4">
           <ContractsList clientId={clientId} />
-        </TabsContent>
-
-        <TabsContent value="projects" className="m-0 p-4">
-          <ClientProjectsTab clientId={clientId} clientName={client.displayName} />
-        </TabsContent>
-
-        <TabsContent value="photos" className="m-0 p-4">
-          <ClientPhotosTab clientName={client.displayName} />
         </TabsContent>
 
         <TabsContent value="files" className="m-0">

@@ -144,6 +144,48 @@ await (supabase as any).from("crm_jobs").select("*" as any).eq("id", jobId).sing
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const jobAny = job as any;
 
+  // Package jobs don't recur on a weekly/monthly rule — each numbered visit
+  // has its own fixed date already resolved onto crm_job_services (from the
+  // package's visit schedule). Generate directly from those dates instead of
+  // the day-of-week logic below, which package jobs never populate.
+  if (jobAny.job_type === "package") {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: jobServices } = await (supabase as any)
+      .from("crm_job_services")
+      .select("start_date")
+      .eq("job_id", jobId);
+
+    const dates: string[] = Array.from(new Set(
+      (jobServices ?? [])
+        .map((s: { start_date: string | null }) => s.start_date)
+        .filter((d: string | null): d is string => !!d)
+    ));
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: existingVisits } = await (supabase as any)
+      .from("crm_job_visits")
+      .select("scheduled_date")
+      .eq("job_id", jobId)
+      .is("deleted_at", null);
+    const existingSet = new Set((existingVisits ?? []).map((v: { scheduled_date: string }) => v.scheduled_date));
+
+    const toInsert = dates
+      .filter((d) => !existingSet.has(d))
+      .map((d) => ({
+        job_id: jobId, client_id: jobAny.client_id,
+        crew_id: jobAny.crew_id ?? null, scheduled_date: d,
+        priority: jobAny.priority ?? 1, notes_to_crew: jobAny.notes_to_crew ?? null,
+      }));
+
+    if (toInsert.length === 0) {
+      return NextResponse.json({ generated: 0, message: "All visits already exist." });
+    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error: insertErr } = await (supabase as any).from("crm_job_visits").insert(toInsert as any);
+    if (insertErr) return NextResponse.json({ error: insertErr.message }, { status: 500 });
+    return NextResponse.json({ generated: toInsert.length });
+  }
+
   // For recurring jobs: start generating from the job's scheduled_date (the "start recurring" date)
   // if it's in the future; otherwise start from today.
   const jobStartDate = jobAny.scheduled_date
