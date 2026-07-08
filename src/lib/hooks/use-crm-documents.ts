@@ -222,3 +222,27 @@ export function useSaveDocumentBlocks(templateId: string) {
       qc.invalidateQueries({ queryKey: ["crm-document-template", templateId] }),
   });
 }
+
+// ── Send test email ──────────────────────────────────────────────────────────
+
+export function useSendTestDocumentEmail(templateId: string) {
+  return useMutation({
+    mutationFn: async (input: {
+      subject: string | null;
+      blocks: Array<{
+        blockType: BlockType;
+        orderIndex: number;
+        content: string | null;
+      }>;
+    }): Promise<{ sentTo: string }> => {
+      const res = await fetch(`/api/crm/documents/${templateId}/send-test`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Failed to send test email");
+      return data;
+    },
+  });
+}

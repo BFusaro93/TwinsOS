@@ -37,7 +37,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { MoreHorizontal, Plus, Search, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { DOC_TYPE_LABELS } from "@/types/crm-documents";
+import { DOC_TYPE_LABELS, PLAIN_TEXT_DOC_TYPES } from "@/types/crm-documents";
 import type { DocStatus, DocType, DocumentTemplate } from "@/types/crm-documents";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -114,10 +114,12 @@ function NewDocumentDialog({
               </SelectContent>
             </Select>
           </div>
-          <div className="space-y-1.5">
-            <Label>Email Subject</Label>
-            <Input value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="e.g. Your estimate from [companyname]" />
-          </div>
+          {!PLAIN_TEXT_DOC_TYPES.includes(docType) && (
+            <div className="space-y-1.5">
+              <Label>Email Subject</Label>
+              <Input value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="e.g. Your estimate from [companyname]" />
+            </div>
+          )}
           <div className="space-y-1.5">
             <Label>Description</Label>
             <Textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} placeholder="Optional internal note" />

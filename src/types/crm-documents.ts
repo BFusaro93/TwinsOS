@@ -1,4 +1,4 @@
-export type DocType = "client" | "estimate" | "invoice_email" | "marketing";
+export type DocType = "client" | "estimate" | "invoice_email" | "marketing" | "chemical" | "text_message";
 export type DocStatus = "active" | "inactive";
 export type BlockType =
   | "header"
@@ -176,6 +176,8 @@ export const MERGE_TAGS_BY_TYPE: Record<DocType, MergeTag[]> = {
   marketing:     COMMON,
   estimate:      [...COMMON, ...ESTIMATE_TAGS],
   invoice_email: [...COMMON, ...INVOICE_TAGS],
+  chemical:      COMMON,
+  text_message:  COMMON,
 };
 
 export const DOC_TYPE_LABELS: Record<DocType, string> = {
@@ -183,7 +185,12 @@ export const DOC_TYPE_LABELS: Record<DocType, string> = {
   estimate:      "Estimate",
   invoice_email: "Invoice Email",
   marketing:     "Marketing",
+  chemical:      "Chemical",
+  text_message:  "Text Message",
 };
+
+/** Doc types sent as SMS — no subject line, no rich formatting/blocks beyond plain text. */
+export const PLAIN_TEXT_DOC_TYPES: DocType[] = ["text_message"];
 
 export const BLOCK_TYPE_LABELS: Record<BlockType, string> = {
   header:     "Header",
