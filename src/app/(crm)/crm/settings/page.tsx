@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   ChevronDown,
   ChevronUp,
@@ -17,6 +17,14 @@ import {
   useDeleteCustomFieldDef,
 } from "@/lib/hooks/use-client-custom-fields";
 import { useOrgList, useAddOrgListItem, useDeleteOrgListItem } from "@/lib/hooks/use-org-lists";
+import {
+  useDiscounts,
+  useCreateDiscount,
+  useUpdateDiscount,
+  useDeleteDiscount,
+} from "@/lib/hooks/use-crm-discounts";
+import type { DiscountType } from "@/types/crm-discounts";
+import { formatCurrency } from "@/lib/utils";
 import {
   Select as UISelect,
   SelectContent as UISelectContent,
@@ -53,7 +61,7 @@ function AccordionSection({
   description,
 }: {
   title: string;
-  count: number;
+  count?: number;
   children: React.ReactNode;
   defaultOpen?: boolean;
   description?: string;
@@ -67,9 +75,11 @@ function AccordionSection({
       >
         <div>
           <span className="text-sm font-semibold text-slate-900">{title}</span>
-          <span className="ml-2 text-xs text-slate-400">
-            {count} item{count !== 1 ? "s" : ""}
-          </span>
+          {typeof count === "number" && (
+            <span className="ml-2 text-xs text-slate-400">
+              {count} item{count !== 1 ? "s" : ""}
+            </span>
+          )}
           {description && (
             <p className="mt-0.5 text-xs text-slate-500">{description}</p>
           )}
@@ -466,6 +476,304 @@ function OrgListEditor({ listName, addPlaceholder }: { listName: string; addPlac
   );
 }
 
+// ── Discounts editor (name + a real percent or flat-dollar rate) ───────────────
+
+function DiscountsEditor() {
+  const { data: discounts = [], isLoading } = useDiscounts();
+  const { mutateAsync: createDiscount } = useCreateDiscount();
+  const { mutateAsync: updateDiscount } = useUpdateDiscount();
+  const { mutateAsync: deleteDiscount } = useDeleteDiscount();
+
+  const [adding, setAdding] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [newType, setNewType] = useState<DiscountType>("percent");
+  const [newAmount, setNewAmount] = useState("");
+
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
+
+  function amountLabel(discountType: DiscountType, percentBps: number | null, flatCents: number | null) {
+    return discountType === "percent"
+      ? `${((percentBps ?? 0) / 100).toFixed(2)}%`
+      : formatCurrency(flatCents ?? 0);
+  }
+
+  async function handleAdd() {
+    const name = newName.trim();
+    const amount = parseFloat(newAmount);
+    if (!name) { toast.error("Enter a discount name"); return; }
+    if (!amount || amount <= 0) {
+      toast.error(newType === "percent" ? "Enter a rate greater than 0%" : "Enter an amount greater than $0");
+      return;
+    }
+    try {
+      await createDiscount({
+        name,
+        discountType: newType,
+        percentBps: newType === "percent" ? Math.round(amount * 100) : null,
+        flatCents: newType === "flat" ? Math.round(amount * 100) : null,
+      });
+      toast.success("Discount added");
+      setNewName("");
+      setNewAmount("");
+      setNewType("percent");
+      setAdding(false);
+    } catch (err) {
+      toast.error(`Failed to add discount: ${err instanceof Error ? err.message : "Unknown error"}`);
+    }
+  }
+
+  async function handleRemove(id: string) {
+    if (!confirm("Remove this discount?")) return;
+    try { await deleteDiscount(id); toast.success("Discount removed"); }
+    catch { toast.error("Failed to remove discount"); }
+  }
+
+  function commitRename(id: string) {
+    if (editName.trim()) void updateDiscount({ id, updates: { name: editName.trim() } });
+    setEditingId(null);
+  }
+
+  if (isLoading) return <p className="text-sm text-slate-400 py-2">Loading…</p>;
+
+  return (
+    <div className="divide-y">
+      {discounts.map((d) => (
+        <div key={d.id} className="flex items-center gap-3 py-3">
+          <div className="flex-1">
+            {editingId === d.id ? (
+              <input
+                autoFocus
+                className="rounded-md border border-brand-400 px-2 py-1 text-sm text-slate-900 focus:outline-none focus:ring-1 focus:ring-brand-400"
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                onBlur={() => commitRename(d.id)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") commitRename(d.id);
+                  if (e.key === "Escape") setEditingId(null);
+                }}
+              />
+            ) : (
+              <button
+                className="text-left text-sm font-medium text-slate-800 hover:text-brand-600"
+                onClick={() => { setEditingId(d.id); setEditName(d.name); }}
+                title="Click to rename"
+              >
+                {d.name}
+              </button>
+            )}
+            <p className="mt-0.5 text-xs text-slate-400">{amountLabel(d.discountType, d.percentBps, d.flatCents)} off</p>
+          </div>
+
+          <Toggle
+            enabled={d.isActive}
+            onToggle={() => void updateDiscount({ id: d.id, updates: { isActive: !d.isActive } })}
+          />
+
+          <button
+            onClick={() => handleRemove(d.id)}
+            className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-500"
+            title="Remove"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      ))}
+
+      {discounts.length === 0 && !adding && (
+        <p className="py-3 text-sm text-slate-400">No discounts yet.</p>
+      )}
+
+      {adding ? (
+        <div className="flex items-center gap-2 py-3">
+          <input
+            autoFocus
+            placeholder="e.g. Senior discount"
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            className="flex-1 rounded-md border border-brand-400 px-3 py-1.5 text-sm text-slate-900 focus:outline-none focus:ring-1 focus:ring-brand-400"
+          />
+          <UISelect value={newType} onValueChange={(v) => setNewType(v as DiscountType)}>
+            <UISelectTrigger className="h-8 w-16 text-sm"><UISelectValue /></UISelectTrigger>
+            <UISelectContent>
+              <UISelectItem value="percent">%</UISelectItem>
+              <UISelectItem value="flat">$</UISelectItem>
+            </UISelectContent>
+          </UISelect>
+          <input
+            type="number"
+            min="0"
+            step={newType === "percent" ? "0.1" : "0.01"}
+            placeholder={newType === "percent" ? "10" : "5.00"}
+            value={newAmount}
+            onChange={(e) => setNewAmount(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") void handleAdd();
+              if (e.key === "Escape") { setAdding(false); setNewName(""); setNewAmount(""); }
+            }}
+            className="w-24 rounded-md border border-brand-400 px-3 py-1.5 text-sm text-slate-900 focus:outline-none focus:ring-1 focus:ring-brand-400"
+          />
+          <button onClick={() => void handleAdd()} className="rounded-md bg-brand-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-600">Add</button>
+          <button
+            onClick={() => { setAdding(false); setNewName(""); setNewAmount(""); }}
+            className="rounded p-1 text-slate-400 hover:text-slate-600"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      ) : (
+        <div className="py-3">
+          <button onClick={() => setAdding(true)} className="flex items-center gap-1.5 text-sm font-medium text-brand-600 hover:text-brand-700">
+            <Plus className="h-4 w-4" /> Add Discount
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const BILLING_TERMS_OPTIONS = [
+  { value: "due_on_receipt", label: "Due on Receipt" },
+  { value: "net_10", label: "Net 10" },
+  { value: "net_15", label: "Net 15" },
+  { value: "net_30", label: "Net 30" },
+  { value: "net_45", label: "Net 45" },
+  { value: "net_60", label: "Net 60" },
+  { value: "net_90", label: "Net 90" },
+];
+
+const INVOICE_FREQUENCY_OPTIONS = [
+  { value: "daily", label: "Daily" },
+  { value: "weekly", label: "Weekly" },
+  { value: "monthly", label: "Monthly" },
+  { value: "upon_completion", label: "Upon Completion" },
+];
+
+const INVOICE_DELIVERY_OPTIONS = [
+  { value: "email", label: "Email" },
+  { value: "print", label: "Print" },
+  { value: "both", label: "Email & Print" },
+];
+
+function ClientDefaultsSection() {
+  const { data: orgSettings } = useOrgSettings();
+  const { mutate: updateOrgSettings, isPending: saving } = useUpdateOrgSettings();
+  const seeded = useRef(false);
+
+  const [prefix, setPrefix] = useState("");
+  const [nextNumber, setNextNumber] = useState("1000");
+  const [suffix, setSuffix] = useState("");
+  const [billingTerms, setBillingTerms] = useState("due_on_receipt");
+  const [invoiceFrequency, setInvoiceFrequency] = useState("daily");
+  const [invoiceDelivery, setInvoiceDelivery] = useState("email");
+
+  useEffect(() => {
+    if (!orgSettings || seeded.current) return;
+    seeded.current = true;
+    setPrefix(orgSettings.accountNumberPrefix);
+    setNextNumber(String(orgSettings.accountNumberNext));
+    setSuffix(orgSettings.accountNumberSuffix);
+    setBillingTerms(orgSettings.defaultBillingTerms);
+    setInvoiceFrequency(orgSettings.defaultInvoiceFrequency);
+    setInvoiceDelivery(orgSettings.defaultInvoiceDelivery);
+  }, [orgSettings]);
+
+  function handleSave() {
+    const parsedNext = parseInt(nextNumber, 10);
+    if (!Number.isFinite(parsedNext) || parsedNext < 1) {
+      toast.error("Next account number must be a positive whole number");
+      return;
+    }
+    updateOrgSettings(
+      {
+        accountNumberPrefix: prefix.trim(),
+        accountNumberNext: parsedNext,
+        accountNumberSuffix: suffix.trim(),
+        defaultBillingTerms: billingTerms,
+        defaultInvoiceFrequency: invoiceFrequency,
+        defaultInvoiceDelivery: invoiceDelivery,
+      },
+      {
+        onSuccess: () => toast.success("Client defaults saved"),
+        onError: () => toast.error("Failed to save client defaults"),
+      }
+    );
+  }
+
+  const preview = `${prefix}${Number.isFinite(parseInt(nextNumber, 10)) ? nextNumber : "?"}${suffix}`;
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <p className="text-sm font-medium text-slate-800">Starting Account Number</p>
+        <p className="text-xs text-slate-400">Auto-assigned to every new client. Next client will be: <span className="font-mono text-slate-600">{preview}</span></p>
+        <div className="mt-2 grid grid-cols-3 gap-3">
+          <div className="flex flex-col gap-1.5">
+            <Label>Prefix</Label>
+            <Input value={prefix} onChange={(e) => setPrefix(e.target.value)} placeholder="e.g. C-" />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label>Next Number</Label>
+            <Input
+              type="number"
+              min={1}
+              value={nextNumber}
+              onChange={(e) => setNextNumber(e.target.value)}
+            />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label>Suffix</Label>
+            <Input value={suffix} onChange={(e) => setSuffix(e.target.value)} placeholder="optional" />
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-3 gap-3">
+        <div className="flex flex-col gap-1.5">
+          <Label>Default Billing Terms</Label>
+          <UISelect value={billingTerms} onValueChange={setBillingTerms}>
+            <UISelectTrigger><UISelectValue /></UISelectTrigger>
+            <UISelectContent>
+              {BILLING_TERMS_OPTIONS.map((o) => (
+                <UISelectItem key={o.value} value={o.value}>{o.label}</UISelectItem>
+              ))}
+            </UISelectContent>
+          </UISelect>
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Label>When to Invoice</Label>
+          <UISelect value={invoiceFrequency} onValueChange={setInvoiceFrequency}>
+            <UISelectTrigger><UISelectValue /></UISelectTrigger>
+            <UISelectContent>
+              {INVOICE_FREQUENCY_OPTIONS.map((o) => (
+                <UISelectItem key={o.value} value={o.value}>{o.label}</UISelectItem>
+              ))}
+            </UISelectContent>
+          </UISelect>
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Label>Send Invoice By</Label>
+          <UISelect value={invoiceDelivery} onValueChange={setInvoiceDelivery}>
+            <UISelectTrigger><UISelectValue /></UISelectTrigger>
+            <UISelectContent>
+              {INVOICE_DELIVERY_OPTIONS.map((o) => (
+                <UISelectItem key={o.value} value={o.value}>{o.label}</UISelectItem>
+              ))}
+            </UISelectContent>
+          </UISelect>
+        </div>
+      </div>
+      <p className="text-xs text-slate-400">These apply to new clients only — existing clients keep their current settings.</p>
+
+      <div>
+        <Button size="sm" onClick={handleSave} disabled={saving}>
+          {saving ? "Saving…" : "Save Defaults"}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 function CRMTab() {
   const cancellationReasons = useCategoryList([
     "Price",
@@ -487,9 +795,15 @@ function CRMTab() {
   return (
     <div className="rounded-lg border bg-white shadow-sm">
       <AccordionSection
+        title="Client Defaults"
+        defaultOpen
+        description="Account numbering and billing defaults applied to new clients"
+      >
+        <ClientDefaultsSection />
+      </AccordionSection>
+      <AccordionSection
         title="Cancellation Reasons"
         count={cancellationReasons.items.length}
-        defaultOpen
       >
         <CategoryListEditor {...cancellationReasons} addPlaceholder="e.g. Weather-related" />
       </AccordionSection>
@@ -865,6 +1179,7 @@ function ServicesTab() {
   const salesReps = useCategoryList(["Brandon Fusaro", "Michael Fusaro", "Pam Fusaro"]);
   const masterPackages = useCategoryList([], false);
   const snowRoutes = useCategoryList([], false);
+  const { data: serviceCategoryItems = [] } = useOrgList("service_categories");
 
   return (
     <div className="rounded-lg border bg-white shadow-sm">
@@ -883,6 +1198,9 @@ function ServicesTab() {
           )}
           <AddServiceForm onAdded={refetch} />
         </div>
+      </AccordionSection>
+      <AccordionSection title="Service Categories" count={serviceCategoryItems.length}>
+        <OrgListEditor listName="service_categories" addPlaceholder="e.g. Hardscape" />
       </AccordionSection>
       <AccordionSection title="Sales Reps" count={salesReps.items.length}>
         <CategoryListEditor {...salesReps} addPlaceholder="e.g. John Smith" />
@@ -912,7 +1230,7 @@ function AccountingTab() {
     "Credit Card- Visa",
     "Other",
   ]);
-  const discounts = useCategoryList([], false);
+  const { data: discountsList = [] } = useDiscounts();
   const { data: orgSettings } = useOrgSettings();
   const { mutateAsync: updateOrg } = useUpdateOrgSettings();
   const [taxDraft, setTaxDraft] = useState<string>("");
@@ -969,8 +1287,8 @@ function AccountingTab() {
       >
         <CategoryListEditor {...paymentMethods} addPlaceholder="e.g. Zelle" />
       </AccordionSection>
-      <AccordionSection title="Discounts" count={discounts.items.length}>
-        <CategoryListEditor {...discounts} addPlaceholder="e.g. Senior discount" />
+      <AccordionSection title="Discounts" count={discountsList.length} description="Each discount needs a default rate — a percent off or a flat dollar amount.">
+        <DiscountsEditor />
       </AccordionSection>
     </div>
   );
