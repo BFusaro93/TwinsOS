@@ -113,7 +113,7 @@ const CRM_NAV: NavSection[] = [
   {
     label: "Administration",
     items: [
-      { label: "Reports",   href: "/crm/admin/reports",        icon: BarChart3 },
+      { label: "Reports",         href: "/crm/admin/reports",             icon: BarChart3 },
       { label: "Services",  href: "/crm/settings/services",    icon: Layers },
       { label: "Schedules", href: "/crm/settings/schedules",   icon: CalendarClock },
       { label: "Packages",  href: "/crm/settings/packages",    icon: Package },

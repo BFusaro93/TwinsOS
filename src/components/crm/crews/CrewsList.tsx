@@ -159,6 +159,15 @@ function TeamAssignmentsTab({ crew }: { crew: CRMCrew }) {
     }
   }
 
+  async function handleChangeBurden(member: CRMCrewMember, dollarStr: string) {
+    const cents = Math.round((parseFloat(dollarStr) || 0) * 100);
+    try {
+      await updateMember({ id: member.id, updates: { labor_burden_cents_per_hour: cents } });
+    } catch {
+      toast.error("Failed to update labor burden rate");
+    }
+  }
+
   async function handleRemove(member: CRMCrewMember) {
     try {
       await removeMember({ crewId: crew.id, employeeId: member.employeeId });
@@ -204,6 +213,20 @@ function TeamAssignmentsTab({ crew }: { crew: CRMCrew }) {
                     value={m.daysOfWeek}
                     onChange={(days) => handleChangeDays(m, days)}
                   />
+                  <div className="flex items-center gap-1 shrink-0">
+                    <span className="text-xs text-slate-400">$</span>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      defaultValue={m.laborBurdenCentsPerHour > 0 ? (m.laborBurdenCentsPerHour / 100).toFixed(2) : ""}
+                      placeholder="0.00"
+                      className="h-8 w-20 text-right text-xs"
+                      title="Labor burden rate ($/hr)"
+                      onBlur={(e) => handleChangeBurden(m, e.target.value)}
+                    />
+                    <span className="text-xs text-slate-400">/hr</span>
+                  </div>
                   <button
                     className="shrink-0 text-red-400 hover:text-red-600 transition-colors"
                     onClick={() => handleRemove(m)}
@@ -526,7 +549,7 @@ function CrewDialog({
                 key={tab.value}
                 value={tab.value}
                 disabled={tab.disabled}
-                className="h-full rounded-none border-b-2 border-transparent px-4 py-0 text-sm text-brand-600 data-[state=active]:border-slate-700 data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:text-slate-900 data-[state=active]:font-semibold disabled:opacity-40 disabled:cursor-not-allowed"
+                className="h-full rounded-none border-b-2 border-transparent px-4 py-0 text-sm data-[state=active]:border-brand-500 data-[state=active]:bg-transparent data-[state=active]:shadow-none disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 {tab.label}
               </TabsTrigger>
@@ -549,21 +572,11 @@ function CrewDialog({
         </Tabs>
 
         {/* Footer */}
-        <div className="flex items-center justify-center gap-3 shrink-0 border-t bg-slate-50 px-6 py-4">
-          <Button
-            className="bg-brand-500 hover:bg-brand-600 text-white px-8"
-            onClick={handleSave}
-            disabled={creating || updating}
-          >
+        <div className="shrink-0 flex justify-end gap-2 border-t px-6 py-3 bg-white">
+          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button onClick={handleSave} disabled={creating || updating}>
             {creating || updating ? "Saving…" : activeCrew ? "Save" : "Create & Continue"}
           </Button>
-          <span className="text-slate-400 text-sm">or</span>
-          <button
-            className="text-brand-600 text-sm hover:underline"
-            onClick={() => onOpenChange(false)}
-          >
-            Cancel
-          </button>
         </div>
       </DialogContent>
     </Dialog>

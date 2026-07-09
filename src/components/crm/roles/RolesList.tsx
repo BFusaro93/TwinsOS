@@ -191,7 +191,7 @@ function RoleDialog({
               <TabsTrigger
                 key={tabKey}
                 value={tabKey}
-                className="h-full rounded-none border-b-2 border-transparent px-5 py-0 text-sm font-medium text-slate-500 data-[state=active]:border-slate-800 data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:text-slate-900 data-[state=active]:font-bold"
+                className="h-full rounded-none border-b-2 border-transparent px-5 py-0 text-sm data-[state=active]:border-brand-500 data-[state=active]:bg-transparent data-[state=active]:shadow-none"
               >
                 {PERMISSION_TABS[tabKey].label}
               </TabsTrigger>
@@ -208,18 +208,11 @@ function RoleDialog({
         </Tabs>
 
         {/* Footer */}
-        <div className="flex items-center justify-center gap-3 shrink-0 border-t bg-slate-50 px-6 py-4">
-          <Button
-            className="bg-brand-500 hover:bg-brand-600 text-white px-8"
-            onClick={handleSave}
-            disabled={creating || updating}
-          >
+        <div className="shrink-0 flex justify-end gap-2 border-t px-6 py-3 bg-white">
+          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button onClick={handleSave} disabled={creating || updating}>
             {creating || updating ? "Saving…" : "Save"}
           </Button>
-          <span className="text-slate-400 text-sm">or</span>
-          <button className="text-brand-600 text-sm hover:underline" onClick={() => onOpenChange(false)}>
-            Cancel
-          </button>
         </div>
       </DialogContent>
     </Dialog>
@@ -276,10 +269,7 @@ export function RolesList() {
           <p className="text-sm text-slate-500">Define permissions for each CRM role</p>
         </div>
         <PermissionGate permission="allow_roles_access">
-          <Button
-            className="bg-brand-500 hover:bg-brand-600 text-white"
-            onClick={() => setDialogRole("new")}
-          >
+          <Button onClick={() => setDialogRole("new")}>
             <Plus className="mr-1.5 h-4 w-4" /> Add Role
           </Button>
         </PermissionGate>

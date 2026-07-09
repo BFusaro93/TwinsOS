@@ -17,6 +17,29 @@ const MODE_LABEL: Record<string, string> = {
 
 type Tab = "active" | "inactive" | "all";
 
+// Groups services so each parent is immediately followed by its children
+// (sorted by name), instead of an unrelated flat alphabetical list.
+function groupServices(list: CRMService[]): { service: CRMService; depth: number }[] {
+  const idSet = new Set(list.map((s) => s.id));
+  const byParent = new Map<string, CRMService[]>();
+  for (const s of list) {
+    const key = s.parentServiceId && idSet.has(s.parentServiceId) ? s.parentServiceId : "__root__";
+    if (!byParent.has(key)) byParent.set(key, []);
+    byParent.get(key)!.push(s);
+  }
+  for (const arr of byParent.values()) arr.sort((a, b) => a.name.localeCompare(b.name));
+
+  const result: { service: CRMService; depth: number }[] = [];
+  function walk(key: string, depth: number) {
+    for (const s of byParent.get(key) ?? []) {
+      result.push({ service: s, depth });
+      walk(s.id, depth + 1);
+    }
+  }
+  walk("__root__", 0);
+  return result;
+}
+
 interface Props {
   onAdd: () => void;
   onEdit: (service: CRMService) => void;
@@ -105,13 +128,18 @@ export function ServicesList({ onAdd, onEdit }: Props) {
                 </td>
               </tr>
             )}
-            {filtered.map((s) => (
+            {groupServices(filtered).map(({ service: s, depth }) => (
               <tr
                 key={s.id}
                 className="border-b last:border-0 hover:bg-slate-50 cursor-pointer"
                 onClick={() => onEdit(s)}
               >
-                <td className="px-4 py-3 font-medium text-slate-800">{s.name}</td>
+                <td className="px-4 py-3 font-medium text-slate-800">
+                  <span style={depth > 0 ? { paddingLeft: depth * 20 } : undefined} className="inline-flex items-center gap-1.5">
+                    {depth > 0 && <span className="text-slate-300">↳</span>}
+                    <span className={depth > 0 ? "font-normal text-slate-600" : undefined}>{s.name}</span>
+                  </span>
+                </td>
                 <td className="px-4 py-3 text-slate-500">{s.code ?? "—"}</td>
                 <td className="px-4 py-3 text-slate-600">
                   {MODE_LABEL[s.serviceMode] ?? s.serviceMode}

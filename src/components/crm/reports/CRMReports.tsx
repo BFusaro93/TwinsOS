@@ -14,7 +14,10 @@ import {
   ClipboardCheck,
   Clock,
   AlertCircle,
+  ArrowRight,
+  BarChart2,
 } from "lucide-react";
+import Link from "next/link";
 import { EstimatesReportSection } from "./EstimatesReportSection";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -251,15 +254,17 @@ function MonthlyRevenueChart({ data }: { data: Array<{ month: string; revenue: n
 
 // ── Main Component ────────────────────────────────────────────────────────────
 
-export function CRMReports() {
+export function CRMReports({ hideHeader = false }: { hideHeader?: boolean }) {
   const { data, isLoading } = useReportData();
 
   return (
     <div className="flex h-full flex-col overflow-auto">
-      <PageHeader
-        title="Reports"
-        description="CRM performance metrics and business analytics."
-      />
+      {!hideHeader && (
+        <PageHeader
+          title="Reports"
+          description="CRM performance metrics and business analytics."
+        />
+      )}
 
       <div className="flex-1 p-6 space-y-6">
         {isLoading ? (
@@ -366,6 +371,60 @@ export function CRMReports() {
         ) : null}
 
         <EstimatesReportSection />
+
+        {/* Detailed Reports */}
+        <section>
+          <h2 className="mb-3 text-xs font-bold uppercase tracking-widest text-slate-400">
+            Detailed Reports
+          </h2>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <Link
+              href="/crm/reports/job-costing"
+              className="group flex items-center gap-4 rounded-xl border bg-white p-5 shadow-sm hover:border-brand-400 hover:shadow-md transition-all"
+            >
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-50 text-blue-600 shrink-0">
+                <TrendingUp className="h-5 w-5" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-semibold text-slate-900">Job Costing Report</p>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Per-job view — actual vs. estimated hours, labor cost, Rev/Man Hr, and Target Over/Under
+                </p>
+              </div>
+              <ArrowRight className="h-4 w-4 text-slate-300 group-hover:text-brand-500 shrink-0 transition-colors" />
+            </Link>
+            <Link
+              href="/crm/reports/cogs"
+              className="group flex items-center gap-4 rounded-xl border bg-white p-5 shadow-sm hover:border-brand-400 hover:shadow-md transition-all"
+            >
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600 shrink-0">
+                <BarChart2 className="h-5 w-5" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-semibold text-slate-900">COGS by Service</p>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Which services are making money? Gross sales, labor %, materials, and margin by service type
+                </p>
+              </div>
+              <ArrowRight className="h-4 w-4 text-slate-300 group-hover:text-brand-500 shrink-0 transition-colors" />
+            </Link>
+            <Link
+              href="/crm/reports/referrals"
+              className="group flex items-center gap-4 rounded-xl border bg-white p-5 shadow-sm hover:border-brand-400 hover:shadow-md transition-all"
+            >
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-purple-50 text-purple-600 shrink-0">
+                <Users className="h-5 w-5" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-semibold text-slate-900">Client Referrals</p>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Which clients are referring the most business, and whether those referrals stuck around
+                </p>
+              </div>
+              <ArrowRight className="h-4 w-4 text-slate-300 group-hover:text-brand-500 shrink-0 transition-colors" />
+            </Link>
+          </div>
+        </section>
       </div>
     </div>
   );
