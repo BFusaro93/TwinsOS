@@ -21,6 +21,8 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useCreateProject, useUpdateProject } from "@/lib/hooks/use-projects";
+import { useClients } from "@/lib/hooks/use-clients";
+import { ClientCombobox } from "@/components/shared/ClientCombobox";
 import { useSettingsStore } from "@/stores/settings-store";
 import type { Project } from "@/types";
 
@@ -45,8 +47,10 @@ export function NewProjectDialog({ open, onOpenChange, initialData }: NewProject
   const [laborHours, setLaborHours] = useState("");
   const [budgetHours, setBudgetHours] = useState("");
   const [notes, setNotes] = useState("");
+  const [clientId, setClientId] = useState("");
   const createProject = useCreateProject();
   const updateProject = useUpdateProject();
+  const { data: clients = [] } = useClients();
   const { breakevenLaborRateCents, burdenedLaborRateCents } = useSettingsStore();
 
   useEffect(() => {
@@ -64,6 +68,7 @@ export function NewProjectDialog({ open, onOpenChange, initialData }: NewProject
       setLaborHours(initialData.laborHours != null ? String(initialData.laborHours) : "");
       setBudgetHours(initialData.budgetHours != null ? String(initialData.budgetHours) : "");
       setNotes(initialData.notes ?? "");
+      setClientId(initialData.clientId ?? "");
     }
   }, [open, initialData]);
 
@@ -84,6 +89,7 @@ export function NewProjectDialog({ open, onOpenChange, initialData }: NewProject
     setLaborHours("");
     setBudgetHours("");
     setNotes("");
+    setClientId("");
   }
 
   function handleSubmit(e: React.FormEvent) {
@@ -104,6 +110,7 @@ export function NewProjectDialog({ open, onOpenChange, initialData }: NewProject
       laborHours: parseFloat(laborHours) > 0 ? parseFloat(laborHours) : null,
       budgetHours: parseFloat(budgetHours) > 0 ? parseFloat(budgetHours) : null,
       notes: notes || null,
+      clientId: clientId || null,
     };
     if (isEditing && initialData) {
       updateProject.mutate({ id: initialData.id, ...payload }, { onSuccess: () => handleClose() });
@@ -152,6 +159,18 @@ export function NewProjectDialog({ open, onOpenChange, initialData }: NewProject
                 value={customerName}
                 onChange={(e) => setCustomerName(e.target.value)}
                 placeholder="Customer or client name"
+              />
+            </div>
+
+            {/* Link to CRM Client — optional, full width */}
+            <div className="sm:col-span-2 grid gap-1.5">
+              <Label htmlFor="project-client-link">Link to Client (optional)</Label>
+              <ClientCombobox
+                id="project-client-link"
+                clients={clients}
+                value={clientId}
+                onValueChange={setClientId}
+                noneLabel="No client linked — matched by name only"
               />
             </div>
 

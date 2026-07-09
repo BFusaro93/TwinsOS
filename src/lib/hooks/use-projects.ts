@@ -129,6 +129,7 @@ export function useUpdateProject() {
           ...(input.laborRateCents !== undefined && { labor_rate_cents: input.laborRateCents }),
           ...(input.burdenedRateCents !== undefined && { burdened_rate_cents: input.burdenedRateCents }),
           ...(input.notes !== undefined && { notes: input.notes }),
+          ...(input.clientId !== undefined && { client_id: input.clientId }),
         })
         .eq("id", id)
         .select()
@@ -136,7 +137,7 @@ export function useUpdateProject() {
       if (error) throw error;
       return mapProject(data);
     },
-    onMutate: async ({ id, status, name, customerName, address, startDate, endDate, contractPrice, laborHours, budgetHours, laborRateCents, burdenedRateCents, notes }) => {
+    onMutate: async ({ id, status, name, customerName, address, startDate, endDate, contractPrice, laborHours, budgetHours, laborRateCents, burdenedRateCents, notes, clientId }) => {
       await queryClient.cancelQueries({ queryKey: ["projects"] });
       const previous = queryClient.getQueryData<Project[]>(["projects"]);
       const patch: Partial<Project> = {};
@@ -152,6 +153,7 @@ export function useUpdateProject() {
       if (laborRateCents !== undefined) patch.laborRateCents = laborRateCents;
       if (burdenedRateCents !== undefined) patch.burdenedRateCents = burdenedRateCents;
       if (notes !== undefined) patch.notes = notes;
+      if (clientId !== undefined) patch.clientId = clientId;
       patchProjectCache(queryClient, id, patch);
       return { previous };
     },

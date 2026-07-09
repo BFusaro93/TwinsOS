@@ -34,6 +34,8 @@ export interface PhotoJob {
   isArchived: boolean;
   /** Optional link to a Project for cost tracking. null = standalone photo job */
   projectId: string | null;
+  /** Optional link to a CRM client. null = matched by customerName only */
+  clientId: string | null;
   createdAt: string;
   updatedAt: string;
   deletedAt: string | null;

@@ -1703,6 +1703,87 @@ export type Database = {
           },
         ]
       }
+      crm_campaigns: {
+        Row: {
+          body: string | null
+          clicked_count: number | null
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          delivered_count: number | null
+          id: string
+          name: string
+          opened_count: number | null
+          org_id: string
+          scheduled_at: string | null
+          sent_at: string | null
+          status: string
+          subject: string | null
+          target_segment: string
+          total_recipients: number | null
+          type: string
+          unsubscribed_count: number | null
+          updated_at: string
+        }
+        Insert: {
+          body?: string | null
+          clicked_count?: number | null
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          delivered_count?: number | null
+          id?: string
+          name: string
+          opened_count?: number | null
+          org_id?: string
+          scheduled_at?: string | null
+          sent_at?: string | null
+          status?: string
+          subject?: string | null
+          target_segment?: string
+          total_recipients?: number | null
+          type?: string
+          unsubscribed_count?: number | null
+          updated_at?: string
+        }
+        Update: {
+          body?: string | null
+          clicked_count?: number | null
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          delivered_count?: number | null
+          id?: string
+          name?: string
+          opened_count?: number | null
+          org_id?: string
+          scheduled_at?: string | null
+          sent_at?: string | null
+          status?: string
+          subject?: string | null
+          target_segment?: string
+          total_recipients?: number | null
+          type?: string
+          unsubscribed_count?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_campaigns_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_campaigns_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       crm_client_custom_field_values: {
         Row: {
           client_id: string
@@ -7189,6 +7270,7 @@ export type Database = {
         Row: {
           address: string
           city: string
+          client_id: string | null
           created_at: string
           created_by: string | null
           customer_name: string
@@ -7207,6 +7289,7 @@ export type Database = {
         Insert: {
           address?: string
           city?: string
+          client_id?: string | null
           created_at?: string
           created_by?: string | null
           customer_name?: string
@@ -7225,6 +7308,7 @@ export type Database = {
         Update: {
           address?: string
           city?: string
+          client_id?: string | null
           created_at?: string
           created_by?: string | null
           customer_name?: string
@@ -7241,6 +7325,20 @@ export type Database = {
           zip?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "photo_jobs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "photo_jobs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_clients"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "photo_jobs_created_by_fkey"
             columns: ["created_by"]
@@ -7930,6 +8028,7 @@ export type Database = {
           budget_hours: number | null
           burdened_rate_cents: number | null
           city: string
+          client_id: string | null
           contract_price: number
           created_at: string
           created_by: string | null
@@ -7943,6 +8042,7 @@ export type Database = {
           name: string
           notes: string | null
           org_id: string
+          progress_pct: number
           start_date: string | null
           state: string
           status: string
@@ -7955,6 +8055,7 @@ export type Database = {
           budget_hours?: number | null
           burdened_rate_cents?: number | null
           city?: string
+          client_id?: string | null
           contract_price?: number
           created_at?: string
           created_by?: string | null
@@ -7968,6 +8069,7 @@ export type Database = {
           name: string
           notes?: string | null
           org_id?: string
+          progress_pct?: number
           start_date?: string | null
           state?: string
           status?: string
@@ -7980,6 +8082,7 @@ export type Database = {
           budget_hours?: number | null
           burdened_rate_cents?: number | null
           city?: string
+          client_id?: string | null
           contract_price?: number
           created_at?: string
           created_by?: string | null
@@ -7993,6 +8096,7 @@ export type Database = {
           name?: string
           notes?: string | null
           org_id?: string
+          progress_pct?: number
           start_date?: string | null
           state?: string
           status?: string
@@ -8001,6 +8105,20 @@ export type Database = {
           zip?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "projects_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "projects_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_clients"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "projects_created_by_fkey"
             columns: ["created_by"]

@@ -3018,7 +3018,7 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
         </TabsContent>
 
         <TabsContent value="photos" className="m-0 p-4">
-          <ClientPhotosTab clientName={client.displayName} />
+          <ClientPhotosTab clientId={clientId} clientName={client.displayName} />
         </TabsContent>
 
         <TabsContent value="files" className="m-0">

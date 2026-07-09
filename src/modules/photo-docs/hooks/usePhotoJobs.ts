@@ -21,6 +21,7 @@ function mapPhotoJob(row: Record<string, any>): PhotoJob {
     status: (row.status ?? "active") as PhotoJobStatus,
     isArchived: row.is_archived === true,
     projectId: row.project_id ?? null,
+    clientId: row.client_id ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     deletedAt: row.deleted_at ?? null,
@@ -61,7 +62,7 @@ export function useCreatePhotoJob() {
   const qc = useQueryClient();
   const { currentUser } = useCurrentUserStore();
   return useMutation({
-    mutationFn: async (input: { name: string; customerName: string; address: string; city: string; state: string; zip: string; notes?: string; projectId?: string }) => {
+    mutationFn: async (input: { name: string; customerName: string; address: string; city: string; state: string; zip: string; notes?: string; projectId?: string; clientId?: string }) => {
       const db = createClient() as any;
       const { data: profile } = await db.from("profiles").select("org_id").eq("id", currentUser.id).single();
       const { data, error } = await db.from("photo_jobs").insert({
@@ -74,6 +75,7 @@ export function useCreatePhotoJob() {
         zip: input.zip,
         notes: input.notes ?? null,
         project_id: input.projectId ?? null,
+        client_id: input.clientId ?? null,
         created_by: currentUser.id,
       }).select().single();
       if (error) throw error;
@@ -86,7 +88,7 @@ export function useCreatePhotoJob() {
 export function useUpdatePhotoJob() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, ...input }: { id: string; name?: string; customerName?: string; address?: string; city?: string; state?: string; zip?: string; notes?: string | null; status?: PhotoJobStatus; projectId?: string | null }) => {
+    mutationFn: async ({ id, ...input }: { id: string; name?: string; customerName?: string; address?: string; city?: string; state?: string; zip?: string; notes?: string | null; status?: PhotoJobStatus; projectId?: string | null; clientId?: string | null }) => {
       const db = createClient() as any;
       const { error } = await db.from("photo_jobs").update({
         ...(input.name !== undefined && { name: input.name }),
@@ -98,6 +100,7 @@ export function useUpdatePhotoJob() {
         ...(input.notes !== undefined && { notes: input.notes }),
         ...(input.status !== undefined && { status: input.status }),
         ...(input.projectId !== undefined && { project_id: input.projectId }),
+        ...(input.clientId !== undefined && { client_id: input.clientId }),
         updated_at: new Date().toISOString(),
       }).eq("id", id);
       if (error) throw error;

@@ -6,6 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Camera, MapPin } from "lucide-react";
 
 interface Props {
+  clientId: string;
   clientName: string;
 }
 
@@ -15,8 +16,8 @@ const PHOTO_STATUS_COLOR: Record<string, string> = {
   pending:  "bg-purple-100 text-purple-700 border-purple-200",
 };
 
-export function ClientPhotosTab({ clientName }: Props) {
-  const { data: jobs, isLoading } = useClientPhotoJobs(clientName);
+export function ClientPhotosTab({ clientId, clientName }: Props) {
+  const { data: jobs, isLoading } = useClientPhotoJobs(clientId, clientName);
   const router = useRouter();
 
   if (isLoading) {

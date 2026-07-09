@@ -4,11 +4,12 @@ import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import {
   Camera, MapPin, Search, Images, Plus, X, Maximize2, Minimize2,
-  Pencil, Check, Archive, ArchiveRestore, Link2, FileText, Trash2,
+  Pencil, Check, Archive, ArchiveRestore, Link2, FileText, Trash2, User,
 } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { usePhotoJobs, useCreatePhotoJob, usePhotoJob, useUpdatePhotoJob, useArchivePhotoJob, useDeletePhotoJob } from "@/modules/photo-docs/hooks/usePhotoJobs";
 import { useProjects } from "@/lib/hooks/use-projects";
+import { useClients } from "@/lib/hooks/use-clients";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -50,7 +51,7 @@ const STATUS_OPTIONS: { value: PhotoJobStatus; label: string }[] = [
   { value: "pending",  label: "Pending" },
 ];
 
-const EMPTY_FORM = { name: "", customerName: "", address: "", city: "", state: "", zip: "", notes: "", projectId: "" };
+const EMPTY_FORM = { name: "", customerName: "", address: "", city: "", state: "", zip: "", notes: "", projectId: "", clientId: "" };
 
 // ── Full-featured detail pane (list view) ─────────────────────────────────────
 
@@ -59,6 +60,7 @@ function JobDetailPane({ jobId }: { jobId: string }) {
   const { isCrew: isCrewRole, canAnnotate } = usePhotoAccess();
   const { data: job, isLoading } = usePhotoJob(jobId);
   const { data: projects = [] } = useProjects();
+  const { data: clients = [] } = useClients();
   const { mutate: updateJob, isPending: saving } = useUpdatePhotoJob();
   const { mutate: archiveJob, isPending: archiving } = useArchivePhotoJob();
   const { mutate: deleteJob, isPending: deleting } = useDeletePhotoJob();
@@ -66,6 +68,8 @@ function JobDetailPane({ jobId }: { jobId: string }) {
   const [editing, setEditing] = useState(false);
   const [editingLink, setEditingLink] = useState(false);
   const [selectedProjectId, setSelectedProjectId] = useState<string>("");
+  const [editingClientLink, setEditingClientLink] = useState(false);
+  const [selectedClientId, setSelectedClientId] = useState<string>("");
   const [projectSheetOpen, setProjectSheetOpen] = useState(false);
   const [form, setForm] = useState({
     name: "", customerName: "", address: "", city: "", state: "", zip: "",
@@ -111,7 +115,20 @@ function JobDetailPane({ jobId }: { jobId: string }) {
     );
   }
 
+  function saveClientLink() {
+    updateJob(
+      { id: jobId, clientId: selectedClientId || null },
+      {
+        onSuccess: () => {
+          toast.success(selectedClientId ? "Client linked" : "Client link removed");
+          setEditingClientLink(false);
+        },
+      },
+    );
+  }
+
   const linkedProject = job?.projectId ? projects.find((p) => p.id === job.projectId) ?? null : null;
+  const linkedClient = job?.clientId ? clients.find((c) => c.id === job.clientId) ?? null : null;
   const fullAddress = job ? formatAddress(job.address, job.city, job.state, job.zip) : "";
 
   if (isLoading) {
@@ -294,6 +311,34 @@ function JobDetailPane({ jobId }: { jobId: string }) {
                   </div>
                 )}
               </div>
+              {/* Client link */}
+              <div className="border-t border-slate-200 pt-2">
+                {editingClientLink ? (
+                  <div className="flex items-center gap-2">
+                    <User className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+                    <select className="flex-1 rounded-md border border-slate-200 px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-brand-500" value={selectedClientId} onChange={(e) => setSelectedClientId(e.target.value)}>
+                      <option value="">— No client linked, matched by name only —</option>
+                      {clients.map((c) => <option key={c.id} value={c.id}>{c.displayName}</option>)}
+                    </select>
+                    <button onClick={saveClientLink} disabled={saving} className="rounded-md p-1 text-brand-600 hover:bg-brand-50 disabled:opacity-50"><Check className="h-3.5 w-3.5" /></button>
+                    <button onClick={() => setEditingClientLink(false)} className="rounded-md p-1 text-slate-400 hover:bg-slate-100"><X className="h-3.5 w-3.5" /></button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <User className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+                    {linkedClient ? (
+                      <span className="text-xs font-medium text-slate-700">{linkedClient.displayName}</span>
+                    ) : (
+                      <span className="text-xs text-slate-400">No client linked — matched by customer name only</span>
+                    )}
+                    {(!isCrewRole || canAnnotate) && (
+                      <button onClick={() => { setSelectedClientId(job.clientId ?? ""); setEditingClientLink(true); }} className="ml-auto rounded-md p-1 text-slate-400 hover:bg-slate-100">
+                        <Pencil className="h-3 w-3" />
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
               <p className="text-xs text-slate-400">Created {formatDate(job.createdAt)}</p>
             </div>
           </div>
@@ -357,6 +402,7 @@ export default function PhotoJobsPage() {
   const { mutate: createJob, isPending: creating } = useCreatePhotoJob();
   const { mutate: deleteJob } = useDeletePhotoJob();
   const { data: projects = [] } = useProjects();
+  const { data: clients = [] } = useClients();
   const [form, setForm] = useState(EMPTY_FORM);
 
   const filtered = useMemo(() => jobs.filter((j) => {
@@ -373,7 +419,7 @@ export default function PhotoJobsPage() {
   function handleCreate() {
     if (!form.name.trim()) return;
     createJob(
-      { name: form.name, customerName: form.customerName, address: form.address, city: form.city, state: form.state, zip: form.zip, notes: form.notes || undefined, projectId: form.projectId || undefined },
+      { name: form.name, customerName: form.customerName, address: form.address, city: form.city, state: form.state, zip: form.zip, notes: form.notes || undefined, projectId: form.projectId || undefined, clientId: form.clientId || undefined },
       {
         onSuccess: (job) => {
           setShowNew(false);
@@ -520,6 +566,13 @@ export default function PhotoJobsPage() {
                 <select className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-500" value={form.projectId} onChange={(e) => setForm((f) => ({ ...f, projectId: e.target.value }))}>
                   <option value="">— No project link —</option>
                   {projects.map((p) => <option key={p.id} value={p.id}>{p.name} ({p.customerName})</option>)}
+                </select>
+              </div>
+              <div className="sm:col-span-2">
+                <Label className="text-xs">Link to Client (optional)</Label>
+                <select className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-500" value={form.clientId} onChange={(e) => setForm((f) => ({ ...f, clientId: e.target.value }))}>
+                  <option value="">— No client linked, matched by name only —</option>
+                  {clients.map((c) => <option key={c.id} value={c.id}>{c.displayName}</option>)}
                 </select>
               </div>
             </div>

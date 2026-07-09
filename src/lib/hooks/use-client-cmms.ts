@@ -7,10 +7,11 @@ import type { Project } from "@/types";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-// Projects and photo jobs still reference customers via the informal
-// customer_name string — the clients.id FK link is deferred until the CRM
-// rollout — so these hooks match on the client's display name (plus
-// projects.client_id where it happens to already be set).
+// Projects and photo jobs both support an optional client_id link
+// alongside the free-text customer_name they've always used — most
+// existing rows (the live CMMS deployment has no real CRM clients yet)
+// will only ever have customer_name set, so these hooks match on
+// EITHER: client_id when a real link exists, or customer_name otherwise.
 
 export function useClientProjects(clientId: string, displayName: string) {
   return useQuery({
@@ -50,19 +51,25 @@ export interface ClientPhotoJob {
   photoCount: number;
 }
 
-export function useClientPhotoJobs(displayName: string) {
+export function useClientPhotoJobs(clientId: string, displayName: string) {
   return useQuery({
-    queryKey: ["client-photo-jobs", displayName],
+    queryKey: ["client-photo-jobs", clientId, displayName],
     queryFn: async () => {
       const db = createClient() as any;
-      const { data, error } = await db
-        .from("photo_jobs")
-        .select("*")
-        .ilike("customer_name", displayName)
-        .is("deleted_at", null)
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      const jobs = (data ?? []) as Record<string, any>[];
+      const [byId, byName] = await Promise.all([
+        db.from("photo_jobs").select("*").eq("client_id", clientId).is("deleted_at", null),
+        db.from("photo_jobs").select("*").ilike("customer_name", displayName).is("deleted_at", null),
+      ]);
+      if (byId.error) throw byId.error;
+      if (byName.error) throw byName.error;
+      const seen = new Set<string>();
+      const merged = [...(byId.data ?? []), ...(byName.data ?? [])].filter((r: any) => {
+        if (seen.has(r.id)) return false;
+        seen.add(r.id);
+        return true;
+      });
+      merged.sort((a: any, b: any) => (b.created_at ?? "").localeCompare(a.created_at ?? ""));
+      const jobs = merged as Record<string, any>[];
 
       // Photo counts are best-effort — environments without the job_photos
       // table (or its photo_job_id FK) just show 0
@@ -92,6 +99,6 @@ export function useClientPhotoJobs(displayName: string) {
         photoCount: counts.get(row.id) ?? 0,
       }));
     },
-    enabled: !!displayName,
+    enabled: !!clientId && !!displayName,
   });
 }
