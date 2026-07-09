@@ -229,8 +229,10 @@ function BlockCanvas({
       )}
       onClick={onActivate}
     >
-      {/* Move / delete controls */}
-      <div className="absolute -right-8 top-1 hidden flex-col items-center gap-0.5 group-hover:flex">
+      {/* Move / delete controls — kept inside the block's own box (not
+          floated outside it) so the hover state stays active while the
+          mouse travels from the block to these buttons. */}
+      <div className="absolute right-1 top-1 hidden flex-col items-center gap-0.5 rounded-md border border-slate-100 bg-white/95 p-0.5 shadow-sm group-hover:flex">
         {!isFirst && (
           <button onClick={(e) => { e.stopPropagation(); onMoveUp(); }} className="rounded p-0.5 hover:bg-slate-100" title="Move up">
             <ChevronDown className="h-3.5 w-3.5 rotate-180 text-slate-400" />
