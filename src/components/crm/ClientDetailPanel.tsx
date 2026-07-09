@@ -58,6 +58,8 @@ import { AddPaymentDialog, RefundDialog } from "./payments/PaymentsList";
 import { ContractsList } from "./contracts/ContractsList";
 import { NewContractDialog } from "./contracts/NewContractDialog";
 import { ClientFilesTab } from "./ClientFilesTab";
+import { ClientProjectsTab } from "./ClientProjectsTab";
+import { ClientPhotosTab } from "./ClientPhotosTab";
 import {
   useCustomFieldDefs,
   useClientCustomFieldValues,
@@ -2555,9 +2557,6 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
                 <Home className="h-4 w-4 shrink-0 text-slate-400" />
               )}
               <h2 className="truncate text-lg font-semibold text-slate-900">{client.displayName}</h2>
-              {client.accountNumber && (
-                <span className="shrink-0 font-mono text-xs text-slate-400">#{client.accountNumber}</span>
-              )}
               <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide border ${STATUS_COLOR[client.status]}`}>
                 {client.status}
               </span>
@@ -2618,6 +2617,7 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
                 onRemove={(tag) => removeTag({ clientId, tag })}
               />
               <div className="flex flex-wrap gap-x-6 gap-y-0.5">
+                {client.accountNumber && <InfoRow label="Account #" value={client.accountNumber} />}
                 {client.priority && <InfoRow label="Priority" value={client.priority.charAt(0).toUpperCase() + client.priority.slice(1)} />}
                 {client.source && <InfoRow label="Source" value={client.source} />}
                 {client.clientSince && (
@@ -2810,7 +2810,7 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
                   <p className={`font-medium ${child.balanceOutstandingCents > 0 ? "text-red-600" : "text-slate-500"}`}>
                     {formatCurrency(child.balanceOutstandingCents)}
                   </p>
-                  <Badge className={`text-[9px] capitalize border ${STATUS_COLOR[child.status]}`}>
+                  <Badge variant="outline" className={`text-[9px] capitalize border ${STATUS_COLOR[child.status]}`}>
                     {child.status}
                   </Badge>
                 </div>
@@ -3011,6 +3011,14 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
 
         <TabsContent value="contracts" className="m-0 p-4">
           <ContractsList clientId={clientId} />
+        </TabsContent>
+
+        <TabsContent value="projects" className="m-0 p-4">
+          <ClientProjectsTab clientId={clientId} clientName={client.displayName} />
+        </TabsContent>
+
+        <TabsContent value="photos" className="m-0 p-4">
+          <ClientPhotosTab clientName={client.displayName} />
         </TabsContent>
 
         <TabsContent value="files" className="m-0">
