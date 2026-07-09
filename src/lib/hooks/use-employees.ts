@@ -128,6 +128,7 @@ function mapCrewMember(row: any): CRMCrewMember {
     isForeman: row.is_foreman ?? false,
     daysOfWeek: row.days_of_week ?? [0, 1, 2, 3, 4, 5, 6],
     createdAt: row.created_at,
+    laborBurdenCentsPerHour: row.labor_burden_cents_per_hour ?? 0,
     employeeName: row.crm_employees
       ? `${row.crm_employees.first_name} ${row.crm_employees.last_name}`
       : (row.name ?? undefined),

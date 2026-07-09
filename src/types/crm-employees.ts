@@ -128,6 +128,7 @@ export interface CRMCrewMember {
   employeeId: string;
   isForeman: boolean;
   daysOfWeek: number[]; // 0=Sun, 1=Mon … 6=Sat
+  laborBurdenCentsPerHour: number;
   createdAt: string;
   // joined
   employeeName?: string;
