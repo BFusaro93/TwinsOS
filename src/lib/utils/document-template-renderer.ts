@@ -131,10 +131,10 @@ function addParagraphSpacing(html: string): string {
     const existing = attrs ?? "";
     const styleMatch = existing.match(/style="([^"]*)"/i);
     if (styleMatch) {
-      const merged = `${styleMatch[1]};margin:0 0 12px 0`;
+      const merged = `${styleMatch[1]};margin:0 0 6px 0`;
       return `<p${existing.replace(/style="[^"]*"/i, `style="${merged}"`)}>`;
     }
-    return `<p style="margin:0 0 12px 0"${existing}>`;
+    return `<p style="margin:0 0 6px 0"${existing}>`;
   });
 }
 

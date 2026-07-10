@@ -23,8 +23,8 @@ interface Line {
 }
 
 const styles = StyleSheet.create({
-  line: { marginBottom: 2 },
-  listRow: { flexDirection: "row", marginBottom: 2 },
+  line: { marginBottom: 6 },
+  listRow: { flexDirection: "row", marginBottom: 6 },
   bullet: { width: 14 },
   listText: { flex: 1 },
 });
