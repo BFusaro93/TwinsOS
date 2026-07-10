@@ -25,7 +25,12 @@ export function useProjects(includeArchived = false) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let q = (supabase as any)
         .from("projects")
-        .select("*, po_line_items(total_cost)")
+        .select(`
+          *,
+          po_line_items(total_cost),
+          project_direct_items(quantity, unit_cost, deleted_at),
+          project_subcontract_costs(amount, deleted_at)
+        `)
         .is("deleted_at", null)
         .order("name");
       if (!includeArchived) q = q.eq("is_archived", false);
@@ -34,7 +39,20 @@ export function useProjects(includeArchived = false) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       return data.map((row: any) => {
         const lineItems: { total_cost: number }[] = row.po_line_items ?? [];
-        const computedTotal = lineItems.reduce((sum, li) => sum + (li.total_cost ?? 0), 0);
+        const directItems: { quantity: number; unit_cost: number; deleted_at: string | null }[] =
+          row.project_direct_items ?? [];
+        const subcontractCosts: { amount: number; deleted_at: string | null }[] =
+          row.project_subcontract_costs ?? [];
+
+        const lineItemTotal = lineItems.reduce((sum, li) => sum + (li.total_cost ?? 0), 0);
+        const directItemTotal = directItems
+          .filter((d) => !d.deleted_at)
+          .reduce((sum, d) => sum + Math.round(Number(d.quantity) * d.unit_cost), 0);
+        const subcontractTotal = subcontractCosts
+          .filter((c) => !c.deleted_at)
+          .reduce((sum, c) => sum + (c.amount ?? 0), 0);
+
+        const computedTotal = lineItemTotal + directItemTotal + subcontractTotal;
         return mapProject({ ...row, total_cost: computedTotal });
       }) as Project[];
     },

@@ -3139,8 +3139,12 @@ export type Database = {
       }
       crm_invoice_line_items: {
         Row: {
+          applied_discount_id: string | null
           created_at: string
           description: string
+          discount_cents: number
+          discount_type: string | null
+          discount_value: number | null
           hours: number | null
           id: string
           invoice_id: string
@@ -3156,8 +3160,12 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          applied_discount_id?: string | null
           created_at?: string
           description: string
+          discount_cents?: number
+          discount_type?: string | null
+          discount_value?: number | null
           hours?: number | null
           id?: string
           invoice_id: string
@@ -3173,8 +3181,12 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          applied_discount_id?: string | null
           created_at?: string
           description?: string
+          discount_cents?: number
+          discount_type?: string | null
+          discount_value?: number | null
           hours?: number | null
           id?: string
           invoice_id?: string
@@ -3190,6 +3202,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "crm_invoice_line_items_applied_discount_id_fkey"
+            columns: ["applied_discount_id"]
+            isOneToOne: false
+            referencedRelation: "crm_discounts"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "crm_invoice_line_items_invoice_id_fkey"
             columns: ["invoice_id"]
@@ -3216,6 +3235,7 @@ export type Database = {
       crm_invoices: {
         Row: {
           amount_paid_cents: number
+          applied_discount_id: string | null
           balance_cents: number
           client_id: string
           contract_id: string | null
@@ -3225,6 +3245,8 @@ export type Database = {
           deleted_at: string | null
           description: string
           discount_cents: number
+          discount_type: string | null
+          discount_value: number | null
           due_date: string | null
           estimate_id: string | null
           id: string
@@ -3247,6 +3269,7 @@ export type Database = {
         }
         Insert: {
           amount_paid_cents?: number
+          applied_discount_id?: string | null
           balance_cents?: number
           client_id: string
           contract_id?: string | null
@@ -3256,6 +3279,8 @@ export type Database = {
           deleted_at?: string | null
           description?: string
           discount_cents?: number
+          discount_type?: string | null
+          discount_value?: number | null
           due_date?: string | null
           estimate_id?: string | null
           id?: string
@@ -3278,6 +3303,7 @@ export type Database = {
         }
         Update: {
           amount_paid_cents?: number
+          applied_discount_id?: string | null
           balance_cents?: number
           client_id?: string
           contract_id?: string | null
@@ -3287,6 +3313,8 @@ export type Database = {
           deleted_at?: string | null
           description?: string
           discount_cents?: number
+          discount_type?: string | null
+          discount_value?: number | null
           due_date?: string | null
           estimate_id?: string | null
           id?: string
@@ -3308,6 +3336,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "crm_invoices_applied_discount_id_fkey"
+            columns: ["applied_discount_id"]
+            isOneToOne: false
+            referencedRelation: "crm_discounts"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "crm_invoices_client_id_fkey"
             columns: ["client_id"]
@@ -5691,11 +5726,15 @@ export type Database = {
       estimate_line_items: {
         Row: {
           adj_rate_cents: number | null
+          applied_discount_id: string | null
           budgeted_hours: number
           calc_type: number
           cost_cents: number
           created_at: string
           deleted_at: string | null
+          discount_cents: number
+          discount_type: string | null
+          discount_value: number | null
           estimate_desc: string | null
           estimate_id: string
           id: string
@@ -5724,11 +5763,15 @@ export type Database = {
         }
         Insert: {
           adj_rate_cents?: number | null
+          applied_discount_id?: string | null
           budgeted_hours?: number
           calc_type?: number
           cost_cents?: number
           created_at?: string
           deleted_at?: string | null
+          discount_cents?: number
+          discount_type?: string | null
+          discount_value?: number | null
           estimate_desc?: string | null
           estimate_id: string
           id?: string
@@ -5757,11 +5800,15 @@ export type Database = {
         }
         Update: {
           adj_rate_cents?: number | null
+          applied_discount_id?: string | null
           budgeted_hours?: number
           calc_type?: number
           cost_cents?: number
           created_at?: string
           deleted_at?: string | null
+          discount_cents?: number
+          discount_type?: string | null
+          discount_value?: number | null
           estimate_desc?: string | null
           estimate_id?: string
           id?: string
@@ -5789,6 +5836,13 @@ export type Database = {
           visits?: number
         }
         Relationships: [
+          {
+            foreignKeyName: "estimate_line_items_applied_discount_id_fkey"
+            columns: ["applied_discount_id"]
+            isOneToOne: false
+            referencedRelation: "crm_discounts"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "estimate_line_items_estimate_id_fkey"
             columns: ["estimate_id"]
@@ -6144,6 +6198,7 @@ export type Database = {
       }
       estimates: {
         Row: {
+          applied_discount_id: string | null
           client_id: string
           created_at: string
           created_by: string | null
@@ -6156,6 +6211,8 @@ export type Database = {
           deposit_required_cents: number
           description: string
           discount_cents: number
+          discount_type: string | null
+          discount_value: number | null
           est_document: string
           estimate_date: string
           estimate_number: number
@@ -6188,6 +6245,7 @@ export type Database = {
           work_order_number: string | null
         }
         Insert: {
+          applied_discount_id?: string | null
           client_id: string
           created_at?: string
           created_by?: string | null
@@ -6200,6 +6258,8 @@ export type Database = {
           deposit_required_cents?: number
           description?: string
           discount_cents?: number
+          discount_type?: string | null
+          discount_value?: number | null
           est_document?: string
           estimate_date: string
           estimate_number?: number
@@ -6232,6 +6292,7 @@ export type Database = {
           work_order_number?: string | null
         }
         Update: {
+          applied_discount_id?: string | null
           client_id?: string
           created_at?: string
           created_by?: string | null
@@ -6244,6 +6305,8 @@ export type Database = {
           deposit_required_cents?: number
           description?: string
           discount_cents?: number
+          discount_type?: string | null
+          discount_value?: number | null
           est_document?: string
           estimate_date?: string
           estimate_number?: number
@@ -6276,6 +6339,13 @@ export type Database = {
           work_order_number?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "estimates_applied_discount_id_fkey"
+            columns: ["applied_discount_id"]
+            isOneToOne: false
+            referencedRelation: "crm_discounts"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "estimates_client_id_fkey"
             columns: ["client_id"]
@@ -9567,7 +9637,7 @@ export type Database = {
     }
     Functions: {
       adjust_part_quantity: {
-        Args: { p_delta: number; p_part_id: string }
+        Args: { p_delta: number; p_part_id: string; p_work_order_id?: string }
         Returns: undefined
       }
       crm_run_report: {
@@ -9598,6 +9668,17 @@ export type Database = {
       }
       my_org_id: { Args: never; Returns: string }
       next_damage_case_number: { Args: never; Returns: string }
+      receive_part_quantity: {
+        Args: {
+          p_new_cost_layers: Json
+          p_new_unit_cost: number
+          p_org_id: string
+          p_part_id: string
+          p_po_number: string
+          p_quantity: number
+        }
+        Returns: undefined
+      }
       sync_client_balance: { Args: { p_client_id: string }; Returns: undefined }
     }
     Enums: {

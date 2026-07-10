@@ -329,8 +329,8 @@ export function LineItemsTable({
                   <label className="text-xs font-medium text-slate-600">Quantity</label>
                   <Input
                     type="number"
-                    min={0.01}
-                    step={0.01}
+                    min={0.001}
+                    step={0.001}
                     value={editForm.quantity}
                     onChange={(e) => setEditForm((f) => ({ ...f, quantity: e.target.value }))}
                     autoFocus
@@ -454,8 +454,8 @@ export function LineItemsTable({
                   <label className="text-xs font-medium text-slate-600">Quantity</label>
                   <Input
                     type="number"
-                    min={0.01}
-                    step={0.01}
+                    min={0.001}
+                    step={0.001}
                     value={addForm.quantity}
                     onChange={(e) => setAddForm((f) => ({ ...f, quantity: e.target.value }))}
                   />

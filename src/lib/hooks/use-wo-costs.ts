@@ -145,6 +145,7 @@ export function useAddWOPart() {
         await (supabase.rpc as any)("adjust_part_quantity", {
           p_part_id: input.partId,
           p_delta: -input.quantity,
+          p_work_order_id: input.workOrderId,
         });
         await syncPartQtyToProduct(supabase, input.partId);
       }
@@ -198,6 +199,7 @@ export function useUpdateWOPart() {
           await (supabase.rpc as any)("adjust_part_quantity", {
             p_part_id: existing.part_id,
             p_delta: delta,
+            p_work_order_id: workOrderId,
           });
           await syncPartQtyToProduct(supabase, existing.part_id);
         }
@@ -239,6 +241,7 @@ export function useDeleteWOPart() {
         await (supabase.rpc as any)("adjust_part_quantity", {
           p_part_id: partId,
           p_delta: quantity,
+          p_work_order_id: workOrderId,
         });
         await syncPartQtyToProduct(supabase, partId);
       }

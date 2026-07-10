@@ -191,7 +191,7 @@ export function AddProjectMaterialsDialog({
                         <Input
                           type="number"
                           min={0.01}
-                          step={0.01}
+                          step={1}
                           className="h-8 w-16 text-xs"
                           value={item.quantity}
                           onChange={(e) =>

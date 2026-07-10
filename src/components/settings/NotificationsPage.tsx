@@ -114,6 +114,9 @@ export function NotificationsPage({ hideHeader = false }: NotificationsPageProps
           <p className="mt-0.5 text-xs text-slate-500">
             Configure which events trigger an email to your inbox
           </p>
+          <p className="mt-2 text-xs text-slate-400">
+            You won&apos;t get an email for actions you performed yourself (e.g. assigning a work order to yourself) — only for changes made by someone else.
+          </p>
         </div>
         <div className="divide-y px-5">
           <SettingRow label="Work Order Assigned" description="When a work order is assigned to you">

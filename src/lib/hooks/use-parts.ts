@@ -227,7 +227,7 @@ export function useReceivePartCostLayer() {
 
       const { data: current, error: fetchErr } = await supabase
         .from("parts")
-        .select("cost_layers, unit_cost, quantity_on_hand")
+        .select("org_id, cost_layers, unit_cost, quantity_on_hand")
         .eq("id", receipt.partId)
         .single();
       if (fetchErr) throw fetchErr;
@@ -242,14 +242,17 @@ export function useReceivePartCostLayer() {
       });
       const newUnitCost = computeNewUnitCost(newLayers, costMethod, current.unit_cost);
 
-      const { error: updateErr } = await supabase
-        .from("parts")
-        .update({
-          cost_layers: newLayers as unknown as import("@/types/supabase").Json,
-          unit_cost: newUnitCost,
-          quantity_on_hand: current.quantity_on_hand + receipt.quantity,
-        })
-        .eq("id", receipt.partId);
+      // Goes through an RPC (rather than a plain update) so the quantity
+      // change is attributed in the audit trail to this PO/receipt instead
+      // of showing up as a generic manual "quantity adjusted" edit.
+      const { error: updateErr } = await supabase.rpc("receive_part_quantity", {
+        p_org_id: current.org_id as string,
+        p_part_id: receipt.partId,
+        p_quantity: receipt.quantity,
+        p_new_unit_cost: newUnitCost,
+        p_new_cost_layers: newLayers as unknown as import("@/types/supabase").Json,
+        p_po_number: receipt.poNumber ?? "",
+      });
       if (updateErr) throw updateErr;
     },
     onSuccess: () => {
@@ -350,6 +353,45 @@ export function useBulkImportParts() {
         count++;
       }
       return count;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["parts"] });
+      queryClient.invalidateQueries({ queryKey: ["products"] });
+    },
+  });
+}
+
+/**
+ * Rewrites the stored `categories`/`category` strings on every part tagged with
+ * `from`, replacing that entry with `to` (deduped). Used to merge a stray/custom
+ * category label into a saved one — renaming the label in Settings does not by
+ * itself touch these already-stored strings, so this is the actual data migration.
+ */
+export function useMergePartCategory() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ from, to }: { from: string; to: string }) => {
+      if (from === to) return 0;
+      const supabase = createClient();
+      const { data: rows, error } = await supabase
+        .from("parts")
+        .select("id, categories")
+        .contains("categories", [from])
+        .is("deleted_at", null);
+      if (error) throw error;
+
+      await Promise.all(
+        (rows ?? []).map((row) => {
+          const merged = Array.from(
+            new Set((row.categories as string[]).map((c) => (c === from ? to : c)))
+          );
+          return supabase
+            .from("parts")
+            .update({ categories: merged, category: merged[0] ?? "" })
+            .eq("id", row.id);
+        })
+      );
+      return rows?.length ?? 0;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["parts"] });

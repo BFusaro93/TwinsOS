@@ -42,7 +42,11 @@ export default function JobPhotosPage({ params }: { params: Promise<{ jobId: str
   const router = useRouter();
   const { isCrew, canAnnotate } = usePhotoAccess();
   const { data: job } = usePhotoJob(jobId);
+  // Non-archived projects for the "link a new project" picker; the full list
+  // (including archived) so an already-linked project doesn't appear
+  // disconnected here just because it was archived elsewhere.
   const { data: projects = [] } = useProjects();
+  const { data: allProjects = [] } = useProjects(true);
   const { mutate: updateJob, isPending: saving } = useUpdatePhotoJob();
   const { mutate: archiveJob, isPending: archiving } = useArchivePhotoJob();
 
@@ -105,8 +109,13 @@ export default function JobPhotosPage({ params }: { params: Promise<{ jobId: str
     );
   }
 
-  const linkedProject = job?.projectId ? projects.find((p) => p.id === job.projectId) ?? null : null;
+  const linkedProject = job?.projectId ? allProjects.find((p) => p.id === job.projectId) ?? null : null;
   const fullAddress = job ? formatAddress(job.address, job.city, job.state, job.zip) : "";
+  // Keep an already-linked archived project selectable/visible in the picker
+  // even though it's excluded from the default (non-archived) project list.
+  const pickerProjects = linkedProject?.isArchived
+    ? [linkedProject, ...projects]
+    : projects;
 
   return (
     <PhotoModuleGuard>
@@ -255,7 +264,7 @@ export default function JobPhotosPage({ params }: { params: Promise<{ jobId: str
                       onChange={(e) => setSelectedProjectId(e.target.value)}
                     >
                       <option value="">— No project link —</option>
-                      {projects.map((p) => <option key={p.id} value={p.id}>{p.name} ({p.customerName})</option>)}
+                      {pickerProjects.map((p) => <option key={p.id} value={p.id}>{p.name} ({p.customerName})</option>)}
                     </select>
                     <button onClick={saveLink} disabled={saving} className="rounded-md p-1.5 text-brand-600 hover:bg-brand-50 disabled:opacity-50">
                       <Check className="h-4 w-4" />
@@ -276,6 +285,11 @@ export default function JobPhotosPage({ params }: { params: Promise<{ jobId: str
                           variant={linkedProject.status === "on_hold" ? "on_hold_project" : linkedProject.status}
                           label={PROJECT_STATUS_LABELS[linkedProject.status]}
                         />
+                        {linkedProject.isArchived && (
+                          <span className="rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                            Archived
+                          </span>
+                        )}
                       </div>
                     ) : (
                       <span className="text-sm text-slate-400">No project linked</span>
