@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useMemo } from "react";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { useUIStore, useCurrentUserStore } from "@/stores";
@@ -125,11 +126,36 @@ const CRM_NAV: NavSection[] = [
   },
 ];
 
+const ALL_NAV_ITEMS = CRM_NAV.flatMap((section) => section.items);
+
+function matchesHref(pathname: string, href: string): boolean {
+  return (
+    pathname === href ||
+    (href !== "/crm/home" &&
+      href !== "/vendors" &&
+      href !== "/docs" &&
+      pathname.startsWith(href + "/"))
+  );
+}
+
 export function CRMSidebar() {
   const pathname = usePathname();
   const { sidebarCollapsed } = useUIStore();
   const { logoDataUrl, orgName } = useSettingsStore();
   const { currentUser } = useCurrentUserStore();
+
+  // Several nav items share a path prefix with siblings (e.g. "Settings" at
+  // /crm/settings and "Documents" at /crm/settings/documents) — only the
+  // most specific (longest) matching href should be highlighted at a time.
+  const activeHref = useMemo(() => {
+    let best: string | null = null;
+    for (const item of ALL_NAV_ITEMS) {
+      if (matchesHref(pathname, item.href) && (!best || item.href.length > best.length)) {
+        best = item.href;
+      }
+    }
+    return best;
+  }, [pathname]);
 
   return (
     <aside
@@ -172,12 +198,7 @@ export function CRMSidebar() {
               </p>
             )}
             {section.items.map((item) => {
-              const isActive =
-                pathname === item.href ||
-                (item.href !== "/crm/home" &&
-                  item.href !== "/vendors" &&
-                  item.href !== "/docs" &&
-                  pathname.startsWith(item.href + "/"));
+              const isActive = item.href === activeHref;
               const Icon = item.icon;
 
               return (
