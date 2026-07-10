@@ -48,13 +48,14 @@ import { ApprovalFlowsPage } from "@/components/settings/ApprovalFlowsPage";
 import { NotificationsPage } from "@/components/settings/NotificationsPage";
 import { useSettingsStore } from "@/stores/settings-store";
 import type { FieldRequirement } from "@/stores/settings-store";
+import type { Part } from "@/types/cmms";
 import { COST_METHOD_LABELS, type CostMethod } from "@/lib/cost-methods";
 import { useOrgSettings, useUpdateOrgSettings } from "@/lib/hooks/use-org-settings";
 import { useIntegration, useUpsertIntegration } from "@/lib/hooks/use-integrations";
 import { useWorkOrders, useBulkImportWorkOrders } from "@/lib/hooks/use-work-orders";
 import { useAssets, useBulkImportAssets } from "@/lib/hooks/use-assets";
 import { useVehicles, useBulkImportVehicles } from "@/lib/hooks/use-vehicles";
-import { useParts, useBulkImportParts } from "@/lib/hooks/use-parts";
+import { useParts, useBulkImportParts, useMergePartCategory } from "@/lib/hooks/use-parts";
 import { useVendors, useBulkImportVendors } from "@/lib/hooks/use-vendors";
 import { useRequisitions, useBulkImportRequisitions } from "@/lib/hooks/use-requisitions";
 import { usePurchaseOrders, useBulkImportPurchaseOrders } from "@/lib/hooks/use-purchase-orders";
@@ -397,6 +398,89 @@ function CategoryListEditor({
           </button>
         </div>
       )}
+    </div>
+  );
+}
+
+// ── CustomPartCategoriesCleanup ────────────────────────────────────────────────
+// Surfaces category strings stored on parts that don't match any saved label —
+// e.g. leftover custom entries or ones orphaned by a prior rename — so they can
+// be merged into a saved category or promoted into one.
+
+function CustomPartCategoriesCleanup({
+  parts,
+  savedLabels,
+  onMerge,
+  onPromote,
+  isMerging,
+}: {
+  parts: Part[] | undefined;
+  savedLabels: string[];
+  onMerge: (from: string, to: string) => void;
+  onPromote: (label: string) => void;
+  isMerging: boolean;
+}) {
+  const savedSet = new Set(savedLabels);
+  const counts = new Map<string, number>();
+  for (const part of parts ?? []) {
+    const cats = part.categories?.length ? part.categories : part.category ? [part.category] : [];
+    for (const c of cats) {
+      if (!c || savedSet.has(c)) continue;
+      counts.set(c, (counts.get(c) ?? 0) + 1);
+    }
+  }
+  const customLabels = Array.from(counts.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+  const [targets, setTargets] = useState<Record<string, string>>({});
+
+  if (customLabels.length === 0) return null;
+
+  return (
+    <div className="mt-2 rounded-md border border-amber-200 bg-amber-50 p-3">
+      <p className="text-xs font-semibold text-amber-800">
+        Custom categories in use ({customLabels.length})
+      </p>
+      <p className="mt-0.5 text-xs text-amber-700">
+        These part categories aren&apos;t in the saved list above. Merge each into an
+        existing category, or save it as a new one.
+      </p>
+      <div className="mt-2 divide-y divide-amber-200/60">
+        {customLabels.map(([label, count]) => (
+          <div key={label} className="flex items-center gap-2 py-2">
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-medium text-slate-800">{label}</p>
+              <p className="text-xs text-slate-500">
+                {count} part{count !== 1 ? "s" : ""}
+              </p>
+            </div>
+            <select
+              className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700"
+              value={targets[label] ?? ""}
+              onChange={(e) => setTargets((t) => ({ ...t, [label]: e.target.value }))}
+            >
+              <option value="">Merge into…</option>
+              {savedLabels.map((l) => (
+                <option key={l} value={l}>
+                  {l}
+                </option>
+              ))}
+            </select>
+            <button
+              disabled={!targets[label] || isMerging}
+              onClick={() => onMerge(label, targets[label])}
+              className="rounded-md bg-slate-800 px-2.5 py-1 text-xs font-medium text-white hover:bg-slate-700 disabled:opacity-40"
+            >
+              Merge
+            </button>
+            <button
+              disabled={isMerging}
+              onClick={() => onPromote(label)}
+              className="whitespace-nowrap rounded-md border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-40"
+            >
+              Save as category
+            </button>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -877,6 +961,8 @@ function CustomizationsTab() {
     removeFilterField,
   } = useSettingsStore();
   const { mutate: updateOrgSettings, isPending: savingCustomizations } = useUpdateOrgSettings();
+  const { data: parts } = useParts();
+  const { mutate: mergePartCategory, isPending: isMergingPartCategory } = useMergePartCategory();
 
   // Auto-save status
   const [saveStatus, setSaveStatus] = useState<"idle" | "saved" | "error">("idle");
@@ -929,6 +1015,19 @@ function CustomizationsTab() {
     };
   }
 
+  // Renaming a part category must also rewrite the label already stored on
+  // every part tagged with the old name — otherwise the rename only changes
+  // this config, parts keep the old string, and reverting the label "undoes"
+  // what looked like a merge.
+  function renamePartCategory(id: string, newLabel: string) {
+    const oldLabel = partCategories.find((c) => c.id === id)?.label;
+    setPartCategoryLabel(id, newLabel);
+    debouncedPersist();
+    if (oldLabel && oldLabel !== newLabel) {
+      mergePartCategory({ from: oldLabel, to: newLabel });
+    }
+  }
+
   return (
     <div className="rounded-lg border bg-white shadow-sm">
       {/* Auto-save status bar */}
@@ -969,10 +1068,17 @@ function CustomizationsTab() {
         <CategoryListEditor
           items={partCategories}
           onToggle={act(setPartCategoryEnabled)}
-          onRename={act(setPartCategoryLabel)}
+          onRename={renamePartCategory}
           onAdd={act(addPartCategory)}
           onRemove={act(removePartCategory)}
           addPlaceholder="e.g. Seals & Gaskets"
+        />
+        <CustomPartCategoriesCleanup
+          parts={parts}
+          savedLabels={partCategories.map((c) => c.label)}
+          onMerge={(from, to) => mergePartCategory({ from, to })}
+          onPromote={act(addPartCategory)}
+          isMerging={isMergingPartCategory}
         />
       </AccordionSection>
 

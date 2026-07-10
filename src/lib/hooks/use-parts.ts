@@ -373,15 +373,23 @@ export function useMergePartCategory() {
     mutationFn: async ({ from, to }: { from: string; to: string }) => {
       if (from === to) return 0;
       const supabase = createClient();
+      // Filtering in JS rather than with a DB-side `.contains()`/`.filter("cs", ...)`
+      // predicate: the `categories` column's underlying Postgres type differs between
+      // environments (text[] in prod, jsonb in at least one other), and the wire
+      // syntax those operators need differs by type. Fetching and matching client-side
+      // works identically either way since Supabase deserializes both to a JS array.
       const { data: rows, error } = await supabase
         .from("parts")
         .select("id, categories")
-        .contains("categories", [from])
         .is("deleted_at", null);
       if (error) throw error;
 
+      const matching = (rows ?? []).filter((row) =>
+        ((row.categories as string[] | null) ?? []).includes(from)
+      );
+
       await Promise.all(
-        (rows ?? []).map((row) => {
+        matching.map((row) => {
           const merged = Array.from(
             new Set((row.categories as string[]).map((c) => (c === from ? to : c)))
           );
@@ -391,7 +399,7 @@ export function useMergePartCategory() {
             .eq("id", row.id);
         })
       );
-      return rows?.length ?? 0;
+      return matching.length;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["parts"] });

@@ -53,7 +53,9 @@ export function NewPartDialog({ open, onOpenChange, initialData, onCreated }: Ne
   const { data: allParts } = useParts();
   const { partCategories, locations } = useSettingsStore();
   const enabledLocations = locations.filter((l) => l.enabled);
-  const enabledPartCategories = partCategories.filter((c) => c.enabled);
+  const enabledPartCategories = partCategories
+    .filter((c) => c.enabled)
+    .sort((a, b) => a.label.localeCompare(b.label));
 
   const [name, setName] = useState("");
   const [partNumber, setPartNumber] = useState("");
