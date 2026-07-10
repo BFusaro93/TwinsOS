@@ -151,7 +151,7 @@ export function AddProjectMaterialsDialog({
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) handleClose(); }}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>
             {step === 1
@@ -170,7 +170,7 @@ export function AddProjectMaterialsDialog({
                     <th className="pb-1.5 pr-2 font-medium">
                       Item <span className="text-red-500">*</span>
                     </th>
-                    <th className="w-16 pb-1.5 pr-2 font-medium">Qty</th>
+                    <th className="w-24 pb-1.5 pr-2 font-medium">Qty</th>
                     <th className="w-24 pb-1.5 pr-2 font-medium">Unit Cost ($)</th>
                     <th className="w-8 pb-1.5" />
                   </tr>
@@ -190,9 +190,9 @@ export function AddProjectMaterialsDialog({
                       <td className="py-1.5 pr-2">
                         <Input
                           type="number"
-                          min={0.01}
+                          min={1}
                           step={1}
-                          className="h-8 w-16 text-xs"
+                          className="h-8 w-24 text-xs"
                           value={item.quantity}
                           onChange={(e) =>
                             setItems((prev) =>

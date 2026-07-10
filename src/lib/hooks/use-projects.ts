@@ -27,7 +27,8 @@ export function useProjects(includeArchived = false) {
         .from("projects")
         .select(`
           *,
-          po_line_items(total_cost),
+          po_line_items(quantity, unit_cost, total_cost, taxable, purchase_orders(tax_rate_percent, shipping_cost, subtotal)),
+          requisition_line_items(quantity, unit_cost, total_cost, requisitions(tax_rate_percent, status, converted_po_id)),
           project_direct_items(quantity, unit_cost, deleted_at),
           project_subcontract_costs(amount, deleted_at)
         `)
@@ -38,13 +39,44 @@ export function useProjects(includeArchived = false) {
       if (error) throw error;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       return data.map((row: any) => {
-        const lineItems: { total_cost: number }[] = row.po_line_items ?? [];
+        // Mirrors the Materials tab (ProjectDetailPanel) so the list total and the
+        // Materials + Other Costs tabs on a project's detail view always agree —
+        // both must include PO tax/shipping and pending (unconverted) REQ costs.
+        const poLines: {
+          quantity: number; unit_cost: number; total_cost: number; taxable: boolean | null;
+          purchase_orders: { tax_rate_percent: number; shipping_cost: number; subtotal: number } | null;
+        }[] = row.po_line_items ?? [];
+        const reqLines: {
+          quantity: number; unit_cost: number; total_cost: number;
+          requisitions: { tax_rate_percent: number; status: string; converted_po_id: string | null } | null;
+        }[] = row.requisition_line_items ?? [];
         const directItems: { quantity: number; unit_cost: number; deleted_at: string | null }[] =
           row.project_direct_items ?? [];
         const subcontractCosts: { amount: number; deleted_at: string | null }[] =
           row.project_subcontract_costs ?? [];
 
-        const lineItemTotal = lineItems.reduce((sum, li) => sum + (li.total_cost ?? 0), 0);
+        const lineItemTotal = poLines.reduce((sum, li) => sum + (li.total_cost ?? 0), 0);
+        const poTax = poLines.reduce((sum, li) => {
+          if (li.taxable === false || !li.purchase_orders) return sum;
+          return sum + Math.round((li.total_cost ?? 0) * li.purchase_orders.tax_rate_percent / 100);
+        }, 0);
+        const poShipping = poLines.reduce((sum, li) => {
+          const po = li.purchase_orders;
+          if (!po || !po.shipping_cost || !po.subtotal) return sum;
+          return sum + Math.round(((li.total_cost ?? 0) / po.subtotal) * po.shipping_cost);
+        }, 0);
+
+        // Skip REQ line items whose requisition was already converted to a PO —
+        // that cost is already counted via po_line_items above.
+        const pendingReqLines = reqLines.filter(
+          (li) => !(li.requisitions?.status === "ordered" && li.requisitions?.converted_po_id)
+        );
+        const reqTotal = pendingReqLines.reduce((sum, li) => sum + (li.total_cost ?? 0), 0);
+        const reqTax = pendingReqLines.reduce((sum, li) => {
+          const rate = li.requisitions?.tax_rate_percent ?? 0;
+          return sum + Math.round((li.total_cost ?? 0) * rate / 100);
+        }, 0);
+
         const directItemTotal = directItems
           .filter((d) => !d.deleted_at)
           .reduce((sum, d) => sum + Math.round(Number(d.quantity) * d.unit_cost), 0);
@@ -52,7 +84,8 @@ export function useProjects(includeArchived = false) {
           .filter((c) => !c.deleted_at)
           .reduce((sum, c) => sum + (c.amount ?? 0), 0);
 
-        const computedTotal = lineItemTotal + directItemTotal + subcontractTotal;
+        const computedTotal =
+          lineItemTotal + poTax + poShipping + reqTotal + reqTax + directItemTotal + subcontractTotal;
         return mapProject({ ...row, total_cost: computedTotal });
       }) as Project[];
     },
