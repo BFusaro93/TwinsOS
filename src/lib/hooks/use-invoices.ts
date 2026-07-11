@@ -17,6 +17,10 @@ function mapLineItem(row: any): InvoiceLineItem {
     qty: Number(row.qty),
     rateCents: row.rate_cents,
     totalCents: row.total_cents,
+    discountCents: row.discount_cents ?? 0,
+    discountType: row.discount_type ?? null,
+    discountValue: row.discount_value ?? null,
+    appliedDiscountId: row.applied_discount_id ?? null,
     isTaxable: row.is_taxable ?? false,
     sortOrder: row.sort_order,
     serviceDate: row.service_date ?? null,
@@ -68,6 +72,9 @@ function mapInvoice(row: any): CRMInvoice {
     serviceAddress: row.service_address ?? null,
     subtotalCents: row.subtotal_cents,
     discountCents: row.discount_cents,
+    discountType: row.discount_type ?? null,
+    discountValue: row.discount_value ?? null,
+    appliedDiscountId: row.applied_discount_id ?? null,
     taxRateBps: row.tax_rate_bps,
     taxCents: row.tax_cents,
     totalCents: row.total_cents,
@@ -675,12 +682,27 @@ export function useUpsertInvoiceLineItem() {
       item: Record<string, any>;
     }) => {
       const supabase = createClient();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error } = await (supabase as any)
-        .from("crm_invoice_line_items")
+      // A blind .upsert() with a partial payload fails NOT NULL validation
+      // on columns like description that aren't in the patch — Postgres
+      // checks the INSERT side of "INSERT ... ON CONFLICT DO UPDATE"
+      // regardless of whether the conflict branch fires. Existing rows must
+      // go through a real UPDATE instead.
+      if (item.id) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        .upsert({ invoice_id: invoiceId, ...item } as any);
-      if (error) throw error;
+        const { id, ...patch } = item;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error } = await (supabase as any)
+          .from("crm_invoice_line_items")
+          .update(patch)
+          .eq("id", id);
+        if (error) throw error;
+      } else {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error } = await (supabase as any)
+          .from("crm_invoice_line_items")
+          .insert({ invoice_id: invoiceId, ...item });
+        if (error) throw error;
+      }
     },
     onSuccess: (_d, vars) =>
       qc.invalidateQueries({ queryKey: ["crm-invoices", "detail", vars.invoiceId] }),
@@ -760,18 +782,27 @@ export function useUpdateInvoiceFinancials() {
       lineItems,
       taxRateBps,
       discountCents,
+      discountType,
+      discountValue,
+      appliedDiscountId,
       terms,
     }: {
       id: string;
       lineItems: InvoiceLineItem[];
       taxRateBps: number;
       discountCents: number;
+      discountType?: "percent" | "flat" | null;
+      discountValue?: number | null;
+      appliedDiscountId?: string | null;
       terms?: string | null;
     }) => {
-      const subtotalCents = lineItems.reduce((s, li) => s + li.totalCents, 0);
+      // Subtotal is net of each line's own discount; the document-level
+      // discount is a separate reduction stacked on top of that.
+      const netLineCents = (li: InvoiceLineItem) => li.totalCents - li.discountCents;
+      const subtotalCents = lineItems.reduce((s, li) => s + netLineCents(li), 0);
       const afterDiscount = subtotalCents - discountCents;
       // Tax only applies to taxable line items
-      const taxableBase = lineItems.filter((li) => li.isTaxable).reduce((s, li) => s + li.totalCents, 0);
+      const taxableBase = lineItems.filter((li) => li.isTaxable).reduce((s, li) => s + netLineCents(li), 0);
       const taxCents = Math.round((taxableBase * taxRateBps) / 10000);
       const totalCents = afterDiscount + taxCents;
       const supabase = createClient();
@@ -786,6 +817,9 @@ export function useUpdateInvoiceFinancials() {
       const patch: Record<string, any> = {
         subtotal_cents: subtotalCents,
         discount_cents: discountCents,
+        discount_type: discountType ?? null,
+        discount_value: discountValue ?? null,
+        applied_discount_id: appliedDiscountId ?? null,
         tax_rate_bps: taxRateBps,
         tax_cents: taxCents,
         total_cents: totalCents,

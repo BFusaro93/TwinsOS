@@ -7,6 +7,7 @@ import { useUpsertLineItem, useDeleteLineItem } from "@/lib/hooks/use-estimates"
 import { useCRMServices } from "@/lib/hooks/use-crm-jobs";
 import { useProducts } from "@/lib/hooks/use-products";
 import { useOrgSettings } from "@/lib/hooks/use-org-settings";
+import { useDiscounts } from "@/lib/hooks/use-crm-discounts";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
@@ -17,6 +18,7 @@ import { Input } from "@/components/ui/input";
 import { Trash2, Copy, Plus, ChevronDown, ChevronRight, Pencil, Heading2 } from "lucide-react";
 import { toast } from "sonner";
 import { LineItemNotesPopover, type LineItemNotes } from "./LineItemNotesPopover";
+import { LineItemDiscountPopover, type LineItemDiscountPatch } from "@/components/shared/LineItemDiscountPopover";
 import { AddSubitemDialog } from "./AddSubitemDialog";
 import {
   useLineItemSubitems,
@@ -24,6 +26,7 @@ import {
   type LineItemSubitem,
 } from "@/lib/hooks/use-line-item-subitems";
 import type { EstimateLineItem, LineItemStatus } from "@/types/crm-estimates";
+import type { CRMDiscount } from "@/types/crm-discounts";
 
 const UNIT_TYPES = ["sqft", "lf", "cuyd", "acres", "hr", "each", "lb", "gal"];
 
@@ -212,6 +215,7 @@ function LineItemRow({
   expanded,
   onToggleExpand,
   tiersEnabled,
+  discounts,
 }: {
   item: EstimateLineItem;
   estimateId: string;
@@ -222,6 +226,7 @@ function LineItemRow({
   expanded: boolean;
   onToggleExpand: (id: string) => void;
   tiersEnabled?: boolean;
+  discounts: CRMDiscount[];
 }) {
   const [row, setRow] = useState<RowState>(() => item);
   const [dirty, setDirty] = useState(false);
@@ -233,7 +238,10 @@ function LineItemRow({
     setRow((prev) => {
       const next = { ...prev, [key]: val };
       const computed = computeLineItem(next);
-      return { ...next, ...computed };
+      const merged = { ...next, ...computed };
+      // A flat discount can't exceed the line's own (possibly now-smaller) total
+      merged.discountCents = Math.min(merged.discountCents, merged.totalCents);
+      return merged;
     });
     setDirty(true);
   }
@@ -255,6 +263,10 @@ function LineItemRow({
           rate_cents: row.rateCents,
           visits: row.visits,
           total_cents: row.totalCents,
+          discount_cents: row.discountCents,
+          discount_type: row.discountType,
+          discount_value: row.discountValue,
+          applied_discount_id: row.appliedDiscountId,
           budgeted_hours: row.budgetedHours,
           total_budgeted_hours: row.totalBudgetedHours,
           cost_cents: row.costCents,
@@ -268,6 +280,26 @@ function LineItemRow({
       setDirty(false);
     } catch {
       toast.error("Failed to save line item");
+    }
+  }
+
+  async function saveDiscount(patch: LineItemDiscountPatch) {
+    const next = { ...row, ...patch };
+    setRow(next);
+    try {
+      await upsert({
+        estimateId,
+        item: {
+          id: row.id,
+          discount_cents: patch.discountCents,
+          discount_type: patch.discountType,
+          discount_value: patch.discountValue,
+          applied_discount_id: patch.appliedDiscountId,
+        },
+      });
+    } catch {
+      setRow(row);
+      toast.error("Failed to update discount");
     }
   }
 
@@ -449,8 +481,15 @@ function LineItemRow({
         </td>
 
         {/* Total (TP) */}
-        <td className="w-20 px-2 py-1.5 text-right tabular-nums font-medium text-slate-700">
-          {centsToDisplay(row.totalCents)}
+        <td className="w-20 px-2 py-1.5 text-right tabular-nums">
+          {row.discountCents > 0 ? (
+            <div className="flex flex-col items-end leading-tight">
+              <span className="text-[10px] text-slate-300 line-through">{centsToDisplay(row.totalCents)}</span>
+              <span className="font-medium text-slate-700">{centsToDisplay(row.totalCents - row.discountCents)}</span>
+            </div>
+          ) : (
+            <span className="font-medium text-slate-700">{centsToDisplay(row.totalCents)}</span>
+          )}
         </td>
 
         {/* GM% */}
@@ -486,7 +525,17 @@ function LineItemRow({
 
         {/* Actions */}
         <td className="px-2 py-1.5">
-          <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+          <div className="flex items-center gap-1">
+            <LineItemDiscountPopover
+              discountCents={row.discountCents}
+              discountType={row.discountType}
+              discountValue={row.discountValue}
+              appliedDiscountId={row.appliedDiscountId}
+              lineTotalCents={row.totalCents}
+              discounts={discounts}
+              onSave={saveDiscount}
+            />
+            <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
             <LineItemNotesPopover
               notes={{ estimateDesc: row.estimateDesc ?? null, jobNote: row.jobNote ?? null, invoiceDesc: row.invoiceDesc ?? null, internalNote: row.internalNote ?? null }}
               onSave={saveNotes}
@@ -505,6 +554,7 @@ function LineItemRow({
             >
               <Trash2 className="h-3.5 w-3.5" />
             </button>
+            </div>
           </div>
         </td>
 
@@ -574,6 +624,8 @@ export function EstimateLineItemsGrid({ estimateId, items, selectedIds = [], onS
   );
   const { mutateAsync: upsert } = useUpsertLineItem();
   const { mutateAsync: deleteItem } = useDeleteLineItem();
+  const { data: discounts = [] } = useDiscounts();
+  const activeDiscounts = discounts.filter((d) => d.isActive);
 
   const handleDelete = useCallback(
     async (id: string) => {
@@ -657,7 +709,12 @@ export function EstimateLineItemsGrid({ estimateId, items, selectedIds = [], onS
           cost_cents: 0,
           adj_rate_cents: null,
           sort_order: items.length,
-          ...computed,
+          total_cents: computed.totalCents,
+          budgeted_hours: computed.budgetedHours,
+          total_budgeted_hours: computed.totalBudgetedHours,
+          total_cost_cents: computed.totalCostCents,
+          margin_bps: computed.marginBps,
+          markup_bps: computed.markupBps,
         },
       });
     } catch {
@@ -869,6 +926,7 @@ export function EstimateLineItemsGrid({ estimateId, items, selectedIds = [], onS
                   expanded={expandedRows.has(item.id)}
                   onToggleExpand={toggleExpand}
                   tiersEnabled={tiersEnabled}
+                  discounts={activeDiscounts}
                 />
               )
             )}

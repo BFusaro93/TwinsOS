@@ -12,11 +12,15 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { Estimate } from "@/types/crm-estimates";
+import type { DiscountType } from "@/types/crm-discounts";
 
 interface RecalcParams {
   taxRateBps: number;
   overheadRateBps: number;
   discountCents: number;
+  discountType: DiscountType | null;
+  discountValue: number | null;
+  appliedDiscountId: string | null;
 }
 
 interface Props {
@@ -101,12 +105,34 @@ export function EstimateSummaryPanel({ estimate, onRecalculate, recalcPending }:
   const [taxRateStr,      setTaxRateStr]      = useState(String((estimate.taxRateBps / 100).toFixed(2)));
   const [overheadRateStr, setOverheadRateStr] = useState(String((estimate.overheadRateBps / 100).toFixed(2)));
   const [discountStr,     setDiscountStr]     = useState(String((estimate.discountCents / 100).toFixed(2)));
+  const [discountType,       setDiscountType]       = useState<DiscountType | null>(estimate.discountType);
+  const [discountValue,      setDiscountValue]      = useState<number | null>(estimate.discountValue);
+  const [appliedDiscountId,  setAppliedDiscountId]  = useState<string | null>(estimate.appliedDiscountId);
 
-  async function handleRecalc(discountOverrideStr?: string) {
+  async function handleRecalc(
+    discountOverrideStr?: string,
+    discountOverride?: { type: DiscountType | null; value: number | null; appliedId: string | null }
+  ) {
     const taxRateBps      = Math.round((parseFloat(taxRateStr) || 0) * 100);
     const overheadRateBps = Math.round((parseFloat(overheadRateStr) || 0) * 100);
     const discountCents   = Math.round((parseFloat(discountOverrideStr ?? discountStr) || 0) * 100);
-    await onRecalculate({ taxRateBps, overheadRateBps, discountCents });
+    await onRecalculate({
+      taxRateBps,
+      overheadRateBps,
+      discountCents,
+      discountType: discountOverride ? discountOverride.type : discountType,
+      discountValue: discountOverride ? discountOverride.value : discountValue,
+      appliedDiscountId: discountOverride ? discountOverride.appliedId : appliedDiscountId,
+    });
+  }
+
+  // A manual edit to the raw $ amount decouples it from whatever saved
+  // discount preset produced it — treat it as a plain flat amount.
+  function handleDiscountStrChange(v: string) {
+    setDiscountStr(v);
+    setDiscountType("flat");
+    setDiscountValue(Math.round((parseFloat(v) || 0) * 100));
+    setAppliedDiscountId(null);
   }
 
   function applyNamedDiscount(discountId: string) {
@@ -116,9 +142,13 @@ export function EstimateSummaryPanel({ estimate, onRecalculate, recalcPending }:
     const cents = d.discountType === "percent"
       ? Math.round(estimate.subtotalCents * ((d.percentBps ?? 0) / 10000))
       : (d.flatCents ?? 0);
+    const value = d.discountType === "percent" ? (d.percentBps ?? 0) : (d.flatCents ?? 0);
     const str = (cents / 100).toFixed(2);
     setDiscountStr(str);
-    void handleRecalc(str);
+    setDiscountType(d.discountType);
+    setDiscountValue(value);
+    setAppliedDiscountId(d.id);
+    void handleRecalc(str, { type: d.discountType, value, appliedId: d.id });
   }
 
   // Cost breakdown by type (from direct costs)
@@ -175,7 +205,7 @@ export function EstimateSummaryPanel({ estimate, onRecalculate, recalcPending }:
         <RateRow
           label="Discount"
           value={discountStr}
-          onChange={setDiscountStr}
+          onChange={handleDiscountStrChange}
           onBlur={() => handleRecalc()}
           suffix="$"
         />

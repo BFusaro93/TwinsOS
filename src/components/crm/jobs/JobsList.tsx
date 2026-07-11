@@ -379,7 +379,6 @@ function defaultForm(clientId: string, jobType: JobType): NewClientJobFormValues
     waitingListEnd: null,
     startDateWindow: null,
     endDateWindow: null,
-    createWorkOrder: false,
     isComplete: false,
     notes: null,
     notesToCrew: null,
@@ -526,37 +525,11 @@ function NewJobDialog({
                     </SelectContent>
                   </Select>
                 </div>
-                <div>
-                  <label className="mb-1 block text-xs font-medium text-slate-600">Create Work Order?</label>
-                  <div className="flex gap-4 text-sm">
-                    <label className="flex items-center gap-1.5 cursor-pointer">
-                      <input type="radio" checked={form.createWorkOrder} onChange={() => patch({ createWorkOrder: true })} />
-                      Yes
-                    </label>
-                    <label className="flex items-center gap-1.5 cursor-pointer">
-                      <input type="radio" checked={!form.createWorkOrder} onChange={() => patch({ createWorkOrder: false })} />
-                      No
-                    </label>
-                  </div>
-                </div>
               </div>
             )}
 
             {selectedType === "one_time" && (
               <div className="space-y-3">
-                <div>
-                  <label className="mb-1 block text-xs font-medium text-slate-600">Create Work Order?</label>
-                  <div className="flex gap-4 text-sm">
-                    <label className="flex items-center gap-1.5 cursor-pointer">
-                      <input type="radio" checked={form.createWorkOrder} onChange={() => patch({ createWorkOrder: true })} />
-                      Yes
-                    </label>
-                    <label className="flex items-center gap-1.5 cursor-pointer">
-                      <input type="radio" checked={!form.createWorkOrder} onChange={() => patch({ createWorkOrder: false })} />
-                      No
-                    </label>
-                  </div>
-                </div>
                 <div>
                   <label className="mb-1 block text-xs font-medium text-slate-600">Is this job complete?</label>
                   <div className="flex gap-4 text-sm">
@@ -575,19 +548,6 @@ function NewJobDialog({
 
             {selectedType === "waiting_list" && (
               <div className="space-y-3">
-                <div>
-                  <label className="mb-1 block text-xs font-medium text-slate-600">Create Work Order?</label>
-                  <div className="flex gap-4 text-sm">
-                    <label className="flex items-center gap-1.5 cursor-pointer">
-                      <input type="radio" checked={form.createWorkOrder} onChange={() => patch({ createWorkOrder: true })} />
-                      Yes
-                    </label>
-                    <label className="flex items-center gap-1.5 cursor-pointer">
-                      <input type="radio" checked={!form.createWorkOrder} onChange={() => patch({ createWorkOrder: false })} />
-                      No
-                    </label>
-                  </div>
-                </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="mb-1 block text-xs font-medium text-slate-600">Start Date Window</label>

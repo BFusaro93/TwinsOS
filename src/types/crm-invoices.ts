@@ -1,3 +1,5 @@
+import type { DiscountType } from "./crm-discounts";
+
 export type InvoiceStatus =
   | 'draft'
   | 'sent'
@@ -55,6 +57,10 @@ export interface InvoiceLineItem {
   qty: number;
   rateCents: number;
   totalCents: number;
+  discountCents: number;
+  discountType: DiscountType | null;
+  discountValue: number | null;
+  appliedDiscountId: string | null;
   isTaxable: boolean;
   sortOrder: number;
   serviceDate: string | null;
@@ -82,6 +88,9 @@ export interface CRMInvoice {
   serviceAddress: string | null;
   subtotalCents: number;
   discountCents: number;
+  discountType: DiscountType | null;
+  discountValue: number | null;
+  appliedDiscountId: string | null;
   taxRateBps: number;
   taxCents: number;
   totalCents: number;

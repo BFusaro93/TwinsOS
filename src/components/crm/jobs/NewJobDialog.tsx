@@ -90,7 +90,6 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
   const [schedule, setSchedule] = useState("");
   const [packageId, setPackageId] = useState("");
   const [isComplete, setIsComplete] = useState(false);
-  const [createWorkOrder, setCreateWorkOrder] = useState(false);
   const [services, setServices] = useState<ServiceRow[]>([blankServiceRow(todayStr())]);
 
   useEffect(() => {
@@ -104,7 +103,6 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
       setSchedule("");
       setPackageId("");
       setIsComplete(false);
-      setCreateWorkOrder(false);
       setServices([blankServiceRow(today)]);
     }
   }, [open, initialJobType]);
@@ -216,7 +214,6 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
         waitingListEnd: (jobType === "waiting_list" || jobType === "package") ? completeByDate || null : null,
         startDateWindow: jobType === "recurring" ? startDate || null : null,
         endDateWindow: null,
-        createWorkOrder,
         isComplete: jobType === "one_time" ? isComplete : false,
         notes: null,
         notesToCrew: notesToCrew || null,
@@ -287,15 +284,6 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
                     {(contracts ?? []).map((c) => <SelectItem key={c.id} value={c.id}>{c.title}</SelectItem>)}
                   </SelectContent>
                 </Select>
-              </div>
-            </div>
-
-            {/* Create Work Order */}
-            <div className="flex items-center gap-6">
-              <Label className="shrink-0 w-40">Create a Work Order?</Label>
-              <div className="flex items-center gap-4 text-sm">
-                <label className="flex items-center gap-1.5 cursor-pointer"><input type="radio" name="wo" checked={createWorkOrder} onChange={() => setCreateWorkOrder(true)} /> Yes</label>
-                <label className="flex items-center gap-1.5 cursor-pointer"><input type="radio" name="wo" checked={!createWorkOrder} onChange={() => setCreateWorkOrder(false)} /> No</label>
               </div>
             </div>
 

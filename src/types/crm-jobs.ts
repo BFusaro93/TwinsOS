@@ -137,7 +137,6 @@ export interface CRMJob {
   arrivalWindowHours: number | null;
   startDateWindow: string | null;
   endDateWindow: string | null;
-  createWorkOrder: boolean;
   isComplete: boolean;
   serviceTotalCents: number;
   productTotalCents: number;
@@ -197,7 +196,6 @@ export interface NewClientJobFormValues {
   waitingListEnd: string | null;
   startDateWindow: string | null;
   endDateWindow: string | null;
-  createWorkOrder: boolean;
   isComplete: boolean;
   notes: string | null;
   notesToCrew: string | null;

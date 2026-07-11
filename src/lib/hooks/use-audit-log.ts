@@ -19,6 +19,11 @@ export function useAuditLog(recordType: AuditRecordType, recordId: string) {
       return (data.map(mapAuditEntry)) as AuditEntry[];
     },
     enabled: !!recordId,
+    // Audit history is written by DB triggers, not by any mutation this app
+    // calls directly, so nothing invalidates this query on change. The
+    // global 60s staleTime would otherwise show a stale list for up to a
+    // minute after editing a record and reopening its Audit Trail tab.
+    staleTime: 0,
   });
 }
 

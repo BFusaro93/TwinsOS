@@ -16,6 +16,7 @@ import {
 } from "@/lib/hooks/use-invoices";
 import { useCRMServices } from "@/lib/hooks/use-crm-jobs";
 import { useOrgSettings } from "@/lib/hooks/use-org-settings";
+import { useDiscounts } from "@/lib/hooks/use-crm-discounts";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -48,7 +49,9 @@ import { centsToDisplay } from "@/lib/estimate-calc";
 import { Plus, Trash2, Save, DollarSign, ChevronDown, Mail, Printer, Lock, Unlock, Search, MoreVertical, Ban } from "lucide-react";
 import { toast } from "sonner";
 import type { InvoiceStatus, InvoiceLineItem, PaymentMethod, CRMPayment } from "@/types/crm-invoices";
+import type { DiscountType, CRMDiscount } from "@/types/crm-discounts";
 import { AuditTrailTab } from "@/components/shared/AuditTrailTab";
+import { LineItemDiscountPopover, type LineItemDiscountPatch } from "@/components/shared/LineItemDiscountPopover";
 
 // ── constants ─────────────────────────────────────────────────────────────────
 
@@ -157,9 +160,9 @@ function InlineEdit({
 // ── line item row ─────────────────────────────────────────────────────────────
 
 function LineItemRow({
-  item, invoiceId, taxRateBps,
+  item, invoiceId, taxRateBps, discounts,
 }: {
-  item: InvoiceLineItem; invoiceId: string; taxRateBps: number;
+  item: InvoiceLineItem; invoiceId: string; taxRateBps: number; discounts: CRMDiscount[];
 }) {
   const [row, setRow] = useState(item);
   const [dirty, setDirty] = useState(false);
@@ -171,6 +174,8 @@ function LineItemRow({
     setRow((p) => {
       const n = { ...p, [k]: v };
       n.totalCents = Math.round(Number(n.qty) * n.rateCents);
+      // A flat discount can't exceed the line's own (possibly now-smaller) total
+      n.discountCents = Math.min(n.discountCents, n.totalCents);
       return n;
     });
     setDirty(true);
@@ -184,12 +189,27 @@ function LineItemRow({
       qty: r.qty,
       rate_cents: r.rateCents,
       total_cents: r.totalCents,
+      discount_cents: r.discountCents,
+      discount_type: r.discountType,
+      discount_value: r.discountValue,
+      applied_discount_id: r.appliedDiscountId,
       is_taxable: r.isTaxable,
       sort_order: r.sortOrder,
       service_date: r.serviceDate ?? null,
       hours: r.hours ?? null,
       men: r.men ?? null,
     };
+  }
+
+  async function saveDiscount(patch: LineItemDiscountPatch) {
+    const next = { ...row, ...patch };
+    setRow(next);
+    try {
+      await upsert({ invoiceId, item: buildUpsertPayload(next) });
+    } catch {
+      setRow(row);
+      toast.error("Failed to update discount");
+    }
   }
 
   async function save() {
@@ -323,7 +343,8 @@ function LineItemRow({
           onBlur={() => {
             const cents = Math.round((parseFloat(rateStr) || 0) * 100);
             setRateStr((cents / 100).toFixed(2));
-            const updated = { ...row, rateCents: cents, totalCents: Math.round(row.qty * cents) };
+            const totalCents = Math.round(row.qty * cents);
+            const updated = { ...row, rateCents: cents, totalCents, discountCents: Math.min(row.discountCents, totalCents) };
             setRow(updated);
             saveRow(updated);
           }}
@@ -331,22 +352,40 @@ function LineItemRow({
         />
       </td>
       {/* Total */}
-      <td className="w-24 px-2 py-2 text-right tabular-nums font-medium text-slate-700 align-middle">
-        {centsToDisplay(row.totalCents)}
-      </td>
-      {/* Delete / save indicator */}
-      <td className="w-10 px-2 py-2 text-center align-middle">
-        {removing ? (
-          <span className="text-[10px] text-slate-400">…</span>
+      <td className="w-24 px-2 py-2 text-right tabular-nums align-middle">
+        {row.discountCents > 0 ? (
+          <div className="flex flex-col items-end leading-tight">
+            <span className="text-[10px] text-slate-300 line-through">{centsToDisplay(row.totalCents)}</span>
+            <span className="font-medium text-slate-700">{centsToDisplay(row.totalCents - row.discountCents)}</span>
+          </div>
         ) : (
-          <button
-            type="button"
-            onClick={handleDelete}
-            className="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-          </button>
+          <span className="font-medium text-slate-700">{centsToDisplay(row.totalCents)}</span>
         )}
+      </td>
+      {/* Discount / Delete / save indicator */}
+      <td className="w-16 px-2 py-2 align-middle">
+        <div className="flex items-center justify-end gap-0.5">
+          <LineItemDiscountPopover
+            discountCents={row.discountCents}
+            discountType={row.discountType}
+            discountValue={row.discountValue}
+            appliedDiscountId={row.appliedDiscountId}
+            lineTotalCents={row.totalCents}
+            discounts={discounts}
+            onSave={saveDiscount}
+          />
+          {removing ? (
+            <span className="text-[10px] text-slate-400">…</span>
+          ) : (
+            <button
+              type="button"
+              onClick={handleDelete}
+              className="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
         {isPending && !removing && <span className="text-[10px] text-slate-400">…</span>}
         {dirty && !isPending && (
           <button type="button" onClick={save} className="text-[10px] text-brand-500 hover:underline">save</button>
@@ -469,6 +508,8 @@ export function InvoiceDetail({
   const { mutateAsync: voidInvoice } = useVoidInvoice();
   const { data: savedServices } = useCRMServices();
   const { data: orgSettings } = useOrgSettings();
+  const { data: discounts = [] } = useDiscounts();
+  const activeDiscounts = discounts.filter((d) => d.isActive);
 
   const [activeTab, setActiveTab] = useState<"invoice" | "audit">("invoice");
   const [lineItemPickerOpen, setLineItemPickerOpen] = useState(false);
@@ -478,6 +519,11 @@ export function InvoiceDetail({
   const [selectedPayment, setSelectedPayment] = useState<CRMPayment | null>(null);
   const [saving, setSaving] = useState(false);
   const [taxRateBps, setTaxRateBps] = useState(0);
+  const [discountCents, setDiscountCents] = useState(0);
+  const [discountStr, setDiscountStr] = useState("0.00");
+  const [discountType, setDiscountType] = useState<DiscountType | null>(null);
+  const [discountValue, setDiscountValue] = useState<number | null>(null);
+  const [appliedDiscountId, setAppliedDiscountId] = useState<string | null>(null);
   const [terms, setTerms] = useState("due_on_receipt");
   const [invoiceDate, setInvoiceDate] = useState("");
   const [dueDate, setDueDate] = useState("");
@@ -507,6 +553,11 @@ export function InvoiceDetail({
         : "";
     setDueDate(resolvedDue);
     setInvoiceNumber(invoice.invoiceNumber);
+    setDiscountCents(invoice.discountCents);
+    setDiscountStr((invoice.discountCents / 100).toFixed(2));
+    setDiscountType(invoice.discountType);
+    setDiscountValue(invoice.discountValue);
+    setAppliedDiscountId(invoice.appliedDiscountId);
   }, [invoice?.id]);
 
   function handleTermsChange(newTerms: string) {
@@ -538,11 +589,36 @@ export function InvoiceDetail({
   const payments = invoice.payments ?? [];
   const hasTax = taxRateBps > 0;
 
-  const subtotal = lineItems.reduce((s, li) => s + li.totalCents, 0);
-  const taxableBase = lineItems.filter((li) => li.isTaxable).reduce((s, li) => s + li.totalCents, 0);
+  // Net of each line's own discount; the document-level discount below
+  // is a separate reduction stacked on top of that.
+  const netLineCents = (li: InvoiceLineItem) => li.totalCents - li.discountCents;
+  const subtotal = lineItems.reduce((s, li) => s + netLineCents(li), 0);
+  const taxableBase = lineItems.filter((li) => li.isTaxable).reduce((s, li) => s + netLineCents(li), 0);
   const previewTax = hasTax ? Math.round((taxableBase * taxRateBps) / 10000) : 0;
-  const previewTotal = subtotal - invoice.discountCents + previewTax;
+  const previewTotal = subtotal - discountCents + previewTax;
   const previewBalance = Math.max(0, previewTotal - invoice.amountPaidCents);
+
+  function applyNamedDiscount(discountId: string) {
+    const d = activeDiscounts.find((item) => item.id === discountId);
+    if (!d) return;
+    const cents = d.discountType === "percent"
+      ? Math.round(subtotal * ((d.percentBps ?? 0) / 10000))
+      : (d.flatCents ?? 0);
+    setDiscountCents(cents);
+    setDiscountStr((cents / 100).toFixed(2));
+    setDiscountType(d.discountType);
+    setDiscountValue(d.discountType === "percent" ? (d.percentBps ?? 0) : (d.flatCents ?? 0));
+    setAppliedDiscountId(d.id);
+  }
+
+  // A manual edit to the raw $ amount decouples it from whatever saved
+  // discount preset produced it — treat it as a plain flat amount.
+  function handleDiscountStrChange(v: string) {
+    setDiscountStr(v);
+    setDiscountType("flat");
+    setDiscountValue(Math.round((parseFloat(v) || 0) * 100));
+    setAppliedDiscountId(null);
+  }
 
   async function addLineItem(name?: string, description = "", rateCents = 0, isTaxable = false) {
     try {
@@ -605,7 +681,10 @@ export function InvoiceDetail({
           id: invoice!.id,
           lineItems,
           taxRateBps,
-          discountCents: invoice!.discountCents,
+          discountCents,
+          discountType,
+          discountValue,
+          appliedDiscountId,
           terms,
         }),
         updateHeader({
@@ -949,6 +1028,37 @@ export function InvoiceDetail({
                     </td>
                   </tr>
                   <tr className="border-b border-slate-50">
+                    <td className="py-2 pr-4 text-slate-400 font-medium align-top">Discount</td>
+                    <td className="py-2">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-slate-500 font-medium">$</span>
+                        <Input
+                          type="number" step="0.01" min="0"
+                          value={discountStr}
+                          onChange={(e) => handleDiscountStrChange(e.target.value)}
+                          onBlur={() => setDiscountCents(Math.round((parseFloat(discountStr) || 0) * 100))}
+                          className="h-7 w-24 text-right text-xs"
+                        />
+                        {activeDiscounts.length > 0 && (
+                          <Select onValueChange={applyNamedDiscount}>
+                            <SelectTrigger className="h-7 w-48 text-xs">
+                              <SelectValue placeholder="Apply a saved discount…" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {activeDiscounts.map((d) => (
+                                <SelectItem key={d.id} value={d.id} className="text-xs">
+                                  {d.name} — {d.discountType === "percent"
+                                    ? `${((d.percentBps ?? 0) / 100).toFixed(2)}%`
+                                    : formatCurrency(d.flatCents ?? 0)}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                  <tr className="border-b border-slate-50">
                     <td className="py-2 pr-4 text-slate-400 font-medium">PO #</td>
                     <td className="py-2 text-slate-700">
                       <InlineEdit
@@ -999,7 +1109,7 @@ export function InvoiceDetail({
               </thead>
               <tbody>
                 {lineItems.map((li) => (
-                  <LineItemRow key={li.id} item={li} invoiceId={invoice.id} taxRateBps={taxRateBps} />
+                  <LineItemRow key={li.id} item={li} invoiceId={invoice.id} taxRateBps={taxRateBps} discounts={activeDiscounts} />
                 ))}
                 {lineItems.length === 0 && (
                   <tr>
@@ -1096,10 +1206,10 @@ export function InvoiceDetail({
                   <span className="text-slate-400">Subtotal</span>
                   <span className="tabular-nums font-medium">{formatCurrency(subtotal)}</span>
                 </div>
-                {invoice.discountCents > 0 && (
+                {discountCents > 0 && (
                   <div className="flex justify-between gap-8">
                     <span className="text-slate-400">Discount</span>
-                    <span className="tabular-nums text-red-500">−{formatCurrency(invoice.discountCents)}</span>
+                    <span className="tabular-nums text-red-500">−{formatCurrency(discountCents)}</span>
                   </div>
                 )}
                 {hasTax && (

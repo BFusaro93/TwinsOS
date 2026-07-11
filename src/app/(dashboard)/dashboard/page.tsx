@@ -197,7 +197,7 @@ export default function DashboardPage() {
           <StatCard title="Open Requisitions" value={poKPIs.openRequisitions} icon={FileText} href="/po/requisitions?status=draft,open,pending_approval,approved" />
           <StatCard title="Pending Approval" value={poKPIs.pendingApproval} icon={Clock} href="/po/requisitions?status=pending_approval" />
           <StatCard title="Open Purchase Orders" value={poKPIs.openPOs} icon={ShoppingCart} href="/po/orders?status=requested,pending,approved,ordered,partially_fulfilled" />
-          <StatCard title="Parts Spend MTD" value={formatCurrency(poKPIs.totalSpendMTD)} icon={DollarSign} href="/po/orders" />
+          <StatCard title="Parts Spend MTD" value={formatCurrency(poKPIs.totalSpendMTD)} icon={DollarSign} href="/po/reports/parts-spend" />
         </div>
       </section>
 

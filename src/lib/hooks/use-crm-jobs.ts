@@ -61,7 +61,6 @@ function mapJob(row: any): CRMJob {
     arrivalWindowHours: row.arrival_window_hours ?? null,
     startDateWindow: row.start_date_window ?? null,
     endDateWindow: row.end_date_window ?? null,
-    createWorkOrder: row.create_work_order ?? false,
     isComplete: row.is_complete ?? false,
     serviceTotalCents: row.service_total_cents ?? 0,
     productTotalCents: row.product_total_cents ?? 0,
@@ -183,9 +182,10 @@ export function useWaitingListJobs(startDate?: string, endDate?: string) {
         .from("crm_jobs")
         .select(`
           *,
-          clients(display_name, primary_phone),
+          clients(display_name, primary_phone, billing_address, billing_city, billing_state, billing_zip),
           crm_crews(name),
-          crm_job_services(*)
+          crm_job_services(*),
+          crm_job_visits(id, deleted_at)
         `)
         .in("job_type", ["waiting_list", "package"])
         .is("deleted_at", null)
@@ -195,9 +195,27 @@ export function useWaitingListJobs(startDate?: string, endDate?: string) {
       if (startDate) q = q.or(`waiting_list_end.is.null,waiting_list_end.gte.${startDate}`);
       if (endDate)   q = q.or(`waiting_list_start.is.null,waiting_list_start.lte.${endDate}`);
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await q;
       if (error) throw error;
-      return (data.map(mapJob)) as CRMJob[];
+
+      // A one-time waiting-list job that's already been dispatched (has an active
+      // visit) is done waiting — drop it. Packages keep multiple visits over their
+      // lifetime, so they stay until their date window says otherwise.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const rows = (data as any[]).filter((row) => {
+        if (row.job_type !== "waiting_list") return true;
+        const hasActiveVisit = (row.crm_job_visits ?? []).some((v: any) => !v.deleted_at);
+        return !hasActiveVisit;
+      });
+
+      return (rows.map((row) => mapJob({
+        ...row,
+        service_address: row.service_address ?? row.clients?.billing_address ?? null,
+        service_city:    row.service_city    ?? row.clients?.billing_city    ?? null,
+        service_state:   row.service_state   ?? row.clients?.billing_state   ?? null,
+        service_zip:     row.service_zip     ?? row.clients?.billing_zip     ?? null,
+      }))) as CRMJob[];
     },
   });
 }
@@ -361,7 +379,6 @@ function mapJobFull(row: any): CRMJob {
     arrivalWindowHours: row.arrival_window_hours ?? null,
     startDateWindow: row.start_date_window ?? null,
     endDateWindow: row.end_date_window ?? null,
-    createWorkOrder: row.create_work_order ?? false,
     isComplete: row.is_complete ?? false,
     serviceTotalCents: row.service_total_cents ?? 0,
     productTotalCents: row.product_total_cents ?? 0,
@@ -797,7 +814,6 @@ export function useCreateClientJob() {
           waiting_list_end: values.waitingListEnd || null,
           start_date_window: values.startDateWindow || null,
           end_date_window: values.endDateWindow || null,
-          create_work_order: values.createWorkOrder,
           is_complete: values.isComplete,
           notes: values.notes || null,
           notes_to_crew: values.notesToCrew || null,
@@ -1161,7 +1177,6 @@ export function useCreateJobsFromEstimate() {
           conflict_days: [],
           man_count: 1,
           call_ahead: false,
-          create_work_order: false,
           is_complete: false,
           invoice_separately: false,
         })

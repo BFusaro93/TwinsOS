@@ -12,6 +12,7 @@ import { useClients } from "@/lib/hooks/use-clients";
 import type { EstimateStage } from "@/types/crm-estimates";
 import type { InvoiceStatus } from "@/types/crm-invoices";
 import { PermissionGate } from "@/components/shared/PermissionGate";
+import { RevenueSnapshot } from "@/components/crm/reports/RevenueSnapshot";
 
 const STAGE_COLOR: Record<EstimateStage, string> = {
   draft:    "bg-slate-100 text-slate-600",
@@ -192,6 +193,8 @@ export function MyDay() {
           </p>
         </div>
       </div>
+
+      <RevenueSnapshot />
 
       {/* Two-column content */}
       <div className="grid grid-cols-[3fr_2fr] gap-4 flex-1">
