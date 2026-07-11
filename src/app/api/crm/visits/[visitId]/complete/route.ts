@@ -180,13 +180,16 @@ export async function POST(
   const v = visit as any;
   if (v.client_id) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (supabase as any).from("client_activity").insert({
+    const { error: activityError } = await (supabase as any).from("client_activity").insert({
       client_id: v.client_id,
       activity_type: "job",
       subject: `Visit completed${v.invoice_description ? `: ${v.invoice_description}` : ""}`,
       ref_id: v.job_id,
       ref_table: "crm_jobs",
     });
+    if (activityError) {
+      console.error("[crm/visits/complete] Failed to log client_activity:", activityError);
+    }
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

@@ -99,7 +99,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Failed to create ticket" }, { status: 500 });
   }
 
-  await supabase.from("client_activity").insert({
+  const { error: activityError } = await supabase.from("client_activity").insert({
     org_id: ctx.orgId,
     client_id: ctx.clientId,
     activity_type: "ticket",
@@ -109,6 +109,9 @@ export async function POST(req: Request) {
     ref_id: ticket.id,
     ref_table: "crm_tickets",
   });
+  if (activityError) {
+    console.error("[portal/tickets] Failed to log client_activity:", activityError);
+  }
 
   // ── Send notification email ─────────────────────────────────────────────────
   // Priority: sales rep assigned to client → support_email in portal settings → skip

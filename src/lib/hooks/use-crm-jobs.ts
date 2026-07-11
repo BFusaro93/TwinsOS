@@ -290,13 +290,14 @@ export function useUpdateJobStatus() {
       if (resolvedClientId) {
         const label = status.replace(/_/g, " ");
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await (supabase as any).from("client_activity").insert({
+        const { error: activityError } = await (supabase as any).from("client_activity").insert({
           client_id: resolvedClientId,
           activity_type: "job",
           subject: `Job ${label}`,
           ref_id: id,
           ref_table: "crm_jobs",
         });
+        if (activityError) console.error("[use-crm-jobs] Failed to log client_activity:", activityError);
       }
 
       return { scheduledDate };
