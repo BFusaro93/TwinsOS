@@ -1,3 +1,5 @@
+import type { DiscountType } from "./crm-discounts";
+
 export type EstimateStage =
   | 'draft'
   | 'quote'
@@ -30,6 +32,10 @@ export interface EstimateLineItem {
   rateCents: number;
   visits: number;
   totalCents: number;
+  discountCents: number;
+  discountType: DiscountType | null;
+  discountValue: number | null;
+  appliedDiscountId: string | null;
   budgetedHours: number;
   totalBudgetedHours: number;
   costCents: number;
@@ -91,6 +97,9 @@ export interface Estimate {
   // financials
   subtotalCents: number;
   discountCents: number;
+  discountType: DiscountType | null;
+  discountValue: number | null;
+  appliedDiscountId: string | null;
   taxRateBps: number;
   taxCents: number;
   totalCents: number;

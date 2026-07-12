@@ -25,6 +25,10 @@ function mapLineItem(row: any): EstimateLineItem {
     rateCents: row.rate_cents,
     visits: row.visits,
     totalCents: row.total_cents,
+    discountCents: row.discount_cents ?? 0,
+    discountType: row.discount_type ?? null,
+    discountValue: row.discount_value ?? null,
+    appliedDiscountId: row.applied_discount_id ?? null,
     budgetedHours: Number(row.budgeted_hours),
     totalBudgetedHours: Number(row.total_budgeted_hours),
     costCents: row.cost_cents,
@@ -86,6 +90,9 @@ function mapEstimate(row: any): Estimate {
     workOrderNumber: row.work_order_number,
     subtotalCents: row.subtotal_cents,
     discountCents: row.discount_cents,
+    discountType: row.discount_type ?? null,
+    discountValue: row.discount_value ?? null,
+    appliedDiscountId: row.applied_discount_id ?? null,
     taxRateBps: row.tax_rate_bps,
     taxCents: row.tax_cents,
     totalCents: row.total_cents,
@@ -314,12 +321,28 @@ export function useUpsertLineItem() {
       item: Record<string, any>;
     }) => {
       const supabase = createClient();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error } = await (supabase as any)
-        .from("estimate_line_items")
+      // A blind .upsert() with a partial payload (e.g. just a discount or
+      // notes patch on an existing row) fails NOT NULL validation on columns
+      // like service_name that aren't in the patch — Postgres checks the
+      // INSERT side of "INSERT ... ON CONFLICT DO UPDATE" regardless of
+      // whether the conflict branch fires. Existing rows must go through a
+      // real UPDATE instead.
+      if (item.id) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        .upsert({ estimate_id: estimateId, ...item } as any);
-      if (error) throw error;
+        const { id, ...patch } = item;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error } = await (supabase as any)
+          .from("estimate_line_items")
+          .update(patch)
+          .eq("id", id);
+        if (error) throw error;
+      } else {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error } = await (supabase as any)
+          .from("estimate_line_items")
+          .insert({ estimate_id: estimateId, ...item });
+        if (error) throw error;
+      }
     },
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: ["estimates", "detail", vars.estimateId] });
@@ -440,6 +463,9 @@ export function useSaveEstimateFinancials() {
       taxRateBps,
       overheadRateBps,
       discountCents,
+      discountType,
+      discountValue,
+      appliedDiscountId,
       perTypeOverhead,
     }: {
       id: string;
@@ -448,9 +474,14 @@ export function useSaveEstimateFinancials() {
       taxRateBps: number;
       overheadRateBps: number;
       discountCents: number;
+      discountType?: "percent" | "flat" | null;
+      discountValue?: number | null;
+      appliedDiscountId?: string | null;
       perTypeOverhead?: OverheadSettings;
     }) => {
-      const subtotalCents = lineItems.reduce((s, li) => s + li.totalCents, 0);
+      // Subtotal is net of each line's own discount; the document-level
+      // discount is a separate reduction stacked on top of that.
+      const subtotalCents = lineItems.reduce((s, li) => s + (li.totalCents - li.discountCents), 0);
       const totalCostCents = lineItems.reduce((s, li) => s + li.totalCostCents, 0);
       const directTotal = directCosts.reduce((s, dc) => s + dc.totalCents, 0);
       const revenueCents = subtotalCents - discountCents;
@@ -484,6 +515,9 @@ export function useSaveEstimateFinancials() {
         .update({
           subtotal_cents: subtotalCents,
           discount_cents: discountCents,
+          discount_type: discountType ?? null,
+          discount_value: discountValue ?? null,
+          applied_discount_id: appliedDiscountId ?? null,
           tax_rate_bps: taxRateBps,
           tax_cents: taxCents,
           total_cents: totalCents,
