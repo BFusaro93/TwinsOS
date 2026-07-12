@@ -59,7 +59,11 @@ function JobDetailPane({ jobId }: { jobId: string }) {
   const router = useRouter();
   const { isCrew: isCrewRole, canAnnotate } = usePhotoAccess();
   const { data: job, isLoading } = usePhotoJob(jobId);
+  // Non-archived projects for the "link a new project" picker; the full list
+  // (including archived) so an already-linked project doesn't appear
+  // disconnected here just because it was archived elsewhere.
   const { data: projects = [] } = useProjects();
+  const { data: allProjects = [] } = useProjects(true);
   const { data: clients = [] } = useClients();
   const { mutate: updateJob, isPending: saving } = useUpdatePhotoJob();
   const { mutate: archiveJob, isPending: archiving } = useArchivePhotoJob();
@@ -127,9 +131,14 @@ function JobDetailPane({ jobId }: { jobId: string }) {
     );
   }
 
-  const linkedProject = job?.projectId ? projects.find((p) => p.id === job.projectId) ?? null : null;
+  const linkedProject = job?.projectId ? allProjects.find((p) => p.id === job.projectId) ?? null : null;
   const linkedClient = job?.clientId ? clients.find((c) => c.id === job.clientId) ?? null : null;
   const fullAddress = job ? formatAddress(job.address, job.city, job.state, job.zip) : "";
+  // Keep an already-linked archived project selectable/visible in the picker
+  // even though it's excluded from the default (non-archived) project list.
+  const pickerProjects = linkedProject?.isArchived
+    ? [linkedProject, ...projects]
+    : projects;
 
   if (isLoading) {
     return (
@@ -287,7 +296,7 @@ function JobDetailPane({ jobId }: { jobId: string }) {
                     <Link2 className="h-3.5 w-3.5 shrink-0 text-slate-400" />
                     <select className="flex-1 rounded-md border border-slate-200 px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-brand-500" value={selectedProjectId} onChange={(e) => setSelectedProjectId(e.target.value)}>
                       <option value="">— No project link —</option>
-                      {projects.map((p) => <option key={p.id} value={p.id}>{p.name} ({p.customerName})</option>)}
+                      {pickerProjects.map((p) => <option key={p.id} value={p.id}>{p.name} ({p.customerName})</option>)}
                     </select>
                     <button onClick={saveLink} disabled={saving} className="rounded-md p-1 text-brand-600 hover:bg-brand-50 disabled:opacity-50"><Check className="h-3.5 w-3.5" /></button>
                     <button onClick={() => setEditingLink(false)} className="rounded-md p-1 text-slate-400 hover:bg-slate-100"><X className="h-3.5 w-3.5" /></button>
@@ -299,6 +308,11 @@ function JobDetailPane({ jobId }: { jobId: string }) {
                       <div className="flex items-center gap-1.5">
                         <button onClick={() => setProjectSheetOpen(true)} className="text-xs font-medium text-brand-600 hover:underline">{linkedProject.name}</button>
                         <StatusBadge variant={linkedProject.status === "on_hold" ? "on_hold_project" : linkedProject.status} label={PROJECT_STATUS_LABELS[linkedProject.status]} />
+                        {linkedProject.isArchived && (
+                          <span className="rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                            Archived
+                          </span>
+                        )}
                       </div>
                     ) : (
                       <span className="text-xs text-slate-400">No project linked</span>
