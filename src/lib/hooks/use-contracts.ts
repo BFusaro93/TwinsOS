@@ -216,6 +216,129 @@ export function useUpdateContractStatus() {
   });
 }
 
+const MONTH_KEYS: (keyof MonthlyAmounts)[] = ["jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec"];
+
+function todayStr() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+export interface GenerateInvoicesResult {
+  contractId: string;
+  status: "created" | "skipped";
+  reason?: string;
+}
+
+/**
+ * Manually generates this month's invoice for the given contracts — the
+ * "Create Invoices" action. Unlike the daily cron (/api/cron/contract-invoices)
+ * this ignores billing_day_of_month/is_active/auto_generate, since a manual
+ * click is an explicit request to bill now. It still enforces the same
+ * idempotency check (skip if this contract already has an invoice dated
+ * within the current calendar month) so it can't double-bill.
+ */
+export function useGenerateContractInvoices() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (contractIds: string[]): Promise<GenerateInvoicesResult[]> => {
+      const supabase = createClient();
+      const now = new Date();
+      const currentMonthKey = MONTH_KEYS[now.getMonth()];
+      const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
+      const monthEnd = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()).padStart(2, "0")}`;
+      const today = todayStr();
+
+      const results: GenerateInvoicesResult[] = [];
+
+      for (const contractId of contractIds) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: contract, error: fetchErr } = await (supabase as any)
+          .from("crm_contracts")
+          .select("id, org_id, client_id, title, monthly_amount_cents, monthly_amounts, invoice_line_items")
+          .eq("id", contractId)
+          .is("deleted_at", null)
+          .single();
+        if (fetchErr || !contract) {
+          results.push({ contractId, status: "skipped", reason: "contract not found" });
+          continue;
+        }
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: existing } = await (supabase as any)
+          .from("crm_invoices")
+          .select("id")
+          .eq("client_id", contract.client_id)
+          .eq("contract_id", contract.id)
+          .gte("invoice_date", monthStart)
+          .lte("invoice_date", monthEnd)
+          .is("deleted_at", null)
+          .limit(1)
+          .maybeSingle();
+        if (existing) {
+          results.push({ contractId, status: "skipped", reason: "already billed this month" });
+          continue;
+        }
+
+        const monthlyAmounts = (contract.monthly_amounts ?? {}) as Record<string, number>;
+        const monthAmount: number =
+          monthlyAmounts[currentMonthKey] != null
+            ? monthlyAmounts[currentMonthKey]
+            : contract.monthly_amount_cents;
+        if (monthAmount <= 0) {
+          results.push({ contractId, status: "skipped", reason: "zero amount for month" });
+          continue;
+        }
+
+        const lineItems = (contract.invoice_line_items ?? []) as string[];
+        const description = lineItems.length > 0 ? lineItems.join("\n") : contract.title;
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: invoice, error: invErr } = await (supabase as any)
+          .from("crm_invoices")
+          .insert({
+            client_id: contract.client_id,
+            contract_id: contract.id,
+            description,
+            invoice_date: today,
+            status: "draft",
+            subtotal_cents: monthAmount,
+            total_cents: monthAmount,
+          })
+          .select("id")
+          .single();
+        if (invErr || !invoice) {
+          results.push({ contractId, status: "skipped", reason: invErr?.message ?? "insert failed" });
+          continue;
+        }
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (supabase as any).from("crm_invoice_line_items").insert({
+          invoice_id: invoice.id,
+          description: contract.title,
+          qty: 1,
+          rate_cents: monthAmount,
+          total_cents: monthAmount,
+          sort_order: 1,
+        });
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (supabase as any)
+          .from("crm_contracts")
+          .update({ last_billed_date: today })
+          .eq("id", contractId);
+
+        results.push({ contractId, status: "created" });
+      }
+
+      return results;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["crm-contracts"] });
+      qc.invalidateQueries({ queryKey: ["crm-invoices"] });
+    },
+  });
+}
+
 export function useDeleteContract() {
   const qc = useQueryClient();
   return useMutation({

@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, useEffect } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useInvoices, useUpdateInvoiceStatus } from "@/lib/hooks/use-invoices";
 import { PermissionGate } from "@/components/shared/PermissionGate";
@@ -504,7 +505,16 @@ export function InvoicesList({ clientId }: Props) {
                           </td>
                         );
                       case "client":
-                        return <td key={col.key} className="px-4 py-3 text-slate-600">{inv.clientName}</td>;
+                        return (
+                          <td key={col.key} className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                            <Link
+                              href={`/crm/clients/${inv.clientId}`}
+                              className="font-medium text-brand-600 hover:underline"
+                            >
+                              {inv.clientName}
+                            </Link>
+                          </td>
+                        );
                       case "status":
                         return (
                           <td key={col.key} className="px-4 py-3">

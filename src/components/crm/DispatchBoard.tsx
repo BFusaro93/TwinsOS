@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import { ColumnChooser } from "@/components/shared/ColumnChooser";
 import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
@@ -1123,8 +1124,13 @@ function VisitRow({
       </td>
 
       {/* Client */}
-      <td className="min-w-[140px] px-2 py-2">
-        <p className="font-semibold text-brand-600 truncate max-w-[140px]">{visit.clientName ?? "—"}</p>
+      <td className="min-w-[140px] px-2 py-2" onClick={(e) => e.stopPropagation()}>
+        <Link
+          href={`/crm/clients/${visit.clientId}`}
+          className="block truncate max-w-[140px] font-medium text-brand-600 hover:underline"
+        >
+          {visit.clientName ?? "—"}
+        </Link>
       </td>
 
       {/* Service */}

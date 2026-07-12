@@ -461,7 +461,7 @@ export function EstimatesList({ clientId }: Props) {
                     {visibleColumns.map((col) => {
                       switch (col.key) {
                         case "number":
-                          return <td key={col.key} className="px-3 py-2.5 text-xs font-mono text-slate-400">{e.estimateNumber ?? "—"}</td>;
+                          return <td key={col.key} className="px-3 py-2.5 text-xs font-mono text-slate-400">{e.estimateNumber ? `#${e.estimateNumber}` : "—"}</td>;
                         case "stage":
                           return (
                             <td key={col.key} className="px-3 py-2.5">
@@ -472,8 +472,8 @@ export function EstimatesList({ clientId }: Props) {
                           );
                         case "client":
                           return (
-                            <td key={col.key} className="px-3 py-2.5 max-w-[180px]">
-                              <Link href={`/crm/estimates/${e.id}`} className="block font-medium text-slate-900 hover:text-brand-600 hover:underline truncate">
+                            <td key={col.key} className="px-3 py-2.5 max-w-[180px]" onClick={(ev) => ev.stopPropagation()}>
+                              <Link href={`/crm/clients/${e.clientId}`} className="block font-medium text-brand-600 hover:underline truncate">
                                 {e.clientName ?? "—"}
                               </Link>
                               {e.clientCity && (

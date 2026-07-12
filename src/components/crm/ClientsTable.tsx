@@ -718,7 +718,7 @@ export function ClientsTable({ onSelect }: Props) {
                         {client.accountType === "commercial"
                           ? <Building2 className="h-3.5 w-3.5 shrink-0 text-slate-400" />
                           : <Home className="h-3.5 w-3.5 shrink-0 text-slate-400" />}
-                        <span className="font-medium text-slate-900">{client.displayName}</span>
+                        <span className="font-medium text-brand-600">{client.displayName}</span>
                         {client.doNotMarket && <span className="text-[9px] text-slate-400 border rounded px-1">DNM</span>}
                       </div>
                     </td>

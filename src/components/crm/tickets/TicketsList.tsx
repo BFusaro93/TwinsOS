@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import {
   useTickets,
   useCreateTicket,
@@ -439,11 +440,11 @@ export function TicketsList({ clientId, typeFilter, title = "Tickets", descripti
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
     const typeFiltered = typeFilter ? all.filter((t) => t.type === typeFilter) : all;
     return {
-      open:      all.filter((t) => t.status === "open").length,
-      on_hold:   all.filter((t) => t.status === "on_hold").length,
-      pending:   all.filter((t) => t.status === "pending").length,
-      closed:    all.filter((t) => t.status === "closed").length,
-      total:     all.length,
+      open:      typeFiltered.filter((t) => t.status === "open").length,
+      on_hold:   typeFiltered.filter((t) => t.status === "on_hold").length,
+      pending:   typeFiltered.filter((t) => t.status === "pending").length,
+      closed:    typeFiltered.filter((t) => t.status === "closed").length,
+      total:     typeFiltered.length,
       thisWeek:  typeFiltered.filter((t) => t.createdAt && new Date(t.createdAt) >= weekStart).length,
       thisMonth: typeFiltered.filter((t) => t.createdAt && new Date(t.createdAt) >= monthStart).length,
       typeTotal: typeFiltered.length,
@@ -770,7 +771,7 @@ export function TicketsList({ clientId, typeFilter, title = "Tickets", descripti
                       className="rounded border-slate-300 accent-brand-500"
                     />
                   </td>
-                  <td className="px-4 py-3 font-mono text-xs font-bold text-slate-700">
+                  <td className="px-4 py-3 font-mono text-xs text-slate-400">
                     #{t.ticketNumber}
                   </td>
                   <td className="px-4 py-3">
@@ -780,8 +781,14 @@ export function TicketsList({ clientId, typeFilter, title = "Tickets", descripti
                     <PriorityBadge priority={t.priority} />
                   </td>
                   {!clientId && (
-                    <td className="px-4 py-3 text-blue-600 hover:underline font-medium">
-                      {t.clientName ?? "—"}
+                    <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                      {t.clientId ? (
+                        <Link href={`/crm/clients/${t.clientId}`} className="font-medium text-brand-600 hover:underline">
+                          {t.clientName ?? "—"}
+                        </Link>
+                      ) : (
+                        <span className="font-medium text-slate-400">{t.clientName ?? "—"}</span>
+                      )}
                     </td>
                   )}
                   <td className="px-4 py-3 text-slate-800 font-medium">

@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState } from "react";
+import Link from "next/link";
 import {
   useContracts,
   useCreateContract,
@@ -10,8 +11,11 @@ import {
   useContractNotes,
   useCreateContractNote,
   useDeleteContractNote,
+  useGenerateContractInvoices,
 } from "@/lib/hooks/use-contracts";
 import { useClients } from "@/lib/hooks/use-clients";
+import { useCRMServices } from "@/lib/hooks/use-crm-jobs";
+import { useEmployees } from "@/lib/hooks/use-employees";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -31,6 +35,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -42,10 +47,11 @@ import {
 import { PageHeader } from "@/components/shared/PageHeader";
 import { ColumnChooser } from "@/components/shared/ColumnChooser";
 import type { ColumnDef } from "@/components/shared/ColumnChooser";
+import { AttachmentsSection } from "@/components/shared/AttachmentsSection";
+import { AuditTrailTab } from "@/components/shared/AuditTrailTab";
 import { cn, formatCurrency } from "@/lib/utils";
-import { Plus, Pencil, ChevronDown, Trash2, X, ArrowUp, ArrowDown, Upload, Search } from "lucide-react";
+import { Plus, Pencil, ChevronDown, Trash2, X, ArrowUp, ArrowDown, Search } from "lucide-react";
 import { toast } from "sonner";
-import { createClient } from "@/lib/supabase/client";
 import type { CRMContract, MonthlyAmounts } from "@/types/crm-invoices";
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -94,12 +100,15 @@ function fmtDate(d: string | null) {
   });
 }
 
-// ── section header (SA-style dark bar) ────────────────────────────────────────
+// ── section card (matches Edit Employee's dark title bar over a bordered box) ─
 
-function SectionBar({ label }: { label: string }) {
+function Section({ label, children, className }: { label: string; children: React.ReactNode; className?: string }) {
   return (
-    <div className="mb-3 mt-4 rounded bg-slate-600 px-3 py-1.5 text-xs font-semibold text-white first:mt-0">
-      {label}
+    <div className={cn("mb-4 rounded border last:mb-0", className)}>
+      <div className="rounded-t-md bg-[#5a5a5a] px-4 py-2 text-sm font-semibold text-white">
+        {label}
+      </div>
+      <div className="p-4">{children}</div>
     </div>
   );
 }
@@ -113,6 +122,41 @@ function FieldRow({ label, children }: { label: string; children: React.ReactNod
   );
 }
 
+// ── money input — keeps a local text buffer while focused so a re-render
+//    from the formatted-cents value never fights an in-progress keystroke
+//    (the previous controlled `(cents/100).toFixed(2)` value reformatted on
+//    every character, which is why e.g. typing "25" could land on "2.01") ──
+
+function MoneyInput({
+  cents,
+  onCommit,
+  className,
+}: {
+  cents: number;
+  onCommit: (cents: number) => void;
+  className?: string;
+}) {
+  const [text, setText] = useState(() => (cents / 100).toFixed(2));
+  const [focused, setFocused] = useState(false);
+
+  const displayValue = focused ? text : (cents / 100).toFixed(2);
+
+  return (
+    <Input
+      type="text"
+      inputMode="decimal"
+      className={className}
+      value={displayValue}
+      onFocus={() => setText((cents / 100).toFixed(2))}
+      onChange={(e) => { setFocused(true); setText(e.target.value); }}
+      onBlur={() => {
+        setFocused(false);
+        onCommit(Math.round((parseFloat(text) || 0) * 100));
+      }}
+    />
+  );
+}
+
 // ── contract details tab ──────────────────────────────────────────────────────
 
 interface DetailsState {
@@ -120,7 +164,6 @@ interface DetailsState {
   title: string;
   startDate: string;
   endDate: string;
-  lineItemInput: string;
   lineItems: string[];
   defaultService: string;
   monthlyAmounts: MonthlyAmounts;
@@ -151,10 +194,10 @@ function ContractDetailsTab({
     onChange({ monthlyAmounts: filled });
   }
 
-  function addLineItem() {
-    const s = state.lineItemInput.trim();
+  function addLineItem(name: string) {
+    const s = name.trim();
     if (!s) return;
-    onChange({ lineItems: [...state.lineItems, s], lineItemInput: "" });
+    onChange({ lineItems: [...state.lineItems, s] });
   }
 
   function moveItem(i: number, dir: -1 | 1) {
@@ -174,160 +217,230 @@ function ContractDetailsTab({
 
   return (
     <div className="overflow-y-auto pr-1">
-      {/* Client */}
-      <SectionBar label="Client" />
-      {!hideClient && (
-        <FieldRow label="Client">
-          <Select value={state.clientId} onValueChange={(v) => onChange({ clientId: v })}>
-            <SelectTrigger className="h-8 text-sm">
-              <SelectValue placeholder="Search Clients…" />
-            </SelectTrigger>
-            <SelectContent>
-              {clients.map((c) => (
-                <SelectItem key={c.id} value={c.id}>{c.displayName}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+      <div className="mb-4 grid grid-cols-2 gap-4">
+        <Section label="Client" className="mb-0">
+          {!hideClient && (
+            <FieldRow label="Client">
+              <Select value={state.clientId} onValueChange={(v) => onChange({ clientId: v })}>
+                <SelectTrigger className="h-8 text-sm">
+                  <SelectValue placeholder="Search Clients…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {clients.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>{c.displayName}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </FieldRow>
+          )}
+          <FieldRow label="Contract Name">
+            <Input
+              className="h-8 text-sm"
+              value={state.title}
+              onChange={(e) => onChange({ title: e.target.value })}
+            />
+          </FieldRow>
+        </Section>
+
+        <Section label="Contract Start & End Date" className="mb-0">
+          <FieldRow label="Start Date">
+            <Input type="date" className="h-8 w-44 text-sm" value={state.startDate} onChange={(e) => onChange({ startDate: e.target.value })} />
+          </FieldRow>
+          <FieldRow label="End Date">
+            <Input type="date" className="h-8 w-44 text-sm" value={state.endDate} onChange={(e) => onChange({ endDate: e.target.value })} />
+          </FieldRow>
+        </Section>
+      </div>
+
+      <Section label="Invoice Description">
+        <FieldRow label="Line Item">
+          <ServiceLineItemPicker onAdd={addLineItem} />
         </FieldRow>
-      )}
-      <FieldRow label="Contract Name">
-        <Input
-          className="h-8 text-sm"
-          value={state.title}
-          onChange={(e) => onChange({ title: e.target.value })}
-        />
-      </FieldRow>
+        {state.lineItems.length > 0 && (
+          <FieldRow label="Invoice Line Items">
+            <div className="rounded border bg-slate-50 p-1.5">
+              {state.lineItems.map((item, i) => (
+                <div key={i} className="flex items-center gap-1 py-0.5 text-sm">
+                  <span className="flex-1 truncate">{item}</span>
+                  <button onClick={() => moveItem(i, -1)} className="p-0.5 text-slate-400 hover:text-slate-600"><ArrowUp className="h-3 w-3" /></button>
+                  <button onClick={() => moveItem(i, 1)} className="p-0.5 text-slate-400 hover:text-slate-600"><ArrowDown className="h-3 w-3" /></button>
+                  <button onClick={() => removeItem(i)} className="p-0.5 text-slate-400 hover:text-red-500"><X className="h-3 w-3" /></button>
+                </div>
+              ))}
+            </div>
+          </FieldRow>
+        )}
+      </Section>
 
-      {/* Dates */}
-      <SectionBar label="Contract Start & End Date" />
-      <FieldRow label="Start Date">
-        <Input type="date" className="h-8 w-44 text-sm" value={state.startDate} onChange={(e) => onChange({ startDate: e.target.value })} />
-      </FieldRow>
-      <FieldRow label="End Date">
-        <Input type="date" className="h-8 w-44 text-sm" value={state.endDate} onChange={(e) => onChange({ endDate: e.target.value })} />
-      </FieldRow>
-
-      {/* Invoice Description */}
-      <SectionBar label="Invoice Description" />
-      <FieldRow label="Line Item">
-        <div className="flex gap-1.5">
-          <Input
-            className="h-8 text-sm"
-            value={state.lineItemInput}
-            onChange={(e) => onChange({ lineItemInput: e.target.value })}
-            onKeyDown={(e) => e.key === "Enter" && addLineItem()}
-            placeholder="Enter Line Item"
-          />
-          <Button size="icon" className="h-8 w-8 shrink-0" onClick={addLineItem}>
-            <Plus className="h-3.5 w-3.5" />
-          </Button>
-        </div>
-      </FieldRow>
-      {state.lineItems.length > 0 && (
-        <FieldRow label="Invoice Line Items">
-          <div className="rounded border bg-slate-50 p-1.5">
-            {state.lineItems.map((item, i) => (
-              <div key={i} className="flex items-center gap-1 py-0.5 text-sm">
-                <span className="flex-1 truncate">{item}</span>
-                <button onClick={() => moveItem(i, -1)} className="p-0.5 text-slate-400 hover:text-slate-600"><ArrowUp className="h-3 w-3" /></button>
-                <button onClick={() => moveItem(i, 1)} className="p-0.5 text-slate-400 hover:text-slate-600"><ArrowDown className="h-3 w-3" /></button>
-                <button onClick={() => removeItem(i)} className="p-0.5 text-slate-400 hover:text-red-500"><X className="h-3 w-3" /></button>
+      <Section label="Invoice Details">
+        <div className="grid grid-cols-[1fr_1fr_260px] gap-x-6 gap-y-2">
+          {/* Left months */}
+          <div className="flex flex-col gap-2">
+            {monthsLeft.map(({ key, label }) => (
+              <div key={key} className="flex items-center gap-2">
+                <span className="w-24 shrink-0 text-sm text-slate-600">{label}</span>
+                <MoneyInput
+                  className="h-7 w-28 text-sm"
+                  cents={state.monthlyAmounts[key] ?? 0}
+                  onCommit={(cents) => onChange({
+                    monthlyAmounts: { ...state.monthlyAmounts, [key]: cents },
+                  })}
+                />
+                {key === "jan" && (
+                  <button
+                    className="text-xs font-semibold text-brand-600 hover:underline"
+                    onClick={autoFill}
+                  >
+                    Auto Fill
+                  </button>
+                )}
               </div>
             ))}
           </div>
-        </FieldRow>
-      )}
-
-      {/* Invoice Details */}
-      <SectionBar label="Invoice Details" />
-      <div className="mb-3 grid grid-cols-[1fr_1fr_auto] gap-x-6 gap-y-2">
-        {/* Left months */}
-        <div className="flex flex-col gap-2">
-          {monthsLeft.map(({ key, label }) => (
-            <div key={key} className="flex items-center gap-2">
-              <span className="w-24 shrink-0 text-sm text-slate-600">{label}</span>
+          {/* Right months */}
+          <div className="flex flex-col gap-2">
+            {monthsRight.map(({ key, label }) => (
+              <div key={key} className="flex items-center gap-2">
+                <span className="w-24 shrink-0 text-sm text-slate-600">{label}</span>
+                <MoneyInput
+                  className="h-7 w-28 text-sm"
+                  cents={state.monthlyAmounts[key] ?? 0}
+                  onCommit={(cents) => onChange({
+                    monthlyAmounts: { ...state.monthlyAmounts, [key]: cents },
+                  })}
+                />
+              </div>
+            ))}
+          </div>
+          {/* Right-side settings */}
+          <div className="flex flex-col gap-2 pl-4 border-l border-slate-200">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-sm text-slate-600">Billing Day of Month</span>
               <Input
                 type="number"
-                className="h-7 w-28 text-sm"
-                value={((state.monthlyAmounts[key] ?? 0) / 100).toFixed(2)}
-                onChange={(e) => onChange({
-                  monthlyAmounts: { ...state.monthlyAmounts, [key]: Math.round(parseFloat(e.target.value || "0") * 100) },
-                })}
-              />
-              {key === "jan" && (
-                <button
-                  className="text-xs font-semibold text-brand-600 hover:underline"
-                  onClick={autoFill}
-                >
-                  Auto Fill
-                </button>
-              )}
-            </div>
-          ))}
-        </div>
-        {/* Right months */}
-        <div className="flex flex-col gap-2">
-          {monthsRight.map(({ key, label }) => (
-            <div key={key} className="flex items-center gap-2">
-              <span className="w-24 shrink-0 text-sm text-slate-600">{label}</span>
-              <Input
-                type="number"
-                className="h-7 w-28 text-sm"
-                value={((state.monthlyAmounts[key] ?? 0) / 100).toFixed(2)}
-                onChange={(e) => onChange({
-                  monthlyAmounts: { ...state.monthlyAmounts, [key]: Math.round(parseFloat(e.target.value || "0") * 100) },
-                })}
+                min={1} max={31}
+                className="h-7 w-16 text-sm"
+                value={state.billingDayOfMonth}
+                onChange={(e) => onChange({ billingDayOfMonth: parseInt(e.target.value) || 1 })}
               />
             </div>
-          ))}
-        </div>
-        {/* Right-side settings */}
-        <div className="flex flex-col gap-2 pl-4 border-l border-slate-200">
-          <div className="flex items-center gap-2">
-            <span className="w-36 text-sm text-slate-600">Billing Day of Month</span>
-            <Input
-              type="number"
-              min={1} max={31}
-              className="h-7 w-16 text-sm"
-              value={state.billingDayOfMonth}
-              onChange={(e) => onChange({ billingDayOfMonth: parseInt(e.target.value) || 1 })}
-            />
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="w-36 text-sm text-slate-600">Bill 1 Month in Advance</span>
-            <Checkbox
-              checked={state.billMonthInAdvance}
-              onCheckedChange={(v) => onChange({ billMonthInAdvance: !!v })}
-            />
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="w-36 text-sm text-slate-600">Payment Type</span>
-            <Select value={state.paymentType} onValueChange={(v) => onChange({ paymentType: v })}>
-              <SelectTrigger className="h-7 w-36 text-sm"><SelectValue placeholder="—" /></SelectTrigger>
-              <SelectContent>
-                {PAYMENT_TYPES.map((p) => <SelectItem key={p} value={p}>{p}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="w-36 text-sm text-slate-600">PO Number</span>
-            <Input className="h-7 w-36 text-sm" value={state.poNumber} onChange={(e) => onChange({ poNumber: e.target.value })} />
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="w-36 text-sm text-slate-600">Auto Generate</span>
-            <Checkbox checked={state.autoGenerate} onCheckedChange={(v) => onChange({ autoGenerate: !!v })} />
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="w-36 text-sm text-slate-600">Active</span>
-            <Checkbox checked={state.isActive} onCheckedChange={(v) => onChange({ isActive: !!v })} />
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="w-36 text-sm text-slate-600">Include Sub Properties by Default</span>
-            <Checkbox checked={state.includeSubProperties} onCheckedChange={(v) => onChange({ includeSubProperties: !!v })} />
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-sm text-slate-600">Bill 1 Month in Advance</span>
+              <Checkbox
+                checked={state.billMonthInAdvance}
+                onCheckedChange={(v) => onChange({ billMonthInAdvance: !!v })}
+              />
+            </div>
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-sm text-slate-600">Payment Type</span>
+              <Select value={state.paymentType} onValueChange={(v) => onChange({ paymentType: v })}>
+                <SelectTrigger className="h-7 w-32 shrink-0 text-sm"><SelectValue placeholder="—" /></SelectTrigger>
+                <SelectContent>
+                  {PAYMENT_TYPES.map((p) => <SelectItem key={p} value={p}>{p}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-sm text-slate-600">PO Number</span>
+              <Input className="h-7 w-32 shrink-0 text-sm" value={state.poNumber} onChange={(e) => onChange({ poNumber: e.target.value })} />
+            </div>
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-sm text-slate-600">Auto Generate</span>
+              <Checkbox checked={state.autoGenerate} onCheckedChange={(v) => onChange({ autoGenerate: !!v })} />
+            </div>
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-sm text-slate-600">Active</span>
+              <Checkbox checked={state.isActive} onCheckedChange={(v) => onChange({ isActive: !!v })} />
+            </div>
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-sm text-slate-600">Include Sub Properties by Default</span>
+              <Checkbox checked={state.includeSubProperties} onCheckedChange={(v) => onChange({ includeSubProperties: !!v })} />
+            </div>
           </div>
         </div>
-      </div>
+      </Section>
     </div>
+  );
+}
+
+// ── searchable "line item" picker — pulls from the services catalog instead
+//    of accepting arbitrary free text ──────────────────────────────────────
+
+function ServiceLineItemPicker({ onAdd }: { onAdd: (name: string) => void }) {
+  const { data: services } = useCRMServices();
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const [customText, setCustomText] = useState("");
+
+  const lc = search.toLowerCase();
+  const filtered = (services ?? []).filter((s) =>
+    s.isActive && (!lc || s.name.toLowerCase().includes(lc))
+  );
+
+  function pick(name: string) {
+    onAdd(name);
+    setOpen(false);
+    setSearch("");
+  }
+
+  return (
+    <Popover open={open} onOpenChange={(o) => { setOpen(o); if (!o) { setSearch(""); setCustomText(""); } }}>
+      <PopoverTrigger asChild>
+        <Button variant="outline" size="sm" className="h-8 text-xs">
+          <Plus className="mr-1.5 h-3.5 w-3.5" /> Add Line Item
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-80 p-0">
+        <div className="border-b px-2 py-1.5">
+          <Input
+            autoFocus
+            placeholder="Search services…"
+            className="h-7 text-xs"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+        <div className="max-h-64 overflow-y-auto py-1">
+          {filtered.length > 0 ? (
+            filtered.map((s) => (
+              <button
+                key={s.id}
+                className="flex w-full items-center justify-between px-3 py-1.5 text-xs hover:bg-slate-50"
+                onClick={() => pick(s.name)}
+              >
+                <span className="font-medium text-slate-900">{s.name}</span>
+                {!!s.defaultRateCents && s.defaultRateCents > 0 && (
+                  <span className="ml-2 shrink-0 text-[10px] text-slate-400">
+                    {formatCurrency(s.defaultRateCents)}
+                  </span>
+                )}
+              </button>
+            ))
+          ) : (
+            <div className="px-3 py-3 text-xs text-slate-400">
+              {lc ? `No services matching “${search}”` : "No services found"}
+            </div>
+          )}
+        </div>
+        <div className="flex gap-1.5 border-t p-1.5">
+          <Input
+            placeholder="Or type a custom line…"
+            className="h-7 text-xs"
+            value={customText}
+            onChange={(e) => setCustomText(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter" && customText.trim()) { pick(customText); setCustomText(""); } }}
+          />
+          <Button
+            size="icon"
+            className="h-7 w-7 shrink-0"
+            disabled={!customText.trim()}
+            onClick={() => { pick(customText); setCustomText(""); }}
+          >
+            <Plus className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -341,21 +454,37 @@ function OtherDetailsTab({
   salesRep: string;
   onChange: (patch: { source?: string; salesRep?: string }) => void;
 }) {
+  const { data: employees } = useEmployees();
+  const salesReps = (employees ?? []).filter((e) => e.isSalesRep);
+
   return (
     <div>
-      <SectionBar label="Client Source" />
-      <FieldRow label="Source">
-        <Select value={source} onValueChange={(v) => onChange({ source: v })}>
-          <SelectTrigger className="h-8 w-64 text-sm"><SelectValue placeholder="—" /></SelectTrigger>
-          <SelectContent>
-            {SOURCE_OPTIONS.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-          </SelectContent>
-        </Select>
-      </FieldRow>
-      <SectionBar label="Sales Person" />
-      <FieldRow label="Sales Person">
-        <Input className="h-8 w-64 text-sm" value={salesRep} onChange={(e) => onChange({ salesRep: e.target.value })} placeholder="Name…" />
-      </FieldRow>
+      <Section label="Client Source">
+        <FieldRow label="Source">
+          <Select value={source} onValueChange={(v) => onChange({ source: v })}>
+            <SelectTrigger className="h-8 w-64 text-sm"><SelectValue placeholder="—" /></SelectTrigger>
+            <SelectContent>
+              {SOURCE_OPTIONS.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </FieldRow>
+      </Section>
+      <Section label="Sales Person">
+        <FieldRow label="Sales Person">
+          <Select value={salesRep} onValueChange={(v) => onChange({ salesRep: v })}>
+            <SelectTrigger className="h-8 w-64 text-sm"><SelectValue placeholder="Assign sales rep…" /></SelectTrigger>
+            <SelectContent>
+              {salesReps.map((e) => {
+                const name = `${e.firstName} ${e.lastName}`;
+                return <SelectItem key={e.id} value={name}>{name}</SelectItem>;
+              })}
+              {salesRep && !salesReps.some((e) => `${e.firstName} ${e.lastName}` === salesRep) && (
+                <SelectItem value={salesRep}>{salesRep}</SelectItem>
+              )}
+            </SelectContent>
+          </Select>
+        </FieldRow>
+      </Section>
     </div>
   );
 }
@@ -365,15 +494,13 @@ function OtherDetailsTab({
 function JobsUnderContractTab({ contractId }: { contractId?: string }) {
   if (!contractId) {
     return (
-      <div>
-        <SectionBar label="Scheduled Services" />
-        <p className="py-4 text-sm text-slate-400">Save the contract first to assign jobs.</p>
-      </div>
+      <Section label="Scheduled Services">
+        <p className="text-sm text-slate-400">Save the contract first to assign jobs.</p>
+      </Section>
     );
   }
   return (
-    <div>
-      <SectionBar label="Scheduled Services" />
+    <Section label="Scheduled Services">
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b text-left text-xs font-semibold text-slate-500">
@@ -392,7 +519,7 @@ function JobsUnderContractTab({ contractId }: { contractId?: string }) {
           </tr>
         </tbody>
       </table>
-    </div>
+    </Section>
   );
 }
 
@@ -473,78 +600,6 @@ function ContractNotesTab({ contractId }: { contractId?: string }) {
   );
 }
 
-// ── attachments tab ───────────────────────────────────────────────────────────
-
-function AttachmentsTab({ contractId }: { contractId: string }) {
-  const fileRef = useRef<HTMLInputElement>(null);
-  const [files, setFiles] = useState<{ name: string; date: string; path: string }[]>([]);
-  const [uploading, setUploading] = useState(false);
-
-  async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setUploading(true);
-    try {
-      const supabase = createClient();
-      const path = `contracts/${contractId}/${Date.now()}_${file.name}`;
-      const { error } = await supabase.storage.from("attachments").upload(path, file);
-      if (error) throw error;
-      setFiles((prev) => [...prev, { name: file.name, date: new Date().toLocaleDateString(), path }]);
-      toast.success("Uploaded");
-    } catch { toast.error("Upload failed"); }
-    finally { setUploading(false); if (fileRef.current) fileRef.current.value = ""; }
-  }
-
-  async function handleDelete(path: string) {
-    const supabase = createClient();
-    await supabase.storage.from("attachments").remove([path]);
-    setFiles((prev) => prev.filter((f) => f.path !== path));
-  }
-
-  return (
-    <div className="flex flex-col gap-3">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b bg-slate-600 text-left text-xs font-semibold text-white">
-            <th className="px-3 py-2">Attachment Name</th>
-            <th className="px-3 py-2 w-16">Include</th>
-            <th className="px-3 py-2">Description</th>
-            <th className="px-3 py-2 text-right">Date</th>
-          </tr>
-        </thead>
-        <tbody>
-          {files.length === 0 ? (
-            <tr><td colSpan={4} className="py-4 text-center text-sm text-slate-400">No attachments</td></tr>
-          ) : files.map((f) => (
-            <tr key={f.path} className="group border-b hover:bg-slate-50">
-              <td className="px-3 py-2">
-                <div className="flex items-center gap-2">
-                  <button onClick={() => handleDelete(f.path)} className="text-red-500 opacity-0 group-hover:opacity-100">
-                    <X className="h-3.5 w-3.5" />
-                  </button>
-                  <span className="text-brand-600 hover:underline cursor-pointer">{f.name}</span>
-                </div>
-              </td>
-              <td className="px-3 py-2 text-center">
-                <Checkbox />
-              </td>
-              <td className="px-3 py-2 text-slate-400">—</td>
-              <td className="px-3 py-2 text-right text-xs text-slate-500">{f.date}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      <div>
-        <input ref={fileRef} type="file" className="hidden" onChange={handleUpload} />
-        <Button size="sm" variant="outline" onClick={() => fileRef.current?.click()} disabled={uploading}>
-          <Upload className="mr-1.5 h-3.5 w-3.5" />
-          {uploading ? "Uploading…" : "Upload"}
-        </Button>
-      </div>
-    </div>
-  );
-}
-
 // ── contract dialog (new + edit) ──────────────────────────────────────────────
 
 type TabId = "details" | "other" | "jobs" | "notes" | "attachments" | "audit";
@@ -584,7 +639,6 @@ function ContractDialog({
     title: contract?.title ?? "",
     startDate: contract?.startDate ?? "",
     endDate: contract?.endDate ?? "",
-    lineItemInput: "",
     lineItems: contract?.invoiceLineItems ?? [],
     defaultService: contract?.defaultService ?? "",
     monthlyAmounts: contract?.monthlyAmounts ?? {},
@@ -667,22 +721,23 @@ function ContractDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex max-h-[90vh] w-full max-w-4xl flex-col gap-0 overflow-hidden p-0">
+      <DialogContent className="flex h-[85vh] w-full max-w-5xl flex-col gap-0 overflow-hidden p-0">
         <DialogHeader className="shrink-0 border-b px-6 py-4">
           <DialogTitle className="text-xl font-bold">
             {isNew ? "New Contract" : contract.title}
           </DialogTitle>
-          {/* Tab bar */}
-          <div className="flex gap-0 pt-2">
+          {/* Tab bar — wraps instead of scrolling so the mouse wheel never has to
+              choose between scrolling tabs sideways and the dialog vertically */}
+          <div className="flex flex-wrap gap-x-1 gap-y-0 pt-2">
             {tabs.map((t) => (
               <button
                 key={t.id}
                 onClick={() => setActiveTab(t.id)}
                 className={cn(
-                  "rounded-t px-4 py-1.5 text-sm font-medium transition-colors",
+                  "border-b-2 px-3 py-1.5 text-sm font-medium transition-colors",
                   activeTab === t.id
-                    ? "bg-slate-600 text-white"
-                    : "text-brand-600 hover:text-brand-800"
+                    ? "border-brand-500 text-brand-600"
+                    : "border-transparent text-slate-500 hover:text-slate-700"
                 )}
               >
                 {t.label}
@@ -691,7 +746,7 @@ function ContractDialog({
           </div>
         </DialogHeader>
 
-        <div className="flex-1 overflow-y-auto px-6 py-4">
+        <div className="flex-1 overflow-auto px-6 py-4">
           {activeTab === "details" && (
             <ContractDetailsTab
               state={details}
@@ -717,10 +772,10 @@ function ContractDialog({
             <ContractNotesTab contractId={contract?.id} />
           )}
           {activeTab === "attachments" && contract && (
-            <AttachmentsTab contractId={contract.id} />
+            <AttachmentsSection recordType="contract" recordId={contract.id} />
           )}
-          {activeTab === "audit" && (
-            <div className="py-4 text-sm text-slate-400">Audit trail coming soon.</div>
+          {activeTab === "audit" && contract && (
+            <AuditTrailTab recordType="contract" recordId={contract.id} />
           )}
         </div>
 
@@ -775,6 +830,7 @@ export function ContractsList({ clientId }: Props) {
   const { data: clients } = useClients();
   const { mutateAsync: del } = useDeleteContract();
   const { mutateAsync: updateContract } = useUpdateContract();
+  const { mutateAsync: generateInvoices, isPending: generatingInvoices } = useGenerateContractInvoices();
 
   const baseContracts = (contracts ?? []);
   const filtered = baseContracts.filter((c) =>
@@ -804,6 +860,24 @@ export function ContractsList({ clientId }: Props) {
     await Promise.all(ids.map((id) => updateContract({ id, updates: { is_active: active } })));
     toast.success(`${ids.length} contract${ids.length !== 1 ? "s" : ""} updated`);
     clearSelection();
+  }
+
+  async function handleCreateInvoices() {
+    const ids = selected.size > 0 ? [...selected] : filtered.map((c) => c.id);
+    if (ids.length === 0) return;
+    try {
+      const results = await generateInvoices(ids);
+      const created = results.filter((r) => r.status === "created").length;
+      const skipped = results.length - created;
+      if (created === 0) {
+        toast.info(skipped === 1 ? "That contract was already billed this month" : "All selected contracts were already billed this month");
+      } else {
+        toast.success(`${created} invoice${created !== 1 ? "s" : ""} created${skipped > 0 ? `, ${skipped} skipped (already billed)` : ""}`);
+      }
+      clearSelection();
+    } catch {
+      toast.error("Failed to create invoices");
+    }
   }
 
   async function handleDelete(c: CRMContract) {
@@ -863,7 +937,9 @@ export function ContractsList({ clientId }: Props) {
             <DropdownMenuItem onSelect={() => bulkSetActive(false)}>Make Inactive</DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuLabel className="text-xs text-slate-500">Invoice/Export</DropdownMenuLabel>
-            <DropdownMenuItem>Create Invoices</DropdownMenuItem>
+            <DropdownMenuItem onSelect={handleCreateInvoices} disabled={generatingInvoices}>
+              {generatingInvoices ? "Creating…" : "Create Invoices"}
+            </DropdownMenuItem>
             <DropdownMenuItem>Export</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -973,12 +1049,13 @@ export function ContractsList({ clientId }: Props) {
               filtered.map((c) => (
                 <tr
                   key={c.id}
+                  onClick={() => openEdit(c)}
                   className={cn(
-                    "group border-b hover:bg-slate-50",
+                    "group cursor-pointer border-b hover:bg-slate-50",
                     selected.has(c.id) && "bg-brand-50"
                   )}
                 >
-                  <td className="px-3 py-2.5">
+                  <td className="px-3 py-2.5" onClick={(e) => e.stopPropagation()}>
                     <input
                       type="checkbox"
                       className="rounded border-slate-300 accent-brand-500"
@@ -986,7 +1063,7 @@ export function ContractsList({ clientId }: Props) {
                       onChange={() => toggleSelect(c.id)}
                     />
                   </td>
-                  <td className="px-2 py-2.5">
+                  <td className="px-2 py-2.5" onClick={(e) => e.stopPropagation()}>
                     <button
                       onClick={() => openEdit(c)}
                       className="text-slate-400 hover:text-slate-700"
@@ -995,8 +1072,10 @@ export function ContractsList({ clientId }: Props) {
                     </button>
                   </td>
                   {!clientId && visibleKeys.includes("client") && (
-                    <td className="px-3 py-2.5 font-medium text-brand-600 hover:underline cursor-pointer">
-                      {c.clientName ?? "—"}
+                    <td className="px-3 py-2.5" onClick={(e) => e.stopPropagation()}>
+                      <Link href={`/crm/clients/${c.clientId}`} className="font-medium text-brand-600 hover:underline">
+                        {c.clientName ?? "—"}
+                      </Link>
                     </td>
                   )}
                   {visibleKeys.includes("contract") && (
@@ -1029,7 +1108,7 @@ export function ContractsList({ clientId }: Props) {
                   {visibleKeys.includes("last_bill") && (
                     <td className="px-3 py-2.5 text-xs text-slate-500">{fmtDate(c.lastBilledDate)}</td>
                   )}
-                  <td className="px-3 py-2.5">
+                  <td className="px-3 py-2.5" onClick={(e) => e.stopPropagation()}>
                     <button
                       onClick={() => handleDelete(c)}
                       className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-500"
@@ -1050,6 +1129,7 @@ export function ContractsList({ clientId }: Props) {
       </p>
 
       <ContractDialog
+        key={editContract?.id ?? "new"}
         open={dialogOpen}
         onOpenChange={(o) => { setDialogOpen(o); if (!o) setEditContract(undefined); }}
         contract={editContract}

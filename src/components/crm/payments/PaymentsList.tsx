@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { usePayments, useRecordPayment, useUpdatePayment, useRefundPayment, useInvoices, usePaymentAllocations } from "@/lib/hooks/use-invoices";
 import { useClients } from "@/lib/hooks/use-clients";
@@ -771,8 +772,10 @@ export function PaymentsList({ clientId }: Props) {
                     })}
                   </td>
                   {!clientId && (
-                    <td className="px-3 py-2.5">
-                      <div className="font-medium text-slate-700">{p.clientName ?? "—"}</div>
+                    <td className="px-3 py-2.5" onClick={(e) => e.stopPropagation()}>
+                      <Link href={`/crm/clients/${p.clientId}`} className="font-medium text-brand-600 hover:underline">
+                        {p.clientName ?? "—"}
+                      </Link>
                       {p.clientAddress && (
                         <div className="text-xs text-slate-400">{p.clientAddress}</div>
                       )}

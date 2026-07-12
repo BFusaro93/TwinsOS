@@ -29,7 +29,8 @@ export type AuditRecordType =
   | "lead"
   | "crm_job"
   | "invoice"
-  | "estimate";
+  | "estimate"
+  | "contract";
 
 export interface AuditEntry extends BaseRecord {
   recordType: AuditRecordType;
