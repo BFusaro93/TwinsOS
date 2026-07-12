@@ -52,17 +52,22 @@ export async function POST(
 
   // Also write to client_activity for the unified timeline
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  await (supabase as any)
+  const { error: activityError } = await (supabase as any)
     .from("client_activity")
     .insert({
       org_id:        visit.org_id,
       client_id:     visit.client_id,
       activity_type: "crew_note",
-      description:   parsed.data.note,
-      reference_id:  visitId,
+      subject:       "Crew note",
+      body:          parsed.data.note,
+      ref_id:        visitId,
+      ref_table:     "crm_job_visits",
       created_by:    user.id,
       created_at:    now,
     });
+  if (activityError) {
+    console.error("[crm/crew/visits/notes] Failed to log client_activity:", activityError);
+  }
 
   return NextResponse.json(updatedVisit);
 }

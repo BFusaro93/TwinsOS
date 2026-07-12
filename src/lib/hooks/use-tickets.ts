@@ -94,7 +94,7 @@ export function useCreateTicket() {
       const ticket = mapTicket(data);
       if (values.clientId) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await (supabase as any).from("client_activity").insert({
+        const { error: activityError } = await (supabase as any).from("client_activity").insert({
           client_id: values.clientId,
           activity_type: "ticket",
           subject: values.subject || `${values.type} ticket`,
@@ -103,6 +103,7 @@ export function useCreateTicket() {
           ref_id: ticket.id,
           ref_table: "crm_tickets",
         });
+        if (activityError) console.error("[use-tickets] Failed to log client_activity:", activityError);
       }
       return ticket;
     },
