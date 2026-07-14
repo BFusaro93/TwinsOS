@@ -191,3 +191,15 @@ export const DAMAGE_CASE_TYPE_LABELS: Record<string, string> = {
   damage: "Damage",
   warranty: "Warranty",
 };
+
+// ─── Billing / Payment Terms ──────────────────────────────────────────────────
+
+export const BILLING_TERMS_OPTIONS = [
+  { value: "due_on_receipt", label: "Due on Receipt" },
+  { value: "net_10", label: "Net 10" },
+  { value: "net_15", label: "Net 15" },
+  { value: "net_30", label: "Net 30" },
+  { value: "net_45", label: "Net 45" },
+  { value: "net_60", label: "Net 60" },
+  { value: "net_90", label: "Net 90" },
+];
