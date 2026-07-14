@@ -33,7 +33,9 @@ export function CobblestoneCalculatorPage() {
 
   const cobblesNeeded = lengthIn > 0 ? Math.ceil(lengthIn / size.lengthIn) : 0;
   const totalCobbles = cobblesNeeded > 0 ? cobblesNeeded + bufferCount : 0;
-  const pricePerCobble = totalCobbles >= BULK_THRESHOLD ? BULK_PRICE : STANDARD_PRICE;
+  // Tier is based on cobbles needed, not the buffer-inflated total — the buffer
+  // is a safety margin and shouldn't push a job into the bulk price tier.
+  const pricePerCobble = cobblesNeeded >= BULK_THRESHOLD ? BULK_PRICE : STANDARD_PRICE;
   const totalPrice = totalCobbles * pricePerCobble;
 
   const hasValues = lengthIn > 0;
