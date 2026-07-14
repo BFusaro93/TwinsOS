@@ -35,7 +35,7 @@ function mapContract(row: any): CRMContract {
     isActive: row.is_active ?? true,
     includeSubProperties: row.include_sub_properties ?? true,
     source: row.source ?? null,
-    salesRep: row.sales_rep ?? null,
+    salesRepId: row.sales_rep_id ?? null,
     lastBilledDate: row.last_billed_date ?? null,
     monthlyAmounts: (row.monthly_amounts as MonthlyAmounts) ?? {},
     invoiceLineItems: (row.invoice_line_items as string[]) ?? [],
@@ -45,6 +45,7 @@ function mapContract(row: any): CRMContract {
     updatedAt: row.updated_at,
     createdBy: row.created_by,
     clientName: row.clients?.display_name ?? null,
+    salesRepName: row.profiles?.name ?? null,
   };
 }
 
@@ -70,7 +71,7 @@ export function useContracts(clientId?: string, activeOnly?: boolean) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let q = (supabase as any)
         .from("crm_contracts")
-        .select("*, clients(display_name)")
+        .select("*, clients(display_name), profiles!crm_contracts_sales_rep_id_fkey(name)")
         .is("deleted_at", null)
         .order("created_at", { ascending: false });
       if (clientId) q = q.eq("client_id", clientId);
@@ -91,7 +92,7 @@ export function useContract(id: string) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
         .from("crm_contracts")
-        .select("*, clients(display_name)")
+        .select("*, clients(display_name), profiles!crm_contracts_sales_rep_id_fkey(name)")
         .eq("id", id)
         .is("deleted_at", null)
         .single();
@@ -121,7 +122,7 @@ export function useCreateContract() {
       isActive?: boolean;
       includeSubProperties?: boolean;
       source?: string;
-      salesRep?: string;
+      salesRepId?: string;
       monthlyAmounts?: MonthlyAmounts;
       invoiceLineItems?: string[];
       defaultService?: string;
@@ -146,13 +147,13 @@ export function useCreateContract() {
           is_active: values.isActive ?? true,
           include_sub_properties: values.includeSubProperties ?? true,
           source: values.source ?? null,
-          sales_rep: values.salesRep ?? null,
+          sales_rep_id: values.salesRepId ?? null,
           monthly_amounts: values.monthlyAmounts ?? {},
           invoice_line_items: values.invoiceLineItems ?? [],
           default_service: values.defaultService ?? null,
           status: "draft",
         })
-        .select("*, clients(display_name)")
+        .select("*, clients(display_name), profiles!crm_contracts_sales_rep_id_fkey(name)")
         .single();
       if (error) throw error;
       return mapContract(data);
@@ -254,7 +255,7 @@ export function useGenerateContractInvoices() {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data: contract, error: fetchErr } = await (supabase as any)
           .from("crm_contracts")
-          .select("id, org_id, client_id, title, monthly_amount_cents, monthly_amounts, invoice_line_items")
+          .select("id, org_id, client_id, title, monthly_amount_cents, monthly_amounts, invoice_line_items, sales_rep_id")
           .eq("id", contractId)
           .is("deleted_at", null)
           .single();
@@ -298,6 +299,7 @@ export function useGenerateContractInvoices() {
           .insert({
             client_id: contract.client_id,
             contract_id: contract.id,
+            sales_rep_id: contract.sales_rep_id ?? null,
             description,
             invoice_date: today,
             status: "draft",

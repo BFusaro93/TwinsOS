@@ -447,15 +447,16 @@ function ServiceLineItemPicker({ onAdd }: { onAdd: (name: string) => void }) {
 // ── other details tab ─────────────────────────────────────────────────────────
 
 function OtherDetailsTab({
-  source, salesRep,
+  source, salesRepId, salesRepName,
   onChange,
 }: {
   source: string;
-  salesRep: string;
-  onChange: (patch: { source?: string; salesRep?: string }) => void;
+  salesRepId: string;
+  salesRepName?: string | null;
+  onChange: (patch: { source?: string; salesRepId?: string }) => void;
 }) {
   const { data: employees } = useEmployees();
-  const salesReps = (employees ?? []).filter((e) => e.isSalesRep);
+  const salesReps = (employees ?? []).filter((e) => e.isSalesRep && e.userId);
 
   return (
     <div>
@@ -471,15 +472,16 @@ function OtherDetailsTab({
       </Section>
       <Section label="Sales Person">
         <FieldRow label="Sales Person">
-          <Select value={salesRep} onValueChange={(v) => onChange({ salesRep: v })}>
+          <Select value={salesRepId} onValueChange={(v) => onChange({ salesRepId: v })}>
             <SelectTrigger className="h-8 w-64 text-sm"><SelectValue placeholder="Assign sales rep…" /></SelectTrigger>
             <SelectContent>
-              {salesReps.map((e) => {
-                const name = `${e.firstName} ${e.lastName}`;
-                return <SelectItem key={e.id} value={name}>{name}</SelectItem>;
-              })}
-              {salesRep && !salesReps.some((e) => `${e.firstName} ${e.lastName}` === salesRep) && (
-                <SelectItem value={salesRep}>{salesRep}</SelectItem>
+              {salesReps.map((e) => (
+                <SelectItem key={e.userId as string} value={e.userId as string}>
+                  {e.firstName} {e.lastName}
+                </SelectItem>
+              ))}
+              {salesRepId && !salesReps.some((e) => e.userId === salesRepId) && (
+                <SelectItem value={salesRepId}>{salesRepName ?? "Unknown"}</SelectItem>
               )}
             </SelectContent>
           </Select>
@@ -652,7 +654,7 @@ function ContractDialog({
   });
 
   const [source, setSource] = useState(contract?.source ?? "");
-  const [salesRep, setSalesRep] = useState(contract?.salesRep ?? "");
+  const [salesRepId, setSalesRepId] = useState(contract?.salesRepId ?? "");
 
   const { mutateAsync: createContract, isPending: creating } = useCreateContract();
   const { mutateAsync: updateContract, isPending: updating } = useUpdateContract();
@@ -684,7 +686,7 @@ function ContractDialog({
           isActive: details.isActive,
           includeSubProperties: details.includeSubProperties,
           source: source || undefined,
-          salesRep: salesRep || undefined,
+          salesRepId: salesRepId || undefined,
           monthlyAmounts: details.monthlyAmounts,
           invoiceLineItems: details.lineItems,
           defaultService: details.defaultService || undefined,
@@ -707,7 +709,7 @@ function ContractDialog({
             is_active: details.isActive,
             include_sub_properties: details.includeSubProperties,
             source: source || null,
-            sales_rep: salesRep || null,
+            sales_rep_id: salesRepId || null,
             monthly_amounts: details.monthlyAmounts,
             invoice_line_items: details.lineItems,
             default_service: details.defaultService || null,
@@ -758,10 +760,11 @@ function ContractDialog({
           {activeTab === "other" && (
             <OtherDetailsTab
               source={source}
-              salesRep={salesRep}
+              salesRepId={salesRepId}
+              salesRepName={contract?.salesRepName}
               onChange={(p) => {
                 if (p.source !== undefined) setSource(p.source);
-                if (p.salesRep !== undefined) setSalesRep(p.salesRep);
+                if (p.salesRepId !== undefined) setSalesRepId(p.salesRepId);
               }}
             />
           )}

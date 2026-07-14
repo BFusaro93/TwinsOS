@@ -9,9 +9,13 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import { useCreateInvoice } from "@/lib/hooks/use-invoices";
 import { useClients } from "@/lib/hooks/use-clients";
+import { useEmployees } from "@/lib/hooks/use-employees";
+import { ClientCombobox } from "@/components/shared/ClientCombobox";
 import { toast } from "sonner";
 
 const schema = z.object({
@@ -19,6 +23,7 @@ const schema = z.object({
   description: z.string().min(1, "Description required"),
   invoiceDate: z.string().min(1),
   dueDate:     z.string(),
+  salesRepId:  z.string(),
 });
 type FormValues = z.infer<typeof schema>;
 
@@ -40,6 +45,8 @@ interface Props {
 
 export function NewInvoiceDialog({ open, onOpenChange, defaultClientId, onCreated }: Props) {
   const { data: clients } = useClients();
+  const { data: employees } = useEmployees();
+  const salesReps = (employees ?? []).filter((e) => e.isSalesRep && e.userId);
   const { mutateAsync: create, isPending } = useCreateInvoice();
   const { register, handleSubmit, setValue, watch, formState: { errors } } = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -48,12 +55,19 @@ export function NewInvoiceDialog({ open, onOpenChange, defaultClientId, onCreate
       description: "",
       invoiceDate: todayStr(),
       dueDate: thirtyOut(),
+      salesRepId: "",
     },
   });
 
   async function onSubmit(v: FormValues) {
     try {
-      const inv = await create({ clientId: v.clientId, description: v.description, invoiceDate: v.invoiceDate, dueDate: v.dueDate || undefined });
+      const inv = await create({
+        clientId: v.clientId,
+        salesRepId: v.salesRepId || null,
+        description: v.description,
+        invoiceDate: v.invoiceDate,
+        dueDate: v.dueDate || undefined,
+      });
       if (onCreated) {
         onCreated(inv.id);
       } else {
@@ -73,16 +87,12 @@ export function NewInvoiceDialog({ open, onOpenChange, defaultClientId, onCreate
           {!defaultClientId && (
             <div className="flex flex-col gap-1.5">
               <Label>Client *</Label>
-              <Select value={watch("clientId")} onValueChange={(v) => setValue("clientId", v)}>
-                <SelectTrigger className={errors.clientId ? "border-red-400" : ""}>
-                  <SelectValue placeholder="Select client…" />
-                </SelectTrigger>
-                <SelectContent>
-                  {(clients ?? []).map((c) => (
-                    <SelectItem key={c.id} value={c.id}>{c.displayName}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <ClientCombobox
+                value={watch("clientId")}
+                onValueChange={(v) => setValue("clientId", v)}
+                clients={clients ?? []}
+                noneLabel="Select client..."
+              />
               {errors.clientId && <p className="text-xs text-red-500">{errors.clientId.message}</p>}
             </div>
           )}
@@ -100,6 +110,20 @@ export function NewInvoiceDialog({ open, onOpenChange, defaultClientId, onCreate
               <Label>Due Date</Label>
               <Input type="date" {...register("dueDate")} />
             </div>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label>Sales Rep</Label>
+            <Select value={watch("salesRepId")} onValueChange={(v) => setValue("salesRepId", v === "none" ? "" : v)}>
+              <SelectTrigger><SelectValue placeholder="Assign sales rep…" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Unassigned</SelectItem>
+                {salesReps.map((e) => (
+                  <SelectItem key={e.userId as string} value={e.userId as string}>
+                    {e.firstName} {e.lastName}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         </form>
         <DialogFooter>

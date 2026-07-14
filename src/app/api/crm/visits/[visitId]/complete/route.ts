@@ -49,7 +49,7 @@ export async function POST(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: job } = await (supabase as any)
     .from("crm_jobs")
-    .select("id, job_type, contract_id, client_id, invoice_description, rate_cents, po_number, crm_job_services(id, service_name, qty, rate_cents)")
+    .select("id, job_type, contract_id, client_id, invoice_description, rate_cents, po_number, sales_rep_id, crm_job_services(id, service_name, qty, rate_cents)")
     .eq("id", (visit as any).job_id)
     .single();
 
@@ -126,8 +126,9 @@ export async function POST(
             org_id: orgId,
             client_id: j.client_id,
             crm_job_id: j.id,
+            sales_rep_id: j.sales_rep_id ?? null,
             description: j.invoice_description ?? "Service",
-            invoice_date: today,
+            invoice_date: visitDate ?? today,
             status: "draft",
             subtotal_cents: subtotal,
             tax_rate_bps: 0,
@@ -157,6 +158,14 @@ export async function POST(
         }
 
         if (newInvoice && j.client_id) {
+          // Auto-created invoices skip the manual "assign on save" flow, so
+          // assign the number here or it stays null indefinitely.
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { data: invoiceNumber } = await (supabase.rpc as any)(
+            "assign_invoice_number",
+            { p_invoice_id: (newInvoice as any).id }
+          );
+
           // Sync the client's outstanding balance to include this new invoice
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           await (supabase.rpc as any)("sync_client_balance", { p_client_id: j.client_id });
@@ -165,7 +174,7 @@ export async function POST(
           await (supabase as any).from("client_activity").insert({
             client_id: j.client_id,
             activity_type: "invoice",
-            subject: `Invoice #${(newInvoice as any).invoice_number}`,
+            subject: `Invoice #${invoiceNumber}`,
             amount_cents: subtotal,
             ref_id: (newInvoice as any).id,
             ref_table: "crm_invoices",

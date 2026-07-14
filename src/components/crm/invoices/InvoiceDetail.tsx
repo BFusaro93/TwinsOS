@@ -15,6 +15,7 @@ import {
   useVoidInvoice,
 } from "@/lib/hooks/use-invoices";
 import { useCRMServices } from "@/lib/hooks/use-crm-jobs";
+import { useEmployees } from "@/lib/hooks/use-employees";
 import { useOrgSettings } from "@/lib/hooks/use-org-settings";
 import { useDiscounts } from "@/lib/hooks/use-crm-discounts";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -508,6 +509,8 @@ export function InvoiceDetail({
   const { mutateAsync: voidInvoice } = useVoidInvoice();
   const { data: savedServices } = useCRMServices();
   const { data: orgSettings } = useOrgSettings();
+  const { data: employees } = useEmployees();
+  const salesReps = (employees ?? []).filter((e) => e.isSalesRep && e.userId);
   const { data: discounts = [] } = useDiscounts();
   const activeDiscounts = discounts.filter((d) => d.isActive);
 
@@ -1067,6 +1070,31 @@ export function InvoiceDetail({
                         className="w-36"
                         placeholder="Click to add…"
                       />
+                    </td>
+                  </tr>
+                  <tr className="border-b border-slate-50">
+                    <td className="py-2 pr-4 text-slate-400 font-medium">Sales Rep</td>
+                    <td className="py-2">
+                      <Select
+                        value={invoice.salesRepId ?? ""}
+                        onValueChange={(v) => updateHeader({ id: invoice.id, patch: { sales_rep_id: v || null } })}
+                      >
+                        <SelectTrigger className="h-7 text-xs w-44 border border-slate-200 shadow-none">
+                          <SelectValue placeholder="Assign sales rep…" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {salesReps.map((e) => (
+                            <SelectItem key={e.userId as string} value={e.userId as string}>
+                              {e.firstName} {e.lastName}
+                            </SelectItem>
+                          ))}
+                          {invoice.salesRepId && !salesReps.some((e) => e.userId === invoice.salesRepId) && (
+                            <SelectItem value={invoice.salesRepId}>
+                              {invoice.salesRepName ?? "Unknown"}
+                            </SelectItem>
+                          )}
+                        </SelectContent>
+                      </Select>
                     </td>
                   </tr>
                   <tr>

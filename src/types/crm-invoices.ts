@@ -66,6 +66,7 @@ export interface InvoiceLineItem {
   serviceDate: string | null;
   hours: number | null;
   men: number | null;
+  visitId: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -79,6 +80,7 @@ export interface CRMInvoice {
   clientId: string;
   estimateId: string | null;
   crmJobId: string | null;
+  salesRepId: string | null;
   description: string;
   status: InvoiceStatus;
   invoiceDate: string;
@@ -110,6 +112,7 @@ export interface CRMInvoice {
   clientDefaultTaxRateBps?: number;
   clientDefaultTerms?: string;
   clientDefaultPaymentMethod?: string | null;
+  salesRepName?: string | null;
   lineItems?: InvoiceLineItem[];
   payments?: CRMPayment[];
 }
@@ -171,7 +174,7 @@ export interface CRMContract {
   isActive: boolean;
   includeSubProperties: boolean;
   source: string | null;
-  salesRep: string | null;
+  salesRepId: string | null;
   lastBilledDate: string | null;
   monthlyAmounts: MonthlyAmounts;
   invoiceLineItems: string[];
@@ -182,6 +185,7 @@ export interface CRMContract {
   createdBy: string | null;
   // joined
   clientName?: string;
+  salesRepName?: string | null;
 }
 
 export interface CRMContractNote {

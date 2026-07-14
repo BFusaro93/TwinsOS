@@ -61,7 +61,7 @@ export async function GET(request: Request) {
 
   const { data: contracts, error: fetchErr } = await sb
     .from("crm_contracts")
-    .select("id, org_id, client_id, title, billing_day_of_month, monthly_amount_cents, monthly_amounts, invoice_line_items, bill_month_in_advance, payment_type, po_number")
+    .select("id, org_id, client_id, title, billing_day_of_month, monthly_amount_cents, monthly_amounts, invoice_line_items, bill_month_in_advance, payment_type, po_number, sales_rep_id")
     .eq("is_active", true)
     .eq("auto_generate", true)
     .is("deleted_at", null);
@@ -136,6 +136,7 @@ export async function GET(request: Request) {
         org_id: contract.org_id,
         client_id: contract.client_id,
         contract_id: contract.id,
+        sales_rep_id: contract.sales_rep_id ?? null,
         description,
         invoice_date: invoiceDateStr,
         due_date: null,

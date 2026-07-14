@@ -156,10 +156,10 @@ function JobDetailSheet({ job, open, onOpenChange }: { job: CRMJob; open: boolea
               <span className="text-slate-700">{job.schedule}</span>
             </div>
           )}
-          {job.salesRep && (
+          {job.salesRepName && (
             <div className="flex justify-between">
               <span className="text-slate-400">Sales Rep</span>
-              <span className="text-slate-700">{job.salesRep}</span>
+              <span className="text-slate-700">{job.salesRepName}</span>
             </div>
           )}
           {job.source && (
@@ -365,7 +365,7 @@ function defaultForm(clientId: string, jobType: JobType): NewClientJobFormValues
     conflictDays: [],
     inchTrigger: null,
     invoiceType: null,
-    salesRep: null,
+    salesRepId: null,
     source: null,
     paymentType: null,
     poNumber: null,

@@ -26,6 +26,7 @@ function mapLineItem(row: any): InvoiceLineItem {
     serviceDate: row.service_date ?? null,
     hours: row.hours != null ? Number(row.hours) : null,
     men: row.men ?? null,
+    visitId: row.visit_id ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -63,6 +64,7 @@ function mapInvoice(row: any): CRMInvoice {
     clientId: row.client_id,
     estimateId: row.estimate_id,
     crmJobId: row.crm_job_id,
+    salesRepId: row.sales_rep_id ?? null,
     description: row.description,
     status: row.status,
     invoiceDate: row.invoice_date,
@@ -96,6 +98,7 @@ function mapInvoice(row: any): CRMInvoice {
     clientDefaultTaxRateBps: row.clients?.default_tax_rate_bps ?? 0,
     clientDefaultTerms: row.clients?.default_terms ?? "due_on_receipt",
     clientDefaultPaymentMethod: row.clients?.default_payment_method ?? null,
+    salesRepName: row.profiles?.name ?? null,
     lineItems: (row.crm_invoice_line_items ?? []).map(mapLineItem),
     payments: (row.crm_payments ?? []).map(mapPayment),
   };
@@ -111,7 +114,7 @@ export function useInvoices(clientId?: string) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let q = (supabase as any)
         .from("crm_invoices")
-        .select("*, clients(display_name), crm_invoice_line_items(id, name, description, total_cents, is_taxable)")
+        .select("*, clients(display_name), profiles!crm_invoices_sales_rep_id_fkey(name), crm_invoice_line_items(id, name, description, total_cents, is_taxable)")
         .is("deleted_at", null)
         .order("invoice_date", { ascending: false });
       if (clientId) q = q.eq("client_id", clientId);
@@ -130,7 +133,7 @@ export function useInvoice(id: string) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
         .from("crm_invoices")
-        .select("*, clients(display_name, billing_address, billing_city, billing_state, billing_zip, default_tax_rate_bps, default_terms, default_payment_method), crm_invoice_line_items(*), crm_payments(*)")
+        .select("*, clients(display_name, billing_address, billing_city, billing_state, billing_zip, default_tax_rate_bps, default_terms, default_payment_method), profiles!crm_invoices_sales_rep_id_fkey(name), crm_invoice_line_items(*), crm_payments(*)")
         .eq("id", id)
         .is("deleted_at", null)
         .single();
@@ -149,6 +152,7 @@ export function useCreateInvoiceFromEstimate() {
     mutationFn: async ({
       estimateId,
       clientId,
+      salesRepId,
       description,
       invoiceDate,
       dueDate,
@@ -161,6 +165,7 @@ export function useCreateInvoiceFromEstimate() {
     }: {
       estimateId: string;
       clientId: string;
+      salesRepId?: string | null;
       description: string;
       invoiceDate: string;
       dueDate?: string;
@@ -180,6 +185,7 @@ export function useCreateInvoiceFromEstimate() {
           created_by: user?.id ?? null,
           client_id: clientId,
           estimate_id: estimateId,
+          sales_rep_id: salesRepId ?? null,
           description,
           invoice_date: invoiceDate,
           due_date: dueDate ?? null,
@@ -225,6 +231,7 @@ export function useCreateInvoice() {
   return useMutation({
     mutationFn: async (values: {
       clientId: string;
+      salesRepId?: string | null;
       description: string;
       invoiceDate: string;
       dueDate?: string;
@@ -237,6 +244,7 @@ export function useCreateInvoice() {
         .insert({
           created_by: user?.id ?? null,
           client_id: values.clientId,
+          sales_rep_id: values.salesRepId ?? null,
           description: values.description,
           invoice_date: values.invoiceDate,
           due_date: values.dueDate ?? null,
@@ -369,6 +377,7 @@ export function useUpdateInvoiceHeader() {
         terms?: string;
         service_address?: string | null;
         preferred_payment_method?: string | null;
+        sales_rep_id?: string | null;
       };
     }) => {
       const supabase = createClient();
@@ -947,11 +956,20 @@ export function useCreateInvoiceFromJob() {
       const { data: { user } } = await supabase.auth.getUser();
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: job } = await (supabase as any)
+        .from("crm_jobs")
+        .select("sales_rep_id")
+        .eq("id", jobId)
+        .single();
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
         .from("crm_invoices")
         .insert({
           created_by: user?.id ?? null,
           client_id: clientId,
+          crm_job_id: jobId,
+          sales_rep_id: job?.sales_rep_id ?? null,
           description,
           invoice_date: invoiceDate,
           due_date: dueDate ?? null,

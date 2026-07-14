@@ -22,6 +22,7 @@ import {
 import { useCreateClientJob, useCRMServices, useCRMSchedules } from "@/lib/hooks/use-crm-jobs";
 import { useClients } from "@/lib/hooks/use-clients";
 import { useContracts } from "@/lib/hooks/use-contracts";
+import { useEmployees } from "@/lib/hooks/use-employees";
 import { useOrgSettings } from "@/lib/hooks/use-org-settings";
 import { usePackages } from "@/lib/hooks/use-packages";
 import { computePackageVisitSchedule } from "@/lib/package-schedule";
@@ -77,11 +78,14 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
   const { data: crmSchedules } = useCRMSchedules();
   const { data: orgSettings } = useOrgSettings();
   const { data: crmPackages } = usePackages(false);
+  const { data: employees } = useEmployees();
+  const salesReps = (employees ?? []).filter((e) => e.isSalesRep && e.userId);
 
   const [selectedClientId, setSelectedClientId] = useState(defaultClientId ?? "");
   const [jobType, setJobType] = useState<JobType>(initialJobType ?? "one_time");
   const { data: contracts } = useContracts(defaultClientId ?? selectedClientId);
   const [contractId, setContractId] = useState<string | null>(null);
+  const [salesRepId, setSalesRepId] = useState<string | null>(null);
   const [notesToCrew, setNotesToCrew] = useState("");
   const [isPending, setIsPending] = useState(false);
 
@@ -200,7 +204,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
         conflictDays: [],
         inchTrigger: null,
         invoiceType: null,
-        salesRep: null,
+        salesRepId,
         source: null,
         paymentType: null,
         poNumber: null,
@@ -260,7 +264,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
           <div className="flex flex-1 flex-col gap-4 min-w-0">
 
             {/* Client + Contract */}
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-3 gap-3">
               {!defaultClientId ? (
                 <div className="flex flex-col gap-1.5">
                   <Label>Client *</Label>
@@ -282,6 +286,20 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
                   <SelectContent>
                     <SelectItem value="none">No contract</SelectItem>
                     {(contracts ?? []).map((c) => <SelectItem key={c.id} value={c.id}>{c.title}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label>Sales Rep</Label>
+                <Select value={salesRepId ?? "none"} onValueChange={(v) => setSalesRepId(v === "none" ? null : v)}>
+                  <SelectTrigger><SelectValue placeholder="Assign sales rep…" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Unassigned</SelectItem>
+                    {salesReps.map((e) => (
+                      <SelectItem key={e.userId as string} value={e.userId as string}>
+                        {e.firstName} {e.lastName}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
