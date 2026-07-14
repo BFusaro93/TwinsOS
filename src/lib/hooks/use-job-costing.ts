@@ -27,12 +27,17 @@ export interface EstimatedLine {
 export interface JobCostingData {
   estimatedLines: EstimatedLine[];
   actualHours: number;
+  menCount: number;
+  actualStaffHrs: number;
   actualLaborCostCents: number;
   actualMaterialCostCents: number;
   actualTotalCostCents: number;
   estimatedTotalCents: number;
   estimatedCostCents: number;
   estimatedBudgetedHours: number;
+  targetRateCentsPerHr: number;
+  actualRevPerManHrCents: number;
+  targetOverUnderCents: number;
   materials: JobMaterial[];
 }
 
@@ -135,10 +140,34 @@ export function useJobCosting(jobId: string, estimateId?: string | null): {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: jobRow, error: jobErr } = await (supabase as any)
         .from("crm_jobs")
-        .select("actual_hours, actual_labor_cost_cents, actual_material_cost_cents")
+        .select("actual_hours, actual_labor_cost_cents, actual_material_cost_cents, service_id")
         .eq("id", jobId)
         .single();
       if (jobErr) throw new Error(jobErr.message);
+
+      // Fetch men_count from most recent completed visit
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: visitRow } = await (supabase as any)
+        .from("crm_job_visits")
+        .select("men_count, rate_cents")
+        .eq("job_id", jobId)
+        .not("clocked_out_at", "is", null)
+        .order("clocked_out_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      // Fetch target rate from service
+      let targetRateCentsPerHr = 0;
+      const serviceId: string | null = jobRow.service_id ?? null;
+      if (serviceId) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: svc } = await (supabase as any)
+          .from("crm_services")
+          .select("target_rate_cents_per_hr")
+          .eq("id", serviceId)
+          .maybeSingle();
+        targetRateCentsPerHr = svc?.target_rate_cents_per_hr ?? 0;
+      }
 
       // Fetch materials
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -192,18 +221,31 @@ export function useJobCosting(jobId: string, estimateId?: string | null): {
         );
       }
 
+      const actualHours = Number(jobRow.actual_hours ?? 0);
+      const menCount = Number(visitRow?.men_count ?? 1);
+      const actualStaffHrs = actualHours * menCount;
+      const actualRevRateCents: number = visitRow?.rate_cents ?? 0;
+      const actualRevPerManHrCents = actualStaffHrs > 0
+        ? Math.round(actualRevRateCents / actualStaffHrs)
+        : 0;
+      const targetOverUnderCents = actualRevPerManHrCents - targetRateCentsPerHr;
       const actualLaborCostCents: number = jobRow.actual_labor_cost_cents ?? 0;
       const actualMaterialCostCents: number = jobRow.actual_material_cost_cents ?? 0;
 
       return {
         estimatedLines,
-        actualHours: Number(jobRow.actual_hours ?? 0),
+        actualHours,
+        menCount,
+        actualStaffHrs,
         actualLaborCostCents,
         actualMaterialCostCents,
         actualTotalCostCents: actualLaborCostCents + actualMaterialCostCents,
         estimatedTotalCents,
         estimatedCostCents,
         estimatedBudgetedHours,
+        targetRateCentsPerHr,
+        actualRevPerManHrCents,
+        targetOverUnderCents,
         materials,
       };
     },

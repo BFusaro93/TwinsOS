@@ -211,10 +211,11 @@ export async function POST(
     await (supabase as any).from("client_activity").insert({
       org_id: profile?.org_id,
       client_id: est.client_id,
-      activity_type: "estimate_sent",
+      activity_type: "estimate",
       subject: `Estimate #${est.estimate_number} sent via email`,
       body: `Sent to ${clientEmail}. Subject: ${resolvedSubject}`,
-      related_estimate_id: estimateId,
+      ref_id: estimateId,
+      ref_table: "estimates",
       occurred_at: new Date().toISOString(),
     });
   }

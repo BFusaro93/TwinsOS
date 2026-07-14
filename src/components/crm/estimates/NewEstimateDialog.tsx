@@ -131,11 +131,15 @@ export function NewEstimateDialog({ open, onOpenChange, defaultClientId, onCreat
                   qty:                  item.qty,
                   rate_cents:           item.rateCents,
                   visits:               item.visits,
-                  budgeted_hours:       item.budgetedHours,
                   cost_cents:           0,
                   adj_rate_cents:       null,
                   sort_order:           idx,
-                  ...computed,
+                  total_cents:          computed.totalCents,
+                  budgeted_hours:       computed.budgetedHours,
+                  total_budgeted_hours: computed.totalBudgetedHours,
+                  total_cost_cents:     computed.totalCostCents,
+                  margin_bps:           computed.marginBps,
+                  markup_bps:           computed.markupBps,
                 },
               });
             })

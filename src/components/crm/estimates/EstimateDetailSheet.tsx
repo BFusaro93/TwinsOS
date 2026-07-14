@@ -91,7 +91,7 @@ export function EstimateDetailSheet({ estimateId, onOpenChange }: Props) {
 
         {/* Content */}
         <div className="flex flex-1 flex-col overflow-hidden bg-white">
-          <EstimateDetail estimateId={estimateId} onClose={() => onOpenChange(false)} />
+          <EstimateDetail estimateId={estimateId} onClose={() => onOpenChange(false)} compact />
 
         </div>
       </div>

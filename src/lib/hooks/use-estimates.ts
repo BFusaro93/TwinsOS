@@ -6,6 +6,7 @@ import type {
   Estimate,
   EstimateLineItem,
   EstimateDirectCost,
+  EstimateChangeRequest,
 } from "@/types/crm-estimates";
 import type { OverheadSettings } from "@/lib/hooks/use-overhead-settings";
 
@@ -88,6 +89,7 @@ function mapEstimate(row: any): Estimate {
     numInstallments: row.num_installments,
     poNumber: row.po_number,
     workOrderNumber: row.work_order_number,
+    paymentTerms: row.payment_terms ?? null,
     subtotalCents: row.subtotal_cents,
     discountCents: row.discount_cents,
     discountType: row.discount_type ?? null,
@@ -663,5 +665,62 @@ export function useEstimateShareTokens(estimateId: string) {
       }));
     },
     enabled: !!estimateId,
+  });
+}
+
+// ── change requests ───────────────────────────────────────────────────────────
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapChangeRequest(row: any): EstimateChangeRequest {
+  return {
+    id: row.id,
+    orgId: row.org_id,
+    estimateId: row.estimate_id,
+    clientId: row.client_id,
+    message: row.message,
+    requesterName: row.requester_name,
+    requesterEmail: row.requester_email,
+    status: row.status,
+    createdAt: row.created_at,
+    resolvedAt: row.resolved_at,
+    resolvedBy: row.resolved_by,
+  };
+}
+
+export function useEstimateChangeRequests(estimateId: string) {
+  return useQuery({
+    queryKey: ["estimate-change-requests", estimateId],
+    queryFn: async () => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
+        .from("estimate_change_requests")
+        .select("*")
+        .eq("estimate_id", estimateId)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return (data.map(mapChangeRequest)) as EstimateChangeRequest[];
+    },
+    enabled: !!estimateId,
+  });
+}
+
+export function useResolveChangeRequest() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, estimateId }: { id: string; estimateId: string }) => {
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase as any)
+        .from("estimate_change_requests")
+        .update({ status: "resolved", resolved_at: new Date().toISOString(), resolved_by: user?.id ?? null })
+        .eq("id", id);
+      if (error) throw error;
+      return { estimateId };
+    },
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ["estimate-change-requests", vars.estimateId] });
+    },
   });
 }

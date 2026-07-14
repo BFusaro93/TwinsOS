@@ -137,10 +137,11 @@ export async function POST(
     await supabase.from("client_activity").insert({
       org_id: est.org_id,
       client_id: est.client_id,
-      activity_type: "estimate_accepted",
+      activity_type: "estimate",
       subject: `Estimate #${est.estimate_number} accepted online`,
       body: `Accepted by ${body.acceptedByName.trim()} via View My Proposal portal.${tierNote}`,
-      related_estimate_id: shareToken.estimate_id,
+      ref_id: shareToken.estimate_id,
+      ref_table: "estimates",
       occurred_at: now,
     });
   }

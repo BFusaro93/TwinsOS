@@ -89,7 +89,7 @@ export function PackagesList({ onAdd, onEdit }: Props) {
                   {formatCurrency(pkg.monthlyAmountCents)}
                 </td>
                 <td className="px-4 py-3 text-center text-slate-600">{pkg.seasonMonths} mo</td>
-                <td className="px-4 py-3 text-center text-slate-600">{pkg.visitsPerSeason}</td>
+                <td className="px-4 py-3 text-center text-slate-600">{(pkg.services ?? []).length}</td>
                 <td className="px-4 py-3 text-slate-600 text-xs">{FREQ_LABEL[pkg.scheduleFrequency] ?? pkg.scheduleFrequency}</td>
                 <td className="px-4 py-3 text-slate-500 text-xs">
                   {(pkg.services ?? []).length > 0

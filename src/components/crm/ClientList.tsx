@@ -454,7 +454,7 @@ export function ClientList({ selectedId, onSelect }: Props) {
                       {[client.serviceAddress, client.serviceCity, client.serviceState].filter(Boolean).join(", ") ||
                         client.primaryPhone || client.primaryEmail || "—"}
                     </span>
-                    <Badge className={cn("shrink-0 rounded-full px-1.5 py-0 text-[10px] capitalize", STATUS_COLOR[client.status] ?? "bg-slate-100 text-slate-500")}>
+                    <Badge variant="outline" className={cn("shrink-0 rounded-full px-1.5 py-0 text-[10px] capitalize border-transparent", STATUS_COLOR[client.status] ?? "bg-slate-100 text-slate-500")}>
                       {client.status}
                     </Badge>
                   </div>

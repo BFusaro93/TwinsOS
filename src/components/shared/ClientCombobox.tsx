@@ -30,6 +30,7 @@ interface ClientComboboxProps {
   onValueChange: (value: string) => void;
   noneLabel?: string;
   id?: string;
+  disabled?: boolean;
 }
 
 export function ClientCombobox({
@@ -38,6 +39,7 @@ export function ClientCombobox({
   onValueChange,
   noneLabel = "Select client...",
   id,
+  disabled,
 }: ClientComboboxProps) {
   const [open, setOpen] = React.useState(false);
 
@@ -52,6 +54,7 @@ export function ClientCombobox({
           variant="outline"
           role="combobox"
           aria-expanded={open}
+          disabled={disabled}
           className="w-full justify-between font-normal"
         >
           <span className={cn("truncate", !selectedClient && "text-muted-foreground")}>

@@ -14,6 +14,7 @@ import {
   CalendarClock,
   Activity,
   MessageSquare,
+  MessageSquarePlus,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -62,6 +63,8 @@ function NotifIcon({ type }: { type: AppNotification["type"] }) {
       return <Activity className={cn(cls, "text-blue-500")} />;
     case "wo_comment":
       return <MessageSquare className={cn(cls, "text-slate-400")} />;
+    case "estimate_change_request":
+      return <MessageSquarePlus className={cn(cls, "text-amber-500")} />;
     default:
       return <Bell className={cn(cls, "text-slate-400")} />;
   }
@@ -94,7 +97,7 @@ export function NotificationsBell() {
       .from("notifications")
       .select("id, type, title, message, entity_id, entity_type, created_at")
       .eq("user_id", currentUser.id)
-      .in("type", ["wo_comment", "wo_status_changed"])
+      .in("type", ["wo_comment", "wo_status_changed", "estimate_change_request"])
       .order("created_at", { ascending: false })
       .limit(50)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -257,20 +260,25 @@ export function NotificationsBell() {
         });
       });
 
-    // Persisted DB notifications (wo_comment, wo_status_changed)
+    // Persisted DB notifications (wo_comment, wo_status_changed, estimate_change_request)
     dbNotifications.filter((n) => {
       if (n.type === "wo_comment" && notifPrefs?.inAppWorkOrderComment === false) return false;
       if (n.type === "wo_status_changed" && notifPrefs?.inAppWorkOrderStatusChanged === false) return false;
       return true;
     }).forEach((n) => {
       const id = `db-notif-${n.id}`;
-      const notifType = (n.type === "wo_status_changed" ? "wo_status_changed" : "wo_comment") as AppNotification["type"];
+      const notifType = (
+        n.type === "wo_status_changed" ? "wo_status_changed"
+        : n.type === "estimate_change_request" ? "estimate_change_request"
+        : "wo_comment"
+      ) as AppNotification["type"];
+      const href = notifType === "estimate_change_request" ? `/crm/estimates/${n.entity_id}` : "/cmms/work-orders";
       items.push({
         id,
         type: notifType,
-        title: n.title ?? (notifType === "wo_status_changed" ? "Status Changed" : "New Comment"),
+        title: n.title ?? (notifType === "wo_status_changed" ? "Status Changed" : notifType === "estimate_change_request" ? "Change Requested" : "New Comment"),
         body: n.message,
-        href: "/cmms/work-orders",
+        href,
         entityId: n.entity_id,
         entityType: n.entity_type as AppNotification["entityType"],
         createdAt: n.created_at,

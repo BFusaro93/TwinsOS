@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { FileText, Clock, CheckCircle2, XCircle, Loader2, Download } from "lucide-react";
+import { FileText, Clock, CheckCircle2, XCircle, Loader2, Download, MessageSquarePlus } from "lucide-react";
 
 function fmt(cents: number) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
@@ -202,10 +202,89 @@ function DeclineDialog({ estimate, onClose, onDeclined }: DeclineDialogProps) {
   );
 }
 
+interface RequestChangesDialogProps {
+  estimate: Estimate;
+  onClose: () => void;
+  onSent: () => void;
+}
+
+function RequestChangesDialog({ estimate, onClose, onSent }: RequestChangesDialogProps) {
+  const [message, setMessage] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleSend() {
+    if (!message.trim()) { setError("Please describe what you'd like changed."); return; }
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/portal/estimates/${estimate.id}/action`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "request_changes", message: message.trim() }),
+      });
+      if (!res.ok) {
+        const d = await res.json();
+        setError(d.error ?? "Something went wrong.");
+        return;
+      }
+      onSent();
+    } catch {
+      setError("Network error. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-black/40">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md flex flex-col gap-5 p-6">
+        <div>
+          <h2 className="text-lg font-bold text-slate-900">Request Changes</h2>
+          <p className="text-sm text-slate-500 mt-1">
+            {estimate.title ?? `Estimate #${estimate.estimate_number}`}
+          </p>
+        </div>
+
+        <div>
+          <textarea
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
+            rows={4}
+            placeholder="e.g. Can we swap the mulch for stone edging on the front bed?"
+            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+          />
+          {error && <p className="text-xs text-red-600 mt-1">{error}</p>}
+        </div>
+
+        <div className="flex gap-2">
+          <button
+            onClick={onClose}
+            disabled={loading}
+            className="flex-1 h-10 rounded-lg border border-slate-200 text-sm font-medium text-slate-600 hover:bg-slate-50 transition disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSend}
+            disabled={loading || !message.trim()}
+            className="flex-1 h-10 rounded-lg bg-brand-500 text-white text-sm font-medium hover:bg-brand-600 transition disabled:opacity-50 flex items-center justify-center gap-2"
+          >
+            {loading && <Loader2 className="h-4 w-4 animate-spin" />}
+            Send Request
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function PortalEstimatesPage({ estimates: initial }: { estimates: Estimate[] }) {
   const [estimates, setEstimates] = useState(initial);
   const [signing, setSigning] = useState<Estimate | null>(null);
   const [declining, setDeclining] = useState<Estimate | null>(null);
+  const [requestingChanges, setRequestingChanges] = useState<Estimate | null>(null);
+  const [changesSentFor, setChangesSentFor] = useState<string | null>(null);
 
   function patchStatus(id: string, status: string) {
     setEstimates((prev) => prev.map((e) => e.id === id ? { ...e, status } : e));
@@ -256,6 +335,18 @@ export default function PortalEstimatesPage({ estimates: initial }: { estimates:
                     >
                       Decline
                     </button>
+                    {changesSentFor === est.id ? (
+                      <span className="text-xs text-green-700 flex items-center gap-1">
+                        <CheckCircle2 className="h-3.5 w-3.5" /> Request sent
+                      </span>
+                    ) : (
+                      <button
+                        onClick={() => setRequestingChanges(est)}
+                        className="h-7 px-3 rounded-md border border-slate-200 text-slate-600 text-xs font-medium hover:bg-slate-50 transition flex items-center gap-1"
+                      >
+                        <MessageSquarePlus className="h-3.5 w-3.5" /> Request Changes
+                      </button>
+                    )}
                   </div>
                 )}
 
@@ -328,6 +419,16 @@ export default function PortalEstimatesPage({ estimates: initial }: { estimates:
           estimate={declining}
           onClose={() => setDeclining(null)}
           onDeclined={(id) => patchStatus(id, "declined")}
+        />
+      )}
+      {requestingChanges && (
+        <RequestChangesDialog
+          estimate={requestingChanges}
+          onClose={() => setRequestingChanges(null)}
+          onSent={() => {
+            setChangesSentFor(requestingChanges.id);
+            setRequestingChanges(null);
+          }}
         />
       )}
     </div>

@@ -2,10 +2,11 @@
 
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { X, GripVertical, Search } from "lucide-react";
+import { X, GripVertical } from "lucide-react";
 import { useClients } from "@/lib/hooks/use-clients";
 import { useCreateInvoice, useDeleteInvoice } from "@/lib/hooks/use-invoices";
 import { InvoiceDetail } from "./InvoiceDetail";
+import { ClientCombobox } from "@/components/shared/ClientCombobox";
 import { toast } from "sonner";
 
 interface Props {
@@ -15,13 +16,14 @@ interface Props {
 }
 
 const MIN_WIDTH = 480;
-const DEFAULT_WIDTH = Math.min(1100, typeof window !== "undefined" ? window.innerWidth * 0.75 : 1100);
 
 export function NewInvoiceSheet({ open, onClose, defaultClientId }: Props) {
-  const [width, setWidth] = useState(DEFAULT_WIDTH);
+  // Lazy-initialized on mount (not at module scope) so it reflects the
+  // actual viewport instead of whatever window.innerWidth was when this
+  // chunk first happened to be evaluated.
+  const [width, setWidth] = useState(() => Math.min(1100, typeof window !== "undefined" ? window.innerWidth * 0.75 : 1100));
   const [invoiceId, setInvoiceId] = useState<string | null>(null);
   const [draftClientId, setDraftClientId] = useState<string | null>(null);
-  const [clientSearch, setClientSearch] = useState("");
   const [creating, setCreating] = useState(false);
   const dragging = useRef(false);
   const startX = useRef(0);
@@ -51,7 +53,6 @@ export function NewInvoiceSheet({ open, onClose, defaultClientId }: Props) {
     if (!open) {
       setInvoiceId(null);
       setDraftClientId(null);
-      setClientSearch("");
       setCreating(false);
       savedRef.current = false;
     }
@@ -119,10 +120,6 @@ export function NewInvoiceSheet({ open, onClose, defaultClientId }: Props) {
 
   if (!open) return null;
 
-  const filtered = (clients ?? []).filter((c) =>
-    c.displayName.toLowerCase().includes(clientSearch.toLowerCase())
-  );
-
   return createPortal(
     <>
       <div className="fixed inset-0 z-40 bg-black/40" onClick={handleClose} />
@@ -168,35 +165,13 @@ export function NewInvoiceSheet({ open, onClose, defaultClientId }: Props) {
               <div className="px-8 py-6 grid grid-cols-2 gap-5">
                 <div className="rounded-lg border bg-white p-4 shadow-sm space-y-3">
                   <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Bill To</p>
-                  <div className="relative">
-                    <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-400" />
-                    <input
-                      autoFocus
-                      value={clientSearch}
-                      onChange={(e) => setClientSearch(e.target.value)}
-                      placeholder="Search clients…"
-                      className="w-full rounded-md border border-slate-200 py-2 pl-8 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
-                      disabled={creating}
-                    />
-                  </div>
-                  {clientSearch && (
-                    <div className="max-h-52 overflow-y-auto rounded-md border border-slate-100 bg-white shadow-sm">
-                      {filtered.length === 0 ? (
-                        <p className="px-3 py-2 text-xs text-slate-400">No clients found</p>
-                      ) : (
-                        filtered.map((c) => (
-                          <button
-                            key={c.id}
-                            disabled={creating}
-                            onClick={() => handleSelectClient(c.id)}
-                            className="w-full px-3 py-2 text-left text-sm hover:bg-green-50 hover:text-green-800 transition-colors disabled:opacity-50"
-                          >
-                            {c.displayName}
-                          </button>
-                        ))
-                      )}
-                    </div>
-                  )}
+                  <ClientCombobox
+                    value=""
+                    onValueChange={handleSelectClient}
+                    clients={clients ?? []}
+                    noneLabel="Search clients..."
+                    disabled={creating}
+                  />
                   {creating && (
                     <p className="text-xs text-slate-400 animate-pulse">Creating invoice…</p>
                   )}

@@ -238,7 +238,7 @@ function LineItemRow({
     setRow((prev) => {
       const next = { ...prev, [key]: val };
       const computed = computeLineItem(next);
-      const merged = { ...next, ...computed };
+      const merged: RowState = { ...next, ...computed };
       // A flat discount can't exceed the line's own (possibly now-smaller) total
       merged.discountCents = Math.min(merged.discountCents, merged.totalCents);
       return merged;

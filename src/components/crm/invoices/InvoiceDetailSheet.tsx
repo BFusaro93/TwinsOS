@@ -11,10 +11,12 @@ interface Props {
 }
 
 const MIN_WIDTH = 480;
-const DEFAULT_WIDTH = Math.min(1100, typeof window !== "undefined" ? window.innerWidth * 0.75 : 1100);
 
 export function InvoiceDetailSheet({ invoiceId, onOpenChange }: Props) {
-  const [width, setWidth] = useState(DEFAULT_WIDTH);
+  // Lazy-initialized on mount (not at module scope) so it reflects the
+  // actual viewport instead of whatever window.innerWidth was when this
+  // chunk first happened to be evaluated.
+  const [width, setWidth] = useState(() => Math.min(1100, typeof window !== "undefined" ? window.innerWidth * 0.75 : 1100));
   const dragging = useRef(false);
   const startX = useRef(0);
   const startW = useRef(0);

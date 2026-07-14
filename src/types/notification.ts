@@ -4,6 +4,7 @@ export type NotificationEntityType =
   | "work_order"
   | "pm_schedule"
   | "part"
+  | "estimate"
   | null;
 
 export interface AppNotification {
@@ -17,7 +18,8 @@ export interface AppNotification {
     | "low_stock"
     | "pm_due"
     | "wo_status_changed"
-    | "wo_comment";
+    | "wo_comment"
+    | "estimate_change_request";
   title: string;
   body: string;
   href: string;

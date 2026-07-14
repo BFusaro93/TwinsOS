@@ -9,6 +9,7 @@ interface LineItem {
   service_name: string;
   quantity: number;
   unit_price_cents: number;
+  discount_cents: number;
   sort_order: number;
 }
 
@@ -76,7 +77,7 @@ export default async function EstimatePdfPage({ params }: { params: Promise<{ id
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: lineItems } = await (supabase as any)
     .from("estimate_line_items")
-    .select("id, estimate_desc, service_name, quantity:qty, unit_price_cents:rate_cents, sort_order")
+    .select("id, estimate_desc, service_name, quantity:qty, unit_price_cents:rate_cents, discount_cents, sort_order")
     .eq("estimate_id", id)
     .order("sort_order", { ascending: true }) as { data: LineItem[] | null };
 
@@ -157,7 +158,12 @@ export default async function EstimatePdfPage({ params }: { params: Promise<{ id
                   <td className="py-2.5 text-slate-700">{li.estimate_desc ?? li.service_name}</td>
                   <td className="py-2.5 text-center text-slate-600">{li.quantity}</td>
                   <td className="py-2.5 text-right text-slate-600">{fmt(li.unit_price_cents)}</td>
-                  <td className="py-2.5 text-right font-medium text-slate-900">{fmt(li.unit_price_cents * li.quantity)}</td>
+                  <td className="py-2.5 text-right font-medium text-slate-900">
+                    {fmt(li.unit_price_cents * li.quantity - (li.discount_cents ?? 0))}
+                    {li.discount_cents > 0 && (
+                      <div className="text-[10px] font-normal text-green-600">−{fmt(li.discount_cents)} disc.</div>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>

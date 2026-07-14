@@ -126,7 +126,12 @@ export default async function InvoicePrintPage({ params }: { params: Promise<{ i
                 <td style={{ padding: "9px 10px", textAlign: "right" }}>{li.men ?? "—"}</td>
                 <td style={{ padding: "9px 10px", textAlign: "right" }}>{li.qty}</td>
                 <td style={{ padding: "9px 10px", textAlign: "right" }}>{formatCents(li.rate_cents)}</td>
-                <td style={{ padding: "9px 10px", textAlign: "right", fontWeight: 500 }}>{formatCents(li.total_cents)}</td>
+                <td style={{ padding: "9px 10px", textAlign: "right", fontWeight: 500 }}>
+                  {formatCents(li.total_cents - (li.discount_cents ?? 0))}
+                  {li.discount_cents > 0 && (
+                    <div style={{ fontSize: 10, fontWeight: 400, color: "#16a34a" }}>−{formatCents(li.discount_cents)} disc.</div>
+                  )}
+                </td>
               </tr>
             ))}
           </tbody>

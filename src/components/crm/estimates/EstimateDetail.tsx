@@ -10,13 +10,15 @@ import {
   useUpsertLineItem,
   useEstimateShareTokens,
   useEstimateVersions,
+  useEstimateChangeRequests,
+  useResolveChangeRequest,
   type AIDraftLineItem,
   type EstimateVersion,
 } from "@/lib/hooks/use-estimates";
 import { useCreateInvoiceFromEstimate } from "@/lib/hooks/use-invoices";
 import { useEstimateTemplates } from "@/lib/hooks/use-estimate-templates";
 import { useClients } from "@/lib/hooks/use-clients";
-import { useUsers } from "@/lib/hooks/use-users";
+import { useEmployees } from "@/lib/hooks/use-employees";
 import { useOrgList } from "@/lib/hooks/use-org-lists";
 import { computeLineItem } from "@/lib/estimate-calc";
 import { EstimateLineItemsGrid } from "./EstimateLineItemsGrid";
@@ -41,6 +43,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn, formatCurrency } from "@/lib/utils";
+import { BILLING_TERMS_OPTIONS } from "@/lib/constants";
 import { toast } from "sonner";
 import { AuditTrailTab } from "@/components/shared/AuditTrailTab";
 import { EstimatePhotosTab } from "./EstimatePhotosTab";
@@ -64,6 +67,7 @@ import {
   Printer,
   Send,
   Sparkles,
+  MessageSquarePlus,
 } from "lucide-react";
 import {
   useAttachments,
@@ -72,6 +76,7 @@ import {
   useDownloadAttachment,
 } from "@/lib/hooks/use-attachments";
 import type { EstimateStage, LineItemStatus } from "@/types/crm-estimates";
+import type { DiscountType } from "@/types/crm-discounts";
 import {
   useEstimateStages,
   useSeedDefaultStages,
@@ -311,19 +316,25 @@ function EstimateVersionCard({ version }: { version: EstimateVersion }) {
 interface Props {
   estimateId: string;
   onClose?: () => void;
+  /** Rendered inside a narrower side panel (sheet) — stack the header form to a single column instead of two. */
+  compact?: boolean;
 }
 
-export function EstimateDetail({ estimateId, onClose }: Props) {
+export function EstimateDetail({ estimateId, onClose, compact = false }: Props) {
   const router = useRouter();
   const { data: estimate, isLoading } = useEstimate(estimateId);
   const { data: templates } = useEstimateTemplates();
   const { data: clients }   = useClients();
-  const { data: users }     = useUsers();
+  const { data: employees } = useEmployees();
+  const salesReps = (employees ?? []).filter((e) => e.isSalesRep && e.userId);
   const { mutateAsync: updateEstimate } = useUpdateEstimate();
   const { mutateAsync: updateStage } = useUpdateEstimateStage();
   const { mutateAsync: saveFinancials } = useSaveEstimateFinancials();
   const { mutateAsync: upsertLineItem } = useUpsertLineItem();
   const { mutateAsync: createInvoice, isPending: creatingInvoice } = useCreateInvoiceFromEstimate();
+  const { data: changeRequests } = useEstimateChangeRequests(estimateId);
+  const { mutateAsync: resolveChangeRequest } = useResolveChangeRequest();
+  const openChangeRequests = (changeRequests ?? []).filter((r) => r.status === "open");
 
 
   const { data: shareTokens = [] } = useEstimateShareTokens(estimate?.id ?? "");
@@ -349,7 +360,7 @@ export function EstimateDetail({ estimateId, onClose }: Props) {
   const [lineItemFilter,   setLineItemFilter]   = useState<LineItemStatus | "all">("all");
   const [saving,           setSaving]           = useState(false);
   const [recalcPending,    setRecalcPending]    = useState(false);
-  const [headerEdits,      setHeaderEdits]      = useState<Record<string, string | boolean | number>>({});
+  const [headerEdits,      setHeaderEdits]      = useState<Record<string, string | boolean | number | null>>({});
   const [convertDialogOpen, setConvertDialogOpen] = useState(false);
   const [wonLostDialog, setWonLostDialog] = useState<"won" | "lost" | null>(null);
   const [rateIncreaseOpen, setRateIncreaseOpen] = useState(false);
@@ -357,15 +368,19 @@ export function EstimateDetail({ estimateId, onClose }: Props) {
   const [aiDraftOpen, setAiDraftOpen] = useState(false);
   const [selectedLineItemIds, setSelectedLineItemIds] = useState<string[]>([]);
 
-  function patchHeader(key: string, val: string | boolean | number) {
+  function patchHeader(key: string, val: string | boolean | number | null) {
     setHeaderEdits((p) => ({ ...p, [key]: val }));
   }
 
-  async function saveHeader() {
-    if (!estimate || Object.keys(headerEdits).length === 0) return;
+  // Accepts an explicit patch for callers that fire save in the same tick as
+  // patchHeader (e.g. Select onValueChange) — headerEdits state hasn't
+  // re-rendered yet at that point, so reading it here would miss the just-set value.
+  async function saveHeader(explicitPatch?: Record<string, string | boolean | number | null>) {
+    const patch = explicitPatch ?? headerEdits;
+    if (!estimate || Object.keys(patch).length === 0) return;
     setSaving(true);
     try {
-      await updateEstimate({ id: estimate.id, patch: headerEdits });
+      await updateEstimate({ id: estimate.id, patch });
       setHeaderEdits({});
       toast.success("Saved");
     } catch {
@@ -459,12 +474,16 @@ export function EstimateDetail({ estimateId, onClose }: Props) {
               qty: item.qty,
               rate_cents: item.rateCents,
               visits: item.visits,
-              budgeted_hours: 0,
               cost_cents: 0,
               adj_rate_cents: null,
               sort_order: existingCount + idx,
               unit_type: item.unitType,
-              ...computed,
+              total_cents: computed.totalCents,
+              budgeted_hours: computed.budgetedHours,
+              total_budgeted_hours: computed.totalBudgetedHours,
+              total_cost_cents: computed.totalCostCents,
+              margin_bps: computed.marginBps,
+              markup_bps: computed.markupBps,
             },
           });
         })
@@ -482,6 +501,9 @@ export function EstimateDetail({ estimateId, onClose }: Props) {
     taxRateBps?: number;
     overheadRateBps?: number;
     discountCents?: number;
+    discountType?: DiscountType | null;
+    discountValue?: number | null;
+    appliedDiscountId?: string | null;
   }) {
     if (!estimate) return;
     setRecalcPending(true);
@@ -493,6 +515,9 @@ export function EstimateDetail({ estimateId, onClose }: Props) {
         taxRateBps:      overrides?.taxRateBps      ?? estimate.taxRateBps,
         overheadRateBps: overrides?.overheadRateBps ?? estimate.overheadRateBps,
         discountCents:   overrides?.discountCents   ?? estimate.discountCents,
+        discountType:       overrides && "discountType" in overrides       ? overrides.discountType       : estimate.discountType,
+        discountValue:      overrides && "discountValue" in overrides      ? overrides.discountValue      : estimate.discountValue,
+        appliedDiscountId:  overrides && "appliedDiscountId" in overrides  ? overrides.appliedDiscountId  : estimate.appliedDiscountId,
       });
     } catch {
       toast.error("Recalculation failed");
@@ -679,12 +704,43 @@ export function EstimateDetail({ estimateId, onClose }: Props) {
 
           {activeTab === "details" && (
             <>
+              {/* Open change requests from the client */}
+              {openChangeRequests.length > 0 && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 divide-y divide-amber-200 shrink-0">
+                  {openChangeRequests.map((cr) => (
+                    <div key={cr.id} className="flex items-start gap-3 p-3">
+                      <MessageSquarePlus className="h-4 w-4 shrink-0 mt-0.5 text-amber-600" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-amber-900">
+                          <span className="font-semibold">{cr.requesterName}</span> requested changes:
+                        </p>
+                        <p className="text-sm text-amber-800 mt-0.5">{cr.message}</p>
+                        <p className="text-xs text-amber-600 mt-1">
+                          {new Date(cr.createdAt).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
+                        </p>
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-xs shrink-0 bg-white"
+                        onClick={() => resolveChangeRequest({ id: cr.id, estimateId })}
+                      >
+                        Mark Resolved
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
               {/* Client info card + header form */}
-              <div className="rounded-lg border bg-white shadow-sm overflow-hidden">
-                <div className="flex gap-0">
+              <div className="rounded-lg border bg-white shadow-sm overflow-hidden shrink-0">
+                <div className={cn("flex gap-0", compact && "flex-col")}>
 
                   {/* Client info card */}
-                  <div className="w-56 shrink-0 bg-slate-50 border-r p-4 flex flex-col gap-2">
+                  <div className={cn(
+                    "shrink-0 bg-slate-50 p-4 flex flex-col gap-2",
+                    compact ? "w-full border-b" : "w-56 border-r"
+                  )}>
                     <p className="text-xs font-semibold text-slate-800 uppercase tracking-wide">
                       Client
                     </p>
@@ -726,8 +782,8 @@ export function EstimateDetail({ estimateId, onClose }: Props) {
                   </div>
 
                   {/* Header form */}
-                  <div className="flex-1 p-4">
-                    <div className="grid grid-cols-2 gap-x-8 gap-y-3 text-sm">
+                  <div className="flex-1 p-4 min-w-0">
+                    <div className={cn("grid gap-x-8 gap-y-3 text-sm", compact ? "grid-cols-1" : "grid-cols-2")}>
 
                       {/* Left column */}
                       <div className="flex flex-col gap-3">
@@ -735,7 +791,7 @@ export function EstimateDetail({ estimateId, onClose }: Props) {
                           <Input
                             value={(headerEdits.description as string) ?? estimate.description}
                             onChange={(e) => patchHeader("description", e.target.value)}
-                            onBlur={saveHeader}
+                            onBlur={() => saveHeader()}
                             className="h-8 text-sm"
                           />
                         </FieldRow>
@@ -757,15 +813,22 @@ export function EstimateDetail({ estimateId, onClose }: Props) {
                         <FieldRow label="Sales Rep">
                           <Select
                             value={(headerEdits.sales_rep_id as string) ?? (estimate.salesRepId ?? "")}
-                            onValueChange={(v) => { patchHeader("sales_rep_id", v); saveHeader(); }}
+                            onValueChange={(v) => { patchHeader("sales_rep_id", v); saveHeader({ ...headerEdits, sales_rep_id: v }); }}
                           >
                             <SelectTrigger className="h-8">
                               <SelectValue placeholder="Assign sales rep…" />
                             </SelectTrigger>
                             <SelectContent>
-                              {(users ?? []).map((u) => (
-                                <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
+                              {salesReps.map((e) => (
+                                <SelectItem key={e.userId as string} value={e.userId as string}>
+                                  {e.firstName} {e.lastName}
+                                </SelectItem>
                               ))}
+                              {estimate.salesRepId && !salesReps.some((e) => e.userId === estimate.salesRepId) && (
+                                <SelectItem value={estimate.salesRepId}>
+                                  {estimate.salesRepName ?? "Unknown"}
+                                </SelectItem>
+                              )}
                             </SelectContent>
                           </Select>
                         </FieldRow>
@@ -817,7 +880,7 @@ export function EstimateDetail({ estimateId, onClose }: Props) {
                             type="date"
                             value={(headerEdits.estimate_date as string) ?? estimate.estimateDate}
                             onChange={(e) => patchHeader("estimate_date", e.target.value)}
-                            onBlur={saveHeader}
+                            onBlur={() => saveHeader()}
                             className="h-8 w-36"
                           />
                         </FieldRow>
@@ -826,7 +889,7 @@ export function EstimateDetail({ estimateId, onClose }: Props) {
                             type="date"
                             value={(headerEdits.valid_until_date as string) ?? (estimate.validUntilDate ?? "")}
                             onChange={(e) => patchHeader("valid_until_date", e.target.value)}
-                            onBlur={saveHeader}
+                            onBlur={() => saveHeader()}
                             className="h-8 w-36"
                           />
                         </FieldRow>
@@ -836,7 +899,7 @@ export function EstimateDetail({ estimateId, onClose }: Props) {
                             min={1}
                             value={(headerEdits.num_installments as number) ?? estimate.numInstallments}
                             onChange={(e) => patchHeader("num_installments", Number(e.target.value))}
-                            onBlur={saveHeader}
+                            onBlur={() => saveHeader()}
                             className="h-8 w-20"
                           />
                         </FieldRow>
@@ -852,7 +915,7 @@ export function EstimateDetail({ estimateId, onClose }: Props) {
                                   : Math.round(estimate.probabilityBps / 100)
                               }
                               onChange={(e) => patchHeader("probability_bps", Math.round(Number(e.target.value) * 100))}
-                              onBlur={saveHeader}
+                              onBlur={() => saveHeader()}
                               className="h-8 w-20"
                             />
                             <span className="text-xs text-slate-400">%</span>
@@ -862,7 +925,7 @@ export function EstimateDetail({ estimateId, onClose }: Props) {
                           <Input
                             value={(headerEdits.po_number as string) ?? (estimate.poNumber ?? "")}
                             onChange={(e) => patchHeader("po_number", e.target.value)}
-                            onBlur={saveHeader}
+                            onBlur={() => saveHeader()}
                             className="h-8"
                             placeholder="PO Number"
                           />
@@ -871,10 +934,30 @@ export function EstimateDetail({ estimateId, onClose }: Props) {
                           <Input
                             value={(headerEdits.work_order_number as string) ?? (estimate.workOrderNumber ?? "")}
                             onChange={(e) => patchHeader("work_order_number", e.target.value)}
-                            onBlur={saveHeader}
+                            onBlur={() => saveHeader()}
                             className="h-8"
                             placeholder="Work Order Number"
                           />
+                        </FieldRow>
+                        <FieldRow label="Payment Terms">
+                          <Select
+                            value={(headerEdits.payment_terms as string) ?? (estimate.paymentTerms ?? "org_default")}
+                            onValueChange={(v) => {
+                              const val = v === "org_default" ? null : v;
+                              patchHeader("payment_terms", val);
+                              saveHeader({ ...headerEdits, payment_terms: val });
+                            }}
+                          >
+                            <SelectTrigger className="h-8">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="org_default">Use org default</SelectItem>
+                              {BILLING_TERMS_OPTIONS.map((o) => (
+                                <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
                         </FieldRow>
                         <FieldRow label="Deposit Required">
                           <div className="flex flex-col gap-1">
@@ -892,7 +975,7 @@ export function EstimateDetail({ estimateId, onClose }: Props) {
                                 onChange={(e) =>
                                   patchHeader("deposit_required_cents", Math.round(Number(e.target.value) * 100))
                                 }
-                                onBlur={saveHeader}
+                                onBlur={() => saveHeader()}
                                 className="h-8 w-28"
                                 placeholder="0"
                               />
@@ -943,7 +1026,7 @@ export function EstimateDetail({ estimateId, onClose }: Props) {
                                         [t]: e.target.value,
                                       })
                                     }
-                                    onBlur={saveHeader}
+                                    onBlur={() => saveHeader()}
                                     className="h-7 text-xs"
                                     placeholder={t.charAt(0).toUpperCase() + t.slice(1)}
                                   />
@@ -1035,11 +1118,15 @@ export function EstimateDetail({ estimateId, onClose }: Props) {
                               qty: item.qty,
                               rate_cents: item.rateCents,
                               visits: item.visits,
-                              budgeted_hours: item.budgetedHours,
                               cost_cents: 0,
                               adj_rate_cents: null,
                               sort_order: existingCount + idx,
-                              ...computed,
+                              total_cents: computed.totalCents,
+                              budgeted_hours: computed.budgetedHours,
+                              total_budgeted_hours: computed.totalBudgetedHours,
+                              total_cost_cents: computed.totalCostCents,
+                              margin_bps: computed.marginBps,
+                              markup_bps: computed.markupBps,
                             },
                           });
                         })
@@ -1122,7 +1209,7 @@ export function EstimateDetail({ estimateId, onClose }: Props) {
               <textarea
                 value={(headerEdits.notes as string) ?? (estimate.notes ?? "")}
                 onChange={(e) => patchHeader("notes", e.target.value)}
-                onBlur={saveHeader}
+                onBlur={() => saveHeader()}
                 rows={10}
                 placeholder="Add notes…"
                 className="w-full rounded border border-slate-200 p-2 text-sm focus:border-brand-400 focus:outline-none resize-none"

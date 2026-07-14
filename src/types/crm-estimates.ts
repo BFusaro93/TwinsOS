@@ -94,6 +94,8 @@ export interface Estimate {
   numInstallments: number;
   poNumber: string | null;
   workOrderNumber: string | null;
+  /** Overrides the org's default billing terms for this estimate/job. Null = use org default. */
+  paymentTerms: string | null;
   // financials
   subtotalCents: number;
   discountCents: number;
@@ -136,6 +138,22 @@ export interface Estimate {
   salesRepName?: string;
   lineItems?: EstimateLineItem[];
   directCosts?: EstimateDirectCost[];
+}
+
+// ── change requests (submitted by the client via the public proposal/portal) ───
+
+export interface EstimateChangeRequest {
+  id: string;
+  orgId: string;
+  estimateId: string;
+  clientId: string | null;
+  message: string;
+  requesterName: string;
+  requesterEmail: string | null;
+  status: 'open' | 'resolved';
+  createdAt: string;
+  resolvedAt: string | null;
+  resolvedBy: string | null;
 }
 
 // ── templates ─────────────────────────────────────────────────────────────────

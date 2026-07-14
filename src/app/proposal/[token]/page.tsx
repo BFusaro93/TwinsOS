@@ -5,7 +5,8 @@ import { useParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { CheckCircle2, Loader2 } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import { CheckCircle2, Loader2, MessageSquarePlus } from "lucide-react";
 import type { ProposalData, ProposalLineItem } from "@/types/crm-proposals";
 
 function cents(n: number) {
@@ -106,6 +107,110 @@ function SignaturePad({ onSave }: { onSave: (dataUrl: string | null) => void }) 
           Clear signature
         </button>
       )}
+    </div>
+  );
+}
+
+// ── Request changes ────────────────────────────────────────────────────────────
+
+function RequestChangesSection({ token }: { token: string }) {
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState("");
+  const [message, setMessage] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [sent, setSent] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleSubmit() {
+    if (!name.trim() || !message.trim()) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/public/proposals/${token}/request-changes`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ requesterName: name.trim(), message: message.trim() }),
+      });
+      if (!res.ok) {
+        const data = await res.json() as { error?: string };
+        throw new Error(data.error ?? "Failed to send request");
+      }
+      setSent(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  if (sent) {
+    return (
+      <div className="rounded-lg border bg-white p-6 shadow-sm text-center">
+        <CheckCircle2 className="mx-auto h-8 w-8 text-brand-500" />
+        <p className="mt-2 text-sm font-medium text-slate-700">Thanks — we&apos;ve received your request.</p>
+        <p className="mt-1 text-xs text-slate-500">Our team will follow up with you shortly.</p>
+      </div>
+    );
+  }
+
+  if (!open) {
+    return (
+      <div className="text-center">
+        <button
+          onClick={() => setOpen(true)}
+          className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700 underline underline-offset-2"
+        >
+          <MessageSquarePlus className="h-3.5 w-3.5" />
+          Need something changed? Request changes
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-lg border bg-white p-6 shadow-sm space-y-4">
+      <div>
+        <h2 className="text-base font-bold text-slate-800">Request Changes</h2>
+        <p className="text-sm text-slate-500 mt-1">
+          Let us know what you&apos;d like adjusted and we&apos;ll follow up before you accept.
+        </p>
+      </div>
+
+      <div className="space-y-1.5">
+        <Label htmlFor="rc-name">Your Name <span className="text-red-500">*</span></Label>
+        <Input
+          id="rc-name"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Enter your name"
+        />
+      </div>
+
+      <div className="space-y-1.5">
+        <Label htmlFor="rc-message">What would you like changed? <span className="text-red-500">*</span></Label>
+        <Textarea
+          id="rc-message"
+          value={message}
+          onChange={(e) => setMessage(e.target.value)}
+          rows={4}
+          placeholder="e.g. Can we swap the mulch for stone edging on the front bed?"
+        />
+      </div>
+
+      {error && <p className="text-sm text-red-600">{error}</p>}
+
+      <div className="flex gap-2">
+        <Button variant="outline" className="flex-1" onClick={() => setOpen(false)} disabled={submitting}>
+          Cancel
+        </Button>
+        <Button
+          className="flex-1"
+          disabled={!name.trim() || !message.trim() || submitting}
+          onClick={handleSubmit}
+        >
+          {submitting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Sending…</> : "Send Request"}
+        </Button>
+      </div>
     </div>
   );
 }
@@ -603,6 +708,11 @@ export default function ProposalPage() {
           This is a legally binding acceptance. A confirmation email will be sent to you.
         </p>
       </div>
+      )}
+
+      {/* Request changes */}
+      {depositStep === 'idle' && (
+        <RequestChangesSection token={token} />
       )}
 
       {/* Footer */}

@@ -69,6 +69,7 @@ import { useOrgList } from "@/lib/hooks/use-org-lists";
 import { formatCurrency } from "@/lib/utils";
 import { useOrgSettings } from "@/lib/hooks/use-org-settings";
 import type { CRMPayment, CRMInvoice } from "@/types/crm-invoices";
+import type { Estimate } from "@/types/crm-estimates";
 import { toast } from "sonner";
 import {
   Phone,
@@ -1451,6 +1452,7 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
   const [addInvoiceOpen, setAddInvoiceOpen] = useState(false);
   const [showAllAccounting, setShowAllAccounting] = useState(false);
   const [allAccountingOpen, setAllAccountingOpen] = useState(false);
+  const [allEstimatesOpen, setAllEstimatesOpen] = useState(false);
 
   const { data: allJobs } = useClientJobs(clientId);
   const updateJobStatus = useUpdateJobStatus();
@@ -1790,7 +1792,12 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
             <div className="flex items-center gap-1.5">
               <span className="font-semibold text-sm text-white">Open Estimates</span>
               <span className="rounded-full bg-white/20 px-1.5 py-0.5 text-[10px] font-medium text-white">{openEstimates.length}</span>
-              <button className="text-[11px] text-white/70 hover:text-white">All</button>
+              <button
+                className="text-[11px] text-white/70 hover:text-white"
+                onClick={() => setAllEstimatesOpen(true)}
+              >
+                All
+              </button>
             </div>
             <Button variant="ghost" size="sm" className="h-6 px-2 text-xs text-white/80 hover:text-white hover:bg-white/10"
               onClick={() => setNewEstimateOpen(true)}>
@@ -1920,6 +1927,13 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
         onClose={() => setAllAccountingOpen(false)}
         onOpenInvoice={(id) => { setAllAccountingOpen(false); setSelectedInvoiceId(id); }}
         onOpenPayment={(id) => { setAllAccountingOpen(false); setSelectedPaymentId(id); }}
+      />
+    )}
+    {allEstimatesOpen && (
+      <AllEstimatesModal
+        estimates={estimates ?? []}
+        onClose={() => setAllEstimatesOpen(false)}
+        onOpenEstimate={(id) => { setAllEstimatesOpen(false); setSelectedEstimateId(id); }}
       />
     )}
     {visitsModal && (
@@ -2317,6 +2331,89 @@ function AllAccountingModal({
 
         <div className="border-t px-6 py-2 text-xs text-neutral-400">
           {filtered.length} transaction{filtered.length !== 1 ? "s" : ""}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AllEstimatesModal({
+  estimates,
+  onClose,
+  onOpenEstimate,
+}: {
+  estimates: Estimate[];
+  onClose: () => void;
+  onOpenEstimate: (id: string) => void;
+}) {
+  const [search, setSearch] = useState("");
+
+  const rows = [...estimates].sort(
+    (a, b) => new Date(b.estimateDate).getTime() - new Date(a.estimateDate).getTime()
+  );
+
+  const filtered = rows.filter((e) => {
+    if (!search.trim()) return true;
+    const q = search.toLowerCase();
+    return e.description.toLowerCase().includes(q) || e.stage.toLowerCase().includes(q);
+  });
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+      <div className="flex flex-col bg-white rounded-lg shadow-2xl w-[900px] max-h-[80vh]">
+        <div className="flex items-center justify-between border-b px-6 py-3">
+          <h2 className="text-base font-semibold text-neutral-800">All Estimates</h2>
+          <div className="flex items-center gap-3">
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search description, stage…"
+              className="text-xs border border-neutral-200 rounded px-2.5 py-1.5 w-56 focus:outline-none focus:ring-1 focus:ring-neutral-400"
+            />
+            <button onClick={onClose} className="text-neutral-400 hover:text-neutral-600">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+
+        <div className="overflow-auto flex-1">
+          {filtered.length === 0 ? (
+            <div className="p-6 text-sm text-neutral-400 text-center">No estimates found.</div>
+          ) : (
+            <table className="w-full text-xs">
+              <thead className="sticky top-0 bg-neutral-600 text-white">
+                <tr>
+                  <th className="px-4 py-2 text-left font-medium">Date</th>
+                  <th className="px-4 py-2 text-left font-medium">Stage</th>
+                  <th className="px-4 py-2 text-left font-medium">Description</th>
+                  <th className="px-4 py-2 text-right font-medium">Total</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {filtered.map((e) => (
+                  <tr
+                    key={e.id}
+                    className="cursor-pointer hover:bg-neutral-50"
+                    onClick={() => onOpenEstimate(e.id)}
+                  >
+                    <td className="px-4 py-2.5 text-neutral-700">
+                      {new Date(e.estimateDate).toLocaleDateString()}
+                    </td>
+                    <td className="px-4 py-2.5">
+                      <Badge variant="outline" className="text-[10px] capitalize">{e.stage}</Badge>
+                    </td>
+                    <td className="px-4 py-2.5 font-medium text-neutral-800">{e.description}</td>
+                    <td className="px-4 py-2.5 text-right text-neutral-800">{formatCurrency(e.totalCents)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+
+        <div className="border-t px-6 py-2 text-xs text-neutral-400">
+          {filtered.length} estimate{filtered.length !== 1 ? "s" : ""}
         </div>
       </div>
     </div>
