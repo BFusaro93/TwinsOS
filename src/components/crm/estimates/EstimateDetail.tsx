@@ -589,6 +589,7 @@ export function EstimateDetail({ estimateId, onClose }: Props) {
                 const invoice = await createInvoice({
                   estimateId: estimate.id,
                   clientId: estimate.clientId,
+                  salesRepId: estimate.salesRepId,
                   description: estimate.description ?? `Invoice for estimate #${estimate.estimateNumber}`,
                   invoiceDate: today,
                   lineItems: (estimate.lineItems ?? [])

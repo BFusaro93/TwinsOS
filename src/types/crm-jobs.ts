@@ -126,7 +126,7 @@ export interface CRMJob {
   conflictDays: string[];
   inchTrigger: number | null;
   invoiceType: string | null;
-  salesRep: string | null;
+  salesRepId: string | null;
   source: string | null;
   paymentType: string | null;
   poNumber: string | null;
@@ -151,6 +151,7 @@ export interface CRMJob {
   clientName?: string;
   clientPhone?: string;
   crewName?: string;
+  salesRepName?: string | null;
   services?: CRMJobService[];
 }
 
@@ -182,7 +183,7 @@ export interface NewClientJobFormValues {
   conflictDays: string[];
   inchTrigger: number | null;
   invoiceType: string | null;
-  salesRep: string | null;
+  salesRepId: string | null;
   source: string | null;
   paymentType: string | null;
   poNumber: string | null;
