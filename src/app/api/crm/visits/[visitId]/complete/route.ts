@@ -78,9 +78,12 @@ export async function POST(
 
   // Auto-invoice: create a draft invoice for any completed visit whose job has no contract.
   // Jobs linked to a contract are billed on the contract's billing cycle instead.
-  // Recurring/package/snow/project jobs can have many visits so each visit gets its own invoice.
+  // Recurring/package/project jobs can have many visits so each visit gets its own invoice.
   // One-time and waiting-list jobs are terminal (one visit) so we guard against duplicates.
-  const shouldAutoInvoice = orgId && j && !j.contract_id;
+  // Snow jobs are excluded — they're billed exclusively through the dedicated Snow Invoicing
+  // page (per-inch/hourly rates this flat auto-invoice can't compute), matching the SA guide's
+  // "separate, manual Invoicing" design for snow.
+  const shouldAutoInvoice = orgId && j && !j.contract_id && j.job_type !== "snow";
   const isTerminalJobType = j && (j.job_type === "one_time" || j.job_type === "waiting_list");
 
   if (shouldAutoInvoice) {

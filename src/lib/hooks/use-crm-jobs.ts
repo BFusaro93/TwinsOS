@@ -7,7 +7,7 @@ import type { CRMJob, CRMService, CRMCrew, CRMServiceRateMatrixRow } from "@/typ
 // ── mappers ───────────────────────────────────────────────────────────────────
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function mapJob(row: any): CRMJob {
+export function mapJob(row: any): CRMJob {
   return {
     id: row.id,
     orgId: row.org_id,
@@ -50,6 +50,8 @@ function mapJob(row: any): CRMJob {
     conflictDays: row.conflict_days ?? [],
     inchTrigger: row.inch_trigger ?? null,
     invoiceType: row.invoice_type ?? null,
+    ratePerInchCents: row.rate_per_inch_cents ?? null,
+    assetType: row.asset_type ?? null,
     salesRepId: row.sales_rep_id ?? null,
     source: row.source ?? null,
     paymentType: row.payment_type ?? null,
@@ -371,6 +373,8 @@ function mapJobFull(row: any): CRMJob {
     conflictDays: row.conflict_days ?? [],
     inchTrigger: row.inch_trigger ?? null,
     invoiceType: row.invoice_type ?? null,
+    ratePerInchCents: row.rate_per_inch_cents ?? null,
+    assetType: row.asset_type ?? null,
     source: row.source ?? null,
     paymentType: row.payment_type ?? null,
     poNumber: row.po_number ?? null,
@@ -462,12 +466,20 @@ function applyJobServiceFallback(visit: CRMJobVisit, row: any): CRMJobVisit {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function mapVisit(row: any): CRMJobVisit {
+export function mapVisit(row: any): CRMJobVisit {
   return {
     id: row.id,
     orgId: row.org_id,
     jobId: row.job_id,
     clientId: row.client_id,
+    stormEventId: row.storm_event_id ?? null,
+    snowDepthInches: row.snow_depth_inches ?? null,
+    temperature: row.temperature ?? null,
+    assetType: row.asset_type ?? null,
+    materialsUsed: Array.isArray(row.materials_used)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ? row.materials_used.map((m: any) => ({ name: m.name ?? '', qty: Number(m.qty ?? 0), rateCents: Number(m.rate_cents ?? m.rateCents ?? 0) }))
+      : [],
     clientName: row.clients?.display_name ?? null,
     clientPhone: row.clients?.primary_phone ?? null,
     crewId: row.crew_id ?? null,
@@ -570,6 +582,8 @@ export function useCreateVisit() {
       priority?: number;
       notesToCrew?: string | null;
       invoiceDescription?: string | null;
+      stormEventId?: string | null;
+      orderNum?: number | null;
     }) => {
       const supabase = createClient();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -585,6 +599,8 @@ export function useCreateVisit() {
           priority: values.priority ?? 1,
           notes_to_crew: values.notesToCrew ?? null,
           invoice_description: values.invoiceDescription ?? null,
+          storm_event_id: values.stormEventId ?? null,
+          order_num: values.orderNum ?? null,
         })
         .select()
         .single();
@@ -716,6 +732,11 @@ export function useUpdateVisit() {
         assigned_employee_id: string | null;
         dispatched_at: string | null;
         completed_at: string | null;
+        order_num: number | null;
+        snow_depth_inches: number | null;
+        temperature: number | null;
+        asset_type: string | null;
+        materials_used: { name: string; qty: number; rate_cents: number }[];
       }>;
       jobId?: string;
       jobType?: string;
@@ -802,6 +823,8 @@ export function useCreateClientJob() {
           conflict_days: values.conflictDays,
           inch_trigger: values.inchTrigger ?? null,
           invoice_type: values.invoiceType || null,
+          rate_per_inch_cents: values.ratePerInchCents ?? null,
+          asset_type: values.assetType || null,
           sales_rep_id: values.salesRepId || null,
           source: values.source || null,
           payment_type: values.paymentType || null,

@@ -31,6 +31,8 @@ import { Plus, X } from "lucide-react";
 import { toast } from "sonner";
 import type { JobType } from "@/types/crm-jobs";
 
+const DAYS_OF_WEEK = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
 const JOB_TYPE_TITLE: Record<JobType, string> = {
   one_time:     "New One Time Job",
   recurring:    "New Recurring Job",
@@ -96,6 +98,13 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
   const [isComplete, setIsComplete] = useState(false);
   const [services, setServices] = useState<ServiceRow[]>([blankServiceRow(todayStr())]);
 
+  // Snow-specific billing fields
+  const [invoiceType, setInvoiceType] = useState<string | null>(null);
+  const [inchTrigger, setInchTrigger] = useState<number | null>(null);
+  const [ratePerInchCents, setRatePerInchCents] = useState<number | null>(null);
+  const [assetType, setAssetType] = useState("");
+  const [snowDaysAuthorized, setSnowDaysAuthorized] = useState<string[]>([]);
+
   useEffect(() => {
     if (open) {
       const today = todayStr();
@@ -108,8 +117,17 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
       setPackageId("");
       setIsComplete(false);
       setServices([blankServiceRow(today)]);
+      setInvoiceType(null);
+      setInchTrigger(null);
+      setRatePerInchCents(null);
+      setAssetType("");
+      setSnowDaysAuthorized([]);
     }
   }, [open, initialJobType]);
+
+  function toggleSnowDay(d: string) {
+    setSnowDaysAuthorized((prev) => (prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d]));
+  }
 
   function pickPackage(id: string) {
     setPackageId(id);
@@ -197,13 +215,15 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
         jobType,
         contractId: contractId ?? null,
         schedule: schedule || null,
-        scheduleDays: [],
+        scheduleDays: jobType === "snow" ? snowDaysAuthorized : [],
         packageName: jobType === "package" ? (selectedPackage?.name ?? null) : null,
         packageRenewal: null,
         packageDiscount: null,
         conflictDays: [],
-        inchTrigger: null,
-        invoiceType: null,
+        inchTrigger: jobType === "snow" ? inchTrigger : null,
+        invoiceType: jobType === "snow" ? invoiceType : null,
+        ratePerInchCents: jobType === "snow" ? ratePerInchCents : null,
+        assetType: jobType === "snow" ? (assetType || null) : null,
         salesRepId,
         source: null,
         paymentType: null,
@@ -391,6 +411,67 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
                     </div>
                   </div>
                 )}
+              </div>
+            )}
+
+            {jobType === "snow" && (
+              <div className="flex flex-col gap-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="flex flex-col gap-1.5">
+                    <Label># Inch Trigger</Label>
+                    <Input
+                      type="number" min="0" step="0.5"
+                      value={inchTrigger ?? ""}
+                      onChange={(e) => setInchTrigger(e.target.value ? Number(e.target.value) : null)}
+                      placeholder="e.g. 2"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label>Invoice Type</Label>
+                    <Select value={invoiceType ?? ""} onValueChange={setInvoiceType}>
+                      <SelectTrigger><SelectValue placeholder="Select type" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="per_event">Per Event</SelectItem>
+                        <SelectItem value="per_event_per_inch">Per Event, Per Inch</SelectItem>
+                        <SelectItem value="per_push_per_inch">Per Push, Per Inch</SelectItem>
+                        <SelectItem value="hourly">Hourly</SelectItem>
+                        <SelectItem value="monthly_flat_rate">Monthly Flat Rate</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                {(invoiceType === "per_event_per_inch" || invoiceType === "per_push_per_inch") && (
+                  <div className="flex flex-col gap-1.5">
+                    <Label>Rate Per Inch ($)</Label>
+                    <Input
+                      type="number" min="0" step="0.01"
+                      value={ratePerInchCents != null ? ratePerInchCents / 100 : ""}
+                      onChange={(e) => setRatePerInchCents(e.target.value ? Math.round(parseFloat(e.target.value) * 100) : null)}
+                      placeholder="0.00"
+                    />
+                  </div>
+                )}
+                <div className="flex flex-col gap-1.5">
+                  <Label>Asset Type</Label>
+                  <Input value={assetType} onChange={(e) => setAssetType(e.target.value)} placeholder="e.g. Skid Steer" />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label>Days Authorized</Label>
+                  <div className="flex gap-1 flex-wrap">
+                    {DAYS_OF_WEEK.map((d) => (
+                      <button
+                        key={d}
+                        type="button"
+                        onClick={() => toggleSnowDay(d)}
+                        className={`rounded border px-2 py-0.5 text-xs transition-colors ${
+                          snowDaysAuthorized.includes(d) ? "border-brand-500 bg-brand-500 text-white" : "border-slate-200 bg-white text-slate-600"
+                        }`}
+                      >
+                        {d}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
             )}
 

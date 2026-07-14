@@ -777,6 +777,82 @@ export function JobDetail({ jobId, initialEditing = false }: Props) {
                         )}
                       </div>
                     )}
+                    {job.jobType === "snow" && (
+                      <>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="flex flex-col gap-1">
+                            <Label className="text-xs text-slate-500"># Inch Trigger</Label>
+                            <Input
+                              type="number" min="0" step="0.5"
+                              defaultValue={job.inchTrigger ?? ""}
+                              onChange={(e) => patch("inch_trigger", e.target.value ? Number(e.target.value) : null)}
+                              className="text-sm"
+                              placeholder="e.g. 2"
+                            />
+                          </div>
+                          <div className="flex flex-col gap-1">
+                            <Label className="text-xs text-slate-500">Invoice Type</Label>
+                            <Select
+                              defaultValue={job.invoiceType ?? ""}
+                              onValueChange={(v) => patch("invoice_type", v)}
+                            >
+                              <SelectTrigger className="text-sm"><SelectValue placeholder="Select type" /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="per_event">Per Event</SelectItem>
+                                <SelectItem value="per_event_per_inch">Per Event, Per Inch</SelectItem>
+                                <SelectItem value="per_push_per_inch">Per Push, Per Inch</SelectItem>
+                                <SelectItem value="hourly">Hourly</SelectItem>
+                                <SelectItem value="monthly_flat_rate">Monthly Flat Rate</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+                        {(((edits.invoice_type as string | undefined) ?? job.invoiceType) === "per_event_per_inch" ||
+                          ((edits.invoice_type as string | undefined) ?? job.invoiceType) === "per_push_per_inch") && (
+                          <div className="flex flex-col gap-1">
+                            <Label className="text-xs text-slate-500">Rate Per Inch ($)</Label>
+                            <Input
+                              type="number" min="0" step="0.01"
+                              defaultValue={job.ratePerInchCents != null ? job.ratePerInchCents / 100 : ""}
+                              onChange={(e) => patch("rate_per_inch_cents", e.target.value ? Math.round(parseFloat(e.target.value) * 100) : null)}
+                              className="text-sm"
+                              placeholder="0.00"
+                            />
+                          </div>
+                        )}
+                        <div className="flex flex-col gap-1">
+                          <Label className="text-xs text-slate-500">Asset Type</Label>
+                          <Input
+                            defaultValue={job.assetType ?? ""}
+                            onChange={(e) => patch("asset_type", e.target.value || null)}
+                            className="text-sm"
+                            placeholder="e.g. Skid Steer"
+                          />
+                        </div>
+                        <div className="flex flex-col gap-1">
+                          <Label className="text-xs text-slate-500">Days Authorized</Label>
+                          <div className="flex gap-1 flex-wrap">
+                            {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((d) => {
+                              const current = (edits.schedule_days as string[] | undefined) ?? job.scheduleDays;
+                              const active = current.includes(d);
+                              return (
+                                <button
+                                  key={d}
+                                  type="button"
+                                  onClick={() => patch("schedule_days", active ? current.filter((x) => x !== d) : [...current, d])}
+                                  className={cn(
+                                    "rounded border px-2 py-0.5 text-xs transition-colors",
+                                    active ? "border-brand-500 bg-brand-500 text-white" : "border-slate-200 bg-white text-slate-600"
+                                  )}
+                                >
+                                  {d}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </>
+                    )}
                     {/* Call Ahead toggle */}
                     <div className="flex items-center justify-between">
                       <Label className="text-xs text-slate-500">Call Ahead Required</Label>
@@ -843,6 +919,40 @@ export function JobDetail({ jobId, initialEditing = false }: Props) {
                           {job.recurrenceRule ?? job.schedule ?? <span className="text-slate-400 italic">Not set</span>}
                         </dd>
                       </div>
+                    )}
+                    {job.jobType === "snow" && (
+                      <>
+                        <div className="flex justify-between">
+                          <dt className="text-xs text-slate-500">Invoice Type</dt>
+                          <dd className="text-xs font-medium text-slate-800">
+                            {job.invoiceType
+                              ? { per_event: "Per Event", per_event_per_inch: "Per Event, Per Inch", per_push_per_inch: "Per Push, Per Inch", hourly: "Hourly", monthly_flat_rate: "Monthly Flat Rate" }[job.invoiceType] ?? job.invoiceType
+                              : <span className="text-slate-400 italic">Not set</span>}
+                          </dd>
+                        </div>
+                        <div className="flex justify-between">
+                          <dt className="text-xs text-slate-500"># Inch Trigger</dt>
+                          <dd className="text-xs font-medium text-slate-800">{job.inchTrigger != null ? `${job.inchTrigger}"` : "—"}</dd>
+                        </div>
+                        {(job.invoiceType === "per_event_per_inch" || job.invoiceType === "per_push_per_inch") && (
+                          <div className="flex justify-between">
+                            <dt className="text-xs text-slate-500">Rate Per Inch</dt>
+                            <dd className="text-xs font-medium text-slate-800">{job.ratePerInchCents != null ? formatCurrency(job.ratePerInchCents) : "—"}</dd>
+                          </div>
+                        )}
+                        {job.assetType && (
+                          <div className="flex justify-between">
+                            <dt className="text-xs text-slate-500">Asset Type</dt>
+                            <dd className="text-xs font-medium text-slate-800">{job.assetType}</dd>
+                          </div>
+                        )}
+                        <div className="flex justify-between">
+                          <dt className="text-xs text-slate-500">Days Authorized</dt>
+                          <dd className="text-xs font-medium text-slate-800">
+                            {job.scheduleDays.length > 0 ? job.scheduleDays.join(", ") : <span className="text-slate-400 italic">Any day</span>}
+                          </dd>
+                        </div>
+                      </>
                     )}
                     {job.callAhead && (
                       <div className="flex justify-between">

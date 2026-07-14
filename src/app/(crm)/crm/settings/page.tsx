@@ -50,6 +50,8 @@ import { RolesList } from "@/components/crm/roles/RolesList";
 import { EstimateStagesEditor } from "@/components/crm/settings/EstimateStagesEditor";
 import { OverheadSettingsEditor } from "@/components/crm/settings/OverheadSettingsEditor";
 import { ClientPortalTab } from "@/components/crm/settings/ClientPortalSettings";
+import { SnowRoutesEditor } from "@/components/crm/settings/SnowRoutesEditor";
+import { BILLING_TERMS_OPTIONS } from "@/lib/constants";
 
 // ── AccordionSection ──────────────────────────────────────────────────────────
 
@@ -632,16 +634,6 @@ function DiscountsEditor() {
   );
 }
 
-const BILLING_TERMS_OPTIONS = [
-  { value: "due_on_receipt", label: "Due on Receipt" },
-  { value: "net_10", label: "Net 10" },
-  { value: "net_15", label: "Net 15" },
-  { value: "net_30", label: "Net 30" },
-  { value: "net_45", label: "Net 45" },
-  { value: "net_60", label: "Net 60" },
-  { value: "net_90", label: "Net 90" },
-];
-
 const INVOICE_FREQUENCY_OPTIONS = [
   { value: "daily", label: "Daily" },
   { value: "weekly", label: "Weekly" },
@@ -1176,9 +1168,7 @@ function AddServiceForm({ onAdded }: { onAdded: () => void }) {
 
 function ServicesTab() {
   const { data: services = [], refetch } = useAllCRMServices();
-  const salesReps = useCategoryList(["Brandon Fusaro", "Michael Fusaro", "Pam Fusaro"]);
   const masterPackages = useCategoryList([], false);
-  const snowRoutes = useCategoryList([], false);
   const { data: serviceCategoryItems = [] } = useOrgList("service_categories");
 
   return (
@@ -1202,14 +1192,11 @@ function ServicesTab() {
       <AccordionSection title="Service Categories" count={serviceCategoryItems.length}>
         <OrgListEditor listName="service_categories" addPlaceholder="e.g. Hardscape" />
       </AccordionSection>
-      <AccordionSection title="Sales Reps" count={salesReps.items.length}>
-        <CategoryListEditor {...salesReps} addPlaceholder="e.g. John Smith" />
-      </AccordionSection>
       <AccordionSection title="Master Packages" count={masterPackages.items.length}>
         <CategoryListEditor {...masterPackages} addPlaceholder="e.g. Gold Maintenance" />
       </AccordionSection>
-      <AccordionSection title="Snow Routes" count={snowRoutes.items.length}>
-        <CategoryListEditor {...snowRoutes} addPlaceholder="e.g. Route A" />
+      <AccordionSection title="Snow Routes" description="Master Routes for the Snow Dispatch Board">
+        <SnowRoutesEditor />
       </AccordionSection>
     </div>
   );

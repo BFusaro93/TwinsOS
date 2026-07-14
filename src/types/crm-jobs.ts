@@ -126,6 +126,8 @@ export interface CRMJob {
   conflictDays: string[];
   inchTrigger: number | null;
   invoiceType: string | null;
+  ratePerInchCents: number | null;
+  assetType: string | null;
   salesRepId: string | null;
   source: string | null;
   paymentType: string | null;
@@ -150,6 +152,7 @@ export interface CRMJob {
   createdBy: string | null;
   clientName?: string;
   clientPhone?: string;
+  clientPriority?: string | null;
   crewName?: string;
   salesRepName?: string | null;
   services?: CRMJobService[];
@@ -183,6 +186,8 @@ export interface NewClientJobFormValues {
   conflictDays: string[];
   inchTrigger: number | null;
   invoiceType: string | null;
+  ratePerInchCents: number | null;
+  assetType: string | null;
   salesRepId: string | null;
   source: string | null;
   paymentType: string | null;
@@ -213,11 +218,22 @@ export interface JobComment {
   createdAt: string
 }
 
+export interface SnowVisitMaterial {
+  name: string
+  qty: number
+  rateCents: number
+}
+
 export interface CRMJobVisit {
   id: string
   orgId: string
   jobId: string
   clientId: string
+  stormEventId: string | null
+  snowDepthInches: number | null
+  temperature: number | null
+  assetType: string | null
+  materialsUsed: SnowVisitMaterial[]
   clientName?: string | null
   clientPhone?: string | null
   crewId: string | null
@@ -290,6 +306,45 @@ export interface CRMSchedule {
   /** Only meaningful when frequency === 'monthly' — e.g. "first" + Mon = "1st Monday of every month" */
   weekOfMonth: 'first' | 'second' | 'third' | 'fourth' | 'last' | null;
   isActive: boolean;
+}
+
+export type StormEventStatus = 'pending' | 'working' | 'complete';
+
+export interface StormEvent {
+  id: string;
+  orgId: string;
+  name: string;
+  eventDate: string;
+  dispatchStatus: StormEventStatus;
+  forecastDepthInches: number | null;
+  temperature: number | null;
+  notes: string | null;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SnowRoute {
+  id: string;
+  orgId: string;
+  name: string;
+  defaultCrewId: string | null;
+  defaultCrewName?: string | null;
+  isActive: boolean;
+  stopCount?: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SnowRouteStop {
+  id: string;
+  orgId: string;
+  routeId: string;
+  jobId: string;
+  sortOrder: number;
+  clientName?: string | null;
+  serviceAddress?: string | null;
+  createdAt: string;
 }
 
 export interface NewClientJobServiceValues {

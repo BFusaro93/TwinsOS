@@ -80,7 +80,7 @@ const CRM_NAV: NavSection[] = [
       { label: "Jobs",           href: "/crm/scheduling",              icon: Briefcase },
       { label: "Dispatch Board", href: "/crm/scheduling/dispatch",     icon: CalendarDays },
       { label: "Waiting List",   href: "/crm/scheduling/waiting-list", icon: ListOrdered },
-      { label: "Snow Jobs",      href: "/crm/scheduling/snow",         icon: Snowflake,     comingSoon: true },
+      { label: "Snow Jobs",      href: "/crm/scheduling/snow",         icon: Snowflake },
       { label: "Projects",       href: "/crm/scheduling/projects",     icon: FolderKanban },
     ],
   },
@@ -91,7 +91,7 @@ const CRM_NAV: NavSection[] = [
       { label: "Payments",        href: "/crm/accounting/payments",        icon: CreditCard },
       { label: "Purchase Orders", href: "/crm/accounting/purchase-orders", icon: ShoppingCart },
       { label: "Contracts",       href: "/crm/accounting/contracts",       icon: FileSignature },
-      { label: "Snow Invoicing",  href: "/crm/accounting/snow-invoicing",  icon: FileText,      comingSoon: true },
+      { label: "Snow Invoicing",  href: "/crm/accounting/snow-invoicing",  icon: FileText },
     ],
   },
   {
