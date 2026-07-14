@@ -389,7 +389,7 @@ function DetailsTab({
                 <label className="text-xs font-medium text-slate-600">Unit Cost ($)</label>
                 <Input
                   type="number"
-                  step="0.01"
+                  step="any"
                   min={0}
                   placeholder="0.00"
                   value={addCost}

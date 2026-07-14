@@ -229,7 +229,7 @@ export function BulkPriceUpdateDialog({
                       <div className="flex items-center gap-1">
                         <Input
                           type="number"
-                          step="0.01"
+                          step="any"
                           min={0}
                           value={r.unitCost}
                           onChange={(e) => setRowField(r.id, "unitCost", e.target.value)}
@@ -246,7 +246,7 @@ export function BulkPriceUpdateDialog({
                       <div className="flex items-center gap-1">
                         <Input
                           type="number"
-                          step="0.01"
+                          step="any"
                           min={0}
                           value={r.price}
                           onChange={(e) => setRowField(r.id, "price", e.target.value)}

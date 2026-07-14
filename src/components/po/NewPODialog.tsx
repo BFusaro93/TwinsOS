@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { DecimalInput } from "@/components/shared/DecimalInput";
 import {
   Select,
   SelectContent,
@@ -553,35 +554,21 @@ export function NewPODialog({ open, onOpenChange, initialData, prefillData, onCr
                                 />
                               </td>
                               <td className="py-1.5 pr-2 align-top">
-                                <Input
-                                  type="number"
+                                <DecimalInput
                                   min={0.01}
-                                  step={0.01}
                                   className="h-8 w-20 text-xs"
                                   value={li.quantity}
-                                  onFocus={(e) => e.target.select()}
-                                  onChange={(e) =>
-                                    handleLineItemQtyChange(
-                                      li.id,
-                                      Math.max(0.01, parseFloat(e.target.value) || 0.01)
-                                    )
-                                  }
+                                  selectOnFocus
+                                  onCommit={(qty) => handleLineItemQtyChange(li.id, Math.max(0.01, qty))}
                                 />
                               </td>
                               <td className="py-1.5 pr-2 align-top">
-                                <Input
-                                  type="number"
-                                  step="0.01"
+                                <DecimalInput
                                   min={0}
                                   className="h-8 w-28 text-xs"
                                   value={li.unitCost}
-                                  onFocus={(e) => e.target.select()}
-                                  onChange={(e) =>
-                                    handleLineItemUnitCostChange(
-                                      li.id,
-                                      parseFloat(e.target.value) || 0
-                                    )
-                                  }
+                                  selectOnFocus
+                                  onCommit={(cost) => handleLineItemUnitCostChange(li.id, cost)}
                                 />
                                 {costMethod !== "manual" && li.productItemId && (() => {
                                   const rawId = li.productItemId.replace(/^(product:|part:)/, "");
@@ -701,7 +688,7 @@ export function NewPODialog({ open, onOpenChange, initialData, prefillData, onCr
                     <Input
                       id="po-shipping"
                       type="number"
-                      step="0.01"
+                      step="any"
                       min={0}
                       placeholder="0.00"
                       value={shippingCost}

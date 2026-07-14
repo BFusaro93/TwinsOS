@@ -12,6 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { PhoneInput } from "@/components/shared/PhoneInput";
 import {
   Select,
   SelectContent,
@@ -158,10 +159,10 @@ export function NewVendorDialog({ open, onOpenChange, initialData, onCreated }: 
             {/* Phone — half width */}
             <div className="grid gap-1.5">
               <Label htmlFor="vendor-phone">Phone</Label>
-              <Input
+              <PhoneInput
                 id="vendor-phone"
                 value={phone}
-                onChange={(e) => setPhone(e.target.value)}
+                onChange={setPhone}
                 placeholder="(000) 000-0000"
               />
             </div>

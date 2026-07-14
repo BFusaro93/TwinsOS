@@ -260,7 +260,7 @@ export function NewProductDialog({ open, onOpenChange, initialData, onCreated }:
               <Input
                 id="product-unit-cost"
                 type="number"
-                step="0.01"
+                step="any"
                 placeholder="0.00"
                 value={unitCost}
                 onChange={(e) => setUnitCost(e.target.value)}
@@ -273,7 +273,7 @@ export function NewProductDialog({ open, onOpenChange, initialData, onCreated }:
               <Input
                 id="product-price"
                 type="number"
-                step="0.01"
+                step="any"
                 placeholder="0.00"
                 value={price}
                 onChange={(e) => setPrice(e.target.value)}

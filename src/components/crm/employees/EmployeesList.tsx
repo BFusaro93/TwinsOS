@@ -38,6 +38,7 @@ import { formatCurrency, getAvatarColor } from "@/lib/utils";
 import { Plus, Search, MoreHorizontal, UserCog, ChevronDown, Pencil } from "lucide-react";
 import { MasterDetailLayout } from "@/components/shared/MasterDetailLayout";
 import { PermissionGate } from "@/components/shared/PermissionGate";
+import { PhoneInput } from "@/components/shared/PhoneInput";
 import { toast } from "sonner";
 import type { CRMEmployee, EmploymentStatus, UserType } from "@/types/crm-employees";
 
@@ -201,13 +202,13 @@ function EmploymentTab({
             <FieldInput type="date" value={form.date_hired ?? ""} onChange={(e) => onChange("date_hired", e.target.value)} />
           </Field>
           <Field label="Phone">
-            <FieldInput value={form.phone ?? ""} onChange={(e) => onChange("phone", e.target.value)} />
+            <PhoneInput className="h-8 text-sm" value={form.phone ?? ""} onChange={(v) => onChange("phone", v)} />
           </Field>
           <Field label="Cell Phone">
-            <FieldInput value={form.cell_phone ?? ""} onChange={(e) => onChange("cell_phone", e.target.value)} />
+            <PhoneInput className="h-8 text-sm" value={form.cell_phone ?? ""} onChange={(v) => onChange("cell_phone", v)} />
           </Field>
           <Field label="Pager">
-            <FieldInput value={form.pager ?? ""} onChange={(e) => onChange("pager", e.target.value)} />
+            <PhoneInput className="h-8 text-sm" value={form.pager ?? ""} onChange={(v) => onChange("pager", v)} />
           </Field>
           <Field label="Marital Status">
             <Select value={form.marital_status ?? ""} onValueChange={(v) => onChange("marital_status", v || null)}>
@@ -239,7 +240,7 @@ function EmploymentTab({
             <FieldInput value={form.citizenship ?? ""} onChange={(e) => onChange("citizenship", e.target.value)} />
           </Field>
           <Field label="Emergency Phone">
-            <FieldInput value={form.emergency_phone ?? ""} onChange={(e) => onChange("emergency_phone", e.target.value)} />
+            <PhoneInput className="h-8 text-sm" value={form.emergency_phone ?? ""} onChange={(v) => onChange("emergency_phone", v)} />
           </Field>
           <Field label="Emergency Contact">
             <FieldInput value={form.emergency_contact ?? ""} onChange={(e) => onChange("emergency_contact", e.target.value)} />
@@ -248,7 +249,7 @@ function EmploymentTab({
             <FieldInput type="number" min="0" value={form.num_dependants ?? 0} onChange={(e) => onChange("num_dependants", parseInt(e.target.value) || 0)} className="h-8 w-20 text-sm" />
           </Field>
           <Field label="Spouse Phone">
-            <FieldInput value={form.spouse_phone ?? ""} onChange={(e) => onChange("spouse_phone", e.target.value)} />
+            <PhoneInput className="h-8 text-sm" value={form.spouse_phone ?? ""} onChange={(v) => onChange("spouse_phone", v)} />
           </Field>
           <Field label="Rehire Date">
             <FieldInput type="date" value={form.rehire_date ?? ""} onChange={(e) => onChange("rehire_date", e.target.value)} />

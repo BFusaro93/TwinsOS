@@ -341,7 +341,7 @@ export function LineItemsTable({
                   <Input
                     type="number"
                     min={0}
-                    step={0.01}
+                    step="any"
                     value={editForm.unitCost}
                     onChange={(e) => setEditForm((f) => ({ ...f, unitCost: e.target.value }))}
                   />
@@ -465,7 +465,7 @@ export function LineItemsTable({
                   <Input
                     type="number"
                     min={0}
-                    step={0.01}
+                    step="any"
                     value={addForm.unitCost}
                     onChange={(e) => setAddForm((f) => ({ ...f, unitCost: e.target.value }))}
                   />

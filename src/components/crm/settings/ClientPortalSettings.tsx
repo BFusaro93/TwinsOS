@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { PhoneInput } from "@/components/shared/PhoneInput";
 import { useOrgList } from "@/lib/hooks/use-org-lists";
 
 interface PortalSettings {
@@ -164,11 +165,10 @@ export function ClientPortalTab() {
             <Label className="flex items-center gap-1.5">
               <Phone className="h-3.5 w-3.5 text-slate-400" /> Support Phone
             </Label>
-            <Input
+            <PhoneInput
               value={form.support_phone}
-              onChange={(e) => patch("support_phone", e.target.value)}
+              onChange={(v) => patch("support_phone", v)}
               placeholder="(555) 555-5555"
-              type="tel"
             />
           </div>
           <div className="flex flex-col gap-1.5">

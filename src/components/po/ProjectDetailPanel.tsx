@@ -528,11 +528,11 @@ function MaterialsTab({ project }: { project: Project }) {
             <div className="flex gap-3">
               <div className="flex flex-1 flex-col gap-1">
                 <label className="text-xs font-medium text-slate-600">Quantity</label>
-                <Input type="number" min={0.01} step={0.01} value={editForm.quantity} onChange={(e) => setEditForm((f) => ({ ...f, quantity: e.target.value }))} autoFocus />
+                <Input type="number" min={0.01} step="any" value={editForm.quantity} onChange={(e) => setEditForm((f) => ({ ...f, quantity: e.target.value }))} autoFocus />
               </div>
               <div className="flex flex-1 flex-col gap-1">
                 <label className="text-xs font-medium text-slate-600">Unit Cost ($)</label>
-                <Input type="number" min={0} step={0.01} value={editForm.unitCost} onChange={(e) => setEditForm((f) => ({ ...f, unitCost: e.target.value }))} />
+                <Input type="number" min={0} step="any" value={editForm.unitCost} onChange={(e) => setEditForm((f) => ({ ...f, unitCost: e.target.value }))} />
               </div>
             </div>
             <Button onClick={saveEdit} className="mt-1">Save Changes</Button>
@@ -775,7 +775,7 @@ function SubcontractsTab({ project }: { project: Project }) {
                 <Input
                   type="number"
                   min={0}
-                  step={0.01}
+                  step="any"
                   placeholder="0.00"
                   value={form.amount}
                   onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))}
@@ -922,7 +922,7 @@ function RateField({
         <input
           type="number"
           min={0}
-          step={0.01}
+          step="any"
           autoFocus
           value={draft}
           onChange={(e) => setDraft(e.target.value)}

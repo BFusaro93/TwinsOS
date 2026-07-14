@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DecimalInput } from "@/components/shared/DecimalInput";
 import {
   Select,
   SelectContent,
@@ -188,36 +189,28 @@ export function AddProjectMaterialsDialog({
                         />
                       </td>
                       <td className="py-1.5 pr-2">
-                        <Input
-                          type="number"
-                          min={1}
-                          step={1}
+                        <DecimalInput
+                          min={0.01}
                           className="h-8 w-24 text-xs"
                           value={item.quantity}
-                          onChange={(e) =>
+                          onCommit={(qty) =>
                             setItems((prev) =>
                               prev.map((i) =>
-                                i.id === item.id
-                                  ? { ...i, quantity: Math.max(0.01, parseFloat(e.target.value) || 0.01) }
-                                  : i
+                                i.id === item.id ? { ...i, quantity: Math.max(0.01, qty) } : i
                               )
                             )
                           }
                         />
                       </td>
                       <td className="py-1.5 pr-2">
-                        <Input
-                          type="number"
-                          step="0.01"
+                        <DecimalInput
                           min={0}
                           className="h-8 w-24 text-xs"
                           value={item.unitCost}
-                          onChange={(e) =>
+                          onCommit={(cost) =>
                             setItems((prev) =>
                               prev.map((i) =>
-                                i.id === item.id
-                                  ? { ...i, unitCost: parseFloat(e.target.value) || 0 }
-                                  : i
+                                i.id === item.id ? { ...i, unitCost: cost } : i
                               )
                             )
                           }

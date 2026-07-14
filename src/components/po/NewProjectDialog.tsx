@@ -246,7 +246,7 @@ export function NewProjectDialog({ open, onOpenChange, initialData }: NewProject
                 id="project-contract-price"
                 type="number"
                 min="0"
-                step="0.01"
+                step="any"
                 value={contractPrice}
                 onChange={(e) => setContractPrice(e.target.value)}
                 placeholder="0.00"
