@@ -3,10 +3,12 @@
 import { useState } from "react";
 import { MaterialCalculatorPage } from "./MaterialCalculatorPage";
 import { CobblestoneCalculatorPage } from "./CobblestoneCalculatorPage";
+import { ProjectCostCalculatorPage } from "./ProjectCostCalculatorPage";
 
 const MODES = [
   { id: "material", label: "Material" },
   { id: "cobblestone", label: "Cobblestone" },
+  { id: "project-cost", label: "Project Cost" },
 ] as const;
 
 type ModeId = (typeof MODES)[number]["id"];
@@ -33,7 +35,9 @@ export function CalculatorsPage() {
         ))}
       </div>
 
-      {mode === "material" ? <MaterialCalculatorPage /> : <CobblestoneCalculatorPage />}
+      {mode === "material" && <MaterialCalculatorPage />}
+      {mode === "cobblestone" && <CobblestoneCalculatorPage />}
+      {mode === "project-cost" && <ProjectCostCalculatorPage />}
     </div>
   );
 }
