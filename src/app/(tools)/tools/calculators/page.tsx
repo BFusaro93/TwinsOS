@@ -1,5 +1,5 @@
-import { MaterialCalculatorPage } from "@/components/calculators/MaterialCalculatorPage";
+import { CalculatorsPage } from "@/components/calculators/CalculatorsPage";
 
 export default function CalculatorsRoute() {
-  return <MaterialCalculatorPage />;
+  return <CalculatorsPage />;
 }
