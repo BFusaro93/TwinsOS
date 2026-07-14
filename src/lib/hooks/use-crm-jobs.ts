@@ -50,7 +50,7 @@ function mapJob(row: any): CRMJob {
     conflictDays: row.conflict_days ?? [],
     inchTrigger: row.inch_trigger ?? null,
     invoiceType: row.invoice_type ?? null,
-    salesRep: row.sales_rep ?? null,
+    salesRepId: row.sales_rep_id ?? null,
     source: row.source ?? null,
     paymentType: row.payment_type ?? null,
     poNumber: row.po_number ?? null,
@@ -78,6 +78,7 @@ function mapJob(row: any): CRMJob {
     clientName: row.clients?.display_name ?? null,
     clientPhone: row.clients?.primary_phone ?? null,
     crewName: row.crm_crews?.name ?? null,
+    salesRepName: row.profiles?.name ?? null,
     services: (row.crm_job_services ?? []).map(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (s: any) => ({
@@ -157,6 +158,7 @@ export function useJobsForDate(date: string) {
           *,
           clients(display_name, primary_phone),
           crm_crews(name),
+          profiles!crm_jobs_sales_rep_id_fkey(name),
           crm_job_services(*)
         `)
         .eq("scheduled_date", date)
@@ -184,6 +186,7 @@ export function useWaitingListJobs(startDate?: string, endDate?: string) {
           *,
           clients(display_name, primary_phone, billing_address, billing_city, billing_state, billing_zip),
           crm_crews(name),
+          profiles!crm_jobs_sales_rep_id_fkey(name),
           crm_job_services(*),
           crm_job_visits(id, deleted_at)
         `)
@@ -368,7 +371,6 @@ function mapJobFull(row: any): CRMJob {
     conflictDays: row.conflict_days ?? [],
     inchTrigger: row.inch_trigger ?? null,
     invoiceType: row.invoice_type ?? null,
-    salesRep: row.sales_rep ?? null,
     source: row.source ?? null,
     paymentType: row.payment_type ?? null,
     poNumber: row.po_number ?? null,
@@ -419,7 +421,7 @@ export function useClientJobs(clientId?: string) {
       const supabase = createClient();
       let q = supabase
         .from('crm_jobs')
-        .select('*, crm_job_services(*), clients(display_name, primary_phone)')
+        .select('*, crm_job_services(*), clients(display_name, primary_phone), profiles!crm_jobs_sales_rep_id_fkey(name)')
         .is('deleted_at', null)
         .order('created_at', { ascending: false });
       if (clientId) q = q.eq('client_id', clientId);
@@ -800,7 +802,7 @@ export function useCreateClientJob() {
           conflict_days: values.conflictDays,
           inch_trigger: values.inchTrigger ?? null,
           invoice_type: values.invoiceType || null,
-          sales_rep: values.salesRep || null,
+          sales_rep_id: values.salesRepId || null,
           source: values.source || null,
           payment_type: values.paymentType || null,
           po_number: values.poNumber || null,
