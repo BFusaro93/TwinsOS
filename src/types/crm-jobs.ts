@@ -2,6 +2,10 @@ export type JobType = 'recurring' | 'one_time' | 'waiting_list' | 'package' | 's
 export type JobStatus = 'scheduled' | 'in_progress' | 'completed' | 'cancelled' | 'skipped' | 'hold';
 export type ClientJobStatus = 'active' | 'complete' | 'cancelled' | 'on_hold';
 
+// 'manual'          — SA-style: budgeted hours/rate are entered directly on the service.
+// 'production_rate' — Aspire-style: budgeted hours are derived from qty ÷ sq ft per man-hour.
+export type BudgetMethod = 'manual' | 'production_rate';
+
 export interface CRMService {
   id: string;
   orgId: string;
@@ -10,6 +14,7 @@ export interface CRMService {
   category: string;
   defaultRateCents: number | null;
   productionRateSqftPerHr: number | null;
+  budgetMethod: BudgetMethod;
   unit: string;
   isActive: boolean;
   // SA-parity fields
