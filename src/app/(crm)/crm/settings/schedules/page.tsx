@@ -1,10 +1,13 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
-import { useAllCRMSchedules, useCreateCRMSchedule, useUpdateCRMSchedule, useDeleteCRMSchedule } from "@/lib/hooks/use-crm-jobs";
+import { useAllCRMSchedules, useCreateCRMSchedule, useUpdateCRMSchedule, useDeleteCRMSchedule, useBulkImportCRMSchedules } from "@/lib/hooks/use-crm-jobs";
 import { useOrgSettings } from "@/lib/hooks/use-org-settings";
 import type { CRMSchedule } from "@/types/crm-jobs";
 import { Button } from "@/components/ui/button";
+import { ImportExportMenu } from "@/components/shared/ImportExportMenu";
+import { exportCSV } from "@/lib/csv";
+import { toast } from "sonner";
 import { Switch } from "@/components/ui/switch";
 import {
   Dialog,
@@ -511,6 +514,7 @@ export default function SchedulesPage() {
   const { data: schedules = [], isLoading } = useAllCRMSchedules();
   const updateSchedule = useUpdateCRMSchedule();
   const deleteSchedule = useDeleteCRMSchedule();
+  const { mutateAsync: bulkImportSchedules } = useBulkImportCRMSchedules();
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<CRMSchedule | null>(null);
@@ -541,9 +545,40 @@ export default function SchedulesPage() {
 
       <div className="flex items-center justify-between mb-4">
         <span className="text-sm text-slate-500">{schedules.length} schedule{schedules.length !== 1 ? 's' : ''}</span>
-        <Button size="sm" onClick={openAdd}>
-          <Plus className="h-4 w-4 mr-1.5" /> Add Schedule
-        </Button>
+        <div className="flex items-center gap-2">
+          <ImportExportMenu
+            entityLabel="Schedules"
+            templateColumns={["name", "frequency", "dayOfWeek", "weekPattern", "anchorDate", "seasonStart", "seasonEnd", "weekOfMonth"]}
+            templateFilename="schedules-template.csv"
+            requiredColumns={["name", "frequency", "dayOfWeek"]}
+            onExport={() =>
+              exportCSV(
+                schedules.map((s) => ({
+                  name: s.name,
+                  frequency: s.frequency,
+                  dayOfWeek: s.dayOfWeek,
+                  weekPattern: s.weekPattern ?? "",
+                  anchorDate: s.anchorDate ?? "",
+                  seasonStart: s.seasonStart ?? "",
+                  seasonEnd: s.seasonEnd ?? "",
+                  weekOfMonth: s.weekOfMonth ?? "",
+                })),
+                "schedules-export.csv"
+              )
+            }
+            onImport={async (rows) => {
+              const { created, skipped } = await bulkImportSchedules(rows);
+              if (skipped > 0) {
+                toast.warning(`Imported ${created} schedule${created !== 1 ? "s" : ""}. ${skipped} row${skipped !== 1 ? "s" : ""} skipped (invalid or missing name/frequency/day).`);
+              } else {
+                toast.success(`Successfully imported ${created} schedule${created !== 1 ? "s" : ""}.`);
+              }
+            }}
+          />
+          <Button size="sm" onClick={openAdd}>
+            <Plus className="h-4 w-4 mr-1.5" /> Add Schedule
+          </Button>
+        </div>
       </div>
 
       <div className="rounded-lg border border-slate-200 overflow-hidden">

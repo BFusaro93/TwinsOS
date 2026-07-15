@@ -115,6 +115,53 @@ export function useCreateTicket() {
   });
 }
 
+const TICKET_TYPES = ["note", "call", "event"];
+const TICKET_STATUSES = ["open", "closed", "pending"];
+const TICKET_PRIORITIES = ["low", "normal", "high", "urgent"];
+
+export function useBulkImportTickets() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (rows: Record<string, string>[]) => {
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+
+      const { data: clients } = await supabase.from("clients").select("id, display_name").is("deleted_at", null);
+      const byName = new Map((clients ?? []).map((c) => [c.display_name.trim().toLowerCase(), c.id]));
+
+      let created = 0;
+      let skipped = 0;
+
+      for (const r of rows) {
+        const subject = r.subject?.trim();
+        if (!subject) { skipped++; continue; }
+
+        const clientId = r.clientName?.trim() ? byName.get(r.clientName.trim().toLowerCase()) ?? null : null;
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error } = await (supabase as any).from("crm_tickets").insert({
+          created_by: user?.id ?? null,
+          type: TICKET_TYPES.includes(r.type?.trim().toLowerCase()) ? r.type.trim().toLowerCase() : "note",
+          client_id: clientId,
+          category: r.category?.trim() || null,
+          subject,
+          body: r.body?.trim() || null,
+          status: TICKET_STATUSES.includes(r.status?.trim().toLowerCase()) ? r.status.trim().toLowerCase() : "open",
+          priority: TICKET_PRIORITIES.includes(r.priority?.trim().toLowerCase()) ? r.priority.trim().toLowerCase() : "normal",
+          due_date: r.dueDate?.trim() || null,
+        });
+        if (error) throw error;
+        created++;
+      }
+
+      return { created, skipped };
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["crm-tickets"] });
+    },
+  });
+}
+
 export function useUpdateTicket() {
   const qc = useQueryClient();
   return useMutation({

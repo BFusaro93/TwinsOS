@@ -8,7 +8,11 @@ import { MasterDetailLayout } from "@/components/shared/MasterDetailLayout";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { PermissionGate } from "@/components/shared/PermissionGate";
+import { ImportExportMenu } from "@/components/shared/ImportExportMenu";
+import { exportCSV } from "@/lib/csv";
+import { useEmployees, useBulkImportEmployees } from "@/lib/hooks/use-employees";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 import {
   EmployeeListPanel,
   EmployeesTable,
@@ -17,7 +21,14 @@ import {
 } from "@/components/crm/employees/EmployeesList";
 import type { CRMEmployee } from "@/types/crm-employees";
 
+const EMPLOYEE_TEMPLATE_COLUMNS = [
+  "firstName", "lastName", "email", "phone", "cellPhone",
+  "address", "city", "state", "zip", "dateHired", "resourceCode", "hourlyRate",
+];
+
 export default function EmployeesPage() {
+  const { data: employees } = useEmployees(false);
+  const { mutateAsync: bulkImportEmployees } = useBulkImportEmployees();
   const [selected, setSelected] = useState<CRMEmployee | null>(null);
   const [editEmployee, setEditEmployee] = useState<CRMEmployee | "new" | null>(null);
   const [viewMode, setViewMode] = useState<"list" | "table">("list");
@@ -57,6 +68,38 @@ export default function EmployeesPage() {
         action={
           <div className="flex items-center gap-2">
             {viewToggle}
+            <ImportExportMenu
+              entityLabel="Employees"
+              templateColumns={EMPLOYEE_TEMPLATE_COLUMNS}
+              templateFilename="employees-template.csv"
+              requiredColumns={["firstName", "lastName"]}
+              onExport={() =>
+                exportCSV(
+                  (employees ?? []).map((e) => ({
+                    firstName: e.firstName,
+                    lastName: e.lastName,
+                    email: e.email ?? "",
+                    phone: e.phone ?? "",
+                    cellPhone: e.cellPhone ?? "",
+                    address: e.address ?? "",
+                    city: e.city ?? "",
+                    state: e.state ?? "",
+                    zip: e.zip ?? "",
+                    dateHired: e.dateHired ?? "",
+                    resourceCode: e.resourceCode ?? "",
+                    hourlyRate: e.hourlyRateCents != null ? (e.hourlyRateCents / 100).toFixed(2) : "",
+                  })),
+                  "employees-export.csv"
+                )
+              }
+              onImport={async (rows) => {
+                const { created, updated, skipped } = await bulkImportEmployees(rows);
+                const parts = [`${created} created`];
+                if (updated > 0) parts.push(`${updated} updated`);
+                if (skipped > 0) parts.push(`${skipped} skipped (missing first/last name)`);
+                toast[skipped > 0 ? "warning" : "success"](`Employees import: ${parts.join(", ")}.`);
+              }}
+            />
             <PermissionGate permission="emp_add">
               <Button size="sm" onClick={() => openEdit()}>
                 <Plus className="mr-1.5 h-4 w-4" />

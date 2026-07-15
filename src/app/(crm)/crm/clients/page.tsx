@@ -10,10 +10,23 @@ import { ClientList } from "@/components/crm/ClientList";
 import { ClientsTable } from "@/components/crm/ClientsTable";
 import { ClientDetailPanel } from "@/components/crm/ClientDetailPanel";
 import { NewClientDialog } from "@/components/crm/NewClientDialog";
+import { ImportExportMenu } from "@/components/shared/ImportExportMenu";
+import { exportCSV } from "@/lib/csv";
+import { useClients, useBulkImportClients } from "@/lib/hooks/use-clients";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 import type { Client } from "@/types/crm";
 
+const CLIENT_TEMPLATE_COLUMNS = [
+  "displayName", "accountType", "primaryPhone", "primaryEmail",
+  "billingAddress", "billingCity", "billingState", "billingZip",
+  "serviceAddress", "serviceCity", "serviceState", "serviceZip",
+  "source", "accountNumber",
+];
+
 export default function ClientsPage() {
+  const { data: clients } = useClients();
+  const { mutateAsync: bulkImportClients } = useBulkImportClients();
   const [selected, setSelected] = useState<Client | null>(null);
   const [newOpen, setNewOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"list" | "table">("list");
@@ -50,6 +63,43 @@ export default function ClientsPage() {
         action={
           <div className="flex items-center gap-2">
             {viewToggle}
+            <ImportExportMenu
+              entityLabel="Clients"
+              templateColumns={CLIENT_TEMPLATE_COLUMNS}
+              templateFilename="clients-template.csv"
+              requiredColumns={["displayName"]}
+              onExport={() =>
+                exportCSV(
+                  (clients ?? []).map((c) => ({
+                    displayName: c.displayName,
+                    accountType: c.accountType,
+                    primaryPhone: c.primaryPhone ?? "",
+                    primaryEmail: c.primaryEmail ?? "",
+                    billingAddress: c.billingAddress ?? "",
+                    billingCity: c.billingCity ?? "",
+                    billingState: c.billingState ?? "",
+                    billingZip: c.billingZip ?? "",
+                    serviceAddress: c.serviceAddress ?? "",
+                    serviceCity: c.serviceCity ?? "",
+                    serviceState: c.serviceState ?? "",
+                    serviceZip: c.serviceZip ?? "",
+                    source: c.source ?? "",
+                    accountNumber: c.accountNumber ?? "",
+                  })),
+                  "clients-export.csv"
+                )
+              }
+              onImport={async (rows) => {
+                const { inserted, skipped } = await bulkImportClients(rows);
+                if (skipped > 0) {
+                  toast.warning(
+                    `Imported ${inserted} client${inserted !== 1 ? "s" : ""}. ${skipped} row${skipped !== 1 ? "s" : ""} skipped (missing display name).`
+                  );
+                } else {
+                  toast.success(`Successfully imported ${inserted} client${inserted !== 1 ? "s" : ""}.`);
+                }
+              }}
+            />
             <Button size="sm" onClick={() => setNewOpen(true)}>
               <Plus className="mr-1.5 h-4 w-4" />
               New Client

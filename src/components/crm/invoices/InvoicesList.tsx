@@ -3,11 +3,13 @@
 import { useMemo, useState, useEffect } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useInvoices, useUpdateInvoiceStatus } from "@/lib/hooks/use-invoices";
+import { useInvoices, useUpdateInvoiceStatus, useBulkImportInvoices } from "@/lib/hooks/use-invoices";
 import { PermissionGate } from "@/components/shared/PermissionGate";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ImportExportMenu } from "@/components/shared/ImportExportMenu";
+import { exportCSV } from "@/lib/csv";
 import { cn, formatCurrency } from "@/lib/utils";
 import { Plus, FileText, Search, ChevronDown, X, RotateCcw, GitMerge, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 import { toast } from "sonner";
@@ -113,9 +115,14 @@ interface Props {
   clientId?: string;
 }
 
+const INVOICE_TEMPLATE_COLUMNS = [
+  "clientName", "description", "invoiceDate", "dueDate", "poNumber", "status", "amount", "taxAmount",
+];
+
 export function InvoicesList({ clientId }: Props) {
   const { data: invoices, isLoading, refetch: refetchInvoices } = useInvoices(clientId);
   const { mutateAsync: updateStatus } = useUpdateInvoiceStatus();
+  const { mutateAsync: bulkImportInvoices } = useBulkImportInvoices();
   const [newSheetOpen, setNewSheetOpen] = useState(false);
   const [openInvoiceId, setOpenInvoiceId] = useState<string | null>(null);
   const searchParams = useSearchParams();
@@ -258,9 +265,40 @@ export function InvoicesList({ clientId }: Props) {
           description={!isLoading ? `${allInvoices.length} invoices` : undefined}
           action={
             <PermissionGate permission="acct_add_modify_invoices">
-              <Button size="sm" onClick={() => setNewSheetOpen(true)}>
-                <Plus className="mr-1.5 h-4 w-4" /> Add Invoice
-              </Button>
+              <div className="flex items-center gap-2">
+                <ImportExportMenu
+                  entityLabel="Invoices"
+                  templateColumns={INVOICE_TEMPLATE_COLUMNS}
+                  templateFilename="invoices-template.csv"
+                  requiredColumns={["clientName", "description", "amount"]}
+                  onExport={() =>
+                    exportCSV(
+                      allInvoices.map((inv) => ({
+                        clientName: inv.clientName ?? "",
+                        description: inv.description,
+                        invoiceDate: inv.invoiceDate,
+                        dueDate: inv.dueDate ?? "",
+                        poNumber: inv.poNumber ?? "",
+                        status: inv.status,
+                        amount: (inv.subtotalCents / 100).toFixed(2),
+                        taxAmount: (inv.taxCents / 100).toFixed(2),
+                      })),
+                      "invoices-export.csv"
+                    )
+                  }
+                  onImport={async (rows) => {
+                    const { created, skipped } = await bulkImportInvoices(rows);
+                    if (skipped > 0) {
+                      toast.warning(`Imported ${created} invoice${created !== 1 ? "s" : ""}. ${skipped} row${skipped !== 1 ? "s" : ""} skipped (unmatched client, missing description, or amount).`);
+                    } else {
+                      toast.success(`Successfully imported ${created} invoice${created !== 1 ? "s" : ""}.`);
+                    }
+                  }}
+                />
+                <Button size="sm" onClick={() => setNewSheetOpen(true)}>
+                  <Plus className="mr-1.5 h-4 w-4" /> Add Invoice
+                </Button>
+              </div>
             </PermissionGate>
           }
         />

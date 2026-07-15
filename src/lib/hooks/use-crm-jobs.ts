@@ -105,6 +105,7 @@ function mapService(row: any): CRMService {
     category: row.category,
     defaultRateCents: row.default_rate_cents,
     productionRateSqftPerHr: row.production_rate_sqft_per_hr ? Number(row.production_rate_sqft_per_hr) : null,
+    budgetMethod: row.budget_method ?? 'manual',
     unit: row.unit ?? 'visit',
     isActive: row.is_active,
     parentServiceId: row.parent_service_id ?? null,
@@ -984,6 +985,59 @@ export function useCreateCRMService() {
   });
 }
 
+// ── bulk import services ──────────────────────────────────────────────────────
+
+export function useBulkImportCRMServices() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (rows: Record<string, string>[]) => {
+      const supabase = createClient();
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: existing } = await (supabase as any).from("crm_services").select("id, code").is("deleted_at", null);
+      const byCode = new Map((existing ?? []).filter((s: { code: string | null }) => s.code).map((s: { code: string; id: string }) => [s.code.trim().toLowerCase(), s.id]));
+
+      let created = 0;
+      let updated = 0;
+      let skipped = 0;
+
+      for (const r of rows) {
+        const name = r.name?.trim();
+        if (!name) { skipped++; continue; }
+
+        const code = r.code?.trim() || null;
+        const payload = {
+          name,
+          code,
+          category: r.category?.trim() || "general",
+          unit: (["visit", "sqft", "hour", "lb", "yard"].includes(r.unit?.trim().toLowerCase()) ? r.unit.trim().toLowerCase() : "visit"),
+          default_rate_cents: r.defaultRate ? Math.round(parseFloat(r.defaultRate) * 100) : null,
+          production_rate_sqft_per_hr: r.productionRate ? parseFloat(r.productionRate) : null,
+          is_active: r.isActive?.trim().toLowerCase() !== "no",
+        };
+
+        const existingId = code ? byCode.get(code.toLowerCase()) : undefined;
+        if (existingId) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { error } = await (supabase as any).from("crm_services").update(payload).eq("id", existingId);
+          if (error) throw error;
+          updated++;
+        } else {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { error } = await (supabase as any).from("crm_services").insert(payload);
+          if (error) throw error;
+          created++;
+        }
+      }
+
+      return { created, updated, skipped };
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["crm-services"] });
+    },
+  });
+}
+
 // ── update service ────────────────────────────────────────────────────────────
 
 export function useUpdateCRMService() {
@@ -1418,6 +1472,47 @@ export function useCreateCRMSchedule() {
         .single();
       if (error) throw error;
       return mapSchedule(data);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['crm-schedules'] });
+    },
+  });
+}
+
+const SCHEDULE_FREQUENCIES = ['weekly', 'bi_weekly', 'every_3_weeks', 'every_4_weeks', 'monthly'];
+const SCHEDULE_DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+export function useBulkImportCRMSchedules() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (rows: Record<string, string>[]) => {
+      const supabase = createClient();
+
+      let created = 0;
+      let skipped = 0;
+
+      for (const r of rows) {
+        const name = r.name?.trim();
+        const frequency = r.frequency?.trim().toLowerCase();
+        const dayOfWeek = SCHEDULE_DAYS.find((d) => d.toLowerCase() === r.dayOfWeek?.trim().toLowerCase());
+        if (!name || !SCHEDULE_FREQUENCIES.includes(frequency) || !dayOfWeek) { skipped++; continue; }
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error } = await (supabase as any).from('crm_schedules').insert({
+          name,
+          frequency,
+          day_of_week: dayOfWeek,
+          week_pattern: ['even', 'odd', 'any'].includes(r.weekPattern?.trim().toLowerCase()) ? r.weekPattern.trim().toLowerCase() : null,
+          anchor_date: r.anchorDate?.trim() || null,
+          season_start: r.seasonStart?.trim() || null,
+          season_end: r.seasonEnd?.trim() || null,
+          week_of_month: ['first', 'second', 'third', 'fourth', 'last'].includes(r.weekOfMonth?.trim().toLowerCase()) ? r.weekOfMonth.trim().toLowerCase() : null,
+        });
+        if (error) throw error;
+        created++;
+      }
+
+      return { created, skipped };
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['crm-schedules'] });

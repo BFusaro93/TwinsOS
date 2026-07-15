@@ -263,6 +263,66 @@ export function useCreateInvoice() {
   });
 }
 
+export function useBulkImportInvoices() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (rows: Record<string, string>[]) => {
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+
+      const { data: clients } = await supabase.from("clients").select("id, display_name").is("deleted_at", null);
+      const byName = new Map((clients ?? []).map((c) => [c.display_name.trim().toLowerCase(), c.id]));
+
+      let created = 0;
+      let skipped = 0;
+
+      for (const r of rows) {
+        const clientId = byName.get(r.clientName?.trim().toLowerCase() ?? "");
+        const amountCents = Math.round(parseFloat(r.amount || "0") * 100);
+        if (!clientId || !r.description?.trim() || !amountCents) { skipped++; continue; }
+
+        const taxCents = r.taxAmount ? Math.round(parseFloat(r.taxAmount) * 100) : 0;
+        const totalCents = amountCents + taxCents;
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: invoice, error } = await (supabase as any)
+          .from("crm_invoices")
+          .insert({
+            created_by: user?.id ?? null,
+            client_id: clientId,
+            description: r.description.trim(),
+            invoice_date: r.invoiceDate?.trim() || new Date().toISOString().split("T")[0],
+            due_date: r.dueDate?.trim() || null,
+            po_number: r.poNumber?.trim() || null,
+            status: r.status?.trim().toLowerCase() || "draft",
+            subtotal_cents: amountCents,
+            tax_cents: taxCents,
+            total_cents: totalCents,
+            balance_cents: totalCents,
+          })
+          .select("id")
+          .single();
+        if (error) throw error;
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (supabase as any).from("crm_invoice_line_items").insert({
+          invoice_id: invoice.id,
+          description: r.description.trim(),
+          qty: 1,
+          rate_cents: amountCents,
+          total_cents: amountCents,
+        });
+        created++;
+      }
+
+      return { created, skipped };
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["crm-invoices"] });
+    },
+  });
+}
+
 // ── assign invoice number (called on explicit save of a draft) ────────────────
 
 export function useAssignInvoiceNumber() {
@@ -879,6 +939,75 @@ function mapPaymentFull(row: any): CRMPayment {
     clientAddress: row.clients?.billing_address ?? null,
     invoiceNumber: row.crm_invoices?.invoice_number ?? null,
   };
+}
+
+const PAYMENT_METHODS = [
+  "ACH/E-Check", "AR Write-off", "AutoPay", "Cash", "Check",
+  "Credit Card- AmEx", "Credit Card- Discover", "Credit Card- MasterCard",
+  "Credit Card- Visa", "Other",
+];
+
+export function useBulkImportPayments() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (rows: Record<string, string>[]) => {
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+
+      const { data: clients } = await supabase.from("clients").select("id, display_name").is("deleted_at", null);
+      const byName = new Map((clients ?? []).map((c) => [c.display_name.trim().toLowerCase(), c.id]));
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: invoices } = await (supabase as any).from("crm_invoices").select("id, invoice_number, client_id").is("deleted_at", null);
+      const invoiceByNumberAndClient = new Map<string, string>(
+        (invoices ?? [])
+          .filter((i: { invoice_number: number | null }) => i.invoice_number != null)
+          .map((i: { invoice_number: number; client_id: string; id: string }): [string, string] => [`${i.client_id}:${i.invoice_number}`, i.id])
+      );
+
+      let created = 0;
+      let skipped = 0;
+
+      for (const r of rows) {
+        const clientId = byName.get(r.clientName?.trim().toLowerCase() ?? "");
+        const amountCents = Math.round(parseFloat(r.amount || "0") * 100);
+        if (!clientId || !amountCents) { skipped++; continue; }
+
+        const method = PAYMENT_METHODS.find((m) => m.toLowerCase() === r.method?.trim().toLowerCase()) ?? "Check";
+        const invoiceNumber = r.invoiceNumber ? parseInt(r.invoiceNumber, 10) : null;
+        const invoiceId = invoiceNumber ? invoiceByNumberAndClient.get(`${clientId}:${invoiceNumber}`) ?? null : null;
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: payment, error } = await (supabase as any).from("crm_payments").insert({
+          created_by: user?.id ?? null,
+          client_id: clientId,
+          invoice_id: invoiceId,
+          amount_cents: amountCents,
+          payment_date: r.paymentDate?.trim() || new Date().toISOString().split("T")[0],
+          method,
+          reference: r.reference?.trim() || null,
+          memo: r.memo?.trim() || null,
+        }).select("id").single();
+        if (error) throw error;
+
+        if (invoiceId) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          await (supabase as any).from("crm_payment_allocations").insert({
+            payment_id: payment.id,
+            invoice_id: invoiceId,
+            amount_cents: amountCents,
+          });
+          await applyPaymentToInvoice(supabase, invoiceId, amountCents);
+        }
+        created++;
+      }
+
+      return { created, skipped };
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["crm-payments"] });
+      qc.invalidateQueries({ queryKey: ["crm-invoices"] });
+    },
+  });
 }
 
 export function usePayments(clientId?: string) {

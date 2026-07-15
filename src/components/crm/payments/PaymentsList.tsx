@@ -3,8 +3,10 @@
 import { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { usePayments, useRecordPayment, useUpdatePayment, useRefundPayment, useInvoices, usePaymentAllocations } from "@/lib/hooks/use-invoices";
+import { usePayments, useRecordPayment, useUpdatePayment, useRefundPayment, useInvoices, usePaymentAllocations, useBulkImportPayments } from "@/lib/hooks/use-invoices";
 import { useClients } from "@/lib/hooks/use-clients";
+import { ImportExportMenu } from "@/components/shared/ImportExportMenu";
+import { exportCSV } from "@/lib/csv";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -575,8 +577,11 @@ interface Props {
   clientId?: string;
 }
 
+const PAYMENT_TEMPLATE_COLUMNS = ["clientName", "amount", "paymentDate", "method", "reference", "memo", "invoiceNumber"];
+
 export function PaymentsList({ clientId }: Props) {
   const { data: payments, isLoading, refetch } = usePayments(clientId);
+  const { mutateAsync: bulkImportPayments } = useBulkImportPayments();
   const searchParams = useSearchParams();
   const [activeTab, setActiveTab] = useState<Tab>("last30");
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -640,9 +645,39 @@ export function PaymentsList({ clientId }: Props) {
           title="Payments"
           description={!isLoading ? `${(payments ?? []).length} payments` : undefined}
           action={
-            <Button size="sm" onClick={() => setDialogOpen(true)}>
-              <Plus className="mr-1.5 h-4 w-4" /> Add Payment
-            </Button>
+            <div className="flex items-center gap-2">
+              <ImportExportMenu
+                entityLabel="Payments"
+                templateColumns={PAYMENT_TEMPLATE_COLUMNS}
+                templateFilename="payments-template.csv"
+                requiredColumns={["clientName", "amount"]}
+                onExport={() =>
+                  exportCSV(
+                    (payments ?? []).map((p) => ({
+                      clientName: p.clientName ?? "",
+                      amount: (p.amountCents / 100).toFixed(2),
+                      paymentDate: p.paymentDate,
+                      method: p.method,
+                      reference: p.reference ?? "",
+                      memo: p.memo ?? "",
+                      invoiceNumber: p.invoiceNumber != null ? String(p.invoiceNumber) : "",
+                    })),
+                    "payments-export.csv"
+                  )
+                }
+                onImport={async (rows) => {
+                  const { created, skipped } = await bulkImportPayments(rows);
+                  if (skipped > 0) {
+                    toast.warning(`Imported ${created} payment${created !== 1 ? "s" : ""}. ${skipped} row${skipped !== 1 ? "s" : ""} skipped (unmatched client or missing amount).`);
+                  } else {
+                    toast.success(`Successfully imported ${created} payment${created !== 1 ? "s" : ""}.`);
+                  }
+                }}
+              />
+              <Button size="sm" onClick={() => setDialogOpen(true)}>
+                <Plus className="mr-1.5 h-4 w-4" /> Add Payment
+              </Button>
+            </div>
           }
         />
       )}

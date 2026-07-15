@@ -6,12 +6,15 @@ import {
   useTickets,
   useCreateTicket,
   useUpdateTicket,
+  useBulkImportTickets,
 } from "@/lib/hooks/use-tickets";
 import { useClients } from "@/lib/hooks/use-clients";
 import { useEmployees } from "@/lib/hooks/use-employees";
 import { TicketDetailSheet } from "./TicketDetailSheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
+import { ImportExportMenu } from "@/components/shared/ImportExportMenu";
+import { exportCSV } from "@/lib/csv";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Input } from "@/components/ui/input";
 import {
@@ -407,6 +410,8 @@ interface Props {
   description?: string;
 }
 
+const TICKET_TEMPLATE_COLUMNS = ["subject", "clientName", "type", "status", "priority", "category", "body", "dueDate"];
+
 export function TicketsList({ clientId, typeFilter, title = "Tickets", description = "Support and service tickets" }: Props) {
   const { data: categoryOptions } = useOrgList("ticket_categories");
   const categories = categoryOptions && categoryOptions.length > 0
@@ -428,6 +433,7 @@ export function TicketsList({ clientId, typeFilter, title = "Tickets", descripti
 
   const { data: tickets, isLoading, refetch } = useTickets({ clientId });
   const updateTicket = useUpdateTicket();
+  const { mutateAsync: bulkImportTickets } = useBulkImportTickets();
 
   const all = tickets ?? [];
   const selectedTicket = selectedTicketId ? all.find((t) => t.id === selectedTicketId) ?? null : null;
@@ -541,10 +547,41 @@ export function TicketsList({ clientId, typeFilter, title = "Tickets", descripti
         title={title}
         description={description}
         action={
-          <Button size="sm" className="h-8 text-xs" onClick={() => setDialogOpen(true)}>
-            <Plus className="mr-1 h-3.5 w-3.5" />
-            Add {typeFilter === "call" ? "Call" : typeFilter === "event" ? "Event" : "Ticket"}
-          </Button>
+          <div className="flex items-center gap-2">
+            <ImportExportMenu
+              entityLabel={title}
+              templateColumns={TICKET_TEMPLATE_COLUMNS}
+              templateFilename="tickets-template.csv"
+              requiredColumns={["subject"]}
+              onExport={() =>
+                exportCSV(
+                  all.map((t) => ({
+                    subject: t.subject ?? "",
+                    clientName: t.clientName ?? "",
+                    type: t.type,
+                    status: t.status,
+                    priority: t.priority,
+                    category: t.category ?? "",
+                    body: t.body ?? "",
+                    dueDate: t.dueDate ?? "",
+                  })),
+                  "tickets-export.csv"
+                )
+              }
+              onImport={async (rows) => {
+                const { created, skipped } = await bulkImportTickets(rows);
+                if (skipped > 0) {
+                  toast.warning(`Imported ${created} ticket${created !== 1 ? "s" : ""}. ${skipped} row${skipped !== 1 ? "s" : ""} skipped (missing subject).`);
+                } else {
+                  toast.success(`Successfully imported ${created} ticket${created !== 1 ? "s" : ""}.`);
+                }
+              }}
+            />
+            <Button size="sm" className="h-8 text-xs" onClick={() => setDialogOpen(true)}>
+              <Plus className="mr-1 h-3.5 w-3.5" />
+              Add {typeFilter === "call" ? "Call" : typeFilter === "event" ? "Event" : "Ticket"}
+            </Button>
+          </div>
         }
       />
 

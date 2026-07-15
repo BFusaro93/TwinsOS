@@ -3,7 +3,9 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEstimates } from "@/lib/hooks/use-estimates";
+import { useEstimates, useBulkImportEstimates } from "@/lib/hooks/use-estimates";
+import { ImportExportMenu } from "@/components/shared/ImportExportMenu";
+import { exportCSV } from "@/lib/csv";
 import { NewEstimateDialog } from "./NewEstimateDialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
@@ -95,10 +97,15 @@ interface Props {
   clientId?: string;
 }
 
+const ESTIMATE_TEMPLATE_COLUMNS = [
+  "clientName", "description", "estimateDate", "validUntilDate", "poNumber", "stage",
+];
+
 export function EstimatesList({ clientId }: Props) {
   const router = useRouter();
   const { data: estimates, isLoading, refetch } = useEstimates(clientId);
   const { mutateAsync: updateStage } = useUpdateEstimateStage();
+  const { mutateAsync: bulkImportEstimates } = useBulkImportEstimates();
   const [dialogOpen,      setDialogOpen]      = useState(false);
   const [stageFilter,     setStageFilter]     = useState<StageFilter>("all");
   const [search,          setSearch]          = useState("");
@@ -193,9 +200,38 @@ export function EstimatesList({ clientId }: Props) {
           title="Estimates"
           description={!isLoading ? `${allEstimates.length} estimates${totalIncome > 0 ? ` · ${formatCurrency(totalIncome)} income · ${bpsToPercent(avgMarginBps)} avg margin` : ""}` : undefined}
           action={
-            <Button size="sm" onClick={() => setDialogOpen(true)}>
-              <Plus className="mr-1.5 h-4 w-4" /> New Estimate
-            </Button>
+            <div className="flex items-center gap-2">
+              <ImportExportMenu
+                entityLabel="Estimates"
+                templateColumns={ESTIMATE_TEMPLATE_COLUMNS}
+                templateFilename="estimates-template.csv"
+                requiredColumns={["clientName", "description"]}
+                onExport={() =>
+                  exportCSV(
+                    allEstimates.map((e) => ({
+                      clientName: e.clientName ?? "",
+                      description: e.description,
+                      estimateDate: e.estimateDate,
+                      validUntilDate: e.validUntilDate ?? "",
+                      poNumber: e.poNumber ?? "",
+                      stage: e.stage,
+                    })),
+                    "estimates-export.csv"
+                  )
+                }
+                onImport={async (rows) => {
+                  const { created, skipped } = await bulkImportEstimates(rows);
+                  if (skipped > 0) {
+                    toast.warning(`Imported ${created} estimate${created !== 1 ? "s" : ""}. ${skipped} row${skipped !== 1 ? "s" : ""} skipped (unmatched client or missing description).`);
+                  } else {
+                    toast.success(`Successfully imported ${created} estimate${created !== 1 ? "s" : ""}.`);
+                  }
+                }}
+              />
+              <Button size="sm" onClick={() => setDialogOpen(true)}>
+                <Plus className="mr-1.5 h-4 w-4" /> New Estimate
+              </Button>
+            </div>
           }
         />
       )}

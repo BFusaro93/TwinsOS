@@ -365,6 +365,81 @@ export function useCreateClient() {
   });
 }
 
+/** Normalize a free-text account type into the allowed CHECK values, defaulting to residential. */
+function normalizeAccountType(value: string): "residential" | "commercial" {
+  const v = value.trim().toLowerCase();
+  return v === "commercial" ? "commercial" : "residential";
+}
+
+export function useBulkImportClients() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (rows: Record<string, string>[]) => {
+      const supabase = createClient();
+
+      let skipped = 0;
+      const inserts = rows
+        .map((r) => {
+          const displayName = r.displayName?.trim();
+          if (!displayName) { skipped++; return null; }
+          return {
+            display_name: displayName,
+            account_type: normalizeAccountType(r.accountType ?? ""),
+            account_number: r.accountNumber?.trim() || undefined,
+            primary_phone: r.primaryPhone?.trim() || null,
+            primary_email: r.primaryEmail?.trim() || null,
+            billing_address: r.billingAddress?.trim() || null,
+            billing_city: r.billingCity?.trim() || null,
+            billing_state: r.billingState?.trim() || null,
+            billing_zip: r.billingZip?.trim() || null,
+            service_address: r.serviceAddress?.trim() || null,
+            service_city: r.serviceCity?.trim() || null,
+            service_state: r.serviceState?.trim() || null,
+            service_zip: r.serviceZip?.trim() || null,
+            source: r.source?.trim() || null,
+            client_since: new Date().toISOString().split("T")[0],
+          };
+        })
+        .filter((r): r is NonNullable<typeof r> => r !== null);
+
+      if (inserts.length === 0) return { inserted: 0, skipped };
+
+      // Insert one-by-one so a duplicate account_number can be upserted instead of failing the batch.
+      // Clients without an account_number are always inserted fresh (the org auto-assigns one).
+      let inserted = 0;
+      const { data: { user } } = await supabase.auth.getUser();
+
+      for (const row of inserts) {
+        const { error } = await supabase.from("clients").insert({ ...row, created_by: user?.id ?? null });
+        if (error?.code === "23505" && row.account_number) {
+          await supabase.from("clients").update({
+            display_name: row.display_name,
+            account_type: row.account_type,
+            primary_phone: row.primary_phone,
+            primary_email: row.primary_email,
+            billing_address: row.billing_address,
+            billing_city: row.billing_city,
+            billing_state: row.billing_state,
+            billing_zip: row.billing_zip,
+            service_address: row.service_address,
+            service_city: row.service_city,
+            service_state: row.service_state,
+            service_zip: row.service_zip,
+            source: row.source,
+          }).eq("account_number", row.account_number).is("deleted_at", null);
+        } else if (error) {
+          throw error;
+        }
+        inserted++;
+      }
+      return { inserted, skipped };
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["clients"] });
+    },
+  });
+}
+
 export function useUpdateClient() {
   const qc = useQueryClient();
   return useMutation({
@@ -607,6 +682,71 @@ export function useCreateLead() {
         .single();
       if (error) throw error;
       return mapClient(data);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["clients"] });
+    },
+  });
+}
+
+export function useBulkImportLeads() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (rows: Record<string, string>[]) => {
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+
+      // Load every existing (non-deleted) client once so each row can be matched
+      // against an existing account by email/phone instead of creating a duplicate.
+      const { data: existing } = await supabase
+        .from("clients")
+        .select("id, primary_email, primary_phone")
+        .is("deleted_at", null);
+      const byEmail = new Map((existing ?? []).filter((c) => c.primary_email).map((c) => [c.primary_email!.trim().toLowerCase(), c.id]));
+      const byPhone = new Map((existing ?? []).filter((c) => c.primary_phone).map((c) => [c.primary_phone!.replace(/\D/g, ""), c.id]));
+
+      let created = 0;
+      let matched = 0;
+      let skipped = 0;
+
+      for (const r of rows) {
+        const displayName = r.displayName?.trim();
+        if (!displayName) { skipped++; continue; }
+
+        const email = r.primaryEmail?.trim().toLowerCase() || null;
+        const phone = r.primaryPhone?.trim() || null;
+        const phoneDigits = phone?.replace(/\D/g, "") || null;
+        const matchedClientId = (email && byEmail.get(email)) || (phoneDigits && byPhone.get(phoneDigits));
+
+        if (matchedClientId) {
+          // Row matches an existing client by email or phone — tag it rather than duplicate the account.
+          await supabase.from("client_tags").upsert(
+            { client_id: matchedClientId, tag: "imported-lead" },
+            { onConflict: "org_id,client_id,tag", ignoreDuplicates: true }
+          );
+          matched++;
+          continue;
+        }
+
+        const { error } = await supabase.from("clients").insert({
+          created_by: user?.id ?? null,
+          display_name: displayName,
+          account_type: r.accountType?.trim().toLowerCase() === "commercial" ? "commercial" : "residential",
+          primary_phone: phone,
+          primary_email: r.primaryEmail?.trim() || null,
+          billing_address: r.billingAddress?.trim() || null,
+          billing_city: r.billingCity?.trim() || null,
+          billing_state: r.billingState?.trim() || null,
+          billing_zip: r.billingZip?.trim() || null,
+          source: r.source?.trim() || null,
+          status: "lead",
+          client_since: new Date().toISOString().split("T")[0],
+        });
+        if (error) throw error;
+        created++;
+      }
+
+      return { created, matched, skipped };
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["clients"] });

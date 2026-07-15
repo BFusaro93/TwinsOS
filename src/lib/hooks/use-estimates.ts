@@ -231,6 +231,46 @@ export function useCreateEstimate() {
   });
 }
 
+export function useBulkImportEstimates() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (rows: Record<string, string>[]) => {
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+
+      const { data: clients } = await supabase.from("clients").select("id, display_name").is("deleted_at", null);
+      const byName = new Map((clients ?? []).map((c) => [c.display_name.trim().toLowerCase(), c.id]));
+
+      let created = 0;
+      let skipped = 0;
+
+      for (const r of rows) {
+        const clientId = byName.get(r.clientName?.trim().toLowerCase() ?? "");
+        const description = r.description?.trim();
+        if (!clientId || !description) { skipped++; continue; }
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error } = await (supabase as any).from("estimates").insert({
+          created_by: user?.id ?? null,
+          client_id: clientId,
+          description,
+          estimate_date: r.estimateDate?.trim() || new Date().toISOString().split("T")[0],
+          valid_until_date: r.validUntilDate?.trim() || null,
+          po_number: r.poNumber?.trim() || null,
+          stage: (r.stage?.trim().toLowerCase() as Estimate['stage']) || "draft",
+        });
+        if (error) throw error;
+        created++;
+      }
+
+      return { created, skipped };
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["estimates"] });
+    },
+  });
+}
+
 // ── update header ─────────────────────────────────────────────────────────────
 
 export function useUpdateEstimate() {

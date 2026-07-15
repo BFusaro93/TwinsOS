@@ -5,9 +5,16 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Plus, Search, Pencil, Trash2 } from "lucide-react";
-import { useAllCRMServices, useDeleteCRMService } from "@/lib/hooks/use-crm-jobs";
+import { useAllCRMServices, useDeleteCRMService, useBulkImportCRMServices } from "@/lib/hooks/use-crm-jobs";
 import type { CRMService } from "@/types/crm-jobs";
 import { formatCurrency } from "@/lib/utils";
+import { ImportExportMenu } from "@/components/shared/ImportExportMenu";
+import { exportCSV } from "@/lib/csv";
+import { toast } from "sonner";
+
+const SERVICE_TEMPLATE_COLUMNS = [
+  "name", "code", "category", "unit", "defaultRate", "productionRate", "isActive",
+];
 
 const MODE_LABEL: Record<string, string> = {
   flat_rate: "Flat Rate",
@@ -48,6 +55,7 @@ interface Props {
 export function ServicesList({ onAdd, onEdit }: Props) {
   const { data: services = [], isLoading } = useAllCRMServices();
   const deleteService = useDeleteCRMService();
+  const { mutateAsync: bulkImportServices } = useBulkImportCRMServices();
   const [tab, setTab] = useState<Tab>("active");
   const [search, setSearch] = useState("");
 
@@ -92,10 +100,39 @@ export function ServicesList({ onAdd, onEdit }: Props) {
             </button>
           ))}
         </div>
-        <Button size="sm" onClick={onAdd} className="ml-auto">
-          <Plus className="mr-1.5 h-4 w-4" />
-          Add Service
-        </Button>
+        <div className="ml-auto flex items-center gap-2">
+          <ImportExportMenu
+            entityLabel="Services"
+            templateColumns={SERVICE_TEMPLATE_COLUMNS}
+            templateFilename="services-template.csv"
+            requiredColumns={["name"]}
+            onExport={() =>
+              exportCSV(
+                services.map((s) => ({
+                  name: s.name,
+                  code: s.code ?? "",
+                  category: s.category,
+                  unit: s.unit,
+                  defaultRate: s.defaultRateCents != null ? (s.defaultRateCents / 100).toFixed(2) : "",
+                  productionRate: s.productionRateSqftPerHr != null ? String(s.productionRateSqftPerHr) : "",
+                  isActive: s.isActive ? "yes" : "no",
+                })),
+                "services-export.csv"
+              )
+            }
+            onImport={async (rows) => {
+              const { created, updated, skipped } = await bulkImportServices(rows);
+              const parts = [`${created} created`];
+              if (updated > 0) parts.push(`${updated} updated`);
+              if (skipped > 0) parts.push(`${skipped} skipped (missing name)`);
+              toast[skipped > 0 ? "warning" : "success"](`Services import: ${parts.join(", ")}.`);
+            }}
+          />
+          <Button size="sm" onClick={onAdd}>
+            <Plus className="mr-1.5 h-4 w-4" />
+            Add Service
+          </Button>
+        </div>
       </div>
 
       {/* Table */}

@@ -196,6 +196,60 @@ export function useCreateEmployee() {
   });
 }
 
+export function useBulkImportEmployees() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (rows: Record<string, string>[]) => {
+      const supabase = createClient();
+
+      const { data: existing } = await supabase.from("crm_employees").select("id, email").is("deleted_at", null);
+      const byEmail = new Map((existing ?? []).filter((e) => e.email).map((e) => [e.email!.trim().toLowerCase(), e.id]));
+
+      let created = 0;
+      let updated = 0;
+      let skipped = 0;
+
+      for (const r of rows) {
+        const firstName = r.firstName?.trim();
+        const lastName = r.lastName?.trim();
+        if (!firstName || !lastName) { skipped++; continue; }
+
+        const email = r.email?.trim() || null;
+        const payload = {
+          first_name: firstName,
+          last_name: lastName,
+          email,
+          phone: r.phone?.trim() || null,
+          cell_phone: r.cellPhone?.trim() || null,
+          address: r.address?.trim() || null,
+          city: r.city?.trim() || null,
+          state: r.state?.trim() || null,
+          zip: r.zip?.trim() || null,
+          date_hired: r.dateHired?.trim() || null,
+          resource_code: r.resourceCode?.trim() || null,
+          hourly_rate_cents: r.hourlyRate ? Math.round(parseFloat(r.hourlyRate) * 100) : 0,
+        };
+
+        const existingId = email ? byEmail.get(email.toLowerCase()) : undefined;
+        if (existingId) {
+          const { error } = await supabase.from("crm_employees").update(payload).eq("id", existingId);
+          if (error) throw error;
+          updated++;
+        } else {
+          const { error } = await supabase.from("crm_employees").insert(payload);
+          if (error) throw error;
+          created++;
+        }
+      }
+
+      return { created, updated, skipped };
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["crm-employees"] });
+    },
+  });
+}
+
 export function useUpdateEmployee() {
   const qc = useQueryClient();
   return useMutation({
