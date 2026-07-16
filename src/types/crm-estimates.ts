@@ -90,6 +90,10 @@ export interface Estimate {
   source: string | null;
   estDocument: string;
   stage: EstimateStage;
+  /** Approval gate for sending — independent of `stage`. 'not_required' when no flow applies. */
+  approvalStatus: 'not_required' | 'pending' | 'approved' | 'rejected';
+  /** Set once, on first successful send. Anchor for "no response in N days" automation triggers. */
+  sentAt: string | null;
   showDiscounts: boolean;
   estimateDate: string;
   validUntilDate: string | null;

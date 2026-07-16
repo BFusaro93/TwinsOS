@@ -5,7 +5,7 @@
  * has status = "pending". Called by useSubmitForApproval immediately after it
  * inserts the approval_requests rows.
  *
- * Body: { entityId: string; entityType: "purchase_order" | "requisition" }
+ * Body: { entityId: string; entityType: "purchase_order" | "requisition" | "crm_estimate" }
  */
 
 import { NextResponse } from "next/server";
@@ -13,6 +13,14 @@ import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createClient } from "@supabase/supabase-js";
 import { Resend } from "resend";
 import { formatCurrency } from "@/lib/utils";
+
+const ENTITY_META: Record<string, {
+  table: string; numberField: string; fallbackLabel: string; label: string; path: string; totalField: string;
+}> = {
+  requisition:    { table: "requisitions",   numberField: "requisition_number", fallbackLabel: "Requisition",     label: "Purchase Requisition", path: "po/requisitions", totalField: "grand_total" },
+  purchase_order: { table: "purchase_orders", numberField: "po_number",          fallbackLabel: "Purchase Order",  label: "Purchase Order",       path: "po/orders",       totalField: "grand_total" },
+  crm_estimate:   { table: "estimates",       numberField: "estimate_number",    fallbackLabel: "Estimate",        label: "Estimate",             path: "crm/estimates",   totalField: "total_cents" },
+};
 
 export async function POST(request: Request) {
   // 1. Verify caller is authenticated
@@ -43,21 +51,21 @@ export async function POST(request: Request) {
   );
 
   // 2. Fetch the entity for display info
-  const table = entityType === "requisition" ? "requisitions" : "purchase_orders";
+  const meta = ENTITY_META[entityType];
+  if (!meta) {
+    return NextResponse.json({ error: `Unknown entityType: ${entityType}` }, { status: 400 });
+  }
   const { data: entity } = await adminClient
-    .from(table)
+    .from(meta.table)
     .select("*")
     .eq("id", entityId)
     .single();
 
-  const entityNumber =
-    entityType === "requisition"
-      ? (entity?.requisition_number ?? "Requisition")
-      : (entity?.po_number ?? "Purchase Order");
+  const entityNumber = entity?.[meta.numberField] ?? meta.fallbackLabel;
 
-  // Compute grand total for display (grand_total is stored in cents)
-  const grandTotalDisplay = entity?.grand_total
-    ? formatCurrency(entity.grand_total as number)
+  // Compute grand total for display (stored in cents)
+  const grandTotalDisplay = entity?.[meta.totalField]
+    ? formatCurrency(entity[meta.totalField] as number)
     : "";
 
   // 3. Fetch pending approval requests for this entity
@@ -94,11 +102,10 @@ export async function POST(request: Request) {
   const submitterName = submitterProfile?.name ?? "A team member";
 
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://twins-os.vercel.app";
-  const entityPath = entityType === "requisition" ? "po/requisitions" : "po/orders";
-  const deepLink = `${siteUrl}/${entityPath}`;
+  const deepLink = `${siteUrl}/${meta.path}`;
 
   const resend = new Resend(process.env.RESEND_API_KEY!);
-  const entityLabel = entityType === "requisition" ? "Purchase Requisition" : "Purchase Order";
+  const entityLabel = meta.label;
 
   let sent = 0;
   for (const req of requests) {

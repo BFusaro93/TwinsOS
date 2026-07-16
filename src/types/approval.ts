@@ -1,5 +1,7 @@
 import type { Role } from "./common";
 
+export type ApprovalEntityType = "requisition" | "purchase_order" | "crm_estimate";
+
 export interface ApprovalFlowStep {
   id: string;
   order: number;
@@ -19,7 +21,7 @@ export interface ApprovalFlow {
   id: string;
   orgId: string;
   name: string;
-  entityType: "requisition" | "purchase_order";
+  entityType: ApprovalEntityType;
   steps: ApprovalFlowStep[];
   createdAt: string;
   updatedAt: string;
@@ -35,7 +37,7 @@ export type ApprovalRequestStatus =
 export interface ApprovalRequest {
   id: string;
   orgId: string;
-  entityType: "requisition" | "purchase_order";
+  entityType: ApprovalEntityType;
   entityId: string;
   flowStepId: string;
   order: number;

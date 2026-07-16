@@ -6,6 +6,47 @@ import { patchPOCache } from "./use-purchase-orders";
 import { suppressRealtime, resumeRealtime } from "./use-realtime";
 import type { ApprovalRequest, ApprovalRequestStatus, ApprovalFlow, Requisition, PurchaseOrder } from "@/types";
 
+type EntityType = ApprovalFlow["entityType"];
+
+// Everything that differs between entity types the approval flow can gate.
+// Adding a new entity type only means adding an entry here — the two mutations
+// below contain no more per-type branching.
+interface EntityConfig {
+  table: "requisitions" | "purchase_orders" | "estimates";
+  /** Column on `table` that carries the approval-driven status. For requisition/PO
+   *  this doubles as their own lifecycle status; for crm_estimate it's a dedicated
+   *  `approval_status` column so the estimate's sales-funnel `stage` is never touched. */
+  statusColumn: string;
+  pendingValue: string;
+  queryKeys: string[][];
+  /** Optimistic cache patch — omitted for entity types with no dedicated list cache
+   *  to patch; those just rely on the queryKeys invalidation on settle. */
+  patchCache?: (queryClient: ReturnType<typeof useQueryClient>, entityId: string, status: string) => void;
+}
+
+const ENTITY_CONFIG: Record<EntityType, EntityConfig> = {
+  requisition: {
+    table: "requisitions",
+    statusColumn: "status",
+    pendingValue: "pending_approval",
+    queryKeys: [["requisitions"]],
+    patchCache: (qc, id, status) => patchReqCache(qc, id, { status: status as Requisition["status"] }),
+  },
+  purchase_order: {
+    table: "purchase_orders",
+    statusColumn: "status",
+    pendingValue: "pending",
+    queryKeys: [["purchase-orders"]],
+    patchCache: (qc, id, status) => patchPOCache(qc, id, { status: status as PurchaseOrder["status"] }),
+  },
+  crm_estimate: {
+    table: "estimates",
+    statusColumn: "approval_status",
+    pendingValue: "pending",
+    queryKeys: [["estimates"]],
+  },
+};
+
 export function useApprovalRequests(entityId: string) {
   return useQuery<ApprovalRequest[]>({
     queryKey: ["approval-requests", entityId],
@@ -48,15 +89,14 @@ export function useSubmitForApproval() {
 
       const orgId = profile.org_id;
       const submitterRole = profile.role as string | null;
+      const cfg = ENTITY_CONFIG[entityType];
 
       // ── Update entity status to pending atomically in this mutation ──────────
       // This must happen before the component callback tries to do it separately,
       // so there is only ONE DB write, not two racing mutations.
-      const table = entityType === "requisition" ? "requisitions" : "purchase_orders";
-      const pendingStatus = entityType === "requisition" ? "pending_approval" : "pending";
       const { error: statusErr } = await supabase
-        .from(table)
-        .update({ status: pendingStatus })
+        .from(cfg.table)
+        .update({ [cfg.statusColumn]: cfg.pendingValue })
         .eq("id", entityId)
         .select("id")
         .single();
@@ -144,10 +184,9 @@ export function useSubmitForApproval() {
         // right now rather than leaving it stuck in pending forever.
         const allSkipped = newRequests.every((r) => r.status === "skipped");
         if (allSkipped) {
-          const autoApproveTable = entityType === "requisition" ? "requisitions" : "purchase_orders";
           const { error: autoErr } = await supabase
-            .from(autoApproveTable)
-            .update({ status: "approved" })
+            .from(cfg.table)
+            .update({ [cfg.statusColumn]: "approved" })
             .eq("id", entityId);
           if (autoErr) throw autoErr;
           return { entityType, autoApproved: true };
@@ -169,32 +208,25 @@ export function useSubmitForApproval() {
       // Block Realtime invalidations for the entire mutation lifecycle
       suppressRealtime();
 
+      const cfg = ENTITY_CONFIG[entityType];
       await queryClient.cancelQueries({ queryKey: ["requisitions"] });
       await queryClient.cancelQueries({ queryKey: ["purchase-orders"] });
       const previousReqs = queryClient.getQueryData<Requisition[]>(["requisitions"]);
       const previousPOs = queryClient.getQueryData<PurchaseOrder[]>(["purchase-orders"]);
 
       // Optimistically set the entity to its pending status
-      const pendingStatus = entityType === "requisition" ? "pending_approval" : "pending";
-      if (entityType === "requisition") {
-        patchReqCache(queryClient, entityId, { status: pendingStatus as Requisition["status"] });
-      } else {
-        patchPOCache(queryClient, entityId, { status: pendingStatus as PurchaseOrder["status"] });
-      }
+      cfg.patchCache?.(queryClient, entityId, cfg.pendingValue);
 
       return { previousReqs, previousPOs };
     },
     onSuccess: (result, { entityId, entityType }) => {
+      const cfg = ENTITY_CONFIG[entityType];
       queryClient.invalidateQueries({ queryKey: ["approval-requests", entityId] });
       // If auto-approved (all steps skipped), patch the entity cache immediately
       // so the UI reflects "approved" without waiting for the invalidation refetch.
       if (result?.autoApproved) {
-        if (entityType === "requisition") {
-          patchReqCache(queryClient, entityId, { status: "approved" as Requisition["status"] });
-        } else {
-          patchPOCache(queryClient, entityId, { status: "approved" as PurchaseOrder["status"] });
-        }
-        // Notify the submitter that their PO/req was auto-approved (best-effort)
+        cfg.patchCache?.(queryClient, entityId, "approved");
+        // Notify the submitter that their entity was auto-approved (best-effort)
         fetch("/api/notifications/email", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -213,11 +245,8 @@ export function useSubmitForApproval() {
     onSettled: (_data, _err, { entityType }) => {
       // Release guard THEN invalidate — the refetch will see committed DB data
       resumeRealtime();
-      if (entityType === "requisition") {
-        queryClient.invalidateQueries({ queryKey: ["requisitions"] });
-      } else {
-        queryClient.invalidateQueries({ queryKey: ["purchase-orders"] });
-      }
+      const cfg = ENTITY_CONFIG[entityType];
+      for (const key of cfg.queryKeys) queryClient.invalidateQueries({ queryKey: key });
     },
   });
 }
@@ -300,12 +329,12 @@ export function useDecideApproval(entityId: string) {
         });
 
         newEntityStatus = anyRejected ? "rejected" : "approved";
-        const entityType = decided.entity_type;
-        const table = entityType === "requisition" ? "requisitions" : "purchase_orders";
+        const entityType = decided.entity_type as EntityType;
+        const cfg = ENTITY_CONFIG[entityType];
 
         const { error: entityErr } = await supabase
-          .from(table)
-          .update({ status: newEntityStatus })
+          .from(cfg.table)
+          .update({ [cfg.statusColumn]: newEntityStatus })
           .eq("id", entityId)
           .select("id")
           .single();
@@ -331,11 +360,8 @@ export function useDecideApproval(entityId: string) {
       }
       // Patch entity cache so UI reflects the new status immediately
       if (allResolved && newEntityStatus) {
-        if (entityType === "requisition") {
-          patchReqCache(queryClient, entityId, { status: newEntityStatus as Requisition["status"] });
-        } else {
-          patchPOCache(queryClient, entityId, { status: newEntityStatus as PurchaseOrder["status"] });
-        }
+        const cfg = ENTITY_CONFIG[entityType as EntityType];
+        cfg.patchCache?.(queryClient, entityId, newEntityStatus);
         // Fire approved/rejected email to the submitter (best-effort)
         const emailType = newEntityStatus === "approved" ? "approved" : "rejected";
         fetch("/api/notifications/email", {
@@ -358,6 +384,7 @@ export function useDecideApproval(entityId: string) {
       resumeRealtime();
       queryClient.invalidateQueries({ queryKey: ["requisitions"] });
       queryClient.invalidateQueries({ queryKey: ["purchase-orders"] });
+      queryClient.invalidateQueries({ queryKey: ["estimates"] });
     },
   });
 }

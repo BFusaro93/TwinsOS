@@ -1,6 +1,15 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import {
+  DndContext,
+  useDraggable,
+  useDroppable,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
 import { cn, formatCurrency } from "@/lib/utils";
 import type { Estimate, EstimateStage } from "@/types/crm-estimates";
 import { Badge } from "@/components/ui/badge";
@@ -53,11 +62,26 @@ interface EstimateCardProps {
 
 function EstimateCard({ estimate, onClick }: EstimateCardProps) {
   const probPct = Math.round(estimate.probabilityBps / 100);
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+    id: estimate.id,
+  });
+
   return (
     <button
+      ref={setNodeRef}
+      {...attributes}
+      {...listeners}
       type="button"
       onClick={() => onClick(estimate.id)}
-      className="w-full rounded-md border border-slate-200 bg-white px-3 py-2.5 text-left shadow-sm transition-shadow hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+      style={
+        transform
+          ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`, zIndex: 50 }
+          : undefined
+      }
+      className={cn(
+        "w-full rounded-md border border-slate-200 bg-white px-3 py-2.5 text-left shadow-sm transition-shadow hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500",
+        isDragging && "opacity-50 shadow-lg"
+      )}
     >
       {/* top row: estimate number + probability */}
       <div className="mb-1 flex items-center justify-between gap-1">
@@ -107,9 +131,16 @@ function PipelineColumn({
 }: PipelineColumnProps) {
   const [expanded, setExpanded] = useState(!collapsible);
   const weighted = weightedRevenue(estimates);
+  const { setNodeRef, isOver } = useDroppable({ id: stageKey });
 
   return (
-    <div className="flex w-[260px] shrink-0 flex-col gap-2">
+    <div
+      ref={setNodeRef}
+      className={cn(
+        "flex w-[260px] shrink-0 flex-col gap-2 rounded-md",
+        isOver && "bg-brand-50 ring-2 ring-brand-300"
+      )}
+    >
       {/* column header */}
       <div
         className={cn(
@@ -179,13 +210,43 @@ export interface EstimatesPipelineViewProps {
   estimates: Estimate[];
   stages: { stageKey: string; name: string; probabilityBps: number }[];
   onEstimateClick: (id: string) => void;
+  /**
+   * Called when a card is dropped on a different column. `"sent"` is
+   * intentionally NOT routed through this — dropping onto Sent opens the
+   * estimate instead (see onEstimateClick), since actually sending requires
+   * the compose dialog and its approval gate, which only exist there.
+   */
+  onStageChange: (estimateId: string, newStage: string) => void;
 }
 
 export function EstimatesPipelineView({
   estimates,
   stages,
   onEstimateClick,
+  onStageChange,
 }: EstimatesPipelineViewProps) {
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
+  );
+
+  function handleDragEnd(event: DragEndEvent) {
+    const estimateId = event.active.id as string;
+    const targetStage = event.over?.id as string | undefined;
+    if (!targetStage) return;
+
+    const estimate = estimates.find((e) => e.id === estimateId);
+    if (!estimate || estimate.stage === targetStage) return;
+
+    if (targetStage === "sent") {
+      // Sending requires the compose dialog + approval gate — open the
+      // estimate rather than silently flipping its stage.
+      onEstimateClick(estimateId);
+      return;
+    }
+
+    onStageChange(estimateId, targetStage);
+  }
+
   const grouped = useMemo(() => {
     const map = new Map<string, Estimate[]>();
     for (const s of stages) map.set(s.stageKey, []);
@@ -204,23 +265,25 @@ export function EstimatesPipelineView({
   }, [estimates, stages]);
 
   return (
-    <div className="flex-1 overflow-x-auto overflow-y-auto">
-      <div className="flex gap-3 p-4" style={{ minWidth: "max-content" }}>
-        {stages.map((stage) => {
-          const stageKey = stage.stageKey as EstimateStage;
-          const bucket = grouped.get(stage.stageKey) ?? [];
-          return (
-            <PipelineColumn
-              key={stage.stageKey}
-              stageKey={stageKey}
-              stageName={stage.name}
-              estimates={bucket}
-              onEstimateClick={onEstimateClick}
-              collapsible={COLLAPSED_BY_DEFAULT.includes(stageKey)}
-            />
-          );
-        })}
+    <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
+      <div className="flex-1 overflow-x-auto overflow-y-auto">
+        <div className="flex gap-3 p-4" style={{ minWidth: "max-content" }}>
+          {stages.map((stage) => {
+            const stageKey = stage.stageKey as EstimateStage;
+            const bucket = grouped.get(stage.stageKey) ?? [];
+            return (
+              <PipelineColumn
+                key={stage.stageKey}
+                stageKey={stageKey}
+                stageName={stage.name}
+                estimates={bucket}
+                onEstimateClick={onEstimateClick}
+                collapsible={COLLAPSED_BY_DEFAULT.includes(stageKey)}
+              />
+            );
+          })}
+        </div>
       </div>
-    </div>
+    </DndContext>
   );
 }

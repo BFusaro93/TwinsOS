@@ -59,6 +59,7 @@ function mapTrigger(row: any): CRMSequenceTrigger {
     sequenceId: row.sequence_id,
     triggerType: row.trigger_type as TriggerType,
     position: row.position,
+    config: (row.config as CRMSequenceTrigger["config"]) ?? {},
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };

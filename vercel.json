@@ -24,6 +24,10 @@
     {
       "path": "/api/crm/estimates/expiry-notify",
       "schedule": "0 8 * * *"
+    },
+    {
+      "path": "/api/crm/estimates/automation-date-triggers",
+      "schedule": "0 9 * * *"
     }
   ]
 }

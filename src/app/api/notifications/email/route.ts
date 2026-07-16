@@ -106,6 +106,7 @@ export async function POST(request: Request) {
     requisition:          "requisitions",
     purchase_order:       "purchase_orders",
     maintenance_request:  "maintenance_requests",
+    crm_estimate:         "estimates",
   };
   const table = tableMap[entityType];
   if (!table) return NextResponse.json({ error: `Unknown entityType: ${entityType}` }, { status: 400 });
@@ -316,9 +317,11 @@ export async function POST(request: Request) {
 
     if (notifType === "approved" || notifType === "rejected") {
       const isApproved = notifType === "approved";
-      const num = ((entity.requisition_number ?? entity.po_number ?? "Request")) as string;
-      const entityLabel = entityType === "requisition" ? "Purchase Requisition" : "Purchase Order";
-      const link = entityType === "requisition" ? `${SITE_URL}/po/requisitions?id=${entity.id as string}` : `${SITE_URL}/po/orders?id=${entity.id as string}`;
+      const num = ((entity.requisition_number ?? entity.po_number ?? entity.estimate_number ?? "Request")) as string;
+      const entityLabel = entityType === "requisition" ? "Purchase Requisition" : entityType === "crm_estimate" ? "Estimate" : "Purchase Order";
+      const link = entityType === "requisition" ? `${SITE_URL}/po/requisitions?id=${entity.id as string}`
+        : entityType === "crm_estimate" ? `${SITE_URL}/crm/estimates?id=${entity.id as string}`
+        : `${SITE_URL}/po/orders?id=${entity.id as string}`;
       const color = isApproved ? "#60ab45" : "#dc2626";
       const verb  = isApproved ? "approved" : "rejected";
       return {

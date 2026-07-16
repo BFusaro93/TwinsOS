@@ -372,15 +372,32 @@ function FlowCard({ flow }: { flow: ApprovalFlow }) {
 const DEFAULT_FLOWS: { name: string; entityType: ApprovalFlow["entityType"] }[] = [
   { name: "Requisition Approval", entityType: "requisition" },
   { name: "Purchase Order Approval", entityType: "purchase_order" },
+  { name: "Estimate Approval", entityType: "crm_estimate" },
 ];
 
-export function ApprovalFlowsPage() {
+const ENTITY_LABELS: Record<ApprovalFlow["entityType"], string> = {
+  requisition: "requisitions",
+  purchase_order: "purchase orders",
+  crm_estimate: "estimates",
+};
+
+const ALL_ENTITY_TYPES: ApprovalFlow["entityType"][] = ["requisition", "purchase_order", "crm_estimate"];
+
+interface ApprovalFlowsPageProps {
+  /** Restrict this instance to a subset of entity types (e.g. just crm_estimate when
+   *  embedded in CRM settings). Defaults to all three. */
+  entityTypes?: ApprovalFlow["entityType"][];
+}
+
+export function ApprovalFlowsPage({ entityTypes = ALL_ENTITY_TYPES }: ApprovalFlowsPageProps = {}) {
   const { data: flows, isLoading } = useApprovalFlows();
   const { mutate: createFlow, isPending: creating } = useCreateApprovalFlow();
-  const displayFlows = flows ?? [];
+  const displayFlows = (flows ?? []).filter((f) => entityTypes.includes(f.entityType));
+  const relevantDefaults = DEFAULT_FLOWS.filter((d) => entityTypes.includes(d.entityType));
+  const scopeLabel = entityTypes.map((t) => ENTITY_LABELS[t]).join(" and ");
 
   function handleInitialize() {
-    DEFAULT_FLOWS.forEach(({ name, entityType }) => {
+    relevantDefaults.forEach(({ name, entityType }) => {
       const alreadyExists = displayFlows.some((f) => f.entityType === entityType);
       if (!alreadyExists) {
         createFlow({ name, entityType });
@@ -393,7 +410,7 @@ export function ApprovalFlowsPage() {
       <div>
         <h1 className="text-xl font-semibold text-slate-900">Approval Flows</h1>
         <p className="mt-1 text-sm text-slate-500">
-          Configure the approval chain for requisitions and purchase orders. Each step
+          Configure the approval chain for {scopeLabel}. Each step
           specifies which role must approve and an optional dollar threshold above which
           the step activates.
         </p>
@@ -411,7 +428,7 @@ export function ApprovalFlowsPage() {
         <div className="flex flex-col items-center gap-4 rounded-xl border border-dashed border-slate-200 bg-slate-50 py-12 text-center">
           <p className="text-sm font-medium text-slate-700">No approval flows configured</p>
           <p className="max-w-sm text-xs text-slate-500">
-            Click below to create the default Requisition and Purchase Order approval flows,
+            Click below to create the default {scopeLabel} approval flow{relevantDefaults.length > 1 ? "s" : ""},
             then add approval steps to each one.
           </p>
           <Button size="sm" onClick={handleInitialize} disabled={creating}>

@@ -26,7 +26,11 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { useSequences, useUpdateSequence } from "@/lib/hooks/use-crm-automations";
 import { createClient } from "@/lib/supabase/client";
-import type { TriggerType, ConditionField, ConditionOperator } from "@/types/crm-automations";
+import type { TriggerType, ConditionField, ConditionOperator, TriggerConfig } from "@/types/crm-automations";
+
+// Trigger types that fire off a day-count gap rather than an event — the
+// builder shows a "days" input for these instead of just the type selector.
+const DATE_GAP_TRIGGER_TYPES = new Set<TriggerType>(["estimate_expiring", "estimate_no_response"]);
 
 // ── Trigger groups ─────────────────────────────────────────────────────────────
 
@@ -65,6 +69,8 @@ const TRIGGER_GROUPS: { label: string; items: { value: TriggerType; label: strin
       { value: "estimate_sent", label: "Estimate was sent" },
       { value: "estimate_won", label: "Estimate was won" },
       { value: "estimate_lost", label: "Estimate was lost" },
+      { value: "estimate_expiring", label: "Estimate is expiring" },
+      { value: "estimate_no_response", label: "No response from client" },
     ],
   },
   {
@@ -232,6 +238,7 @@ const RESTRICT_ENTRY_OPTIONS = [
 interface LocalTrigger {
   _key: string;
   triggerType: TriggerType;
+  config: TriggerConfig;
 }
 
 interface LocalStopCondition {
@@ -291,11 +298,12 @@ export function SequenceRulesDialog({ open, onOpenChange, sequenceId, automation
       .select("*")
       .eq("sequence_id", sequenceId)
       .order("position")
-      .then(({ data }: { data: { trigger_type: string }[] | null }) => {
+      .then(({ data }: { data: { trigger_type: string; config: TriggerConfig | null }[] | null }) => {
         setTriggers(
           (data ?? []).map((row) => ({
             _key: nextKey(),
             triggerType: row.trigger_type as TriggerType,
+            config: row.config ?? {},
           }))
         );
       });
@@ -319,7 +327,7 @@ export function SequenceRulesDialog({ open, onOpenChange, sequenceId, automation
   // ── Trigger handlers ─────────────────────────────────────────────────────────
 
   function addTrigger() {
-    setTriggers((prev) => [...prev, { _key: nextKey(), triggerType: "visit_completed" }]);
+    setTriggers((prev) => [...prev, { _key: nextKey(), triggerType: "visit_completed", config: {} }]);
   }
 
   function removeTrigger(key: string) {
@@ -327,7 +335,11 @@ export function SequenceRulesDialog({ open, onOpenChange, sequenceId, automation
   }
 
   function updateTriggerType(key: string, type: TriggerType) {
-    setTriggers((prev) => prev.map((t) => t._key === key ? { ...t, triggerType: type } : t));
+    setTriggers((prev) => prev.map((t) => t._key === key ? { ...t, triggerType: type, config: {} } : t));
+  }
+
+  function updateTriggerConfig(key: string, patch: TriggerConfig) {
+    setTriggers((prev) => prev.map((t) => t._key === key ? { ...t, config: { ...t.config, ...patch } } : t));
   }
 
   // ── Stop condition handlers ───────────────────────────────────────────────────
@@ -376,6 +388,7 @@ export function SequenceRulesDialog({ open, onOpenChange, sequenceId, automation
             sequence_id: sequenceId,
             trigger_type: t.triggerType,
             position: i,
+            config: t.config,
           }))
         );
       }
@@ -508,6 +521,21 @@ export function SequenceRulesDialog({ open, onOpenChange, sequenceId, automation
                   ))}
                 </SelectContent>
               </Select>
+              {DATE_GAP_TRIGGER_TYPES.has(t.triggerType) && (
+                <div className="flex shrink-0 items-center gap-1.5">
+                  <Input
+                    type="number"
+                    min={1}
+                    value={t.config.days ?? ""}
+                    onChange={(e) => updateTriggerConfig(t._key, { days: Number(e.target.value) || undefined })}
+                    placeholder="7"
+                    className="h-9 w-16 text-sm"
+                  />
+                  <span className="text-xs text-slate-400 whitespace-nowrap">
+                    {t.triggerType === "estimate_expiring" ? "days before expiry" : "days since sent"}
+                  </span>
+                </div>
+              )}
               <Button
                 variant="ghost"
                 size="icon"

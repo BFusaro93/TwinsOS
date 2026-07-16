@@ -428,6 +428,7 @@ export function EstimatesList({ clientId }: Props) {
           estimates={filtered}
           stages={estimateStages}
           onEstimateClick={(id) => router.push(`/crm/estimates/${id}`)}
+          onStageChange={(id, stage) => updateStage({ id, stage })}
         />
       )}
 

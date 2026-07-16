@@ -16,6 +16,9 @@ import {
   type EstimateVersion,
 } from "@/lib/hooks/use-estimates";
 import { useCreateInvoiceFromEstimate } from "@/lib/hooks/use-invoices";
+import { useApprovalFlow } from "@/lib/hooks/use-approval-flows";
+import { useSubmitForApproval } from "@/lib/hooks/use-approval-requests";
+import { ApprovalChain } from "@/components/shared/ApprovalChain";
 import { useEstimateTemplates } from "@/lib/hooks/use-estimate-templates";
 import { useClients } from "@/lib/hooks/use-clients";
 import { useEmployees } from "@/lib/hooks/use-employees";
@@ -373,6 +376,37 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
   const [aiDraftOpen, setAiDraftOpen] = useState(false);
   const [selectedLineItemIds, setSelectedLineItemIds] = useState<string[]>([]);
 
+  // ── Approval gate ────────────────────────────────────────────────────────
+  const { data: estimateApprovalFlow } = useApprovalFlow("crm_estimate");
+  const { mutate: submitForApproval, isPending: submittingForApproval } = useSubmitForApproval();
+  const hasApprovalGate = !!estimateApprovalFlow && estimateApprovalFlow.steps.length > 0;
+
+  function handleSendClick() {
+    if (!estimate) return;
+    if (estimate.approvalStatus === "pending") return; // chain is showing; nothing to do here
+
+    if (estimate.approvalStatus === "not_required" && hasApprovalGate) {
+      submitForApproval(
+        { entityId: estimate.id, entityType: "crm_estimate", grandTotalCents: estimate.totalCents },
+        {
+          onSuccess: (result) => {
+            // No steps applied to this amount (or admin bypass) — proceed straight to send.
+            if (result?.autoApproved) setSendDialogOpen(true);
+          },
+        }
+      );
+      return;
+    }
+
+    if (estimate.approvalStatus === "rejected") {
+      submitForApproval({ entityId: estimate.id, entityType: "crm_estimate", grandTotalCents: estimate.totalCents });
+      return;
+    }
+
+    // 'not_required' with no gate configured, or already 'approved'
+    setSendDialogOpen(true);
+  }
+
   function patchHeader(key: string, val: string | boolean | number | null) {
     setHeaderEdits((p) => ({ ...p, [key]: val }));
   }
@@ -612,8 +646,12 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
             Draft
           </Button>
           <Button variant="outline" size="sm" className="h-8 text-xs"
-            onClick={() => setSendDialogOpen(true)}>
-            <Send className="mr-1 h-3.5 w-3.5 text-yellow-500" />Send
+            disabled={estimate.approvalStatus === "pending" || submittingForApproval}
+            onClick={handleSendClick}>
+            <Send className="mr-1 h-3.5 w-3.5 text-yellow-500" />
+            {estimate.approvalStatus === "pending" ? "Awaiting Approval"
+              : estimate.approvalStatus === "rejected" ? "Resubmit for Approval"
+              : "Send"}
           </Button>
           <Button
             variant="outline"
@@ -690,6 +728,18 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
           </Button>
         </div>
       </div>
+
+      {estimate.approvalStatus !== "not_required" && (
+        <div className="border-b bg-slate-50 px-6 py-3">
+          <p className="mb-2 text-xs font-medium text-slate-500">
+            Approval Chain
+            {estimate.approvalStatus === "rejected" && (
+              <span className="ml-2 font-semibold text-red-600">Rejected</span>
+            )}
+          </p>
+          <ApprovalChain entityId={estimate.id} />
+        </div>
+      )}
 
       {/* ── tabs ────────────────────────────────────────────────────── */}
       <div className="flex gap-0 border-b bg-white px-6">

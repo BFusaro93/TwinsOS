@@ -201,9 +201,15 @@ export async function POST(
     cc_emails: body.ccEmails ?? [],
   });
 
-  // Move estimate to "sent"
+  // Move estimate to "sent" — sent_at is set only on the first send, as the
+  // anchor timestamp for "no response in N days" automation triggers.
+  const nowIso = new Date().toISOString();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  await (supabase as any).from("estimates").update({ stage: "sent", updated_at: new Date().toISOString() }).eq("id", estimateId);
+  await (supabase as any).from("estimates").update({
+    stage: "sent",
+    updated_at: nowIso,
+    ...(est.sent_at ? {} : { sent_at: nowIso }),
+  }).eq("id", estimateId);
 
   // Log activity
   if (est.client_id) {

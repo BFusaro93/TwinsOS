@@ -25,6 +25,8 @@ export type TriggerType =
   | 'estimate_lost'
   | 'estimate_sent'
   | 'estimate_won'
+  | 'estimate_expiring'
+  | 'estimate_no_response'
   // Form
   | 'form_submitted'
   // Invoice
@@ -254,12 +256,19 @@ export interface CRMSequence {
   deletedAt: string | null;
 }
 
+/** Config for date-gap trigger types (estimate_expiring, estimate_no_response). */
+export interface TriggerConfig {
+  days?: number;
+}
+
 export interface CRMSequenceTrigger {
   id: string;
   orgId: string;
   sequenceId: string;
   triggerType: TriggerType;
   position: number;
+  /** Only meaningful for date-gap trigger types — e.g. { days: 7 }. */
+  config: TriggerConfig;
   createdAt: string;
   updatedAt: string;
 }
