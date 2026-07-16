@@ -197,7 +197,7 @@ export function TopBar() {
       </Button>
 
       {/* Breadcrumbs */}
-      <nav className="hidden items-center gap-1 text-sm text-slate-500 sm:flex">
+      <nav className="hidden items-center gap-1 text-sm text-slate-500 sm:flex lowercase">
         {breadcrumbs.map((crumb, i) => (
           <span key={i} className="flex items-center gap-1">
             {i > 0 && <span className="text-slate-300">/</span>}
