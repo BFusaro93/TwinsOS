@@ -72,6 +72,7 @@ export interface CRMJobService {
   jobId: string;
   serviceId: string | null;
   serviceName: string;
+  invoiceDescription: string | null;
   qty: number;
   rateCents: number | null;
   startDate: string | null;

@@ -263,7 +263,7 @@ function JobDetailSheet({
   async function handleInvoice() {
     try {
       const lineItems = services.map((s) => ({
-        description: s.serviceName,
+        description: s.invoiceDescription || s.serviceName,
         qty: s.qty ?? 1,
         rateCents: s.rateCents ?? 0,
         totalCents: (s.qty ?? 1) * (s.rateCents ?? 0),

@@ -88,6 +88,7 @@ export function mapJob(row: any): CRMJob {
         jobId: s.job_id,
         serviceId: s.service_id,
         serviceName: s.service_name,
+        invoiceDescription: s.crm_services?.invoice_description ?? null,
         qty: s.qty ?? 1,
         rateCents: s.rate_cents,
       })
@@ -403,6 +404,7 @@ function mapJobServiceFull(s: any): CRMJobService {
     jobId: s.job_id,
     serviceId: s.service_id ?? null,
     serviceName: s.service_name ?? '',
+    invoiceDescription: s.crm_services?.invoice_description ?? null,
     qty: s.qty ?? 1,
     rateCents: s.rate_cents ?? null,
     startDate: s.start_date ?? null,
@@ -539,7 +541,7 @@ export function useVisitsForDate(fromDate: string, toDate?: string) {
           *,
           clients(display_name, primary_phone, billing_address, billing_city, billing_state, billing_zip),
           crm_crews(name),
-          crm_jobs(*, crm_crews(name), crm_job_services(*))
+          crm_jobs(*, crm_crews(name), crm_job_services(*, crm_services(invoice_description)))
         `)
         .is('deleted_at', null)
         .order('priority', { ascending: true })
@@ -1317,7 +1319,7 @@ export function useJobDetail(id: string) {
           *,
           clients(display_name, billing_address, billing_city, billing_state, billing_zip, primary_phone, client_since),
           crm_crews(name),
-          crm_job_services(*)
+          crm_job_services(*, crm_services(invoice_description))
         `)
         .eq('id', id)
         .is('deleted_at', null)

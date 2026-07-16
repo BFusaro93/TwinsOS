@@ -260,7 +260,7 @@ export function JobDetail({ jobId, initialEditing = false }: Props) {
             description: `Service: ${svcs.map((s) => s.serviceName).join(", ") || "Job"}`,
             invoiceDate: today,
             lineItems: svcs.length > 0
-              ? svcs.map((s) => ({ description: s.serviceName || "Service", qty: s.qty ?? 1, rateCents: s.rateCents ?? 0, totalCents: (s.rateCents ?? 0) * (s.qty ?? 1) }))
+              ? svcs.map((s) => ({ description: s.invoiceDescription || s.serviceName || "Service", qty: s.qty ?? 1, rateCents: s.rateCents ?? 0, totalCents: (s.rateCents ?? 0) * (s.qty ?? 1) }))
               : [{ description: "Service", qty: 1, rateCents: job.rateCents ?? 0, totalCents: job.rateCents ?? 0 }],
             subtotalCents: subtotal,
             taxRateBps: 0,
@@ -387,7 +387,7 @@ export function JobDetail({ jobId, initialEditing = false }: Props) {
         invoiceDate: today,
         lineItems: services.length > 0
           ? services.map((s) => ({
-              description: s.serviceName || "Service",
+              description: s.invoiceDescription || s.serviceName || "Service",
               qty: s.qty ?? 1,
               rateCents: s.rateCents ?? 0,
               totalCents: (s.rateCents ?? 0) * (s.qty ?? 1),

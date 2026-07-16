@@ -49,7 +49,7 @@ export async function POST(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: job } = await (supabase as any)
     .from("crm_jobs")
-    .select("id, job_type, contract_id, client_id, invoice_description, rate_cents, po_number, sales_rep_id, crm_job_services(id, service_name, qty, rate_cents)")
+    .select("id, job_type, contract_id, client_id, invoice_description, rate_cents, po_number, sales_rep_id, crm_job_services(id, service_name, qty, rate_cents, crm_services(invoice_description))")
     .eq("id", (visit as any).job_id)
     .single();
 
@@ -100,20 +100,25 @@ export async function POST(
     }
 
     if (!skipInvoice) {
-      const services: { service_name: string; qty: number; rate_cents: number }[] = j.crm_job_services ?? [];
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const services: any[] = j.crm_job_services ?? [];
 
       // Build line items from services; fall back to a single line from job rate_cents
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const visitDate: string | null = (visit as any).scheduled_date ?? null;
       const lineItems = services.length > 0
-        ? services.map((s: { service_name: string; qty: number; rate_cents: number }) => ({
-            name: s.service_name,
-            description: s.service_name,
-            qty: s.qty ?? 1,
-            rate_cents: s.rate_cents ?? 0,
-            total_cents: (s.qty ?? 1) * (s.rate_cents ?? 0),
-            service_date: visitDate,
-          }))
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        ? services.map((s: any) => {
+            const description = s.crm_services?.invoice_description ?? s.service_name;
+            return {
+              name: description,
+              description,
+              qty: s.qty ?? 1,
+              rate_cents: s.rate_cents ?? 0,
+              total_cents: (s.qty ?? 1) * (s.rate_cents ?? 0),
+              service_date: visitDate,
+            };
+          })
         : j.rate_cents
           ? [{ name: j.invoice_description ?? "Service", description: j.invoice_description ?? "Service", qty: 1, rate_cents: j.rate_cents as number, total_cents: j.rate_cents as number, service_date: visitDate }]
           : [];
