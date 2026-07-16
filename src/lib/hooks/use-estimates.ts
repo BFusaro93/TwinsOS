@@ -9,6 +9,7 @@ import type {
   EstimateChangeRequest,
 } from "@/types/crm-estimates";
 import type { OverheadSettings } from "@/lib/hooks/use-overhead-settings";
+import { computeDirectCostOverhead } from "@/lib/estimate-calc";
 
 // ── mappers ───────────────────────────────────────────────────────────────────
 
@@ -39,6 +40,7 @@ function mapLineItem(row: any): EstimateLineItem {
     adjRateCents: row.adj_rate_cents,
     unitType: row.unit_type ?? null,
     productionRateSqftPerHr: row.production_rate_sqft_per_hr ? Number(row.production_rate_sqft_per_hr) : null,
+    budgetMethod: row.budget_method ?? "manual",
     sortOrder: row.sort_order,
     estimateDesc: row.estimate_desc ?? null,
     jobNote: row.job_note ?? null,
@@ -531,18 +533,10 @@ export function useSaveEstimateFinancials() {
       const totalCents = revenueCents + taxCents;
       let overheadCostCents: number;
       if (perTypeOverhead) {
-        const ohByType: Record<string, number> = {
-          labor: perTypeOverhead.laborOhBps,
-          labor_burden: perTypeOverhead.laborBurdenBps,
-          contract: perTypeOverhead.contractOhBps,
-          equipment: perTypeOverhead.equipmentOhBps,
-          materials: perTypeOverhead.materialsOhBps,
-          other: perTypeOverhead.otherOhBps,
-        };
-        overheadCostCents = directCosts.reduce((sum, dc) => {
-          const bps = ohByType[dc.costType] ?? 0;
-          return sum + Math.round((dc.totalCents * bps) / 10000);
-        }, 0);
+        overheadCostCents = directCosts.reduce(
+          (sum, dc) => sum + computeDirectCostOverhead(dc.costType, dc.totalCents, perTypeOverhead),
+          0
+        );
       } else {
         overheadCostCents = Math.round((totalCostCents * overheadRateBps) / 10000);
       }

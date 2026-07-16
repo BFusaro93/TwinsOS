@@ -1,4 +1,5 @@
 import type { DiscountType } from "./crm-discounts";
+import type { BudgetMethod } from "./crm-jobs";
 
 export type EstimateStage =
   | 'draft'
@@ -44,7 +45,8 @@ export interface EstimateLineItem {
   markupBps: number;
   adjRateCents: number | null;
   unitType: string | null;               // sqft, lf, cuyd, hr, each, acres
-  productionRateSqftPerHr: number | null; // from service record — drives budgetedHours auto-calc
+  productionRateSqftPerHr: number | null; // from service record — drives budgetedHours auto-calc when budgetMethod is 'production_rate'
+  budgetMethod: BudgetMethod;             // snapshotted from the service when the line item is added
   sortOrder: number;
   // per-line-item notes (Sprint 3a)
   estimateDesc: string | null;  // shown on client-facing estimate document

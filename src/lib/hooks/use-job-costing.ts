@@ -39,6 +39,8 @@ export interface JobCostingData {
   actualRevPerManHrCents: number;
   targetOverUnderCents: number;
   materials: JobMaterial[];
+  /** From the job's (first) service — which budgeting style drove budgetedHours. */
+  budgetMethod: "manual" | "production_rate";
 }
 
 // ── mappers ───────────────────────────────────────────────────────────────────
@@ -140,7 +142,7 @@ export function useJobCosting(jobId: string, estimateId?: string | null): {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: jobRow, error: jobErr } = await (supabase as any)
         .from("crm_jobs")
-        .select("actual_hours, actual_labor_cost_cents, actual_material_cost_cents, service_id")
+        .select("actual_hours, actual_labor_cost_cents, actual_material_cost_cents")
         .eq("id", jobId)
         .single();
       if (jobErr) throw new Error(jobErr.message);
@@ -156,9 +158,21 @@ export function useJobCosting(jobId: string, estimateId?: string | null): {
         .limit(1)
         .maybeSingle();
 
-      // Fetch target rate from service
+      // service_id/budget_method live on crm_job_services (crm_jobs has no
+      // service_id column) — a job can have multiple services, so this takes
+      // the first for the single target-rate/budget-method display below.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: jobServiceRow } = await (supabase as any)
+        .from("crm_job_services")
+        .select("service_id, budget_method")
+        .eq("job_id", jobId)
+        .order("created_at", { ascending: true })
+        .limit(1)
+        .maybeSingle();
+
       let targetRateCentsPerHr = 0;
-      const serviceId: string | null = jobRow.service_id ?? null;
+      const serviceId: string | null = jobServiceRow?.service_id ?? null;
+      const budgetMethod: "manual" | "production_rate" = jobServiceRow?.budget_method ?? "manual";
       if (serviceId) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data: svc } = await (supabase as any)
@@ -247,6 +261,7 @@ export function useJobCosting(jobId: string, estimateId?: string | null): {
         actualRevPerManHrCents,
         targetOverUnderCents,
         materials,
+        budgetMethod,
       };
     },
     enabled: !!jobId,

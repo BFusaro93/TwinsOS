@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from "react";
 import { cn } from "@/lib/utils";
-import { bpsToPercent, centsToDisplay, computeLineItem } from "@/lib/estimate-calc";
+import { bpsToPercent, centsToDisplay, computeLineItem, getBreakevenRateCents } from "@/lib/estimate-calc";
 import { useUpsertLineItem, useDeleteLineItem } from "@/lib/hooks/use-estimates";
 import { useCRMServices } from "@/lib/hooks/use-crm-jobs";
 import { useProducts } from "@/lib/hooks/use-products";
@@ -27,6 +27,7 @@ import {
 } from "@/lib/hooks/use-line-item-subitems";
 import type { EstimateLineItem, LineItemStatus } from "@/types/crm-estimates";
 import type { CRMDiscount } from "@/types/crm-discounts";
+import type { BudgetMethod } from "@/types/crm-jobs";
 
 const UNIT_TYPES = ["sqft", "lf", "cuyd", "acres", "hr", "each", "lb", "gal"];
 
@@ -233,11 +234,13 @@ function LineItemRow({
   const { mutateAsync: upsert, isPending } = useUpsertLineItem();
   const [addSubitemOpen, setAddSubitemOpen] = useState(false);
   const { data: subitems = [] } = useLineItemSubitems(item.id);
+  const { data: orgSettings } = useOrgSettings();
+  const breakevenRateCents = getBreakevenRateCents(orgSettings?.customizations);
 
   function update<K extends keyof RowState>(key: K, val: RowState[K]) {
     setRow((prev) => {
       const next = { ...prev, [key]: val };
-      const computed = computeLineItem(next);
+      const computed = computeLineItem(next, breakevenRateCents);
       const merged: RowState = { ...next, ...computed };
       // A flat discount can't exceed the line's own (possibly now-smaller) total
       merged.discountCents = Math.min(merged.discountCents, merged.totalCents);
@@ -260,6 +263,7 @@ function LineItemRow({
           qty: row.qty,
           unit_type: row.unitType,
           production_rate_sqft_per_hr: row.productionRateSqftPerHr,
+          budget_method: row.budgetMethod,
           rate_cents: row.rateCents,
           visits: row.visits,
           total_cents: row.totalCents,
@@ -321,8 +325,10 @@ function LineItemRow({
     }
   }
 
-  // Is budgeted hours auto-calculated (production rate active)?
+  // Is budgeted hours auto-calculated? Only when the line item is explicitly
+  // set to the production-rate budget method (not just because a rate is present).
   const isAutoHrs =
+    row.budgetMethod === "production_rate" &&
     !!row.productionRateSqftPerHr &&
     row.productionRateSqftPerHr > 0 &&
     row.unitType !== "hr" &&
@@ -618,6 +624,7 @@ interface Props {
 export function EstimateLineItemsGrid({ estimateId, items, selectedIds = [], onSelectionChange, tiersEnabled = false }: Props) {
   const { data: services } = useCRMServices();
   const { data: orgSettings } = useOrgSettings();
+  const breakevenRateCents = getBreakevenRateCents(orgSettings?.customizations);
   const { data: productCatalog = [] } = useProducts();
   const materialProducts = productCatalog.filter(
     (p) => p.category === "stocked_material" || p.category === "project_material"
@@ -671,27 +678,23 @@ export function EstimateLineItemsGrid({ estimateId, items, selectedIds = [], onS
     [upsert, estimateId, items.length]
   );
 
-  async function addService(svc: { name: string; id?: string; unit?: string; productionRate?: number | null; rateCents?: number | null }) {
+  async function addService(svc: { name: string; id?: string; unit?: string; productionRate?: number | null; budgetMethod?: BudgetMethod; rateCents?: number | null }) {
     const unit = svc.unit ?? null;
     const prodRate = svc.productionRate ?? null;
-
-    // Pre-calculate budgeted hours if production rate available
-    let budgetedHours = 0;
-    if (prodRate && prodRate > 0 && unit && unit !== "hr" && unit !== "each") {
-      budgetedHours = 0; // will be calculated when qty is entered
-    }
+    const budgetMethod = svc.budgetMethod ?? "manual";
 
     const computed = computeLineItem({
       calcType: 1,
       qty: 1,
       rateCents: svc.rateCents ?? 0,
       visits: 1,
-      budgetedHours,
+      budgetedHours: 0, // will be calculated when qty is entered (production_rate) or set manually
       costCents: 0,
       adjRateCents: null,
       unitType: unit,
       productionRateSqftPerHr: prodRate,
-    });
+      budgetMethod,
+    }, breakevenRateCents);
 
     try {
       await upsert({
@@ -704,9 +707,10 @@ export function EstimateLineItemsGrid({ estimateId, items, selectedIds = [], onS
           qty: 1,
           unit_type: unit,
           production_rate_sqft_per_hr: prodRate,
+          budget_method: budgetMethod,
           rate_cents: svc.rateCents ?? 0,
           visits: 1,
-          cost_cents: 0,
+          cost_cents: computed.costCents,
           adj_rate_cents: null,
           sort_order: items.length,
           total_cents: computed.totalCents,
@@ -805,7 +809,7 @@ export function EstimateLineItemsGrid({ estimateId, items, selectedIds = [], onS
                   key={s.id}
                   className="flex w-full items-center justify-between px-3 py-1.5 text-xs hover:bg-slate-50"
                   onClick={() => {
-                    addService({ id: s.id, name: s.name, unit: s.unit ?? undefined, productionRate: s.productionRateSqftPerHr, rateCents: s.defaultRateCents });
+                    addService({ id: s.id, name: s.name, unit: s.unit ?? undefined, productionRate: s.productionRateSqftPerHr, budgetMethod: s.budgetMethod, rateCents: s.defaultRateCents });
                     setAddOpen(false); setSearch("");
                   }}
                 >

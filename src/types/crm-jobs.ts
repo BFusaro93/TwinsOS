@@ -79,6 +79,7 @@ export interface CRMJobService {
   startRecurring: string | null;
   assignedTo: string | null;
   budgetedHours: number;
+  budgetMethod: BudgetMethod; // snapshotted from the service when this row is created
   teamSize: number;
   daysCount: number;
   timeStart: string | null;
@@ -353,6 +354,7 @@ export interface SnowRouteStop {
 }
 
 export interface NewClientJobServiceValues {
+  serviceId: string | null;
   serviceName: string;
   startDate: string | null;
   completeByDate: string | null;
@@ -361,6 +363,7 @@ export interface NewClientJobServiceValues {
   qty: number;
   rateCents: number;
   budgetedHours: number;
+  budgetMethod: BudgetMethod;
   teamSize: number;
   daysCount: number;
   timeStart: string | null;

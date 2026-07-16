@@ -25,7 +25,8 @@ import {
 import { useCreateEstimate, useUpsertLineItem } from "@/lib/hooks/use-estimates";
 import { useEstimateTemplates } from "@/lib/hooks/use-estimate-templates";
 import { useClients } from "@/lib/hooks/use-clients";
-import { computeLineItem } from "@/lib/estimate-calc";
+import { computeLineItem, getBreakevenRateCents } from "@/lib/estimate-calc";
+import { useOrgSettings } from "@/lib/hooks/use-org-settings";
 import { toast } from "sonner";
 import type { Estimate } from "@/types/crm-estimates";
 
@@ -69,6 +70,8 @@ export function NewEstimateDialog({ open, onOpenChange, defaultClientId, onCreat
   const { data: templates } = useEstimateTemplates();
   const { mutateAsync: createEstimate, isPending } = useCreateEstimate();
   const { mutateAsync: upsertLineItem }             = useUpsertLineItem();
+  const { data: orgSettings } = useOrgSettings();
+  const breakevenRateCents = getBreakevenRateCents(orgSettings?.customizations);
 
   const { register, handleSubmit, setValue, watch, reset, formState: { errors } } = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -120,7 +123,8 @@ export function NewEstimateDialog({ open, onOpenChange, defaultClientId, onCreat
                 budgetedHours: item.budgetedHours,
                 costCents:     0,
                 adjRateCents:  null,
-              });
+                budgetMethod:  "manual",
+              }, breakevenRateCents);
               return upsertLineItem({
                 estimateId: estimate.id,
                 item: {
@@ -131,9 +135,10 @@ export function NewEstimateDialog({ open, onOpenChange, defaultClientId, onCreat
                   qty:                  item.qty,
                   rate_cents:           item.rateCents,
                   visits:               item.visits,
-                  cost_cents:           0,
+                  cost_cents:           computed.costCents,
                   adj_rate_cents:       null,
                   sort_order:           idx,
+                  budget_method:        "manual",
                   total_cents:          computed.totalCents,
                   budgeted_hours:       computed.budgetedHours,
                   total_budgeted_hours: computed.totalBudgetedHours,

@@ -20,7 +20,9 @@ import { useEstimateTemplates } from "@/lib/hooks/use-estimate-templates";
 import { useClients } from "@/lib/hooks/use-clients";
 import { useEmployees } from "@/lib/hooks/use-employees";
 import { useOrgList } from "@/lib/hooks/use-org-lists";
-import { computeLineItem } from "@/lib/estimate-calc";
+import { computeLineItem, hasPerTypeOverhead, getBreakevenRateCents } from "@/lib/estimate-calc";
+import { useOverheadSettings } from "@/lib/hooks/use-overhead-settings";
+import { useOrgSettings } from "@/lib/hooks/use-org-settings";
 import { EstimateLineItemsGrid } from "./EstimateLineItemsGrid";
 import { EstimateDirectCostsGrid } from "./EstimateDirectCostsGrid";
 import { EstimateSummaryPanel } from "./EstimateSummaryPanel";
@@ -330,6 +332,9 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
   const { mutateAsync: updateEstimate } = useUpdateEstimate();
   const { mutateAsync: updateStage } = useUpdateEstimateStage();
   const { mutateAsync: saveFinancials } = useSaveEstimateFinancials();
+  const { data: overheadSettings } = useOverheadSettings();
+  const { data: orgSettings } = useOrgSettings();
+  const breakevenRateCents = getBreakevenRateCents(orgSettings?.customizations);
   const { mutateAsync: upsertLineItem } = useUpsertLineItem();
   const { mutateAsync: createInvoice, isPending: creatingInvoice } = useCreateInvoiceFromEstimate();
   const { data: changeRequests } = useEstimateChangeRequests(estimateId);
@@ -422,7 +427,8 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
             adjRateCents: li.adjRateCents,
             unitType: li.unitType ?? undefined,
             productionRateSqftPerHr: li.productionRateSqftPerHr ?? undefined,
-          });
+            budgetMethod: li.budgetMethod,
+          }, breakevenRateCents);
           return upsertLineItem({
             estimateId: estimate.id,
             item: {
@@ -431,6 +437,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
               total_cents: updated.totalCents,
               total_budgeted_hours: updated.totalBudgetedHours,
               budgeted_hours: updated.budgetedHours,
+              cost_cents: updated.costCents,
               total_cost_cents: updated.totalCostCents,
               margin_bps: updated.marginBps,
               markup_bps: updated.markupBps,
@@ -462,6 +469,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
             costCents: 0,
             adjRateCents: null,
             unitType: item.unitType,
+            budgetMethod: "manual",
           });
           return upsertLineItem({
             estimateId: estimate.id,
@@ -478,6 +486,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
               adj_rate_cents: null,
               sort_order: existingCount + idx,
               unit_type: item.unitType,
+              budget_method: "manual",
               total_cents: computed.totalCents,
               budgeted_hours: computed.budgetedHours,
               total_budgeted_hours: computed.totalBudgetedHours,
@@ -518,6 +527,10 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
         discountType:       overrides && "discountType" in overrides       ? overrides.discountType       : estimate.discountType,
         discountValue:      overrides && "discountValue" in overrides      ? overrides.discountValue      : estimate.discountValue,
         appliedDiscountId:  overrides && "appliedDiscountId" in overrides  ? overrides.appliedDiscountId  : estimate.appliedDiscountId,
+        // Per-cost-type overhead (crm_overhead_settings) takes priority over the
+        // flat overheadRateBps once an org has actually configured it; otherwise
+        // fall back to the existing flat-rate behavior.
+        perTypeOverhead: overheadSettings && hasPerTypeOverhead(overheadSettings) ? overheadSettings : undefined,
       });
     } catch {
       toast.error("Recalculation failed");
@@ -1107,7 +1120,8 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                             budgetedHours: item.budgetedHours,
                             costCents: 0,
                             adjRateCents: null,
-                          });
+                            budgetMethod: "manual",
+                          }, breakevenRateCents);
                           return upsertLineItem({
                             estimateId: estimate.id,
                             item: {
@@ -1118,9 +1132,10 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                               qty: item.qty,
                               rate_cents: item.rateCents,
                               visits: item.visits,
-                              cost_cents: 0,
+                              cost_cents: computed.costCents,
                               adj_rate_cents: null,
                               sort_order: existingCount + idx,
+                              budget_method: "manual",
                               total_cents: computed.totalCents,
                               budgeted_hours: computed.budgetedHours,
                               total_budgeted_hours: computed.totalBudgetedHours,

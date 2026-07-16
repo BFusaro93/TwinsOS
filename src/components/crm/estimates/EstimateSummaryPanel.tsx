@@ -4,6 +4,8 @@ import { useState } from "react";
 import { formatCurrency } from "@/lib/utils";
 import { bpsToPercent } from "@/lib/estimate-calc";
 import { useDiscounts } from "@/lib/hooks/use-crm-discounts";
+import { useOverheadSettings } from "@/lib/hooks/use-overhead-settings";
+import { hasPerTypeOverhead } from "@/lib/estimate-calc";
 import {
   Select,
   SelectContent,
@@ -100,6 +102,8 @@ export function EstimateSummaryPanel({ estimate, onRecalculate, recalcPending }:
   const directCosts = estimate.directCosts ?? [];
   const { data: discounts = [] } = useDiscounts();
   const activeDiscounts = discounts.filter((d) => d.isActive);
+  const { data: overheadSettings } = useOverheadSettings();
+  const perTypeOverheadActive = !!overheadSettings && hasPerTypeOverhead(overheadSettings);
 
   // Editable financial settings — initialized from estimate
   const [taxRateStr,      setTaxRateStr]      = useState(String((estimate.taxRateBps / 100).toFixed(2)));
@@ -202,6 +206,11 @@ export function EstimateSummaryPanel({ estimate, onRecalculate, recalcPending }:
           onChange={setOverheadRateStr}
           onBlur={handleRecalc}
         />
+        {perTypeOverheadActive && (
+          <p className="mb-1 text-[10px] leading-tight text-slate-400">
+            Per-cost-type overhead is configured in Settings — this flat rate is ignored while that's active.
+          </p>
+        )}
         <RateRow
           label="Discount"
           value={discountStr}

@@ -64,6 +64,7 @@ import {
 } from "lucide-react";
 import { ChemicalApplicationPanel } from "@/components/crm/chemical/ChemicalApplicationPanel";
 import { createClient } from "@/lib/supabase/client";
+import { computeJobServiceBudgetedHours } from "@/lib/estimate-calc";
 import type { CRMJobVisit } from "@/types/crm-jobs";
 import { JobCostingTab } from "@/components/crm/jobs/JobCostingTab";
 
@@ -350,10 +351,12 @@ export function JobDetail({ jobId, initialEditing = false }: Props) {
       await addJobService.mutateAsync({
         jobId: job.id,
         clientId: job.clientId,
+        serviceId: svc.id,
         serviceName: svc.name,
         qty: parseFloat(newSvcQty) || 1,
         rateCents: newSvcRate ? Math.round(parseFloat(newSvcRate) * 100) : (svc.defaultRateCents ?? null),
         budgetedHours: parseFloat(newSvcBHrs) || 0,
+        budgetMethod: svc.budgetMethod,
       });
       setAddingSvc(false);
       setNewSvcId("");
@@ -1138,7 +1141,7 @@ export function JobDetail({ jobId, initialEditing = false }: Props) {
                             setNewSvcId(v);
                             if (svc) {
                               setNewSvcRate(svc.defaultRateCents != null ? String(svc.defaultRateCents / 100) : "");
-                              setNewSvcBHrs(svc.defaultBHrs != null ? String(svc.defaultBHrs) : "0");
+                              setNewSvcBHrs(String(computeJobServiceBudgetedHours(svc, parseFloat(newSvcQty) || 1)));
                             }
                           }}>
                             <SelectTrigger className="h-7 text-xs"><SelectValue placeholder="Select service…" /></SelectTrigger>
@@ -1149,7 +1152,14 @@ export function JobDetail({ jobId, initialEditing = false }: Props) {
                         </td>
                         <td className="px-2 py-2 text-right">
                           <Input type="number" min="0" step="0.01" value={newSvcQty}
-                            onChange={(e) => setNewSvcQty(e.target.value)}
+                            onChange={(e) => {
+                              const qty = e.target.value;
+                              setNewSvcQty(qty);
+                              const svc = crmServices.find((s) => s.id === newSvcId);
+                              if (svc && svc.budgetMethod === "production_rate") {
+                                setNewSvcBHrs(String(computeJobServiceBudgetedHours(svc, parseFloat(qty) || 1)));
+                              }
+                            }}
                             className="h-7 w-20 text-right text-xs ml-auto" />
                         </td>
                         <td className="px-2 py-2 text-right">

@@ -13,7 +13,7 @@ export interface OverheadSettings {
   otherOhBps: number;
 }
 
-const DEFAULTS: OverheadSettings = {
+export const OVERHEAD_SETTINGS_DEFAULTS: OverheadSettings = {
   id: null,
   laborOhBps: 0,
   laborBurdenBps: 0,
@@ -54,7 +54,7 @@ export function useOverheadSettings() {
         .eq("org_id", profile.org_id)
         .maybeSingle();
       if (error) throw error;
-      return data ? mapRow(data) : DEFAULTS;
+      return data ? mapRow(data) : OVERHEAD_SETTINGS_DEFAULTS;
     },
   });
 }

@@ -35,14 +35,15 @@ import {
 import { useOrgList } from "@/lib/hooks/use-org-lists";
 import { useProducts } from "@/lib/hooks/use-products";
 import { useServiceChemicals, useSaveServiceChemicals } from "@/lib/hooks/use-chemical-tracking";
-import type { CRMService } from "@/types/crm-jobs";
+import { AuditTrailTab } from "@/components/shared/AuditTrailTab";
+import type { CRMService, BudgetMethod } from "@/types/crm-jobs";
 
 const UNITS = ["visit", "sqft", "lf", "cuyd", "acres", "hr", "each", "lb", "gal"];
 // Fallback shown only until the org has configured its own list under
 // Settings > Services > Service Categories.
 const FALLBACK_CATEGORIES = ["lawn", "landscape", "snow", "irrigation", "tree", "chemical", "other"];
 
-type Tab = "details" | "descriptions" | "rate_matrix" | "sub_services" | "chemicals" | "job_costing";
+type Tab = "details" | "descriptions" | "rate_matrix" | "sub_services" | "chemicals" | "job_costing" | "audit";
 
 interface Props {
   open: boolean;
@@ -60,6 +61,7 @@ interface FormState {
   defaultRateCents: string;
   defaultBHrs: string;
   defaultBCostCents: string;
+  budgetMethod: BudgetMethod;
   productionRateSqftPerHr: string;
   targetRateCents: string;
   targetRateWithDriveCents: string;
@@ -84,6 +86,7 @@ function emptyForm(): FormState {
     name: "", code: "", category: "lawn", unit: "visit",
     serviceMode: "flat_rate", parentServiceId: "",
     defaultRateCents: "", defaultBHrs: "", defaultBCostCents: "",
+    budgetMethod: "manual",
     productionRateSqftPerHr: "",
     targetRateCents: "", targetRateWithDriveCents: "",
     taskColor: "#3B82F6",
@@ -107,6 +110,7 @@ function serviceToForm(s: CRMService): FormState {
     defaultRateCents: s.defaultRateCents != null ? (s.defaultRateCents / 100).toFixed(2) : "",
     defaultBHrs: s.defaultBHrs > 0 ? String(s.defaultBHrs) : "",
     defaultBCostCents: s.defaultBCostCents > 0 ? (s.defaultBCostCents / 100).toFixed(2) : "",
+    budgetMethod: s.budgetMethod,
     productionRateSqftPerHr: s.productionRateSqftPerHr != null ? String(s.productionRateSqftPerHr) : "",
     targetRateCents: s.targetRateCents > 0 ? (s.targetRateCents / 100).toFixed(2) : "",
     targetRateWithDriveCents: s.targetRateWithDriveCents > 0 ? (s.targetRateWithDriveCents / 100).toFixed(2) : "",
@@ -650,6 +654,7 @@ export function ServiceDialog({ open, service, onClose }: Props) {
       default_rate_cents: form.defaultRateCents ? parseCents(form.defaultRateCents) : null,
       default_b_hrs: parseNum(form.defaultBHrs),
       default_b_cost_cents: parseCents(form.defaultBCostCents),
+      budget_method: form.budgetMethod,
       production_rate_sqft_per_hr: form.productionRateSqftPerHr ? parseNum(form.productionRateSqftPerHr) : null,
       target_rate_cents: parseCents(form.targetRateCents),
       target_rate_with_drive_cents: parseCents(form.targetRateWithDriveCents),
@@ -692,8 +697,8 @@ export function ServiceDialog({ open, service, onClose }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
+      <DialogContent className="max-w-2xl h-[85vh] flex flex-col p-0">
+        <DialogHeader className="px-6 pt-5 pb-0 shrink-0">
           <DialogTitle>
             {activeService ? `Edit Service: ${activeService.name}` : "Add Service"}
           </DialogTitle>
@@ -703,7 +708,7 @@ export function ServiceDialog({ open, service, onClose }: Props) {
         </DialogHeader>
 
         {/* Tabs */}
-        <div className="flex gap-0 border-b text-sm">
+        <div className="flex gap-0 border-b text-sm shrink-0 px-6">
           {([
             { key: "details", label: "Details" },
             { key: "descriptions", label: "Descriptions" },
@@ -713,6 +718,7 @@ export function ServiceDialog({ open, service, onClose }: Props) {
               ? [{ key: "chemicals" as Tab, label: "Chemicals", disabled: !activeService }]
               : []),
             { key: "job_costing", label: "Job Costing" },
+            { key: "audit", label: "Audit Trail", disabled: !activeService },
           ] as { key: Tab; label: string; disabled?: boolean }[]).map((t) => (
             <button
               key={t.key}
@@ -727,6 +733,8 @@ export function ServiceDialog({ open, service, onClose }: Props) {
             </button>
           ))}
         </div>
+
+        <div className="flex-1 overflow-y-auto px-6">
 
         {/* Details Tab */}
         {tab === "details" && (
@@ -828,7 +836,35 @@ export function ServiceDialog({ open, service, onClose }: Props) {
             {/* Pricing defaults */}
             <div className="rounded-lg border p-3">
               <p className="text-xs font-semibold text-slate-600 mb-2">Pricing Defaults</p>
-              <div className="grid grid-cols-3 gap-3">
+
+              <Field label="Budget Method">
+                <div className="flex gap-1 rounded-md border border-slate-200 bg-slate-50 p-0.5 w-fit">
+                  {([
+                    { value: "manual", label: "Manual Budget Rate" },
+                    { value: "production_rate", label: "Production Rate" },
+                  ] as { value: BudgetMethod; label: string }[]).map((opt) => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => setForm({ ...form, budgetMethod: opt.value })}
+                      className={`rounded px-3 py-1 text-xs font-medium transition-colors ${
+                        form.budgetMethod === opt.value
+                          ? "bg-white text-slate-900 shadow-sm"
+                          : "text-slate-500 hover:text-slate-700"
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+                <p className="mt-1 text-[11px] text-slate-400">
+                  {form.budgetMethod === "manual"
+                    ? "Budgeted hours are entered directly below (Default B.Hrs)."
+                    : "Budgeted hours are calculated per job from quantity ÷ production rate."}
+                </p>
+              </Field>
+
+              <div className="mt-3 grid grid-cols-3 gap-3">
                 <Field label="Default Rate ($)">
                   <Input
                     type="number"
@@ -847,6 +883,7 @@ export function ServiceDialog({ open, service, onClose }: Props) {
                     onChange={(e) => setForm({ ...form, defaultBHrs: e.target.value })}
                     placeholder="0.00"
                     className="text-sm"
+                    disabled={form.budgetMethod !== "manual"}
                   />
                 </Field>
                 <Field label="Default B.Cost ($)">
@@ -867,6 +904,7 @@ export function ServiceDialog({ open, service, onClose }: Props) {
                     onChange={(e) => setForm({ ...form, productionRateSqftPerHr: e.target.value })}
                     placeholder="e.g. 30000"
                     className="text-sm"
+                    disabled={form.budgetMethod !== "production_rate"}
                   />
                 </Field>
                 <Field label="Target Rate ($)">
@@ -966,7 +1004,16 @@ export function ServiceDialog({ open, service, onClose }: Props) {
           </div>
         )}
 
-        <DialogFooter>
+        {/* Audit Trail Tab */}
+        {tab === "audit" && activeService && (
+          <div className="py-2">
+            <AuditTrailTab recordType="service" recordId={activeService.id} />
+          </div>
+        )}
+
+        </div>
+
+        <DialogFooter className="px-6 py-4 border-t shrink-0">
           <Button variant="outline" onClick={onClose} disabled={isPending}>
             Cancel
           </Button>

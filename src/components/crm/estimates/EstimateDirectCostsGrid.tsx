@@ -2,8 +2,9 @@
 
 import { useState } from "react";
 import { cn } from "@/lib/utils";
-import { centsToDisplay } from "@/lib/estimate-calc";
+import { centsToDisplay, computeDirectCostOverhead } from "@/lib/estimate-calc";
 import { useUpsertDirectCost, useDeleteDirectCost } from "@/lib/hooks/use-estimates";
+import { useOverheadSettings, OVERHEAD_SETTINGS_DEFAULTS, type OverheadSettings } from "@/lib/hooks/use-overhead-settings";
 import { Button } from "@/components/ui/button";
 import { Trash2, Plus } from "lucide-react";
 import { toast } from "sonner";
@@ -21,9 +22,11 @@ const COST_TYPE_LABELS: Record<DirectCostType, string> = {
 function DirectCostRow({
   item,
   estimateId,
+  overheadSettings,
 }: {
   item: EstimateDirectCost;
   estimateId: string;
+  overheadSettings: OverheadSettings;
 }) {
   const [row, setRow] = useState(item);
   const [dirty, setDirty] = useState(false);
@@ -34,7 +37,8 @@ function DirectCostRow({
     setRow((prev) => {
       const next = { ...prev, [key]: val };
       const totalCents = Math.round(next.qty * next.rateCents);
-      return { ...next, totalCents };
+      const overheadCents = computeDirectCostOverhead(next.costType, totalCents, overheadSettings);
+      return { ...next, totalCents, overheadCents };
     });
     setDirty(true);
   }
@@ -156,6 +160,7 @@ export function EstimateDirectCostsGrid({
   items: EstimateDirectCost[];
 }) {
   const { mutateAsync: upsert } = useUpsertDirectCost();
+  const { data: overheadSettings = OVERHEAD_SETTINGS_DEFAULTS } = useOverheadSettings();
 
   async function addItem() {
     try {
@@ -195,7 +200,7 @@ export function EstimateDirectCostsGrid({
         </thead>
         <tbody>
           {items.map((item) => (
-            <DirectCostRow key={item.id} item={item} estimateId={estimateId} />
+            <DirectCostRow key={item.id} item={item} estimateId={estimateId} overheadSettings={overheadSettings} />
           ))}
           {/* totals row */}
           <tr className="border-t bg-slate-50 text-xs font-semibold text-slate-600">

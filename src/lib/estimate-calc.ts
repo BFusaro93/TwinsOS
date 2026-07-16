@@ -1,14 +1,34 @@
-import type { EstimateLineItem } from "@/types/crm-estimates";
+import type { EstimateLineItem, DirectCostType } from "@/types/crm-estimates";
+import type { CRMService } from "@/types/crm-jobs";
+import type { OverheadSettings } from "@/lib/hooks/use-overhead-settings";
+
+/**
+ * Reads the org's configured breakeven labor rate ($/hr, fully burdened —
+ * wages + burden + non-billable uplift + fixed OH recovery) from org settings
+ * customizations. Set via the Job Costing bid-rate calculator's "Set as
+ * project rate" action (src/components/operations/JobCostingDashboard.tsx).
+ */
+export function getBreakevenRateCents(customizations: Record<string, unknown> | null | undefined): number | undefined {
+  const v = customizations?.breakevenLaborRateCents;
+  return typeof v === "number" && v > 0 ? v : undefined;
+}
 
 /**
  * Recompute all derived fields on a line item from its inputs.
  *
- * Aspire-style production rate engine:
- *   - If unitType is area/length-based AND productionRateSqftPerHr > 0:
- *       budgetedHours (per occurrence) = qty / productionRateSqftPerHr
- *   - If unitType === 'hr': budgetedHours = qty (direct hours)
- *   - Otherwise: budgetedHours is manually set (no override)
+ * budgetMethod is the explicit, user-chosen toggle (set on the service, snapshotted
+ * onto the line item) between the two supported budgeting styles:
+ *   - 'manual'          (Service Autopilot style): budgetedHours is entered directly
+ *                        and never overridden here — except unitType === 'hr', where
+ *                        qty itself IS the hours (direct pass-through either way).
+ *   - 'production_rate' (Aspire style): budgetedHours (per occurrence) is derived
+ *                        from qty ÷ productionRateSqftPerHr.
  *   - totalBudgetedHours = budgetedHours × visits
+ *
+ * breakevenRateCents (optional) auto-fills costCents from budgetedHours × rate
+ * whenever costCents is still 0 (the "never manually set" convention used
+ * elsewhere on this type) — once a user types a real cost, further edits to
+ * other fields won't clobber it.
  */
 export function computeLineItem(
   item: Pick<
@@ -20,14 +40,17 @@ export function computeLineItem(
     | "budgetedHours"
     | "costCents"
     | "adjRateCents"
+    | "budgetMethod"
   > & {
     unitType?: string | null;
     productionRateSqftPerHr?: number | null;
-  }
+  },
+  breakevenRateCents?: number
 ): Pick<
   EstimateLineItem,
   | "totalCents"
   | "totalBudgetedHours"
+  | "costCents"
   | "totalCostCents"
   | "marginBps"
   | "markupBps"
@@ -39,27 +62,33 @@ export function computeLineItem(
       ? Math.round(item.qty * effectiveRate * item.visits)
       : effectiveRate; // fixed: total IS the rate
 
-  // Auto-calculate budgeted hours from production rate (Aspire engine)
+  // Auto-calculate budgeted hours from production rate (Aspire engine) — only
+  // when the line item is explicitly set to that budget method.
   let budgetedHours = item.budgetedHours;
-  if (
+  if (item.unitType === "hr" && item.qty > 0) {
+    // Direct hours: budgeted hours = qty, regardless of budget method
+    budgetedHours = item.qty;
+  } else if (
+    item.budgetMethod === "production_rate" &&
     item.productionRateSqftPerHr &&
     item.productionRateSqftPerHr > 0 &&
     item.qty > 0 &&
-    item.unitType !== "hr" &&
     item.unitType !== "each"
   ) {
     budgetedHours = item.qty / item.productionRateSqftPerHr;
-  } else if (item.unitType === "hr" && item.qty > 0) {
-    // Direct hours: budgeted hours = qty
-    budgetedHours = item.qty;
+  }
+
+  let costCents = item.costCents;
+  if (costCents === 0 && breakevenRateCents && budgetedHours > 0) {
+    costCents = Math.round(budgetedHours * breakevenRateCents);
   }
 
   const totalBudgetedHours = budgetedHours * item.visits;
 
   const totalCostCents =
     item.calcType === 1
-      ? Math.round(item.costCents * item.qty * item.visits)
-      : item.costCents;
+      ? Math.round(costCents * item.qty * item.visits)
+      : costCents;
 
   const marginBps =
     totalCents > 0
@@ -71,7 +100,68 @@ export function computeLineItem(
       ? Math.round(((totalCents - totalCostCents) / totalCostCents) * 10000)
       : 0;
 
-  return { totalCents, budgetedHours, totalBudgetedHours, totalCostCents, marginBps, markupBps };
+  return { totalCents, budgetedHours, totalBudgetedHours, costCents, totalCostCents, marginBps, markupBps };
+}
+
+/**
+ * Compute budgeted hours for a service added directly to a job (outside the
+ * estimate pipeline — NewJobDialog, JobDetail's "add service" flow). Unlike
+ * estimate line items, a job service row has no per-row unitType, so this
+ * checks the service's own `unit` field instead.
+ */
+export function computeJobServiceBudgetedHours(
+  service: Pick<CRMService, "budgetMethod" | "productionRateSqftPerHr" | "unit" | "defaultBHrs">,
+  qty: number
+): number {
+  if (
+    service.budgetMethod === "production_rate" &&
+    service.productionRateSqftPerHr &&
+    service.productionRateSqftPerHr > 0 &&
+    service.unit !== "hour" &&
+    qty > 0
+  ) {
+    return qty / service.productionRateSqftPerHr;
+  }
+  return service.defaultBHrs ?? 0;
+}
+
+/**
+ * Maps a direct cost's cost_type to the matching org-level overhead bps
+ * (crm_overhead_settings). 'labor' picks up both labor overhead and labor
+ * burden. 'service' has no dedicated bucket in the settings table — treated
+ * as 'other' rather than assumed equivalent to 'sub_contract'.
+ */
+export function overheadBpsForCostType(costType: DirectCostType, settings: OverheadSettings): number {
+  switch (costType) {
+    case "labor": return settings.laborOhBps + settings.laborBurdenBps;
+    case "sub_contract": return settings.contractOhBps;
+    case "product_material": return settings.materialsOhBps;
+    case "asset_equipment": return settings.equipmentOhBps;
+    case "service":
+    case "other":
+    default: return settings.otherOhBps;
+  }
+}
+
+/** True if the org has configured any per-cost-type overhead percentage. */
+export function hasPerTypeOverhead(settings: OverheadSettings): boolean {
+  return (
+    settings.laborOhBps > 0 ||
+    settings.laborBurdenBps > 0 ||
+    settings.contractOhBps > 0 ||
+    settings.equipmentOhBps > 0 ||
+    settings.materialsOhBps > 0 ||
+    settings.otherOhBps > 0
+  );
+}
+
+/** Overhead dollars for a single direct cost row, given its cost_type and total. */
+export function computeDirectCostOverhead(
+  costType: DirectCostType,
+  totalCents: number,
+  settings: OverheadSettings
+): number {
+  return Math.round((totalCents * overheadBpsForCostType(costType, settings)) / 10000);
 }
 
 /** Format basis points as a percentage string: 10000 bps → "100.0%" */

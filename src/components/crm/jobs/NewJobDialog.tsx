@@ -26,10 +26,11 @@ import { useEmployees } from "@/lib/hooks/use-employees";
 import { useOrgSettings } from "@/lib/hooks/use-org-settings";
 import { usePackages } from "@/lib/hooks/use-packages";
 import { computePackageVisitSchedule } from "@/lib/package-schedule";
+import { computeJobServiceBudgetedHours } from "@/lib/estimate-calc";
 import { formatCurrency } from "@/lib/utils";
 import { Plus, X } from "lucide-react";
 import { toast } from "sonner";
-import type { JobType } from "@/types/crm-jobs";
+import type { JobType, BudgetMethod } from "@/types/crm-jobs";
 
 const DAYS_OF_WEEK = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
@@ -58,11 +59,12 @@ interface ServiceRow {
   qty: number;
   rateCents: number;
   budgetedHours: number;
+  budgetMethod: BudgetMethod;
   teamSize: number;
 }
 
 function blankServiceRow(date: string): ServiceRow {
-  return { serviceId: "", serviceName: "", startDate: date, completeByDate: "", qty: 1, rateCents: 0, budgetedHours: 0, teamSize: 1 };
+  return { serviceId: "", serviceName: "", startDate: date, completeByDate: "", qty: 1, rateCents: 0, budgetedHours: 0, budgetMethod: "manual", teamSize: 1 };
 }
 
 interface Props {
@@ -150,14 +152,18 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
       visitSchedule.length > 0
         ? visitSchedule.map(({ service, scheduledDate }) => {
             const matchingService = (crmServices ?? []).find((s) => s.id === service.serviceId);
+            const qty = 1;
             return {
               serviceId: service.serviceId ?? "",
               serviceName: service.serviceName,
               startDate: scheduledDate ? scheduledDate.toISOString().slice(0, 10) : "",
               completeByDate: service.endDate ?? "",
-              qty: 1,
+              qty,
               rateCents: service.defaultRateCents ?? matchingService?.defaultRateCents ?? 0,
-              budgetedHours: service.defaultBHrs ?? matchingService?.defaultBHrs ?? 0,
+              budgetedHours: matchingService
+                ? computeJobServiceBudgetedHours(matchingService, qty)
+                : service.defaultBHrs ?? 0,
+              budgetMethod: matchingService?.budgetMethod ?? "manual",
               teamSize: 1,
             };
           })
@@ -180,12 +186,31 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
   function pickService(i: number, serviceId: string) {
     const svc = (crmServices ?? []).find((s) => s.id === serviceId);
     if (!svc) return;
+    const qty = services[i]?.qty ?? 1;
     updateService(i, {
       serviceId: svc.id,
       serviceName: svc.name,
       rateCents: svc.defaultRateCents ?? 0,
-      budgetedHours: svc.defaultBHrs ?? 0,
+      budgetedHours: computeJobServiceBudgetedHours(svc, qty),
+      budgetMethod: svc.budgetMethod,
     });
+  }
+
+  // Is this row's budgeted hours auto-calculated from the service's production rate?
+  function rowIsAutoHrs(serviceId: string): boolean {
+    const svc = (crmServices ?? []).find((s) => s.id === serviceId);
+    return !!svc && svc.budgetMethod === "production_rate" && !!svc.productionRateSqftPerHr && svc.productionRateSqftPerHr > 0 && svc.unit !== "hour";
+  }
+
+  // Recompute budgeted hours when qty changes, if this row's service uses production rate
+  function updateQty(i: number, qty: number) {
+    const serviceId = services[i]?.serviceId;
+    const svc = (crmServices ?? []).find((s) => s.id === serviceId);
+    if (svc && rowIsAutoHrs(serviceId)) {
+      updateService(i, { qty, budgetedHours: computeJobServiceBudgetedHours(svc, qty) });
+    } else {
+      updateService(i, { qty });
+    }
   }
 
   const effectiveClientId = defaultClientId ?? selectedClientId;
@@ -242,6 +267,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
         notes: null,
         notesToCrew: notesToCrew || null,
         services: services.map((s, idx) => ({
+          serviceId: s.serviceId || null,
           serviceName: s.serviceName,
           startDate: jobType === "one_time" ? (startDate || null) : (s.startDate || startDate || null),
           completeByDate: (jobType === "waiting_list" || jobType === "package") ? (s.completeByDate || completeByDate || null) : null,
@@ -250,6 +276,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
           qty: s.qty,
           rateCents: s.rateCents,
           budgetedHours: s.budgetedHours,
+          budgetMethod: s.budgetMethod,
           teamSize: s.teamSize,
           daysCount: 1,
           timeStart: null,
@@ -525,7 +552,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
                     {showCompleteBy ? (
                       <Input type="date" value={svc.completeByDate} onChange={(e) => updateService(i, { completeByDate: e.target.value })} className="h-7 text-xs" />
                     ) : (
-                      <Input type="number" min="0" step="0.01" value={svc.qty} onChange={(e) => updateService(i, { qty: parseFloat(e.target.value) || 1 })} className="h-7 text-xs" />
+                      <Input type="number" min="0" step="0.01" value={svc.qty} onChange={(e) => updateQty(i, parseFloat(e.target.value) || 1)} className="h-7 text-xs" />
                     )}
                     <Input
                       type="number" min="0" step="0.01"
@@ -534,7 +561,13 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
                       onChange={(e) => updateService(i, { rateCents: Math.round(parseFloat(e.target.value || "0") * 100) })}
                       className="h-7 text-xs" placeholder="0.00"
                     />
-                    <Input type="number" min="0" step="0.25" value={svc.budgetedHours} onChange={(e) => updateService(i, { budgetedHours: parseFloat(e.target.value) || 0 })} className="h-7 text-xs" placeholder="0" />
+                    {rowIsAutoHrs(svc.serviceId) ? (
+                      <span className="flex h-7 items-center justify-end pr-1 text-xs font-medium text-blue-600" title="Auto-calculated from production rate">
+                        {svc.budgetedHours.toFixed(2)}
+                      </span>
+                    ) : (
+                      <Input type="number" min="0" step="0.25" value={svc.budgetedHours} onChange={(e) => updateService(i, { budgetedHours: parseFloat(e.target.value) || 0 })} className="h-7 text-xs" placeholder="0" />
+                    )}
                     <Input type="number" min="1" step="1" value={svc.teamSize} onChange={(e) => updateService(i, { teamSize: parseInt(e.target.value) || 1 })} className="h-7 text-xs" />
                     <span className="text-xs text-slate-700 font-medium text-right pr-1">{formatCurrency(svc.qty * svc.rateCents)}</span>
                     <button type="button" onClick={() => removeService(i)} disabled={services.length === 1} className="flex h-6 w-6 items-center justify-center rounded text-slate-400 hover:text-red-500 disabled:opacity-30">

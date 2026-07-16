@@ -2,7 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
-import type { CRMJob, CRMService, CRMCrew, CRMServiceRateMatrixRow } from "@/types/crm-jobs";
+import type { CRMJob, CRMService, CRMCrew, CRMServiceRateMatrixRow, BudgetMethod } from "@/types/crm-jobs";
 
 // ── mappers ───────────────────────────────────────────────────────────────────
 
@@ -410,6 +410,7 @@ function mapJobServiceFull(s: any): CRMJobService {
     startRecurring: s.start_recurring ?? null,
     assignedTo: s.assigned_to ?? null,
     budgetedHours: s.budgeted_hours ?? 0,
+    budgetMethod: s.budget_method ?? 'manual',
     teamSize: s.team_size ?? 1,
     daysCount: s.days_count ?? 1,
     timeStart: s.time_start ?? null,
@@ -853,6 +854,7 @@ export function useCreateClientJob() {
         const jobId = (data as { id: string }).id;
         const serviceRows = values.services.map((s, i) => ({
           job_id: jobId,
+          service_id: s.serviceId || null,
           service_name: s.serviceName || '',
           start_date: s.startDate || null,
           complete_by_date: s.completeByDate || null,
@@ -861,6 +863,7 @@ export function useCreateClientJob() {
           qty: s.qty,
           rate_cents: s.rateCents,
           budgeted_hours: s.budgetedHours,
+          budget_method: s.budgetMethod,
           team_size: s.teamSize,
           days_count: s.daysCount,
           time_start: s.timeStart || null,
@@ -1607,23 +1610,27 @@ export function useUpdateJobService() {
 export function useAddJobService() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ jobId, clientId, serviceName, qty, rateCents, budgetedHours }: {
+    mutationFn: async ({ jobId, clientId, serviceId, serviceName, qty, rateCents, budgetedHours, budgetMethod }: {
       jobId: string;
       clientId: string;
+      serviceId?: string | null;
       serviceName: string;
       qty: number;
       rateCents: number | null;
       budgetedHours: number;
+      budgetMethod?: BudgetMethod;
     }) => {
       const supabase = createClient();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any).from('crm_job_services').insert({
         job_id: jobId,
         client_id: clientId,
+        service_id: serviceId || null,
         service_name: serviceName,
         qty,
         rate_cents: rateCents,
         budgeted_hours: budgetedHours,
+        budget_method: budgetMethod ?? 'manual',
         team_size: 1,
         days_count: 1,
         included: true,

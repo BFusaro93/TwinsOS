@@ -254,6 +254,7 @@ export function JobCostingTab({ jobId, estimateId }: Props) {
     targetRateCentsPerHr,
     actualRevPerManHrCents,
     targetOverUnderCents,
+    budgetMethod,
   } = costing;
 
   // Derived summary values
@@ -302,8 +303,14 @@ export function JobCostingTab({ jobId, estimateId }: Props) {
 
       {/* ── Est vs Actual comparison table ── */}
       <div className="rounded-lg border bg-white shadow-sm overflow-hidden">
-        <div className="bg-slate-50 border-b px-4 py-2">
+        <div className="bg-slate-50 border-b px-4 py-2 flex items-center justify-between">
           <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Estimated vs. Actual</p>
+          <span
+            className="text-[10px] font-medium text-slate-400"
+            title="Which budgeting style drove the estimated hours above — set on the service."
+          >
+            Budget method: {budgetMethod === "production_rate" ? "Production Rate" : "Manual"}
+          </span>
         </div>
         <table className="w-full text-sm">
           <thead>
