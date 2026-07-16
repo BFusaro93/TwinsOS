@@ -33,6 +33,8 @@ import {
   useCustomFieldDefs,
 } from "@/lib/hooks/use-rate-matrix";
 import { useOrgList } from "@/lib/hooks/use-org-lists";
+import { useProducts } from "@/lib/hooks/use-products";
+import { useServiceChemicals, useSaveServiceChemicals } from "@/lib/hooks/use-chemical-tracking";
 import type { CRMService } from "@/types/crm-jobs";
 
 const UNITS = ["visit", "sqft", "lf", "cuyd", "acres", "hr", "each", "lb", "gal"];
@@ -40,7 +42,7 @@ const UNITS = ["visit", "sqft", "lf", "cuyd", "acres", "hr", "each", "lb", "gal"
 // Settings > Services > Service Categories.
 const FALLBACK_CATEGORIES = ["lawn", "landscape", "snow", "irrigation", "tree", "chemical", "other"];
 
-type Tab = "details" | "descriptions" | "rate_matrix" | "sub_services" | "job_costing";
+type Tab = "details" | "descriptions" | "rate_matrix" | "sub_services" | "chemicals" | "job_costing";
 
 interface Props {
   open: boolean;
@@ -484,6 +486,135 @@ function SubServicesTab({ parentService }: SubServicesTabProps) {
   );
 }
 
+// ── Chemicals Tab ─────────────────────────────────────────────────────────────
+// Default chemical products for a chemical-tracking service (SA's "Products &
+// Mixes" tab) — these pre-populate the per-visit Chemical Application panel.
+
+interface ChemicalsTabProps {
+  serviceId: string;
+}
+
+function ChemicalsTab({ serviceId }: ChemicalsTabProps) {
+  const { data: serviceChemicals = [] } = useServiceChemicals(serviceId);
+  const { data: allProducts = [] } = useProducts();
+  const saveChemicals = useSaveServiceChemicals();
+
+  const chemicalProducts = allProducts.filter((p) => p.trackChemicals && !p.deletedAt);
+  const [addingProductId, setAddingProductId] = useState("");
+
+  function persist(next: { productId: string; startDate: string | null; endDate: string | null }[]) {
+    saveChemicals.mutate({ serviceId, chemicals: next });
+  }
+
+  function handleAdd() {
+    if (!addingProductId) return;
+    persist([
+      ...serviceChemicals.map((c) => ({ productId: c.productId, startDate: c.startDate, endDate: c.endDate })),
+      { productId: addingProductId, startDate: null, endDate: null },
+    ]);
+    setAddingProductId("");
+  }
+
+  function handleRemove(productId: string) {
+    persist(
+      serviceChemicals
+        .filter((c) => c.productId !== productId)
+        .map((c) => ({ productId: c.productId, startDate: c.startDate, endDate: c.endDate }))
+    );
+  }
+
+  function handleDateChange(productId: string, field: "startDate" | "endDate", value: string) {
+    persist(
+      serviceChemicals.map((c) =>
+        c.productId === productId ? { productId: c.productId, startDate: c.startDate, endDate: c.endDate, [field]: value || null } : { productId: c.productId, startDate: c.startDate, endDate: c.endDate }
+      )
+    );
+  }
+
+  const linkable = chemicalProducts.filter((p) => !serviceChemicals.some((c) => c.productId === p.id));
+
+  return (
+    <div className="flex flex-col gap-4">
+      <p className="text-xs text-slate-500">
+        Chemical products attached here are pre-loaded onto every visit for this service — techs
+        don&apos;t need to re-select them each time. Optional Start/End dates support seasonal rotation.
+      </p>
+
+      <div className="rounded-lg border overflow-hidden">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="bg-slate-50 border-b font-medium text-slate-500 text-xs uppercase tracking-wide">
+              <th className="px-3 py-2 text-left">Product</th>
+              <th className="px-3 py-2 text-left">Start Date</th>
+              <th className="px-3 py-2 text-left">End Date</th>
+              <th className="px-3 py-2 w-8" />
+            </tr>
+          </thead>
+          <tbody>
+            {serviceChemicals.length === 0 && (
+              <tr>
+                <td colSpan={4} className="px-3 py-6 text-center text-slate-400 text-xs">
+                  No chemicals attached yet.
+                </td>
+              </tr>
+            )}
+            {serviceChemicals.map((c) => (
+              <tr key={c.id} className="border-b last:border-0">
+                <td className="px-3 py-2 text-slate-800">{c.productName ?? "—"}</td>
+                <td className="px-2 py-1.5">
+                  <input
+                    type="date"
+                    defaultValue={c.startDate ?? ""}
+                    onBlur={(e) => handleDateChange(c.productId, "startDate", e.target.value)}
+                    className="w-full rounded border border-slate-200 px-1.5 py-0.5 text-xs focus:outline-none focus:border-brand-400"
+                  />
+                </td>
+                <td className="px-2 py-1.5">
+                  <input
+                    type="date"
+                    defaultValue={c.endDate ?? ""}
+                    onBlur={(e) => handleDateChange(c.productId, "endDate", e.target.value)}
+                    className="w-full rounded border border-slate-200 px-1.5 py-0.5 text-xs focus:outline-none focus:border-brand-400"
+                  />
+                </td>
+                <td className="px-2 py-2 text-center">
+                  <button
+                    onClick={() => handleRemove(c.productId)}
+                    className="rounded p-0.5 hover:bg-red-50 text-slate-400 hover:text-red-500"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <div className="p-2 border-t bg-slate-50 flex items-center gap-2">
+          <Select value={addingProductId || "none"} onValueChange={(v) => setAddingProductId(v === "none" ? "" : v)}>
+            <SelectTrigger className="h-7 w-64 text-xs">
+              <SelectValue placeholder="Select a chemical product…" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">Select a chemical product…</SelectItem>
+              {linkable.map((p) => (
+                <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button size="sm" className="h-7 text-xs" onClick={handleAdd} disabled={!addingProductId}>
+            <Plus className="mr-1 h-3.5 w-3.5" /> Add
+          </Button>
+          {chemicalProducts.length === 0 && (
+            <span className="text-xs text-slate-400">
+              No chemical products yet — mark a product &quot;Track Chemicals&quot; in the Products catalog.
+            </span>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Main Dialog ───────────────────────────────────────────────────────────────
 
 export function ServiceDialog({ open, service, onClose }: Props) {
@@ -578,6 +709,9 @@ export function ServiceDialog({ open, service, onClose }: Props) {
             { key: "descriptions", label: "Descriptions" },
             { key: "rate_matrix", label: "Rate Matrix", disabled: !activeService },
             { key: "sub_services", label: "Sub-services", disabled: !activeService },
+            ...(form.trackChemicals
+              ? [{ key: "chemicals" as Tab, label: "Chemicals", disabled: !activeService }]
+              : []),
             { key: "job_costing", label: "Job Costing" },
           ] as { key: Tab; label: string; disabled?: boolean }[]).map((t) => (
             <button
@@ -815,6 +949,13 @@ export function ServiceDialog({ open, service, onClose }: Props) {
         {tab === "sub_services" && activeService && (
           <div className="py-2">
             <SubServicesTab parentService={activeService} />
+          </div>
+        )}
+
+        {/* Chemicals Tab */}
+        {tab === "chemicals" && activeService && (
+          <div className="py-2">
+            <ChemicalsTab serviceId={activeService.id} />
           </div>
         )}
 

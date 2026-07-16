@@ -51,6 +51,7 @@ import { EstimateStagesEditor } from "@/components/crm/settings/EstimateStagesEd
 import { OverheadSettingsEditor } from "@/components/crm/settings/OverheadSettingsEditor";
 import { ClientPortalTab } from "@/components/crm/settings/ClientPortalSettings";
 import { SnowRoutesEditor } from "@/components/crm/settings/SnowRoutesEditor";
+import { ChemicalTrackingTab } from "@/components/crm/settings/ChemicalTrackingSettings";
 import { BILLING_TERMS_OPTIONS } from "@/lib/constants";
 
 // ── AccordionSection ──────────────────────────────────────────────────────────
@@ -1277,16 +1278,6 @@ function AccountingTab() {
       <AccordionSection title="Discounts" count={discountsList.length} description="Each discount needs a default rate — a percent off or a flat dollar amount.">
         <DiscountsEditor />
       </AccordionSection>
-    </div>
-  );
-}
-
-// ── ChemicalTrackingTab ───────────────────────────────────────────────────────
-
-function ChemicalTrackingTab() {
-  return (
-    <div className="flex flex-col items-center justify-center gap-3 rounded-lg border bg-white py-20 shadow-sm">
-      <p className="text-sm text-slate-500">Chemical tracking configuration coming soon</p>
     </div>
   );
 }

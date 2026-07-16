@@ -7,6 +7,11 @@ export type ProductCategory =
   | "stocked_material"
   | "project_material";
 
+export interface ActiveIngredient {
+  name: string;
+  percentage: number;
+}
+
 export interface ProductItem extends BaseRecord {
   name: string;
   description: string;
@@ -26,4 +31,14 @@ export interface ProductItem extends BaseRecord {
   minimumStock: number;
   /** CMMS part category (e.g. "Electrical", "Hydraulic") — maintenance_part only. */
   partCategory: string | null;
+  /** Chemical Tracking (CRM) — track_chemicals unlocks the fields below. */
+  trackChemicals: boolean;
+  scientificName: string | null;
+  epaRegistrationNumber: string | null;
+  epaUrl: string | null;
+  labelInstructions: string | null;
+  routeSheetInstructions: string | null;
+  activeIngredients: ActiveIngredient[];
+  reEntryInterval: string | null;
+  restrictedProduct: boolean;
 }

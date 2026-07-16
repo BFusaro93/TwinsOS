@@ -55,7 +55,9 @@ import {
   Printer,
   StickyNote,
   Package,
+  FlaskConical,
 } from "lucide-react";
+import { ChemicalTrackingWizard } from "@/components/crm/chemical/ChemicalTrackingWizard";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -1341,6 +1343,7 @@ export function DispatchBoard() {
   const [visibleKeys,     setVisibleKeys]     = useState<string[]>(COL_DEFS.map((d) => d.key));
   const [statsOpen,       setStatsOpen]       = useState(false);
   const [printOpen,       setPrintOpen]       = useState(false);
+  const [chemicalWizardOpen, setChemicalWizardOpen] = useState(false);
 
   // Move-to-day dialog state
   const [moveDayDate, setMoveDayDate] = useState("");
@@ -1359,6 +1362,10 @@ export function DispatchBoard() {
   const qc = useQueryClient();
 
   const allVisits = visits ?? [];
+  const chemicalServiceIds = new Set((allServices ?? []).filter((s) => s.trackChemicals).map((s) => s.id));
+  const hasChemicalVisits = allVisits.some((v) =>
+    (v.job?.services ?? []).some((s) => s.serviceId && chemicalServiceIds.has(s.serviceId))
+  );
 
   async function handleOptimizeRoute() {
     const targets = filtered.filter((v) => v.job?.serviceAddress);
@@ -1830,6 +1837,18 @@ export function DispatchBoard() {
           </PopoverContent>
         </Popover>
 
+        {/* Chemical Tracking — day close-out wizard, only shown when relevant */}
+        {hasChemicalVisits && (
+          <button
+            onClick={() => setChemicalWizardOpen(true)}
+            title="Chemical Tracking"
+            className="h-7 flex items-center gap-1.5 rounded bg-[#5a5a5a] border border-[#6a6a6a] px-2.5 text-[10px] text-teal-300 hover:text-teal-100 transition-colors"
+          >
+            <FlaskConical className="h-3 w-3" />
+            Chemical Tracking
+          </button>
+        )}
+
         {/* Actions — visible when rows selected */}
         {selectedIds.size > 0 && (
           <DropdownMenu>
@@ -2188,6 +2207,14 @@ export function DispatchBoard() {
         visits={displayVisits}
         crews={crews ?? []}
         selectedDate={selectedDate}
+      />
+
+      {/* Chemical Tracking wizard — day close-out */}
+      <ChemicalTrackingWizard
+        open={chemicalWizardOpen}
+        onOpenChange={setChemicalWizardOpen}
+        date={selectedDate}
+        visits={allVisits}
       />
 
       {/* Team assignment dialog */}

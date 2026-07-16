@@ -77,7 +77,7 @@ function mapFieldDef(row: any): CRMCustomFieldDef {
   return {
     id: row.id,
     orgId: row.org_id,
-    label: row.label,
+    label: row.field_label,
     fieldType: row.field_type,
     entityType: row.entity_type,
     isSystem: row.is_system ?? false,
@@ -236,7 +236,7 @@ export function useCustomFieldDefs(entityType?: "client" | "property") {
         .from("crm_rate_matrix_field_defs")
         .select("*")
         .is("deleted_at", null)
-        .order("label");
+        .order("field_label");
       if (entityType) {
         q = q.eq("entity_type", entityType);
       }

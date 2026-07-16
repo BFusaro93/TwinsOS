@@ -32,7 +32,7 @@ export interface CRMEmailTemplate {
   name: string;
   subject: string;
   bodyHtml: string;
-  templateType: "estimate" | "confirmation" | "invoice";
+  templateType: "estimate" | "confirmation" | "invoice" | "chemical_application";
   isDefault: boolean;
   createdAt: string;
   updatedAt: string;
@@ -53,6 +53,22 @@ export const EMAIL_MERGE_TAGS = [
 ] as const;
 
 export type MergeTag = typeof EMAIL_MERGE_TAGS[number]["tag"];
+
+// Merge tags supported in the Chemical Application Notice email template
+export const CHEMICAL_EMAIL_MERGE_TAGS = [
+  { tag: "[clientfirstname]",    label: "Client First Name" },
+  { tag: "[clientfullname]",     label: "Client Full Name" },
+  { tag: "[companyname]",        label: "Company Name" },
+  { tag: "[applicationdate]",    label: "Application Date" },
+  { tag: "[applicatorname]",     label: "Applicator Name" },
+  { tag: "[applicatorlicense]",  label: "Applicator License #" },
+  { tag: "[products]",           label: "Products Applied (name, EPA #, amount)" },
+  { tag: "[conditions]",         label: "Weather Conditions" },
+  { tag: "[careinstructions]",   label: "Post-Application Care Instructions" },
+  { tag: "[companyphonenumber]", label: "Company Phone" },
+] as const;
+
+export type ChemicalMergeTag = typeof CHEMICAL_EMAIL_MERGE_TAGS[number]["tag"];
 
 // Public proposal data shape (returned by the proposal API, no auth required)
 export interface ProposalData {

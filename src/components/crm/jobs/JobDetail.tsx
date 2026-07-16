@@ -60,7 +60,9 @@ import {
   Trash2,
   SkipForward,
   Plus,
+  FlaskConical,
 } from "lucide-react";
+import { ChemicalApplicationPanel } from "@/components/crm/chemical/ChemicalApplicationPanel";
 import { createClient } from "@/lib/supabase/client";
 import type { CRMJobVisit } from "@/types/crm-jobs";
 import { JobCostingTab } from "@/components/crm/jobs/JobCostingTab";
@@ -431,6 +433,8 @@ export function JobDetail({ jobId, initialEditing = false }: Props) {
   }
 
   const services = job.services ?? [];
+  const jobServiceIds = new Set(services.map((s) => s.serviceId).filter(Boolean));
+  const isChemicalJob = crmServices.some((s) => jobServiceIds.has(s.id) && s.trackChemicals);
   const effectiveStatus = (edits.status as string) ?? job.status;
   const today = new Date().toISOString().slice(0, 10);
   const isOverdue = job.jobType === "waiting_list"
@@ -1516,6 +1520,9 @@ export function JobDetail({ jobId, initialEditing = false }: Props) {
                     )}
                     {visits.map((v) => (
                       <VisitRow key={v.id} visit={v}
+                        jobId={job.id}
+                        propertyId={job.propertyId}
+                        isChemicalJob={isChemicalJob}
                         onDelete={async () => {
                           if (!confirm("Delete this visit?")) return;
                           await deleteVisit.mutateAsync(v.id);
@@ -1691,12 +1698,18 @@ export function JobDetail({ jobId, initialEditing = false }: Props) {
 
 function VisitRow({
   visit,
+  jobId,
+  propertyId,
+  isChemicalJob,
   onDelete,
   onSaveNote,
   onSaveInvoiceDesc,
   onSkip,
 }: {
   visit: CRMJobVisit;
+  jobId: string;
+  propertyId: string | null;
+  isChemicalJob: boolean;
   onDelete: () => void;
   onSaveNote: (note: string) => Promise<void>;
   onSaveInvoiceDesc: (desc: string) => Promise<void>;
@@ -1708,6 +1721,7 @@ function VisitRow({
   const [invoiceDescVal, setInvoiceDescVal] = useState(visit.invoiceDescription ?? "");
   const [skipping, setSkipping] = useState(false);
   const [skipReason, setSkipReason] = useState("");
+  const [showChemicals, setShowChemicals] = useState(false);
 
   const isTerminal = visit.status === "completed" || visit.status === "skipped" || visit.status === "cancelled";
 
@@ -1751,12 +1765,24 @@ function VisitRow({
           </div>
         </td>
         <td className="px-4 py-3 w-20">
-          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          <div className="flex items-center gap-1">
+            {isChemicalJob && (
+              <button
+                onClick={() => setShowChemicals((v) => !v)}
+                title="Chemical applications"
+                className={cn(
+                  "rounded p-1 hover:bg-teal-50 hover:text-teal-600 transition-opacity",
+                  showChemicals ? "text-teal-600" : "text-slate-300 opacity-0 group-hover:opacity-100"
+                )}
+              >
+                <FlaskConical className="h-3.5 w-3.5" />
+              </button>
+            )}
             {!isTerminal && (
               <button
                 onClick={() => { setSkipping(true); setEditingNote(false); }}
                 title="Skip visit"
-                className="rounded p-1 hover:bg-amber-50 text-slate-300 hover:text-amber-500"
+                className="rounded p-1 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-amber-50 text-slate-300 hover:text-amber-500"
               >
                 <SkipForward className="h-3.5 w-3.5" />
               </button>
@@ -1764,13 +1790,20 @@ function VisitRow({
             <button
               onClick={onDelete}
               title="Delete visit"
-              className="rounded p-1 hover:bg-red-50 text-slate-300 hover:text-red-500"
+              className="rounded p-1 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-50 text-slate-300 hover:text-red-500"
             >
               <Trash2 className="h-3.5 w-3.5" />
             </button>
           </div>
         </td>
       </tr>
+      {showChemicals && (
+        <tr className="border-b bg-teal-50/40">
+          <td colSpan={6} className="px-4 py-3">
+            <ChemicalApplicationPanel jobId={jobId} visitId={visit.id} propertyId={propertyId} />
+          </td>
+        </tr>
+      )}
       {skipping && (
         <tr className="border-b bg-amber-50">
           <td colSpan={6} className="px-4 py-2">

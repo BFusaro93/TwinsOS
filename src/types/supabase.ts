@@ -1784,6 +1784,422 @@ export type Database = {
           },
         ]
       }
+      crm_chemical_application_emails: {
+        Row: {
+          body_html: string
+          email_type: string
+          id: string
+          org_id: string
+          resend_id: string | null
+          sent_at: string
+          subject: string
+          to_email: string
+          to_name: string | null
+          visit_id: string
+        }
+        Insert: {
+          body_html: string
+          email_type?: string
+          id?: string
+          org_id?: string
+          resend_id?: string | null
+          sent_at?: string
+          subject: string
+          to_email: string
+          to_name?: string | null
+          visit_id: string
+        }
+        Update: {
+          body_html?: string
+          email_type?: string
+          id?: string
+          org_id?: string
+          resend_id?: string | null
+          sent_at?: string
+          subject?: string
+          to_email?: string
+          to_name?: string | null
+          visit_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_chemical_application_emails_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_chemical_application_emails_visit_id_fkey"
+            columns: ["visit_id"]
+            isOneToOne: false
+            referencedRelation: "crm_job_visits"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_chemical_application_emails_visit_id_fkey"
+            columns: ["visit_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_job_visits"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      crm_chemical_application_rates: {
+        Row: {
+          application_method_id: string | null
+          area_qty: number | null
+          area_unit_id: string | null
+          created_at: string
+          id: string
+          is_default: boolean
+          org_id: string
+          product_cost_cents: number
+          product_id: string
+          rate_qty: number | null
+          unit_of_measure_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          application_method_id?: string | null
+          area_qty?: number | null
+          area_unit_id?: string | null
+          created_at?: string
+          id?: string
+          is_default?: boolean
+          org_id?: string
+          product_cost_cents?: number
+          product_id: string
+          rate_qty?: number | null
+          unit_of_measure_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          application_method_id?: string | null
+          area_qty?: number | null
+          area_unit_id?: string | null
+          created_at?: string
+          id?: string
+          is_default?: boolean
+          org_id?: string
+          product_cost_cents?: number
+          product_id?: string
+          rate_qty?: number | null
+          unit_of_measure_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_chemical_application_rates_application_method_id_fkey"
+            columns: ["application_method_id"]
+            isOneToOne: false
+            referencedRelation: "crm_chemical_lookup_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_chemical_application_rates_area_unit_id_fkey"
+            columns: ["area_unit_id"]
+            isOneToOne: false
+            referencedRelation: "crm_chemical_lookup_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_chemical_application_rates_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_chemical_application_rates_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "product_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_chemical_application_rates_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_chemical_application_rates_unit_of_measure_id_fkey"
+            columns: ["unit_of_measure_id"]
+            isOneToOne: false
+            referencedRelation: "crm_chemical_lookup_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      crm_chemical_applications: {
+        Row: {
+          application_end_time: string | null
+          application_method_id: string | null
+          application_rate_label: string | null
+          application_start_time: string | null
+          applicator_employee_id: string | null
+          applicator_license_number: string | null
+          areas_treated_ids: string[]
+          budgeted_concentrate_amount: number | null
+          chemical_amount: number | null
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          epa_number_snapshot: string | null
+          id: string
+          job_id: string
+          notes: string | null
+          org_id: string
+          ph_level: number | null
+          product_id: string | null
+          solution_amount: number | null
+          target_ids: string[]
+          temperature: number | null
+          unit_of_measure_id: string | null
+          updated_at: string
+          used: boolean
+          visit_id: string | null
+          wind_direction: string | null
+          wind_speed: number | null
+        }
+        Insert: {
+          application_end_time?: string | null
+          application_method_id?: string | null
+          application_rate_label?: string | null
+          application_start_time?: string | null
+          applicator_employee_id?: string | null
+          applicator_license_number?: string | null
+          areas_treated_ids?: string[]
+          budgeted_concentrate_amount?: number | null
+          chemical_amount?: number | null
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          epa_number_snapshot?: string | null
+          id?: string
+          job_id: string
+          notes?: string | null
+          org_id?: string
+          ph_level?: number | null
+          product_id?: string | null
+          solution_amount?: number | null
+          target_ids?: string[]
+          temperature?: number | null
+          unit_of_measure_id?: string | null
+          updated_at?: string
+          used?: boolean
+          visit_id?: string | null
+          wind_direction?: string | null
+          wind_speed?: number | null
+        }
+        Update: {
+          application_end_time?: string | null
+          application_method_id?: string | null
+          application_rate_label?: string | null
+          application_start_time?: string | null
+          applicator_employee_id?: string | null
+          applicator_license_number?: string | null
+          areas_treated_ids?: string[]
+          budgeted_concentrate_amount?: number | null
+          chemical_amount?: number | null
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          epa_number_snapshot?: string | null
+          id?: string
+          job_id?: string
+          notes?: string | null
+          org_id?: string
+          ph_level?: number | null
+          product_id?: string | null
+          solution_amount?: number | null
+          target_ids?: string[]
+          temperature?: number | null
+          unit_of_measure_id?: string | null
+          updated_at?: string
+          used?: boolean
+          visit_id?: string | null
+          wind_direction?: string | null
+          wind_speed?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_chemical_applications_application_method_id_fkey"
+            columns: ["application_method_id"]
+            isOneToOne: false
+            referencedRelation: "crm_chemical_lookup_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_chemical_applications_applicator_employee_id_fkey"
+            columns: ["applicator_employee_id"]
+            isOneToOne: false
+            referencedRelation: "crm_employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_chemical_applications_applicator_employee_id_fkey"
+            columns: ["applicator_employee_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_chemical_applications_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "crm_jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_chemical_applications_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_chemical_applications_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_chemical_applications_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "product_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_chemical_applications_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_chemical_applications_unit_of_measure_id_fkey"
+            columns: ["unit_of_measure_id"]
+            isOneToOne: false
+            referencedRelation: "crm_chemical_lookup_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_chemical_applications_visit_id_fkey"
+            columns: ["visit_id"]
+            isOneToOne: false
+            referencedRelation: "crm_job_visits"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_chemical_applications_visit_id_fkey"
+            columns: ["visit_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_job_visits"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      crm_chemical_lookup_items: {
+        Row: {
+          created_at: string
+          deleted_at: string | null
+          id: string
+          is_active: boolean
+          list_type: string
+          name: string
+          org_id: string
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          is_active?: boolean
+          list_type: string
+          name: string
+          org_id?: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          is_active?: boolean
+          list_type?: string
+          name?: string
+          org_id?: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_chemical_lookup_items_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      crm_chemical_settings: {
+        Row: {
+          area_custom_field_id: string | null
+          auto_calc_quantity: boolean
+          conditions_display: string
+          default_unit_of_measure_id: string | null
+          id: string
+          org_id: string
+          updated_at: string
+        }
+        Insert: {
+          area_custom_field_id?: string | null
+          auto_calc_quantity?: boolean
+          conditions_display?: string
+          default_unit_of_measure_id?: string | null
+          id?: string
+          org_id?: string
+          updated_at?: string
+        }
+        Update: {
+          area_custom_field_id?: string | null
+          auto_calc_quantity?: boolean
+          conditions_display?: string
+          default_unit_of_measure_id?: string | null
+          id?: string
+          org_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_chemical_settings_area_custom_field_id_fkey"
+            columns: ["area_custom_field_id"]
+            isOneToOne: false
+            referencedRelation: "crm_rate_matrix_field_defs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_chemical_settings_default_unit_of_measure_id_fkey"
+            columns: ["default_unit_of_measure_id"]
+            isOneToOne: false
+            referencedRelation: "crm_chemical_lookup_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_chemical_settings_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: true
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       crm_client_custom_field_values: {
         Row: {
           client_id: string
@@ -2119,7 +2535,9 @@ export type Database = {
           created_at: string
           crew_id: string
           days_of_week: number[]
+          employee_id: string | null
           id: string
+          is_foreman: boolean
           labor_burden_cents_per_hour: number
           name: string
           org_id: string
@@ -2129,7 +2547,9 @@ export type Database = {
           created_at?: string
           crew_id: string
           days_of_week?: number[]
+          employee_id?: string | null
           id?: string
+          is_foreman?: boolean
           labor_burden_cents_per_hour?: number
           name: string
           org_id?: string
@@ -2139,7 +2559,9 @@ export type Database = {
           created_at?: string
           crew_id?: string
           days_of_week?: number[]
+          employee_id?: string | null
           id?: string
+          is_foreman?: boolean
           labor_burden_cents_per_hour?: number
           name?: string
           org_id?: string
@@ -2151,6 +2573,20 @@ export type Database = {
             columns: ["crew_id"]
             isOneToOne: false
             referencedRelation: "crm_crews"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_crew_members_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "crm_employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_crew_members_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_employees"
             referencedColumns: ["id"]
           },
           {
@@ -3617,6 +4053,7 @@ export type Database = {
       crm_job_services: {
         Row: {
           assigned_to: string | null
+          budget_method: string
           budgeted_hours: number
           complete_by_date: string | null
           created_at: string
@@ -3638,6 +4075,7 @@ export type Database = {
         }
         Insert: {
           assigned_to?: string | null
+          budget_method?: string
           budgeted_hours?: number
           complete_by_date?: string | null
           created_at?: string
@@ -3659,6 +4097,7 @@ export type Database = {
         }
         Update: {
           assigned_to?: string | null
+          budget_method?: string
           budgeted_hours?: number
           complete_by_date?: string | null
           created_at?: string
@@ -4336,6 +4775,7 @@ export type Database = {
           created_by: string | null
           deleted_at: string | null
           description: string | null
+          description_on_estimate: string | null
           id: string
           is_active: boolean
           monthly_amount_cents: number
@@ -4353,6 +4793,7 @@ export type Database = {
           created_by?: string | null
           deleted_at?: string | null
           description?: string | null
+          description_on_estimate?: string | null
           id?: string
           is_active?: boolean
           monthly_amount_cents?: number
@@ -4370,6 +4811,7 @@ export type Database = {
           created_by?: string | null
           deleted_at?: string | null
           description?: string | null
+          description_on_estimate?: string | null
           id?: string
           is_active?: boolean
           monthly_amount_cents?: number
@@ -5063,6 +5505,72 @@ export type Database = {
           },
         ]
       }
+      crm_service_chemicals: {
+        Row: {
+          created_at: string
+          end_date: string | null
+          id: string
+          org_id: string
+          product_id: string
+          service_id: string
+          start_date: string | null
+        }
+        Insert: {
+          created_at?: string
+          end_date?: string | null
+          id?: string
+          org_id?: string
+          product_id: string
+          service_id: string
+          start_date?: string | null
+        }
+        Update: {
+          created_at?: string
+          end_date?: string | null
+          id?: string
+          org_id?: string
+          product_id?: string
+          service_id?: string
+          start_date?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_service_chemicals_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_service_chemicals_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "product_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_service_chemicals_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_service_chemicals_service_id_fkey"
+            columns: ["service_id"]
+            isOneToOne: false
+            referencedRelation: "crm_services"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_service_chemicals_service_id_fkey"
+            columns: ["service_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_services"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       crm_service_rate_matrix: {
         Row: {
           budgeted_cost_cents: number
@@ -5141,6 +5649,7 @@ export type Database = {
       }
       crm_services: {
         Row: {
+          budget_method: string
           call_script_notes: string | null
           category: string
           code: string | null
@@ -5179,6 +5688,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          budget_method?: string
           call_script_notes?: string | null
           category?: string
           code?: string | null
@@ -5217,6 +5727,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          budget_method?: string
           call_script_notes?: string | null
           category?: string
           code?: string | null
@@ -6044,6 +6555,7 @@ export type Database = {
         Row: {
           adj_rate_cents: number | null
           applied_discount_id: string | null
+          budget_method: string
           budgeted_hours: number
           calc_type: number
           cost_cents: number
@@ -6081,6 +6593,7 @@ export type Database = {
         Insert: {
           adj_rate_cents?: number | null
           applied_discount_id?: string | null
+          budget_method?: string
           budgeted_hours?: number
           calc_type?: number
           cost_cents?: number
@@ -6118,6 +6631,7 @@ export type Database = {
         Update: {
           adj_rate_cents?: number | null
           applied_discount_id?: string | null
+          budget_method?: string
           budgeted_hours?: number
           calc_type?: number
           cost_cents?: number
@@ -8109,6 +8623,7 @@ export type Database = {
       }
       product_items: {
         Row: {
+          active_ingredients: Json
           alternate_vendors: Json
           category: string
           cost_layers: Json
@@ -8116,8 +8631,11 @@ export type Database = {
           created_by: string | null
           deleted_at: string | null
           description: string
+          epa_registration_number: string | null
+          epa_url: string | null
           id: string
           is_inventory: boolean
+          label_instructions: string | null
           minimum_stock: number
           name: string
           org_id: string
@@ -8126,12 +8644,18 @@ export type Database = {
           picture_url: string | null
           price: number
           quantity_on_hand: number
+          re_entry_interval: string | null
+          restricted_product: boolean
+          route_sheet_instructions: string | null
+          scientific_name: string | null
+          track_chemicals: boolean
           unit_cost: number
           updated_at: string
           vendor_id: string | null
           vendor_name: string
         }
         Insert: {
+          active_ingredients?: Json
           alternate_vendors?: Json
           category: string
           cost_layers?: Json
@@ -8139,8 +8663,11 @@ export type Database = {
           created_by?: string | null
           deleted_at?: string | null
           description?: string
+          epa_registration_number?: string | null
+          epa_url?: string | null
           id?: string
           is_inventory?: boolean
+          label_instructions?: string | null
           minimum_stock?: number
           name: string
           org_id?: string
@@ -8149,12 +8676,18 @@ export type Database = {
           picture_url?: string | null
           price?: number
           quantity_on_hand?: number
+          re_entry_interval?: string | null
+          restricted_product?: boolean
+          route_sheet_instructions?: string | null
+          scientific_name?: string | null
+          track_chemicals?: boolean
           unit_cost?: number
           updated_at?: string
           vendor_id?: string | null
           vendor_name?: string
         }
         Update: {
+          active_ingredients?: Json
           alternate_vendors?: Json
           category?: string
           cost_layers?: Json
@@ -8162,8 +8695,11 @@ export type Database = {
           created_by?: string | null
           deleted_at?: string | null
           description?: string
+          epa_registration_number?: string | null
+          epa_url?: string | null
           id?: string
           is_inventory?: boolean
+          label_instructions?: string | null
           minimum_stock?: number
           name?: string
           org_id?: string
@@ -8172,6 +8708,11 @@ export type Database = {
           picture_url?: string | null
           price?: number
           quantity_on_hand?: number
+          re_entry_interval?: string | null
+          restricted_product?: boolean
+          route_sheet_instructions?: string | null
+          scientific_name?: string | null
+          track_chemicals?: boolean
           unit_cost?: number
           updated_at?: string
           vendor_id?: string | null
@@ -9490,6 +10031,39 @@ export type Database = {
       }
     }
     Views: {
+      rpt_chemical_applications: {
+        Row: {
+          application_end_time: string | null
+          application_method: string | null
+          application_rate_label: string | null
+          application_start_time: string | null
+          applicator_license_number: string | null
+          applicator_name: string | null
+          areas_treated: string | null
+          budgeted_concentrate_amount: number | null
+          chemical_amount: number | null
+          chemical_name: string | null
+          client_name: string | null
+          epa_number_snapshot: string | null
+          epa_registration_number: string | null
+          id: string | null
+          notes: string | null
+          ph_level: number | null
+          service_address: string | null
+          service_city: string | null
+          service_date: string | null
+          service_state: string | null
+          service_zip: string | null
+          solution_amount: number | null
+          targets: string | null
+          temperature: number | null
+          unit_of_measure: string | null
+          used: boolean | null
+          wind_direction: string | null
+          wind_speed: number | null
+        }
+        Relationships: []
+      }
       rpt_client_activity: {
         Row: {
           activity_type: string | null

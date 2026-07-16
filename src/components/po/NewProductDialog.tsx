@@ -25,7 +25,8 @@ import { useCreateProduct, useUpdateProduct } from "@/lib/hooks/use-products";
 import { VendorCombobox } from "@/components/shared/VendorCombobox";
 import { NewVendorDialog } from "@/components/shared/NewVendorDialog";
 import { useSettingsStore } from "@/stores/settings-store";
-import type { ProductItem, Vendor } from "@/types";
+import { Plus, Trash2 } from "lucide-react";
+import type { ActiveIngredient, ProductItem, Vendor } from "@/types";
 
 interface NewProductDialogProps {
   open: boolean;
@@ -59,6 +60,16 @@ export function NewProductDialog({ open, onOpenChange, initialData, onCreated }:
   const enabledPartCategories = partCategories.filter((c) => c.enabled);
   const isMaintPart = category === "maintenance_part";
 
+  const [trackChemicals, setTrackChemicals] = useState(false);
+  const [scientificName, setScientificName] = useState("");
+  const [epaRegistrationNumber, setEpaRegistrationNumber] = useState("");
+  const [epaUrl, setEpaUrl] = useState("");
+  const [labelInstructions, setLabelInstructions] = useState("");
+  const [routeSheetInstructions, setRouteSheetInstructions] = useState("");
+  const [activeIngredients, setActiveIngredients] = useState<ActiveIngredient[]>([]);
+  const [reEntryInterval, setReEntryInterval] = useState("");
+  const [restrictedProduct, setRestrictedProduct] = useState(false);
+
   const createProduct = useCreateProduct();
   const updateProduct = useUpdateProduct();
 
@@ -75,6 +86,15 @@ export function NewProductDialog({ open, onOpenChange, initialData, onCreated }:
       setQuantityOnHand(String(initialData.quantityOnHand));
       setMinimumStock(String(initialData.minimumStock ?? 0));
       setPartCategory(initialData.partCategory ?? "none");
+      setTrackChemicals(initialData.trackChemicals ?? false);
+      setScientificName(initialData.scientificName ?? "");
+      setEpaRegistrationNumber(initialData.epaRegistrationNumber ?? "");
+      setEpaUrl(initialData.epaUrl ?? "");
+      setLabelInstructions(initialData.labelInstructions ?? "");
+      setRouteSheetInstructions(initialData.routeSheetInstructions ?? "");
+      setActiveIngredients(initialData.activeIngredients ?? []);
+      setReEntryInterval(initialData.reEntryInterval ?? "");
+      setRestrictedProduct(initialData.restrictedProduct ?? false);
     }
   }, [open, initialData]);
 
@@ -93,9 +113,30 @@ export function NewProductDialog({ open, onOpenChange, initialData, onCreated }:
     setQuantityOnHand("");
     setMinimumStock("0");
     setPartCategory("none");
+    setTrackChemicals(false);
+    setScientificName("");
+    setEpaRegistrationNumber("");
+    setEpaUrl("");
+    setLabelInstructions("");
+    setRouteSheetInstructions("");
+    setActiveIngredients([]);
+    setReEntryInterval("");
+    setRestrictedProduct(false);
     setExtraVendors([]);
     createProduct.reset();
     updateProduct.reset();
+  }
+
+  function addIngredient() {
+    setActiveIngredients((prev) => [...prev, { name: "", percentage: 0 }]);
+  }
+
+  function updateIngredient(index: number, patch: Partial<ActiveIngredient>) {
+    setActiveIngredients((prev) => prev.map((ai, i) => (i === index ? { ...ai, ...patch } : ai)));
+  }
+
+  function removeIngredient(index: number) {
+    setActiveIngredients((prev) => prev.filter((_, i) => i !== index));
   }
 
   function handleSubmit(e: React.FormEvent) {
@@ -119,6 +160,17 @@ export function NewProductDialog({ open, onOpenChange, initialData, onCreated }:
       costLayers: isEditing && initialData ? initialData.costLayers : [],
       minimumStock: isMaintPart ? parseInt(minimumStock) || 0 : 0,
       partCategory: isMaintPart && partCategory !== "none" ? partCategory : null,
+      trackChemicals,
+      scientificName: trackChemicals ? scientificName || null : null,
+      epaRegistrationNumber: trackChemicals ? epaRegistrationNumber || null : null,
+      epaUrl: trackChemicals ? epaUrl || null : null,
+      labelInstructions: trackChemicals ? labelInstructions || null : null,
+      routeSheetInstructions: trackChemicals ? routeSheetInstructions || null : null,
+      activeIngredients: trackChemicals
+        ? activeIngredients.filter((ai) => ai.name.trim() !== "")
+        : [],
+      reEntryInterval: trackChemicals ? reEntryInterval || null : null,
+      restrictedProduct: trackChemicals ? restrictedProduct : false,
     };
 
     if (isEditing && initialData) {
@@ -318,6 +370,148 @@ export function NewProductDialog({ open, onOpenChange, initialData, onCreated }:
                   value={quantityOnHand}
                   onChange={(e) => setQuantityOnHand(e.target.value)}
                 />
+              </div>
+            )}
+
+            {/* Chemical Tracking — full width */}
+            <div className="col-span-2 grid gap-1.5">
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="product-track-chemicals"
+                  checked={trackChemicals}
+                  onCheckedChange={(checked) => setTrackChemicals(checked === true)}
+                />
+                <Label htmlFor="product-track-chemicals" className="cursor-pointer font-normal">
+                  Track Chemicals
+                </Label>
+              </div>
+            </div>
+
+            {trackChemicals && (
+              <div className="col-span-2 rounded-md border border-brand-100 bg-brand-50 px-3 py-2.5">
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-brand-600">
+                  Chemical Tracking
+                </p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="grid gap-1.5">
+                    <Label htmlFor="product-scientific-name">Scientific Name</Label>
+                    <Input
+                      id="product-scientific-name"
+                      value={scientificName}
+                      onChange={(e) => setScientificName(e.target.value)}
+                      placeholder="Some states require this"
+                    />
+                  </div>
+                  <div className="grid gap-1.5">
+                    <Label htmlFor="product-epa-number">EPA Registration #</Label>
+                    <Input
+                      id="product-epa-number"
+                      value={epaRegistrationNumber}
+                      onChange={(e) => setEpaRegistrationNumber(e.target.value)}
+                      placeholder="EPA Reg. No."
+                    />
+                  </div>
+                  <div className="col-span-2 grid gap-1.5">
+                    <Label htmlFor="product-epa-url">EPA URL</Label>
+                    <Input
+                      id="product-epa-url"
+                      value={epaUrl}
+                      onChange={(e) => setEpaUrl(e.target.value)}
+                      placeholder="https://npic.orst.edu/... or epa.gov link"
+                    />
+                  </div>
+                  <div className="col-span-2 grid gap-1.5">
+                    <Label htmlFor="product-label-instructions">Label Instructions</Label>
+                    <Textarea
+                      id="product-label-instructions"
+                      rows={2}
+                      value={labelInstructions}
+                      onChange={(e) => setLabelInstructions(e.target.value)}
+                      placeholder="Shown to the technician applying this chemical"
+                    />
+                  </div>
+                  <div className="col-span-2 grid gap-1.5">
+                    <Label htmlFor="product-route-sheet-instructions">Client Route Sheet Instructions</Label>
+                    <Textarea
+                      id="product-route-sheet-instructions"
+                      rows={2}
+                      value={routeSheetInstructions}
+                      onChange={(e) => setRouteSheetInstructions(e.target.value)}
+                      placeholder="Printed for the client, e.g. watering/re-entry instructions"
+                    />
+                  </div>
+
+                  <div className="col-span-2 grid gap-1.5">
+                    <Label htmlFor="product-reentry-interval">Re-Entry Interval</Label>
+                    <Input
+                      id="product-reentry-interval"
+                      value={reEntryInterval}
+                      onChange={(e) => setReEntryInterval(e.target.value)}
+                      placeholder="e.g. 24 hours, or until dry"
+                    />
+                  </div>
+
+                  <div className="col-span-2 flex items-center gap-2">
+                    <Checkbox
+                      id="product-restricted"
+                      checked={restrictedProduct}
+                      onCheckedChange={(checked) => setRestrictedProduct(checked === true)}
+                    />
+                    <Label htmlFor="product-restricted" className="cursor-pointer font-normal">
+                      Restricted Use Product
+                    </Label>
+                  </div>
+
+                  <div className="col-span-2 grid gap-1.5">
+                    <Label>Active Ingredients</Label>
+                    {activeIngredients.map((ai, i) => (
+                      <div key={i} className="flex items-center gap-2">
+                        <Input
+                          value={ai.name}
+                          onChange={(e) => updateIngredient(i, { name: e.target.value })}
+                          placeholder="Ingredient name"
+                          className="flex-1"
+                        />
+                        <div className="relative w-28">
+                          <Input
+                            type="number"
+                            step="any"
+                            value={ai.percentage || ""}
+                            onChange={(e) => updateIngredient(i, { percentage: parseFloat(e.target.value) || 0 })}
+                            placeholder="0.0"
+                            className="pr-6"
+                          />
+                          <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-slate-400">
+                            %
+                          </span>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 shrink-0 text-slate-400 hover:text-red-500"
+                          onClick={() => removeIngredient(i)}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    ))}
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={addIngredient}
+                      className="w-fit gap-1"
+                    >
+                      <Plus className="h-3.5 w-3.5" /> Add Ingredient
+                    </Button>
+                  </div>
+                </div>
+                {isEditing && (
+                  <p className="mt-2 text-xs text-brand-600/80">
+                    Application rates can be managed from the product&apos;s detail panel after saving.
+                  </p>
+                )}
               </div>
             )}
           </div>

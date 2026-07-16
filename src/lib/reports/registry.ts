@@ -1,6 +1,7 @@
 import type { PrebuiltReportDef } from "@/lib/reports/definition-types";
 import { ADDITIONAL_REPORTS } from "@/lib/reports/definitions/additions";
 import { AUDIT_REPORTS } from "@/lib/reports/definitions/audits";
+import { CHEMICAL_REPORTS } from "@/lib/reports/definitions/chemical-reports";
 import { CLIENT_REPORTS } from "@/lib/reports/definitions/client-reports";
 import { ESTIMATE_REPORTS } from "@/lib/reports/definitions/estimates";
 import { FINANCIAL_REPORTS } from "@/lib/reports/definitions/financial";
@@ -14,6 +15,7 @@ import { SERVICE_REPORTS } from "@/lib/reports/definitions/service-reports";
 
 export const ALL_REPORTS: PrebuiltReportDef[] = [
   ...AUDIT_REPORTS,
+  ...CHEMICAL_REPORTS,
   ...CLIENT_REPORTS,
   ...ESTIMATE_REPORTS,
   ...FINANCIAL_REPORTS,

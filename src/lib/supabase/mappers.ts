@@ -9,6 +9,7 @@ import type {
   W9Status,
   ProductItem,
   ProductCategory,
+  ActiveIngredient,
   Project,
   ProjectStatus,
   LineItem,
@@ -120,6 +121,18 @@ export function mapProductItem(row: ProductItemRow): ProductItem {
     costLayers: (row.cost_layers as unknown as CostLayer[]) ?? [],
     minimumStock: (row as unknown as { minimum_stock?: number }).minimum_stock ?? 0,
     partCategory: (row as unknown as { part_category?: string | null }).part_category ?? null,
+    trackChemicals: (row as unknown as { track_chemicals?: boolean }).track_chemicals ?? false,
+    scientificName: (row as unknown as { scientific_name?: string | null }).scientific_name ?? null,
+    epaRegistrationNumber:
+      (row as unknown as { epa_registration_number?: string | null }).epa_registration_number ?? null,
+    epaUrl: (row as unknown as { epa_url?: string | null }).epa_url ?? null,
+    labelInstructions: (row as unknown as { label_instructions?: string | null }).label_instructions ?? null,
+    routeSheetInstructions:
+      (row as unknown as { route_sheet_instructions?: string | null }).route_sheet_instructions ?? null,
+    activeIngredients:
+      ((row as unknown as { active_ingredients?: unknown }).active_ingredients as ActiveIngredient[]) ?? [],
+    reEntryInterval: (row as unknown as { re_entry_interval?: string | null }).re_entry_interval ?? null,
+    restrictedProduct: (row as unknown as { restricted_product?: boolean }).restricted_product ?? false,
   };
 }
 

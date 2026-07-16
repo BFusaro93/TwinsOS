@@ -53,6 +53,7 @@ import { useWorkOrders } from "@/lib/hooks/use-work-orders";
 import { useParts } from "@/lib/hooks/use-parts";
 import { useDeleteProduct, useUpdateProduct } from "@/lib/hooks/use-products";
 import { WO_STATUS_LABELS } from "@/lib/constants";
+import { ChemicalApplicationRatesEditor } from "@/components/crm/chemical/ChemicalApplicationRatesEditor";
 import type { ProductItem } from "@/types";
 
 interface ProductDetailSheetProps {
@@ -407,6 +408,93 @@ function HistoryTab({
   );
 }
 
+function ChemicalTab({ product }: { product: ProductItem }) {
+  return (
+    <div className="p-6 flex flex-col gap-5">
+      <dl>
+        <DetailRow label="Scientific Name" value={product.scientificName} />
+        <DetailRow label="EPA Registration #" value={product.epaRegistrationNumber} />
+        <DetailRow
+          label="EPA URL"
+          value={
+            product.epaUrl ? (
+              <a
+                href={product.epaUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="text-brand-600 hover:underline"
+              >
+                {product.epaUrl}
+              </a>
+            ) : null
+          }
+        />
+        <DetailRow label="Re-Entry Interval" value={product.reEntryInterval} />
+        <DetailRow
+          label="Restricted Use"
+          value={
+            product.restrictedProduct ? (
+              <Badge variant="outline" className="border-red-200 bg-red-50 text-red-700">
+                Restricted
+              </Badge>
+            ) : (
+              "No"
+            )
+          }
+        />
+      </dl>
+
+      {product.activeIngredients.length > 0 && (
+        <>
+          <Separator />
+          <div>
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+              Active Ingredients
+            </p>
+            <dl>
+              {product.activeIngredients.map((ai, i) => (
+                <DetailRow key={i} label={ai.name} value={`${ai.percentage}%`} />
+              ))}
+            </dl>
+          </div>
+        </>
+      )}
+
+      {product.labelInstructions && (
+        <>
+          <Separator />
+          <div>
+            <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-400">
+              Label Instructions
+            </p>
+            <p className="whitespace-pre-wrap text-sm text-slate-700">{product.labelInstructions}</p>
+          </div>
+        </>
+      )}
+
+      {product.routeSheetInstructions && (
+        <>
+          <Separator />
+          <div>
+            <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-400">
+              Client Route Sheet Instructions
+            </p>
+            <p className="whitespace-pre-wrap text-sm text-slate-700">{product.routeSheetInstructions}</p>
+          </div>
+        </>
+      )}
+
+      <Separator />
+      <div>
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+          Application Rates
+        </p>
+        <ChemicalApplicationRatesEditor productId={product.id} />
+      </div>
+    </div>
+  );
+}
+
 export function ProductDetailSheet({ product, open, onOpenChange }: ProductDetailSheetProps) {
   const { data: requisitions } = useRequisitions();
   const { data: purchaseOrders } = usePurchaseOrders();
@@ -541,7 +629,12 @@ export function ProductDetailSheet({ product, open, onOpenChange }: ProductDetai
         <Tabs defaultValue="details" className="flex flex-1 flex-col overflow-hidden">
           <div className="shrink-0 overflow-x-auto border-b px-4 md:px-6">
             <TabsList className="h-10 bg-transparent p-0">
-              {["details", "history", "audit trail"].map((v) => (
+              {[
+                "details",
+                ...(product.trackChemicals ? ["chemical"] : []),
+                "history",
+                "audit trail",
+              ].map((v) => (
                 <TabsTrigger
                   key={v}
                   value={v}
@@ -561,6 +654,11 @@ export function ProductDetailSheet({ product, open, onOpenChange }: ProductDetai
               onManageVendors={() => setManageVendorsOpen(true)}
             />
           </TabsContent>
+          {product.trackChemicals && (
+            <TabsContent value="chemical" className="mt-0 flex-1 overflow-y-auto">
+              <ChemicalTab product={product} />
+            </TabsContent>
+          )}
           <TabsContent value="history" className="mt-0 flex-1 overflow-y-auto">
             <HistoryTab product={product} purchaseOrders={purchaseOrders} onPOClick={setSelectedPOId} onWOClick={setSelectedWOId} />
           </TabsContent>

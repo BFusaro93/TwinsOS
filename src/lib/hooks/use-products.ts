@@ -156,6 +156,15 @@ export function useCreateProduct() {
           cost_layers: input.costLayers as unknown as import("@/types/supabase").Json,
           minimum_stock: input.minimumStock ?? 0,
           part_category: input.partCategory ?? null,
+          track_chemicals: input.trackChemicals ?? false,
+          scientific_name: input.scientificName ?? null,
+          epa_registration_number: input.epaRegistrationNumber ?? null,
+          epa_url: input.epaUrl ?? null,
+          label_instructions: input.labelInstructions ?? null,
+          route_sheet_instructions: input.routeSheetInstructions ?? null,
+          active_ingredients: (input.activeIngredients ?? []) as unknown as import("@/types/supabase").Json,
+          re_entry_interval: input.reEntryInterval ?? null,
+          restricted_product: input.restrictedProduct ?? false,
           created_by: user?.id ?? null,
         })
         .select()
@@ -211,6 +220,15 @@ export function useUpdateProduct() {
           ...(input.minimumStock !== undefined && { minimum_stock: input.minimumStock }),
           ...(input.partCategory !== undefined && { part_category: input.partCategory }),
           ...(input.alternateVendors !== undefined && { alternate_vendors: input.alternateVendors as unknown as import("@/types/supabase").Json }),
+          ...(input.trackChemicals !== undefined && { track_chemicals: input.trackChemicals }),
+          ...(input.scientificName !== undefined && { scientific_name: input.scientificName }),
+          ...(input.epaRegistrationNumber !== undefined && { epa_registration_number: input.epaRegistrationNumber }),
+          ...(input.epaUrl !== undefined && { epa_url: input.epaUrl }),
+          ...(input.labelInstructions !== undefined && { label_instructions: input.labelInstructions }),
+          ...(input.routeSheetInstructions !== undefined && { route_sheet_instructions: input.routeSheetInstructions }),
+          ...(input.activeIngredients !== undefined && { active_ingredients: input.activeIngredients as unknown as import("@/types/supabase").Json }),
+          ...(input.reEntryInterval !== undefined && { re_entry_interval: input.reEntryInterval }),
+          ...(input.restrictedProduct !== undefined && { restricted_product: input.restrictedProduct }),
         })
         .eq("id", id)
         .select()
