@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import {
   useCrews,
+  useCrewLogins,
   useEmployees,
   useCreateCrew,
   useUpdateCrew,
@@ -294,13 +295,26 @@ async function geocodeAddress(address: string, city: string, state: string, zip:
 function TeamDetailsTab({
   form,
   onChange,
+  crewId,
 }: {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   form: Record<string, any>;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   onChange: (k: string, v: any) => void;
+  crewId?: string;
 }) {
   const [geocoding, setGeocoding] = useState(false);
+  const { data: logins = [] } = useCrewLogins();
+  const { data: allCrews } = useCrews(false);
+
+  // A crew login should only ever resolve to one team's Crew App view — exclude
+  // logins already linked to a different team, but keep this crew's own pick available.
+  const linkedElsewhere = new Set(
+    (allCrews ?? [])
+      .filter((c) => c.id !== crewId && c.userId)
+      .map((c) => c.userId)
+  );
+  const availableLogins = logins.filter((l) => !linkedElsewhere.has(l.id));
 
   const handleAddressBlur = useCallback(async () => {
     const { starting_address, starting_city, starting_state, starting_zip } = form;
@@ -338,6 +352,28 @@ function TeamDetailsTab({
               onChange={(e) => onChange("code", e.target.value)}
               placeholder="e.g. ENHANCE1"
             />
+          </Field>
+          <Field label="Linked Login">
+            <Select
+              value={form.user_id ?? "none"}
+              onValueChange={(v) => onChange("user_id", v === "none" ? null : v)}
+            >
+              <SelectTrigger className="h-8 text-sm w-56">
+                <SelectValue placeholder="No shared login linked" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">None</SelectItem>
+                {availableLogins.map((l) => (
+                  <SelectItem key={l.id} value={l.id}>
+                    {l.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="mt-1 text-xs text-slate-400">
+              The shared crew login (e.g. a field team&apos;s clock-in account) that sees this team&apos;s
+              visits in the Crew App.
+            </p>
           </Field>
           <Field label="Tags">
             <Input
@@ -487,6 +523,7 @@ function CrewDialog({
       starting_address: c.startingAddress, starting_city: c.startingCity,
       starting_state: c.startingState, starting_zip: c.startingZip,
       starting_lat: c.startingLat, starting_lng: c.startingLng,
+      user_id: c.userId,
     };
   }
 
@@ -563,7 +600,7 @@ function CrewDialog({
                   ✓ Team created — switch to Team Assignments to add members, then Save.
                 </p>
               )}
-              <TeamDetailsTab form={form} onChange={onChange} />
+              <TeamDetailsTab form={form} onChange={onChange} crewId={activeCrew?.id} />
             </TabsContent>
             <TabsContent value="assignments" className="mt-0">
               {activeCrew && <TeamAssignmentsTab crew={activeCrew} />}

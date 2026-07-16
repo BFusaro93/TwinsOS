@@ -49,7 +49,7 @@ export async function POST(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: job } = await (supabase as any)
     .from("crm_jobs")
-    .select("id, job_type, contract_id, client_id, invoice_description, rate_cents, po_number, sales_rep_id, crm_job_services(id, service_name, qty, rate_cents)")
+    .select("id, job_type, contract_id, client_id, invoice_description, rate_cents, po_number, sales_rep_id, crm_job_services(id, service_name, qty, rate_cents, crm_services(invoice_description))")
     .eq("id", (visit as any).job_id)
     .single();
 
@@ -100,22 +100,29 @@ export async function POST(
     }
 
     if (!skipInvoice) {
-      const services: { service_name: string; qty: number; rate_cents: number }[] = j.crm_job_services ?? [];
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const services: { service_name: string; qty: number; rate_cents: number; crm_services: { invoice_description: string | null } | null }[] = j.crm_job_services ?? [];
+      const visitInvoiceDescription: string | null = (visit as any).invoice_description ?? null;
 
-      // Build line items from services; fall back to a single line from job rate_cents
+      // Build line items from services; fall back to a single line from job rate_cents.
+      // Description precedence per line: the service's own invoice description (set in
+      // Services settings) falls back to its plain name.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const visitDate: string | null = (visit as any).scheduled_date ?? null;
       const lineItems = services.length > 0
-        ? services.map((s: { service_name: string; qty: number; rate_cents: number }) => ({
-            name: s.service_name,
-            description: s.service_name,
-            qty: s.qty ?? 1,
-            rate_cents: s.rate_cents ?? 0,
-            total_cents: (s.qty ?? 1) * (s.rate_cents ?? 0),
-            service_date: visitDate,
-          }))
+        ? services.map((s) => {
+            const description = s.crm_services?.invoice_description || s.service_name;
+            return {
+              name: s.service_name,
+              description,
+              qty: s.qty ?? 1,
+              rate_cents: s.rate_cents ?? 0,
+              total_cents: (s.qty ?? 1) * (s.rate_cents ?? 0),
+              service_date: visitDate,
+            };
+          })
         : j.rate_cents
-          ? [{ name: j.invoice_description ?? "Service", description: j.invoice_description ?? "Service", qty: 1, rate_cents: j.rate_cents as number, total_cents: j.rate_cents as number, service_date: visitDate }]
+          ? [{ name: visitInvoiceDescription ?? j.invoice_description ?? "Service", description: visitInvoiceDescription ?? j.invoice_description ?? "Service", qty: 1, rate_cents: j.rate_cents as number, total_cents: j.rate_cents as number, service_date: visitDate }]
           : [];
 
       const subtotal = lineItems.reduce((s: number, li: { total_cents: number }) => s + li.total_cents, 0);
@@ -130,7 +137,7 @@ export async function POST(
             client_id: j.client_id,
             crm_job_id: j.id,
             sales_rep_id: j.sales_rep_id ?? null,
-            description: j.invoice_description ?? "Service",
+            description: visitInvoiceDescription ?? j.invoice_description ?? "Service",
             invoice_date: visitDate ?? today,
             status: "draft",
             subtotal_cents: subtotal,

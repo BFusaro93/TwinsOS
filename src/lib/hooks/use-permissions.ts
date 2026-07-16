@@ -18,10 +18,14 @@ async function fetchUserPermissions(): Promise<{
   isAdmin: boolean;
   roleId: string | null;
   roleName: string | null;
+  profileRole: string | null;
+  hasEmployeeLink: boolean;
 }> {
   const supabase = createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { permissions: {}, isAdmin: false, roleId: null, roleName: null };
+  if (!user) {
+    return { permissions: {}, isAdmin: false, roleId: null, roleName: null, profileRole: null, hasEmployeeLink: false };
+  }
 
   // Check if user is org admin via profile role
   const { data: profile } = await supabase
@@ -42,7 +46,7 @@ async function fetchUserPermissions(): Promise<{
     .maybeSingle();
 
   if (!employee?.crm_role_id) {
-    return { permissions: {}, isAdmin, roleId: null, roleName: null };
+    return { permissions: {}, isAdmin, roleId: null, roleName: null, profileRole: profile?.role ?? null, hasEmployeeLink: !!employee };
   }
 
   return {
@@ -52,6 +56,8 @@ async function fetchUserPermissions(): Promise<{
     roleId: employee.crm_role_id,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     roleName: (employee.crm_roles as any)?.name ?? null,
+    profileRole: profile?.role ?? null,
+    hasEmployeeLink: true,
   };
 }
 
@@ -79,4 +85,26 @@ export function usePermissions(): PermissionsResult {
     roleId: data?.roleId ?? null,
     roleName: data?.roleName ?? null,
   };
+}
+
+/**
+ * Gates access to the CRM module itself (not a specific permission within it).
+ * Org admins always get in. Crew accounts (profiles.role === 'crew') only get
+ * into their own /crm/crew surface — that's a shared field-clock-in login, not
+ * a real CRM seat. Everyone else needs an active crm_employees record linked
+ * to their login (crm_role_id set) — being able to log in at all does not,
+ * by itself, grant CRM access.
+ */
+export function useCrmAccess(pathname: string): { allowed: boolean; isLoading: boolean } {
+  const { data, isLoading } = useQuery({
+    queryKey: ["crm-permissions"],
+    queryFn: fetchUserPermissions,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  if (isLoading || !data) return { allowed: true, isLoading: true }; // avoid a flash of the denied screen while loading
+
+  if (data.isAdmin) return { allowed: true, isLoading: false };
+  if (data.profileRole === "crew") return { allowed: pathname.startsWith("/crm/crew"), isLoading: false };
+  return { allowed: !!data.roleId, isLoading: false };
 }

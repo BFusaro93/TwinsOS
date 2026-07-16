@@ -2,7 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
-import type { CRMEmployee, CRMCrew, CRMCrewMember } from "@/types/crm-employees";
+import type { CRMEmployee, CRMCrew, CRMCrewMember, CRMCrewLogin } from "@/types/crm-employees";
 
 // ── mappers ───────────────────────────────────────────────────────────────────
 
@@ -111,6 +111,7 @@ function mapCrew(row: any): CRMCrew {
     startingZip: row.starting_zip ?? null,
     startingLat: row.starting_lat != null ? Number(row.starting_lat) : null,
     startingLng: row.starting_lng != null ? Number(row.starting_lng) : null,
+    userId: row.user_id ?? null,
     foremanName: row.foreman
       ? `${row.foreman.first_name} ${row.foreman.last_name}`
       : undefined,
@@ -305,6 +306,31 @@ export function useCrews(activeOnly = false) {
       if (error) throw error;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       return (data.map(mapCrew)) as import("@/types/crm-employees").CRMCrew[];
+    },
+  });
+}
+
+/**
+ * Shared crew logins (profiles.role === 'crew') that can be linked to a team via
+ * crm_crews.user_id — this is what the Crew App uses to resolve "my crew" when a
+ * shared login signs in (see useMyCrewVisits/useMyCrewInfo in use-crew-app.ts).
+ */
+export function useCrewLogins() {
+  return useQuery({
+    queryKey: ["crm-crew-logins"],
+    queryFn: async () => {
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("id, name, email")
+        .eq("role", "crew")
+        .order("name");
+      if (error) throw error;
+      return (data ?? []).map((row): CRMCrewLogin => ({
+        id: row.id,
+        name: row.name ?? row.email ?? "Unnamed login",
+        email: row.email ?? null,
+      }));
     },
   });
 }

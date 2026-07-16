@@ -27,9 +27,14 @@ function mapOption(row: any): OrgListOption {
 async function getOrgId(): Promise<string> {
   const supabase = createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  const orgId = user?.user_metadata?.org_id as string | undefined;
-  if (!orgId) throw new Error("No org_id in session");
-  return orgId;
+  if (!user) throw new Error("Not authenticated");
+  const { data: profile, error } = await supabase
+    .from("profiles")
+    .select("org_id")
+    .eq("id", user.id)
+    .single();
+  if (error) throw error;
+  return profile.org_id as string;
 }
 
 export function useOrgList(listName: string) {

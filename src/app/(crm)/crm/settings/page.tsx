@@ -52,6 +52,7 @@ import { OverheadSettingsEditor } from "@/components/crm/settings/OverheadSettin
 import { ClientPortalTab } from "@/components/crm/settings/ClientPortalSettings";
 import { SnowRoutesEditor } from "@/components/crm/settings/SnowRoutesEditor";
 import { ChemicalTrackingTab } from "@/components/crm/settings/ChemicalTrackingSettings";
+import { ApprovalFlowsPage } from "@/components/settings/ApprovalFlowsPage";
 import { BILLING_TERMS_OPTIONS } from "@/lib/constants";
 
 // ── AccordionSection ──────────────────────────────────────────────────────────
@@ -98,55 +99,7 @@ function AccordionSection({
   );
 }
 
-// ── CategoryListEditor ────────────────────────────────────────────────────────
-
-interface CategoryListItem {
-  id: string;
-  label: string;
-  enabled: boolean;
-  isBuiltIn: boolean;
-}
-
-function useCategoryList(defaults: string[], builtIn = true) {
-  const [items, setItems] = useState<CategoryListItem[]>(
-    defaults.map((label, i) => ({
-      id: `builtin-${i}`,
-      label,
-      enabled: true,
-      isBuiltIn: builtIn,
-    }))
-  );
-
-  function onToggle(id: string, enabled: boolean) {
-    setItems((prev) => prev.map((item) => (item.id === id ? { ...item, enabled } : item)));
-  }
-
-  function onRename(id: string, label: string) {
-    setItems((prev) => prev.map((item) => (item.id === id ? { ...item, label } : item)));
-  }
-
-  function onAdd(label: string) {
-    setItems((prev) => [
-      ...prev,
-      { id: `custom-${Date.now()}`, label, enabled: true, isBuiltIn: false },
-    ]);
-  }
-
-  function onRemove(id: string) {
-    setItems((prev) => prev.filter((item) => item.id !== id));
-  }
-
-  return { items, onToggle, onRename, onAdd, onRemove };
-}
-
-interface CategoryListEditorProps {
-  items: CategoryListItem[];
-  onToggle: (id: string, enabled: boolean) => void;
-  onRename: (id: string, label: string) => void;
-  onAdd: (label: string) => void;
-  onRemove: (id: string) => void;
-  addPlaceholder?: string;
-}
+// ── Toggle ────────────────────────────────────────────────────────────────────
 
 function Toggle({ enabled, onToggle }: { enabled: boolean; onToggle: () => void }) {
   return (
@@ -164,130 +117,6 @@ function Toggle({ enabled, onToggle }: { enabled: boolean; onToggle: () => void 
         }`}
       />
     </button>
-  );
-}
-
-function CategoryListEditor({
-  items,
-  onToggle,
-  onRename,
-  onAdd,
-  onRemove,
-  addPlaceholder = "New item label",
-}: CategoryListEditorProps) {
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [labelDraft, setLabelDraft] = useState("");
-  const [addingItem, setAddingItem] = useState(false);
-  const [newItemLabel, setNewItemLabel] = useState("");
-
-  function commitRename(id: string) {
-    if (labelDraft.trim()) onRename(id, labelDraft.trim());
-    setEditingId(null);
-  }
-
-  function commitAdd() {
-    if (newItemLabel.trim()) {
-      onAdd(newItemLabel.trim());
-      setNewItemLabel("");
-      setAddingItem(false);
-    }
-  }
-
-  return (
-    <div className="divide-y">
-      {items.map((item) => (
-        <div key={item.id} className="flex items-center gap-3 py-3">
-          <div className="flex-1">
-            {editingId === item.id ? (
-              <input
-                autoFocus
-                className="rounded-md border border-brand-400 px-2 py-1 text-sm text-slate-900 focus:outline-none focus:ring-1 focus:ring-brand-400"
-                value={labelDraft}
-                onChange={(e) => setLabelDraft(e.target.value)}
-                onBlur={() => commitRename(item.id)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") commitRename(item.id);
-                  if (e.key === "Escape") setEditingId(null);
-                }}
-              />
-            ) : (
-              <button
-                className="text-left text-sm font-medium text-slate-800 hover:text-brand-600"
-                onClick={() => {
-                  setEditingId(item.id);
-                  setLabelDraft(item.label);
-                }}
-                title="Click to rename"
-              >
-                {item.label}
-              </button>
-            )}
-            <p className="mt-0.5 text-xs text-slate-400">{item.isBuiltIn ? "Built-in" : "Custom"}</p>
-          </div>
-
-          <Toggle
-            enabled={item.enabled}
-            onToggle={() => onToggle(item.id, !item.enabled)}
-          />
-
-          {!item.isBuiltIn ? (
-            <button
-              onClick={() => onRemove(item.id)}
-              className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-500"
-              title="Remove"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          ) : (
-            <div className="w-6" />
-          )}
-        </div>
-      ))}
-
-      {addingItem ? (
-        <div className="flex items-center gap-3 py-3">
-          <input
-            autoFocus
-            placeholder={addPlaceholder}
-            value={newItemLabel}
-            onChange={(e) => setNewItemLabel(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") commitAdd();
-              if (e.key === "Escape") {
-                setAddingItem(false);
-                setNewItemLabel("");
-              }
-            }}
-            className="flex-1 rounded-md border border-brand-400 px-3 py-1.5 text-sm text-slate-900 focus:outline-none focus:ring-1 focus:ring-brand-400"
-          />
-          <button
-            onClick={commitAdd}
-            className="rounded-md bg-brand-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-600"
-          >
-            Add
-          </button>
-          <button
-            onClick={() => {
-              setAddingItem(false);
-              setNewItemLabel("");
-            }}
-            className="rounded p-1 text-slate-400 hover:text-slate-600"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-      ) : (
-        <div className="py-3">
-          <button
-            onClick={() => setAddingItem(true)}
-            className="flex items-center gap-1.5 text-sm font-medium text-brand-600 hover:text-brand-700"
-          >
-            <Plus className="h-4 w-4" />
-            Add Item
-          </button>
-        </div>
-      )}
-    </div>
   );
 }
 
@@ -768,19 +597,8 @@ function ClientDefaultsSection() {
 }
 
 function CRMTab() {
-  const cancellationReasons = useCategoryList([
-    "Price",
-    "Moved",
-    "Unhappy with service",
-    "No longer needs service",
-  ]);
-  const contactTypes = useCategoryList([
-    "Owner",
-    "Billing contact",
-    "Site manager",
-    "Decision maker",
-    "Other",
-  ]);
+  const { data: cancellationReasons = [] } = useOrgList("cancellation_reasons");
+  const { data: contactTypes = [] } = useOrgList("contact_types");
   const { data: clientSources = [] } = useOrgList("client_sources");
   const { data: clientTags = [] } = useOrgList("client_tags");
   const { data: ticketCategoryItems = [] } = useOrgList("ticket_categories");
@@ -796,15 +614,15 @@ function CRMTab() {
       </AccordionSection>
       <AccordionSection
         title="Cancellation Reasons"
-        count={cancellationReasons.items.length}
+        count={cancellationReasons.length}
       >
-        <CategoryListEditor {...cancellationReasons} addPlaceholder="e.g. Weather-related" />
+        <OrgListEditor listName="cancellation_reasons" addPlaceholder="e.g. Weather-related" />
       </AccordionSection>
       <AccordionSection title="Client Sources" count={clientSources.length}>
         <OrgListEditor listName="client_sources" addPlaceholder="e.g. Trade show" />
       </AccordionSection>
-      <AccordionSection title="Contact Types" count={contactTypes.items.length}>
-        <CategoryListEditor {...contactTypes} addPlaceholder="e.g. Property manager" />
+      <AccordionSection title="Contact Types" count={contactTypes.length}>
+        <OrgListEditor listName="contact_types" addPlaceholder="e.g. Property manager" />
       </AccordionSection>
       <AccordionSection title="Ticket Categories" count={ticketCategoryItems.length}>
         <OrgListEditor listName="ticket_categories" addPlaceholder="e.g. Complaint" />
@@ -963,6 +781,13 @@ function EstimatesTab() {
     <div className="rounded-lg border bg-white shadow-sm">
       <AccordionSection title="Estimate Stages" count={0} defaultOpen>
         <EstimateStagesEditor />
+      </AccordionSection>
+      <AccordionSection
+        title="Estimate Approval Flow"
+        count={0}
+        description="Require manager sign-off before estimates above a dollar threshold can be sent to clients."
+      >
+        <ApprovalFlowsPage entityTypes={["crm_estimate"]} />
       </AccordionSection>
       <AccordionSection title="Estimate Reasons" count={estimateReasonItems.length}>
         <OrgListEditor listName="estimate_reasons" addPlaceholder="e.g. Seasonal" />
@@ -1169,7 +994,7 @@ function AddServiceForm({ onAdded }: { onAdded: () => void }) {
 
 function ServicesTab() {
   const { data: services = [], refetch } = useAllCRMServices();
-  const masterPackages = useCategoryList([], false);
+  const { data: masterPackages = [] } = useOrgList("master_packages");
   const { data: serviceCategoryItems = [] } = useOrgList("service_categories");
 
   return (
@@ -1193,8 +1018,8 @@ function ServicesTab() {
       <AccordionSection title="Service Categories" count={serviceCategoryItems.length}>
         <OrgListEditor listName="service_categories" addPlaceholder="e.g. Hardscape" />
       </AccordionSection>
-      <AccordionSection title="Master Packages" count={masterPackages.items.length}>
-        <CategoryListEditor {...masterPackages} addPlaceholder="e.g. Gold Maintenance" />
+      <AccordionSection title="Master Packages" count={masterPackages.length}>
+        <OrgListEditor listName="master_packages" addPlaceholder="e.g. Gold Maintenance" />
       </AccordionSection>
       <AccordionSection title="Snow Routes" description="Master Routes for the Snow Dispatch Board">
         <SnowRoutesEditor />
@@ -1206,18 +1031,7 @@ function ServicesTab() {
 // ── AccountingTab ─────────────────────────────────────────────────────────────
 
 function AccountingTab() {
-  const paymentMethods = useCategoryList([
-    "ACH/E-Check",
-    "AR Write-off",
-    "AutoPay",
-    "Cash",
-    "Check",
-    "Credit Card- AmEx",
-    "Credit Card- Discover",
-    "Credit Card- MasterCard",
-    "Credit Card- Visa",
-    "Other",
-  ]);
+  const { data: paymentMethods = [] } = useOrgList("payment_methods");
   const { data: discountsList = [] } = useDiscounts();
   const { data: orgSettings } = useOrgSettings();
   const { mutateAsync: updateOrg } = useUpdateOrgSettings();
@@ -1271,9 +1085,9 @@ function AccountingTab() {
       </AccordionSection>
       <AccordionSection
         title="Payment Methods"
-        count={paymentMethods.items.length}
+        count={paymentMethods.length}
       >
-        <CategoryListEditor {...paymentMethods} addPlaceholder="e.g. Zelle" />
+        <OrgListEditor listName="payment_methods" addPlaceholder="e.g. Zelle" />
       </AccordionSection>
       <AccordionSection title="Discounts" count={discountsList.length} description="Each discount needs a default rate — a percent off or a flat dollar amount.">
         <DiscountsEditor />

@@ -9,11 +9,6 @@ import { usePackages, useDeletePackage } from "@/lib/hooks/use-packages";
 import { formatCurrency } from "@/lib/utils";
 import type { CRMPackage } from "@/types/crm-packages";
 
-const FREQ_LABEL: Record<string, string> = {
-  weekly: "Weekly", biweekly: "Bi-weekly",
-  monthly: "Monthly", as_needed: "As Needed", custom: "Custom",
-};
-
 interface Props {
   onAdd: () => void;
   onEdit: (pkg: CRMPackage) => void;
@@ -62,7 +57,6 @@ export function PackagesList({ onAdd, onEdit }: Props) {
               <th className="px-4 py-3 text-right">Monthly</th>
               <th className="px-4 py-3 text-center">Season</th>
               <th className="px-4 py-3 text-center">Visits</th>
-              <th className="px-4 py-3 text-left">Frequency</th>
               <th className="px-4 py-3 text-left">Services</th>
               <th className="px-4 py-3 text-center">Active</th>
               <th className="px-4 py-3 w-20" />
@@ -70,10 +64,10 @@ export function PackagesList({ onAdd, onEdit }: Props) {
           </thead>
           <tbody>
             {isLoading && (
-              <tr><td colSpan={9} className="px-4 py-8 text-center text-slate-400">Loading…</td></tr>
+              <tr><td colSpan={8} className="px-4 py-8 text-center text-slate-400">Loading…</td></tr>
             )}
             {!isLoading && filtered.length === 0 && (
-              <tr><td colSpan={9} className="px-4 py-8 text-center text-slate-400">No packages found.</td></tr>
+              <tr><td colSpan={8} className="px-4 py-8 text-center text-slate-400">No packages found.</td></tr>
             )}
             {filtered.map((pkg) => (
               <tr key={pkg.id} onClick={() => onEdit(pkg)}
@@ -90,7 +84,6 @@ export function PackagesList({ onAdd, onEdit }: Props) {
                 </td>
                 <td className="px-4 py-3 text-center text-slate-600">{pkg.seasonMonths} mo</td>
                 <td className="px-4 py-3 text-center text-slate-600">{(pkg.services ?? []).length}</td>
-                <td className="px-4 py-3 text-slate-600 text-xs">{FREQ_LABEL[pkg.scheduleFrequency] ?? pkg.scheduleFrequency}</td>
                 <td className="px-4 py-3 text-slate-500 text-xs">
                   {(pkg.services ?? []).length > 0
                     ? (pkg.services ?? []).map((s) => s.serviceName).join(", ")

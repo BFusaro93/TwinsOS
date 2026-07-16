@@ -116,9 +116,18 @@ export interface CRMCrew {
   startingZip: string | null;
   startingLat: number | null;
   startingLng: number | null;
+  /** Shared crew login (profiles.role === 'crew') this team's Crew App visits resolve to. */
+  userId: string | null;
   // joined
   foremanName?: string;
   members?: CRMCrewMember[];
+}
+
+/** A shared crew login account (profiles.role === 'crew') available to link to a team. */
+export interface CRMCrewLogin {
+  id: string;
+  name: string;
+  email: string | null;
 }
 
 export interface CRMCrewMember {

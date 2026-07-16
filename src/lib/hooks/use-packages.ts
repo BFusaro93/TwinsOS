@@ -32,11 +32,10 @@ function mapPackage(row: any): CRMPackage {
     name: row.name,
     code: row.code ?? null,
     description: row.description ?? null,
+    descriptionOnEstimate: row.description_on_estimate ?? null,
     monthlyAmountCents: row.monthly_amount_cents,
     seasonMonths: row.season_months,
     visitsPerSeason: row.visits_per_season,
-    scheduleFrequency: row.schedule_frequency,
-    scheduleDays: row.schedule_days ?? [],
     isActive: row.is_active,
     deletedAt: row.deleted_at ?? null,
     createdAt: row.created_at,
@@ -57,7 +56,8 @@ export function usePackages(includeInactive = false) {
         .from("crm_packages")
         .select("*, crm_package_services(*)")
         .is("deleted_at", null)
-        .order("name");
+        .order("name")
+        .order("sort_order", { foreignTable: "crm_package_services" });
       if (!includeInactive) q = q.eq("is_active", true);
       const { data, error } = await q;
       if (error) throw error;

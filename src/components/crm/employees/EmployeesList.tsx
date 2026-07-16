@@ -108,7 +108,7 @@ function PersonalTab({
             <Field label="Print On Check As">
               <FieldInput value={form.print_on_check_as ?? ""} onChange={(e) => onChange("print_on_check_as", e.target.value)} />
             </Field>
-            <Field label="Email" required>
+            <Field label="Email">
               <FieldInput type="email" value={form.email ?? ""} onChange={(e) => onChange("email", e.target.value)} />
             </Field>
             <Field label="Birth Date">
@@ -608,7 +608,7 @@ function EmployeeDialog({
       user_type: e.userType, show_in_selection: e.showInSelection,
       show_in_calendar: e.showInCalendar, field_time_clock: e.fieldTimeClock,
       office_time_clock: e.officeTimeClock, send_text_alerts: e.sendTextAlerts,
-      user_role: e.userRole, route_sheet_format: e.routeSheetFormat,
+      user_role: e.userRole, crm_role_id: e.crmRoleId, route_sheet_format: e.routeSheetFormat,
       map_icon_color: e.mapIconColor, map_codes: e.mapCodes, is_sales_rep: e.isSalesRep,
       starting_address: e.startingAddress, starting_city: e.startingCity,
       starting_state: e.startingState, starting_zip: e.startingZip,

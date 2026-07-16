@@ -5462,6 +5462,7 @@ export type Database = {
       }
       crm_sequence_triggers: {
         Row: {
+          config: Json
           created_at: string
           id: string
           org_id: string
@@ -5471,6 +5472,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          config?: Json
           created_at?: string
           id?: string
           org_id?: string
@@ -5480,6 +5482,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          config?: Json
           created_at?: string
           id?: string
           org_id?: string
@@ -7030,6 +7033,7 @@ export type Database = {
       estimates: {
         Row: {
           applied_discount_id: string | null
+          approval_status: string
           client_id: string
           created_at: string
           created_by: string | null
@@ -7061,6 +7065,7 @@ export type Database = {
           reason: string | null
           revenue_cents: number
           sales_rep_id: string | null
+          sent_at: string | null
           show_discounts: boolean
           source: string | null
           stage: string
@@ -7078,6 +7083,7 @@ export type Database = {
         }
         Insert: {
           applied_discount_id?: string | null
+          approval_status?: string
           client_id: string
           created_at?: string
           created_by?: string | null
@@ -7109,6 +7115,7 @@ export type Database = {
           reason?: string | null
           revenue_cents?: number
           sales_rep_id?: string | null
+          sent_at?: string | null
           show_discounts?: boolean
           source?: string | null
           stage?: string
@@ -7126,6 +7133,7 @@ export type Database = {
         }
         Update: {
           applied_discount_id?: string | null
+          approval_status?: string
           client_id?: string
           created_at?: string
           created_by?: string | null
@@ -7157,6 +7165,7 @@ export type Database = {
           reason?: string | null
           revenue_cents?: number
           sales_rep_id?: string | null
+          sent_at?: string | null
           show_discounts?: boolean
           source?: string | null
           stage?: string
@@ -10318,10 +10327,64 @@ export type Database = {
         }
         Relationships: []
       }
+      rpt_job_services: {
+        Row: {
+          actual_man_hours: number | null
+          actual_production_rate: number | null
+          assumed_production_rate: number | null
+          budget_method: string | null
+          budgeted_hours: number | null
+          client_name: string | null
+          id: string | null
+          is_complete: boolean | null
+          job_actual_hours: number | null
+          job_id: string | null
+          job_status: string | null
+          man_count: number | null
+          qty: number | null
+          rate_variance_bps: number | null
+          scheduled_date: string | null
+          service_category: string | null
+          service_id: string | null
+          service_name: string | null
+          service_unit: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_job_services_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "crm_jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_job_services_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_job_services_service_id_fkey"
+            columns: ["service_id"]
+            isOneToOne: false
+            referencedRelation: "crm_services"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_job_services_service_id_fkey"
+            columns: ["service_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_services"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       rpt_job_visits: {
         Row: {
           actual_hours: number | null
           actual_labor_cost_cents: number | null
+          budget_methods: string | null
           budgeted_hours: number | null
           client_name: string | null
           clocked_in_at: string | null
@@ -10714,3 +10777,4 @@ export const Constants = {
     Enums: {},
   },
 } as const
+

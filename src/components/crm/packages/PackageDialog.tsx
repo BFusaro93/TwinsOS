@@ -21,20 +21,11 @@ import {
 } from "@/lib/hooks/use-packages";
 import { useCRMServices } from "@/lib/hooks/use-crm-jobs";
 import { computePackageVisitSchedule, type PackageVisitSchedule } from "@/lib/package-schedule";
+import { AuditTrailTab } from "@/components/shared/AuditTrailTab";
 import type { CRMPackage, CRMPackageService } from "@/types/crm-packages";
 import type { CRMService } from "@/types/crm-jobs";
 
-const FREQ_OPTIONS = [
-  { value: "weekly",    label: "Weekly" },
-  { value: "biweekly",  label: "Bi-weekly" },
-  { value: "monthly",   label: "Monthly" },
-  { value: "as_needed", label: "As Needed" },
-  { value: "custom",    label: "Custom" },
-];
-
-const DAYS = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"];
-
-type Tab = "details" | "services";
+type Tab = "details" | "services" | "audit";
 
 interface Props {
   open: boolean;
@@ -46,20 +37,18 @@ interface FormState {
   name: string;
   code: string;
   description: string;
+  descriptionOnEstimate: string;
   monthlyAmountCents: string;
   seasonMonths: string;
   visitsPerSeason: string;
-  scheduleFrequency: string;
-  scheduleDays: string[];
   isActive: boolean;
 }
 
 function emptyForm(): FormState {
   return {
-    name: "", code: "", description: "",
+    name: "", code: "", description: "", descriptionOnEstimate: "",
     monthlyAmountCents: "", seasonMonths: "12",
-    visitsPerSeason: "1", scheduleFrequency: "as_needed",
-    scheduleDays: [], isActive: true,
+    visitsPerSeason: "1", isActive: true,
   };
 }
 
@@ -68,11 +57,10 @@ function pkgToForm(p: CRMPackage): FormState {
     name: p.name,
     code: p.code ?? "",
     description: p.description ?? "",
+    descriptionOnEstimate: p.descriptionOnEstimate ?? "",
     monthlyAmountCents: p.monthlyAmountCents > 0 ? (p.monthlyAmountCents / 100).toFixed(2) : "",
     seasonMonths: String(p.seasonMonths),
     visitsPerSeason: String(p.visitsPerSeason),
-    scheduleFrequency: p.scheduleFrequency,
-    scheduleDays: p.scheduleDays ?? [],
     isActive: p.isActive,
   };
 }
@@ -246,25 +234,15 @@ export function PackageDialog({ open, packageId, onClose }: Props) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, packageId]);
 
-  function toggleDay(day: string) {
-    setForm((p) => ({
-      ...p,
-      scheduleDays: p.scheduleDays.includes(day)
-        ? p.scheduleDays.filter((d) => d !== day)
-        : [...p.scheduleDays, day],
-    }));
-  }
-
   async function handleSave() {
     const patch = {
       name: form.name.trim(),
       code: form.code.trim() || null,
       description: form.description.trim() || null,
+      description_on_estimate: form.descriptionOnEstimate.trim() || null,
       monthly_amount_cents: Math.round((parseFloat(form.monthlyAmountCents) || 0) * 100),
       season_months: parseInt(form.seasonMonths) || 12,
       visits_per_season: pkg ? (pkg.services?.length || 1) : (parseInt(form.visitsPerSeason) || 1),
-      schedule_frequency: form.scheduleFrequency,
-      schedule_days: form.scheduleDays,
       is_active: form.isActive,
     };
     try {
@@ -319,6 +297,7 @@ export function PackageDialog({ open, packageId, onClose }: Props) {
           {([
             { key: "details",  label: "Details" },
             { key: "services", label: `Services (${pkg?.services?.length ?? 0})`, disabled: !pkg },
+            { key: "audit", label: "Audit Trail", disabled: !pkg },
           ] as { key: Tab; label: string; disabled?: boolean }[]).map((t) => (
             <button
               key={t.key}
@@ -351,6 +330,12 @@ export function PackageDialog({ open, packageId, onClose }: Props) {
             <div className="flex flex-col gap-1">
               <Label className="text-xs font-medium text-slate-600">Description</Label>
               <Textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={2} className="text-sm resize-none" />
+              <p className="text-xs text-slate-400">Internal notes — not shown to the client.</p>
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <Label className="text-xs font-medium text-slate-600">Estimate Description</Label>
+              <Textarea value={form.descriptionOnEstimate} onChange={(e) => setForm({ ...form, descriptionOnEstimate: e.target.value })} rows={2} className="text-sm resize-none" placeholder="Wording shown to the client when this package appears on an estimate" />
             </div>
 
             {/* Billing */}
@@ -379,46 +364,16 @@ export function PackageDialog({ open, packageId, onClose }: Props) {
             {/* Visit schedule */}
             <div className="rounded-lg border p-3 flex flex-col gap-3">
               <p className="text-xs font-semibold text-slate-600">Visit Schedule</p>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="flex flex-col gap-1">
-                  <Label className="text-xs text-slate-500">Visits per Season</Label>
-                  {pkg ? (
-                    <p className="text-sm font-semibold text-slate-800 mt-1.5">
-                      {pkg.services?.length ?? 0} <span className="font-normal text-slate-400">(from Services tab)</span>
-                    </p>
-                  ) : (
-                    <p className="text-xs text-slate-400 mt-1.5">Add services after creating the package</p>
-                  )}
-                </div>
-                <div className="flex flex-col gap-1">
-                  <Label className="text-xs text-slate-500">Frequency</Label>
-                  <Select value={form.scheduleFrequency} onValueChange={(v) => setForm({ ...form, scheduleFrequency: v })}>
-                    <SelectTrigger className="text-sm"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {FREQ_OPTIONS.map((o) => (
-                        <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+              <div className="flex flex-col gap-1">
+                <Label className="text-xs text-slate-500">Visits per Season</Label>
+                {pkg ? (
+                  <p className="text-sm font-semibold text-slate-800 mt-1.5">
+                    {pkg.services?.length ?? 0} <span className="font-normal text-slate-400">(from Services tab)</span>
+                  </p>
+                ) : (
+                  <p className="text-xs text-slate-400 mt-1.5">Add services after creating the package</p>
+                )}
               </div>
-              {(form.scheduleFrequency === "weekly" || form.scheduleFrequency === "biweekly") && (
-                <div className="flex flex-col gap-1">
-                  <Label className="text-xs text-slate-500">Days</Label>
-                  <div className="flex flex-wrap gap-1.5">
-                    {DAYS.map((d) => (
-                      <button key={d} type="button" onClick={() => toggleDay(d)}
-                        className={`rounded-full px-2.5 py-0.5 text-xs border transition-colors
-                          ${form.scheduleDays.includes(d)
-                            ? "border-brand-500 bg-brand-500 text-white"
-                            : "border-slate-200 bg-white text-slate-600 hover:border-brand-300"
-                          }`}>
-                        {d.slice(0, 3)}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
             </div>
 
             <label className="flex items-center gap-2 text-sm cursor-pointer">
@@ -477,6 +432,13 @@ export function PackageDialog({ open, packageId, onClose }: Props) {
             {services.length === 0 && (
               <p className="text-xs text-amber-600">No services defined yet — add services under CRM Settings → Services first.</p>
             )}
+          </div>
+        )}
+
+        {/* Audit Trail tab */}
+        {tab === "audit" && pkg && (
+          <div className="py-2">
+            <AuditTrailTab recordType="package" recordId={pkg.id} />
           </div>
         )}
 

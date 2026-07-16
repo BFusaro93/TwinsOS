@@ -4,11 +4,11 @@ export interface CRMPackage {
   name: string;
   code: string | null;
   description: string | null;
+  /** Client-facing wording shown when this package appears on an estimate. */
+  descriptionOnEstimate: string | null;
   monthlyAmountCents: number;
   seasonMonths: number;
   visitsPerSeason: number;
-  scheduleFrequency: "weekly" | "biweekly" | "monthly" | "as_needed" | "custom";
-  scheduleDays: string[];
   isActive: boolean;
   deletedAt: string | null;
   createdAt: string;
