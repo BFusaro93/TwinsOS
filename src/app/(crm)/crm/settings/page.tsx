@@ -9,6 +9,15 @@ import {
   Eye,
   EyeOff,
   GripVertical,
+  Users,
+  UserPlus,
+  FileText,
+  Receipt,
+  DollarSign,
+  Ticket as TicketIcon,
+  Wrench,
+  CalendarDays,
+  UserCog,
 } from "lucide-react";
 import {
   useCustomFieldDefs,
@@ -32,6 +41,15 @@ import {
   SelectTrigger as UISelectTrigger,
   SelectValue as UISelectValue,
 } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Separator } from "@/components/ui/separator";
 import Link from "next/link";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -44,6 +62,9 @@ import {
   useCreateCRMService,
   useUpdateCRMService,
   useDeleteCRMService,
+  useBulkImportCRMServices,
+  useAllCRMSchedules,
+  useBulkImportCRMSchedules,
 } from "@/lib/hooks/use-crm-jobs";
 import type { CRMService } from "@/types/crm-jobs";
 import { RolesList } from "@/components/crm/roles/RolesList";
@@ -54,6 +75,13 @@ import { SnowRoutesEditor } from "@/components/crm/settings/SnowRoutesEditor";
 import { ChemicalTrackingTab } from "@/components/crm/settings/ChemicalTrackingSettings";
 import { ApprovalFlowsPage } from "@/components/settings/ApprovalFlowsPage";
 import { BILLING_TERMS_OPTIONS } from "@/lib/constants";
+import { downloadCSV, readCSVFile } from "@/lib/csv";
+import { autoMapColumns, remapRows } from "@/components/shared/ImportExportMenu";
+import { useClients, useLeads, useBulkImportClients, useBulkImportLeads } from "@/lib/hooks/use-clients";
+import { useEstimates, useBulkImportEstimates } from "@/lib/hooks/use-estimates";
+import { useInvoices, usePayments, useBulkImportInvoices, useBulkImportPayments } from "@/lib/hooks/use-invoices";
+import { useTickets, useBulkImportTickets } from "@/lib/hooks/use-tickets";
+import { useEmployees, useBulkImportEmployees } from "@/lib/hooks/use-employees";
 
 // ── AccordionSection ──────────────────────────────────────────────────────────
 
@@ -1344,6 +1372,333 @@ function IntegrationsTab() {
   );
 }
 
+// ── Import tile (renders as icon+label tile, opens file picker → mapping dialog) ─
+
+function ImportTile({
+  label,
+  icon,
+  onImport,
+  templateColumns,
+  requiredColumns,
+  onStatus,
+}: {
+  label: string;
+  icon: React.ReactNode;
+  onImport: (rows: Record<string, string>[]) => Promise<unknown>;
+  templateColumns: string[];
+  requiredColumns: string[];
+  onStatus: (s: { type: "success" | "error"; message: string }) => void;
+}) {
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [mappingOpen, setMappingOpen] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [rawRows, setRawRows] = useState<Record<string, string>[]>([]);
+  const [csvColumns, setCsvColumns] = useState<string[]>([]);
+  const [columnMapping, setColumnMapping] = useState<Record<string, string>>({});
+  const [parsedRows, setParsedRows] = useState<Record<string, string>[]>([]);
+  const [importing, setImporting] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
+
+  async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = "";
+    try {
+      const rows = await readCSVFile(file);
+      if (rows.length === 0) { onStatus({ type: "error", message: "CSV file is empty." }); return; }
+      const cols = Object.keys(rows[0]);
+      setCsvColumns(cols);
+      setRawRows(rows);
+      const mapping = autoMapColumns(cols, templateColumns);
+      setColumnMapping(mapping);
+      const allMapped = templateColumns.every((f) => mapping[f]);
+      if (allMapped) { proceedToPreview(rows, mapping); } else { setMappingOpen(true); }
+    } catch { onStatus({ type: "error", message: "Failed to read CSV file." }); }
+  }
+
+  function proceedToPreview(rows: Record<string, string>[], mapping: Record<string, string>) {
+    const remapped = remapRows(rows, mapping);
+    const mappedFields = new Set(Object.keys(mapping).filter((k) => mapping[k] && mapping[k] !== "__skip__"));
+    const missing = requiredColumns.filter((c) => !mappedFields.has(c));
+    if (missing.length) {
+      setImportError(`Missing required field mapping: ${missing.join(", ")}`);
+      setParsedRows([]);
+      setMappingOpen(false);
+      setPreviewOpen(true);
+      return;
+    }
+    setImportError(null);
+    setParsedRows(remapped);
+    setMappingOpen(false);
+    setPreviewOpen(true);
+  }
+
+  async function handleConfirm() {
+    setImporting(true);
+    setImportError(null);
+    try {
+      await onImport(parsedRows);
+      setPreviewOpen(false);
+      onStatus({ type: "success", message: `Successfully imported ${parsedRows.length} ${label.toLowerCase()}.` });
+    } catch (err) {
+      setImportError(err instanceof Error ? err.message : "Import failed.");
+    } finally { setImporting(false); }
+  }
+
+  function resetAll() { setMappingOpen(false); setPreviewOpen(false); setRawRows([]); setCsvColumns([]); setColumnMapping({}); setParsedRows([]); setImportError(null); }
+
+  const fieldLabel = (f: string) => f.replace(/([A-Z])/g, " $1").replace(/^./, (c) => c.toUpperCase()).trim();
+
+  return (
+    <>
+      <button
+        onClick={() => fileRef.current?.click()}
+        className="flex flex-col items-center gap-2 rounded-lg border border-slate-200 p-5 text-slate-500 transition-colors hover:border-brand-300 hover:bg-brand-50 hover:text-brand-600"
+      >
+        {icon}
+        <span className="text-sm">{label}</span>
+      </button>
+      <input ref={fileRef} type="file" accept=".csv,text/csv" className="hidden" onChange={handleFile} />
+
+      {/* Mapping dialog */}
+      <Dialog open={mappingOpen} onOpenChange={(o) => { if (!o) resetAll(); }}>
+        <DialogContent className="sm:max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Map Columns — {label}</DialogTitle>
+            <DialogDescription>{rawRows.length} rows found. Match your CSV columns to the expected fields.</DialogDescription>
+          </DialogHeader>
+          <div className="max-h-80 overflow-y-auto">
+            <div className="flex flex-col gap-3">
+              {templateColumns.map((field) => (
+                <div key={field} className="grid grid-cols-2 items-center gap-3">
+                  <label className="text-sm font-medium text-slate-700">
+                    {fieldLabel(field)}
+                    {requiredColumns.includes(field) && <span className="text-red-500"> *</span>}
+                  </label>
+                  <UISelect value={columnMapping[field] || "__skip__"} onValueChange={(v) => setColumnMapping((prev) => ({ ...prev, [field]: v === "__skip__" ? "" : v }))}>
+                    <UISelectTrigger className="h-9 text-sm"><UISelectValue placeholder="Skip" /></UISelectTrigger>
+                    <UISelectContent>
+                      <UISelectItem value="__skip__"><span className="text-slate-400">— Skip —</span></UISelectItem>
+                      {csvColumns.map((col) => (<UISelectItem key={col} value={col}>{col}</UISelectItem>))}
+                    </UISelectContent>
+                  </UISelect>
+                </div>
+              ))}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={resetAll}>Cancel</Button>
+            <Button onClick={() => proceedToPreview(rawRows, columnMapping)}>Continue to Preview</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Preview dialog */}
+      <Dialog open={previewOpen} onOpenChange={(o) => { if (!o) resetAll(); }}>
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>{importError ? "Import Error" : `Import ${label}`}</DialogTitle>
+            <DialogDescription>{importError ?? `${parsedRows.length} rows ready to import.`}</DialogDescription>
+          </DialogHeader>
+          {!importError && parsedRows.length > 0 && (
+            <div className="max-h-64 overflow-auto rounded-md border text-xs">
+              <table className="w-full">
+                <thead className="sticky top-0 bg-slate-50">
+                  <tr>{Object.keys(parsedRows[0]).map((col) => (<th key={col} className="border-b px-3 py-2 text-left font-semibold text-slate-600">{fieldLabel(col)}</th>))}</tr>
+                </thead>
+                <tbody>
+                  {parsedRows.slice(0, 5).map((row, i) => (<tr key={i} className="border-b last:border-0">{Object.keys(parsedRows[0]).map((col) => (<td key={col} className="px-3 py-1.5 text-slate-700">{row[col] || "—"}</td>))}</tr>))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          {importError && <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{importError}</div>}
+          <DialogFooter>
+            <Button variant="outline" onClick={resetAll}>Cancel</Button>
+            {!importError && <Button onClick={handleConfirm} disabled={importing}>{importing ? "Importing..." : `Import ${parsedRows.length} Rows`}</Button>}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
+// ── ImportExportTab ───────────────────────────────────────────────────────────
+
+function ImportExportTab() {
+  const [importStatus, setImportStatus] = useState<{ type: "success" | "error"; message: string } | null>(null);
+
+  // Data hooks for exports
+  const { data: clients } = useClients();
+  const { data: leads } = useLeads();
+  const { data: estimates } = useEstimates();
+  const { data: invoices } = useInvoices();
+  const { data: payments } = usePayments();
+  const { data: tickets } = useTickets();
+  const { data: services } = useAllCRMServices();
+  const { data: schedules } = useAllCRMSchedules();
+  const { data: employees } = useEmployees(false);
+
+  // Bulk import hooks
+  const { mutateAsync: bulkImportClients } = useBulkImportClients();
+  const { mutateAsync: bulkImportLeads } = useBulkImportLeads();
+  const { mutateAsync: bulkImportEstimates } = useBulkImportEstimates();
+  const { mutateAsync: bulkImportInvoices } = useBulkImportInvoices();
+  const { mutateAsync: bulkImportPayments } = useBulkImportPayments();
+  const { mutateAsync: bulkImportTickets } = useBulkImportTickets();
+  const { mutateAsync: bulkImportServices } = useBulkImportCRMServices();
+  const { mutateAsync: bulkImportSchedules } = useBulkImportCRMSchedules();
+  const { mutateAsync: bulkImportEmployees } = useBulkImportEmployees();
+
+  function handleExport(label: string) {
+    switch (label) {
+      case "Clients":
+        if (!clients?.length) return;
+        downloadCSV("clients.csv",
+          ["displayName", "accountType", "primaryPhone", "primaryEmail", "billingAddress", "billingCity", "billingState", "billingZip", "source", "accountNumber"],
+          clients.map((c) => [c.displayName, c.accountType, c.primaryPhone ?? "", c.primaryEmail ?? "", c.billingAddress ?? "", c.billingCity ?? "", c.billingState ?? "", c.billingZip ?? "", c.source ?? "", c.accountNumber ?? ""]));
+        break;
+      case "Leads":
+        if (!leads?.length) return;
+        downloadCSV("leads.csv",
+          ["displayName", "accountType", "primaryPhone", "primaryEmail", "billingAddress", "billingCity", "billingState", "billingZip", "source"],
+          leads.map((c) => [c.displayName, c.accountType, c.primaryPhone ?? "", c.primaryEmail ?? "", c.billingAddress ?? "", c.billingCity ?? "", c.billingState ?? "", c.billingZip ?? "", c.source ?? ""]));
+        break;
+      case "Estimates":
+        if (!estimates?.length) return;
+        downloadCSV("estimates.csv",
+          ["clientName", "description", "estimateDate", "validUntilDate", "poNumber", "stage"],
+          estimates.map((e) => [e.clientName ?? "", e.description, e.estimateDate, e.validUntilDate ?? "", e.poNumber ?? "", e.stage]));
+        break;
+      case "Invoices":
+        if (!invoices?.length) return;
+        downloadCSV("invoices.csv",
+          ["clientName", "description", "invoiceDate", "dueDate", "poNumber", "status", "amount", "taxAmount"],
+          invoices.map((inv) => [inv.clientName ?? "", inv.description, inv.invoiceDate, inv.dueDate ?? "", inv.poNumber ?? "", inv.status, (inv.subtotalCents / 100).toFixed(2), (inv.taxCents / 100).toFixed(2)]));
+        break;
+      case "Payments":
+        if (!payments?.length) return;
+        downloadCSV("payments.csv",
+          ["clientName", "amount", "paymentDate", "method", "reference", "memo", "invoiceNumber"],
+          payments.map((p) => [p.clientName ?? "", (p.amountCents / 100).toFixed(2), p.paymentDate, p.method, p.reference ?? "", p.memo ?? "", p.invoiceNumber != null ? String(p.invoiceNumber) : ""]));
+        break;
+      case "Tickets":
+        if (!tickets?.length) return;
+        downloadCSV("tickets.csv",
+          ["subject", "clientName", "type", "status", "priority", "category", "body", "dueDate"],
+          tickets.map((t) => [t.subject ?? "", t.clientName ?? "", t.type, t.status, t.priority, t.category ?? "", t.body ?? "", t.dueDate ?? ""]));
+        break;
+      case "Services":
+        if (!services?.length) return;
+        downloadCSV("services.csv",
+          ["name", "code", "category", "unit", "defaultRate", "productionRate", "isActive"],
+          services.map((s) => [s.name, s.code ?? "", s.category, s.unit, s.defaultRateCents != null ? (s.defaultRateCents / 100).toFixed(2) : "", s.productionRateSqftPerHr != null ? String(s.productionRateSqftPerHr) : "", s.isActive ? "yes" : "no"]));
+        break;
+      case "Schedules":
+        if (!schedules?.length) return;
+        downloadCSV("schedules.csv",
+          ["name", "frequency", "dayOfWeek", "weekPattern", "anchorDate", "seasonStart", "seasonEnd", "weekOfMonth"],
+          schedules.map((s) => [s.name, s.frequency, s.dayOfWeek, s.weekPattern ?? "", s.anchorDate ?? "", s.seasonStart ?? "", s.seasonEnd ?? "", s.weekOfMonth ?? ""]));
+        break;
+      case "Employees":
+        if (!employees?.length) return;
+        downloadCSV("employees.csv",
+          ["firstName", "lastName", "email", "phone", "cellPhone", "address", "city", "state", "zip", "dateHired", "resourceCode", "hourlyRate"],
+          employees.map((e) => [e.firstName, e.lastName, e.email ?? "", e.phone ?? "", e.cellPhone ?? "", e.address ?? "", e.city ?? "", e.state ?? "", e.zip ?? "", e.dateHired ?? "", e.resourceCode ?? "", e.hourlyRateCents != null ? (e.hourlyRateCents / 100).toFixed(2) : ""]));
+        break;
+      default:
+        break;
+    }
+  }
+
+  const EXPORT_TILES: { label: string; icon: React.ReactNode }[] = [
+    { label: "Clients",   icon: <Users className="h-6 w-6" /> },
+    { label: "Leads",     icon: <UserPlus className="h-6 w-6" /> },
+    { label: "Estimates", icon: <FileText className="h-6 w-6" /> },
+    { label: "Invoices",  icon: <Receipt className="h-6 w-6" /> },
+    { label: "Payments",  icon: <DollarSign className="h-6 w-6" /> },
+    { label: "Tickets",   icon: <TicketIcon className="h-6 w-6" /> },
+    { label: "Services",  icon: <Wrench className="h-6 w-6" /> },
+    { label: "Schedules", icon: <CalendarDays className="h-6 w-6" /> },
+    { label: "Employees", icon: <UserCog className="h-6 w-6" /> },
+  ];
+
+  return (
+    <div className="flex flex-col gap-6">
+      {/* Status banner */}
+      {importStatus && (
+        <div className={`rounded-md border px-4 py-3 text-sm ${
+          importStatus.type === "success"
+            ? "border-green-200 bg-green-50 text-green-700"
+            : "border-red-200 bg-red-50 text-red-700"
+        }`}>
+          {importStatus.message}
+          <button className="ml-2 font-medium underline" onClick={() => setImportStatus(null)}>
+            Dismiss
+          </button>
+        </div>
+      )}
+
+      {/* Export */}
+      <div className="rounded-lg border bg-white shadow-sm">
+        <div className="px-6 py-4">
+          <h2 className="text-sm font-semibold text-slate-900">Export Data</h2>
+          <p className="mt-0.5 text-xs text-slate-500">Download your data as a CSV file</p>
+        </div>
+        <Separator />
+        <div className="p-6">
+          <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+            {EXPORT_TILES.map(({ label, icon }) => (
+              <button
+                key={label}
+                onClick={() => handleExport(label)}
+                className="flex flex-col items-center gap-2 rounded-lg border border-slate-200 p-5 text-slate-500 transition-colors hover:border-brand-300 hover:bg-brand-50 hover:text-brand-600"
+              >
+                {icon}
+                <span className="text-sm">{label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Import */}
+      <div className="rounded-lg border bg-white shadow-sm">
+        <div className="px-6 py-4">
+          <h2 className="text-sm font-semibold text-slate-900">Import Data</h2>
+          <p className="mt-0.5 text-xs text-slate-500">Upload a CSV to bulk-import records</p>
+        </div>
+        <Separator />
+        <div className="p-6">
+          <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+            {[
+              { label: "Clients",   icon: <Users className="h-6 w-6" />,       onImport: (r: Record<string, string>[]) => bulkImportClients(r),   templateColumns: ["displayName", "accountType", "primaryPhone", "primaryEmail", "billingAddress", "billingCity", "billingState", "billingZip", "serviceAddress", "serviceCity", "serviceState", "serviceZip", "source", "accountNumber"], required: ["displayName"] },
+              { label: "Leads",     icon: <UserPlus className="h-6 w-6" />,    onImport: (r: Record<string, string>[]) => bulkImportLeads(r),      templateColumns: ["displayName", "accountType", "primaryPhone", "primaryEmail", "billingAddress", "billingCity", "billingState", "billingZip", "source"], required: ["displayName"] },
+              { label: "Estimates", icon: <FileText className="h-6 w-6" />,    onImport: (r: Record<string, string>[]) => bulkImportEstimates(r),  templateColumns: ["clientName", "description", "estimateDate", "validUntilDate", "poNumber", "stage"], required: ["clientName", "description"] },
+              { label: "Invoices",  icon: <Receipt className="h-6 w-6" />,     onImport: (r: Record<string, string>[]) => bulkImportInvoices(r),   templateColumns: ["clientName", "description", "invoiceDate", "dueDate", "poNumber", "status", "amount", "taxAmount"], required: ["clientName", "description", "amount"] },
+              { label: "Payments",  icon: <DollarSign className="h-6 w-6" />,  onImport: (r: Record<string, string>[]) => bulkImportPayments(r),   templateColumns: ["clientName", "amount", "paymentDate", "method", "reference", "memo", "invoiceNumber"], required: ["clientName", "amount"] },
+              { label: "Tickets",   icon: <TicketIcon className="h-6 w-6" />,  onImport: (r: Record<string, string>[]) => bulkImportTickets(r),    templateColumns: ["subject", "clientName", "type", "status", "priority", "category", "body", "dueDate"], required: ["subject"] },
+              { label: "Services",  icon: <Wrench className="h-6 w-6" />,      onImport: (r: Record<string, string>[]) => bulkImportServices(r),   templateColumns: ["name", "code", "category", "unit", "defaultRate", "productionRate", "isActive"], required: ["name"] },
+              { label: "Schedules", icon: <CalendarDays className="h-6 w-6" />, onImport: (r: Record<string, string>[]) => bulkImportSchedules(r), templateColumns: ["name", "frequency", "dayOfWeek", "weekPattern", "anchorDate", "seasonStart", "seasonEnd", "weekOfMonth"], required: ["name", "frequency", "dayOfWeek"] },
+              { label: "Employees", icon: <UserCog className="h-6 w-6" />,     onImport: (r: Record<string, string>[]) => bulkImportEmployees(r),  templateColumns: ["firstName", "lastName", "email", "phone", "cellPhone", "address", "city", "state", "zip", "dateHired", "resourceCode", "hourlyRate"], required: ["firstName", "lastName"] },
+            ].map((tile) => (
+              <ImportTile
+                key={tile.label}
+                label={tile.label}
+                icon={tile.icon}
+                onImport={tile.onImport}
+                templateColumns={tile.templateColumns}
+                requiredColumns={tile.required}
+                onStatus={setImportStatus}
+              />
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 const TAB_KEYS = [
@@ -1354,6 +1709,7 @@ const TAB_KEYS = [
   "services",
   "accounting",
   "chemical_tracking",
+  "import_export",
   "integrations",
   "client_portal",
 ] as const;
@@ -1369,6 +1725,7 @@ function tabLabel(tab: TabKey): string {
     case "services":          return "Services";
     case "accounting":        return "Accounting";
     case "chemical_tracking": return "Chemical Tracking";
+    case "import_export":     return "Import / Export";
     case "integrations":      return "Integrations";
     case "client_portal":     return "Client Portal";
   }
@@ -1416,6 +1773,9 @@ export default function CRMSettingsPage() {
           </TabsContent>
           <TabsContent value="chemical_tracking" className="mt-0">
             <ChemicalTrackingTab />
+          </TabsContent>
+          <TabsContent value="import_export" className="mt-0">
+            <ImportExportTab />
           </TabsContent>
           <TabsContent value="integrations" className="mt-0">
             <IntegrationsTab />
