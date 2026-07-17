@@ -1320,6 +1320,7 @@ export type Database = {
           billing_city: string | null
           billing_country: string | null
           billing_email: string | null
+          billing_same_as_service: boolean
           billing_state: string | null
           billing_terms: string | null
           billing_zip: string | null
@@ -1341,6 +1342,7 @@ export type Database = {
           invoice_delivery: string | null
           invoice_frequency: string | null
           is_taxable: boolean
+          last_name: string | null
           linear_ft_edging: number | null
           linear_ft_perimeter: number | null
           map_code: string | null
@@ -1360,6 +1362,10 @@ export type Database = {
           revenue_potential_cents: number
           sales_rep_id: string | null
           sales_tax_code: string | null
+          service_address: string | null
+          service_city: string | null
+          service_state: string | null
+          service_zip: string | null
           source: string | null
           status: string
           turf_sqft: number | null
@@ -1378,6 +1384,7 @@ export type Database = {
           billing_city?: string | null
           billing_country?: string | null
           billing_email?: string | null
+          billing_same_as_service?: boolean
           billing_state?: string | null
           billing_terms?: string | null
           billing_zip?: string | null
@@ -1399,6 +1406,7 @@ export type Database = {
           invoice_delivery?: string | null
           invoice_frequency?: string | null
           is_taxable?: boolean
+          last_name?: string | null
           linear_ft_edging?: number | null
           linear_ft_perimeter?: number | null
           map_code?: string | null
@@ -1418,6 +1426,10 @@ export type Database = {
           revenue_potential_cents?: number
           sales_rep_id?: string | null
           sales_tax_code?: string | null
+          service_address?: string | null
+          service_city?: string | null
+          service_state?: string | null
+          service_zip?: string | null
           source?: string | null
           status?: string
           turf_sqft?: number | null
@@ -1436,6 +1448,7 @@ export type Database = {
           billing_city?: string | null
           billing_country?: string | null
           billing_email?: string | null
+          billing_same_as_service?: boolean
           billing_state?: string | null
           billing_terms?: string | null
           billing_zip?: string | null
@@ -1457,6 +1470,7 @@ export type Database = {
           invoice_delivery?: string | null
           invoice_frequency?: string | null
           is_taxable?: boolean
+          last_name?: string | null
           linear_ft_edging?: number | null
           linear_ft_perimeter?: number | null
           map_code?: string | null
@@ -1476,6 +1490,10 @@ export type Database = {
           revenue_potential_cents?: number
           sales_rep_id?: string | null
           sales_tax_code?: string | null
+          service_address?: string | null
+          service_city?: string | null
+          service_state?: string | null
+          service_zip?: string | null
           source?: string | null
           status?: string
           turf_sqft?: number | null
