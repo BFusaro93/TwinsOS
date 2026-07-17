@@ -90,6 +90,7 @@ export const REPORT_DATASETS: ReportDataset[] = [
     fields: [
       { key: "job_number", label: "Job #", type: "number" },
       { key: "client_name", label: "Client", type: "text" },
+      { key: "client_phone", label: "Client Phone", type: "text" },
       { key: "job_type", label: "Job Type", type: "text" },
       { key: "status", label: "Status", type: "text" },
       { key: "sub_status", label: "Sub Status", type: "text" },
@@ -111,6 +112,7 @@ export const REPORT_DATASETS: ReportDataset[] = [
       { key: "service_city", label: "Service City", type: "text" },
       { key: "service_zip", label: "Service Zip", type: "text" },
       { key: "package_name", label: "Package", type: "text" },
+      { key: "call_ahead", label: "Call Ahead Required", type: "boolean" },
       { key: "under_contract", label: "Under Contract", type: "boolean" },
       { key: "is_complete", label: "Complete", type: "boolean" },
       { key: "created_at", label: "Created At", type: "datetime" },

@@ -1,12 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   useCampaigns,
   useCreateCampaign,
   useUpdateCampaign,
   useDeleteCampaign,
+  useSendCampaign,
 } from "@/lib/hooks/use-crm-campaigns";
+import { useClients } from "@/lib/hooks/use-clients";
+import { CampaignAudiencePicker } from "./CampaignAudiencePicker";
 import type { CRMCampaign, CampaignStatus, NewCampaignFormValues } from "@/types/crm-campaigns";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { EmptyState } from "@/components/shared/EmptyState";
@@ -118,54 +121,53 @@ function CampaignDialog({
   const { mutateAsync: update, isPending: updating } = useUpdateCampaign();
   const saving = creating || updating;
 
+  const { data: allClients = [] } = useClients();
+
+  const emptyForm: NewCampaignFormValues = {
+    name: "",
+    type: "email",
+    targetSegment: "all_clients",
+    subject: "",
+    body: "",
+    scheduledAt: null,
+    audienceClientIds: [],
+  };
+  const formFromCampaign = (c: CRMCampaign): NewCampaignFormValues => ({
+    name: c.name,
+    type: c.type,
+    targetSegment: c.targetSegment,
+    subject: c.subject ?? "",
+    body: c.body ?? "",
+    scheduledAt: c.scheduledAt ? c.scheduledAt.slice(0, 16) : null,
+    audienceClientIds: c.audienceClientIds,
+  });
+
   const [form, setForm] = useState<NewCampaignFormValues>(() =>
-    campaign
-      ? {
-          name: campaign.name,
-          type: campaign.type,
-          targetSegment: campaign.targetSegment,
-          subject: campaign.subject ?? "",
-          body: campaign.body ?? "",
-          scheduledAt: campaign.scheduledAt
-            ? campaign.scheduledAt.slice(0, 16)
-            : null,
-        }
-      : {
-          name: "",
-          type: "email",
-          targetSegment: "all_clients",
-          subject: "",
-          body: "",
-          scheduledAt: null,
-        }
+    campaign ? formFromCampaign(campaign) : emptyForm
   );
 
-  // Reset form when dialog opens/campaign changes
+  // Radix only calls onOpenChange for user-initiated closes, not when the
+  // parent flips `open` true — so re-sync here whenever the dialog opens or
+  // the campaign being edited changes, instead of relying on onOpenChange.
+  useEffect(() => {
+    if (open) setForm(campaign ? formFromCampaign(campaign) : emptyForm);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, campaign]);
+
   const handleOpenChange = (o: boolean) => {
     if (!o) onClose();
-    else
-      setForm(
-        campaign
-          ? {
-              name: campaign.name,
-              type: campaign.type,
-              targetSegment: campaign.targetSegment,
-              subject: campaign.subject ?? "",
-              body: campaign.body ?? "",
-              scheduledAt: campaign.scheduledAt
-                ? campaign.scheduledAt.slice(0, 16)
-                : null,
-            }
-          : {
-              name: "",
-              type: "email",
-              targetSegment: "all_clients",
-              subject: "",
-              body: "",
-              scheduledAt: null,
-            }
-      );
   };
+
+  const segmentExclusionCount = useMemo(() => {
+    if (form.targetSegment === "custom") return 0;
+    const inSegment = allClients.filter((c) => {
+      if (form.targetSegment === "active_clients") return c.status === "active";
+      if (form.targetSegment === "leads") return c.status === "lead";
+      if (form.targetSegment === "past_clients") return c.status === "inactive" || c.status === "cancelled";
+      return true;
+    });
+    return inSegment.filter((c) => c.doNotMarket).length;
+  }, [allClients, form.targetSegment]);
 
   async function handleSubmit() {
     if (!form.name.trim()) { toast.error("Name is required"); return; }
@@ -245,6 +247,20 @@ function CampaignDialog({
             </div>
           </div>
 
+          {form.targetSegment === "custom" ? (
+            <div className="space-y-1.5">
+              <Label>Audience</Label>
+              <CampaignAudiencePicker
+                selectedIds={form.audienceClientIds}
+                onChange={(ids) => setForm((p) => ({ ...p, audienceClientIds: ids }))}
+              />
+            </div>
+          ) : segmentExclusionCount > 0 ? (
+            <p className="rounded bg-amber-50 px-2.5 py-1.5 text-[11px] text-amber-700">
+              Excludes {segmentExclusionCount} client{segmentExclusionCount !== 1 ? "s" : ""} marked Do Not Market
+            </p>
+          ) : null}
+
           {form.type === "email" && (
             <div className="space-y-1.5">
               <Label>Subject Line</Label>
@@ -298,11 +314,13 @@ function CampaignRow({
   onEdit,
   onDelete,
   onStatusChange,
+  onSend,
 }: {
   campaign: CRMCampaign;
   onEdit: (c: CRMCampaign) => void;
   onDelete: (c: CRMCampaign) => void;
   onStatusChange: (id: string, status: CampaignStatus) => void;
+  onSend: (c: CRMCampaign) => void;
 }) {
   const openRate =
     campaign.deliveredCount > 0
@@ -384,6 +402,12 @@ function CampaignRow({
               <Pencil className="mr-2 h-3.5 w-3.5" />
               Edit
             </DropdownMenuItem>
+            {campaign.type === "email" && (campaign.status === "draft" || campaign.status === "scheduled") && (
+              <DropdownMenuItem onClick={() => onSend(campaign)}>
+                <Send className="mr-2 h-3.5 w-3.5" />
+                Send Now
+              </DropdownMenuItem>
+            )}
             {campaign.status === "draft" && (
               <DropdownMenuItem
                 onClick={() => onStatusChange(campaign.id, "scheduled")}
@@ -431,10 +455,26 @@ export function CampaignsList() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<CRMCampaign | null>(null);
   const [deleting, setDeleting] = useState<CRMCampaign | null>(null);
+  const [sending, setSending] = useState<CRMCampaign | null>(null);
 
   const { data: campaigns = [] as CRMCampaign[], isLoading } = useCampaigns();
+  const { data: allClients = [] } = useClients();
   const { mutateAsync: update } = useUpdateCampaign();
   const { mutateAsync: deleteCampaign, isPending: delPending } = useDeleteCampaign();
+  const { mutateAsync: sendCampaign, isPending: sendPending } = useSendCampaign();
+
+  const recipientCount = useMemo(() => {
+    if (!sending) return 0;
+    const eligible = allClients.filter((c) => !c.doNotMarket && c.primaryEmail);
+    if (sending.targetSegment === "custom") {
+      const ids = new Set(sending.audienceClientIds);
+      return eligible.filter((c) => ids.has(c.id)).length;
+    }
+    if (sending.targetSegment === "active_clients") return eligible.filter((c) => c.status === "active").length;
+    if (sending.targetSegment === "leads") return eligible.filter((c) => c.status === "lead").length;
+    if (sending.targetSegment === "past_clients") return eligible.filter((c) => c.status === "inactive" || c.status === "cancelled").length;
+    return eligible.length;
+  }, [sending, allClients]);
 
   const filtered = campaigns.filter((c: CRMCampaign) => {
     if (statusTab !== "all" && c.status !== statusTab) return false;
@@ -459,6 +499,17 @@ export function CampaignsList() {
       setDeleting(null);
     } catch {
       toast.error("Failed to delete campaign");
+    }
+  }
+
+  async function handleSend() {
+    if (!sending) return;
+    try {
+      const result = await sendCampaign(sending.id);
+      toast.success(`Sent to ${result.delivered} of ${result.totalRecipients} recipients${result.failed > 0 ? ` (${result.failed} failed)` : ""}`);
+      setSending(null);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to send campaign");
     }
   }
 
@@ -571,6 +622,7 @@ export function CampaignsList() {
                   onEdit={(camp) => { setEditing(camp); setDialogOpen(true); }}
                   onDelete={setDeleting}
                   onStatusChange={handleStatusChange}
+                  onSend={setSending}
                 />
               ))}
             </tbody>
@@ -583,6 +635,24 @@ export function CampaignsList() {
         campaign={editing}
         onClose={() => { setDialogOpen(false); setEditing(null); }}
       />
+
+      <AlertDialog open={!!sending} onOpenChange={(o) => !o && setSending(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Send &ldquo;{sending?.name}&rdquo; now?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will immediately email {recipientCount} client{recipientCount !== 1 ? "s" : ""}
+              {" "}(Do Not Market clients and clients with no email on file are always excluded). This can&apos;t be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={sendPending}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleSend} disabled={sendPending || recipientCount === 0}>
+              {sendPending ? "Sending…" : `Send to ${recipientCount}`}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog open={!!deleting} onOpenChange={(o) => !o && setDeleting(null)}>
         <AlertDialogContent>

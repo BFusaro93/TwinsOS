@@ -32,6 +32,7 @@ export interface CRMCampaign {
   openedCount: number;
   clickedCount: number;
   unsubscribedCount: number;
+  audienceClientIds: string[];
   createdBy: string | null;
   createdAt: string;
   updatedAt: string;
@@ -45,4 +46,11 @@ export interface NewCampaignFormValues {
   subject: string;
   body: string;
   scheduledAt: string | null;
+  audienceClientIds: string[];
+}
+
+export interface SendCampaignResult {
+  totalRecipients: number;
+  delivered: number;
+  failed: number;
 }

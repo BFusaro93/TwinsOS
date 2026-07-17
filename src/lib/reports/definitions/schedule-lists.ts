@@ -115,6 +115,33 @@ export const SCHEDULE_LIST_REPORTS: PrebuiltReportDef[] = [
     }),
   },
   {
+    key: "call-ahead-required",
+    section: "schedule_lists",
+    name: "Call Ahead Required",
+    description: "Scheduled jobs that require a call-ahead reminder before the crew arrives.",
+    filters: [],
+    analysis: () => ({
+      dataset: "rpt_jobs",
+      columns: [
+        "scheduled_date",
+        "client_name",
+        "client_phone",
+        "service_address",
+        "service_city",
+        "crew_name",
+        "service_names",
+      ],
+      filters: [
+        { column: "call_ahead", op: "eq", value: true },
+        { column: "status", op: "eq", value: "scheduled" },
+      ],
+      groupBy: [],
+      aggregates: [],
+      sortColumn: "scheduled_date",
+      sortDir: "asc",
+    }),
+  },
+  {
     key: "service-price-list",
     section: "schedule_lists",
     name: "Service Price List",

@@ -58,6 +58,7 @@ import { AddPaymentDialog, RefundDialog } from "./payments/PaymentsList";
 import { ContractsList } from "./contracts/ContractsList";
 import { NewContractDialog } from "./contracts/NewContractDialog";
 import { ClientFilesTab } from "./ClientFilesTab";
+import { SendClientEmailDialog } from "./SendClientEmailDialog";
 import { ClientProjectsTab } from "./ClientProjectsTab";
 import { ClientPhotosTab } from "./ClientPhotosTab";
 import {
@@ -2595,6 +2596,7 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
   const { data: parentClient } = useClient(client?.parentClientId ?? "");
   const [activeTab, setActiveTab] = useState("home");
   const [editOpen, setEditOpen] = useState(false);
+  const [sendEmailOpen, setSendEmailOpen] = useState(false);
   const [addContactOpen, setAddContactOpen] = useState(false);
   const [editContact, setEditContact] = useState<ClientContact | null>(null);
   const [allContactsOpen, setAllContactsOpen] = useState(false);
@@ -2756,7 +2758,7 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
                   size="sm"
                   className="h-7 rounded-r-none border-r-0 px-3 text-xs bg-brand-500 hover:bg-brand-600 text-white"
                   onClick={() => {
-                    if (client.primaryEmail) window.location.href = `mailto:${client.primaryEmail}`;
+                    if (client.primaryEmail) setSendEmailOpen(true);
                     else toast.error("No email on file");
                   }}
                 >
@@ -2771,7 +2773,7 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-40">
                     <DropdownMenuItem onClick={() => {
-                      if (client.primaryEmail) window.location.href = `mailto:${client.primaryEmail}`;
+                      if (client.primaryEmail) setSendEmailOpen(true);
                       else toast.error("No email on file");
                     }}>
                       <Mail className="mr-2 h-3.5 w-3.5" /> Email
@@ -3164,6 +3166,15 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
 
       {client && (
         <EditClientDialog client={client} open={editOpen} onOpenChange={setEditOpen} />
+      )}
+      {client?.primaryEmail && (
+        <SendClientEmailDialog
+          open={sendEmailOpen}
+          onClose={() => setSendEmailOpen(false)}
+          clientId={clientId}
+          clientName={client.displayName}
+          clientEmail={client.primaryEmail}
+        />
       )}
       <CancelClientDialog
         clientId={clientId}

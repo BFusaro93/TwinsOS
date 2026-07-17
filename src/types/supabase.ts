@@ -1363,6 +1363,7 @@ export type Database = {
           source: string | null
           status: string
           turf_sqft: number | null
+          unsubscribe_token: string
           updated_at: string
           yards_of_mulch: number | null
         }
@@ -1420,6 +1421,7 @@ export type Database = {
           source?: string | null
           status?: string
           turf_sqft?: number | null
+          unsubscribe_token?: string
           updated_at?: string
           yards_of_mulch?: number | null
         }
@@ -1477,6 +1479,7 @@ export type Database = {
           source?: string | null
           status?: string
           turf_sqft?: number | null
+          unsubscribe_token?: string
           updated_at?: string
           yards_of_mulch?: number | null
         }
@@ -1705,6 +1708,7 @@ export type Database = {
       }
       crm_campaigns: {
         Row: {
+          audience_client_ids: string[]
           body: string | null
           clicked_count: number | null
           created_at: string
@@ -1726,6 +1730,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          audience_client_ids?: string[]
           body?: string | null
           clicked_count?: number | null
           created_at?: string
@@ -1747,6 +1752,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          audience_client_ids?: string[]
           body?: string | null
           clicked_count?: number | null
           created_at?: string
@@ -4178,6 +4184,7 @@ export type Database = {
           invoice_description: string | null
           job_comments: Json
           job_id: string
+          job_service_id: string | null
           materials_used: Json
           men_count: number
           notes_to_client: string | null
@@ -4219,6 +4226,7 @@ export type Database = {
           invoice_description?: string | null
           job_comments?: Json
           job_id: string
+          job_service_id?: string | null
           materials_used?: Json
           men_count?: number
           notes_to_client?: string | null
@@ -4260,6 +4268,7 @@ export type Database = {
           invoice_description?: string | null
           job_comments?: Json
           job_id?: string
+          job_service_id?: string | null
           materials_used?: Json
           men_count?: number
           notes_to_client?: string | null
@@ -4320,6 +4329,20 @@ export type Database = {
             columns: ["job_id"]
             isOneToOne: false
             referencedRelation: "rpt_jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_job_visits_job_service_id_fkey"
+            columns: ["job_service_id"]
+            isOneToOne: false
+            referencedRelation: "crm_job_services"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_job_visits_job_service_id_fkey"
+            columns: ["job_service_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_job_services"
             referencedColumns: ["id"]
           },
           {
@@ -5066,7 +5089,7 @@ export type Database = {
           field_type?: string
           id?: string
           options?: Json | null
-          org_id: string
+          org_id?: string
           sort_order?: number
         }
         Update: {
@@ -6369,7 +6392,7 @@ export type Database = {
           description: string
           estimate_id: string
           id?: string
-          org_id: string
+          org_id?: string
           overhead_cents?: number
           qty?: number
           rate_cents?: number
@@ -6613,7 +6636,7 @@ export type Database = {
           job_note?: string | null
           margin_bps?: number
           markup_bps?: number
-          org_id: string
+          org_id?: string
           production_rate_sqft_per_hr?: number | null
           qty?: number
           rate_cents?: number
@@ -6872,7 +6895,7 @@ export type Database = {
           calc_type?: number
           created_at?: string
           id?: string
-          org_id: string
+          org_id?: string
           qty?: number
           rate_cents?: number
           service_id?: string | null
@@ -6948,7 +6971,7 @@ export type Database = {
           est_document?: string
           id?: string
           name: string
-          org_id: string
+          org_id?: string
           show_discounts?: boolean
           show_when?: string
           updated_at?: string
@@ -7106,7 +7129,7 @@ export type Database = {
           net_profit_cents?: number
           notes?: string | null
           num_installments?: number
-          org_id: string
+          org_id?: string
           overhead_cost_cents?: number
           overhead_rate_bps?: number
           payment_terms?: string | null
@@ -8916,7 +8939,7 @@ export type Database = {
           description: string
           id?: string
           notes?: string | null
-          org_id: string
+          org_id?: string
           project_id: string
           updated_at?: string
           vendor_id?: string | null
@@ -10413,7 +10436,9 @@ export type Database = {
         Row: {
           actual_hours: number | null
           budgeted_hours: number | null
+          call_ahead: boolean | null
           client_name: string | null
+          client_phone: string | null
           created_at: string | null
           crew_name: string | null
           date_sold: string | null
@@ -10777,4 +10802,3 @@ export const Constants = {
     Enums: {},
   },
 } as const
-

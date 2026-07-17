@@ -6,6 +6,7 @@ import type {
   CRMCampaign,
   CampaignStatus,
   NewCampaignFormValues,
+  SendCampaignResult,
 } from "@/types/crm-campaigns";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -26,6 +27,7 @@ function mapCampaign(row: any): CRMCampaign {
     openedCount: row.opened_count ?? 0,
     clickedCount: row.clicked_count ?? 0,
     unsubscribedCount: row.unsubscribed_count ?? 0,
+    audienceClientIds: row.audience_client_ids ?? [],
     createdBy: row.created_by,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -69,6 +71,7 @@ export function useCreateCampaign() {
           subject: values.subject || null,
           body: values.body || null,
           scheduled_at: values.scheduledAt || null,
+          audience_client_ids: values.audienceClientIds ?? [],
           status: "draft",
         })
         .select()
@@ -98,6 +101,7 @@ export function useUpdateCampaign() {
       if (updates.subject !== undefined) patch.subject = updates.subject || null;
       if (updates.body !== undefined) patch.body = updates.body || null;
       if (updates.scheduledAt !== undefined) patch.scheduled_at = updates.scheduledAt || null;
+      if (updates.audienceClientIds !== undefined) patch.audience_client_ids = updates.audienceClientIds;
       if (updates.status !== undefined) patch.status = updates.status;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
@@ -108,6 +112,19 @@ export function useUpdateCampaign() {
         .single();
       if (error) throw error;
       return mapCampaign(data);
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["crm-campaigns"] }),
+  });
+}
+
+export function useSendCampaign() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string): Promise<SendCampaignResult> => {
+      const res = await fetch(`/api/crm/campaigns/${id}/send`, { method: "POST" });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "Failed to send campaign");
+      return json as SendCampaignResult;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["crm-campaigns"] }),
   });

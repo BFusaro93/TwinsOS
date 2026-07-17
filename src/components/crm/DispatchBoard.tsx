@@ -52,6 +52,7 @@ import {
   ArrowUpDown,
   Download,
   Phone,
+  PhoneCall,
   Printer,
   StickyNote,
   Package,
@@ -1342,6 +1343,7 @@ export function DispatchBoard() {
   const [manualOrder,     setManualOrder]     = useState<string[] | null>(null);
   const [visibleKeys,     setVisibleKeys]     = useState<string[]>(COL_DEFS.map((d) => d.key));
   const [statsOpen,       setStatsOpen]       = useState(false);
+  const [callAheadOpen,   setCallAheadOpen]   = useState(false);
   const [printOpen,       setPrintOpen]       = useState(false);
   const [chemicalWizardOpen, setChemicalWizardOpen] = useState(false);
 
@@ -1586,6 +1588,8 @@ export function DispatchBoard() {
   const unassignedStatBHrs   = displayVisits.filter((v) => !v.crewId).reduce((s, v) => s + (v.job?.budgetedHours ?? 0), 0);
   const unassignedStatAmt    = displayVisits.filter((v) => !v.crewId).reduce((s, v) => s + ((v as any).rateCents ?? v.job?.rateCents ?? 0), 0);
 
+  const callAheadVisits = displayVisits.filter((v) => v.job?.callAhead && v.clientPhone);
+
   return (
     <div className="flex h-full flex-col gap-4">
       {/* Page header */}
@@ -1743,6 +1747,55 @@ export function DispatchBoard() {
             <BarChart3 className="h-3.5 w-3.5" />
             Stats
           </Button>
+          <Popover open={callAheadOpen} onOpenChange={setCallAheadOpen}>
+            <PopoverTrigger asChild>
+              <Button
+                size="sm" variant="outline"
+                className={cn("h-7 gap-1.5 px-2.5 text-xs", callAheadOpen && "border-brand-400 text-brand-700 bg-brand-50")}
+                title="Call ahead required"
+              >
+                <PhoneCall className="h-3.5 w-3.5" />
+                Call Ahead
+                {callAheadVisits.length > 0 && (
+                  <span className="ml-0.5 rounded-full bg-amber-100 px-1.5 text-[10px] font-semibold text-amber-700">
+                    {callAheadVisits.length}
+                  </span>
+                )}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-80 p-0" align="end">
+              <div className="border-b px-3 py-2">
+                <p className="text-xs font-semibold text-slate-700">Call Ahead Required</p>
+                <p className="text-[10px] text-slate-400">Jobs in the current view needing a call before arrival</p>
+              </div>
+              <div className="max-h-80 overflow-y-auto">
+                {callAheadVisits.length === 0 ? (
+                  <p className="px-3 py-4 text-xs text-slate-400 italic text-center">No call-ahead jobs in view</p>
+                ) : (
+                  callAheadVisits.map((v) => (
+                    <div key={v.id} className="flex items-start justify-between gap-2 border-b px-3 py-2 last:border-b-0 hover:bg-slate-50">
+                      <div className="min-w-0">
+                        <p className="truncate text-xs font-medium text-slate-800">{v.clientName ?? v.job?.clientName ?? "—"}</p>
+                        <p className="truncate text-[10px] text-slate-500">{v.job?.serviceAddress ?? ""}{v.job?.serviceCity ? `, ${v.job.serviceCity}` : ""}</p>
+                        <p className="text-[10px] text-slate-400">
+                          {new Date(`${v.scheduledDate}T00:00:00`).toLocaleDateString([], { month: "short", day: "numeric" })}
+                          {v.startTime ? ` · ${v.startTime}` : ""}
+                          {v.crewName ? ` · ${v.crewName}` : ""}
+                        </p>
+                      </div>
+                      <a
+                        href={`tel:${v.clientPhone}`}
+                        className="shrink-0 flex items-center gap-1 rounded border border-green-200 bg-green-50 px-2 py-1 text-[10px] font-medium text-green-700 hover:bg-green-100"
+                      >
+                        <Phone className="h-3 w-3" />
+                        {v.clientPhone}
+                      </a>
+                    </div>
+                  ))
+                )}
+              </div>
+            </PopoverContent>
+          </Popover>
           <Button size="sm" variant="outline" className="h-7 gap-1.5 px-2.5 text-xs" onClick={handleReverseRoute} title="Reverse route order">
             <ArrowUpDown className="h-3.5 w-3.5" />
             Reverse
