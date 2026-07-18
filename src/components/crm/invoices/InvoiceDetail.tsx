@@ -657,11 +657,16 @@ export function InvoiceDetail({
   }
 
   function handlePrint() {
-    window.open(`/crm/invoices/${invoice!.id}/print`, "_blank");
+    const win = window.open(`/api/crm/invoices/${invoice!.id}/pdf`, "_blank");
+    if (win) win.addEventListener("load", () => win.print(), { once: true });
     // Lock after print
     setLock({ id: invoice!.id, locked: true })
       .then(() => toast.info("Invoice locked after print"))
       .catch(() => {});
+  }
+
+  function handleDownloadPDF() {
+    window.open(`/api/crm/invoices/${invoice!.id}/pdf`, "_blank");
   }
 
   async function handleToggleLock() {
@@ -801,6 +806,10 @@ export function InvoiceDetail({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
+              <DropdownMenuItem onSelect={handleDownloadPDF}>
+                <Printer className="mr-2 h-3.5 w-3.5 text-slate-500" /> Download PDF
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
               {invoice.status !== "void" && (
                 <DropdownMenuItem onSelect={() => setConfirmVoidOpen(true)}>
                   <Ban className="mr-2 h-3.5 w-3.5 text-slate-500" /> Void Invoice

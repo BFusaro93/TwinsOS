@@ -201,9 +201,12 @@ export function useUpdateChemicalSettings() {
       values: Partial<Omit<ChemicalSettings, "id" | "orgId" | "updatedAt">>
     ) => {
       const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not authenticated");
       const { data: profile, error: profileError } = await supabase
         .from("profiles")
         .select("org_id")
+        .eq("id", user.id)
         .single();
       if (profileError) throw profileError;
 

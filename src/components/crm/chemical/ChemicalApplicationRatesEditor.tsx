@@ -16,6 +16,7 @@ import { formatCurrency } from "@/lib/utils";
 import {
   useChemicalApplicationRates,
   useChemicalLookupItems,
+  useChemicalSettings,
   useSaveChemicalApplicationRates,
 } from "@/lib/hooks/use-chemical-tracking";
 
@@ -29,13 +30,13 @@ interface RateRow {
   isDefault: boolean;
 }
 
-function emptyRow(isDefault: boolean): RateRow {
+function emptyRow(isDefault: boolean, defaultUnitId: string | null, prevAreaUnitId: string | null): RateRow {
   return {
     applicationMethodId: null,
     rateQty: "",
-    unitOfMeasureId: null,
+    unitOfMeasureId: defaultUnitId,
     areaQty: "",
-    areaUnitId: null,
+    areaUnitId: prevAreaUnitId,
     productCost: "",
     isDefault,
   };
@@ -48,6 +49,7 @@ export function ChemicalApplicationRatesEditor({ productId }: { productId: strin
   const { data: methods = [] } = useChemicalLookupItems("application_method");
   const { data: volumeUnits = [] } = useChemicalLookupItems("volume_unit");
   const { data: areaUnits = [] } = useChemicalLookupItems("area_unit");
+  const { data: settings } = useChemicalSettings();
   const saveRates = useSaveChemicalApplicationRates();
 
   const [rows, setRows] = useState<RateRow[]>([]);
@@ -78,7 +80,14 @@ export function ChemicalApplicationRatesEditor({ productId }: { productId: strin
   }
 
   function addRow() {
-    setRows((prev) => [...prev, emptyRow(prev.length === 0)]);
+    setRows((prev) => [
+      ...prev,
+      emptyRow(
+        prev.length === 0,
+        settings?.defaultUnitOfMeasureId ?? null,
+        prev[prev.length - 1]?.areaUnitId ?? null
+      ),
+    ]);
     setDirty(true);
   }
 

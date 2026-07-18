@@ -48,10 +48,23 @@ function LeadItem({ lead, isSelected, onSelect }: { lead: Client; isSelected: bo
   );
 }
 
-export function LeadsListView() {
+interface LeadsListViewProps {
+  selectedId?: string | null;
+  onSelect?: (lead: Client) => void;
+  onBack?: () => void;
+}
+
+export function LeadsListView({ selectedId, onSelect, onBack }: LeadsListViewProps = {}) {
   const { data: leads, isLoading } = useLeads();
   const [search, setSearch] = useState("");
-  const [selected, setSelected] = useState<Client | null>(null);
+  const [internalSelected, setInternalSelected] = useState<Client | null>(null);
+
+  const controlled = selectedId !== undefined;
+  const selected = controlled ? (leads ?? []).find((l) => l.id === selectedId) ?? null : internalSelected;
+  function selectLead(lead: Client) {
+    if (onSelect) onSelect(lead);
+    else setInternalSelected(lead);
+  }
 
   const filtered = (leads ?? []).filter((l) => {
     const q = search.toLowerCase();
@@ -98,7 +111,7 @@ export function LeadsListView() {
                 key={lead.id}
                 lead={lead}
                 isSelected={selected?.id === lead.id}
-                onSelect={() => setSelected(lead)}
+                onSelect={() => selectLead(lead)}
               />
             ))}
           </div>
@@ -110,7 +123,7 @@ export function LeadsListView() {
   return (
     <MasterDetailLayout
       hasSelection={!!selected}
-      onBack={() => setSelected(null)}
+      onBack={() => (controlled ? onBack?.() : setInternalSelected(null))}
       listPanel={listPanel}
       detailPanel={selected ? <ClientDetailPanel clientId={selected.id} /> : null}
       emptyState={

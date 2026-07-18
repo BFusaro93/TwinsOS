@@ -102,6 +102,7 @@ export interface CRMInvoice {
   locked: boolean;
   lockedAt: string | null;
   preferredPaymentMethod: string | null;
+  pdfTemplateId: string | null;
   deletedAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -197,4 +198,22 @@ export interface CRMContractNote {
   createdAt: string;
   updatedAt: string;
   deletedAt: string | null;
+}
+
+// ── invoice PDF template ─────────────────────────────────────────────────────
+
+/** Which React PDF component renders the invoice. Add a new key here (and a
+ *  matching case in InvoiceDocument.tsx) when adding a new visual layout. */
+export type InvoicePDFLayoutKey = "default";
+
+export interface InvoicePDFTemplate {
+  id: string;
+  orgId: string;
+  name: string;
+  layoutKey: InvoicePDFLayoutKey;
+  isDefault: boolean;
+  deletedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string | null;
 }

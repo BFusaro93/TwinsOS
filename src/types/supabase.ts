@@ -839,6 +839,7 @@ export type Database = {
           org_id: string
           phone: string | null
           phone_type: string | null
+          phones: Json
           updated_at: string
         }
         Insert: {
@@ -857,6 +858,7 @@ export type Database = {
           org_id?: string
           phone?: string | null
           phone_type?: string | null
+          phones?: Json
           updated_at?: string
         }
         Update: {
@@ -875,6 +877,7 @@ export type Database = {
           org_id?: string
           phone?: string | null
           phone_type?: string | null
+          phones?: Json
           updated_at?: string
         }
         Relationships: [
@@ -3719,6 +3722,57 @@ export type Database = {
           },
         ]
       }
+      crm_invoice_pdf_templates: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          id: string
+          is_default: boolean
+          layout_key: string
+          name: string
+          org_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          is_default?: boolean
+          layout_key?: string
+          name: string
+          org_id?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          is_default?: boolean
+          layout_key?: string
+          name?: string
+          org_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_invoice_pdf_templates_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_invoice_pdf_templates_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       crm_invoices: {
         Row: {
           amount_paid_cents: number
@@ -3743,6 +3797,7 @@ export type Database = {
           locked_at: string | null
           notes: string | null
           org_id: string
+          pdf_template_id: string | null
           po_number: string | null
           preferred_payment_method: string | null
           sales_rep_id: string | null
@@ -3778,6 +3833,7 @@ export type Database = {
           locked_at?: string | null
           notes?: string | null
           org_id?: string
+          pdf_template_id?: string | null
           po_number?: string | null
           preferred_payment_method?: string | null
           sales_rep_id?: string | null
@@ -3813,6 +3869,7 @@ export type Database = {
           locked_at?: string | null
           notes?: string | null
           org_id?: string
+          pdf_template_id?: string | null
           po_number?: string | null
           preferred_payment_method?: string | null
           sales_rep_id?: string | null
@@ -3852,6 +3909,13 @@ export type Database = {
             columns: ["contract_id"]
             isOneToOne: false
             referencedRelation: "crm_contracts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_invoices_pdf_template_id_fkey"
+            columns: ["pdf_template_id"]
+            isOneToOne: false
+            referencedRelation: "crm_invoice_pdf_templates"
             referencedColumns: ["id"]
           },
           {

@@ -2,10 +2,17 @@ import type { Role } from "./common";
 
 export type ApprovalEntityType = "requisition" | "purchase_order" | "crm_estimate";
 
+/**
+ * For requisition/purchase_order steps this is a generic `Role` (admin/manager/purchaser).
+ * For crm_estimate steps this is a `crm_roles.id` instead — CRM approval is gated by
+ * CRM-specific roles (Operations Manager, Sales, etc.), not the CMMS Role enum.
+ */
+export type ApprovalRequiredRole = Role | string;
+
 export interface ApprovalFlowStep {
   id: string;
   order: number;
-  requiredRole: Role;
+  requiredRole: ApprovalRequiredRole;
   label: string;
   /** Amount in cents above which this step is required. 0 = always required. */
   thresholdCents: number;
@@ -43,7 +50,7 @@ export interface ApprovalRequest {
   order: number;
   approverId: string;
   approverName: string;
-  approverRole: Role;
+  approverRole: ApprovalRequiredRole;
   status: ApprovalRequestStatus;
   decidedAt: string | null;
   comment: string | null;

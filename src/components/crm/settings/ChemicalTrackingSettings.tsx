@@ -68,17 +68,32 @@ function GeneralChemicalSettings() {
   const numericFieldDefs = propertyFieldDefs.filter((d) => d.fieldType === "number");
 
   function handleConditionsChange(v: ChemicalConditionsDisplay) {
-    update.mutate({ conditionsDisplay: v }, { onSuccess: () => toast.success("Saved") });
+    update.mutate(
+      { conditionsDisplay: v },
+      {
+        onSuccess: () => toast.success("Saved"),
+        onError: (err) => toast.error(`Failed to save: ${(err as Error).message}`),
+      }
+    );
   }
 
   function handleAutoCalcChange(v: boolean) {
-    update.mutate({ autoCalcQuantity: v }, { onSuccess: () => toast.success("Saved") });
+    update.mutate(
+      { autoCalcQuantity: v },
+      {
+        onSuccess: () => toast.success("Saved"),
+        onError: (err) => toast.error(`Failed to save: ${(err as Error).message}`),
+      }
+    );
   }
 
   function handleAreaFieldChange(v: string) {
     update.mutate(
       { areaCustomFieldId: v === "none" ? null : v },
-      { onSuccess: () => toast.success("Saved") }
+      {
+        onSuccess: () => toast.success("Saved"),
+        onError: (err) => toast.error(`Failed to save: ${(err as Error).message}`),
+      }
     );
   }
 

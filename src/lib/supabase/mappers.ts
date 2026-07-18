@@ -272,7 +272,7 @@ export function mapApprovalFlowStep(row: ApprovalFlowStepRow): ApprovalFlowStep 
   return {
     id: row.id,
     order: row.order,
-    requiredRole: row.required_role as Role,
+    requiredRole: row.required_role,
     label: row.label,
     thresholdCents: row.threshold_cents,
     assignedUserId: row.assigned_user_id,
@@ -305,7 +305,7 @@ export function mapApprovalRequest(row: ApprovalRequestRow): ApprovalRequest {
     order: row.order,
     approverId: row.approver_id ?? "",
     approverName: row.approver_name,
-    approverRole: row.approver_role as Role,
+    approverRole: row.approver_role,
     status: row.status as ApprovalRequestStatus,
     decidedAt: row.decided_at,
     comment: row.comment,

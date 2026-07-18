@@ -117,6 +117,16 @@ export function useSubmitForApproval() {
         .select("id, name, role")
         .eq("org_id", orgId);
 
+      // crm_estimate steps store a crm_roles.id (not a generic Role) — resolve the
+      // people holding that role via their linked crm_employees.user_id.
+      const { data: crmEmployees } = entityType === "crm_estimate"
+        ? await supabase
+            .from("crm_employees")
+            .select("user_id, crm_role_id, first_name, last_name")
+            .eq("org_id", orgId)
+            .is("deleted_at", null)
+        : { data: null };
+
       // Drop any previous requests for this entity
       await supabase
         .from("approval_requests")
@@ -157,6 +167,24 @@ export function useSubmitForApproval() {
             approver_role: step.required_role,
             status: effectiveStatus,
           });
+        } else if (entityType === "crm_estimate") {
+          const roleHolders = (crmEmployees ?? []).filter(
+            (e) => e.crm_role_id === step.required_role && e.user_id
+          );
+          const targets = roleHolders.map((e) => ({
+            id: e.user_id as string,
+            name: `${e.first_name} ${e.last_name}`,
+          }));
+
+          for (const approver of targets) {
+            newRequests.push({
+              org_id: orgId, entity_type: entityType, entity_id: entityId,
+              flow_step_id: step.id, order: step.order,
+              approver_id: approver.id, approver_name: approver.name,
+              approver_role: step.required_role,
+              status: effectiveStatus,
+            });
+          }
         } else {
           const approvers = orgUsers?.filter((u) => u.role === step.required_role) ?? [];
           const targets = approvers.length > 0

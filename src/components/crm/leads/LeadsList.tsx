@@ -225,15 +225,15 @@ const ACCOUNT_COLOR: Record<string, string> = {
 interface LeadsListProps {
   newDialogOpen?: boolean;
   onNewDialogOpenChange?: (o: boolean) => void;
+  onSelect?: (lead: Client) => void;
 }
 
-export function LeadsList({ newDialogOpen, onNewDialogOpenChange }: LeadsListProps = {}) {
+export function LeadsList({ newDialogOpen, onNewDialogOpenChange, onSelect }: LeadsListProps = {}) {
   const { data: leads, isLoading } = useLeads();
   const [search, setSearch] = useState("");
   const [internalDialogOpen, setInternalDialogOpen] = useState(false);
   const [convertLead, setConvertLead] = useState<Client | undefined>();
   const [closeLead, setCloseLead] = useState<Client | undefined>();
-  const router = useRouter();
 
   const controlled = newDialogOpen !== undefined;
   const dialogOpen = controlled ? newDialogOpen : internalDialogOpen;
@@ -304,9 +304,16 @@ export function LeadsList({ newDialogOpen, onNewDialogOpenChange }: LeadsListPro
               </tr>
             ) : (
               filtered.map((lead) => (
-                <tr key={lead.id} className="group border-b hover:bg-slate-50">
+                <tr
+                  key={lead.id}
+                  className={cn("group border-b hover:bg-slate-50", onSelect && "cursor-pointer")}
+                  onClick={() => onSelect?.(lead)}
+                >
                   <td className="px-4 py-2.5">
-                    <button className="font-medium text-brand-600 hover:underline text-left" onClick={() => router.push(`/crm/clients/${lead.id}`)}>
+                    <button
+                      className="font-medium text-brand-600 hover:underline text-left"
+                      onClick={(e) => { e.stopPropagation(); onSelect?.(lead); }}
+                    >
                       {lead.displayName}
                     </button>
                   </td>

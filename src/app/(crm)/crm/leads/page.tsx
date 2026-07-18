@@ -11,6 +11,7 @@ import { exportCSV } from "@/lib/csv";
 import { useLeads, useBulkImportLeads } from "@/lib/hooks/use-clients";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import type { Client } from "@/types/crm";
 
 const LEAD_TEMPLATE_COLUMNS = [
   "displayName", "accountType", "primaryPhone", "primaryEmail",
@@ -22,6 +23,7 @@ export default function LeadsPage() {
   const { mutateAsync: bulkImportLeads } = useBulkImportLeads();
   const [viewMode, setViewMode] = useState<"table" | "list">("table");
   const [newOpen, setNewOpen] = useState(false);
+  const [selected, setSelected] = useState<Client | null>(null);
 
   const viewToggle = (
     <div className="flex items-center rounded-md border bg-white shadow-sm">
@@ -93,9 +95,17 @@ export default function LeadsPage() {
 
       <div className="flex-1 overflow-hidden">
         {viewMode === "table" ? (
-          <LeadsList newDialogOpen={newOpen} onNewDialogOpenChange={setNewOpen} />
+          <LeadsList
+            newDialogOpen={newOpen}
+            onNewDialogOpenChange={setNewOpen}
+            onSelect={(lead) => { setSelected(lead); setViewMode("list"); }}
+          />
         ) : (
-          <LeadsListView />
+          <LeadsListView
+            selectedId={selected?.id ?? null}
+            onSelect={setSelected}
+            onBack={() => setSelected(null)}
+          />
         )}
       </div>
     </div>

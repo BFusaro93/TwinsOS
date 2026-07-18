@@ -73,6 +73,8 @@ import { OverheadSettingsEditor } from "@/components/crm/settings/OverheadSettin
 import { ClientPortalTab } from "@/components/crm/settings/ClientPortalSettings";
 import { SnowRoutesEditor } from "@/components/crm/settings/SnowRoutesEditor";
 import { ChemicalTrackingTab } from "@/components/crm/settings/ChemicalTrackingSettings";
+import { InvoiceTemplatesEditor } from "@/components/crm/settings/InvoiceTemplatesEditor";
+import { useInvoicePDFTemplates } from "@/lib/hooks/use-invoice-pdf-templates";
 import { ApprovalFlowsPage } from "@/components/settings/ApprovalFlowsPage";
 import { BILLING_TERMS_OPTIONS } from "@/lib/constants";
 import { downloadCSV, readCSVFile } from "@/lib/csv";
@@ -1022,7 +1024,6 @@ function AddServiceForm({ onAdded }: { onAdded: () => void }) {
 
 function ServicesTab() {
   const { data: services = [], refetch } = useAllCRMServices();
-  const { data: masterPackages = [] } = useOrgList("master_packages");
   const { data: serviceCategoryItems = [] } = useOrgList("service_categories");
 
   return (
@@ -1046,9 +1047,6 @@ function ServicesTab() {
       <AccordionSection title="Service Categories" count={serviceCategoryItems.length}>
         <OrgListEditor listName="service_categories" addPlaceholder="e.g. Hardscape" />
       </AccordionSection>
-      <AccordionSection title="Master Packages" count={masterPackages.length}>
-        <OrgListEditor listName="master_packages" addPlaceholder="e.g. Gold Maintenance" />
-      </AccordionSection>
       <AccordionSection title="Snow Routes" description="Master Routes for the Snow Dispatch Board">
         <SnowRoutesEditor />
       </AccordionSection>
@@ -1061,6 +1059,7 @@ function ServicesTab() {
 function AccountingTab() {
   const { data: paymentMethods = [] } = useOrgList("payment_methods");
   const { data: discountsList = [] } = useDiscounts();
+  const { data: invoiceTemplates = [] } = useInvoicePDFTemplates();
   const { data: orgSettings } = useOrgSettings();
   const { mutateAsync: updateOrg } = useUpdateOrgSettings();
   const [taxDraft, setTaxDraft] = useState<string>("");
@@ -1119,6 +1118,13 @@ function AccountingTab() {
       </AccordionSection>
       <AccordionSection title="Discounts" count={discountsList.length} description="Each discount needs a default rate — a percent off or a flat dollar amount.">
         <DiscountsEditor />
+      </AccordionSection>
+      <AccordionSection
+        title="Invoice Templates"
+        count={invoiceTemplates.length}
+        description="PDF layouts used when generating or printing an invoice. The starred template is the org default."
+      >
+        <InvoiceTemplatesEditor />
       </AccordionSection>
     </div>
   );

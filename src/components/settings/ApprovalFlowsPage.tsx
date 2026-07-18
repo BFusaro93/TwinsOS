@@ -2,6 +2,21 @@
 
 import { useState, useEffect, useRef } from "react";
 import { GripVertical, Plus, Pencil, Trash2, Save, X } from "lucide-react";
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  verticalListSortingStrategy,
+  useSortable,
+  arrayMove,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -15,7 +30,9 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { useApprovalFlows, useUpdateApprovalFlow, useCreateApprovalFlow } from "@/lib/hooks/use-approval-flows";
 import { useUsers } from "@/lib/hooks/use-users";
-import type { ApprovalFlow, ApprovalFlowStep, Role } from "@/types";
+import { useRoles } from "@/lib/hooks/use-roles";
+import { useEmployees } from "@/lib/hooks/use-employees";
+import type { ApprovalFlow, ApprovalFlowStep, ApprovalRequiredRole, Role } from "@/types";
 
 const ROLE_OPTIONS: { value: Role; label: string }[] = [
   { value: "manager", label: "Manager" },
@@ -35,7 +52,7 @@ function formatThreshold(cents: number) {
 }
 
 interface StepDraft {
-  requiredRole: Role;
+  requiredRole: ApprovalRequiredRole;
   label: string;
   thresholdCents: number;
   assignedUserId: string | null;
@@ -43,15 +60,21 @@ interface StepDraft {
 
 function EditStepForm({
   step,
+  isCrmEstimate,
   onSave,
   onCancel,
 }: {
   step: Partial<ApprovalFlowStep>;
+  isCrmEstimate: boolean;
   onSave: (s: StepDraft) => void;
   onCancel: () => void;
 }) {
   const { data: allUsers = [] } = useUsers();
-  const [role, setRole] = useState<Role>(step.requiredRole ?? "manager");
+  const { data: crmRoles = [] } = useRoles(true);
+  const { data: employees = [] } = useEmployees();
+  const [role, setRole] = useState<ApprovalRequiredRole>(
+    step.requiredRole ?? (isCrmEstimate ? crmRoles[0]?.id ?? "" : "manager")
+  );
   const [label, setLabel] = useState(step.label ?? "");
   const [threshold, setThreshold] = useState(
     step.thresholdCents != null ? String(step.thresholdCents / 100) : "0"
@@ -61,13 +84,39 @@ function EditStepForm({
   );
 
   const thresholdCents = Math.round(parseFloat(threshold || "0") * 100);
-  const usersWithRole = allUsers.filter((u) => u.role === role);
+
+  // crmRoles loads async — if this is a new step opened before the list arrived,
+  // backfill the default selection once roles are available.
+  useEffect(() => {
+    if (isCrmEstimate && !step.requiredRole && !role && crmRoles.length > 0) {
+      setRole(crmRoles[0].id);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [crmRoles]);
+
+  // CRM steps assign employees (filtered by crm_role, resolved to their linked login);
+  // PO/CMMS steps assign profiles directly, filtered by the generic Role.
+  const employeesWithRole = isCrmEstimate
+    ? employees.filter((e) => e.crmRoleId === role && e.userId)
+    : [];
+  const usersWithRole = isCrmEstimate
+    ? employeesWithRole.map((e) => ({ id: e.userId as string, name: `${e.firstName} ${e.lastName}` }))
+    : allUsers.filter((u) => u.role === role);
+  const roleLabel = isCrmEstimate
+    ? crmRoles.find((r) => r.id === role)?.name ?? "role"
+    : role;
 
   // Reset assigned user when role changes if the previously assigned user no longer fits
-  function handleRoleChange(newRole: Role) {
+  function handleRoleChange(newRole: ApprovalRequiredRole) {
     setRole(newRole);
-    const stillValid = allUsers.some((u) => u.id === assignedUserId && u.role === newRole);
+    const stillValid = usersForRole(newRole).some((u) => u.id === assignedUserId);
     if (!stillValid) setAssignedUserId("anyone");
+  }
+
+  function usersForRole(r: ApprovalRequiredRole) {
+    return isCrmEstimate
+      ? employees.filter((e) => e.crmRoleId === r && e.userId).map((e) => ({ id: e.userId as string }))
+      : allUsers.filter((u) => u.role === r);
   }
 
   return (
@@ -87,14 +136,18 @@ function EditStepForm({
         </div>
         <div className="flex flex-col gap-1">
           <label className="text-xs font-medium text-slate-600">Required Role</label>
-          <Select value={role} onValueChange={(v) => handleRoleChange(v as Role)}>
+          <Select value={role} onValueChange={handleRoleChange}>
             <SelectTrigger className="h-8 text-sm">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {ROLE_OPTIONS.map((r) => (
-                <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
-              ))}
+              {isCrmEstimate
+                ? crmRoles.map((r) => (
+                    <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>
+                  ))
+                : ROLE_OPTIONS.map((r) => (
+                    <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
+                  ))}
             </SelectContent>
           </Select>
         </div>
@@ -106,7 +159,7 @@ function EditStepForm({
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="anyone">
-                Any {role} (all notified, first to decide wins)
+                Any {roleLabel} (all notified, first to decide wins)
               </SelectItem>
               {usersWithRole.map((u) => (
                 <SelectItem key={u.id} value={u.id}>
@@ -118,8 +171,10 @@ function EditStepForm({
           <p className="text-xs text-slate-400">
             {assignedUserId === "anyone"
               ? usersWithRole.length > 1
-                ? `All ${usersWithRole.length} ${role}s will be notified. The first to approve or reject resolves this step.`
-                : `The single ${role} on your team will receive this request.`
+                ? `All ${usersWithRole.length} people with the ${roleLabel} role will be notified. The first to approve or reject resolves this step.`
+                : usersWithRole.length === 1
+                  ? `The single ${roleLabel} on your team will receive this request.`
+                  : `No one currently has the ${roleLabel} role — this step will have no approver until someone is assigned that role.`
               : `Only ${allUsers.find((u) => u.id === assignedUserId)?.name ?? "Unknown"} will receive this request.`}
           </p>
         </div>
@@ -172,8 +227,97 @@ function EditStepForm({
   );
 }
 
+function SortableStepRow({
+  step,
+  index,
+  roleColorClass,
+  roleLabel,
+  assignedName,
+  peopleCount,
+  onEdit,
+  onDelete,
+}: {
+  step: ApprovalFlowStep;
+  index: number;
+  roleColorClass: string;
+  roleLabel: string;
+  assignedName: string | null;
+  peopleCount: number;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: step.id,
+  });
+  const style = { transform: CSS.Transform.toString(transform), transition };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`flex flex-wrap items-center gap-2 rounded-lg border border-slate-100 bg-slate-50 p-3 md:gap-3 ${
+        isDragging ? "z-10 opacity-90 shadow-md" : ""
+      }`}
+    >
+      <button
+        type="button"
+        {...attributes}
+        {...listeners}
+        className="hidden shrink-0 cursor-grab touch-none text-slate-300 hover:text-slate-500 active:cursor-grabbing md:block"
+      >
+        <GripVertical className="h-4 w-4" />
+      </button>
+
+      {/* Order badge */}
+      <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-500 text-xs font-bold text-white">
+        {index + 1}
+      </div>
+
+      {/* Info */}
+      <div className="flex flex-1 flex-col gap-0.5">
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-medium text-slate-900">{step.label}</span>
+          <Badge variant="outline" className={`text-[10px] ${roleColorClass}`}>
+            {roleLabel}
+          </Badge>
+        </div>
+        <span className="text-xs text-slate-400">
+          {assignedName
+            ? `Assigned to ${assignedName}`
+            : `Any ${roleLabel} (${peopleCount} on team)`}
+          {" · "}
+          {formatThreshold(step.thresholdCents)}
+        </span>
+      </div>
+
+      {/* Actions */}
+      <div className="flex shrink-0 gap-1">
+        <Button
+          size="icon"
+          variant="ghost"
+          className="h-7 w-7 text-slate-400 hover:text-slate-700"
+          onClick={onEdit}
+        >
+          <Pencil className="h-3.5 w-3.5" />
+        </Button>
+        <Button
+          size="icon"
+          variant="ghost"
+          className="h-7 w-7 text-slate-400 hover:text-red-500"
+          onClick={onDelete}
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 function FlowCard({ flow }: { flow: ApprovalFlow }) {
+  const isCrmEstimate = flow.entityType === "crm_estimate";
   const { data: allUsers = [] } = useUsers();
+  const { data: crmRoles = [] } = useRoles(true);
+  const { data: employees = [] } = useEmployees();
   const { mutate: saveFlow, isPending: saving, isError: saveError } = useUpdateApprovalFlow();
   const [steps, setSteps] = useState<ApprovalFlowStep[]>(flow.steps);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -245,6 +389,32 @@ function FlowCard({ flow }: { flow: ApprovalFlow }) {
     setDirty(true);
   }
 
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
+
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    setSteps((prev) => {
+      const oldIndex = prev.findIndex((s) => s.id === active.id);
+      const newIndex = prev.findIndex((s) => s.id === over.id);
+      if (oldIndex === -1 || newIndex === -1) return prev;
+      return arrayMove(prev, oldIndex, newIndex).map((s, i) => ({ ...s, order: i + 1 }));
+    });
+    setDirty(true);
+  }
+
+  function roleLabelFor(requiredRole: ApprovalFlowStep["requiredRole"]) {
+    return isCrmEstimate
+      ? crmRoles.find((r) => r.id === requiredRole)?.name ?? "Unknown role"
+      : requiredRole;
+  }
+
+  function peopleWithRoleCount(requiredRole: ApprovalFlowStep["requiredRole"]) {
+    return isCrmEstimate
+      ? employees.filter((e) => e.crmRoleId === requiredRole && e.userId).length
+      : allUsers.filter((u) => u.role === requiredRole).length;
+  }
+
   return (
     <div className="rounded-xl border bg-white p-5 shadow-sm">
       <div className="mb-4 flex items-start justify-between">
@@ -279,77 +449,49 @@ function FlowCard({ flow }: { flow: ApprovalFlow }) {
       )}
 
       <div className="flex flex-col gap-2">
-        {steps.map((step, i) => (
-          <div key={step.id}>
-            {editingId === step.id ? (
-              <EditStepForm
-                step={step}
-                onSave={handleSaveStep}
-                onCancel={() => setEditingId(null)}
-              />
-            ) : (
-              <div className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-100 bg-slate-50 p-3 md:gap-3">
-                <GripVertical className="hidden h-4 w-4 shrink-0 text-slate-300 md:block" />
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+          <SortableContext items={steps.map((s) => s.id)} strategy={verticalListSortingStrategy}>
+            {steps.map((step, i) => (
+              <div key={step.id}>
+                {editingId === step.id ? (
+                  <EditStepForm
+                    step={step}
+                    isCrmEstimate={isCrmEstimate}
+                    onSave={handleSaveStep}
+                    onCancel={() => setEditingId(null)}
+                  />
+                ) : (
+                  <SortableStepRow
+                    step={step}
+                    index={i}
+                    roleColorClass={isCrmEstimate ? "" : ROLE_COLORS[step.requiredRole] ?? ""}
+                    roleLabel={roleLabelFor(step.requiredRole)}
+                    assignedName={
+                      step.assignedUserId
+                        ? allUsers.find((u) => u.id === step.assignedUserId)?.name ?? "Unknown"
+                        : null
+                    }
+                    peopleCount={peopleWithRoleCount(step.requiredRole)}
+                    onEdit={() => setEditingId(step.id)}
+                    onDelete={() => handleDelete(step.id)}
+                  />
+                )}
 
-                {/* Order badge */}
-                <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-500 text-xs font-bold text-white">
-                  {i + 1}
-                </div>
-
-                {/* Info */}
-                <div className="flex flex-1 flex-col gap-0.5">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium text-slate-900">{step.label}</span>
-                    <Badge
-                      variant="outline"
-                      className={`text-[10px] ${ROLE_COLORS[step.requiredRole] ?? ""}`}
-                    >
-                      {step.requiredRole}
-                    </Badge>
+                {/* Connector arrow */}
+                {i < steps.length - 1 && !addingNew && (
+                  <div className="flex justify-center py-1">
+                    <div className="h-4 w-0.5 bg-slate-200" />
                   </div>
-                  <span className="text-xs text-slate-400">
-                    {step.assignedUserId
-                      ? `Assigned to ${allUsers.find((u) => u.id === step.assignedUserId)?.name ?? "Unknown"}`
-                      : `Any ${step.requiredRole} (${allUsers.filter((u) => u.role === step.requiredRole).length} on team)`}
-                    {" · "}
-                    {formatThreshold(step.thresholdCents)}
-                  </span>
-                </div>
-
-                {/* Actions */}
-                <div className="flex shrink-0 gap-1">
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    className="h-7 w-7 text-slate-400 hover:text-slate-700"
-                    onClick={() => setEditingId(step.id)}
-                  >
-                    <Pencil className="h-3.5 w-3.5" />
-                  </Button>
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    className="h-7 w-7 text-slate-400 hover:text-red-500"
-                    onClick={() => handleDelete(step.id)}
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
+                )}
               </div>
-            )}
-
-            {/* Connector arrow */}
-            {i < steps.length - 1 && !addingNew && (
-              <div className="flex justify-center py-1">
-                <div className="h-4 w-0.5 bg-slate-200" />
-              </div>
-            )}
-          </div>
-        ))}
+            ))}
+          </SortableContext>
+        </DndContext>
 
         {addingNew ? (
           <EditStepForm
             step={{ order: steps.length + 1 }}
+            isCrmEstimate={isCrmEstimate}
             onSave={handleSaveStep}
             onCancel={() => setAddingNew(false)}
           />
