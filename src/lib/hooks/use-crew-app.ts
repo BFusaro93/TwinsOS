@@ -57,6 +57,7 @@ function mapVisit(row: Record<string, unknown>): CRMJobVisit {
     orgId:                row.org_id as string,
     jobId:                row.job_id as string,
     clientId:             row.client_id as string,
+    jobServiceId:         (row.job_service_id as string) ?? null,
     stormEventId:         (row.storm_event_id as string) ?? null,
     snowDepthInches:      (row.snow_depth_inches as number) ?? null,
     temperature:          (row.temperature as number) ?? null,
