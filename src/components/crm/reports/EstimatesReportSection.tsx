@@ -54,6 +54,16 @@ const STAGE_LABEL: Record<EstimateStage, string> = {
 
 const ALL_STAGES: EstimateStage[] = ["draft", "quote", "sent", "approved", "won", "lost", "invoiced"];
 
+// estimates.stage lost its DB CHECK constraint once stages became org-configurable
+// (crm_estimate_stages) — a stage value can be anything, not just ALL_STAGES, so
+// these read with a fallback instead of indexing the Record directly.
+function stageColorClass(stage: string): string {
+  return STAGE_COLOR[stage as EstimateStage] ?? "bg-slate-100 text-slate-600";
+}
+function stageLabelText(stage: string): string {
+  return STAGE_LABEL[stage as EstimateStage] ?? stage;
+}
+
 // ── Date range ────────────────────────────────────────────────────────────────
 
 type DateRange = "this_year" | "last_30" | "last_90" | "custom";
@@ -71,7 +81,9 @@ function getRangeStart(range: DateRange, customStart: string): string {
 interface RawEstimate {
   id: string;
   estimate_number: string | null;
-  stage: EstimateStage;
+  // Not constrained to EstimateStage at the DB level anymore — orgs can define
+  // their own stage keys via crm_estimate_stages.
+  stage: string;
   total_price_cents: number;
   created_at: string;
   clients: { display_name: string } | null;
@@ -87,7 +99,7 @@ interface RawLineItem {
   rate_cents: number;
   total_cents: number;
   direct_cost_cents: number;
-  estimates: { stage: EstimateStage; created_at: string } | null;
+  estimates: { stage: string; created_at: string } | null;
 }
 
 // ── Data fetching ─────────────────────────────────────────────────────────────
@@ -178,14 +190,17 @@ function EmptyRow({ cols }: { cols: number }) {
 
 function ByStageReport({ estimates }: { estimates: RawEstimate[] }) {
   const rows = useMemo(() => {
-    const map = new Map<EstimateStage, { count: number; total: number }>();
+    const map = new Map<string, { count: number; total: number }>();
     for (const stage of ALL_STAGES) map.set(stage, { count: 0, total: 0 });
     for (const e of estimates) {
+      if (!map.has(e.stage)) map.set(e.stage, { count: 0, total: 0 });
       const cur = map.get(e.stage)!;
       cur.count += 1;
       cur.total += e.total_price_cents ?? 0;
     }
-    return ALL_STAGES.map((stage) => ({ stage, ...map.get(stage)! })).filter((r) => r.count > 0);
+    return Array.from(map.entries())
+      .map(([stage, d]) => ({ stage, ...d }))
+      .filter((r) => r.count > 0);
   }, [estimates]);
 
   const totalCount = rows.reduce((s, r) => s + r.count, 0);
@@ -215,8 +230,8 @@ function ByStageReport({ estimates }: { estimates: RawEstimate[] }) {
               rows.map((r) => (
                 <tr key={r.stage} className="hover:bg-slate-50/50">
                   <TD>
-                    <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-medium", STAGE_COLOR[r.stage])}>
-                      {STAGE_LABEL[r.stage]}
+                    <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-medium", stageColorClass(r.stage))}>
+                      {stageLabelText(r.stage)}
                     </span>
                   </TD>
                   <TD right>{r.count}</TD>
@@ -274,8 +289,8 @@ function WonEstimatesReport({ estimates }: { estimates: RawEstimate[] }) {
                   <TD right>{formatCurrency(e.total_price_cents ?? 0)}</TD>
                   <TD right muted>—</TD>
                   <TD>
-                    <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-medium", STAGE_COLOR[e.stage])}>
-                      {STAGE_LABEL[e.stage]}
+                    <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-medium", stageColorClass(e.stage))}>
+                      {stageLabelText(e.stage)}
                     </span>
                   </TD>
                 </tr>
