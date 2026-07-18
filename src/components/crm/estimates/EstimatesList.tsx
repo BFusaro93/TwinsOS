@@ -44,7 +44,11 @@ const ESTIMATE_COLUMNS: ColumnDef[] = [
   { key: "margin",      label: "Margin" },
 ];
 
-const STAGE_COLOR: Record<EstimateStage, string> = {
+// Fallbacks for when crm_estimate_stages hasn't loaded yet (or a stage_key has
+// no matching row) — colors aren't stored per-org (no color column on
+// crm_estimate_stages), so these stay a fixed palette keyed by stage_key.
+// Labels, order, and which stages exist at all come from the DB below.
+const FALLBACK_STAGE_COLOR: Record<string, string> = {
   draft:    "bg-slate-100 text-slate-600",
   quote:    "bg-blue-100 text-blue-700",
   sent:     "bg-yellow-100 text-yellow-700",
@@ -54,7 +58,7 @@ const STAGE_COLOR: Record<EstimateStage, string> = {
   invoiced: "bg-teal-100 text-teal-700",
 };
 
-const STAGE_LABEL: Record<EstimateStage, string> = {
+const FALLBACK_STAGE_LABEL: Record<string, string> = {
   draft:    "Draft",
   quote:    "Quote",
   sent:     "Sent",
@@ -66,7 +70,7 @@ const STAGE_LABEL: Record<EstimateStage, string> = {
 
 type StageFilter = EstimateStage | "all";
 
-const STAGE_TABS: { value: StageFilter; label: string }[] = [
+const FALLBACK_STAGE_TABS: { value: StageFilter; label: string }[] = [
   { value: "all",      label: "All Estimates" },
   { value: "draft",    label: "Draft" },
   { value: "quote",    label: "Quote" },
@@ -121,13 +125,39 @@ export function EstimatesList({ clientId }: Props) {
 
   const allEstimates = estimates ?? [];
 
+  // Stage tabs/labels come from the org's configurable crm_estimate_stages
+  // (sorted by sort_order); fall back to the system defaults only while that
+  // hook is still loading or for a stage_key with no matching row.
+  const stageTabs = useMemo<{ value: StageFilter; label: string }[]>(() => {
+    if (estimateStages.length === 0) return FALLBACK_STAGE_TABS;
+    const sorted = [...estimateStages].sort((a, b) => a.sortOrder - b.sortOrder);
+    return [
+      { value: "all" as StageFilter, label: "All Estimates" },
+      ...sorted.map((s) => ({ value: s.stageKey as StageFilter, label: s.name })),
+    ];
+  }, [estimateStages]);
+
+  const stageLabel = useMemo(() => {
+    const map: Record<string, string> = { ...FALLBACK_STAGE_LABEL };
+    for (const s of estimateStages) map[s.stageKey] = s.name;
+    return map;
+  }, [estimateStages]);
+
+  const stageColor = useMemo(() => {
+    const map: Record<string, string> = { ...FALLBACK_STAGE_COLOR };
+    for (const s of estimateStages) {
+      if (!map[s.stageKey]) map[s.stageKey] = "bg-slate-100 text-slate-600";
+    }
+    return map;
+  }, [estimateStages]);
+
   const counts = useMemo(() => {
     const c: Record<string, number> = { all: allEstimates.length };
-    for (const t of STAGE_TABS) {
+    for (const t of stageTabs) {
       if (t.value !== "all") c[t.value] = allEstimates.filter((e) => e.stage === t.value).length;
     }
     return c;
-  }, [allEstimates]);
+  }, [allEstimates, stageTabs]);
 
   const filtered = useMemo(() => {
     let list = stageFilter === "all" ? allEstimates : allEstimates.filter((e) => e.stage === stageFilter);
@@ -347,7 +377,7 @@ export function EstimatesList({ clientId }: Props) {
             <RotateCcw className="h-3.5 w-3.5" />
           </button>
           <div className="ml-2 flex items-center gap-1 overflow-x-auto">
-            {STAGE_TABS.map(({ value, label }) => {
+            {stageTabs.map(({ value, label }) => {
               const count = counts[value] ?? 0;
               return (
                 <button
@@ -502,8 +532,8 @@ export function EstimatesList({ clientId }: Props) {
                         case "stage":
                           return (
                             <td key={col.key} className="px-3 py-2.5">
-                              <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-medium whitespace-nowrap", STAGE_COLOR[e.stage])}>
-                                {STAGE_LABEL[e.stage]}
+                              <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-medium whitespace-nowrap", stageColor[e.stage])}>
+                                {stageLabel[e.stage] ?? e.stage}
                               </span>
                             </td>
                           );

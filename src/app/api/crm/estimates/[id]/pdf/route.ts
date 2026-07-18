@@ -60,6 +60,7 @@ export async function GET(
       rateCents: (li.rate_cents as number) ?? 0,
       visits: (li.visits as number) ?? 1,
       totalCents: (li.total_cents as number) ?? 0,
+      tier: (li.tier as "basic" | "standard" | "premium" | null) ?? null,
     }));
 
   const addr = (org?.address as Record<string, string>) ?? {};
@@ -81,6 +82,11 @@ export async function GET(
     taxCents: (est.tax_cents as number) ?? 0,
     discountCents: (est.discount_cents as number) ?? 0,
     totalCents: (est.total_cents as number) ?? 0,
+    paymentTerms: (est.payment_terms as string) ?? null,
+    depositRequiredCents: (est.deposit_required_cents as number) ?? 0,
+    numInstallments: (est.num_installments as number) ?? 1,
+    tiersEnabled: (est.tiers_enabled as boolean) ?? false,
+    tierLabels: (est.tier_labels as { basic: string; standard: string; premium: string }) ?? { basic: "Basic", standard: "Standard", premium: "Premium" },
     lineItems,
   };
 

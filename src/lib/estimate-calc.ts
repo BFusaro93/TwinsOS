@@ -176,3 +176,41 @@ export function centsToDisplay(cents: number): string {
     maximumFractionDigits: 2,
   });
 }
+
+export interface InstallmentScheduleEntry {
+  number: number;
+  amountCents: number;
+  dueDate: string; // YYYY-MM-DD
+}
+
+/**
+ * Splits the balance due (total minus any deposit) into N equal monthly
+ * installments starting one month after startDate, so the deposit (due at
+ * signing) isn't counted as installment #1. Integer division leftover cents
+ * are added to the final installment so the sum always equals the balance
+ * exactly. Returns [] when numInstallments <= 1 (nothing to schedule).
+ */
+export function computeInstallmentSchedule(
+  totalCents: number,
+  depositRequiredCents: number,
+  numInstallments: number,
+  startDate: string
+): InstallmentScheduleEntry[] {
+  if (numInstallments <= 1) return [];
+
+  const balanceCents = Math.max(0, totalCents - depositRequiredCents);
+  const baseAmount = Math.floor(balanceCents / numInstallments);
+  const remainder = balanceCents - baseAmount * numInstallments;
+
+  const start = new Date(startDate + "T00:00:00");
+
+  return Array.from({ length: numInstallments }, (_, i) => {
+    const due = new Date(start);
+    due.setMonth(due.getMonth() + i + 1);
+    return {
+      number: i + 1,
+      amountCents: baseAmount + (i === numInstallments - 1 ? remainder : 0),
+      dueDate: `${due.getFullYear()}-${String(due.getMonth() + 1).padStart(2, "0")}-${String(due.getDate()).padStart(2, "0")}`,
+    };
+  });
+}

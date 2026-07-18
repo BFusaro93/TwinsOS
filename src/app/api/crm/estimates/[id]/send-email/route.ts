@@ -211,6 +211,15 @@ export async function POST(
     ...(est.sent_at ? {} : { sent_at: nowIso }),
   }).eq("id", estimateId);
 
+  // Draft line items aren't proposed to the client yet — sending the estimate
+  // is the "go live" moment, so bump them to quote (same as Service Autopilot).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await (supabase as any)
+    .from("estimate_line_items")
+    .update({ status: "quote" })
+    .eq("estimate_id", estimateId)
+    .eq("status", "draft");
+
   // Log activity
   if (est.client_id) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

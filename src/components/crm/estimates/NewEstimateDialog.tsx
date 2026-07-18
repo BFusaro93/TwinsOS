@@ -22,9 +22,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { ClientCombobox } from "@/components/shared/ClientCombobox";
 import { useCreateEstimate, useUpsertLineItem } from "@/lib/hooks/use-estimates";
 import { useEstimateTemplates } from "@/lib/hooks/use-estimate-templates";
 import { useClients } from "@/lib/hooks/use-clients";
+import { useEmployees } from "@/lib/hooks/use-employees";
 import { computeLineItem, getBreakevenRateCents } from "@/lib/estimate-calc";
 import { useOrgSettings } from "@/lib/hooks/use-org-settings";
 import { toast } from "sonner";
@@ -37,6 +39,7 @@ const schema = z.object({
   validUntilDate: z.string(),
   stage:          z.string(),
   templateId:     z.string(),
+  salesRepId:     z.string(),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -68,10 +71,25 @@ export function NewEstimateDialog({ open, onOpenChange, defaultClientId, onCreat
   const router = useRouter();
   const { data: clients }   = useClients();
   const { data: templates } = useEstimateTemplates();
+  const { data: employees } = useEmployees();
+  const salesReps = (employees ?? []).filter((e) => e.isSalesRep && e.userId);
   const { mutateAsync: createEstimate, isPending } = useCreateEstimate();
   const { mutateAsync: upsertLineItem }             = useUpsertLineItem();
   const { data: orgSettings } = useOrgSettings();
   const breakevenRateCents = getBreakevenRateCents(orgSettings?.customizations);
+
+  const selectableClients = (clients ?? [])
+    .filter((c) => c.status !== "inactive" && c.status !== "cancelled")
+    .sort((a, b) => {
+      if (a.status === "lead" && b.status !== "lead") return 1;
+      if (a.status !== "lead" && b.status === "lead") return -1;
+      return a.displayName.localeCompare(b.displayName);
+    })
+    .map((c) => ({
+      id: c.id,
+      displayName: c.status === "lead" ? `${c.displayName} (lead)` : c.displayName,
+      billingAddress: c.billingAddress,
+    }));
 
   const { register, handleSubmit, setValue, watch, reset, formState: { errors } } = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -82,6 +100,7 @@ export function NewEstimateDialog({ open, onOpenChange, defaultClientId, onCreat
       validUntilDate: thirtyDaysOut(),
       stage:          "draft",
       templateId:     "none",
+      salesRepId:     "none",
     },
   });
 
@@ -107,6 +126,7 @@ export function NewEstimateDialog({ open, onOpenChange, defaultClientId, onCreat
         estimateDate:   values.estimateDate,
         validUntilDate: values.validUntilDate || undefined,
         stage:          values.stage,
+        salesRepId:     values.salesRepId !== "none" ? values.salesRepId : undefined,
       });
 
       // Apply template line items if one was selected
@@ -180,28 +200,12 @@ export function NewEstimateDialog({ open, onOpenChange, defaultClientId, onCreat
           {!defaultClientId && (
             <div className="flex flex-col gap-1.5">
               <Label>Client *</Label>
-              <Select
+              <ClientCombobox
+                clients={selectableClients}
                 value={watch("clientId")}
                 onValueChange={(v) => setValue("clientId", v)}
-              >
-                <SelectTrigger className={errors.clientId ? "border-red-400" : ""}>
-                  <SelectValue placeholder="Select client…" />
-                </SelectTrigger>
-                <SelectContent>
-                  {(clients ?? [])
-                    .filter((c) => c.status !== "inactive" && c.status !== "cancelled")
-                    .sort((a, b) => {
-                      if (a.status === "lead" && b.status !== "lead") return 1;
-                      if (a.status !== "lead" && b.status === "lead") return -1;
-                      return a.displayName.localeCompare(b.displayName);
-                    })
-                    .map((c) => (
-                      <SelectItem key={c.id} value={c.id}>
-                        {c.displayName}{c.status === "lead" ? " (lead)" : ""}
-                      </SelectItem>
-                    ))}
-                </SelectContent>
-              </Select>
+                noneLabel="Select client…"
+              />
               {errors.clientId && (
                 <p className="text-xs text-red-500">{errors.clientId.message}</p>
               )}
@@ -248,6 +252,25 @@ export function NewEstimateDialog({ open, onOpenChange, defaultClientId, onCreat
                 </SelectContent>
               </Select>
             </div>
+            <div className="flex flex-col gap-1.5">
+              <Label>Sales Rep</Label>
+              <Select value={watch("salesRepId")} onValueChange={(v) => setValue("salesRepId", v)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Assign sales rep…" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">None</SelectItem>
+                  {salesReps.map((e) => (
+                    <SelectItem key={e.userId as string} value={e.userId as string}>
+                      {e.firstName} {e.lastName}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
             <div className="flex flex-col gap-1.5">
               <Label>Template</Label>
               <Select

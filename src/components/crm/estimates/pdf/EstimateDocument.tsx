@@ -7,6 +7,8 @@ import {
   StyleSheet,
   Font,
 } from "@react-pdf/renderer";
+import { BILLING_TERMS_OPTIONS } from "@/lib/constants";
+import { computeInstallmentSchedule } from "@/lib/estimate-calc";
 
 // ── types ────────────────────────────────────────────────────────────────────
 
@@ -18,6 +20,7 @@ export interface EstimatePDFLineItem {
   rateCents: number;
   visits: number;
   totalCents: number;
+  tier: "basic" | "standard" | "premium" | null;
 }
 
 export interface EstimatePDFData {
@@ -38,6 +41,11 @@ export interface EstimatePDFData {
   taxCents: number;
   discountCents: number;
   totalCents: number;
+  paymentTerms: string | null;
+  depositRequiredCents: number;
+  numInstallments: number;
+  tiersEnabled: boolean;
+  tierLabels: { basic: string; standard: string; premium: string };
 
   lineItems: EstimatePDFLineItem[];
 }
@@ -67,6 +75,8 @@ function formatDate(iso: string): string {
   const d = new Date(iso);
   return d.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
 }
+
+const TIER_ORDER = ["basic", "standard", "premium"] as const;
 
 // ── styles ────────────────────────────────────────────────────────────────────
 
@@ -111,6 +121,12 @@ const S = StyleSheet.create({
 
   // line items table
   tableHeader: { flexDirection: "row", paddingVertical: 5, paddingHorizontal: 8, borderRadius: 2 },
+  tierGroup: { marginBottom: 18 },
+  tierBanner: { paddingHorizontal: 8, paddingVertical: 5, borderTopLeftRadius: 2, borderTopRightRadius: 2 },
+  tierBannerText: { fontSize: 9, fontFamily: "Helvetica-Bold", color: "#ffffff", textTransform: "uppercase", letterSpacing: 0.5 },
+  tierSubtotalRow: { flexDirection: "row", justifyContent: "space-between", paddingHorizontal: 8, paddingVertical: 5, backgroundColor: "#f8fafc" },
+  tierSubtotalLabel: { fontSize: 8.5, fontFamily: "Helvetica-Bold", color: "#475569" },
+  tierSubtotalValue: { fontSize: 8.5, fontFamily: "Helvetica-Bold" },
   tableHeaderText: { fontSize: 7.5, fontFamily: "Helvetica-Bold", color: "#ffffff", textTransform: "uppercase", letterSpacing: 0.3 },
   tableRow: { flexDirection: "row", paddingVertical: 5, paddingHorizontal: 8, borderBottom: "1 solid #f1f5f9" },
   tableRowAlt: { backgroundColor: "#f8fafc" },
@@ -133,6 +149,10 @@ const S = StyleSheet.create({
 
   // notes
   notesSection: { marginTop: 24, borderTop: "1 solid #e2e8f0", paddingTop: 12 },
+  scheduleSection: { marginTop: 16 },
+  scheduleLabel: { fontSize: 7, color: "#94a3b8", letterSpacing: 0.5, textTransform: "uppercase", marginBottom: 6 },
+  scheduleRow: { flexDirection: "row", justifyContent: "space-between", width: 260, paddingVertical: 2 },
+  scheduleText: { fontSize: 8.5, color: "#475569" },
   notesLabel: { fontSize: 7, color: "#94a3b8", letterSpacing: 0.5, textTransform: "uppercase", marginBottom: 4 },
   notesText: { fontSize: 8.5, color: "#475569", lineHeight: 1.6 },
 
@@ -158,6 +178,13 @@ export function EstimateDocument({ estimate, org }: { estimate: EstimatePDFData;
     .join(", ");
 
   const orgAddressLine2 = [org.city, org.state, org.zip].filter(Boolean).join(", ");
+
+  const installmentSchedule = computeInstallmentSchedule(
+    estimate.totalCents,
+    estimate.depositRequiredCents,
+    estimate.numInstallments,
+    estimate.createdAt.slice(0, 10)
+  );
 
   return (
     <Document title={`Estimate #${estimate.estimateNumber}`} author={org.name}>
@@ -224,60 +251,141 @@ export function EstimateDocument({ estimate, org }: { estimate: EstimatePDFData;
               <Text style={S.metaValue}>{formatDate(estimate.validUntil)}</Text>
             </View>
           ) : <View style={S.metaCell} />}
-          <View style={S.metaCell} />
+          {estimate.paymentTerms ? (
+            <View style={S.metaCell}>
+              <Text style={S.metaLabel}>Payment Terms</Text>
+              <Text style={S.metaValue}>
+                {BILLING_TERMS_OPTIONS.find((o) => o.value === estimate.paymentTerms)?.label ?? estimate.paymentTerms}
+              </Text>
+            </View>
+          ) : <View style={S.metaCell} />}
           <View style={S.metaCell} />
         </View>
 
         {/* ── line items ─────────────────────────────────────────────── */}
-        <View style={[S.tableHeader, { backgroundColor: accentColor }]}>
-          <View style={S.cellService}><Text style={S.tableHeaderText}>Service</Text></View>
-          <View style={S.cellNum}><Text style={[S.tableHeaderText, { textAlign: "right" }]}>OCC</Text></View>
-          <View style={S.cellNum}><Text style={[S.tableHeaderText, { textAlign: "right" }]}>Qty</Text></View>
-          <View style={S.cellNum}><Text style={[S.tableHeaderText, { textAlign: "right" }]}>Unit</Text></View>
-          <View style={S.cellNum}><Text style={[S.tableHeaderText, { textAlign: "right" }]}>Rate</Text></View>
-          <View style={S.cellTotal}><Text style={[S.tableHeaderText, { textAlign: "right" }]}>Total</Text></View>
-        </View>
-
-        {estimate.lineItems.map((li, i) => (
-          <View key={i} style={[S.tableRow, i % 2 === 1 ? S.tableRowAlt : {}]}>
-            <View style={S.cellService}>
-              <Text style={S.serviceNameText}>{li.serviceName ?? "Service"}</Text>
-              {li.estimateDesc ? (
-                <Text style={S.serviceDescText}>{li.estimateDesc.replace(/<[^>]+>/g, "")}</Text>
-              ) : null}
+        {estimate.tiersEnabled ? (
+          TIER_ORDER.map((tierKey) => {
+            const items = estimate.lineItems.filter((li) => li.tier === tierKey);
+            if (items.length === 0) return null;
+            const tierTotalCents = items.reduce((sum, li) => sum + li.totalCents, 0);
+            return (
+              <View key={tierKey} style={S.tierGroup}>
+                <View style={[S.tierBanner, { backgroundColor: accentColor }]}>
+                  <Text style={S.tierBannerText}>{estimate.tierLabels[tierKey]}</Text>
+                </View>
+                <View style={[S.tableHeader, { backgroundColor: "#334155" }]}>
+                  <View style={S.cellService}><Text style={S.tableHeaderText}>Service</Text></View>
+                  <View style={S.cellNum}><Text style={[S.tableHeaderText, { textAlign: "right" }]}>OCC</Text></View>
+                  <View style={S.cellNum}><Text style={[S.tableHeaderText, { textAlign: "right" }]}>Qty</Text></View>
+                  <View style={S.cellNum}><Text style={[S.tableHeaderText, { textAlign: "right" }]}>Unit</Text></View>
+                  <View style={S.cellNum}><Text style={[S.tableHeaderText, { textAlign: "right" }]}>Rate</Text></View>
+                  <View style={S.cellTotal}><Text style={[S.tableHeaderText, { textAlign: "right" }]}>Total</Text></View>
+                </View>
+                {items.map((li, i) => (
+                  <View key={i} style={[S.tableRow, i % 2 === 1 ? S.tableRowAlt : {}]}>
+                    <View style={S.cellService}>
+                      <Text style={S.serviceNameText}>{li.serviceName ?? "Service"}</Text>
+                      {li.estimateDesc ? (
+                        <Text style={S.serviceDescText}>{li.estimateDesc.replace(/<[^>]+>/g, "")}</Text>
+                      ) : null}
+                    </View>
+                    <View style={S.cellNum}><Text style={S.cellText}>{li.visits}</Text></View>
+                    <View style={S.cellNum}><Text style={S.cellText}>{li.qty.toLocaleString()}</Text></View>
+                    <View style={S.cellNum}><Text style={S.cellText}>{li.unitType ?? "—"}</Text></View>
+                    <View style={S.cellNum}><Text style={S.cellText}>{cents(li.rateCents)}</Text></View>
+                    <View style={S.cellTotal}><Text style={[S.cellText, { textAlign: "right", fontFamily: "Helvetica-Bold" }]}>{cents(li.totalCents)}</Text></View>
+                  </View>
+                ))}
+                <View style={S.tierSubtotalRow}>
+                  <Text style={S.tierSubtotalLabel}>{estimate.tierLabels[tierKey]} Total</Text>
+                  <Text style={[S.tierSubtotalValue, { color: accentColor }]}>{cents(tierTotalCents)}</Text>
+                </View>
+              </View>
+            );
+          })
+        ) : (
+          <>
+            <View style={[S.tableHeader, { backgroundColor: accentColor }]}>
+              <View style={S.cellService}><Text style={S.tableHeaderText}>Service</Text></View>
+              <View style={S.cellNum}><Text style={[S.tableHeaderText, { textAlign: "right" }]}>OCC</Text></View>
+              <View style={S.cellNum}><Text style={[S.tableHeaderText, { textAlign: "right" }]}>Qty</Text></View>
+              <View style={S.cellNum}><Text style={[S.tableHeaderText, { textAlign: "right" }]}>Unit</Text></View>
+              <View style={S.cellNum}><Text style={[S.tableHeaderText, { textAlign: "right" }]}>Rate</Text></View>
+              <View style={S.cellTotal}><Text style={[S.tableHeaderText, { textAlign: "right" }]}>Total</Text></View>
             </View>
-            <View style={S.cellNum}><Text style={S.cellText}>{li.visits}</Text></View>
-            <View style={S.cellNum}><Text style={S.cellText}>{li.qty.toLocaleString()}</Text></View>
-            <View style={S.cellNum}><Text style={S.cellText}>{li.unitType ?? "—"}</Text></View>
-            <View style={S.cellNum}><Text style={S.cellText}>{cents(li.rateCents)}</Text></View>
-            <View style={S.cellTotal}><Text style={[S.cellText, { textAlign: "right", fontFamily: "Helvetica-Bold" }]}>{cents(li.totalCents)}</Text></View>
-          </View>
-        ))}
+
+            {estimate.lineItems.map((li, i) => (
+              <View key={i} style={[S.tableRow, i % 2 === 1 ? S.tableRowAlt : {}]}>
+                <View style={S.cellService}>
+                  <Text style={S.serviceNameText}>{li.serviceName ?? "Service"}</Text>
+                  {li.estimateDesc ? (
+                    <Text style={S.serviceDescText}>{li.estimateDesc.replace(/<[^>]+>/g, "")}</Text>
+                  ) : null}
+                </View>
+                <View style={S.cellNum}><Text style={S.cellText}>{li.visits}</Text></View>
+                <View style={S.cellNum}><Text style={S.cellText}>{li.qty.toLocaleString()}</Text></View>
+                <View style={S.cellNum}><Text style={S.cellText}>{li.unitType ?? "—"}</Text></View>
+                <View style={S.cellNum}><Text style={S.cellText}>{cents(li.rateCents)}</Text></View>
+                <View style={S.cellTotal}><Text style={[S.cellText, { textAlign: "right", fontFamily: "Helvetica-Bold" }]}>{cents(li.totalCents)}</Text></View>
+              </View>
+            ))}
+          </>
+        )}
 
         {/* ── totals ─────────────────────────────────────────────────── */}
-        <View style={S.totalsBlock}>
-          <View style={S.totalsRow}>
-            <Text style={S.totalsLabel}>Subtotal</Text>
-            <Text style={S.totalsValue}>{cents(estimate.subtotalCents)}</Text>
-          </View>
-          {estimate.discountCents > 0 && (
-            <View style={S.totalsRow}>
-              <Text style={[S.totalsLabel, { color: "#16a34a" }]}>Discount</Text>
-              <Text style={[S.totalsValue, { color: "#16a34a" }]}>-{cents(estimate.discountCents)}</Text>
+        {estimate.tiersEnabled ? (
+          estimate.depositRequiredCents > 0 && (
+            <View style={S.totalsBlock}>
+              <View style={S.totalsRow}>
+                <Text style={[S.totalsLabel, { fontFamily: "Helvetica-Bold" }]}>Deposit Required</Text>
+                <Text style={S.totalsValue}>{cents(estimate.depositRequiredCents)}</Text>
+              </View>
             </View>
-          )}
-          {estimate.taxRateBps > 0 && (
+          )
+        ) : (
+          <View style={S.totalsBlock}>
             <View style={S.totalsRow}>
-              <Text style={S.totalsLabel}>Tax ({bpsToPercent(estimate.taxRateBps)})</Text>
-              <Text style={S.totalsValue}>{cents(estimate.taxCents)}</Text>
+              <Text style={S.totalsLabel}>Subtotal</Text>
+              <Text style={S.totalsValue}>{cents(estimate.subtotalCents)}</Text>
             </View>
-          )}
-          <View style={S.totalDivider} />
-          <View style={S.grandTotalRow}>
-            <Text style={S.grandTotalLabel}>Total</Text>
-            <Text style={[S.grandTotalValue, { color: accentColor }]}>{cents(estimate.totalCents)}</Text>
+            {estimate.discountCents > 0 && (
+              <View style={S.totalsRow}>
+                <Text style={[S.totalsLabel, { color: "#16a34a" }]}>Discount</Text>
+                <Text style={[S.totalsValue, { color: "#16a34a" }]}>-{cents(estimate.discountCents)}</Text>
+              </View>
+            )}
+            {estimate.taxRateBps > 0 && (
+              <View style={S.totalsRow}>
+                <Text style={S.totalsLabel}>Tax ({bpsToPercent(estimate.taxRateBps)})</Text>
+                <Text style={S.totalsValue}>{cents(estimate.taxCents)}</Text>
+              </View>
+            )}
+            <View style={S.totalDivider} />
+            <View style={S.grandTotalRow}>
+              <Text style={S.grandTotalLabel}>Total</Text>
+              <Text style={[S.grandTotalValue, { color: accentColor }]}>{cents(estimate.totalCents)}</Text>
+            </View>
+            {estimate.depositRequiredCents > 0 && (
+              <View style={S.totalsRow}>
+                <Text style={[S.totalsLabel, { fontFamily: "Helvetica-Bold" }]}>Deposit Required</Text>
+                <Text style={S.totalsValue}>{cents(estimate.depositRequiredCents)}</Text>
+              </View>
+            )}
           </View>
-        </View>
+        )}
+
+        {/* ── payment schedule ───────────────────────────────────────── */}
+        {installmentSchedule.length > 0 && (
+          <View style={S.scheduleSection}>
+            <Text style={S.scheduleLabel}>Payment Schedule</Text>
+            {installmentSchedule.map((inst) => (
+              <View key={inst.number} style={S.scheduleRow}>
+                <Text style={S.scheduleText}>Installment {inst.number} of {installmentSchedule.length} — due {formatDate(inst.dueDate)}</Text>
+                <Text style={[S.scheduleText, { fontFamily: "Helvetica-Bold" }]}>{cents(inst.amountCents)}</Text>
+              </View>
+            ))}
+          </View>
+        )}
 
         {/* ── notes ──────────────────────────────────────────────────── */}
         {estimate.notes ? (

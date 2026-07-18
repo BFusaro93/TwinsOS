@@ -413,7 +413,7 @@ function LineItemRow({
         </td>
 
         {/* OCC (Visits) */}
-        <td className="w-12 px-2 py-1.5">
+        <td className="w-16 px-2 py-1.5">
           <InlineNum
             value={row.visits}
             onChange={(v) => update("visits", v)}
@@ -678,7 +678,7 @@ export function EstimateLineItemsGrid({ estimateId, items, selectedIds = [], onS
     [upsert, estimateId, items.length]
   );
 
-  async function addService(svc: { name: string; id?: string; unit?: string; productionRate?: number | null; budgetMethod?: BudgetMethod; rateCents?: number | null }) {
+  async function addService(svc: { name: string; id?: string; unit?: string; productionRate?: number | null; budgetMethod?: BudgetMethod; rateCents?: number | null; estimateDesc?: string | null; invoiceDesc?: string | null }) {
     const unit = svc.unit ?? null;
     const prodRate = svc.productionRate ?? null;
     const budgetMethod = svc.budgetMethod ?? "manual";
@@ -706,6 +706,8 @@ export function EstimateLineItemsGrid({ estimateId, items, selectedIds = [], onS
           calc_type: 1,
           qty: 1,
           unit_type: unit,
+          estimate_desc: svc.estimateDesc ?? null,
+          invoice_desc: svc.invoiceDesc ?? null,
           production_rate_sqft_per_hr: prodRate,
           budget_method: budgetMethod,
           rate_cents: svc.rateCents ?? 0,
@@ -809,7 +811,7 @@ export function EstimateLineItemsGrid({ estimateId, items, selectedIds = [], onS
                   key={s.id}
                   className="flex w-full items-center justify-between px-3 py-1.5 text-xs hover:bg-slate-50"
                   onClick={() => {
-                    addService({ id: s.id, name: s.name, unit: s.unit ?? undefined, productionRate: s.productionRateSqftPerHr, budgetMethod: s.budgetMethod, rateCents: s.defaultRateCents });
+                    addService({ id: s.id, name: s.name, unit: s.unit ?? undefined, productionRate: s.productionRateSqftPerHr, budgetMethod: s.budgetMethod, rateCents: s.defaultRateCents, estimateDesc: s.descriptionOnEstimate, invoiceDesc: s.invoiceDescription });
                     setAddOpen(false); setSearch("");
                   }}
                 >

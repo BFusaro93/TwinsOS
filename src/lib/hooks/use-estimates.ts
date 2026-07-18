@@ -326,6 +326,18 @@ export function useUpdateEstimateStage() {
         .eq("id", id);
       if (error) throw error;
 
+      if (stage === "sent") {
+        // Draft line items aren't proposed to the client yet — moving to
+        // "sent" (even manually, outside the email-send flow) is the "go
+        // live" moment, so bump them to quote (same as Service Autopilot).
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (supabase as any)
+          .from("estimate_line_items")
+          .update({ status: "quote" })
+          .eq("estimate_id", id)
+          .eq("status", "draft");
+      }
+
       const resolvedClientId = clientId ?? existing?.client_id;
       if (resolvedClientId) {
         const stageLabel: Record<string, string> = {

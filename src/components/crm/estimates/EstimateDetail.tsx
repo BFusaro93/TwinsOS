@@ -23,7 +23,7 @@ import { useEstimateTemplates } from "@/lib/hooks/use-estimate-templates";
 import { useClients } from "@/lib/hooks/use-clients";
 import { useEmployees } from "@/lib/hooks/use-employees";
 import { useOrgList } from "@/lib/hooks/use-org-lists";
-import { computeLineItem, hasPerTypeOverhead, getBreakevenRateCents } from "@/lib/estimate-calc";
+import { computeLineItem, hasPerTypeOverhead, getBreakevenRateCents, computeInstallmentSchedule } from "@/lib/estimate-calc";
 import { useOverheadSettings } from "@/lib/hooks/use-overhead-settings";
 import { useOrgSettings } from "@/lib/hooks/use-org-settings";
 import { EstimateLineItemsGrid } from "./EstimateLineItemsGrid";
@@ -846,7 +846,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
 
                   {/* Header form */}
                   <div className="flex-1 p-4 min-w-0">
-                    <div className={cn("grid gap-x-8 gap-y-3 text-sm", compact ? "grid-cols-1" : "grid-cols-2")}>
+                    <div className="grid grid-cols-2 gap-x-8 gap-y-3 text-sm">
 
                       {/* Left column */}
                       <div className="flex flex-col gap-3">
@@ -957,14 +957,27 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                           />
                         </FieldRow>
                         <FieldRow label="# of Installments">
-                          <Input
-                            type="number"
-                            min={1}
-                            value={(headerEdits.num_installments as number) ?? estimate.numInstallments}
-                            onChange={(e) => patchHeader("num_installments", Number(e.target.value))}
-                            onBlur={() => saveHeader()}
-                            className="h-8 w-20"
-                          />
+                          <div className="flex flex-col gap-1">
+                            <Input
+                              type="number"
+                              min={1}
+                              value={(headerEdits.num_installments as number) ?? estimate.numInstallments}
+                              onChange={(e) => patchHeader("num_installments", Number(e.target.value))}
+                              onBlur={() => saveHeader()}
+                              className="h-8 w-20"
+                            />
+                            {(() => {
+                              const n = (headerEdits.num_installments as number) ?? estimate.numInstallments;
+                              const deposit = (headerEdits.deposit_required_cents as number) ?? estimate.depositRequiredCents;
+                              const schedule = computeInstallmentSchedule(estimate.totalCents, deposit, n, estimate.estimateDate);
+                              if (schedule.length === 0) return null;
+                              return (
+                                <p className="text-[10px] text-slate-400">
+                                  {schedule.length} × {formatCurrency(schedule[0].amountCents)}/mo starting {new Date(schedule[0].dueDate + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                                </p>
+                              );
+                            })()}
+                          </div>
                         </FieldRow>
                         <FieldRow label="Probability %">
                           <div className="flex items-center gap-1.5">
