@@ -306,6 +306,7 @@ export const ADDITIONAL_REPORTS: PrebuiltReportDef[] = [
         [
           "Budgeted to Date sums the contract's monthly amounts from the start month through today (or the contract end).",
           "Over / (Under) is invoiced-to-date minus budgeted-to-date.",
+          "A contract that starts mid-month is still credited a full month's budget for that first month.",
         ]
       );
     },
@@ -339,8 +340,9 @@ export const ADDITIONAL_REPORTS: PrebuiltReportDef[] = [
 
       const { data: estLines, error: estError } = await supabase
         .from("estimate_line_items")
-        .select("service_name, qty, total_cents")
+        .select("service_name, qty, total_cents, estimates!inner(deleted_at)")
         .is("deleted_at", null)
+        .is("estimates.deleted_at", null)
         .limit(5000);
       if (estError) throw new Error(estError.message);
       for (const li of (estLines ?? []) as { service_name: string | null; qty: number | null; total_cents: number | null }[]) {
@@ -394,7 +396,9 @@ export const ADDITIONAL_REPORTS: PrebuiltReportDef[] = [
           col("inv_cents", "Invoiced Amount", "money"),
         ],
         rows,
-        ["Amounts exclude sales tax. Job amount is line qty × rate on the job's service lines."]
+        [
+          "Amounts exclude sales tax. Job amount is line qty × rate on the job's service lines (the sold template), not per-visit delivery — for a recurring job this is a single snapshot, not a sum across every visit, so it won't reconcile 1:1 against Invoiced Amount.",
+        ]
       );
     },
   },

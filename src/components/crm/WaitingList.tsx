@@ -38,7 +38,7 @@ import {
 import { formatCurrency, cn } from "@/lib/utils";
 import { Plus, ListOrdered, ChevronDown, RotateCcw, Search, Send, X } from "lucide-react";
 import { toast } from "sonner";
-import type { CRMJob } from "@/types/crm-jobs";
+import type { CRMJob, CRMJobService } from "@/types/crm-jobs";
 
 function toLocalDateString(date: Date): string {
   const y = date.getFullYear();
@@ -85,14 +85,16 @@ const COL_FILTERS: { key: ColFilterKey; label: string }[] = [
 
 interface DispatchJobsDialogProps {
   jobs: CRMJob[];
+  /** When scheduling a single visit within a package job, rather than the whole job. */
+  service?: CRMJobService | null;
   onOpenChange: (open: boolean) => void;
   onDone: () => void;
 }
 
-function DispatchJobsDialog({ jobs, onOpenChange, onDone }: DispatchJobsDialogProps) {
+function DispatchJobsDialog({ jobs, service, onOpenChange, onDone }: DispatchJobsDialogProps) {
   const { data: crews } = useCRMCrews();
   const createVisit = useCreateVisit();
-  const [date, setDate] = useState(() => toLocalDateString(new Date()));
+  const [date, setDate] = useState(() => service?.startDate || toLocalDateString(new Date()));
   const [crewId, setCrewId] = useState("");
 
   async function handleDispatch() {
@@ -104,10 +106,15 @@ function DispatchJobsDialog({ jobs, onOpenChange, onDone }: DispatchJobsDialogPr
           clientId: job.clientId,
           scheduledDate: date,
           crewId: crewId || null,
+          jobServiceId: service?.id ?? null,
         })
       )
     );
-    toast.success(`${jobs.length} job${jobs.length > 1 ? "s" : ""} dispatched for ${date}`);
+    toast.success(
+      service
+        ? `${service.serviceName} dispatched for ${date}`
+        : `${jobs.length} job${jobs.length > 1 ? "s" : ""} dispatched for ${date}`
+    );
     onDone();
     onOpenChange(false);
   }
@@ -116,7 +123,9 @@ function DispatchJobsDialog({ jobs, onOpenChange, onDone }: DispatchJobsDialogPr
     <Dialog open onOpenChange={onOpenChange}>
       <DialogContent className="max-w-sm">
         <DialogHeader>
-          <DialogTitle>Dispatch {jobs.length} Job{jobs.length > 1 ? "s" : ""}</DialogTitle>
+          <DialogTitle>
+            {service ? `Dispatch — ${service.serviceName}` : `Dispatch ${jobs.length} Job${jobs.length > 1 ? "s" : ""}`}
+          </DialogTitle>
         </DialogHeader>
 
         <div className="space-y-3 py-2">
@@ -157,26 +166,32 @@ function DispatchJobsDialog({ jobs, onOpenChange, onDone }: DispatchJobsDialogPr
 
 function WaitingJobRow({
   job,
+  service,
   visibleKeys,
   selected,
   onToggle,
   onSchedule,
 }: {
   job: CRMJob;
+  /** When set, this row represents one visit within a package job rather than the whole job. */
+  service?: CRMJobService | null;
   visibleKeys: string[];
   selected: boolean;
   onToggle: () => void;
   onSchedule: () => void;
 }) {
-  const serviceName =
-    job.services && job.services.length > 0
+  const serviceName = service
+    ? service.serviceName
+    : job.services && job.services.length > 0
       ? job.services.map((s) => s.serviceName).join(", ")
       : "—";
   const serviceTotal = (job.services ?? []).reduce(
     (sum, s) => sum + (s.rateCents ?? 0) * (s.qty ?? 1),
     0
   );
-  const effectiveRate = job.rateCents ?? (serviceTotal > 0 ? serviceTotal : null);
+  const effectiveRate = service
+    ? service.rateCents ?? null
+    : job.rateCents ?? (serviceTotal > 0 ? serviceTotal : null);
   const isVisible = (key: string) => visibleKeys.includes(key);
 
   return (
@@ -185,12 +200,14 @@ function WaitingJobRow({
       onClick={onSchedule}
     >
       <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
-        <input
-          type="checkbox"
-          checked={selected}
-          onChange={onToggle}
-          className="rounded border-slate-300 accent-brand-500"
-        />
+        {!service && (
+          <input
+            type="checkbox"
+            checked={selected}
+            onChange={onToggle}
+            className="rounded border-slate-300 accent-brand-500"
+          />
+        )}
       </td>
       {isVisible("client") && (
         <td className="min-w-[200px] px-4 py-3" onClick={(e) => e.stopPropagation()}>
@@ -205,7 +222,14 @@ function WaitingJobRow({
       {isVisible("service") && (
         <td className="min-w-[180px] px-4 py-3 text-slate-700">{serviceName}</td>
       )}
-      {isVisible("dateRange") && (
+      {isVisible("dateRange") && service && (
+        <td className="px-4 py-3">
+          <span className="rounded-md bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
+            {formatDateRange(service.startDate, service.completeByDate)}
+          </span>
+        </td>
+      )}
+      {isVisible("dateRange") && !service && (
         <td className="px-4 py-3">
           <span className="rounded-md bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
             {formatDateRange(job.waitingListStart, job.waitingListEnd)}
@@ -261,6 +285,7 @@ export function WaitingList() {
     WAITING_LIST_COLUMNS.map((c) => c.key)
   );
   const [dispatchJobs, setDispatchJobs] = useState<CRMJob[] | null>(null);
+  const [dispatchService, setDispatchService] = useState<{ job: CRMJob; service: CRMJobService } | null>(null);
 
   const { data: jobs, isLoading, refetch } = useWaitingListJobs(startDate, endDate);
   const all = jobs ?? [];
@@ -292,6 +317,24 @@ export function WaitingList() {
 
     return list;
   }, [all, activeColFilter, colFilterValue, search]);
+
+  // Package jobs carry one crm_job_services row per visit, each with its own
+  // date window — expand those into one row per visit so each can be scheduled
+  // independently instead of the whole job going out on a single date.
+  // Non-package jobs (or a package with only one visit left) render unchanged.
+  const visitRows = useMemo(() => {
+    const rows: { key: string; job: CRMJob; service: CRMJobService | null }[] = [];
+    for (const job of filtered) {
+      if (job.jobType === "package" && (job.services?.length ?? 0) > 1) {
+        for (const service of job.services!) {
+          rows.push({ key: `${job.id}-${service.id}`, job, service });
+        }
+      } else {
+        rows.push({ key: job.id, job, service: null });
+      }
+    }
+    return rows;
+  }, [filtered]);
 
   const allSelected = filtered.length > 0 && filtered.every((j) => selectedIds.has(j.id));
   const someSelected = selectedIds.size > 0;
@@ -482,7 +525,7 @@ export function WaitingList() {
                   ))}
                 </tr>
               ))
-            ) : filtered.length === 0 ? (
+            ) : visitRows.length === 0 ? (
               <tr>
                 <td colSpan={colCount} className="py-16 text-center text-sm text-slate-400">
                   {search || activeColFilter
@@ -491,14 +534,15 @@ export function WaitingList() {
                 </td>
               </tr>
             ) : (
-              filtered.map((job) => (
+              visitRows.map(({ key, job, service }) => (
                 <WaitingJobRow
-                  key={job.id}
+                  key={key}
                   job={job}
+                  service={service}
                   visibleKeys={visibleKeys}
                   selected={selectedIds.has(job.id)}
                   onToggle={() => toggleOne(job.id)}
-                  onSchedule={() => setDispatchJobs([job])}
+                  onSchedule={() => service ? setDispatchService({ job, service }) : setDispatchJobs([job])}
                 />
               ))
             )}
@@ -511,6 +555,15 @@ export function WaitingList() {
           jobs={dispatchJobs}
           onOpenChange={(open) => { if (!open) setDispatchJobs(null); }}
           onDone={() => { setSelectedIds(new Set()); refetch(); }}
+        />
+      )}
+
+      {dispatchService && (
+        <DispatchJobsDialog
+          jobs={[dispatchService.job]}
+          service={dispatchService.service}
+          onOpenChange={(open) => { if (!open) setDispatchService(null); }}
+          onDone={() => { refetch(); }}
         />
       )}
     </div>

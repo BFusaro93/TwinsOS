@@ -104,7 +104,7 @@ export const AUDIT_REPORTS: PrebuiltReportDef[] = [
       let query = supabase
         .from("crm_job_visits")
         .select(
-          "scheduled_date, completed_at, status, rate_cents, qty, crm_jobs:job_id(service_address, service_city), clients:client_id(display_name, balance_outstanding_cents)"
+          "scheduled_date, completed_at, status, rate_cents, qty, crm_jobs:job_id(service_address, service_city, rate_cents), clients:client_id(display_name, balance_outstanding_cents)"
         )
         .in("status", ["completed", "in_progress"])
         .is("deleted_at", null);
@@ -121,7 +121,11 @@ export const AUDIT_REPORTS: PrebuiltReportDef[] = [
         status: string | null;
         rate_cents: number | null;
         qty: number | null;
-        crm_jobs: { service_address: string | null; service_city: string | null } | null;
+        crm_jobs: {
+          service_address: string | null;
+          service_city: string | null;
+          rate_cents: number | null;
+        } | null;
         clients: {
           display_name: string | null;
           balance_outstanding_cents: number | null;
@@ -135,7 +139,9 @@ export const AUDIT_REPORTS: PrebuiltReportDef[] = [
           status: r.status,
           address: r.crm_jobs?.service_address ?? "",
           city: r.crm_jobs?.service_city ?? "",
-          amount_cents: Math.round((r.rate_cents ?? 0) * (Number(r.qty) || 1)),
+          amount_cents: Math.round(
+            (r.rate_cents ?? r.crm_jobs?.rate_cents ?? 0) * (Number(r.qty) || 1)
+          ),
           balance: r.clients?.balance_outstanding_cents ?? 0,
         }));
 
