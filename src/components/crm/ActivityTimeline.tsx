@@ -47,6 +47,8 @@ function formatTime(iso: string) {
 
 function activityHref(item: ClientActivity): string | null {
   if (item.activityType === "invoice" && item.refId) return `/crm/accounting/invoices/${item.refId}`;
+  if (item.activityType === "payment" && item.refTable === "crm_invoices" && item.refId)
+    return `/crm/accounting/invoices/${item.refId}`;
   if (item.activityType === "estimate" && item.refId) return `/crm/estimates/${item.refId}`;
   if ((item.activityType === "job" || item.activityType === "job_visit") && item.refId)
     return `/crm/clients/${item.clientId}?tab=jobs`;

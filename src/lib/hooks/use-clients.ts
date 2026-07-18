@@ -162,7 +162,7 @@ function mapActivity(row: any): ClientActivity {
     occurredAt: row.occurred_at,
     createdAt: row.created_at,
     createdBy: row.created_by,
-    createdByName: row.profiles?.full_name ?? null,
+    createdByName: row.profiles?.name ?? null,
   };
 }
 
@@ -289,7 +289,7 @@ export function useClientActivity(clientId: string) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
         .from("client_activity")
-        .select("*")
+        .select("*, profiles(name)")
         .eq("client_id", clientId)
         .order("created_at", { ascending: false });
       if (error) throw error;

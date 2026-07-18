@@ -36,6 +36,7 @@ const INVOICE_COLUMNS: ColumnDef[] = [
   { key: "due",         label: "Due" },
   { key: "total",       label: "Total" },
   { key: "balance",     label: "Balance" },
+  { key: "paymentType", label: "Payment Type" },
 ];
 
 const STATUS_COLOR: Record<InvoiceStatus, string> = {
@@ -544,13 +545,16 @@ export function InvoicesList({ clientId }: Props) {
                         );
                       case "client":
                         return (
-                          <td key={col.key} className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                          <td key={col.key} className="px-4 py-3 max-w-[200px]" onClick={(e) => e.stopPropagation()}>
                             <Link
                               href={`/crm/clients/${inv.clientId}`}
-                              className="font-medium text-brand-600 hover:underline"
+                              className="block font-medium text-brand-600 hover:underline truncate"
                             >
                               {inv.clientName}
                             </Link>
+                            {inv.clientAddress && (
+                              <p className="text-[10px] text-slate-400 truncate">{inv.clientAddress}</p>
+                            )}
                           </td>
                         );
                       case "status":
@@ -579,6 +583,12 @@ export function InvoicesList({ clientId }: Props) {
                         return (
                           <td key={col.key} className={cn("px-4 py-3 text-right font-medium", inv.balanceCents > 0 ? "text-red-600" : "text-green-600")}>
                             {formatCurrency(inv.balanceCents)}
+                          </td>
+                        );
+                      case "paymentType":
+                        return (
+                          <td key={col.key} className="px-4 py-3 text-xs text-slate-500">
+                            {inv.preferredPaymentMethod ?? inv.clientDefaultPaymentMethod ?? "—"}
                           </td>
                         );
                       default: return null;

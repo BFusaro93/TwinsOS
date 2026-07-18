@@ -29,12 +29,20 @@ export async function POST(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: visit, error: visitErr } = await (supabase as any)
     .from("crm_job_visits")
-    .select("job_id, client_id, invoice_description, scheduled_date")
+    .select("job_id, client_id, invoice_description, scheduled_date, status")
     .eq("id", visitId)
     .single();
 
   if (visitErr || !visit) {
     return NextResponse.json({ error: "Visit not found" }, { status: 404 });
+  }
+
+  // Idempotent: a visit already marked completed must not re-run the
+  // side effects below (duplicate activity-timeline entries, duplicate
+  // auto-invoices) if this route is called again for it — e.g. a repeat
+  // "Mark Complete" click before the UI reflects the first one.
+  if ((visit as { status: string }).status === "completed") {
+    return NextResponse.json({ ok: true, jobId: (visit as { job_id: string }).job_id, clientId: (visit as { client_id: string }).client_id, alreadyCompleted: true });
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -205,6 +213,7 @@ export async function POST(
       subject: `Visit completed${v.invoice_description ? `: ${v.invoice_description}` : ""}`,
       ref_id: v.job_id,
       ref_table: "crm_jobs",
+      created_by: user.id,
     });
   }
 

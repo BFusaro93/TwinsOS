@@ -86,6 +86,7 @@ function mapInvoice(row: any): CRMInvoice {
     locked: row.locked ?? false,
     lockedAt: row.locked_at ?? null,
     preferredPaymentMethod: row.preferred_payment_method ?? null,
+    pdfTemplateId: row.pdf_template_id ?? null,
     deletedAt: row.deleted_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -114,7 +115,7 @@ export function useInvoices(clientId?: string) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let q = (supabase as any)
         .from("crm_invoices")
-        .select("*, clients(display_name), profiles!crm_invoices_sales_rep_id_fkey(name), crm_invoice_line_items(id, name, description, total_cents, is_taxable)")
+        .select("*, clients(display_name, billing_address, billing_city, billing_state, billing_zip), profiles!crm_invoices_sales_rep_id_fkey(name), crm_invoice_line_items(id, name, description, total_cents, is_taxable)")
         .is("deleted_at", null)
         .order("invoice_date", { ascending: false });
       if (clientId) q = q.eq("client_id", clientId);
@@ -540,16 +541,19 @@ export function useRecordPayment() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await (supabase.rpc as any)("sync_client_balance", { p_client_id: clientId });
 
+      const refLabel = reference ? ` #${reference}` : "";
+      const dateLabel = paymentDate ? ` on ${paymentDate}` : "";
       const label = isPrepayment
-        ? `Prepayment recorded: ${method}`
+        ? `Prepayment recorded: ${method}${refLabel}${dateLabel}`
         : activeAllocations.length > 0
-          ? `Payment received: ${method}`
-          : `Payment recorded: ${method}`;
+          ? `Payment received: ${method}${refLabel}${dateLabel}`
+          : `Payment recorded: ${method}${refLabel}${dateLabel}`;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await (supabase as any).from("client_activity").insert({
         client_id: clientId,
         activity_type: "payment",
         subject: label,
+        amount_cents: amountCents,
         ref_id: primaryInvoiceId,
         ref_table: primaryInvoiceId ? "crm_invoices" : null,
       });

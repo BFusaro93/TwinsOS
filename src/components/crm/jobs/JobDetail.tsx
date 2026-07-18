@@ -61,6 +61,7 @@ import {
   SkipForward,
   Plus,
   FlaskConical,
+  ArrowLeft,
 } from "lucide-react";
 import { ChemicalApplicationPanel } from "@/components/crm/chemical/ChemicalApplicationPanel";
 import { createClient } from "@/lib/supabase/client";
@@ -455,6 +456,15 @@ export function JobDetail({ jobId, initialEditing = false }: Props) {
       {/* ── top bar ── */}
       <div className="flex items-center justify-between border-b bg-white px-6 py-3 shadow-sm">
         <div className="flex items-center gap-3">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-8 shrink-0 text-xs text-slate-500"
+            onClick={() => router.push("/crm/scheduling")}
+          >
+            <ArrowLeft className="mr-1 h-3.5 w-3.5" />
+            Back
+          </Button>
           <div>
             <h1 className="text-base font-semibold text-slate-900">
               {job.clientName ?? "Job"}

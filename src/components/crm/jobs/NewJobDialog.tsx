@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { DecimalInput } from "@/components/shared/DecimalInput";
 import {
   Select,
   SelectContent,
@@ -19,7 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useCreateClientJob, useCRMServices, useCRMSchedules } from "@/lib/hooks/use-crm-jobs";
+import { useCreateClientJob, useCRMServices, useCRMSchedules, useCRMCrews } from "@/lib/hooks/use-crm-jobs";
 import { useClients } from "@/lib/hooks/use-clients";
 import { useContracts } from "@/lib/hooks/use-contracts";
 import { useEmployees } from "@/lib/hooks/use-employees";
@@ -83,6 +84,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
   const { data: orgSettings } = useOrgSettings();
   const { data: crmPackages } = usePackages(false);
   const { data: employees } = useEmployees();
+  const { data: crews } = useCRMCrews();
   const salesReps = (employees ?? []).filter((e) => e.isSalesRep && e.userId);
 
   const [selectedClientId, setSelectedClientId] = useState(defaultClientId ?? "");
@@ -90,6 +92,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
   const { data: contracts } = useContracts(defaultClientId ?? selectedClientId);
   const [contractId, setContractId] = useState<string | null>(null);
   const [salesRepId, setSalesRepId] = useState<string | null>(null);
+  const [crewId, setCrewId] = useState<string | null>(null);
   const [notesToCrew, setNotesToCrew] = useState("");
   const [isPending, setIsPending] = useState(false);
 
@@ -112,6 +115,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
       const today = todayStr();
       setJobType(initialJobType ?? "one_time");
       setContractId(null);
+      setCrewId(null);
       setNotesToCrew("");
       setStartDate(today);
       setCompleteByDate("");
@@ -239,6 +243,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
         clientId: effectiveClientId,
         jobType,
         contractId: contractId ?? null,
+        crewId: crewId ?? null,
         schedule: schedule || null,
         scheduleDays: jobType === "snow" ? snowDaysAuthorized : [],
         packageName: jobType === "package" ? (selectedPackage?.name ?? null) : null,
@@ -311,7 +316,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
           <div className="flex flex-1 flex-col gap-4 min-w-0">
 
             {/* Client + Contract */}
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-4 gap-3">
               {!defaultClientId ? (
                 <div className="flex flex-col gap-1.5">
                   <Label>Client *</Label>
@@ -346,6 +351,18 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
                       <SelectItem key={e.userId as string} value={e.userId as string}>
                         {e.firstName} {e.lastName}
                       </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label>Crew</Label>
+                <Select value={crewId ?? "unassigned"} onValueChange={(v) => setCrewId(v === "unassigned" ? null : v)}>
+                  <SelectTrigger><SelectValue placeholder="Unassigned" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="unassigned">Unassigned</SelectItem>
+                    {(crews ?? []).map((c) => (
+                      <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -516,7 +533,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
                   className="grid text-white text-xs font-medium px-3 py-2"
                   style={{
                     gridTemplateColumns: showServiceDate
-                      ? "2fr 1fr 1fr 1fr 1fr 1fr 1.5fr 28px"
+                      ? "1.7fr 1.3fr 1.3fr 0.9fr 0.8fr 0.7fr 1.3fr 28px"
                       : "2fr 1fr 1fr 1fr 1fr 1.5fr 28px",
                     backgroundColor: brandColor,
                   }}
@@ -536,7 +553,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
                     className="grid items-center gap-1.5 border-b last:border-0 bg-white px-3 py-2"
                     style={{
                       gridTemplateColumns: showServiceDate
-                        ? "2fr 1fr 1fr 1fr 1fr 1fr 1.5fr 28px"
+                        ? "1.7fr 1.3fr 1.3fr 0.9fr 0.8fr 0.7fr 1.3fr 28px"
                         : "2fr 1fr 1fr 1fr 1fr 1.5fr 28px",
                     }}
                   >
@@ -554,19 +571,25 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
                     ) : (
                       <Input type="number" min="0" step="0.01" value={svc.qty} onChange={(e) => updateQty(i, parseFloat(e.target.value) || 1)} className="h-7 text-xs" />
                     )}
-                    <Input
-                      type="number" min="0" step="0.01"
+                    <DecimalInput
+                      min={0}
+                      className="h-7 text-xs"
                       value={svc.rateCents / 100}
-                      onFocus={(e) => e.target.select()}
-                      onChange={(e) => updateService(i, { rateCents: Math.round(parseFloat(e.target.value || "0") * 100) })}
-                      className="h-7 text-xs" placeholder="0.00"
+                      selectOnFocus
+                      onCommit={(cost) => updateService(i, { rateCents: Math.round(cost * 100) })}
                     />
                     {rowIsAutoHrs(svc.serviceId) ? (
                       <span className="flex h-7 items-center justify-end pr-1 text-xs font-medium text-blue-600" title="Auto-calculated from production rate">
                         {svc.budgetedHours.toFixed(2)}
                       </span>
                     ) : (
-                      <Input type="number" min="0" step="0.25" value={svc.budgetedHours} onChange={(e) => updateService(i, { budgetedHours: parseFloat(e.target.value) || 0 })} className="h-7 text-xs" placeholder="0" />
+                      <DecimalInput
+                        min={0}
+                        className="h-7 text-xs"
+                        value={svc.budgetedHours}
+                        selectOnFocus
+                        onCommit={(hrs) => updateService(i, { budgetedHours: hrs })}
+                      />
                     )}
                     <Input type="number" min="1" step="1" value={svc.teamSize} onChange={(e) => updateService(i, { teamSize: parseInt(e.target.value) || 1 })} className="h-7 text-xs" />
                     <span className="text-xs text-slate-700 font-medium text-right pr-1">{formatCurrency(svc.qty * svc.rateCents)}</span>

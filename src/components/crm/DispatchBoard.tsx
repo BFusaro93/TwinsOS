@@ -57,6 +57,7 @@ import {
   StickyNote,
   Package,
   FlaskConical,
+  MessageSquareText,
 } from "lucide-react";
 import { ChemicalTrackingWizard } from "@/components/crm/chemical/ChemicalTrackingWizard";
 import {
@@ -78,6 +79,19 @@ import { useCRMServices } from "@/lib/hooks/use-crm-jobs";
 // ── status icon ───────────────────────────────────────────────────────────────
 
 const STATUS_CYCLE: VisitStatus[] = ["scheduled", "dispatched", "in_progress", "completed", "skipped"];
+
+// Actual hours = (end - start) x crew size, mirroring SA's dispatch board.
+// A manually-entered actualHours (e.g. from crew clock-in/out) always wins.
+function computeActualHours(visit: CRMJobVisit): number | null {
+  if (visit.actualHours != null) return visit.actualHours;
+  if (!visit.startTime || !visit.endTime) return null;
+  const [sh, sm] = visit.startTime.split(":").map(Number);
+  const [eh, em] = visit.endTime.split(":").map(Number);
+  if ([sh, sm, eh, em].some((n) => Number.isNaN(n))) return null;
+  const diffHours = (eh * 60 + em - (sh * 60 + sm)) / 60;
+  if (diffHours <= 0) return null;
+  return diffHours * (visit.menCount || 1);
+}
 
 function StatusIcon({ status }: { status: VisitStatus }) {
   switch (status) {
@@ -1057,6 +1071,17 @@ function VisitRow({
   const effectiveRate = visit.rateCents ?? job?.rateCents ?? (serviceTotal > 0 ? serviceTotal : null);
   const effectiveCrew = visit.crewName ?? job?.crewName ?? null;
   const budgetedHours = job?.budgetedHours;
+  const actualHours = computeActualHours(visit);
+
+  const updateVisit = useUpdateVisit();
+  const [startVal, setStartVal] = useState(visit.startTime ?? "");
+  const [endVal, setEndVal] = useState(visit.endTime ?? "");
+  useEffect(() => { setStartVal(visit.startTime ?? ""); }, [visit.startTime]);
+  useEffect(() => { setEndVal(visit.endTime ?? ""); }, [visit.endTime]);
+
+  function saveVisitTime(field: "start_time" | "end_time", value: string) {
+    updateVisit.mutate({ id: visit.id, updates: { [field]: value || null } });
+  }
 
   const lastSvc = job?.lastServiceDate
     ? new Date(job.lastServiceDate + "T12:00:00").toLocaleDateString("en-US", { month: "numeric", day: "numeric" })
@@ -1184,12 +1209,28 @@ function VisitRow({
 
       {/* Start */}
       {isVisible("start") && (
-        <td className="px-2 py-2 text-slate-400 whitespace-nowrap">{visit.startTime ?? "—"}</td>
+        <td className="px-1 py-1 text-slate-400 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+          <input
+            type="time"
+            value={startVal}
+            onChange={(e) => setStartVal(e.target.value)}
+            onBlur={() => saveVisitTime("start_time", startVal)}
+            className="w-[92px] rounded border border-transparent bg-transparent px-1 py-0.5 text-xs text-slate-600 hover:border-slate-200 focus:border-brand-400 focus:outline-none"
+          />
+        </td>
       )}
 
       {/* End */}
       {isVisible("end") && (
-        <td className="px-2 py-2 text-slate-400 whitespace-nowrap">{visit.endTime ?? "—"}</td>
+        <td className="px-1 py-1 text-slate-400 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+          <input
+            type="time"
+            value={endVal}
+            onChange={(e) => setEndVal(e.target.value)}
+            onBlur={() => saveVisitTime("end_time", endVal)}
+            className="w-[92px] rounded border border-transparent bg-transparent px-1 py-0.5 text-xs text-slate-600 hover:border-slate-200 focus:border-brand-400 focus:outline-none"
+          />
+        </td>
       )}
 
       {/* B Hrs */}
@@ -1203,7 +1244,7 @@ function VisitRow({
       {isVisible("actual") && (
         <td className="px-2 py-2 text-right text-slate-500">
           <div className="flex flex-col items-end gap-0.5">
-            {visit.actualHours != null ? visit.actualHours.toFixed(2) : "—"}
+            {actualHours != null ? actualHours.toFixed(2) : "—"}
             {visit.clockedInAt && (
               <span className="text-[10px] text-slate-400" title={`Clocked in: ${visit.clockedInAt}`}>
                 ⏱ {new Date(visit.clockedInAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
@@ -1242,29 +1283,47 @@ function VisitRow({
         </td>
       )}
 
-      {/* Icons */}
-      {isVisible("icons") && (
-        <td className="px-2 py-2">
-          <div className="flex items-center gap-1.5">
-            {(visit.notesToCrew || visit.job?.notesToCrew || visit.job?.notes) && (
-              <span title="Has notes"><StickyNote className="h-3 w-3 text-amber-400" /></span>
-            )}
-            {(visit.job?.productTotalCents ?? 0) > 0 && (
-              <span title="Has products"><Package className="h-3 w-3 text-purple-500" /></span>
-            )}
-            {visit.job?.callAhead && visit.clientPhone && (
-              <a
-                href={`tel:${visit.clientPhone}`}
-                onClick={(e) => e.stopPropagation()}
-                title={`Call ahead: ${visit.job.clientPhone}`}
-                className="text-slate-300 hover:text-green-600 transition-colors"
-              >
-                <Phone className="h-3 w-3" />
-              </a>
-            )}
-          </div>
-        </td>
-      )}
+      {/* Icons + Notes preview */}
+      {isVisible("icons") && (() => {
+        const crewNote = visit.notesToCrew ?? visit.job?.notesToCrew ?? null;
+        const latestComment = visit.jobComments.length > 0 ? visit.jobComments[visit.jobComments.length - 1] : null;
+        return (
+          <td className="px-2 py-2 max-w-[220px]">
+            <div className="flex items-center gap-1.5">
+              {(crewNote || visit.job?.notes) && (
+                <span title={crewNote ?? visit.job?.notes ?? ""} className="shrink-0"><StickyNote className="h-3 w-3 text-amber-400" /></span>
+              )}
+              {(visit.job?.productTotalCents ?? 0) > 0 && (
+                <span title="Has products" className="shrink-0"><Package className="h-3 w-3 text-purple-500" /></span>
+              )}
+              {visit.job?.callAhead && visit.clientPhone && (
+                <a
+                  href={`tel:${visit.clientPhone}`}
+                  onClick={(e) => e.stopPropagation()}
+                  title={`Call ahead: ${visit.job.clientPhone}`}
+                  className="text-slate-300 hover:text-green-600 transition-colors shrink-0"
+                >
+                  <Phone className="h-3 w-3" />
+                </a>
+              )}
+              {latestComment && (
+                <span
+                  className="shrink-0"
+                  title={`${visit.jobComments.length} comment${visit.jobComments.length > 1 ? "s" : ""}: ${latestComment.text}`}
+                >
+                  <MessageSquareText className="h-3 w-3 text-blue-400" />
+                </span>
+              )}
+              {crewNote && (
+                <span className="truncate text-[11px] text-slate-500" title={crewNote}>{crewNote}</span>
+              )}
+              {!crewNote && latestComment && (
+                <span className="truncate text-[11px] text-slate-400 italic" title={latestComment.text}>{latestComment.text}</span>
+              )}
+            </div>
+          </td>
+        );
+      })()}
     </tr>
   );
 }
@@ -1273,7 +1332,7 @@ function VisitRow({
 
 function TotalsRow({ visits, isVisible }: { visits: CRMJobVisit[]; isVisible: (col: ColKey) => boolean }) {
   const totalBHrs = visits.reduce((s, v) => s + (v.job?.budgetedHours ?? 0), 0);
-  const totalAct  = visits.reduce((s, v) => s + ((v as any).actualHours ?? 0), 0);
+  const totalAct  = visits.reduce((s, v) => s + (computeActualHours(v) ?? 0), 0);
   const totalAmt  = visits.reduce((s, v) => s + ((v as any).rateCents ?? v.job?.rateCents ?? 0), 0);
 
   // Fixed always-visible cols: checkbox(1), #(1), St(1), Client(1) = 4
@@ -1552,7 +1611,7 @@ export function DispatchBoard() {
         v.startTime ?? "",
         v.endTime ?? "",
         job?.budgetedHours?.toFixed(2) ?? "",
-        (v as any).actualHours?.toFixed(2) ?? "",
+        computeActualHours(v)?.toFixed(2) ?? "",
         (v as any).menCount ?? "",
         (rateCents / 100).toFixed(2),
         (rateCents / 100).toFixed(2),

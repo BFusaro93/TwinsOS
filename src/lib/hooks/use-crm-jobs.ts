@@ -81,17 +81,12 @@ export function mapJob(row: any): CRMJob {
     clientPhone: row.clients?.primary_phone ?? null,
     crewName: row.crm_crews?.name ?? null,
     salesRepName: row.profiles?.name ?? null,
-    services: (row.crm_job_services ?? []).map(
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (s: any) => ({
-        id: s.id,
-        jobId: s.job_id,
-        serviceId: s.service_id,
-        serviceName: s.service_name,
-        qty: s.qty ?? 1,
-        rateCents: s.rate_cents,
-      })
-    ),
+    services: (row.crm_job_services ?? []).map(mapJobServiceFull),
+    visits: row.crm_job_visits
+      ? (row.crm_job_visits as { id: string; scheduled_date: string; status: string; deleted_at: string | null; crm_crews: { name: string } | null }[])
+          .filter((v) => !v.deleted_at)
+          .map((v) => ({ id: v.id, scheduledDate: v.scheduled_date, status: v.status as VisitStatus, crewName: v.crm_crews?.name ?? null }))
+      : undefined,
   };
 }
 
@@ -191,7 +186,7 @@ export function useWaitingListJobs(startDate?: string, endDate?: string) {
           crm_crews(name),
           profiles!crm_jobs_sales_rep_id_fkey(name),
           crm_job_services(*),
-          crm_job_visits(id, deleted_at)
+          crm_job_visits(id, deleted_at, job_service_id)
         `)
         .in("job_type", ["waiting_list", "package"])
         .is("deleted_at", null)
@@ -214,6 +209,23 @@ export function useWaitingListJobs(startDate?: string, endDate?: string) {
         const hasActiveVisit = (row.crm_job_visits ?? []).some((v: any) => !v.deleted_at);
         return !hasActiveVisit;
       });
+
+      // Package jobs carry every visit in crm_job_services regardless of whether
+      // it's already been scheduled — drop the ones a visit already references
+      // via job_service_id so each remaining row represents a visit still
+      // needing a date (see 20260717000001_job_visits_job_service_id.sql).
+      for (const row of rows) {
+        if (row.job_type !== "package") continue;
+        const scheduledServiceIds = new Set(
+          (row.crm_job_visits ?? [])
+            .filter((v: any) => !v.deleted_at && v.job_service_id)
+            .map((v: any) => v.job_service_id)
+        );
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        row.crm_job_services = (row.crm_job_services ?? []).filter(
+          (s: any) => !scheduledServiceIds.has(s.id)
+        );
+      }
 
       return (rows.map((row) => mapJob({
         ...row,
@@ -474,6 +486,7 @@ export function mapVisit(row: any): CRMJobVisit {
     orgId: row.org_id,
     jobId: row.job_id,
     clientId: row.client_id,
+    jobServiceId: row.job_service_id ?? null,
     stormEventId: row.storm_event_id ?? null,
     snowDepthInches: row.snow_depth_inches ?? null,
     temperature: row.temperature ?? null,
@@ -586,6 +599,7 @@ export function useCreateVisit() {
       invoiceDescription?: string | null;
       stormEventId?: string | null;
       orderNum?: number | null;
+      jobServiceId?: string | null;
     }) => {
       const supabase = createClient();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -603,6 +617,7 @@ export function useCreateVisit() {
           invoice_description: values.invoiceDescription ?? null,
           storm_event_id: values.stormEventId ?? null,
           order_num: values.orderNum ?? null,
+          job_service_id: values.jobServiceId ?? null,
         })
         .select()
         .single();
@@ -815,8 +830,9 @@ export function useCreateClientJob() {
           created_by: user?.id ?? null,
           client_id: values.clientId,
           job_type: values.jobType,
-          status: 'scheduled',
+          status: values.isComplete ? 'completed' : 'scheduled',
           contract_id: values.contractId || null,
+          crew_id: values.crewId || null,
           schedule: values.schedule || null,
           schedule_days: values.scheduleDays,
           package_name: values.packageName || null,
@@ -844,7 +860,7 @@ export function useCreateClientJob() {
           is_complete: values.isComplete,
           notes: values.notes || null,
           notes_to_crew: values.notesToCrew || null,
-          budgeted_hours: values.services.reduce((sum, s) => sum + (s.budgetedHours || 0), 0) || null,
+          budgeted_hours: values.services.reduce((sum, s) => sum + (s.budgetedHours || 0) * (s.teamSize || 1), 0) || null,
         })
         .select()
         .single();
@@ -887,7 +903,9 @@ export function useCreateClientJob() {
           job_id: job.id,
           client_id: values.clientId,
           scheduled_date: values.scheduledDate,
-          status: 'scheduled',
+          status: values.isComplete ? 'completed' : 'scheduled',
+          crew_id: values.crewId || null,
+          completed_at: values.isComplete ? new Date().toISOString() : null,
         });
       }
 
@@ -902,6 +920,7 @@ export function useCreateClientJob() {
             client_id: values.clientId,
             scheduled_date: s.startDate,
             status: 'scheduled',
+            crew_id: values.crewId || null,
           }));
         if (visitRows.length > 0) {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1190,7 +1209,8 @@ export function useJobsList(filters?: {
           *,
           clients(display_name, primary_phone),
           crm_crews(name),
-          crm_job_services(*)
+          crm_job_services(*),
+          crm_job_visits(id, scheduled_date, status, deleted_at, crm_crews(name))
         `)
         .is("deleted_at", null)
         .neq("job_type", "snow")
@@ -1201,14 +1221,11 @@ export function useJobsList(filters?: {
       if (filters?.activeOnly) q = q.neq("status", "completed").neq("status", "cancelled");
       if (filters?.jobType)    q = q.eq("job_type", filters.jobType);
       if (filters?.clientId) q = q.eq("client_id", filters.clientId);
-      // Include unscheduled jobs (null scheduled_date) alongside the date range
-      if (filters?.fromDate && filters?.toDate) {
-        q = q.or(`scheduled_date.is.null,and(scheduled_date.gte.${filters.fromDate},scheduled_date.lte.${filters.toDate})`);
-      } else if (filters?.fromDate) {
-        q = q.or(`scheduled_date.is.null,scheduled_date.gte.${filters.fromDate}`);
-      } else if (filters?.toDate) {
-        q = q.or(`scheduled_date.is.null,scheduled_date.lte.${filters.toDate}`);
-      }
+      // Date-range filtering happens client-side in JobsList against each job's
+      // actual visit occurrences (see mapJob's `visits`) — the job-level
+      // scheduled_date is only meaningful for one-time/snow/project jobs and
+      // goes stale for recurring/package/waiting_list jobs once visits are
+      // generated, so filtering on it here would hide/misplace those jobs.
 
       const { data, error } = await q;
       if (error) throw error;

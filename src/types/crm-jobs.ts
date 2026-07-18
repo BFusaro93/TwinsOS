@@ -162,6 +162,8 @@ export interface CRMJob {
   crewName?: string;
   salesRepName?: string | null;
   services?: CRMJobService[];
+  /** Populated only by useJobsList — the job's actual scheduled/generated visit occurrences. */
+  visits?: { id: string; scheduledDate: string; status: VisitStatus; crewName: string | null }[];
 }
 
 export interface NewJobFormValues {
@@ -184,6 +186,7 @@ export interface NewClientJobFormValues {
   clientId: string;
   jobType: JobType;
   contractId: string | null;
+  crewId: string | null;
   schedule: string | null;
   scheduleDays: string[];
   packageName: string | null;
@@ -235,6 +238,8 @@ export interface CRMJobVisit {
   orgId: string
   jobId: string
   clientId: string
+  /** Which specific job service/visit (e.g. "Visit 3 of 5" on a package job) this scheduling event is for, if any. */
+  jobServiceId: string | null
   stormEventId: string | null
   snowDepthInches: number | null
   temperature: number | null

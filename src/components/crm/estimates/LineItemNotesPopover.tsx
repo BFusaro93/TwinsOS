@@ -71,7 +71,7 @@ export function LineItemNotesPopover({ notes, onSave }: Props) {
             </TabsList>
           </div>
 
-          <div className="p-3">
+          <div className="h-[200px] overflow-y-auto p-3">
             <TabsContent value="estimate_desc" className="mt-0">
               <p className="mb-1.5 text-xs text-slate-500">Shown on the client-facing estimate document.</p>
               <RichTextEditor
@@ -85,7 +85,7 @@ export function LineItemNotesPopover({ notes, onSave }: Props) {
             <TabsContent value="job_note" className="mt-0">
               <p className="mb-1.5 text-xs text-slate-500">Carries to Job Notes for field crew when converting to a job.</p>
               <Textarea
-                rows={4}
+                rows={6}
                 value={draft.jobNote ?? ""}
                 onChange={(e) => setDraft((d) => ({ ...d, jobNote: e.target.value || null }))}
                 placeholder="Notes for crew…"
@@ -95,7 +95,7 @@ export function LineItemNotesPopover({ notes, onSave }: Props) {
             <TabsContent value="invoice_desc" className="mt-0">
               <p className="mb-1.5 text-xs text-slate-500">Carries to the invoice line item description.</p>
               <Textarea
-                rows={4}
+                rows={6}
                 value={draft.invoiceDesc ?? ""}
                 onChange={(e) => setDraft((d) => ({ ...d, invoiceDesc: e.target.value || null }))}
                 placeholder="Description on invoice…"
@@ -105,7 +105,7 @@ export function LineItemNotesPopover({ notes, onSave }: Props) {
             <TabsContent value="line_item" className="mt-0">
               <p className="mb-1.5 text-xs text-slate-500">Internal only — your client will not see this note.</p>
               <Textarea
-                rows={4}
+                rows={6}
                 value={draft.internalNote ?? ""}
                 onChange={(e) => setDraft((d) => ({ ...d, internalNote: e.target.value || null }))}
                 placeholder="Private internal note…"

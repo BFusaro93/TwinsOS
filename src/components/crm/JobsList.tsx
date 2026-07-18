@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useJobsList } from "@/lib/hooks/use-crm-jobs";
@@ -19,6 +19,38 @@ import { formatCurrency, cn } from "@/lib/utils";
 import { Search, Calendar, ChevronRight, Plus } from "lucide-react";
 import { NewJobDialog } from "@/components/crm/jobs/NewJobDialog";
 import type { CRMJob } from "@/types/crm-jobs";
+
+// A single row in the Jobs list. Recurring/package/waiting_list jobs can have
+// many generated visits, each on its own date — so a job expands into one
+// occurrence per visit instead of a single row keyed by the job's own (often
+// stale) scheduled_date. Jobs with no visits yet fall back to a single row.
+interface JobOccurrence {
+  key: string;
+  job: CRMJob;
+  date: string | null;
+  status: string;
+  crewName: string | null;
+}
+
+function expandJob(job: CRMJob): JobOccurrence[] {
+  const visits = job.visits ?? [];
+  if (visits.length > 0) {
+    return visits.map((v) => ({
+      key: `${job.id}-${v.id}`,
+      job,
+      date: v.scheduledDate,
+      status: v.status,
+      crewName: v.crewName ?? job.crewName ?? null,
+    }));
+  }
+  return [{
+    key: job.id,
+    job,
+    date: job.scheduledDate,
+    status: job.status,
+    crewName: job.crewName ?? null,
+  }];
+}
 
 const STATUS_COLOR: Record<string, string> = {
   scheduled:   "bg-blue-100 text-blue-700",
@@ -53,41 +85,52 @@ const in30 = new Date(Date.now() + 30 * 86400_000).toISOString().slice(0, 10);
 export function JobsList() {
   const router = useRouter();
   const [search, setSearch] = useState("");
-  const [viewMode, setViewMode] = useState<"active" | "completed">("active");
+  const [viewMode, setViewMode] = useState<"active" | "unscheduled" | "completed">("active");
   const [typeFilter, setTypeFilter] = useState("all");
   const [fromDate, setFromDate] = useState(today);
   const [toDate, setToDate] = useState(in30);
   const [newJobOpen, setNewJobOpen] = useState(false);
 
+  // Status/date filtering happens client-side below, per-occurrence — a job's
+  // own status/scheduled_date don't reflect its individual generated visits.
   const { data: jobs = [], isLoading } = useJobsList({
-    status:     viewMode === "completed" ? "completed" : undefined,
-    activeOnly: viewMode === "active",
-    jobType:    typeFilter !== "all" ? typeFilter : undefined,
-    fromDate:   viewMode === "active" ? (fromDate || undefined) : undefined,
-    toDate:     viewMode === "active" ? (toDate   || undefined) : undefined,
+    jobType: typeFilter !== "all" ? typeFilter : undefined,
   });
 
-  const filteredJobs = search
-    ? jobs.filter(
-        (j) =>
-          (j.clientName ?? "").toLowerCase().includes(search.toLowerCase()) ||
-          (j.crewName ?? "").toLowerCase().includes(search.toLowerCase()) ||
-          (j.services ?? []).some((s) =>
+  const occurrences = useMemo(() => jobs.flatMap(expandJob), [jobs]);
+
+  const viewFiltered = occurrences.filter((o) => {
+    if (viewMode === "unscheduled") return o.date === null;
+    if (viewMode === "completed") return o.status === "completed";
+    // active
+    if (o.date === null) return false;
+    if (o.status === "completed" || o.status === "cancelled") return false;
+    if (fromDate && o.date < fromDate) return false;
+    if (toDate && o.date > toDate) return false;
+    return true;
+  });
+
+  const filtered = search
+    ? viewFiltered.filter(
+        (o) =>
+          (o.job.clientName ?? "").toLowerCase().includes(search.toLowerCase()) ||
+          (o.crewName ?? "").toLowerCase().includes(search.toLowerCase()) ||
+          (o.job.services ?? []).some((s) =>
             s.serviceName.toLowerCase().includes(search.toLowerCase())
           )
       )
-    : jobs;
+    : viewFiltered;
 
-  // group by date — completed view uses updatedAt so jobs without scheduledDate still sort sensibly
-  const grouped = filteredJobs.reduce<Record<string, CRMJob[]>>((acc, job) => {
+  // group by date — completed view uses the visit/job's updatedAt so rows without a date still sort sensibly
+  const grouped = filtered.reduce<Record<string, JobOccurrence[]>>((acc, o) => {
     let key: string;
     if (viewMode === "completed") {
-      key = job.updatedAt ? job.updatedAt.slice(0, 10) : (job.scheduledDate ?? "Unknown");
+      key = o.date ?? (o.job.updatedAt ? o.job.updatedAt.slice(0, 10) : "Unknown");
     } else {
-      key = job.scheduledDate ?? "Unscheduled";
+      key = o.date ?? "Unscheduled";
     }
     if (!acc[key]) acc[key] = [];
-    acc[key].push(job);
+    acc[key].push(o);
     return acc;
   }, {});
 
@@ -100,11 +143,11 @@ export function JobsList() {
   });
 
   const stats = {
-    total:      filteredJobs.length,
-    scheduled:  filteredJobs.filter((j) => j.status === "scheduled").length,
-    inProgress: filteredJobs.filter((j) => j.status === "in_progress").length,
-    completed:  filteredJobs.filter((j) => j.status === "completed").length,
-    revenue:    filteredJobs.reduce((s, j) => s + (j.rateCents ?? 0), 0),
+    total:      filtered.length,
+    scheduled:  filtered.filter((o) => o.status === "scheduled").length,
+    inProgress: filtered.filter((o) => o.status === "in_progress").length,
+    completed:  filtered.filter((o) => o.status === "completed").length,
+    revenue:    filtered.reduce((s, o) => s + (o.job.rateCents ?? 0), 0),
   };
 
   return (
@@ -149,7 +192,7 @@ export function JobsList() {
       <div className="flex flex-wrap items-center gap-2">
         {/* View mode tabs */}
         <div className="flex rounded-md border overflow-hidden text-sm shrink-0">
-          {(["active", "completed"] as const).map((mode) => (
+          {(["active", "unscheduled", "completed"] as const).map((mode) => (
             <button
               key={mode}
               onClick={() => setViewMode(mode)}
@@ -160,7 +203,7 @@ export function JobsList() {
                   : "bg-white text-slate-600 hover:bg-slate-50"
               )}
             >
-              {mode === "active" ? "Active" : "Completed"}
+              {mode === "active" ? "Active" : mode === "unscheduled" ? "Unscheduled" : "Completed"}
             </button>
           ))}
         </div>
@@ -225,43 +268,51 @@ export function JobsList() {
         </div>
       )}
 
-      {dateKeys.map((dateKey) => (
-        <div key={dateKey} className="flex flex-col gap-1">
-          <div className="flex items-center gap-2">
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
-              {dateKey === "Unscheduled"
-                ? "Unscheduled"
-                : new Date(dateKey + "T00:00:00").toLocaleDateString("en-US", {
-                    weekday: "long",
-                    month: "long",
-                    day: "numeric",
-                  })}
-            </p>
-            <span className="text-xs text-slate-400">({grouped[dateKey].length})</span>
-          </div>
-
-          <div className="rounded-lg border bg-white shadow-sm overflow-hidden">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b bg-slate-50 text-xs font-semibold text-slate-500 uppercase tracking-wide">
-                  <th className="px-4 py-2.5 text-left">Client</th>
-                  <th className="px-4 py-2.5 text-left">Services</th>
-                  <th className="px-4 py-2.5 text-left">Type</th>
-                  <th className="px-4 py-2.5 text-left">Crew</th>
-                  <th className="px-4 py-2.5 text-right">Revenue</th>
-                  <th className="px-4 py-2.5 text-center">Status</th>
-                  <th className="px-4 py-2.5 w-8" />
+      {dateKeys.length > 0 && (
+        <div className="rounded-lg border bg-white shadow-sm overflow-hidden">
+          <table className="w-full text-sm table-fixed">
+            <colgroup>
+              <col className="w-[26%]" />
+              <col className="w-[26%]" />
+              <col className="w-[12%]" />
+              <col className="w-[14%]" />
+              <col className="w-[12%]" />
+              <col className="w-[8%]" />
+              <col className="w-8" />
+            </colgroup>
+            <thead>
+              <tr className="border-b bg-slate-50 text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                <th className="px-4 py-2.5 text-left">Client</th>
+                <th className="px-4 py-2.5 text-left">Services</th>
+                <th className="px-4 py-2.5 text-left">Type</th>
+                <th className="px-4 py-2.5 text-left">Crew</th>
+                <th className="px-4 py-2.5 text-right">Revenue</th>
+                <th className="px-4 py-2.5 text-center">Status</th>
+                <th className="px-4 py-2.5 w-8" />
+              </tr>
+            </thead>
+            {dateKeys.map((dateKey) => (
+              <tbody key={dateKey}>
+                <tr className="bg-slate-50/60">
+                  <td colSpan={7} className="px-4 py-1.5 text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                    {dateKey === "Unscheduled"
+                      ? "Unscheduled"
+                      : new Date(dateKey + "T00:00:00").toLocaleDateString("en-US", {
+                          weekday: "long",
+                          month: "long",
+                          day: "numeric",
+                        })}
+                    <span className="ml-2 normal-case text-slate-400">({grouped[dateKey].length})</span>
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {grouped[dateKey].map((job) => (
-                  <JobRow key={job.id} job={job} onClick={() => router.push(`/crm/scheduling/jobs/${job.id}`)} />
+                {grouped[dateKey].map((o) => (
+                  <JobRow key={o.key} occurrence={o} onClick={() => router.push(`/crm/scheduling/jobs/${o.job.id}`)} />
                 ))}
               </tbody>
-            </table>
-          </div>
+            ))}
+          </table>
         </div>
-      ))}
+      )}
       <NewJobDialog
         open={newJobOpen}
         onOpenChange={setNewJobOpen}
@@ -270,7 +321,8 @@ export function JobsList() {
   );
 }
 
-function JobRow({ job, onClick }: { job: CRMJob; onClick: () => void }) {
+function JobRow({ occurrence, onClick }: { occurrence: JobOccurrence; onClick: () => void }) {
+  const { job, status, crewName } = occurrence;
   const serviceNames = (job.services ?? []).map((s) => s.serviceName).filter(Boolean).join(", ");
 
   return (
@@ -292,14 +344,14 @@ function JobRow({ job, onClick }: { job: CRMJob; onClick: () => void }) {
         {JOB_TYPE_LABEL[job.jobType] ?? job.jobType}
       </td>
       <td className="px-4 py-3 text-slate-600 text-xs">
-        {job.crewName ?? <span className="text-slate-400 italic">Unassigned</span>}
+        {crewName ?? <span className="text-slate-400 italic">Unassigned</span>}
       </td>
       <td className="px-4 py-3 text-right tabular-nums text-slate-700 text-sm">
         {job.rateCents != null ? formatCurrency(job.rateCents) : "—"}
       </td>
       <td className="px-4 py-3 text-center">
-        <Badge className={cn("text-[10px]", STATUS_COLOR[job.status] ?? "bg-slate-100 text-slate-500")}>
-          {STATUS_LABEL[job.status] ?? job.status}
+        <Badge className={cn("text-[10px]", STATUS_COLOR[status] ?? "bg-slate-100 text-slate-500")}>
+          {STATUS_LABEL[status] ?? status}
         </Badge>
       </td>
       <td className="px-4 py-3 text-center">
