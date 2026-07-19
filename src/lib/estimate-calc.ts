@@ -189,12 +189,18 @@ export interface InstallmentScheduleEntry {
  * signing) isn't counted as installment #1. Integer division leftover cents
  * are added to the final installment so the sum always equals the balance
  * exactly. Returns [] when numInstallments <= 1 (nothing to schedule).
+ *
+ * `dayOfMonth`, when given, fixes every installment to that day (e.g. always
+ * the 1st, or always the 15th) instead of whichever day startDate falls on —
+ * clamped to the last day of a shorter month (e.g. requesting the 31st in
+ * February falls back to the 28th/29th).
  */
 export function computeInstallmentSchedule(
   totalCents: number,
   depositRequiredCents: number,
   numInstallments: number,
-  startDate: string
+  startDate: string,
+  dayOfMonth?: number | null
 ): InstallmentScheduleEntry[] {
   if (numInstallments <= 1) return [];
 
@@ -207,6 +213,10 @@ export function computeInstallmentSchedule(
   return Array.from({ length: numInstallments }, (_, i) => {
     const due = new Date(start);
     due.setMonth(due.getMonth() + i + 1);
+    if (dayOfMonth) {
+      const daysInMonth = new Date(due.getFullYear(), due.getMonth() + 1, 0).getDate();
+      due.setDate(Math.min(dayOfMonth, daysInMonth));
+    }
     return {
       number: i + 1,
       amountCents: baseAmount + (i === numInstallments - 1 ? remainder : 0),

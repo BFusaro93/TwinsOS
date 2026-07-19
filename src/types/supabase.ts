@@ -6819,6 +6819,79 @@ export type Database = {
           },
         ]
       }
+      estimate_milestones: {
+        Row: {
+          amount_cents: number
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          estimate_id: string
+          id: string
+          invoice_id: string | null
+          milestone_type: string
+          milestone_value: number
+          name: string
+          org_id: string
+          sort_order: number
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          amount_cents?: number
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          estimate_id: string
+          id?: string
+          invoice_id?: string | null
+          milestone_type?: string
+          milestone_value?: number
+          name: string
+          org_id?: string
+          sort_order?: number
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          amount_cents?: number
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          estimate_id?: string
+          id?: string
+          invoice_id?: string | null
+          milestone_type?: string
+          milestone_value?: number
+          name?: string
+          org_id?: string
+          sort_order?: number
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "estimate_milestones_estimate_id_fkey"
+            columns: ["estimate_id"]
+            isOneToOne: false
+            referencedRelation: "estimates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estimate_milestones_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "crm_invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estimate_milestones_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       estimate_photos: {
         Row: {
           caption: string | null
@@ -7158,12 +7231,14 @@ export type Database = {
           estimate_number: number
           gross_profit_cents: number
           id: string
+          installment_day_of_month: number | null
           net_profit_cents: number
           notes: string | null
           num_installments: number
           org_id: string
           overhead_cost_cents: number
           overhead_rate_bps: number
+          payment_plan_type: string
           payment_terms: string | null
           po_number: string | null
           probability_bps: number
@@ -7208,12 +7283,14 @@ export type Database = {
           estimate_number?: number
           gross_profit_cents?: number
           id?: string
+          installment_day_of_month?: number | null
           net_profit_cents?: number
           notes?: string | null
           num_installments?: number
           org_id?: string
           overhead_cost_cents?: number
           overhead_rate_bps?: number
+          payment_plan_type?: string
           payment_terms?: string | null
           po_number?: string | null
           probability_bps?: number
@@ -7258,12 +7335,14 @@ export type Database = {
           estimate_number?: number
           gross_profit_cents?: number
           id?: string
+          installment_day_of_month?: number | null
           net_profit_cents?: number
           notes?: string | null
           num_installments?: number
           org_id?: string
           overhead_cost_cents?: number
           overhead_rate_bps?: number
+          payment_plan_type?: string
           payment_terms?: string | null
           po_number?: string | null
           probability_bps?: number

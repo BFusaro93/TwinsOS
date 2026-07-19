@@ -23,6 +23,11 @@ export interface EstimatePDFLineItem {
   tier: "basic" | "standard" | "premium" | null;
 }
 
+export interface EstimatePDFMilestone {
+  name: string;
+  amountCents: number;
+}
+
 export interface EstimatePDFData {
   estimateNumber: number;
   description: string | null;
@@ -45,6 +50,9 @@ export interface EstimatePDFData {
   paymentTerms: string | null;
   depositRequiredCents: number;
   numInstallments: number;
+  installmentDayOfMonth: number | null;
+  paymentPlanType: "installments" | "milestones";
+  milestones: EstimatePDFMilestone[];
   tiersEnabled: boolean;
   tierLabels: { basic: string; standard: string; premium: string };
 
@@ -180,12 +188,15 @@ export function EstimateDocument({ estimate, org }: { estimate: EstimatePDFData;
 
   const orgAddressLine2 = [org.city, org.state, org.zip].filter(Boolean).join(", ");
 
-  const installmentSchedule = computeInstallmentSchedule(
-    estimate.totalCents,
-    estimate.depositRequiredCents,
-    estimate.numInstallments,
-    estimate.createdAt.slice(0, 10)
-  );
+  const installmentSchedule = estimate.paymentPlanType === "installments"
+    ? computeInstallmentSchedule(
+        estimate.totalCents,
+        estimate.depositRequiredCents,
+        estimate.numInstallments,
+        estimate.createdAt.slice(0, 10),
+        estimate.installmentDayOfMonth
+      )
+    : [];
 
   return (
     <Document title={`Estimate #${estimate.estimateNumber}`} author={org.name}>
@@ -383,6 +394,17 @@ export function EstimateDocument({ estimate, org }: { estimate: EstimatePDFData;
               <View key={inst.number} style={S.scheduleRow}>
                 <Text style={S.scheduleText}>Installment {inst.number} of {installmentSchedule.length} — due {formatDate(inst.dueDate)}</Text>
                 <Text style={[S.scheduleText, { fontFamily: "Helvetica-Bold" }]}>{cents(inst.amountCents)}</Text>
+              </View>
+            ))}
+          </View>
+        )}
+        {estimate.paymentPlanType === "milestones" && estimate.milestones.length > 0 && (
+          <View style={S.scheduleSection}>
+            <Text style={S.scheduleLabel}>Payment Schedule</Text>
+            {estimate.milestones.map((m, i) => (
+              <View key={i} style={S.scheduleRow}>
+                <Text style={S.scheduleText}>{m.name}</Text>
+                <Text style={[S.scheduleText, { fontFamily: "Helvetica-Bold" }]}>{cents(m.amountCents)}</Text>
               </View>
             ))}
           </View>

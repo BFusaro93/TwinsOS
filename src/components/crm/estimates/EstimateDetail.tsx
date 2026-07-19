@@ -28,6 +28,7 @@ import { useOverheadSettings } from "@/lib/hooks/use-overhead-settings";
 import { useOrgSettings } from "@/lib/hooks/use-org-settings";
 import { EstimateLineItemsGrid } from "./EstimateLineItemsGrid";
 import { EstimateDirectCostsGrid } from "./EstimateDirectCostsGrid";
+import { EstimateMilestonesEditor } from "./EstimateMilestonesEditor";
 import { EstimateSummaryPanel } from "./EstimateSummaryPanel";
 import { AIDraftDialog } from "./AIDraftDialog";
 import { ConvertToJobDialog } from "./ConvertToJobDialog";
@@ -956,29 +957,69 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                             className="h-8 w-36"
                           />
                         </FieldRow>
-                        <FieldRow label="# of Installments">
-                          <div className="flex flex-col gap-1">
-                            <Input
-                              type="number"
-                              min={1}
-                              value={(headerEdits.num_installments as number) ?? estimate.numInstallments}
-                              onChange={(e) => patchHeader("num_installments", Number(e.target.value))}
-                              onBlur={() => saveHeader()}
-                              className="h-8 w-20"
-                            />
-                            {(() => {
-                              const n = (headerEdits.num_installments as number) ?? estimate.numInstallments;
-                              const deposit = (headerEdits.deposit_required_cents as number) ?? estimate.depositRequiredCents;
-                              const schedule = computeInstallmentSchedule(estimate.totalCents, deposit, n, estimate.estimateDate);
-                              if (schedule.length === 0) return null;
-                              return (
-                                <p className="text-[10px] text-slate-400">
-                                  {schedule.length} × {formatCurrency(schedule[0].amountCents)}/mo starting {new Date(schedule[0].dueDate + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                                </p>
-                              );
-                            })()}
-                          </div>
+                        <FieldRow label="Payment Plan">
+                          <Select
+                            value={(headerEdits.payment_plan_type as string) ?? estimate.paymentPlanType}
+                            onValueChange={(v) => { patchHeader("payment_plan_type", v); saveHeader({ ...headerEdits, payment_plan_type: v }); }}
+                          >
+                            <SelectTrigger className="h-8 w-44">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="installments">Monthly Installments</SelectItem>
+                              <SelectItem value="milestones">Milestones</SelectItem>
+                            </SelectContent>
+                          </Select>
                         </FieldRow>
+                        {((headerEdits.payment_plan_type as string) ?? estimate.paymentPlanType) === "installments" && (
+                          <>
+                            <FieldRow label="# of Installments">
+                              <div className="flex flex-col gap-1">
+                                <Input
+                                  type="number"
+                                  min={1}
+                                  value={(headerEdits.num_installments as number) ?? estimate.numInstallments}
+                                  onChange={(e) => patchHeader("num_installments", Number(e.target.value))}
+                                  onBlur={() => saveHeader()}
+                                  className="h-8 w-20"
+                                />
+                                {(() => {
+                                  const n = (headerEdits.num_installments as number) ?? estimate.numInstallments;
+                                  const deposit = (headerEdits.deposit_required_cents as number) ?? estimate.depositRequiredCents;
+                                  const day = (headerEdits.installment_day_of_month as number | null | undefined) ?? estimate.installmentDayOfMonth;
+                                  const schedule = computeInstallmentSchedule(estimate.totalCents, deposit, n, estimate.estimateDate, day);
+                                  if (schedule.length === 0) return null;
+                                  return (
+                                    <p className="text-[10px] text-slate-400">
+                                      {schedule.length} × {formatCurrency(schedule[0].amountCents)}/mo starting {new Date(schedule[0].dueDate + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                                    </p>
+                                  );
+                                })()}
+                              </div>
+                            </FieldRow>
+                            <FieldRow label="Payment Day">
+                              <div className="flex items-center gap-1.5">
+                                <Input
+                                  type="number"
+                                  min={1}
+                                  max={31}
+                                  value={
+                                    (headerEdits.installment_day_of_month as number | null | undefined) !== undefined
+                                      ? String((headerEdits.installment_day_of_month as number | null) ?? "")
+                                      : String(estimate.installmentDayOfMonth ?? "")
+                                  }
+                                  onChange={(e) =>
+                                    patchHeader("installment_day_of_month", e.target.value === "" ? null : Number(e.target.value))
+                                  }
+                                  onBlur={() => saveHeader()}
+                                  className="h-8 w-20"
+                                  placeholder="—"
+                                />
+                                <span className="text-[10px] text-slate-400">Blank = same day as estimate date</span>
+                              </div>
+                            </FieldRow>
+                          </>
+                        )}
                         <FieldRow label="Probability %">
                           <div className="flex items-center gap-1.5">
                             <Input
@@ -1113,6 +1154,17 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                         </FieldRow>
                       </div>
                     </div>
+                    {((headerEdits.payment_plan_type as string) ?? estimate.paymentPlanType) === "milestones" && (
+                      <div className="mt-4 flex flex-col gap-1.5 border-t pt-4">
+                        <Label className="text-xs font-medium text-slate-600">Milestones</Label>
+                        <EstimateMilestonesEditor
+                          estimateId={estimate.id}
+                          clientId={estimate.clientId}
+                          salesRepId={estimate.salesRepId}
+                          totalCents={estimate.totalCents}
+                        />
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

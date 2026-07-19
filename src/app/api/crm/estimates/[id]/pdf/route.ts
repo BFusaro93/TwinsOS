@@ -4,7 +4,7 @@ import { cookies } from "next/headers";
 import { renderToBuffer } from "@react-pdf/renderer";
 import { createElement } from "react";
 import { EstimateDocument } from "@/components/crm/estimates/pdf/EstimateDocument";
-import type { EstimatePDFData, EstimatePDFLineItem, OrgPDFData } from "@/components/crm/estimates/pdf/EstimateDocument";
+import type { EstimatePDFData, EstimatePDFLineItem, EstimatePDFMilestone, OrgPDFData } from "@/components/crm/estimates/pdf/EstimateDocument";
 
 export async function GET(
   _req: NextRequest,
@@ -29,7 +29,8 @@ export async function GET(
     .select(`
       *,
       clients(display_name, billing_address, billing_city, billing_state, billing_zip),
-      estimate_line_items(*)
+      estimate_line_items(*),
+      estimate_milestones(name, amount_cents, sort_order, deleted_at)
     `)
     .eq("id", id)
     .single();
@@ -37,6 +38,16 @@ export async function GET(
   if (estErr || !est) {
     return NextResponse.json({ error: "Estimate not found" }, { status: 404 });
   }
+
+  const milestones: EstimatePDFMilestone[] = (est.estimate_milestones ?? [])
+    .filter((m: Record<string, unknown>) => !m.deleted_at)
+    .sort((a: Record<string, unknown>, b: Record<string, unknown>) =>
+      ((a.sort_order as number) ?? 0) - ((b.sort_order as number) ?? 0)
+    )
+    .map((m: Record<string, unknown>) => ({
+      name: m.name as string,
+      amountCents: (m.amount_cents as number) ?? 0,
+    }));
 
   // ── fetch org settings ──────────────────────────────────────────────────────
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -86,6 +97,9 @@ export async function GET(
     paymentTerms: (est.payment_terms as string) ?? null,
     depositRequiredCents: (est.deposit_required_cents as number) ?? 0,
     numInstallments: (est.num_installments as number) ?? 1,
+    installmentDayOfMonth: (est.installment_day_of_month as number | null) ?? null,
+    paymentPlanType: (est.payment_plan_type as "installments" | "milestones") ?? "installments",
+    milestones,
     tiersEnabled: (est.tiers_enabled as boolean) ?? false,
     tierLabels: (est.tier_labels as { basic: string; standard: string; premium: string }) ?? { basic: "Basic", standard: "Standard", premium: "Premium" },
     lineItems,

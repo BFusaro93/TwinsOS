@@ -78,6 +78,23 @@ export interface EstimateDirectCost {
   updatedAt: string;
 }
 
+export interface EstimateMilestone {
+  id: string;
+  orgId: string;
+  estimateId: string;
+  name: string;
+  milestoneType: 'flat' | 'percent';
+  /** Cents if milestoneType is 'flat', basis points (0-10000) if 'percent'. */
+  milestoneValue: number;
+  /** Snapshotted dollar amount actually billed — the source of truth for invoicing. */
+  amountCents: number;
+  sortOrder: number;
+  status: 'pending' | 'invoiced';
+  invoiceId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 // ── estimate header ────────────────────────────────────────────────────────────
 
 export interface Estimate {
@@ -98,6 +115,10 @@ export interface Estimate {
   estimateDate: string;
   validUntilDate: string | null;
   numInstallments: number;
+  /** Day of month (1-31) installments are due on. Null = same day as estimateDate. */
+  installmentDayOfMonth: number | null;
+  /** 'installments' = equal monthly payments; 'milestones' = estimate_milestones rows drive billing. */
+  paymentPlanType: 'installments' | 'milestones';
   poNumber: string | null;
   workOrderNumber: string | null;
   /** Overrides the org's default billing terms for this estimate/job. Null = use org default. */

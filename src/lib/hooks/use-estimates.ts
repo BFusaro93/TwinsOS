@@ -91,6 +91,8 @@ function mapEstimate(row: any): Estimate {
     estimateDate: row.estimate_date,
     validUntilDate: row.valid_until_date,
     numInstallments: row.num_installments,
+    installmentDayOfMonth: row.installment_day_of_month ?? null,
+    paymentPlanType: (row.payment_plan_type as Estimate['paymentPlanType']) ?? 'installments',
     poNumber: row.po_number,
     workOrderNumber: row.work_order_number,
     paymentTerms: row.payment_terms ?? null,

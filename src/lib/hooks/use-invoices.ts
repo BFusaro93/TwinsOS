@@ -56,7 +56,7 @@ function mapPayment(row: any): CRMPayment {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function mapInvoice(row: any): CRMInvoice {
+export function mapInvoice(row: any): CRMInvoice {
   return {
     id: row.id,
     orgId: row.org_id,
