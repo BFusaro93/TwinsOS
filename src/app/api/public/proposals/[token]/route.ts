@@ -105,6 +105,7 @@ export async function GET(
     taxRateBps: est.tax_rate_bps ?? 0,
     taxCents: est.tax_cents ?? 0,
     discountCents: est.discount_cents ?? 0,
+    showDiscounts: est.show_discounts ?? false,
     totalCents: est.total_cents ?? 0,
 
     tiersEnabled: est.tiers_enabled ?? false,

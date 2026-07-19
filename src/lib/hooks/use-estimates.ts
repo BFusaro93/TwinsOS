@@ -177,6 +177,8 @@ export function useEstimate(id: string) {
         `)
         .eq("id", id)
         .is("deleted_at", null)
+        .order("sort_order", { foreignTable: "estimate_line_items" })
+        .order("sort_order", { foreignTable: "estimate_direct_costs" })
         .single();
       if (error) throw error;
       return mapEstimate(data);

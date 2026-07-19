@@ -93,6 +93,7 @@ export interface ProposalData {
   taxRateBps: number;
   taxCents: number;
   discountCents: number;
+  showDiscounts: boolean;
   totalCents: number;
 
   tiersEnabled: boolean;

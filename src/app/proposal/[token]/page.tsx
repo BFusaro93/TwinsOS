@@ -542,7 +542,7 @@ export default function ProposalPage() {
           <div className="flex justify-between text-slate-600">
             <span>Subtotal</span><span className="font-medium">{cents(selectedTotal)}</span>
           </div>
-          {proposal.discountCents > 0 && (
+          {proposal.showDiscounts && proposal.discountCents > 0 && (
             <div className="flex justify-between text-green-600">
               <span>Discount</span><span className="font-medium">-{cents(proposal.discountCents)}</span>
             </div>

@@ -24,6 +24,7 @@ interface EstimateRow {
   portal_accepted_at: string | null;
   portal_signature_name: string | null;
   notes: string | null;
+  show_discounts: boolean;
 }
 
 function fmt(cents: number) {
@@ -45,7 +46,7 @@ export default async function EstimatePdfPage({ params }: { params: Promise<{ id
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (supabase as any)
       .from("estimates")
-      .select("id, estimate_number, title:description, total_price_cents:total_cents, status:stage, expires_at:valid_until_date, created_at, portal_accepted_at, portal_signature_name, notes")
+      .select("id, estimate_number, title:description, total_price_cents:total_cents, status:stage, expires_at:valid_until_date, created_at, portal_accepted_at, portal_signature_name, notes, show_discounts")
       .eq("id", id)
       .eq("client_id", ctx.clientId)
       .eq("org_id", ctx.orgId)
@@ -160,7 +161,7 @@ export default async function EstimatePdfPage({ params }: { params: Promise<{ id
                   <td className="py-2.5 text-right text-slate-600">{fmt(li.unit_price_cents)}</td>
                   <td className="py-2.5 text-right font-medium text-slate-900">
                     {fmt(li.unit_price_cents * li.quantity - (li.discount_cents ?? 0))}
-                    {li.discount_cents > 0 && (
+                    {estimate.show_discounts && li.discount_cents > 0 && (
                       <div className="text-[10px] font-normal text-green-600">−{fmt(li.discount_cents)} disc.</div>
                     )}
                   </td>

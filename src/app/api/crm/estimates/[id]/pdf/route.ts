@@ -81,6 +81,7 @@ export async function GET(
     taxRateBps: (est.tax_rate_bps as number) ?? 0,
     taxCents: (est.tax_cents as number) ?? 0,
     discountCents: (est.discount_cents as number) ?? 0,
+    showDiscounts: (est.show_discounts as boolean) ?? false,
     totalCents: (est.total_cents as number) ?? 0,
     paymentTerms: (est.payment_terms as string) ?? null,
     depositRequiredCents: (est.deposit_required_cents as number) ?? 0,

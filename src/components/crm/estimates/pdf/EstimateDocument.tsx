@@ -40,6 +40,7 @@ export interface EstimatePDFData {
   taxRateBps: number;
   taxCents: number;
   discountCents: number;
+  showDiscounts: boolean;
   totalCents: number;
   paymentTerms: string | null;
   depositRequiredCents: number;
@@ -348,7 +349,7 @@ export function EstimateDocument({ estimate, org }: { estimate: EstimatePDFData;
               <Text style={S.totalsLabel}>Subtotal</Text>
               <Text style={S.totalsValue}>{cents(estimate.subtotalCents)}</Text>
             </View>
-            {estimate.discountCents > 0 && (
+            {estimate.showDiscounts && estimate.discountCents > 0 && (
               <View style={S.totalsRow}>
                 <Text style={[S.totalsLabel, { color: "#16a34a" }]}>Discount</Text>
                 <Text style={[S.totalsValue, { color: "#16a34a" }]}>-{cents(estimate.discountCents)}</Text>
