@@ -81,6 +81,8 @@ import { downloadCSV, readCSVFile } from "@/lib/csv";
 import { autoMapColumns, remapRows } from "@/components/shared/ImportExportMenu";
 import { useClients, useLeads, useBulkImportClients, useBulkImportLeads } from "@/lib/hooks/use-clients";
 import { useEstimates, useBulkImportEstimates } from "@/lib/hooks/use-estimates";
+import { useEstimateStages } from "@/lib/hooks/use-estimate-stages";
+import { useApprovalFlows } from "@/lib/hooks/use-approval-flows";
 import { useInvoices, usePayments, useBulkImportInvoices, useBulkImportPayments } from "@/lib/hooks/use-invoices";
 import { useTickets, useBulkImportTickets } from "@/lib/hooks/use-tickets";
 import { useEmployees, useBulkImportEmployees } from "@/lib/hooks/use-employees";
@@ -806,15 +808,18 @@ function CustomFieldDefsEditor() {
 
 function EstimatesTab() {
   const { data: estimateReasonItems = [] } = useOrgList("estimate_reasons");
+  const { data: estimateStages = [] } = useEstimateStages();
+  const { data: approvalFlows = [] } = useApprovalFlows();
+  const estimateApprovalSteps = approvalFlows.find((f) => f.entityType === "crm_estimate")?.steps.length ?? 0;
 
   return (
     <div className="rounded-lg border bg-white shadow-sm">
-      <AccordionSection title="Estimate Stages" count={0} defaultOpen>
+      <AccordionSection title="Estimate Stages" count={estimateStages.length} defaultOpen>
         <EstimateStagesEditor />
       </AccordionSection>
       <AccordionSection
         title="Estimate Approval Flow"
-        count={0}
+        count={estimateApprovalSteps}
         description="Require manager sign-off before estimates above a dollar threshold can be sent to clients."
       >
         <ApprovalFlowsPage entityTypes={["crm_estimate"]} />
