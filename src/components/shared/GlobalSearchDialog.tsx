@@ -62,6 +62,15 @@ interface GlobalSearchDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
+// cmdk's default filter does fuzzy subsequence scoring (like Sublime's command
+// palette) — great for one homogeneous list, but across a dozen unrelated
+// entity types it means a query like "marcus" can match any work order/part
+// whose concatenated value happens to contain those letters in order anywhere.
+// Plain substring matching is what users expect for a business-record search.
+function substringFilter(value: string, search: string): number {
+  return value.toLowerCase().includes(search.toLowerCase()) ? 1 : 0;
+}
+
 export function GlobalSearchDialog({ open, onOpenChange }: GlobalSearchDialogProps) {
   const router = useRouter();
   const { setSelectedRequisitionId, setSelectedPOId } = usePOStore();
@@ -117,7 +126,7 @@ export function GlobalSearchDialog({ open, onOpenChange }: GlobalSearchDialogPro
   }
 
   return (
-    <CommandDialog open={open} onOpenChange={onOpenChange}>
+    <CommandDialog open={open} onOpenChange={onOpenChange} filter={substringFilter}>
       <CommandInput placeholder={isCrew ? "Search job photos and dispatch jobs…" : "Search clients, leads, invoices, work orders, assets…"} />
       <CommandList className="max-h-[480px]">
         <CommandEmpty>No results found.</CommandEmpty>
