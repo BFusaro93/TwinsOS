@@ -86,7 +86,7 @@ export function MyDay() {
   const totalBalanceCents = outstandingInvoices.reduce((s, i) => s + i.balanceCents, 0);
 
   const activeClients = (allClients ?? []).filter((c) => c.status === "active");
-  const newThisMonth = (allClients ?? []).filter(
+  const newThisMonth = activeClients.filter(
     (c) => c.createdAt >= startOfMonth
   ).length;
 
