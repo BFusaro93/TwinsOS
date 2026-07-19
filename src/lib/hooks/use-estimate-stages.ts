@@ -21,10 +21,9 @@ const DEFAULT_STAGES: Omit<EstimateStage, "id" | "orgId" | "active">[] = [
   { name: "Draft",      stageKey: "draft",    probabilityBps: 1000,  sortOrder: 0, isDefault: true,  isSystem: true },
   { name: "Quote Ready",stageKey: "quote",    probabilityBps: 3000,  sortOrder: 1, isDefault: false, isSystem: true },
   { name: "Sent",       stageKey: "sent",     probabilityBps: 5000,  sortOrder: 2, isDefault: false, isSystem: true },
-  { name: "Accepted",   stageKey: "accepted", probabilityBps: 7000,  sortOrder: 3, isDefault: false, isSystem: true },
-  { name: "Won",        stageKey: "won",      probabilityBps: 10000, sortOrder: 4, isDefault: false, isSystem: true },
-  { name: "Lost",       stageKey: "lost",     probabilityBps: 0,     sortOrder: 5, isDefault: false, isSystem: true },
-  { name: "Invoiced",   stageKey: "invoiced", probabilityBps: 10000, sortOrder: 6, isDefault: false, isSystem: true },
+  { name: "Accepted",   stageKey: "accepted", probabilityBps: 10000, sortOrder: 3, isDefault: false, isSystem: true },
+  { name: "Lost",       stageKey: "lost",     probabilityBps: 0,     sortOrder: 4, isDefault: false, isSystem: true },
+  { name: "Invoiced",   stageKey: "invoiced", probabilityBps: 10000, sortOrder: 5, isDefault: false, isSystem: true },
 ];
 
 function toStage(row: Record<string, unknown>): EstimateStage {

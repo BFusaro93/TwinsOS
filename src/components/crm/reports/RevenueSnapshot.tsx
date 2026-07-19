@@ -122,7 +122,7 @@ export function useReportData() {
       // Estimates
       const estimates = estimatesRes.data ?? [];
       const estimatesWonList = estimates.filter(
-        (e: { stage: string }) => e.stage === "won" || e.stage === "invoiced"
+        (e: { stage: string }) => e.stage === "accepted" || e.stage === "invoiced"
       );
       const estimatesValueWon = estimatesWonList.reduce(
         (sum: number, e: { total_price_cents: number }) => sum + (e.total_price_cents ?? 0),

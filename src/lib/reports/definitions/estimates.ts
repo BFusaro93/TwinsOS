@@ -17,7 +17,6 @@ const STAGE_OPTIONS = [
   { value: "quote", label: "Quote" },
   { value: "sent", label: "Sent" },
   { value: "accepted", label: "Accepted" },
-  { value: "won", label: "Won" },
   { value: "lost", label: "Lost" },
   { value: "invoiced", label: "Invoiced" },
 ];
@@ -62,9 +61,9 @@ export const ESTIMATE_REPORTS: PrebuiltReportDef[] = [
   {
     key: "won-estimates-by-service",
     section: "estimates",
-    name: "Won Estimates by Service",
+    name: "Accepted Estimates by Service",
     description:
-      "Shows every service line on won and invoiced estimates with hours, cost, and value.",
+      "Shows every service line on accepted and invoiced estimates with hours, cost, and value.",
     filters: [
       dateRangeFilterDef("Estimate Date", "this_year"),
       { key: "sales_rep", label: "Sales Rep", type: "select", optionsSource: "salesReps" },
@@ -85,7 +84,7 @@ export const ESTIMATE_REPORTS: PrebuiltReportDef[] = [
         "sales_rep",
       ],
       filters: [
-        { column: "estimate_stage", op: "in", value: ["won", "invoiced"] },
+        { column: "estimate_stage", op: "in", value: ["accepted", "invoiced"] },
         ...dateRangeFilters("estimate_date", params, { preset: "this_year" }),
         ...eqFilter("sales_rep", params.sales_rep),
       ],
@@ -98,9 +97,9 @@ export const ESTIMATE_REPORTS: PrebuiltReportDef[] = [
   {
     key: "won-estimates-service-summary",
     section: "estimates",
-    name: "Won Estimates by Service (Summary)",
+    name: "Accepted Estimates by Service (Summary)",
     description:
-      "Totals won and invoiced estimate lines by service — line count, value, hours, and cost.",
+      "Totals accepted and invoiced estimate lines by service — line count, value, hours, and cost.",
     filters: [
       dateRangeFilterDef("Estimate Date", "this_year"),
       { key: "sales_rep", label: "Sales Rep", type: "select", optionsSource: "salesReps" },
@@ -109,7 +108,7 @@ export const ESTIMATE_REPORTS: PrebuiltReportDef[] = [
       dataset: "rpt_estimate_line_items",
       columns: [],
       filters: [
-        { column: "estimate_stage", op: "in", value: ["won", "invoiced"] },
+        { column: "estimate_stage", op: "in", value: ["accepted", "invoiced"] },
         ...dateRangeFilters("estimate_date", params, { preset: "this_year" }),
         ...eqFilter("sales_rep", params.sales_rep),
       ],
@@ -127,16 +126,16 @@ export const ESTIMATE_REPORTS: PrebuiltReportDef[] = [
   {
     key: "estimate-value-vs-actual",
     section: "estimates",
-    name: "Won Estimates — Estimated vs Invoiced Value",
+    name: "Accepted Estimates — Estimated vs Invoiced Value",
     description:
-      "Compares each won estimate's value against what was actually invoiced and paid.",
+      "Compares each accepted estimate's value against what was actually invoiced and paid.",
     filters: [dateRangeFilterDef("Estimate Date", "this_year")],
     run: async ({ supabase, params }) => {
       const { from, to } = resolveDateRange(params, "this_year");
       let query = supabase
         .from("estimates")
         .select("id, estimate_number, estimate_date, total_cents, clients:client_id(display_name)")
-        .in("stage", ["won", "invoiced"])
+        .in("stage", ["accepted", "invoiced"])
         .is("deleted_at", null);
       if (from) query = query.gte("estimate_date", from);
       if (to) query = query.lte("estimate_date", to);
@@ -212,7 +211,7 @@ export const ESTIMATE_REPORTS: PrebuiltReportDef[] = [
         ],
         rows,
         [
-          "Invoiced and paid values are summed across all non-void invoices linked to each won or invoiced estimate.",
+          "Invoiced and paid values are summed across all non-void invoices linked to each accepted or invoiced estimate.",
         ]
       );
     },

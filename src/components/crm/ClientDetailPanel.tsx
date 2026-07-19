@@ -1493,12 +1493,12 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
   const accountingRowsVisible = accountingRows.slice(0, ACCOUNTING_PAGE);
 
   const openEstimates = (estimates ?? []).filter(
-    (e) => e.stage !== "won" && e.stage !== "lost"
+    (e) => e.stage !== "accepted" && e.stage !== "lost"
   );
 
   if (isLead) {
     // Leads only show the estimates column — full width
-    const openEstimates = (estimates ?? []).filter((e) => e.stage !== "won" && e.stage !== "lost");
+    const openEstimates = (estimates ?? []).filter((e) => e.stage !== "accepted" && e.stage !== "lost");
     return (
       <div className="flex flex-col overflow-hidden h-full">
         <div className="flex items-center justify-between border-b px-4 py-2.5">

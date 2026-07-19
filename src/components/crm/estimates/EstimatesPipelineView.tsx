@@ -21,8 +21,7 @@ const STAGE_DOT: Record<EstimateStage, string> = {
   draft:    "bg-slate-400",
   quote:    "bg-blue-500",
   sent:     "bg-yellow-500",
-  accepted: "bg-purple-500",
-  won:      "bg-green-500",
+  accepted: "bg-green-500",
   lost:     "bg-red-500",
   invoiced: "bg-teal-500",
 };
@@ -31,14 +30,13 @@ const STAGE_HEADER: Record<EstimateStage, string> = {
   draft:    "border-slate-200  bg-slate-50",
   quote:    "border-blue-200   bg-blue-50",
   sent:     "border-yellow-200 bg-yellow-50",
-  accepted: "border-purple-200 bg-purple-50",
-  won:      "border-green-200  bg-green-50",
+  accepted: "border-green-200  bg-green-50",
   lost:     "border-red-200    bg-red-50",
   invoiced: "border-teal-200   bg-teal-50",
 };
 
 // Stages that collapse by default since they accumulate over time
-const COLLAPSED_BY_DEFAULT: EstimateStage[] = ["won", "lost", "invoiced"];
+const COLLAPSED_BY_DEFAULT: EstimateStage[] = ["accepted", "lost", "invoiced"];
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 

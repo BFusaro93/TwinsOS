@@ -61,10 +61,10 @@ export async function POST(
     })
     .eq("id", shareToken.id);
 
-  // 2. Move estimate stage → won
+  // 2. Move estimate stage → accepted
   await supabase
     .from("estimates")
-    .update({ stage: "won", updated_at: now })
+    .update({ stage: "accepted", updated_at: now })
     .eq("id", shareToken.estimate_id);
 
   // 2b. Record deposit if provided

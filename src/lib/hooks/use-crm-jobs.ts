@@ -1306,12 +1306,12 @@ export function useCreateJobsFromEstimate() {
         if (svcError) throw svcError;
       }
 
-      // Mark estimate won
+      // Mark estimate accepted
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await (supabase as any)
         .from("estimates")
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        .update({ stage: "won" } as any)
+        .update({ stage: "accepted" } as any)
         .eq("id", estimateId);
 
       return { jobId };

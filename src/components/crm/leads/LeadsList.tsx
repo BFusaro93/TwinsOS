@@ -35,7 +35,7 @@ import { useEstimates } from "@/lib/hooks/use-estimates";
 
 function LeadRevenuePotential({ leadId }: { leadId: string }) {
   const { data: estimates } = useEstimates(leadId);
-  const open = (estimates ?? []).filter((e) => e.stage !== "won" && e.stage !== "lost");
+  const open = (estimates ?? []).filter((e) => e.stage !== "accepted" && e.stage !== "lost");
   const total = open.reduce((sum, e) => sum + e.totalCents, 0);
   if (total <= 0) return <span className="text-slate-300">—</span>;
   return <span className="font-medium text-green-700">{formatCurrency(total)}</span>;

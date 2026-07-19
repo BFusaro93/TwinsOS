@@ -54,13 +54,13 @@ export async function POST(
     .is("deleted_at", null)
     .limit(20);
 
-  // Fetch context: top 30 recent won estimate line items
+  // Fetch context: top 30 recent accepted estimate line items
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: recentItems } = await (supabase as any)
     .from("estimate_line_items")
     .select("service_name, qty, rate_cents, unit_type, visits, estimates!inner(stage, org_id)")
     .eq("estimates.org_id", orgId)
-    .eq("estimates.stage", "won")
+    .eq("estimates.stage", "accepted")
     .is("deleted_at", null)
     .order("created_at", { ascending: false })
     .limit(30);

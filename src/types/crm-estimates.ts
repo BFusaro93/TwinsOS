@@ -6,7 +6,6 @@ export type EstimateStage =
   | 'quote'
   | 'sent'
   | 'accepted'
-  | 'won'
   | 'lost'
   | 'invoiced';
 

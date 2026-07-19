@@ -36,8 +36,7 @@ const STAGE_COLOR: Record<EstimateStage, string> = {
   draft:    "bg-slate-100 text-slate-600",
   quote:    "bg-blue-100 text-blue-700",
   sent:     "bg-violet-100 text-violet-700",
-  accepted: "bg-amber-100 text-amber-700",
-  won:      "bg-green-100 text-green-700",
+  accepted: "bg-green-100 text-green-700",
   lost:     "bg-red-100 text-red-700",
   invoiced: "bg-teal-100 text-teal-700",
 };
@@ -47,12 +46,11 @@ const STAGE_LABEL: Record<EstimateStage, string> = {
   quote:    "Quote",
   sent:     "Sent",
   accepted: "Accepted",
-  won:      "Won",
   lost:     "Lost",
   invoiced: "Invoiced",
 };
 
-const ALL_STAGES: EstimateStage[] = ["draft", "quote", "sent", "accepted", "won", "lost", "invoiced"];
+const ALL_STAGES: EstimateStage[] = ["draft", "quote", "sent", "accepted", "lost", "invoiced"];
 
 // estimates.stage lost its DB CHECK constraint once stages became org-configurable
 // (crm_estimate_stages) — a stage value can be anything, not just ALL_STAGES, so
@@ -251,7 +249,7 @@ function ByStageReport({ estimates }: { estimates: RawEstimate[] }) {
 
 function WonEstimatesReport({ estimates }: { estimates: RawEstimate[] }) {
   const won = useMemo(
-    () => estimates.filter((e) => e.stage === "won" || e.stage === "invoiced"),
+    () => estimates.filter((e) => e.stage === "accepted" || e.stage === "invoiced"),
     [estimates]
   );
   const totalValue = won.reduce((s, e) => s + (e.total_price_cents ?? 0), 0);
@@ -259,7 +257,7 @@ function WonEstimatesReport({ estimates }: { estimates: RawEstimate[] }) {
   return (
     <>
       <SummaryRow items={[
-        { label: "Won Estimates", value: won.length.toLocaleString() },
+        { label: "Accepted Estimates", value: won.length.toLocaleString() },
         { label: "Total Estimated Value", value: formatCurrency(totalValue) },
       ]} />
       <p className="mb-3 text-xs text-slate-400">
@@ -310,7 +308,7 @@ function WonByServiceReport({ lineItems }: { lineItems: RawLineItem[] }) {
     const wonItems = lineItems.filter(
       (li) =>
         li.status === "won" &&
-        (li.estimates?.stage === "won" || li.estimates?.stage === "invoiced")
+        (li.estimates?.stage === "accepted" || li.estimates?.stage === "invoiced")
     );
     const map = new Map<string, { qty: number; revenue: number; estimateIds: Set<string> }>();
     for (const li of wonItems) {
@@ -381,7 +379,7 @@ function WonServiceProductsReport({ lineItems }: { lineItems: RawLineItem[] }) {
         .filter(
           (li) =>
             li.status === "won" &&
-            (li.estimates?.stage === "won" || li.estimates?.stage === "invoiced")
+            (li.estimates?.stage === "accepted" || li.estimates?.stage === "invoiced")
         )
         .sort((a, b) => (b.total_cents ?? 0) - (a.total_cents ?? 0)),
     [lineItems]
@@ -520,8 +518,8 @@ export function EstimatesReportSection() {
         <Tabs defaultValue="by_stage">
           <TabsList className="mb-4">
             <TabsTrigger value="by_stage">By Stage</TabsTrigger>
-            <TabsTrigger value="won_vs_actual">Won vs. Actual</TabsTrigger>
-            <TabsTrigger value="won_by_service">Won by Service</TabsTrigger>
+            <TabsTrigger value="won_vs_actual">Accepted vs. Actual</TabsTrigger>
+            <TabsTrigger value="won_by_service">Accepted by Service</TabsTrigger>
             <TabsTrigger value="service_products">Service Products</TabsTrigger>
           </TabsList>
 

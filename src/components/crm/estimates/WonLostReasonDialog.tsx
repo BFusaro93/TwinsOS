@@ -20,7 +20,7 @@ import { Label } from "@/components/ui/label";
 import { useOrgList } from "@/lib/hooks/use-org-lists";
 
 interface Props {
-  stage: "won" | "lost";
+  stage: "accepted" | "lost";
   open: boolean;
   onConfirm: (reason: string) => void;
   onCancel: () => void;
@@ -41,8 +41,8 @@ export function WonLostReasonDialog({ stage, open, onConfirm, onCancel }: Props)
     onCancel();
   }
 
-  const label = stage === "won" ? "Won" : "Lost";
-  const colorClass = stage === "won" ? "bg-green-600 hover:bg-green-700" : "bg-red-600 hover:bg-red-700";
+  const label = stage === "accepted" ? "Accepted" : "Lost";
+  const colorClass = stage === "accepted" ? "bg-green-600 hover:bg-green-700" : "bg-red-600 hover:bg-red-700";
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) handleCancel(); }}>

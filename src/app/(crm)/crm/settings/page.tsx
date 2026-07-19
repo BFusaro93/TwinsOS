@@ -824,7 +824,7 @@ function EstimatesTab() {
       >
         <ApprovalFlowsPage entityTypes={["crm_estimate"]} />
       </AccordionSection>
-      <AccordionSection title="Estimate Reasons" count={estimateReasonItems.length}>
+      <AccordionSection title="Won/Lost Reasons" count={estimateReasonItems.length}>
         <OrgListEditor listName="estimate_reasons" addPlaceholder="e.g. Seasonal" />
       </AccordionSection>
       <AccordionSection title="Overhead Recovery" count={0}>

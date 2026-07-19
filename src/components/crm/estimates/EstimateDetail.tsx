@@ -94,8 +94,7 @@ const DEFAULT_STAGE_COLORS: Record<string, string> = {
   draft:    "bg-slate-100 text-slate-600",
   quote:    "bg-blue-100 text-blue-700",
   sent:     "bg-yellow-100 text-yellow-700",
-  accepted: "bg-purple-100 text-purple-700",
-  won:      "bg-green-100 text-green-700",
+  accepted: "bg-green-100 text-green-700",
   lost:     "bg-red-100 text-red-600",
   invoiced: "bg-teal-100 text-teal-700",
 };
@@ -105,7 +104,6 @@ const DEFAULT_STAGE_LIST: { stageKey: string; name: string }[] = [
   { stageKey: "quote",    name: "Quote Ready" },
   { stageKey: "sent",     name: "Estimate Sent" },
   { stageKey: "accepted", name: "Accepted" },
-  { stageKey: "won",      name: "Closed - Won" },
   { stageKey: "lost",     name: "Closed - Lost" },
   { stageKey: "invoiced", name: "Invoiced" },
 ];
@@ -371,7 +369,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
   const [recalcPending,    setRecalcPending]    = useState(false);
   const [headerEdits,      setHeaderEdits]      = useState<Record<string, string | boolean | number | null>>({});
   const [convertDialogOpen, setConvertDialogOpen] = useState(false);
-  const [wonLostDialog, setWonLostDialog] = useState<"won" | "lost" | null>(null);
+  const [wonLostDialog, setWonLostDialog] = useState<"accepted" | "lost" | null>(null);
   const [rateIncreaseOpen, setRateIncreaseOpen] = useState(false);
   const [sendDialogOpen, setSendDialogOpen] = useState(false);
   const [aiDraftOpen, setAiDraftOpen] = useState(false);
@@ -617,7 +615,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                   {stageName(effectiveStage)}
                 </Badge>
               </span>
-              {estimate.reason && (effectiveStage === "won" || effectiveStage === "lost") && (
+              {estimate.reason && (effectiveStage === "accepted" || effectiveStage === "lost") && (
                 <span className="ml-2 text-xs text-slate-500 font-normal">
                   · {estimate.reason}
                 </span>
@@ -631,8 +629,8 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
 
         <div className="flex items-center gap-1.5">
           <Button variant="outline" size="sm" className="h-8 text-xs"
-            onClick={() => setWonLostDialog("won")}>
-            <CheckCircle2 className="mr-1 h-3.5 w-3.5 text-green-500" />Won
+            onClick={() => setWonLostDialog("accepted")}>
+            <CheckCircle2 className="mr-1 h-3.5 w-3.5 text-green-500" />Accepted
           </Button>
           <Button variant="outline" size="sm" className="h-8 text-xs"
             onClick={() => setWonLostDialog("lost")}>
@@ -901,7 +899,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                             value={effectiveStage}
                             onValueChange={(v) => {
                               const s = v as EstimateStage;
-                              if (s === "won" || s === "lost") {
+                              if (s === "accepted" || s === "lost") {
                                 setWonLostDialog(s);
                               } else {
                                 patchHeader("stage", s);
@@ -1410,7 +1408,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
             const stage = wonLostDialog;
             setWonLostDialog(null);
             handleStage(stage, reason);
-            if (stage === "won") setConvertDialogOpen(true);
+            if (stage === "accepted") setConvertDialogOpen(true);
           }}
           onCancel={() => setWonLostDialog(null)}
         />
