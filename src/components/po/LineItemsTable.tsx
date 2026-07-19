@@ -10,7 +10,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Input } from "@/components/ui/input";
+import { DecimalInput } from "@/components/shared/DecimalInput";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -86,23 +86,23 @@ export function LineItemsTable({
   const { data: products = [] } = useProducts();
 
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState({ quantity: "", unitCost: "", projectId: "none", taxable: true });
+  const [editForm, setEditForm] = useState({ quantity: 0, unitCost: 0, projectId: "none", taxable: true });
 
   // Add line item dialog state
   const [addOpen, setAddOpen] = useState(false);
-  const [addForm, setAddForm] = useState({ productId: "", quantity: "1", unitCost: "", projectId: "none", taxable: true });
+  const [addForm, setAddForm] = useState({ productId: "", quantity: 1, unitCost: 0, projectId: "none", taxable: true });
   const [productComboOpen, setProductComboOpen] = useState(false);
 
   function openAdd() {
-    setAddForm({ productId: "", quantity: "1", unitCost: "", projectId: "none", taxable: true });
+    setAddForm({ productId: "", quantity: 1, unitCost: 0, projectId: "none", taxable: true });
     setAddOpen(true);
   }
 
   function saveAdd() {
     const product = products.find((p) => p.id === addForm.productId);
     if (!product) return;
-    const quantity = Math.max(0.01, parseFloat(addForm.quantity) || 0.01);
-    const unitCost = Math.round(parseFloat(addForm.unitCost) * 100) || 0;
+    const quantity = Math.max(0.01, addForm.quantity || 0.01);
+    const unitCost = Math.round(addForm.unitCost * 100) || 0;
     const projectId = addForm.projectId === "none" ? null : addForm.projectId;
     const newItem: LineItem = {
       id: crypto.randomUUID(),
@@ -133,8 +133,8 @@ export function LineItemsTable({
   function openEdit(li: LineItem) {
     setEditingId(li.id);
     setEditForm({
-      quantity: String(li.quantity),
-      unitCost: (li.unitCost / 100).toFixed(2),
+      quantity: li.quantity,
+      unitCost: li.unitCost / 100,
       projectId: li.projectId ?? "none",
       taxable: li.taxable !== false,
     });
@@ -142,8 +142,8 @@ export function LineItemsTable({
 
   function saveEdit() {
     if (!editingId) return;
-    const quantity = Math.max(0.01, parseFloat(editForm.quantity) || 0.01);
-    const unitCost = Math.round(parseFloat(editForm.unitCost) * 100) || 0;
+    const quantity = Math.max(0.01, editForm.quantity || 0.01);
+    const unitCost = Math.round(editForm.unitCost * 100) || 0;
     const projectId = editForm.projectId === "none" ? null : editForm.projectId;
     const next = items.map((li) => {
       if (li.id !== editingId) return li;
@@ -327,23 +327,21 @@ export function LineItemsTable({
               <div className="flex gap-3">
                 <div className="flex flex-1 flex-col gap-1">
                   <label className="text-xs font-medium text-slate-600">Quantity</label>
-                  <Input
-                    type="number"
+                  <DecimalInput
                     min={0.001}
-                    step={0.001}
                     value={editForm.quantity}
-                    onChange={(e) => setEditForm((f) => ({ ...f, quantity: e.target.value }))}
+                    onCommit={(n) => setEditForm((f) => ({ ...f, quantity: n }))}
                     autoFocus
+                    selectOnFocus
                   />
                 </div>
                 <div className="flex flex-1 flex-col gap-1">
                   <label className="text-xs font-medium text-slate-600">Unit Cost ($)</label>
-                  <Input
-                    type="number"
+                  <DecimalInput
                     min={0}
-                    step="any"
                     value={editForm.unitCost}
-                    onChange={(e) => setEditForm((f) => ({ ...f, unitCost: e.target.value }))}
+                    onCommit={(n) => setEditForm((f) => ({ ...f, unitCost: n }))}
+                    selectOnFocus
                   />
                 </div>
               </div>
@@ -427,7 +425,7 @@ export function LineItemsTable({
                                     ...f,
                                     productId: p.id,
                                     unitCost: p.unitCost != null
-                                      ? (p.unitCost / 100).toFixed(2)
+                                      ? p.unitCost / 100
                                       : f.unitCost,
                                   }));
                                   setProductComboOpen(false);
@@ -452,22 +450,20 @@ export function LineItemsTable({
               <div className="flex gap-3">
                 <div className="flex flex-1 flex-col gap-1">
                   <label className="text-xs font-medium text-slate-600">Quantity</label>
-                  <Input
-                    type="number"
+                  <DecimalInput
                     min={0.001}
-                    step={0.001}
                     value={addForm.quantity}
-                    onChange={(e) => setAddForm((f) => ({ ...f, quantity: e.target.value }))}
+                    onCommit={(n) => setAddForm((f) => ({ ...f, quantity: n }))}
+                    selectOnFocus
                   />
                 </div>
                 <div className="flex flex-1 flex-col gap-1">
                   <label className="text-xs font-medium text-slate-600">Unit Cost ($)</label>
-                  <Input
-                    type="number"
+                  <DecimalInput
                     min={0}
-                    step="any"
                     value={addForm.unitCost}
-                    onChange={(e) => setAddForm((f) => ({ ...f, unitCost: e.target.value }))}
+                    onCommit={(n) => setAddForm((f) => ({ ...f, unitCost: n }))}
+                    selectOnFocus
                   />
                 </div>
               </div>
