@@ -36,7 +36,7 @@ const STAGE_COLOR: Record<EstimateStage, string> = {
   draft:    "bg-slate-100 text-slate-600",
   quote:    "bg-blue-100 text-blue-700",
   sent:     "bg-violet-100 text-violet-700",
-  approved: "bg-amber-100 text-amber-700",
+  accepted: "bg-amber-100 text-amber-700",
   won:      "bg-green-100 text-green-700",
   lost:     "bg-red-100 text-red-700",
   invoiced: "bg-teal-100 text-teal-700",
@@ -46,13 +46,13 @@ const STAGE_LABEL: Record<EstimateStage, string> = {
   draft:    "Draft",
   quote:    "Quote",
   sent:     "Sent",
-  approved: "Approved",
+  accepted: "Accepted",
   won:      "Won",
   lost:     "Lost",
   invoiced: "Invoiced",
 };
 
-const ALL_STAGES: EstimateStage[] = ["draft", "quote", "sent", "approved", "won", "lost", "invoiced"];
+const ALL_STAGES: EstimateStage[] = ["draft", "quote", "sent", "accepted", "won", "lost", "invoiced"];
 
 // estimates.stage lost its DB CHECK constraint once stages became org-configurable
 // (crm_estimate_stages) — a stage value can be anything, not just ALL_STAGES, so

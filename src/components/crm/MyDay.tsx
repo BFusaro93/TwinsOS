@@ -18,7 +18,7 @@ const STAGE_COLOR: Record<EstimateStage, string> = {
   draft:    "bg-slate-100 text-slate-600",
   quote:    "bg-blue-100 text-blue-700",
   sent:     "bg-yellow-100 text-yellow-700",
-  approved: "bg-purple-100 text-purple-700",
+  accepted: "bg-purple-100 text-purple-700",
   won:      "bg-green-100 text-green-700",
   lost:     "bg-red-100 text-red-600",
   invoiced: "bg-teal-100 text-teal-700",

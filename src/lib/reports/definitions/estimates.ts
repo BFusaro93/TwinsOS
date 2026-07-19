@@ -16,7 +16,7 @@ const STAGE_OPTIONS = [
   { value: "draft", label: "Draft" },
   { value: "quote", label: "Quote" },
   { value: "sent", label: "Sent" },
-  { value: "approved", label: "Approved" },
+  { value: "accepted", label: "Accepted" },
   { value: "won", label: "Won" },
   { value: "lost", label: "Lost" },
   { value: "invoiced", label: "Invoiced" },

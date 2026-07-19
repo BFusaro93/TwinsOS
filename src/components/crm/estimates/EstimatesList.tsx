@@ -52,7 +52,7 @@ const FALLBACK_STAGE_COLOR: Record<string, string> = {
   draft:    "bg-slate-100 text-slate-600",
   quote:    "bg-blue-100 text-blue-700",
   sent:     "bg-yellow-100 text-yellow-700",
-  approved: "bg-purple-100 text-purple-700",
+  accepted: "bg-purple-100 text-purple-700",
   won:      "bg-green-100 text-green-700",
   lost:     "bg-red-100 text-red-600",
   invoiced: "bg-teal-100 text-teal-700",
@@ -62,7 +62,7 @@ const FALLBACK_STAGE_LABEL: Record<string, string> = {
   draft:    "Draft",
   quote:    "Quote",
   sent:     "Sent",
-  approved: "Approved",
+  accepted: "Accepted",
   won:      "Won",
   lost:     "Lost",
   invoiced: "Invoiced",
@@ -75,7 +75,7 @@ const FALLBACK_STAGE_TABS: { value: StageFilter; label: string }[] = [
   { value: "draft",    label: "Draft" },
   { value: "quote",    label: "Quote" },
   { value: "sent",     label: "Sent" },
-  { value: "approved", label: "Approved" },
+  { value: "accepted", label: "Accepted" },
   { value: "won",      label: "Won" },
   { value: "lost",     label: "Lost" },
   { value: "invoiced", label: "Invoiced" },
@@ -342,8 +342,8 @@ export function EstimatesList({ clientId }: Props) {
               <DropdownMenuItem disabled={!someSelected} onSelect={() => bulkSetStage("sent")}>
                 Mark as Sent
               </DropdownMenuItem>
-              <DropdownMenuItem disabled={!someSelected} onSelect={() => bulkSetStage("approved")}>
-                Mark as Approved
+              <DropdownMenuItem disabled={!someSelected} onSelect={() => bulkSetStage("accepted")}>
+                Mark as Accepted
               </DropdownMenuItem>
               <DropdownMenuItem disabled={!someSelected} onSelect={() => bulkSetStage("won")}>
                 Mark as Won
