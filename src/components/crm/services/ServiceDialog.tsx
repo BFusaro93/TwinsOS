@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import Link from "next/link";
+import { ServiceJobCostingTab } from "./ServiceJobCostingTab";
 import {
   Dialog,
   DialogContent,
@@ -718,7 +718,7 @@ export function ServiceDialog({ open, service, onClose }: Props) {
             ...(form.trackChemicals
               ? [{ key: "chemicals" as Tab, label: "Chemicals", disabled: !activeService }]
               : []),
-            { key: "job_costing", label: "Job Costing" },
+            { key: "job_costing", label: "Job Costing", disabled: !activeService },
             { key: "audit", label: "Audit Trail", disabled: !activeService },
           ] as { key: Tab; label: string; disabled?: boolean }[]).map((t) => (
             <button
@@ -999,19 +999,8 @@ export function ServiceDialog({ open, service, onClose }: Props) {
         )}
 
         {/* Job Costing Tab */}
-        {tab === "job_costing" && (
-          <div className="py-6 text-center text-sm text-slate-500">
-            <p>
-              Per-service estimated-vs-actual production rate accuracy is available in the
-              Report Center.
-            </p>
-            <Link
-              href="/crm/admin/reports/r/production-rate-accuracy"
-              className="mt-2 inline-block text-brand-600 hover:underline"
-            >
-              View Production Rate Accuracy Report →
-            </Link>
-          </div>
+        {tab === "job_costing" && activeService && (
+          <ServiceJobCostingTab serviceId={activeService.id} />
         )}
 
         {/* Audit Trail Tab */}
