@@ -121,13 +121,14 @@ function TeamAssignmentsTab({ crew }: { crew: CRMCrew }) {
   const { mutateAsync: addMember, isPending: adding } = useAddCrewMember();
   const { mutateAsync: removeMember } = useRemoveCrewMember();
   const { mutateAsync: updateMember } = useUpdateCrewMember();
+  const [pickingNew, setPickingNew] = useState(false);
 
   const existingIds = new Set((liveCrew.members ?? []).map((m) => m.employeeId));
   const available = (allEmployees ?? []).filter((e) => !existingIds.has(e.id));
 
-  async function handleAdd() {
-    if (available.length === 0) return;
-    const emp = available[0];
+  async function handlePickNewEmployee(employeeId: string) {
+    const emp = available.find((e) => e.id === employeeId);
+    if (!emp) return;
     try {
       await addMember({
         crewId: crew.id,
@@ -135,6 +136,7 @@ function TeamAssignmentsTab({ crew }: { crew: CRMCrew }) {
         name: `${emp.firstName} ${emp.lastName}`,
         daysOfWeek: [...ALL_DAYS],
       });
+      setPickingNew(false);
     } catch (err) {
       const msg = (err as { message?: string })?.message ?? "Unknown error";
       toast.error(`Failed to add assignment: ${msg}`);
@@ -183,12 +185,34 @@ function TeamAssignmentsTab({ crew }: { crew: CRMCrew }) {
     <div className="rounded border">
       <SectionBar title="Team Assignments" />
       <div className="p-0">
-        {members.length === 0 ? (
+        {members.length === 0 && !pickingNew ? (
           <div className="py-8 text-center text-sm text-slate-400">
             No assignments yet — click Add Assignment below
           </div>
         ) : (
           <div className="divide-y">
+            {pickingNew && (
+              <div className="flex items-center gap-3 px-4 py-2">
+                <Select value="" onValueChange={handlePickNewEmployee}>
+                  <SelectTrigger className="h-8 text-sm flex-1 min-w-0">
+                    <SelectValue placeholder="Select employee…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {available.map((e) => (
+                      <SelectItem key={e.id} value={e.id}>
+                        {e.firstName} {e.lastName}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <button
+                  className="shrink-0 text-slate-400 hover:text-slate-600 transition-colors"
+                  onClick={() => setPickingNew(false)}
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            )}
             {members.map((m) => {
               const otherEmployees = (allEmployees ?? []).filter(
                 (e) => e.id === m.employeeId || !existingIds.has(e.id)
@@ -244,8 +268,8 @@ function TeamAssignmentsTab({ crew }: { crew: CRMCrew }) {
             variant="outline"
             size="sm"
             className="h-7 text-xs"
-            onClick={handleAdd}
-            disabled={adding || available.length === 0}
+            onClick={() => setPickingNew(true)}
+            disabled={adding || pickingNew || available.length === 0}
           >
             Add Assignment
           </Button>

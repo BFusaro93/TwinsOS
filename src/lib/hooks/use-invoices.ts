@@ -180,6 +180,12 @@ export function useCreateInvoiceFromEstimate() {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: client } = await (supabase as any)
+        .from("clients")
+        .select("default_payment_method")
+        .eq("id", clientId)
+        .single();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: inv, error: invErr } = await (supabase as any)
         .from("crm_invoices")
         .insert({
@@ -197,6 +203,7 @@ export function useCreateInvoiceFromEstimate() {
           total_cents: totalCents,
           balance_cents: totalCents,
           status: "draft",
+          preferred_payment_method: client?.default_payment_method ?? null,
         })
         .select()
         .single();
@@ -240,6 +247,12 @@ export function useCreateInvoice() {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: client } = await (supabase as any)
+        .from("clients")
+        .select("default_payment_method")
+        .eq("id", values.clientId)
+        .single();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
         .from("crm_invoices")
         .insert({
@@ -251,6 +264,7 @@ export function useCreateInvoice() {
           due_date: values.dueDate ?? null,
           status: "draft",
           invoice_number: null, // number assigned explicitly on save, not on open
+          preferred_payment_method: client?.default_payment_method ?? null,
         })
         .select()
         .single();
@@ -271,8 +285,15 @@ export function useBulkImportInvoices() {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
 
-      const { data: clients } = await supabase.from("clients").select("id, display_name").is("deleted_at", null);
-      const byName = new Map((clients ?? []).map((c) => [c.display_name.trim().toLowerCase(), c.id]));
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: clients } = await (supabase as any)
+        .from("clients")
+        .select("id, display_name, default_payment_method")
+        .is("deleted_at", null);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const byName = new Map((clients ?? []).map((c: any) => [c.display_name.trim().toLowerCase(), c.id]));
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const defaultPaymentMethodById = new Map((clients ?? []).map((c: any) => [c.id, c.default_payment_method ?? null]));
 
       let created = 0;
       let skipped = 0;
@@ -300,6 +321,7 @@ export function useBulkImportInvoices() {
             tax_cents: taxCents,
             total_cents: totalCents,
             balance_cents: totalCents,
+            preferred_payment_method: defaultPaymentMethodById.get(clientId) ?? null,
           })
           .select("id")
           .single();

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import {
   Dialog,
   DialogContent,
@@ -301,11 +302,11 @@ function RateMatrixTab({ serviceId }: RateMatrixTabProps) {
           </tbody>
         </table>
         <div className="p-2 border-t bg-slate-50 flex items-center gap-2">
-          <Button variant="ghost" size="sm" onClick={addRow} disabled={!selectedFieldId} className="text-xs">
+          <Button variant="ghost" size="sm" onClick={addRow} className="text-xs">
             <Plus className="mr-1 h-3.5 w-3.5" /> Add Row
           </Button>
-          {!selectedFieldId && (
-            <span className="text-xs text-slate-400">Select a lookup field first</span>
+          {!selectedFieldId && rows.length === 0 && (
+            <span className="text-xs text-slate-400">Tip: pick a lookup field above so rows know what to measure against</span>
           )}
         </div>
       </div>
@@ -999,8 +1000,17 @@ export function ServiceDialog({ open, service, onClose }: Props) {
 
         {/* Job Costing Tab */}
         {tab === "job_costing" && (
-          <div className="py-4 text-sm text-slate-500 text-center">
-            Job costing analysis coming soon.
+          <div className="py-6 text-center text-sm text-slate-500">
+            <p>
+              Per-service estimated-vs-actual production rate accuracy is available in the
+              Report Center.
+            </p>
+            <Link
+              href="/crm/admin/reports/r/production-rate-accuracy"
+              className="mt-2 inline-block text-brand-600 hover:underline"
+            >
+              View Production Rate Accuracy Report →
+            </Link>
           </div>
         )}
 

@@ -537,9 +537,14 @@ export function EstimatesList({ clientId }: Props) {
                               <Link href={`/crm/clients/${e.clientId}`} className="block font-medium text-brand-600 hover:underline truncate">
                                 {e.clientName ?? "—"}
                               </Link>
-                              {e.clientCity && (
-                                <p className="text-[10px] text-slate-400 truncate">{e.clientCity}{e.clientState ? `, ${e.clientState}` : ""}</p>
-                              )}
+                              {(() => {
+                                const fullAddress = [e.clientAddress, e.clientCity, e.clientState, e.clientZip]
+                                  .filter(Boolean)
+                                  .join(", ");
+                                return fullAddress ? (
+                                  <p className="text-[10px] text-slate-400 truncate">{fullAddress}</p>
+                                ) : null;
+                              })()}
                             </td>
                           );
                         case "description":
