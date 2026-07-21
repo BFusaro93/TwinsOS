@@ -737,7 +737,7 @@ export function EstimateLineItemsGrid({ estimateId, items, selectedIds = [], onS
           section_name: "New Section",
           status: "quote",
           sort_order: items.length,
-          service_name: null,
+          service_name: "",
           qty: 0,
           rate_cents: 0,
           visits: 1,

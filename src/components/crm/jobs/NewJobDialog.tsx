@@ -533,7 +533,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
                   className="grid text-white text-xs font-medium px-3 py-2"
                   style={{
                     gridTemplateColumns: showServiceDate
-                      ? "1.7fr 1.3fr 1.3fr 0.9fr 0.8fr 0.7fr 1.3fr 28px"
+                      ? "1.5fr 1.5fr 1.5fr 0.9fr 0.8fr 0.7fr 1.1fr 28px"
                       : "2fr 1fr 1fr 1fr 1fr 1.5fr 28px",
                     backgroundColor: brandColor,
                   }}
@@ -553,7 +553,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
                     className="grid items-center gap-1.5 border-b last:border-0 bg-white px-3 py-2"
                     style={{
                       gridTemplateColumns: showServiceDate
-                        ? "1.7fr 1.3fr 1.3fr 0.9fr 0.8fr 0.7fr 1.3fr 28px"
+                        ? "1.5fr 1.5fr 1.5fr 0.9fr 0.8fr 0.7fr 1.1fr 28px"
                         : "2fr 1fr 1fr 1fr 1fr 1.5fr 28px",
                     }}
                   >
@@ -564,10 +564,10 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
                       </SelectContent>
                     </Select>
                     {showServiceDate && (
-                      <Input type="date" value={svc.startDate} onChange={(e) => updateService(i, { startDate: e.target.value })} className="h-7 text-xs" />
+                      <Input type="date" value={svc.startDate} onChange={(e) => updateService(i, { startDate: e.target.value })} className="h-7 px-1.5 text-xs" />
                     )}
                     {showCompleteBy ? (
-                      <Input type="date" value={svc.completeByDate} onChange={(e) => updateService(i, { completeByDate: e.target.value })} className="h-7 text-xs" />
+                      <Input type="date" value={svc.completeByDate} onChange={(e) => updateService(i, { completeByDate: e.target.value })} className="h-7 px-1.5 text-xs" />
                     ) : (
                       <Input type="number" min="0" step="0.01" value={svc.qty} onChange={(e) => updateQty(i, parseFloat(e.target.value) || 1)} className="h-7 text-xs" />
                     )}
