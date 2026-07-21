@@ -836,11 +836,17 @@ export function ContractsList({ clientId }: Props) {
   const { mutateAsync: generateInvoices, isPending: generatingInvoices } = useGenerateContractInvoices();
 
   const baseContracts = (contracts ?? []);
-  const filtered = baseContracts.filter((c) =>
-    !search ||
-    c.title.toLowerCase().includes(search.toLowerCase()) ||
-    (c.clientName ?? "").toLowerCase().includes(search.toLowerCase())
-  );
+  const filtered = baseContracts.filter((c) => {
+    if (!search) return true;
+    const q = search.toLowerCase();
+    return (
+      c.title.toLowerCase().includes(q) ||
+      (c.clientName ?? "").toLowerCase().includes(q) ||
+      (c.clientEmail ?? "").toLowerCase().includes(q) ||
+      (c.clientPhone ?? "").includes(q) ||
+      (c.poNumber ?? "").toLowerCase().includes(q)
+    );
+  });
 
   function toggleSelect(id: string) {
     setSelected((prev) => {
@@ -982,8 +988,8 @@ export function ContractsList({ clientId }: Props) {
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search…"
-            className="h-7 w-44 pl-7 text-xs bg-white border-slate-200 focus-visible:ring-0"
+            placeholder="Search contracts or clients…"
+            className="h-7 w-56 pl-7 text-xs bg-white border-slate-200 focus-visible:ring-0"
           />
           {search && (
             <button

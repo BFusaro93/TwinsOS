@@ -186,6 +186,8 @@ export interface CRMContract {
   createdBy: string | null;
   // joined
   clientName?: string;
+  clientEmail?: string | null;
+  clientPhone?: string | null;
   salesRepName?: string | null;
 }
 

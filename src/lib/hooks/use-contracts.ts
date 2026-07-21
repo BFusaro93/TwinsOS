@@ -45,6 +45,8 @@ function mapContract(row: any): CRMContract {
     updatedAt: row.updated_at,
     createdBy: row.created_by,
     clientName: row.clients?.display_name ?? null,
+    clientEmail: row.clients?.primary_email ?? null,
+    clientPhone: row.clients?.primary_phone ?? null,
     salesRepName: row.profiles?.name ?? null,
   };
 }
@@ -71,7 +73,7 @@ export function useContracts(clientId?: string, activeOnly?: boolean) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let q = (supabase as any)
         .from("crm_contracts")
-        .select("*, clients(display_name), profiles!crm_contracts_sales_rep_id_fkey(name)")
+        .select("*, clients(display_name, primary_email, primary_phone), profiles!crm_contracts_sales_rep_id_fkey(name)")
         .is("deleted_at", null)
         .order("created_at", { ascending: false });
       if (clientId) q = q.eq("client_id", clientId);
@@ -92,7 +94,7 @@ export function useContract(id: string) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
         .from("crm_contracts")
-        .select("*, clients(display_name), profiles!crm_contracts_sales_rep_id_fkey(name)")
+        .select("*, clients(display_name, primary_email, primary_phone), profiles!crm_contracts_sales_rep_id_fkey(name)")
         .eq("id", id)
         .is("deleted_at", null)
         .single();
@@ -153,7 +155,7 @@ export function useCreateContract() {
           default_service: values.defaultService ?? null,
           status: "draft",
         })
-        .select("*, clients(display_name), profiles!crm_contracts_sales_rep_id_fkey(name)")
+        .select("*, clients(display_name, primary_email, primary_phone), profiles!crm_contracts_sales_rep_id_fkey(name)")
         .single();
       if (error) throw error;
       return mapContract(data);
