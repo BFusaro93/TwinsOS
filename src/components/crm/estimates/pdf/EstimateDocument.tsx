@@ -87,6 +87,122 @@ function formatDate(iso: string): string {
 
 const TIER_ORDER = ["basic", "standard", "premium"] as const;
 
+// ── rich text (TipTap HTML → react-pdf) ──────────────────────────────────────
+// Estimate description/notes/line-item-desc fields are saved as HTML from the
+// shared RichTextEditor (TipTap). react-pdf can't render arbitrary HTML, so
+// parse the small subset it actually produces (p, ul/ol/li, strong/b, em/i, u)
+// into Text/View trees instead of stripping every tag down to plain text.
+
+interface InlineSpan {
+  text: string;
+  bold?: boolean;
+  italic?: boolean;
+  underline?: boolean;
+}
+
+function decodeEntities(s: string): string {
+  return s
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, "\"")
+    .replace(/&#39;/g, "'");
+}
+
+function parseInline(html: string): InlineSpan[] {
+  const spans: InlineSpan[] = [];
+  const marks: Array<Partial<Pick<InlineSpan, "bold" | "italic" | "underline">>> = [{}];
+  const tagRe = /<(\/?)(strong|b|em|i|u)>|([^<]+)/gi;
+  let match: RegExpExecArray | null;
+  while ((match = tagRe.exec(html))) {
+    const [, closing, tag, text] = match;
+    if (text !== undefined) {
+      const decoded = decodeEntities(text);
+      if (decoded) spans.push({ text: decoded, ...marks[marks.length - 1] });
+    } else if (tag) {
+      const key = tag.toLowerCase() === "u" ? "underline" : tag.toLowerCase() === "i" || tag.toLowerCase() === "em" ? "italic" : "bold";
+      if (closing) {
+        if (marks.length > 1) marks.pop();
+      } else {
+        marks.push({ ...marks[marks.length - 1], [key]: true });
+      }
+    }
+  }
+  return spans;
+}
+
+type RichBlock =
+  | { type: "p"; spans: InlineSpan[] }
+  | { type: "li"; ordered: boolean; index: number; spans: InlineSpan[] };
+
+function parseRichBlocks(html: string): RichBlock[] {
+  const blocks: RichBlock[] = [];
+  const blockRe = /<p[^>]*>([\s\S]*?)<\/p>|<ul[^>]*>([\s\S]*?)<\/ul>|<ol[^>]*>([\s\S]*?)<\/ol>/gi;
+  let m: RegExpExecArray | null;
+  let matchedAny = false;
+  while ((m = blockRe.exec(html))) {
+    matchedAny = true;
+    if (m[1] !== undefined) {
+      const spans = parseInline(m[1]);
+      if (spans.length) blocks.push({ type: "p", spans });
+    } else {
+      const listInner = m[2] ?? m[3] ?? "";
+      const ordered = m[2] === undefined;
+      const liRe = /<li[^>]*>([\s\S]*?)<\/li>/gi;
+      let lm: RegExpExecArray | null;
+      let index = 1;
+      while ((lm = liRe.exec(listInner))) {
+        const inner = lm[1].replace(/<\/?p[^>]*>/gi, "");
+        blocks.push({ type: "li", ordered, index: index++, spans: parseInline(inner) });
+      }
+    }
+  }
+  if (!matchedAny) {
+    const spans = parseInline(html);
+    if (spans.length) blocks.push({ type: "p", spans });
+  }
+  return blocks;
+}
+
+function spanFontFamily(s: InlineSpan): string | undefined {
+  if (s.bold && s.italic) return "Helvetica-BoldOblique";
+  if (s.bold) return "Helvetica-Bold";
+  if (s.italic) return "Helvetica-Oblique";
+  return undefined;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function RichText({ html, style }: { html: string | null; style: any }) {
+  if (!html) return null;
+  const blocks = parseRichBlocks(html);
+  if (!blocks.length) return null;
+  return (
+    <>
+      {blocks.map((b, i) => {
+        const spans = b.spans.map((s, j) => (
+          <Text key={j} style={{ fontFamily: spanFontFamily(s), textDecoration: s.underline ? "underline" : undefined }}>
+            {s.text}
+          </Text>
+        ));
+        if (b.type === "li") {
+          return (
+            <View key={i} style={{ flexDirection: "row", marginTop: i > 0 ? 1 : 0 }}>
+              <Text style={[style, { width: 12 }]}>{b.ordered ? `${b.index}.` : "•"}</Text>
+              <Text style={[style, { flex: 1 }]}>{spans}</Text>
+            </View>
+          );
+        }
+        return (
+          <Text key={i} style={[style, i > 0 ? { marginTop: 2 } : {}]}>
+            {spans}
+          </Text>
+        );
+      })}
+    </>
+  );
+}
+
 // ── styles ────────────────────────────────────────────────────────────────────
 
 const S = StyleSheet.create({
@@ -298,7 +414,7 @@ export function EstimateDocument({ estimate, org }: { estimate: EstimatePDFData;
                     <View style={S.cellService}>
                       <Text style={S.serviceNameText}>{li.serviceName ?? "Service"}</Text>
                       {li.estimateDesc ? (
-                        <Text style={S.serviceDescText}>{li.estimateDesc.replace(/<[^>]+>/g, "")}</Text>
+                        <RichText html={li.estimateDesc} style={S.serviceDescText} />
                       ) : null}
                     </View>
                     <View style={S.cellNum}><Text style={S.cellText}>{li.visits}</Text></View>
@@ -331,7 +447,7 @@ export function EstimateDocument({ estimate, org }: { estimate: EstimatePDFData;
                 <View style={S.cellService}>
                   <Text style={S.serviceNameText}>{li.serviceName ?? "Service"}</Text>
                   {li.estimateDesc ? (
-                    <Text style={S.serviceDescText}>{li.estimateDesc.replace(/<[^>]+>/g, "")}</Text>
+                    <RichText html={li.estimateDesc} style={S.serviceDescText} />
                   ) : null}
                 </View>
                 <View style={S.cellNum}><Text style={S.cellText}>{li.visits}</Text></View>
