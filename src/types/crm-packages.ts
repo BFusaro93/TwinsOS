@@ -6,8 +6,8 @@ export interface CRMPackage {
   description: string | null;
   /** Client-facing wording shown when this package appears on an estimate. */
   descriptionOnEstimate: string | null;
-  monthlyAmountCents: number;
-  seasonMonths: number;
+  /** Wording shown on invoices for this package's visits. */
+  invoiceDescription: string | null;
   visitsPerSeason: number;
   isActive: boolean;
   deletedAt: string | null;

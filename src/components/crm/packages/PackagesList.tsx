@@ -6,7 +6,6 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Plus, Search, Pencil, Trash2 } from "lucide-react";
 import { usePackages, useDeletePackage } from "@/lib/hooks/use-packages";
-import { formatCurrency } from "@/lib/utils";
 import type { CRMPackage } from "@/types/crm-packages";
 
 interface Props {
@@ -54,8 +53,6 @@ export function PackagesList({ onAdd, onEdit }: Props) {
             <tr className="border-b bg-slate-50 text-xs font-semibold text-slate-500 uppercase tracking-wide">
               <th className="px-4 py-3 text-left">Package</th>
               <th className="px-4 py-3 text-left">Code</th>
-              <th className="px-4 py-3 text-right">Monthly</th>
-              <th className="px-4 py-3 text-center">Season</th>
               <th className="px-4 py-3 text-center">Visits</th>
               <th className="px-4 py-3 text-left">Services</th>
               <th className="px-4 py-3 text-center">Active</th>
@@ -64,10 +61,10 @@ export function PackagesList({ onAdd, onEdit }: Props) {
           </thead>
           <tbody>
             {isLoading && (
-              <tr><td colSpan={8} className="px-4 py-8 text-center text-slate-400">Loading…</td></tr>
+              <tr><td colSpan={6} className="px-4 py-8 text-center text-slate-400">Loading…</td></tr>
             )}
             {!isLoading && filtered.length === 0 && (
-              <tr><td colSpan={8} className="px-4 py-8 text-center text-slate-400">No packages found.</td></tr>
+              <tr><td colSpan={6} className="px-4 py-8 text-center text-slate-400">No packages found.</td></tr>
             )}
             {filtered.map((pkg) => (
               <tr key={pkg.id} onClick={() => onEdit(pkg)}
@@ -79,10 +76,6 @@ export function PackagesList({ onAdd, onEdit }: Props) {
                   )}
                 </td>
                 <td className="px-4 py-3 text-slate-500">{pkg.code ?? "—"}</td>
-                <td className="px-4 py-3 text-right tabular-nums font-medium">
-                  {formatCurrency(pkg.monthlyAmountCents)}
-                </td>
-                <td className="px-4 py-3 text-center text-slate-600">{pkg.seasonMonths} mo</td>
                 <td className="px-4 py-3 text-center text-slate-600">{(pkg.services ?? []).length}</td>
                 <td className="px-4 py-3 text-slate-500 text-xs">
                   {(pkg.services ?? []).length > 0

@@ -100,7 +100,7 @@ import {
   Search,
 } from "lucide-react";
 import type { Client, ClientContact, ContactPhone, PhoneType } from "@/types/crm";
-import type { CRMJob, CRMJobVisit } from "@/types/crm-jobs";
+import type { CRMJob, CRMJobVisit, CRMJobService } from "@/types/crm-jobs";
 
 // Contact types — configurable via Settings in a future sprint
 const CONTACT_TYPES = [
@@ -1995,6 +1995,17 @@ function JobVisitsModal({
   const serviceLabel = useMemo(() => {
     return (job.services ?? []).map((s) => serviceCodeMap[s.serviceId ?? ""] ?? s.serviceName).join(", ") || jobName;
   }, [job.services, serviceCodeMap, jobName]);
+  const serviceById = useMemo(() => {
+    const m: Record<string, CRMJobService> = {};
+    (job.services ?? []).forEach((s) => { m[s.id] = s; });
+    return m;
+  }, [job.services]);
+  // Package jobs have multiple services (e.g. FERT 1 of 5, FERT 2 of 5…) — show
+  // the specific service for each visit instead of every service joined together.
+  function visitServiceLabel(v: CRMJobVisit): string {
+    const svc = v.jobServiceId ? serviceById[v.jobServiceId] : null;
+    return svc ? (serviceCodeMap[svc.serviceId ?? ""] ?? svc.serviceName) : serviceLabel;
+  }
   const today = new Date().toISOString().slice(0, 10);
 
   const filtered = visits.filter((v: CRMJobVisit) => {
@@ -2095,7 +2106,7 @@ function JobVisitsModal({
                         )}
                       </td>
                       <td className="px-4 py-2.5 text-neutral-700">{dateStr}</td>
-                      <td className="px-4 py-2.5 text-neutral-700">{serviceLabel}</td>
+                      <td className="px-4 py-2.5 text-neutral-700">{visitServiceLabel(v)}</td>
                       <td className="px-4 py-2.5 text-neutral-500">{v.crewName ?? "—"}</td>
                       {mode === "history" && (
                         <td className="px-4 py-2.5 text-right text-neutral-700">{v.menCount}</td>

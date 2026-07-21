@@ -14,7 +14,6 @@ import {
 } from "@/components/ui/select";
 import { Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { formatCurrency } from "@/lib/utils";
 import {
   usePackages, useCreatePackage, useUpdatePackage,
   useUpsertPackageService, useDeletePackageService,
@@ -38,8 +37,7 @@ interface FormState {
   code: string;
   description: string;
   descriptionOnEstimate: string;
-  monthlyAmountCents: string;
-  seasonMonths: string;
+  invoiceDescription: string;
   visitsPerSeason: string;
   isActive: boolean;
 }
@@ -47,7 +45,7 @@ interface FormState {
 function emptyForm(): FormState {
   return {
     name: "", code: "", description: "", descriptionOnEstimate: "",
-    monthlyAmountCents: "", seasonMonths: "12",
+    invoiceDescription: "",
     visitsPerSeason: "1", isActive: true,
   };
 }
@@ -58,8 +56,7 @@ function pkgToForm(p: CRMPackage): FormState {
     code: p.code ?? "",
     description: p.description ?? "",
     descriptionOnEstimate: p.descriptionOnEstimate ?? "",
-    monthlyAmountCents: p.monthlyAmountCents > 0 ? (p.monthlyAmountCents / 100).toFixed(2) : "",
-    seasonMonths: String(p.seasonMonths),
+    invoiceDescription: p.invoiceDescription ?? "",
     visitsPerSeason: String(p.visitsPerSeason),
     isActive: p.isActive,
   };
@@ -240,8 +237,7 @@ export function PackageDialog({ open, packageId, onClose }: Props) {
       code: form.code.trim() || null,
       description: form.description.trim() || null,
       description_on_estimate: form.descriptionOnEstimate.trim() || null,
-      monthly_amount_cents: Math.round((parseFloat(form.monthlyAmountCents) || 0) * 100),
-      season_months: parseInt(form.seasonMonths) || 12,
+      invoice_description: form.invoiceDescription.trim() || null,
       visits_per_season: pkg ? (pkg.services?.length || 1) : (parseInt(form.visitsPerSeason) || 1),
       is_active: form.isActive,
     };
@@ -283,7 +279,6 @@ export function PackageDialog({ open, packageId, onClose }: Props) {
   }
 
   const isPending = createPkg.isPending || updatePkg.isPending;
-  const totalAnnual = Math.round((parseFloat(form.monthlyAmountCents) || 0) * 100) * (parseInt(form.seasonMonths) || 12);
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
@@ -338,27 +333,9 @@ export function PackageDialog({ open, packageId, onClose }: Props) {
               <Textarea value={form.descriptionOnEstimate} onChange={(e) => setForm({ ...form, descriptionOnEstimate: e.target.value })} rows={2} className="text-sm resize-none" placeholder="Wording shown to the client when this package appears on an estimate" />
             </div>
 
-            {/* Billing */}
-            <div className="rounded-lg border p-3 flex flex-col gap-3">
-              <p className="text-xs font-semibold text-slate-600">Billing</p>
-              <div className="grid grid-cols-3 gap-3">
-                <div className="flex flex-col gap-1">
-                  <Label className="text-xs text-slate-500">Monthly Amount ($)</Label>
-                  <Input type="number" step="0.01" value={form.monthlyAmountCents}
-                    onChange={(e) => setForm({ ...form, monthlyAmountCents: e.target.value })}
-                    placeholder="0.00" className="text-sm" />
-                </div>
-                <div className="flex flex-col gap-1">
-                  <Label className="text-xs text-slate-500">Season Months</Label>
-                  <Input type="number" value={form.seasonMonths}
-                    onChange={(e) => setForm({ ...form, seasonMonths: e.target.value })}
-                    min="1" max="12" className="text-sm" />
-                </div>
-                <div className="flex flex-col gap-1">
-                  <Label className="text-xs text-slate-500">Annual Total</Label>
-                  <p className="text-sm font-semibold text-slate-800 mt-1.5">{formatCurrency(totalAnnual)}</p>
-                </div>
-              </div>
+            <div className="flex flex-col gap-1">
+              <Label className="text-xs font-medium text-slate-600">Invoice Description</Label>
+              <Textarea value={form.invoiceDescription} onChange={(e) => setForm({ ...form, invoiceDescription: e.target.value })} rows={2} className="text-sm resize-none" placeholder="Wording shown on invoices for this package's visits" />
             </div>
 
             {/* Visit schedule */}
