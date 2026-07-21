@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { AlertCircle, ArrowLeft, Download, Printer } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { PageHeader } from "@/components/shared/PageHeader";
 import { Skeleton } from "@/components/ui/skeleton";
 import { downloadCSV } from "@/lib/csv";
 import { useRunReport } from "@/lib/hooks/use-report-center";
@@ -19,6 +20,21 @@ import {
 import { formatCellValue, ReportTable } from "./ReportTable";
 
 const HUB_HREF = "/crm/admin/reports?tab=center";
+
+function BackButton() {
+  const router = useRouter();
+  return (
+    <Button
+      variant="outline"
+      size="sm"
+      className="print:hidden"
+      onClick={() => router.push(HUB_HREF)}
+    >
+      <ArrowLeft className="mr-1.5 h-3.5 w-3.5" />
+      Report Center
+    </Button>
+  );
+}
 
 function initialFilterValues(filters: ReportFilterDef[]): Record<string, string> {
   const values: Record<string, string> = {};
@@ -34,18 +50,6 @@ function initialFilterValues(filters: ReportFilterDef[]): Record<string, string>
   return values;
 }
 
-function BackLink() {
-  return (
-    <Link
-      href={HUB_HREF}
-      className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-slate-900"
-    >
-      <ArrowLeft className="h-3.5 w-3.5" />
-      Report Center
-    </Link>
-  );
-}
-
 function LinkOutCard({ def }: { def: PrebuiltReportDef }) {
   const router = useRouter();
 
@@ -54,17 +58,15 @@ function LinkOutCard({ def }: { def: PrebuiltReportDef }) {
   }, [def.href, router]);
 
   return (
-    <div className="p-6">
-      <div className="rounded-lg border bg-white p-6 shadow-sm">
-        <p className="text-sm text-slate-600">
-          Opening <span className="font-medium">{def.name}</span>…
-        </p>
-        {def.href && (
-          <Link href={def.href} className="mt-2 inline-block text-sm text-blue-600 hover:underline">
-            Continue to the report
-          </Link>
-        )}
-      </div>
+    <div className="rounded-lg border bg-white p-6 shadow-sm">
+      <p className="text-sm text-slate-600">
+        Opening <span className="font-medium">{def.name}</span>…
+      </p>
+      {def.href && (
+        <Link href={def.href} className="mt-2 inline-block text-sm text-blue-600 hover:underline">
+          Continue to the report
+        </Link>
+      )}
     </div>
   );
 }
@@ -91,12 +93,13 @@ function PrebuiltReportRunner({ def }: { def: PrebuiltReportDef }) {
   };
 
   return (
-    <div className="flex flex-col gap-4 p-6 print:p-0">
-      <div className="print:hidden">
-        <BackLink />
-        <h1 className="mt-2 text-xl font-semibold text-slate-900">{def.name}</h1>
-        <p className="mt-0.5 text-sm text-slate-500">{def.description}</p>
-      </div>
+    <div className="flex h-full flex-col gap-4">
+      <PageHeader
+        title={def.name}
+        description={def.description}
+        action={<BackButton />}
+        className="print:hidden"
+      />
 
       <div className="print:hidden">
         <ReportFilterBar
@@ -150,22 +153,20 @@ export function ReportViewer({ reportKey }: { reportKey: string }) {
 
   if (!def) {
     return (
-      <div className="p-6">
-        <div className="rounded-lg border bg-white p-6 shadow-sm">
-          <h1 className="text-base font-semibold text-slate-900">
-            Report not found
-          </h1>
-          <p className="mt-1 text-sm text-slate-500">
-            No report exists with the key &quot;{reportKey}&quot;.
-          </p>
-          <Link
-            href={HUB_HREF}
-            className="mt-3 inline-flex items-center gap-1 text-sm text-blue-600 hover:underline"
-          >
-            <ArrowLeft className="h-3.5 w-3.5" />
-            Back to Report Center
-          </Link>
-        </div>
+      <div className="rounded-lg border bg-white p-6 shadow-sm">
+        <h1 className="text-base font-semibold text-slate-900">
+          Report not found
+        </h1>
+        <p className="mt-1 text-sm text-slate-500">
+          No report exists with the key &quot;{reportKey}&quot;.
+        </p>
+        <Link
+          href={HUB_HREF}
+          className="mt-3 inline-flex items-center gap-1 text-sm text-blue-600 hover:underline"
+        >
+          <ArrowLeft className="h-3.5 w-3.5" />
+          Back to Report Center
+        </Link>
       </div>
     );
   }

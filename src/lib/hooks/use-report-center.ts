@@ -1,11 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
+import { getDataset } from "@/lib/reports/datasets";
 import type {
   AnalysisConfig,
   CustomReport,
   CustomReportInput,
+  Dashboard,
+  DashboardInput,
   ReportFilterOption,
   ReportResult,
+  VisualSpec,
 } from "@/types/crm-reports";
 
 // ── shared ────────────────────────────────────────────────────────────────────
@@ -201,6 +205,129 @@ export function useReportFilterOptions(source?: ReportFilterOptionsSource) {
           .map((r) => ({ value: r.name, label: r.name }));
       }
       return [];
+    },
+  });
+}
+
+// ── dashboards CRUD ───────────────────────────────────────────────────────────
+
+export function useDashboards() {
+  return useQuery<Dashboard[]>({
+    queryKey: ["dashboards"],
+    queryFn: async () => {
+      const res = await fetch("/api/crm/dashboards");
+      if (!res.ok) throw new Error(await readError(res));
+      const body = (await res.json()) as { dashboards: Dashboard[] };
+      return body.dashboards;
+    },
+  });
+}
+
+export function useDashboard(id: string | undefined) {
+  return useQuery<Dashboard>({
+    queryKey: ["dashboards", id],
+    enabled: !!id,
+    queryFn: async () => {
+      const res = await fetch(`/api/crm/dashboards/${id}`);
+      if (!res.ok) throw new Error(await readError(res));
+      const body = (await res.json()) as { dashboard: Dashboard };
+      return body.dashboard;
+    },
+  });
+}
+
+export function useCreateDashboard() {
+  const queryClient = useQueryClient();
+  return useMutation<Dashboard, Error, DashboardInput>({
+    mutationFn: async (input) => {
+      const res = await fetch("/api/crm/dashboards", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+      });
+      if (!res.ok) throw new Error(await readError(res));
+      const body = (await res.json()) as { dashboard: Dashboard };
+      return body.dashboard;
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["dashboards"] });
+    },
+  });
+}
+
+export function useUpdateDashboard() {
+  const queryClient = useQueryClient();
+  return useMutation<Dashboard, Error, DashboardInput & { id: string }>({
+    mutationFn: async ({ id, ...input }) => {
+      const res = await fetch(`/api/crm/dashboards/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+      });
+      if (!res.ok) throw new Error(await readError(res));
+      const body = (await res.json()) as { dashboard: Dashboard };
+      return body.dashboard;
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["dashboards"] });
+    },
+  });
+}
+
+export function useDeleteDashboard() {
+  const queryClient = useQueryClient();
+  return useMutation<void, Error, string>({
+    mutationFn: async (id) => {
+      const res = await fetch(`/api/crm/dashboards/${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error(await readError(res));
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["dashboards"] });
+    },
+  });
+}
+
+// ── run a dashboard panel's visual ────────────────────────────────────────────
+
+/**
+ * Builds the effective AnalysisConfig for a visual (merging in the shared
+ * tab date-range filter when useTabDateRange is set) and runs it through the
+ * same /api/crm/reports/analysis/run endpoint the custom-analysis builder uses.
+ */
+export function buildEffectiveConfig(
+  visual: VisualSpec,
+  dateRange?: { from: string; to: string }
+): AnalysisConfig {
+  if (!visual.useTabDateRange || !dateRange) return visual.config;
+  const dataset = getDataset(visual.config.dataset);
+  const dateField = dataset?.defaultDateField;
+  if (!dateField) return visual.config;
+  return {
+    ...visual.config,
+    filters: [
+      ...visual.config.filters,
+      { column: dateField, op: "gte", value: dateRange.from },
+      { column: dateField, op: "lte", value: dateRange.to },
+    ],
+  };
+}
+
+export function useRunVisualQuery(
+  visual: VisualSpec | undefined,
+  dateRange?: { from: string; to: string }
+) {
+  return useQuery<ReportResult>({
+    queryKey: ["run-visual", visual, dateRange],
+    enabled: !!visual,
+    queryFn: async () => {
+      const config = buildEffectiveConfig(visual as VisualSpec, dateRange);
+      const res = await fetch("/api/crm/reports/analysis/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(config),
+      });
+      if (!res.ok) throw new Error(await readError(res));
+      return res.json() as Promise<ReportResult>;
     },
   });
 }

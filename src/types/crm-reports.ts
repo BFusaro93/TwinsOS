@@ -96,6 +96,68 @@ export interface CustomReport {
   updatedAt: string;
 }
 
+// ---------- Dashboards (visuals built on the analysis engine) ----------
+
+export const visualTypeSchema = z.enum(["kpi", "table", "bar", "line", "pie"]);
+export type VisualType = z.infer<typeof visualTypeSchema>;
+
+export const visualSpecSchema = z.object({
+  type: visualTypeSchema,
+  /** Base analysis config. Does NOT include the shared tab date-range filter
+   *  — that's appended at run time when useTabDateRange is true. */
+  config: analysisConfigSchema,
+  /** Append a gte/lte filter on the dataset's defaultDateField from the
+   *  dashboard tab's shared date range control. */
+  useTabDateRange: z.boolean().default(false),
+  /** Category/x-axis column for bar/line/pie (a groupBy column or plain column). */
+  labelColumn: z.string().optional(),
+  /** One or more numeric output columns to plot as series (bar/line) or the
+   *  single value (pie's slice size). */
+  valueColumns: z.array(z.string()).default([]),
+  /** Output column to render as the big number for a "kpi" visual. */
+  kpiColumn: z.string().optional(),
+});
+export type VisualSpec = z.infer<typeof visualSpecSchema>;
+
+export const dashboardPanelSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  size: z.enum(["third", "half", "full"]).default("half"),
+  visual: visualSpecSchema,
+});
+export type DashboardPanel = z.infer<typeof dashboardPanelSchema>;
+
+export const dashboardTabSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  panels: z.array(dashboardPanelSchema).default([]),
+  /** Show a shared date-range control for this tab (applies to any panel
+   *  whose visual has useTabDateRange: true). */
+  useDateFilter: z.boolean().default(false),
+});
+export type DashboardTab = z.infer<typeof dashboardTabSchema>;
+
+export const dashboardConfigSchema = z.object({
+  tabs: z.array(dashboardTabSchema).default([]),
+});
+export type DashboardConfig = z.infer<typeof dashboardConfigSchema>;
+
+export const dashboardInputSchema = z.object({
+  name: z.string().min(1).max(120),
+  description: z.string().max(500).nullish(),
+  config: dashboardConfigSchema,
+});
+export type DashboardInput = z.infer<typeof dashboardInputSchema>;
+
+export interface Dashboard {
+  id: string;
+  name: string;
+  description: string | null;
+  config: DashboardConfig;
+  createdAt: string;
+  updatedAt: string;
+}
+
 // ---------- Report results (shared shape for every report) ----------
 
 export interface ReportColumnDef {

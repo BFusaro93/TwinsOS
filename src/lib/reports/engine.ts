@@ -27,13 +27,13 @@ export function validateAnalysisConfig(config: AnalysisConfig): string | null {
   if (!dataset) return `Unknown dataset: ${config.dataset}`;
 
   const fieldKeys = new Set(dataset.fields.map((f) => f.key));
-  const grouped = config.groupBy.length > 0;
+  // "Aggregated" mode covers both grouped queries (one or more Group By
+  // columns) and ungrouped grand-total queries (aggregates with zero Group
+  // By columns — Postgres treats the whole filtered set as one group).
+  const aggregated = config.groupBy.length > 0 || config.aggregates.length > 0;
 
-  if (!grouped && config.columns.length === 0) {
+  if (!aggregated && config.columns.length === 0) {
     return "Select at least one column.";
-  }
-  if (grouped && config.groupBy.length === 0 && config.aggregates.length === 0) {
-    return "Grouped analyses need at least one group column or aggregate.";
   }
   for (const col of config.columns) {
     if (!fieldKeys.has(col)) return `Unknown column: ${col}`;
@@ -70,8 +70,8 @@ export function aggregateAlias(fn: string, column: string): string {
 
 /** Output column defs for an analysis config (drives table rendering + CSV). */
 export function columnsForAnalysis(config: AnalysisConfig): ReportColumnDef[] {
-  const grouped = config.groupBy.length > 0;
-  if (!grouped) {
+  const aggregated = config.groupBy.length > 0 || config.aggregates.length > 0;
+  if (!aggregated) {
     return config.columns.map((key) => {
       const field = getDatasetField(config.dataset, key);
       return {
@@ -144,18 +144,18 @@ export async function runAnalysis(
   const error = validateAnalysisConfig(config);
   if (error) throw new Error(error);
 
-  const grouped = config.groupBy.length > 0;
+  const aggregated = config.groupBy.length > 0 || config.aggregates.length > 0;
   const { data, error: rpcError } = await (supabase as SupabaseClient).rpc(
     "crm_run_report",
     {
       p_dataset: config.dataset,
-      p_columns: grouped ? [] : config.columns,
+      p_columns: aggregated ? [] : config.columns,
       p_filters: config.filters.map((f) => ({
         column: f.column,
         op: f.op,
         value: f.value,
       })),
-      p_group_by: grouped ? config.groupBy : null,
+      p_group_by: config.groupBy.length > 0 ? config.groupBy : null,
       p_aggregates: config.aggregates.map((a) => ({ column: a.column, fn: a.fn })),
       p_sort_column: config.sortColumn ?? null,
       p_sort_dir: config.sortDir,
