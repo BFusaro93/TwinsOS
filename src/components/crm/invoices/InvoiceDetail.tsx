@@ -555,7 +555,7 @@ export function InvoiceDetail({
         ? invoice.invoiceDate
         : "";
     setDueDate(resolvedDue);
-    setInvoiceNumber(invoice.invoiceNumber);
+    setInvoiceNumber(invoice.invoiceNumber ?? "");
     setDiscountCents(invoice.discountCents);
     setDiscountStr((invoice.discountCents / 100).toFixed(2));
     setDiscountType(invoice.discountType);
@@ -698,7 +698,11 @@ export function InvoiceDetail({
         updateHeader({
           id: invoice!.id,
           patch: {
-            invoice_number: invoiceNumber === "" ? undefined : Number(invoiceNumber),
+            // invoiceNumber can be "" (untouched) or a validated positive number
+            // (see InlineEdit's onSave above) — never send a bare Number(falsy
+            // value), which coerces null/"" to 0 and would overwrite a real
+            // invoice number with a literal zero.
+            invoice_number: typeof invoiceNumber === "number" && invoiceNumber > 0 ? invoiceNumber : undefined,
             invoice_date: invoiceDate || invoice!.invoiceDate,
             due_date: dueDate || null,
             terms,
@@ -909,8 +913,11 @@ export function InvoiceDetail({
             <span className="text-white text-sm font-semibold">
               Invoice #
               <InlineEdit
-                value={String(invoiceNumber === "" ? invoice.invoiceNumber : invoiceNumber)}
-                onSave={(v) => setInvoiceNumber(Number(v) || invoice.invoiceNumber)}
+                value={invoiceNumber === "" ? (invoice.invoiceNumber != null ? String(invoice.invoiceNumber) : "") : String(invoiceNumber)}
+                onSave={(v) => {
+                  const n = Number(v);
+                  setInvoiceNumber(v.trim() !== "" && Number.isFinite(n) && n > 0 ? n : (invoice.invoiceNumber ?? ""));
+                }}
                 type="number"
                 className="ml-1 w-20 bg-brand-700 text-white text-sm font-semibold border-brand-500"
               />

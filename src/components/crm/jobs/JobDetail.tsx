@@ -29,6 +29,7 @@ import { useCreateInvoiceFromJob } from "@/lib/hooks/use-invoices";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { VisitStatusIcon } from "@/components/shared/VisitStatusIcon";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -1758,7 +1759,8 @@ function VisitRow({
         <td className="px-4 py-3 text-slate-600">{visit.crewName ?? <span className="italic text-slate-400">Unassigned</span>}</td>
         <td className="px-4 py-3 text-right tabular-nums">{visit.actualHours?.toFixed(1) ?? "—"}</td>
         <td className="px-4 py-3 text-center">
-          <Badge className={cn("text-[10px]", VISIT_STATUS_COLOR[visit.status] ?? "bg-slate-50 text-slate-500")}>
+          <Badge className={cn("gap-1 text-[10px]", VISIT_STATUS_COLOR[visit.status] ?? "bg-slate-50 text-slate-500")}>
+            <VisitStatusIcon status={visit.status} className="h-3 w-3" />
             {visit.status}
           </Badge>
         </td>

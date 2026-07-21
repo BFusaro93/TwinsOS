@@ -327,6 +327,12 @@ export function WaitingList() {
     for (const job of filtered) {
       if (job.jobType === "package" && (job.services?.length ?? 0) > 1) {
         for (const service of job.services!) {
+          // The job-level waiting_list_start/end (used by the server-side date
+          // filter) spans the whole package, so a job can pass the filter while
+          // individual visits inside it fall outside the selected range — only
+          // show visits whose own date window actually overlaps it.
+          if (service.completeByDate && service.completeByDate < startDate) continue;
+          if (service.startDate && service.startDate > endDate) continue;
           rows.push({ key: `${job.id}-${service.id}`, job, service });
         }
       } else {
@@ -334,7 +340,7 @@ export function WaitingList() {
       }
     }
     return rows;
-  }, [filtered]);
+  }, [filtered, startDate, endDate]);
 
   const allSelected = filtered.length > 0 && filtered.every((j) => selectedIds.has(j.id));
   const someSelected = selectedIds.size > 0;

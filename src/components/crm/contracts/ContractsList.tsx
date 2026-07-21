@@ -619,7 +619,7 @@ const EDIT_TABS: { id: TabId; label: string }[] = [
   { id: "audit", label: "Audit Trail" },
 ];
 
-function ContractDialog({
+export function ContractDialog({
   open,
   onOpenChange,
   contract,
@@ -876,6 +876,10 @@ export function ContractsList({ clientId }: Props) {
         toast.info(skipped === 1 ? "That contract was already billed this month" : "All selected contracts were already billed this month");
       } else {
         toast.success(`${created} invoice${created !== 1 ? "s" : ""} created${skipped > 0 ? `, ${skipped} skipped (already billed)` : ""}`);
+      }
+      const problems = results.filter((r) => r.status === "created" && r.reason);
+      if (problems.length > 0) {
+        toast.warning(`${problems.length} invoice${problems.length !== 1 ? "s" : ""} created with issues — check them: ${problems[0].reason}`);
       }
       clearSelection();
     } catch {

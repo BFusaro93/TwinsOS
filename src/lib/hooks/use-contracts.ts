@@ -314,9 +314,16 @@ export function useGenerateContractInvoices() {
         }
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await (supabase as any).from("crm_invoice_line_items").insert({
+        const { error: numErr } = await (supabase.rpc as any)("assign_invoice_number", { p_invoice_id: invoice.id });
+
+        // Line item description AND name (the "Service" column) should reflect
+        // the contract's actual configured service(s), not the contract's own
+        // title — description matches the invoice header description above.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error: liErr } = await (supabase as any).from("crm_invoice_line_items").insert({
           invoice_id: invoice.id,
-          description: contract.title,
+          name: lineItems.length > 0 ? lineItems.join(", ") : contract.title,
+          description,
           qty: 1,
           rate_cents: monthAmount,
           total_cents: monthAmount,
@@ -329,7 +336,11 @@ export function useGenerateContractInvoices() {
           .update({ last_billed_date: today })
           .eq("id", contractId);
 
-        results.push({ contractId, status: "created" });
+        const problems = [
+          numErr ? `invoice number not assigned (${numErr.message})` : null,
+          liErr ? `line item not created (${liErr.message})` : null,
+        ].filter(Boolean);
+        results.push({ contractId, status: "created", reason: problems.length > 0 ? problems.join("; ") : undefined });
       }
 
       return results;

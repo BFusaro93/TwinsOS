@@ -17,6 +17,7 @@ import { WeekStrip } from "./WeekStrip";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/shared/PageHeader";
+import { VisitStatusIcon } from "@/components/shared/VisitStatusIcon";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -32,11 +33,7 @@ import { formatCurrency, cn } from "@/lib/utils";
 import { toast } from "sonner";
 import {
   Calendar,
-  CalendarCheck,
   Smartphone,
-  CheckCircle2,
-  XCircle,
-  CornerDownRight,
   FileText,
   Users,
   Search,
@@ -93,18 +90,6 @@ function computeActualHours(visit: CRMJobVisit): number | null {
   return diffHours * (visit.menCount || 1);
 }
 
-function StatusIcon({ status }: { status: VisitStatus }) {
-  switch (status) {
-    case "scheduled":   return <Calendar className="h-4 w-4 text-slate-400" />;
-    case "dispatched":  return <Smartphone className="h-4 w-4 text-orange-400" />;
-    case "in_progress": return <CalendarCheck className="h-4 w-4 text-yellow-500" />;
-    case "completed":   return <CheckCircle2 className="h-4 w-4 text-green-500" />;
-    case "cancelled":   return <XCircle className="h-4 w-4 text-red-400" />;
-    case "skipped":     return <CornerDownRight className="h-4 w-4 text-blue-400" />;
-    default:            return <Calendar className="h-4 w-4 text-slate-300" />;
-  }
-}
-
 function StatusCycleButton({ visit }: { visit: CRMJobVisit }) {
   const { mutateAsync: updateStatus, isPending } = useUpdateVisitStatus();
 
@@ -126,7 +111,7 @@ function StatusCycleButton({ visit }: { visit: CRMJobVisit }) {
       title={visit.status}
       className={cn("flex items-center justify-center rounded transition-opacity", isPending && "opacity-50")}
     >
-      <StatusIcon status={visit.status} />
+      <VisitStatusIcon status={visit.status} />
     </button>
   );
 }
@@ -988,7 +973,7 @@ function TeamAssignDialog({
                         >
                           <p className="text-xs font-medium text-slate-700 truncate">{v.clientName ?? "—"}</p>
                           <p className="text-[10px] text-slate-400 truncate">{svcName}</p>
-                          <StatusIcon status={v.status} />
+                          <VisitStatusIcon status={v.status} />
                           <button
                             onClick={() => reassign(v.id, null, v.jobId)}
                             className="absolute top-1 right-1 hidden group-hover:flex text-[9px] text-slate-400 hover:text-red-500"

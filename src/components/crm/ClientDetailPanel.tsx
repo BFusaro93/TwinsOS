@@ -55,8 +55,7 @@ import { NewJobDialog } from "./jobs/NewJobDialog";
 import { InvoiceDetailSheet } from "./invoices/InvoiceDetailSheet";
 import { NewInvoiceSheet } from "./invoices/NewInvoiceSheet";
 import { AddPaymentDialog, RefundDialog } from "./payments/PaymentsList";
-import { ContractsList } from "./contracts/ContractsList";
-import { NewContractDialog } from "./contracts/NewContractDialog";
+import { ContractsList, ContractDialog } from "./contracts/ContractsList";
 import { ClientFilesTab } from "./ClientFilesTab";
 import { SendClientEmailDialog } from "./SendClientEmailDialog";
 import { ClientProjectsTab } from "./ClientProjectsTab";
@@ -69,7 +68,7 @@ import {
 import { useOrgList } from "@/lib/hooks/use-org-lists";
 import { formatCurrency } from "@/lib/utils";
 import { useOrgSettings } from "@/lib/hooks/use-org-settings";
-import type { CRMPayment, CRMInvoice } from "@/types/crm-invoices";
+import type { CRMPayment, CRMInvoice, CRMContract } from "@/types/crm-invoices";
 import type { Estimate } from "@/types/crm-estimates";
 import { toast } from "sonner";
 import {
@@ -1442,7 +1441,8 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
   const [newEstimateOpen, setNewEstimateOpen] = useState(false);
   const [newJobOpen, setNewJobOpen] = useState(false);
   const [newJobType, setNewJobType] = useState<import("@/types/crm-jobs").JobType>("one_time");
-  const [newContractOpen, setNewContractOpen] = useState(false);
+  const [addingContract, setAddingContract] = useState(false);
+  const [editingContract, setEditingContract] = useState<CRMContract | null>(null);
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const [jobEditMode, setJobEditMode] = useState(false);
   const [visitsModal, setVisitsModal] = useState<{ job: CRMJob; jobName: string; mode: "upcoming" | "history" } | null>(null);
@@ -1844,7 +1844,7 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
               <button className="text-[11px] text-white/70 hover:text-white" onClick={() => onSwitchTab?.("contracts")}>All</button>
             </div>
             <Button variant="ghost" size="sm" className="h-6 px-2 text-xs text-white/80 hover:text-white hover:bg-white/10"
-              onClick={() => setNewContractOpen(true)}>
+              onClick={() => setAddingContract(true)}>
               <Plus className="mr-0.5 h-3 w-3" /> Add a Contract
             </Button>
           </div>
@@ -1854,7 +1854,11 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
               <p className="px-4 py-6 text-xs text-slate-400 text-center">No contracts</p>
             ) : (
               (contracts ?? []).map((contract) => (
-                <div key={contract.id} className="px-4 py-3 hover:bg-slate-50">
+                <div
+                  key={contract.id}
+                  className="cursor-pointer px-4 py-3 hover:bg-slate-50"
+                  onClick={() => setEditingContract(contract)}
+                >
                   <div className="flex items-start justify-between gap-2">
                     <p className="truncate text-xs font-semibold text-slate-700">{contract.title}</p>
                     <Badge variant="secondary" className="shrink-0 text-[10px]">
@@ -1906,10 +1910,13 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
       initialJobType={newJobType}
       onCreated={(jobId) => { setNewJobOpen(false); setSelectedJobId(jobId); }}
     />
-    <NewContractDialog
-      open={newContractOpen}
-      onOpenChange={setNewContractOpen}
-      clientId={clientId}
+    <ContractDialog
+      key={editingContract?.id ?? "new"}
+      open={addingContract || !!editingContract}
+      onOpenChange={(o) => { if (!o) { setAddingContract(false); setEditingContract(null); } }}
+      contract={editingContract ?? undefined}
+      defaultClientId={clientId}
+      clients={[]}
     />
     <AddPaymentDialog
       open={addPaymentOpen}
