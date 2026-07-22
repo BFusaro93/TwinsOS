@@ -59,7 +59,6 @@ function useEmailActivity() {
           profiles(name)
         `)
         .eq("activity_type", "email")
-        .is("deleted_at", null)
         .order("occurred_at", { ascending: false })
         .limit(500);
       if (error) throw error;

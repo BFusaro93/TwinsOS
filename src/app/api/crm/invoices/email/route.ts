@@ -138,5 +138,22 @@ export async function POST(req: NextRequest) {
     await (supabase as any).from("crm_invoices").update({ status: "sent" }).eq("id", invoiceId);
   }
 
+  // Log activity
+  if (inv.client_id) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (supabase as any).from("client_activity").insert({
+      org_id: profile?.org_id,
+      client_id: inv.client_id,
+      activity_type: "email",
+      subject: `Invoice #${inv.invoice_number} sent via email`,
+      body: `Sent to ${clientEmail}`,
+      sent_to: clientEmail,
+      ref_id: invoiceId,
+      ref_table: "crm_invoices",
+      occurred_at: new Date().toISOString(),
+      created_by: user.id,
+    });
+  }
+
   return NextResponse.json({ ok: true });
 }

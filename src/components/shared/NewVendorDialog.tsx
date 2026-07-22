@@ -21,6 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { toast } from "sonner";
 import type { Vendor } from "@/types";
 import { useCreateVendor, useUpdateVendor } from "@/lib/hooks/use-vendors";
 
@@ -96,7 +97,10 @@ export function NewVendorDialog({ open, onOpenChange, initialData, onCreated }: 
     if (isEditing && initialData) {
       updateVendor.mutate(
         { id: initialData.id, ...payload },
-        { onSuccess: () => handleClose() }
+        {
+          onSuccess: () => handleClose(),
+          onError: () => toast.error("Failed to save vendor"),
+        }
       );
     } else {
       createVendor.mutate(payload, {
@@ -104,6 +108,7 @@ export function NewVendorDialog({ open, onOpenChange, initialData, onCreated }: 
           onCreated?.(vendor);
           handleClose();
         },
+        onError: () => toast.error("Failed to create vendor"),
       });
     }
   }
@@ -115,7 +120,9 @@ export function NewVendorDialog({ open, onOpenChange, initialData, onCreated }: 
       <DialogContent className="sm:max-w-[560px]">
         <DialogHeader>
           <DialogTitle>{isEditing ? "Edit Vendor" : "New Vendor"}</DialogTitle>
-          <DialogDescription>Add a new vendor or supplier contact.</DialogDescription>
+          <DialogDescription>
+            {isEditing ? "Update this vendor's contact information." : "Add a new vendor or supplier contact."}
+          </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">

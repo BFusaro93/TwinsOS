@@ -21,7 +21,7 @@ export function NewInvoiceSheet({ open, onClose, defaultClientId }: Props) {
   // Lazy-initialized on mount (not at module scope) so it reflects the
   // actual viewport instead of whatever window.innerWidth was when this
   // chunk first happened to be evaluated.
-  const [width, setWidth] = useState(() => Math.min(1100, typeof window !== "undefined" ? window.innerWidth * 0.75 : 1100));
+  const [width, setWidth] = useState(() => Math.max(MIN_WIDTH, Math.min(1100, typeof window !== "undefined" ? window.innerWidth * 0.75 : 1100)));
   const [invoiceId, setInvoiceId] = useState<string | null>(null);
   const [draftClientId, setDraftClientId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);

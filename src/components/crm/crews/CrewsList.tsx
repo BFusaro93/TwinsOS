@@ -558,11 +558,14 @@ function CrewDialog({
     crew ? crewToForm(crew) : emptyForm
   );
 
+  const [activeTab, setActiveTab] = useState("details");
+
   // Sync form when dialog opens for a different crew
   useEffect(() => {
     if (open) {
       setActiveCrew(crew);
       setForm(crew ? crewToForm(crew) : emptyForm);
+      setActiveTab("details");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, crew]);
@@ -579,7 +582,8 @@ function CrewDialog({
         const created = await create(form);
         toast.success("Team created — add assignments below");
         setActiveCrew(created);
-        // Stay open so assignments tab is accessible immediately
+        setActiveTab("assignments");
+        // Stay open and switch to the assignments tab immediately
       } else {
         await update({ id: activeCrew.id, updates: form });
         toast.success("Team saved");
@@ -603,7 +607,7 @@ function CrewDialog({
           <DialogTitle className="text-xl font-bold">{title}</DialogTitle>
         </DialogHeader>
 
-        <Tabs defaultValue="details" className="flex flex-1 flex-col overflow-hidden">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-1 flex-col overflow-hidden">
           <TabsList className="shrink-0 border-b bg-white rounded-none justify-start px-6 py-0 h-10 gap-0">
             {tabList.map((tab) => (
               <TabsTrigger
