@@ -88,6 +88,20 @@ export function usePermissions(): PermissionsResult {
 }
 
 /**
+ * True once we know (post-load) that this login is a shared crew field-clock-in
+ * account (profiles.role === 'crew') rather than a real seat — used to keep
+ * crew logins confined to /crm/crew and out of the PO/CMMS dashboard shell.
+ */
+export function useIsCrewOnly(): { isCrewOnly: boolean; isLoading: boolean } {
+  const { data, isLoading } = useQuery({
+    queryKey: ["crm-permissions"],
+    queryFn: fetchUserPermissions,
+    staleTime: 5 * 60 * 1000,
+  });
+  return { isCrewOnly: data?.profileRole === "crew", isLoading: isLoading || !data };
+}
+
+/**
  * Gates access to the CRM module itself (not a specific permission within it).
  * Org admins always get in. Crew accounts (profiles.role === 'crew') only get
  * into their own /crm/crew surface — that's a shared field-clock-in login, not

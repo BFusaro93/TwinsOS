@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect } from "react";
-import { usePathname } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { AppSidebar } from "@/components/shared/AppSidebar";
 import { TopBar } from "@/components/shared/TopBar";
 import { RealtimeSync } from "@/components/shared/RealtimeSync";
 import { SettingsLoader } from "@/components/shared/SettingsLoader";
 import { useUIStore } from "@/stores";
+import { useIsCrewOnly } from "@/lib/hooks/use-permissions";
 
 export default function DashboardLayout({
   children,
@@ -15,11 +16,21 @@ export default function DashboardLayout({
 }) {
   const { sidebarOpen, setSidebarOpen } = useUIStore();
   const pathname = usePathname();
+  const router = useRouter();
+  const { isCrewOnly, isLoading } = useIsCrewOnly();
 
   // Auto-close mobile sidebar drawer on navigation
   useEffect(() => {
     setSidebarOpen(false);
   }, [pathname, setSidebarOpen]);
+
+  // Crew field-clock-in logins have no seat in the PO/CMMS module — keep them
+  // confined to /crm/crew, same as useCrmAccess does for the CRM module.
+  useEffect(() => {
+    if (!isLoading && isCrewOnly) router.replace("/crm/crew");
+  }, [isLoading, isCrewOnly, router]);
+
+  if (isCrewOnly) return null;
 
   return (
     <div className="flex h-dvh overflow-hidden bg-slate-50">
