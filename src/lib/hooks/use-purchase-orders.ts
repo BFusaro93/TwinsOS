@@ -277,6 +277,33 @@ function mapStatus(raw: string): string {
 
 type SupabaseClient = ReturnType<typeof createClient>;
 
+// A part_number can be reused across POs under a different item name (e.g. a
+// different brand/vendor for the same interchangeable part). The catalog
+// keeps whichever name it saw first and silently ignores later name
+// variants — record the mismatch instead of discarding it so it can be
+// reviewed later (surfaces in that record's own audit trail).
+async function logCatalogNameConflict(
+  supabase: SupabaseClient,
+  recordType: "product" | "part",
+  recordId: string,
+  existingName: string,
+  incomingName: string,
+  poNumber: string,
+) {
+  if (existingName === incomingName) return;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await (supabase as any).from("audit_log").insert({
+    record_type: recordType,
+    record_id: recordId,
+    action: "name_conflict",
+    changed_by_name: "System",
+    description: `Import name conflict on ${poNumber} (not applied): catalog has "${existingName}", import line used "${incomingName}"`,
+    field_changed: "name",
+    old_value: existingName,
+    new_value: incomingName,
+  });
+}
+
 async function importDenormalized(supabase: SupabaseClient, rows: Record<string, string>[]): Promise<number> {
   // Group rows by PO number
   const poGroups = new Map<string, Record<string, string>[]>();
@@ -390,7 +417,7 @@ async function importDenormalized(supabase: SupabaseClient, rows: Record<string,
       if (partNumber) {
         const { data: existingProduct } = await supabase
           .from("product_items")
-          .select("id")
+          .select("id, name")
           .eq("part_number", partNumber)
           .is("deleted_at", null)
           .limit(1)
@@ -398,6 +425,7 @@ async function importDenormalized(supabase: SupabaseClient, rows: Record<string,
 
         if (existingProduct) {
           productItemId = existingProduct.id;
+          await logCatalogNameConflict(supabase, "product", existingProduct.id, existingProduct.name, itemName, poNumber);
         } else {
           const { data: newProduct } = await supabase
             .from("product_items")
@@ -424,16 +452,18 @@ async function importDenormalized(supabase: SupabaseClient, rows: Record<string,
       if (productItemId && partNumber) {
         const { data: linked } = await supabase
           .from("parts")
-          .select("id")
+          .select("id, name")
           .eq("product_item_id", productItemId)
           .is("deleted_at", null)
           .maybeSingle();
 
-        if (!linked) {
+        if (linked) {
+          await logCatalogNameConflict(supabase, "part", linked.id, linked.name, itemName, poNumber);
+        } else {
           // Check for an unlinked part with the same part number
           const { data: byPN } = await supabase
             .from("parts")
-            .select("id")
+            .select("id, name")
             .eq("part_number", partNumber)
             .is("deleted_at", null)
             .maybeSingle();
@@ -444,6 +474,7 @@ async function importDenormalized(supabase: SupabaseClient, rows: Record<string,
               .from("parts")
               .update({ product_item_id: productItemId })
               .eq("id", byPN.id);
+            await logCatalogNameConflict(supabase, "part", byPN.id, byPN.name, itemName, poNumber);
           } else {
             // Create a new part record
             await supabase.from("parts").insert({
