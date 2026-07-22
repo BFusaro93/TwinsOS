@@ -251,7 +251,7 @@ export const DOC_SECTIONS: DocSection[] = [
           {
             step: "Linking Maintenance Parts to CMMS",
             detail:
-              "When you create a Maintenance Part in the catalog, you can link it to a Part in the CMMS Parts inventory. This creates the connection so receiving that product updates the correct part's stock level.",
+              "When you create a Maintenance Part in the catalog, you can link it to a Part in the CMMS Parts inventory. This creates the connection so receiving that product updates the correct part's stock level and cost — see Administration > Inventory Costing Methods.",
           },
         ],
       },
@@ -355,12 +355,22 @@ export const DOC_SECTIONS: DocSection[] = [
           {
             step: "Create a PM Schedule",
             detail:
-              "Go to CMMS > PM Schedules and click '+ New PM Schedule'. Link it to an asset, give it a name (e.g., 'Monthly Blade Inspection'), and set the frequency.",
+              "Go to CMMS > PM Schedules and click '+ New PM Schedule'. Give it a name (e.g., 'Monthly Blade Inspection') and set the frequency, then link it to the asset(s) it covers from the Assets tab.",
           },
           {
             step: "Frequency options",
             detail:
-              "Schedules can repeat daily, weekly, bi-weekly, monthly, quarterly, semi-annually, or annually. Set the start date and the system calculates the next due date automatically.",
+              "Schedules can repeat daily, weekly, monthly, quarterly, or annually. Set the start date and the system calculates the next due date automatically.",
+          },
+          {
+            step: "One schedule can cover multiple assets",
+            detail:
+              "A PM Schedule's Assets tab holds a list of assets, not just one — useful for a fleet-wide routine like 'Quarterly Blade Sharpening' that applies to every mower on the crew. Add or remove assets from that tab at any time.",
+          },
+          {
+            step: "Parts lists",
+            detail:
+              "Two ways to plan parts for a PM: the schedule-level Parts tab lists parts expected for the routine in general, while each asset row on the Assets tab can carry its own per-asset parts list (with quantity and unit cost) — useful when different assets on the same schedule need different parts, e.g. different oil filter part numbers per mower model.",
           },
           {
             step: "Notifications",
@@ -416,7 +426,7 @@ export const DOC_SECTIONS: DocSection[] = [
           {
             step: "Adding a part",
             detail:
-              "Go to CMMS > Parts and click '+ New Part'. Enter the part name, part number, unit of measure, minimum stock level, and current quantity on hand.",
+              "Go to CMMS > Parts and click '+ New Part'. Enter the part name, part number, unit of measure, minimum stock level, and current quantity on hand. You can also add a picture, a storage location, and one or more categories to help with search and filtering.",
           },
           {
             step: "Linking to assets",
@@ -424,9 +434,24 @@ export const DOC_SECTIONS: DocSection[] = [
               "In the part detail, use the Assets tab to link which assets use this part. This is many-to-many — a single part can serve multiple assets.",
           },
           {
+            step: "Multiple vendors per part",
+            detail:
+              "A part can list a primary vendor plus alternate vendors it's also sourced from. This is for reference/reordering convenience — it does not split the part into separate catalog entries.",
+          },
+          {
+            step: "Generic / interchangeable equivalents get their own part",
+            detail:
+              "If a part number is genuinely interchangeable across brands (e.g. a name-brand OEM filter vs. a generic aftermarket equivalent that fits the same spec), keep them as two separate catalog entries rather than merging purchases of both under one part — the two aren't the same cost or vendor history, and PO line items need to attach to the correct one. Import history is easy to conflate the first time a part number is entered under a different name in a later purchase; if you spot a part whose Products catalog name and Parts inventory name genuinely disagree, check its Audit Trail for a 'name conflict' entry (see FAQ) before assuming it's just a typo.",
+          },
+          {
             step: "Replenishing stock",
             detail:
               "Create a Purchase Requisition using the Maintenance Part product that corresponds to this part. When the PO is received in Purchasing > Receiving, the quantity on hand increments automatically. Never adjust quantity manually outside of receiving.",
+          },
+          {
+            step: "Cost stays in sync with the Products catalog",
+            detail:
+              "Every part is linked to a Products catalog entry. When a receipt updates a part's unit cost, the linked product's cost updates automatically too (and vice versa for manual edits) — so the price shown in CMMS Parts and Purchasing Products should always match. See Administration > Inventory Costing Methods for how that cost is actually calculated.",
           },
           {
             step: "Low stock alerts",
@@ -455,6 +480,16 @@ export const DOC_SECTIONS: DocSection[] = [
             step: "Creating a meter-threshold automation",
             detail:
               "Go to CMMS > Automations and click '+ New Automation'. Set Trigger Type to 'Meter Threshold', select the meter, choose the operator (≥ for cumulative like mileage), and enter the threshold value.",
+          },
+          {
+            step: "Other trigger types",
+            detail:
+              "Beyond meter thresholds, an automation can trigger on: a part dropping below minimum stock (any part, or a specific one), a PM schedule coming due within N days, a work order going overdue by N+ days, a new maintenance request being submitted, a work order's status changing to a specific value, or a purchase order's status changing to a specific value.",
+          },
+          {
+            step: "Action types",
+            detail:
+              "An automation can: create a Work Order, create a Maintenance Request (a review step before it becomes a WO), create a Purchase Requisition, notify a role in-app (Send Notification), or send an email (Send Email, requires email configuration).",
           },
           {
             step: "Setting a service interval",
@@ -564,6 +599,44 @@ export const DOC_SECTIONS: DocSection[] = [
           },
         ],
       },
+      {
+        id: "costing-methods",
+        title: "Inventory Costing Methods",
+        summary: "Choose how the unit cost pre-fills on new Requisition, PO, and Work Order lines.",
+        icon: Gauge,
+        steps: [
+          {
+            step: "Where it's configured",
+            detail:
+              "Go to Settings > Costing. This is an org-wide setting with three modes: Manual, Weighted Average Cost (WAC), and First In, First Out (FIFO).",
+          },
+          {
+            step: "Manual",
+            detail:
+              "The catalog's stored unit cost is used as-is. It updates to the most recently received price after each goods receipt, but you can also override it directly on the part or product record.",
+          },
+          {
+            step: "Weighted Average Cost (WAC)",
+            detail:
+              "The pre-filled cost is the quantity-weighted average across every cost layer still in stock. Receiving more stock at a different price blends into the average rather than replacing it outright.",
+          },
+          {
+            step: "First In, First Out (FIFO)",
+            detail:
+              "The pre-filled cost is whatever the oldest still-in-stock batch paid. As that batch is consumed and a newer one becomes the oldest, the pre-fill shifts to that batch's price.",
+          },
+          {
+            step: "Cost layers, and what never changes",
+            detail:
+              "Each goods receipt adds a 'cost layer' (quantity + unit cost + date + PO reference) to the part/product record. Cost layers only affect the pre-fill on new lines — historical Requisition, PO, and Work Order line items keep whatever cost was recorded at the time and are never retroactively changed.",
+          },
+          {
+            step: "Parts and Products always agree",
+            detail:
+              "A CMMS Part and its linked Products catalog entry share one cost — updating either one (through a receipt or a manual edit) propagates to the other automatically, so the price you see is consistent whether you're looking at CMMS > Parts or Purchasing > Products.",
+          },
+        ],
+      },
     ],
   },
 ];
@@ -598,6 +671,10 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
         q: "How do I record goods received against a purchase order?",
         a: "Go to Purchasing > Receiving and click '+ New Receipt'. Select the PO, enter quantities received for each line, and save. Maintenance Part lines auto-update the CMMS Parts inventory quantity on hand.",
       },
+      {
+        q: "Why did a product's unit cost change after a goods receipt?",
+        a: "A Products catalog entry and its linked CMMS Part always share one cost. Depending on the org's Costing Method (Settings > Costing — Manual, WAC, or FIFO), receiving stock at a different price can update that shared cost. See Administration > Inventory Costing Methods for details.",
+      },
     ],
   },
   {
@@ -626,6 +703,14 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       {
         q: "How does the service interval on an automation work?",
         a: "After the triggered WO is marked Done, the threshold automatically advances by the interval amount. Example: oil change automation at 36,000 miles with a 5,000 mile interval — after WO completes, threshold becomes 41,000 miles automatically.",
+      },
+      {
+        q: "Why does a part's audit trail show a 'name conflict' entry?",
+        a: "The bulk PO import keeps the first name it ever saw for a given part number. If a later purchase uses a different name for the same part number (a different vendor's label for an interchangeable part, or a genuine data-entry mismatch), the import doesn't silently overwrite the catalog — it records a 'name conflict' entry on that part/product's audit trail instead so it can be reviewed rather than lost.",
+      },
+      {
+        q: "A part number seems to cover two different physical parts — what should I do?",
+        a: "Split it into two catalog entries — one per physical part — rather than sharing one record. Give each a distinct part number (e.g. append '-OEM' / '-GEN' if the real-world part number would otherwise collide) so future purchases and Work Order usage attach to the correct one. Any Assets already linked to the shared part should be copied over to the new entry for whichever part actually fits them.",
       },
     ],
   },
