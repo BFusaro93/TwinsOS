@@ -189,6 +189,7 @@ export interface NewClientJobFormValues {
   crewId: string | null;
   schedule: string | null;
   scheduleDays: string[];
+  packageId: string | null;
   packageName: string | null;
   packageRenewal: string | null;
   packageDiscount: string | null;

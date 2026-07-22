@@ -246,6 +246,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
         crewId: crewId ?? null,
         schedule: schedule || null,
         scheduleDays: jobType === "snow" ? snowDaysAuthorized : [],
+        packageId: jobType === "package" ? (packageId || null) : null,
         packageName: jobType === "package" ? (selectedPackage?.name ?? null) : null,
         packageRenewal: null,
         packageDiscount: null,
