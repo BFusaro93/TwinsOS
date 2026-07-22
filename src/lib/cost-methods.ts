@@ -100,6 +100,9 @@ export function computeNewUnitCost(
 ): number {
   if (method === "wac") return computeWAC(layers, currentUnitCost);
   // manual / fifo: update to the last received price so the catalog stays current.
+  // parts.unit_cost / product_items.unit_cost are whole-cent integers, so round
+  // even though the layer itself may carry fractional-cent precision from a
+  // case/bulk-priced PO line.
   const lastLayer = layers[layers.length - 1];
-  return lastLayer?.unitCost ?? currentUnitCost;
+  return Math.round(lastLayer?.unitCost ?? currentUnitCost);
 }
