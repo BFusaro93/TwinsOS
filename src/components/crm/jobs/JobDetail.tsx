@@ -712,7 +712,7 @@ export function JobDetail({ jobId, initialEditing = false }: Props) {
                         </div>
                       </div>
                     )}
-                    {(job.jobType === "recurring" || job.jobType === "package") && (
+                    {job.jobType === "recurring" && (
                       <div className="flex flex-col gap-1">
                         <Label className="text-xs text-slate-500">Recurring Schedule</Label>
                         <Select
@@ -948,7 +948,7 @@ export function JobDetail({ jobId, initialEditing = false }: Props) {
                         </dd>
                       </div>
                     )}
-                    {(job.jobType === "recurring" || job.jobType === "package") && (
+                    {job.jobType === "recurring" && (
                       <div className="flex justify-between">
                         <dt className="text-xs text-slate-500">Schedule</dt>
                         <dd className="text-xs font-medium text-slate-800 flex items-center gap-1">
