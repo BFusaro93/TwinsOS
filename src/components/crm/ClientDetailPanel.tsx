@@ -2624,6 +2624,7 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
   const [openTicketId, setOpenTicketId] = useState<string | null>(null);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [portalInviteOpen, setPortalInviteOpen] = useState(false);
+  const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   const { mutateAsync: convertLead, isPending: converting } = useConvertLeadToClient();
   const { mutateAsync: activate } = useActivateClient();
   const { mutate: addTag } = useAddClientTag();
@@ -2808,11 +2809,16 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
 
               {/* More split button */}
               <div className="flex items-center">
-                <Button variant="outline" size="sm" className="h-7 rounded-r-none border-r-0 px-3 text-xs">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 rounded-r-none border-r-0 px-3 text-xs"
+                  onClick={() => setMoreMenuOpen(true)}
+                >
                   <MoreHorizontal className="mr-1 h-3 w-3" />
                   More
                 </Button>
-                <DropdownMenu>
+                <DropdownMenu open={moreMenuOpen} onOpenChange={setMoreMenuOpen}>
                   <DropdownMenuTrigger asChild>
                     <Button variant="outline" size="sm" className="h-7 rounded-l-none border-l-0 px-1.5 text-xs">
                       <ChevronDown className="h-3.5 w-3.5" />
