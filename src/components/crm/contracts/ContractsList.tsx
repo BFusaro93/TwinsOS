@@ -48,6 +48,7 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { ColumnChooser } from "@/components/shared/ColumnChooser";
 import type { ColumnDef } from "@/components/shared/ColumnChooser";
 import { AttachmentsSection } from "@/components/shared/AttachmentsSection";
+import { ClientCombobox } from "@/components/shared/ClientCombobox";
 import { AuditTrailTab } from "@/components/shared/AuditTrailTab";
 import { cn, formatCurrency } from "@/lib/utils";
 import { Plus, Pencil, ChevronDown, Trash2, X, ArrowUp, ArrowDown, Search } from "lucide-react";
@@ -221,16 +222,12 @@ function ContractDetailsTab({
         <Section label="Client" className="mb-0">
           {!hideClient && (
             <FieldRow label="Client">
-              <Select value={state.clientId} onValueChange={(v) => onChange({ clientId: v })}>
-                <SelectTrigger className="h-8 text-sm">
-                  <SelectValue placeholder="Search Clients…" />
-                </SelectTrigger>
-                <SelectContent>
-                  {clients.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>{c.displayName}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <ClientCombobox
+                clients={clients}
+                value={state.clientId}
+                onValueChange={(v) => onChange({ clientId: v })}
+                noneLabel="Search clients…"
+              />
             </FieldRow>
           )}
           <FieldRow label="Contract Name">
@@ -988,7 +985,7 @@ export function ContractsList({ clientId }: Props) {
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search contracts or clients…"
+            placeholder="Search…"
             className="h-7 w-56 pl-7 text-xs bg-white border-slate-200 focus-visible:ring-0"
           />
           {search && (

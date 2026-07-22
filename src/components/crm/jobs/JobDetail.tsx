@@ -97,6 +97,11 @@ const JOB_TYPE_LABEL: Record<string, string> = {
   project:      "Project",
 };
 
+function fmtShort(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  return new Date(iso + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
 const VISIT_STATUS_COLOR: Record<string, string> = {
   scheduled:   "bg-blue-50 text-blue-700",
   dispatched:  "bg-purple-50 text-purple-700",
@@ -451,6 +456,18 @@ export function JobDetail({ jobId, initialEditing = false }: Props) {
     ? services.reduce((s, sv) => s + (sv.rateCents ?? 0) * (sv.qty ?? 1), 0)
     : (job.rateCents ?? 0);
 
+  // Package jobs never set a single scheduledDate (visits are spread across
+  // the season), so fall back to the span of its own visit dates — or the
+  // waiting-list-style window set at creation if no visits exist yet.
+  const visitDates = visits.map((v) => v.scheduledDate).filter(Boolean).sort();
+  const packageDateRange = job.jobType === "package"
+    ? (visitDates.length > 0
+        ? { start: visitDates[0], end: visitDates[visitDates.length - 1] }
+        : (job.waitingListStart || job.waitingListEnd)
+        ? { start: job.waitingListStart, end: job.waitingListEnd }
+        : null)
+    : null;
+
   return (
     <div className="flex h-full flex-col overflow-hidden">
 
@@ -488,6 +505,8 @@ export function JobDetail({ jobId, initialEditing = false }: Props) {
                 ? new Date(job.scheduledDate + "T00:00:00").toLocaleDateString("en-US", {
                     weekday: "long", month: "long", day: "numeric", year: "numeric",
                   })
+                : job.jobType === "package" && packageDateRange
+                ? `${fmtShort(packageDateRange.start)} – ${fmtShort(packageDateRange.end)}`
                 : job.schedule ?? job.recurrenceRule ?? "Not scheduled"
               }
               {job.recurrenceRule && (
@@ -501,7 +520,7 @@ export function JobDetail({ jobId, initialEditing = false }: Props) {
         </div>
 
         <div className="flex items-center gap-1.5">
-          {job.jobType === "waiting_list" && (
+          {(job.jobType === "waiting_list" || job.jobType === "package") && (
             <Button variant="outline" size="sm" className="h-8 text-xs"
               onClick={() => { setTab("visits"); setAddingVisit(true); }}>
               <CalendarPlus className="mr-1 h-3.5 w-3.5 text-brand-500" />
