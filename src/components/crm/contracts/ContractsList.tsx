@@ -53,7 +53,9 @@ import { AuditTrailTab } from "@/components/shared/AuditTrailTab";
 import { cn, formatCurrency } from "@/lib/utils";
 import { Plus, Pencil, ChevronDown, Trash2, X, ArrowUp, ArrowDown, Search } from "lucide-react";
 import { toast } from "sonner";
-import type { CRMContract, MonthlyAmounts } from "@/types/crm-invoices";
+import type { CRMContract, MonthlyAmounts, ContractStatus } from "@/types/crm-invoices";
+
+const CONTRACT_STATUSES: ContractStatus[] = ["draft", "sent", "signed", "active", "expired", "cancelled"];
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -655,7 +657,16 @@ export function ContractDialog({
 
   const { mutateAsync: createContract, isPending: creating } = useCreateContract();
   const { mutateAsync: updateContract, isPending: updating } = useUpdateContract();
+  const { mutateAsync: updateStatus } = useUpdateContractStatus();
   const isPending = creating || updating;
+
+  async function handleStatusChange(status: ContractStatus) {
+    if (!contract) return;
+    try {
+      await updateStatus({ id: contract.id, status });
+      toast.success(`Contract marked as ${status}`);
+    } catch { toast.error("Failed to update contract status"); }
+  }
 
   function patchDetails(patch: Partial<DetailsState>) {
     setDetails((prev) => ({ ...prev, ...patch }));
@@ -722,9 +733,23 @@ export function ContractDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="flex h-[85vh] w-full max-w-5xl flex-col gap-0 overflow-hidden p-0">
         <DialogHeader className="shrink-0 border-b px-6 py-4">
-          <DialogTitle className="text-xl font-bold">
-            {isNew ? "New Contract" : contract.title}
-          </DialogTitle>
+          <div className="flex items-center gap-3">
+            <DialogTitle className="text-xl font-bold">
+              {isNew ? "New Contract" : contract.title}
+            </DialogTitle>
+            {!isNew && (
+              <Select value={contract.status} onValueChange={(v) => handleStatusChange(v as ContractStatus)}>
+                <SelectTrigger className={cn("h-6 w-auto gap-1 rounded-full border-none px-2 py-0 text-[10px] font-medium capitalize", STATUS_COLOR[contract.status])}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {CONTRACT_STATUSES.map((s) => (
+                    <SelectItem key={s} value={s} className="capitalize">{s}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          </div>
           {/* Tab bar — wraps instead of scrolling so the mouse wheel never has to
               choose between scrolling tabs sideways and the dialog vertically */}
           <div className="flex flex-wrap gap-x-1 gap-y-0 pt-2">
