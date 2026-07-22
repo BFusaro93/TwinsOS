@@ -35,6 +35,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { NewJobDialog } from "@/components/crm/jobs/NewJobDialog";
 import { formatCurrency, cn } from "@/lib/utils";
 import { Plus, ListOrdered, ChevronDown, RotateCcw, Search, Send, X } from "lucide-react";
 import { toast } from "sonner";
@@ -286,6 +287,7 @@ export function WaitingList() {
   );
   const [dispatchJobs, setDispatchJobs] = useState<CRMJob[] | null>(null);
   const [dispatchService, setDispatchService] = useState<{ job: CRMJob; service: CRMJobService } | null>(null);
+  const [addOpen, setAddOpen] = useState(false);
 
   const { data: jobs, isLoading, refetch } = useWaitingListJobs(startDate, endDate);
   const all = jobs ?? [];
@@ -367,11 +369,18 @@ export function WaitingList() {
         title="Waiting List"
         description="Jobs queued for opportunistic scheduling"
         action={
-          <Button size="sm" className="h-8 text-xs">
+          <Button size="sm" className="h-8 text-xs" onClick={() => setAddOpen(true)}>
             <Plus className="mr-1 h-3.5 w-3.5" />
             Add to Waiting List
           </Button>
         }
+      />
+
+      <NewJobDialog
+        open={addOpen}
+        onOpenChange={setAddOpen}
+        initialJobType="waiting_list"
+        onCreated={() => refetch()}
       />
 
       {/* Date window */}
