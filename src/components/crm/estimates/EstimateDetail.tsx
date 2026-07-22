@@ -116,7 +116,7 @@ const LINE_ITEM_TABS: { value: LineItemStatus | "all"; label: string }[] = [
   { value: "lost",  label: "Lost" },
 ];
 
-type Tab = "details" | "notes" | "photos" | "attachments" | "audit" | "versions";
+type Tab = "details" | "payment" | "notes" | "photos" | "attachments" | "audit" | "versions";
 
 // ── Attachments tab ────────────────────────────────────────────────────────────
 
@@ -742,7 +742,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
 
       {/* ── tabs ────────────────────────────────────────────────────── */}
       <div className="flex gap-0 border-b bg-white px-6">
-        {(["details", "notes", "photos", "attachments", "audit", "versions"] as Tab[]).map((t) => (
+        {(["details", "payment", "notes", "photos", "attachments", "audit", "versions"] as Tab[]).map((t) => (
           <button
             key={t}
             onClick={() => setActiveTab(t)}
@@ -753,7 +753,10 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                 : "border-transparent text-slate-500 hover:text-slate-800"
             )}
           >
-            {t === "audit" ? "Audit Trail" : t === "versions" ? `Versions${versions.length > 0 ? ` (${versions.length})` : ""}` : t.charAt(0).toUpperCase() + t.slice(1)}
+            {t === "audit" ? "Audit Trail"
+              : t === "versions" ? `Versions${versions.length > 0 ? ` (${versions.length})` : ""}`
+              : t === "payment" ? "Payment Plan"
+              : t.charAt(0).toUpperCase() + t.slice(1)}
           </button>
         ))}
       </div>
@@ -955,69 +958,6 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                             className="h-8 w-36"
                           />
                         </FieldRow>
-                        <FieldRow label="Payment Plan">
-                          <Select
-                            value={(headerEdits.payment_plan_type as string) ?? estimate.paymentPlanType}
-                            onValueChange={(v) => { patchHeader("payment_plan_type", v); saveHeader({ ...headerEdits, payment_plan_type: v }); }}
-                          >
-                            <SelectTrigger className="h-8 w-44">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="installments">Monthly Installments</SelectItem>
-                              <SelectItem value="milestones">Milestones</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </FieldRow>
-                        {((headerEdits.payment_plan_type as string) ?? estimate.paymentPlanType) === "installments" && (
-                          <>
-                            <FieldRow label="# of Installments">
-                              <div className="flex flex-col gap-1">
-                                <Input
-                                  type="number"
-                                  min={1}
-                                  value={(headerEdits.num_installments as number) ?? estimate.numInstallments}
-                                  onChange={(e) => patchHeader("num_installments", Number(e.target.value))}
-                                  onBlur={() => saveHeader()}
-                                  className="h-8 w-20"
-                                />
-                                {(() => {
-                                  const n = (headerEdits.num_installments as number) ?? estimate.numInstallments;
-                                  const deposit = (headerEdits.deposit_required_cents as number) ?? estimate.depositRequiredCents;
-                                  const day = (headerEdits.installment_day_of_month as number | null | undefined) ?? estimate.installmentDayOfMonth;
-                                  const schedule = computeInstallmentSchedule(estimate.totalCents, deposit, n, estimate.estimateDate, day);
-                                  if (schedule.length === 0) return null;
-                                  return (
-                                    <p className="text-[10px] text-slate-400">
-                                      {schedule.length} × {formatCurrency(schedule[0].amountCents)}/mo starting {new Date(schedule[0].dueDate + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                                    </p>
-                                  );
-                                })()}
-                              </div>
-                            </FieldRow>
-                            <FieldRow label="Payment Day">
-                              <div className="flex items-center gap-1.5">
-                                <Input
-                                  type="number"
-                                  min={1}
-                                  max={31}
-                                  value={
-                                    (headerEdits.installment_day_of_month as number | null | undefined) !== undefined
-                                      ? String((headerEdits.installment_day_of_month as number | null) ?? "")
-                                      : String(estimate.installmentDayOfMonth ?? "")
-                                  }
-                                  onChange={(e) =>
-                                    patchHeader("installment_day_of_month", e.target.value === "" ? null : Number(e.target.value))
-                                  }
-                                  onBlur={() => saveHeader()}
-                                  className="h-8 w-20"
-                                  placeholder="—"
-                                />
-                                <span className="text-[10px] text-slate-400">Blank = same day as estimate date</span>
-                              </div>
-                            </FieldRow>
-                          </>
-                        )}
                         <FieldRow label="Probability %">
                           <div className="flex items-center gap-1.5">
                             <Input
@@ -1074,38 +1014,6 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                             </SelectContent>
                           </Select>
                         </FieldRow>
-                        <FieldRow label="Deposit Required">
-                          <div className="flex flex-col gap-1">
-                            <div className="flex items-center gap-1.5">
-                              <span className="text-xs text-slate-400">$</span>
-                              <Input
-                                type="number"
-                                min={0}
-                                step={1}
-                                value={
-                                  headerEdits.deposit_required_cents !== undefined
-                                    ? String(Math.round((headerEdits.deposit_required_cents as number) / 100))
-                                    : String(Math.round(estimate.depositRequiredCents / 100))
-                                }
-                                onChange={(e) =>
-                                  patchHeader("deposit_required_cents", Math.round(Number(e.target.value) * 100))
-                                }
-                                onBlur={() => saveHeader()}
-                                className="h-8 w-28"
-                                placeholder="0"
-                              />
-                            </div>
-                            {estimate.depositCollectedCents > 0 && (
-                              <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-medium text-green-700">
-                                Collected {formatCurrency(estimate.depositCollectedCents)}
-                                {estimate.depositMethod ? ` via ${estimate.depositMethod}` : ""}
-                                {estimate.depositCollectedAt
-                                  ? ` on ${new Date(estimate.depositCollectedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`
-                                  : ""}
-                              </span>
-                            )}
-                          </div>
-                        </FieldRow>
                         <FieldRow label="Tiered Proposal">
                           <div className="flex flex-col gap-1">
                             <div className="flex items-center gap-2 h-8">
@@ -1152,17 +1060,6 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                         </FieldRow>
                       </div>
                     </div>
-                    {((headerEdits.payment_plan_type as string) ?? estimate.paymentPlanType) === "milestones" && (
-                      <div className="mt-4 flex flex-col gap-1.5 border-t pt-4">
-                        <Label className="text-xs font-medium text-slate-600">Milestones</Label>
-                        <EstimateMilestonesEditor
-                          estimateId={estimate.id}
-                          clientId={estimate.clientId}
-                          salesRepId={estimate.salesRepId}
-                          totalCents={estimate.totalCents}
-                        />
-                      </div>
-                    )}
                   </div>
                 </div>
               </div>
@@ -1330,6 +1227,119 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                 items={estimate.directCosts ?? []}
               />
             </>
+          )}
+
+          {activeTab === "payment" && (
+            <div className="rounded-lg border bg-white p-4 shadow-sm">
+              <div className="grid grid-cols-2 gap-3 max-w-xl">
+                <FieldRow label="Payment Plan">
+                  <Select
+                    value={(headerEdits.payment_plan_type as string) ?? estimate.paymentPlanType}
+                    onValueChange={(v) => { patchHeader("payment_plan_type", v); saveHeader({ ...headerEdits, payment_plan_type: v }); }}
+                  >
+                    <SelectTrigger className="h-8 w-44">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="installments">Monthly Installments</SelectItem>
+                      <SelectItem value="milestones">Milestones</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </FieldRow>
+                {((headerEdits.payment_plan_type as string) ?? estimate.paymentPlanType) === "installments" && (
+                  <>
+                    <FieldRow label="# of Installments">
+                      <div className="flex flex-col gap-1">
+                        <Input
+                          type="number"
+                          min={1}
+                          value={(headerEdits.num_installments as number) ?? estimate.numInstallments}
+                          onChange={(e) => patchHeader("num_installments", Number(e.target.value))}
+                          onBlur={() => saveHeader()}
+                          className="h-8 w-20"
+                        />
+                        {(() => {
+                          const n = (headerEdits.num_installments as number) ?? estimate.numInstallments;
+                          const deposit = (headerEdits.deposit_required_cents as number) ?? estimate.depositRequiredCents;
+                          const day = (headerEdits.installment_day_of_month as number | null | undefined) ?? estimate.installmentDayOfMonth;
+                          const schedule = computeInstallmentSchedule(estimate.totalCents, deposit, n, estimate.estimateDate, day);
+                          if (schedule.length === 0) return null;
+                          return (
+                            <p className="text-[10px] text-slate-400">
+                              {schedule.length} × {formatCurrency(schedule[0].amountCents)}/mo starting {new Date(schedule[0].dueDate + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                            </p>
+                          );
+                        })()}
+                      </div>
+                    </FieldRow>
+                    <FieldRow label="Payment Day">
+                      <div className="flex items-center gap-1.5">
+                        <Input
+                          type="number"
+                          min={1}
+                          max={31}
+                          value={
+                            (headerEdits.installment_day_of_month as number | null | undefined) !== undefined
+                              ? String((headerEdits.installment_day_of_month as number | null) ?? "")
+                              : String(estimate.installmentDayOfMonth ?? "")
+                          }
+                          onChange={(e) =>
+                            patchHeader("installment_day_of_month", e.target.value === "" ? null : Number(e.target.value))
+                          }
+                          onBlur={() => saveHeader()}
+                          className="h-8 w-20"
+                          placeholder="—"
+                        />
+                        <span className="text-[10px] text-slate-400">Blank = same day as estimate date</span>
+                      </div>
+                    </FieldRow>
+                  </>
+                )}
+                <FieldRow label="Deposit Required">
+                  <div className="flex flex-col gap-1">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs text-slate-400">$</span>
+                      <Input
+                        type="number"
+                        min={0}
+                        step={1}
+                        value={
+                          headerEdits.deposit_required_cents !== undefined
+                            ? String(Math.round((headerEdits.deposit_required_cents as number) / 100))
+                            : String(Math.round(estimate.depositRequiredCents / 100))
+                        }
+                        onChange={(e) =>
+                          patchHeader("deposit_required_cents", Math.round(Number(e.target.value) * 100))
+                        }
+                        onBlur={() => saveHeader()}
+                        className="h-8 w-28"
+                        placeholder="0"
+                      />
+                    </div>
+                    {estimate.depositCollectedCents > 0 && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-medium text-green-700">
+                        Collected {formatCurrency(estimate.depositCollectedCents)}
+                        {estimate.depositMethod ? ` via ${estimate.depositMethod}` : ""}
+                        {estimate.depositCollectedAt
+                          ? ` on ${new Date(estimate.depositCollectedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`
+                          : ""}
+                      </span>
+                    )}
+                  </div>
+                </FieldRow>
+              </div>
+              {((headerEdits.payment_plan_type as string) ?? estimate.paymentPlanType) === "milestones" && (
+                <div className="mt-4 flex flex-col gap-1.5 border-t pt-4 max-w-xl">
+                  <Label className="text-xs font-medium text-slate-600">Milestones</Label>
+                  <EstimateMilestonesEditor
+                    estimateId={estimate.id}
+                    clientId={estimate.clientId}
+                    salesRepId={estimate.salesRepId}
+                    totalCents={estimate.totalCents}
+                  />
+                </div>
+              )}
+            </div>
           )}
 
           {activeTab === "notes" && (
