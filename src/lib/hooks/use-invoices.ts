@@ -328,6 +328,9 @@ export function useBulkImportInvoices() {
         if (error) throw error;
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (supabase as any).rpc("assign_invoice_number", { p_invoice_id: invoice.id });
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         await (supabase as any).from("crm_invoice_line_items").insert({
           invoice_id: invoice.id,
           description: r.description.trim(),

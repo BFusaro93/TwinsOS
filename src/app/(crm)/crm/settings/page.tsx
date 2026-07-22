@@ -1452,7 +1452,11 @@ function ImportTile({
       setPreviewOpen(false);
       onStatus({ type: "success", message: `Successfully imported ${parsedRows.length} ${label.toLowerCase()}.` });
     } catch (err) {
-      setImportError(err instanceof Error ? err.message : "Import failed.");
+      const message =
+        err instanceof Error ? err.message :
+        (err && typeof err === "object" && "message" in err && typeof err.message === "string") ? err.message :
+        "Import failed.";
+      setImportError(message);
     } finally { setImporting(false); }
   }
 
