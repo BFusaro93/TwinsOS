@@ -974,7 +974,7 @@ export function InvoiceDetail({
                     <td className="py-2 pr-4 text-slate-400 w-32 font-medium">Invoice #</td>
                     <td className="py-2 text-slate-700">
                       <InlineEdit
-                        value={String(invoiceNumber === "" ? invoice.invoiceNumber : invoiceNumber)}
+                        value={invoiceNumber === "" ? (invoice.invoiceNumber != null ? String(invoice.invoiceNumber) : "") : String(invoiceNumber)}
                         onSave={(v) => setInvoiceNumber(Number(v) || invoice.invoiceNumber)}
                         type="number"
                         className="w-28"

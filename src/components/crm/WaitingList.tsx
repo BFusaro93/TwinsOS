@@ -403,7 +403,7 @@ export function WaitingList() {
           />
         </div>
         <span className="ml-auto text-xs text-slate-400">
-          {isLoading ? "…" : `${filtered.length} jobs`}
+          {isLoading ? "…" : `${visitRows.length} jobs`}
         </span>
       </div>
 

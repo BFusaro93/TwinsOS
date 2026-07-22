@@ -622,9 +622,19 @@ export function useCreateVisit() {
         .select()
         .single();
       if (error) throw error;
+
+      // Cascade crew assignment to parent job so it shows everywhere
+      if (values.crewId !== undefined) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (supabase as any).from('crm_jobs').update({ crew_id: values.crewId ?? null }).eq('id', values.jobId);
+      }
+
       return mapVisit(data);
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['crm-job-visits'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['crm-job-visits'] });
+      qc.invalidateQueries({ queryKey: ['crm-jobs'] });
+    },
   });
 }
 

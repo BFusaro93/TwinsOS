@@ -82,19 +82,23 @@ type BillingFilter = "all" | "invoice" | "payment" | "credit";
 
 function BillingTab({ project }: { project: Project }) {
   const [filter, setFilter] = useState<BillingFilter>("all");
+  // Only scope billing to this project's client — without a linked client_id
+  // there's no way to attribute invoices/payments to this project, so show
+  // nothing rather than the whole org's unrelated billing activity.
   const { data: invoices } = useInvoices(project.clientId ?? undefined);
   const { data: payments } = usePayments(project.clientId ?? undefined);
+  const hasClient = !!project.clientId;
 
   const rows = [
-    ...(invoices ?? []).map((inv) => ({
+    ...(hasClient ? invoices ?? [] : []).map((inv) => ({
       type: "Invoice" as const,
       date: inv.invoiceDate,
-      ref: String(inv.invoiceNumber),
+      ref: inv.invoiceNumber != null ? String(inv.invoiceNumber) : "",
       memo: inv.description,
       status: inv.status,
       totalCents: inv.totalCents,
     })),
-    ...(payments ?? []).map((p) => ({
+    ...(hasClient ? payments ?? [] : []).map((p) => ({
       type: "Payment" as const,
       date: p.paymentDate,
       ref: p.reference ?? "",
