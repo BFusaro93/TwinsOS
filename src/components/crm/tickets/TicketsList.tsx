@@ -182,12 +182,13 @@ export function NewTicketDialog({ open, onOpenChange, defaultClientId, defaultTy
     { label: "Call", value: "call" },
     { label: "Event", value: "event" },
   ];
+  const typeLabel = form.type === "call" ? "Call" : form.type === "event" ? "Event" : "Ticket";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>New Ticket</DialogTitle>
+          <DialogTitle>New {typeLabel}</DialogTitle>
         </DialogHeader>
 
         <div className="grid gap-4 py-2">
@@ -289,7 +290,7 @@ export function NewTicketDialog({ open, onOpenChange, defaultClientId, defaultTy
               value={form.subject}
               onChange={(e) => set("subject", e.target.value)}
               className="h-9 text-sm"
-              placeholder="Ticket subject…"
+              placeholder={`${typeLabel} subject…`}
             />
           </div>
 
@@ -413,6 +414,7 @@ interface Props {
 const TICKET_TEMPLATE_COLUMNS = ["subject", "clientName", "type", "status", "priority", "category", "body", "dueDate"];
 
 export function TicketsList({ clientId, typeFilter, title = "Tickets", description = "Support and service tickets" }: Props) {
+  const listTypeLabel = typeFilter === "call" ? "Call" : typeFilter === "event" ? "Event" : "Ticket";
   const { data: categoryOptions } = useOrgList("ticket_categories");
   const categories = categoryOptions && categoryOptions.length > 0
     ? categoryOptions.map((o) => o.value)
@@ -765,7 +767,7 @@ export function TicketsList({ clientId, typeFilter, title = "Tickets", descripti
                   className="rounded border-slate-300 accent-brand-500"
                 />
               </th>
-              <th className="px-4 py-3">Ticket #</th>
+              <th className="px-4 py-3">{listTypeLabel} #</th>
               <th className="px-4 py-3">Status</th>
               <th className="px-4 py-3">Priority</th>
               {!clientId && <th className="px-4 py-3">Account</th>}
@@ -790,7 +792,7 @@ export function TicketsList({ clientId, typeFilter, title = "Tickets", descripti
             ) : filtered.length === 0 ? (
               <tr>
                 <td colSpan={colCount} className="py-16 text-center text-sm text-slate-400">
-                  {search ? "No tickets match your search" : "No tickets yet"}
+                  {search ? `No ${listTypeLabel.toLowerCase()}s match your search` : `No ${listTypeLabel.toLowerCase()}s yet`}
                 </td>
               </tr>
             ) : (
