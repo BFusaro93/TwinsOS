@@ -25,6 +25,7 @@ export interface PurchaseOrder extends BaseRecord {
   taxRatePercent: number; // e.g., 7 for 7%
   salesTax: number; // cents
   shippingCost: number; // cents
+  discountCost: number; // cents — positive magnitude, subtracted from grandTotal
   grandTotal: number; // cents
   requisitionId: string | null;
   paymentSubmittedToAP: boolean;

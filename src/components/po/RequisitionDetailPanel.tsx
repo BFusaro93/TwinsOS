@@ -117,6 +117,16 @@ function DetailsTab({
     syncStatus({ id: req.id, status: s });
   }
 
+  /** Compute updated requisition totals from a new subtotal. Sales tax applies
+   *  to the full subtotal (requisitions have no per-line taxable flag), after
+   *  subtracting the manual discount from the taxable base. */
+  function totals(newSubtotal: number) {
+    const taxableAfterDiscount = Math.max(0, newSubtotal - req.discountCost);
+    const salesTax = Math.round((taxableAfterDiscount * req.taxRatePercent) / 100);
+    const grandTotal = newSubtotal - req.discountCost + salesTax + req.shippingCost;
+    return { subtotal: newSubtotal, salesTax, grandTotal };
+  }
+
   const { data: products = [] } = useProducts();
   const { data: parts = [] } = useParts();
   const { data: addProjects = [] } = useProjects();
@@ -130,7 +140,8 @@ function DetailsTab({
     const selected = catalog.find((c) => c.key === addValue);
     if (!selected) return;
     const qty = Math.max(1, parseInt(addQty) || 1);
-    const costCents = addCost ? Math.round(parseFloat(addCost) * 100) : selected.unitCost;
+    // Preserve up to 4 decimal places (fractional cents) for case/bulk pricing accuracy.
+    const costCents = addCost ? Math.round(parseFloat(addCost) * 10000) / 100 : selected.unitCost;
     const rawId = selected.key.replace(/^(product:|part:)/, "");
     const productItemId = selected.type === "part" ? "" : rawId;
     const partId = selected.type === "part" ? rawId : null;
@@ -146,9 +157,8 @@ function DetailsTab({
       notes: null,
       taxable: true,
     };
-    const newSubtotal = lineItems.reduce((s, li) => s + li.quantity * li.unitCost, 0) + qty * costCents;
-    const newSalesTax = Math.round((newSubtotal * req.taxRatePercent) / 100);
-    const newGrandTotal = newSubtotal + newSalesTax + req.shippingCost;
+    const newSubtotalRaw = lineItems.reduce((s, li) => s + li.quantity * li.unitCost, 0) + qty * costCents;
+    const { subtotal: newSubtotal, salesTax: newSalesTax, grandTotal: newGrandTotal } = totals(newSubtotalRaw);
     persistLineItem(
       { requisitionId: req.id, lineItem: newLineItem, newSubtotal, newSalesTax, newGrandTotal },
       {
@@ -165,9 +175,8 @@ function DetailsTab({
     );
   }
 
-  const subtotal = lineItems.reduce((sum, li) => sum + li.quantity * li.unitCost, 0);
-  const salesTax = Math.round((subtotal * req.taxRatePercent) / 100);
-  const grandTotal = subtotal + salesTax + req.shippingCost;
+  const subtotalRaw = lineItems.reduce((sum, li) => sum + li.quantity * li.unitCost, 0);
+  const { subtotal, salesTax, grandTotal } = totals(subtotalRaw);
   const taxLabel = req.taxRatePercent > 0 ? `Sales Tax (${req.taxRatePercent}%)` : "Sales Tax";
 
   return (
@@ -299,9 +308,8 @@ function DetailsTab({
           onItemAdded={(newItem, updatedItems) => {
             // LineItemsTable already updated local state via onItemsChange.
             // Persist to DB without re-adding to state in onSuccess.
-            const newSubtotal = updatedItems.reduce((s, li) => s + li.quantity * li.unitCost, 0);
-            const newSalesTax = Math.round((newSubtotal * req.taxRatePercent) / 100);
-            const newGrandTotal = newSubtotal + newSalesTax + req.shippingCost;
+            const { subtotal: newSubtotal, salesTax: newSalesTax, grandTotal: newGrandTotal } =
+              totals(updatedItems.reduce((s, li) => s + li.quantity * li.unitCost, 0));
             persistLineItem({
               requisitionId: req.id,
               lineItem: {
@@ -323,9 +331,8 @@ function DetailsTab({
           }}
           onItemEdited={(editedItem, updatedItems) => {
             // Persist the edit to the DB and recalculate totals
-            const newSubtotal = updatedItems.reduce((s, li) => s + li.quantity * li.unitCost, 0);
-            const newSalesTax = Math.round((newSubtotal * req.taxRatePercent) / 100);
-            const newGrandTotal = newSubtotal + newSalesTax + req.shippingCost;
+            const { subtotal: newSubtotal, salesTax: newSalesTax, grandTotal: newGrandTotal } =
+              totals(updatedItems.reduce((s, li) => s + li.quantity * li.unitCost, 0));
             persistLineItemUpdate({
               lineItemId: editedItem.id,
               requisitionId: req.id,
@@ -339,9 +346,8 @@ function DetailsTab({
           }}
           onItemDeleted={(deletedId, updatedItems) => {
             // Persist the delete to the DB and recalculate totals
-            const newSubtotal = updatedItems.reduce((s, li) => s + li.quantity * li.unitCost, 0);
-            const newSalesTax = Math.round((newSubtotal * req.taxRatePercent) / 100);
-            const newGrandTotal = newSubtotal + newSalesTax + req.shippingCost;
+            const { subtotal: newSubtotal, salesTax: newSalesTax, grandTotal: newGrandTotal } =
+              totals(updatedItems.reduce((s, li) => s + li.quantity * li.unitCost, 0));
             persistLineItemDelete({
               lineItemId: deletedId,
               requisitionId: req.id,
@@ -425,6 +431,12 @@ function DetailsTab({
           <span>Subtotal</span>
           <span>{formatCurrency(subtotal)}</span>
         </div>
+        {req.discountCost > 0 && (
+          <div className="flex justify-between py-1 text-slate-600">
+            <span>Discount</span>
+            <span>-{formatCurrency(req.discountCost)}</span>
+          </div>
+        )}
         <div className="flex justify-between py-1 text-slate-600">
           <span>{taxLabel}</span>
           <span>{formatCurrency(salesTax)}</span>

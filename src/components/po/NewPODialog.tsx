@@ -133,6 +133,7 @@ export function NewPODialog({ open, onOpenChange, initialData, prefillData, onCr
   const [lineItems, setLineItems] = useState<DraftLineItem[]>(() => [emptyLineItem()]);
   const [taxRatePercent, setTaxRatePercent] = useState(() => String(orgTaxRate ?? 7));
   const [shippingCost, setShippingCost] = useState("");
+  const [discountCost, setDiscountCost] = useState("");
   const { mutate: createPO, isPending: creating } = useCreatePurchaseOrder();
   const { mutate: updatePO, isPending: updating } = useUpdatePurchaseOrder();
   const saving = creating || updating;
@@ -167,6 +168,7 @@ export function NewPODialog({ open, onOpenChange, initialData, prefillData, onCr
       setNotes(initialData.notes ?? "");
       setTaxRatePercent(String(initialData.taxRatePercent));
       setShippingCost(initialData.shippingCost > 0 ? (initialData.shippingCost / 100).toFixed(2) : "");
+      setDiscountCost(initialData.discountCost > 0 ? (initialData.discountCost / 100).toFixed(2) : "");
     } else if (open && !initialData) {
       // Sync tax rate from org settings when creating a new PO
       setTaxRatePercent(String(orgTaxRate ?? 7));
@@ -211,9 +213,11 @@ export function NewPODialog({ open, onOpenChange, initialData, prefillData, onCr
     .filter((li) => li.taxable)
     .reduce((sum, li) => sum + li.quantity * li.unitCost, 0);
   const taxRate = parseFloat(taxRatePercent) || 0;
-  const taxDollars = taxableSubtotalDollars * (taxRate / 100);
+  const discountDollars = parseFloat(discountCost) || 0;
+  const taxableAfterDiscountDollars = Math.max(0, taxableSubtotalDollars - discountDollars);
+  const taxDollars = taxableAfterDiscountDollars * (taxRate / 100);
   const shippingDollars = parseFloat(shippingCost) || 0;
-  const grandTotalDollars = subtotalDollars + taxDollars + shippingDollars;
+  const grandTotalDollars = subtotalDollars - discountDollars + taxDollars + shippingDollars;
 
   function handleClose() {
     onOpenChange(false);
@@ -225,6 +229,7 @@ export function NewPODialog({ open, onOpenChange, initialData, prefillData, onCr
     setLineItems([emptyLineItem()]);
     setTaxRatePercent(String(orgTaxRate ?? 7));
     setShippingCost("");
+    setDiscountCost("");
     setExtraVendors([]);
     setExtraProducts([]);
     setExtraParts([]);
@@ -292,11 +297,18 @@ export function NewPODialog({ open, onOpenChange, initialData, prefillData, onCr
     const vendor = allVendors.find((v) => v.id === vendorId);
     const taxRate = parseFloat(taxRatePercent) || 0;
     const shippingCents = Math.round((parseFloat(shippingCost) || 0) * 100);
+    const discountCents = Math.round((parseFloat(discountCost) || 0) * 100);
 
     if (isEditing && initialData) {
       // In edit mode, line items aren't shown — preserve the existing subtotal
       // and only recalculate sales tax and grand total from the updated rates.
-      const salesTaxCents = Math.round(initialData.subtotal * (taxRate / 100));
+      // Tax applies only to taxable line items, same as PODetailPanel's totals(),
+      // and only after the discount is subtracted from the taxable base.
+      const taxableSubtotalCents = Math.round(
+        initialData.lineItems.filter((li) => li.taxable !== false).reduce((sum, li) => sum + li.quantity * li.unitCost, 0)
+      );
+      const taxableAfterDiscountCents = Math.max(0, taxableSubtotalCents - discountCents);
+      const salesTaxCents = Math.round(taxableAfterDiscountCents * (taxRate / 100));
       updatePO(
         {
           id: initialData.id,
@@ -307,8 +319,9 @@ export function NewPODialog({ open, onOpenChange, initialData, prefillData, onCr
           invoiceNumber: invoiceNumber || null,
           taxRatePercent: taxRate,
           shippingCost: shippingCents,
+          discountCost: discountCents,
           salesTax: salesTaxCents,
-          grandTotal: initialData.subtotal + salesTaxCents + shippingCents,
+          grandTotal: initialData.subtotal - discountCents + salesTaxCents + shippingCents,
           notes: notes || null,
         },
         { onSuccess: () => handleClose() }
@@ -322,7 +335,8 @@ export function NewPODialog({ open, onOpenChange, initialData, prefillData, onCr
     const taxableSubtotalCents = Math.round(
       lineItems.filter((li) => li.taxable).reduce((sum, li) => sum + li.quantity * li.unitCost, 0) * 100
     );
-    const salesTaxCents = Math.round(taxableSubtotalCents * (taxRate / 100));
+    const taxableAfterDiscountCents = Math.max(0, taxableSubtotalCents - discountCents);
+    const salesTaxCents = Math.round(taxableAfterDiscountCents * (taxRate / 100));
     const now = new Date().toISOString();
 
     // Generate PO number: PO-{year}-{6-digit timestamp suffix}
@@ -356,7 +370,9 @@ export function NewPODialog({ open, onOpenChange, initialData, prefillData, onCr
           productItemName: li.productItemName,
           partNumber: li.partNumber,
           quantity: li.quantity,
-          unitCost: Math.round(li.unitCost * 100),
+          // Preserve up to 4 decimal places (fractional cents) for case/bulk
+          // pricing accuracy; only the extended line total rounds to whole cents.
+          unitCost: Math.round(li.unitCost * 10000) / 100,
           totalCost: Math.round(li.quantity * li.unitCost * 100),
           projectId: li.projectId === "none" ? null : li.projectId,
           notes: null,
@@ -367,7 +383,8 @@ export function NewPODialog({ open, onOpenChange, initialData, prefillData, onCr
       taxRatePercent: taxRate,
       salesTax: salesTaxCents,
       shippingCost: shippingCents,
-      grandTotal: subtotalCents + salesTaxCents + shippingCents,
+      discountCost: discountCents,
+      grandTotal: subtotalCents - discountCents + salesTaxCents + shippingCents,
       requisitionId: prefillData?.requisitionId ?? null,
       paymentSubmittedToAP: false,
       paymentRemitted: false,
@@ -669,8 +686,8 @@ export function NewPODialog({ open, onOpenChange, initialData, prefillData, onCr
                 </>
               )}
 
-              {/* Tax / Shipping — shown in both create and edit mode */}
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              {/* Tax / Shipping / Discount — shown in both create and edit mode */}
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                 <div className="grid gap-1.5">
                   <Label htmlFor="po-tax-rate">Tax Rate (%)</Label>
                   <Input
@@ -696,6 +713,20 @@ export function NewPODialog({ open, onOpenChange, initialData, prefillData, onCr
                     />
                   </div>
                 )}
+                {rf.isVisible("discount_cost") && (
+                  <div className="grid gap-1.5">
+                    <Label htmlFor="po-discount">Discount ($){rf.req("discount_cost")}</Label>
+                    <Input
+                      id="po-discount"
+                      type="number"
+                      step="any"
+                      min={0}
+                      placeholder="0.00"
+                      value={discountCost}
+                      onChange={(e) => setDiscountCost(e.target.value)}
+                    />
+                  </div>
+                )}
               </div>
 
               {/* Totals Summary — shown in both create and edit mode */}
@@ -708,15 +739,23 @@ export function NewPODialog({ open, onOpenChange, initialData, prefillData, onCr
                 const taxableSubtotalCents = isEditing
                   ? subtotalCents   // existing PO: we don't know per-line taxability here, use full subtotal as approximation
                   : Math.round(taxableSubtotalDollars * 100);
-                const taxCents = Math.round(taxableSubtotalCents * (taxRate / 100));
+                const discountCents = Math.round(discountDollars * 100);
+                const taxableAfterDiscountCents = Math.max(0, taxableSubtotalCents - discountCents);
+                const taxCents = Math.round(taxableAfterDiscountCents * (taxRate / 100));
                 const shippingCents = Math.round(shippingDollars * 100);
-                const grandTotalCents = subtotalCents + taxCents + shippingCents;
+                const grandTotalCents = subtotalCents - discountCents + taxCents + shippingCents;
                 return (
                   <div className="rounded-md bg-slate-50 p-3 space-y-1 text-sm">
                     <div className="flex justify-between text-slate-600">
                       <span>Subtotal</span>
                       <span className="tabular-nums">{formatCurrency(subtotalCents)}</span>
                     </div>
+                    {discountDollars > 0 && (
+                      <div className="flex justify-between text-slate-600">
+                        <span>Discount</span>
+                        <span className="tabular-nums">-{formatCurrency(discountCents)}</span>
+                      </div>
+                    )}
                     <div className="flex justify-between text-slate-600">
                       <span>Tax ({taxRate}%)</span>
                       <span className="tabular-nums">{formatCurrency(taxCents)}</span>

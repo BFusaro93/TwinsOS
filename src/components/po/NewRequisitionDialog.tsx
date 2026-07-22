@@ -130,6 +130,7 @@ export function NewRequisitionDialog({ open, onOpenChange, initialData, prefillD
   const [lineItems, setLineItems] = useState<DraftLineItem[]>(() => [emptyLineItem()]);
   const [taxRatePercent, setTaxRatePercent] = useState(() => String(orgTaxRate ?? 7));
   const [shippingCost, setShippingCost] = useState("");
+  const [discountCost, setDiscountCost] = useState("");
 
   const createRequisition = useCreateRequisition();
   const updateRequisition = useUpdateRequisition();
@@ -163,6 +164,7 @@ export function NewRequisitionDialog({ open, onOpenChange, initialData, prefillD
       setNotes(initialData.notes ?? "");
       setTaxRatePercent(String(initialData.taxRatePercent));
       setShippingCost(initialData.shippingCost > 0 ? (initialData.shippingCost / 100).toFixed(2) : "");
+      setDiscountCost(initialData.discountCost > 0 ? (initialData.discountCost / 100).toFixed(2) : "");
     } else if (open && !initialData) {
       // Sync tax rate from org settings when creating a new requisition
       setTaxRatePercent(String(orgTaxRate ?? 7));
@@ -206,9 +208,11 @@ export function NewRequisitionDialog({ open, onOpenChange, initialData, prefillD
     0
   );
   const taxRate = parseFloat(taxRatePercent) || 0;
-  const taxDollars = subtotalDollars * (taxRate / 100);
+  const discountDollars = parseFloat(discountCost) || 0;
+  const taxableAfterDiscountDollars = Math.max(0, subtotalDollars - discountDollars);
+  const taxDollars = taxableAfterDiscountDollars * (taxRate / 100);
   const shippingDollars = parseFloat(shippingCost) || 0;
-  const grandTotalDollars = subtotalDollars + taxDollars + shippingDollars;
+  const grandTotalDollars = subtotalDollars - discountDollars + taxDollars + shippingDollars;
 
   function handleClose() {
     onOpenChange(false);
@@ -218,6 +222,7 @@ export function NewRequisitionDialog({ open, onOpenChange, initialData, prefillD
     setLineItems([emptyLineItem()]);
     setTaxRatePercent(String(orgTaxRate ?? 7));
     setShippingCost("");
+    setDiscountCost("");
     setExtraVendors([]);
     setExtraProducts([]);
     setExtraParts([]);
@@ -287,11 +292,14 @@ export function NewRequisitionDialog({ open, onOpenChange, initialData, prefillD
     const resolvedVendorId = vendorId !== "none" ? vendorId : null;
     const taxRate = parseFloat(taxRatePercent) || 0;
     const shippingCents = Math.round((parseFloat(shippingCost) || 0) * 100);
+    const discountCents = Math.round((parseFloat(discountCost) || 0) * 100);
 
     if (isEditing && initialData) {
       // In edit mode, line items aren't shown — preserve the existing subtotal
-      // and only recalculate sales tax and grand total from the updated rates.
-      const salesTaxCents = Math.round(initialData.subtotal * (taxRate / 100));
+      // and only recalculate sales tax and grand total from the updated rates,
+      // after subtracting the discount from the taxable base.
+      const taxableAfterDiscountCents = Math.max(0, initialData.subtotal - discountCents);
+      const salesTaxCents = Math.round(taxableAfterDiscountCents * (taxRate / 100));
       updateRequisition.mutate(
         {
           id: initialData.id,
@@ -300,8 +308,9 @@ export function NewRequisitionDialog({ open, onOpenChange, initialData, prefillD
           vendorName: vendor?.name ?? (resolvedVendorId ? initialData.vendorName : null),
           taxRatePercent: taxRate,
           shippingCost: shippingCents,
+          discountCost: discountCents,
           salesTax: salesTaxCents,
-          grandTotal: initialData.subtotal + salesTaxCents + shippingCents,
+          grandTotal: initialData.subtotal - discountCents + salesTaxCents + shippingCents,
           notes: notes || null,
         },
         { onSuccess: () => handleClose() }
@@ -312,7 +321,8 @@ export function NewRequisitionDialog({ open, onOpenChange, initialData, prefillD
     const subtotalCents = Math.round(
       lineItems.reduce((sum, li) => sum + li.quantity * li.unitCost, 0) * 100
     );
-    const salesTaxCents = Math.round(subtotalCents * (taxRate / 100));
+    const taxableAfterDiscountCents = Math.max(0, subtotalCents - discountCents);
+    const salesTaxCents = Math.round(taxableAfterDiscountCents * (taxRate / 100));
 
     createRequisition.mutate(
       {
@@ -340,7 +350,9 @@ export function NewRequisitionDialog({ open, onOpenChange, initialData, prefillD
             productItemName: li.productItemName,
             partNumber: li.partNumber,
             quantity: li.quantity,
-            unitCost: Math.round(li.unitCost * 100),
+            // Preserve up to 4 decimal places (fractional cents) for case/bulk
+            // pricing accuracy; only the extended line total rounds to whole cents.
+            unitCost: Math.round(li.unitCost * 10000) / 100,
             totalCost: Math.round(li.quantity * li.unitCost * 100),
             projectId: li.projectId === "none" ? null : li.projectId,
             notes: null,
@@ -351,7 +363,8 @@ export function NewRequisitionDialog({ open, onOpenChange, initialData, prefillD
         taxRatePercent: taxRate,
         salesTax: salesTaxCents,
         shippingCost: shippingCents,
-        grandTotal: subtotalCents + salesTaxCents + shippingCents,
+        discountCost: discountCents,
+        grandTotal: subtotalCents - discountCents + salesTaxCents + shippingCents,
         notes: notes || null,
       },
       {
@@ -604,8 +617,8 @@ export function NewRequisitionDialog({ open, onOpenChange, initialData, prefillD
                     </Button>
                   </div>
 
-                  {/* Tax / Shipping */}
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  {/* Tax / Shipping / Discount */}
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                     <div className="grid gap-1.5">
                       <Label htmlFor="req-tax-rate">Tax Rate (%)</Label>
                       <Input
@@ -629,6 +642,18 @@ export function NewRequisitionDialog({ open, onOpenChange, initialData, prefillD
                         onChange={(e) => setShippingCost(e.target.value)}
                       />
                     </div>
+                    <div className="grid gap-1.5">
+                      <Label htmlFor="req-discount">Discount ($)</Label>
+                      <Input
+                        id="req-discount"
+                        type="number"
+                        step="any"
+                        min={0}
+                        placeholder="0.00"
+                        value={discountCost}
+                        onChange={(e) => setDiscountCost(e.target.value)}
+                      />
+                    </div>
                   </div>
 
                   {/* Totals Summary */}
@@ -639,6 +664,14 @@ export function NewRequisitionDialog({ open, onOpenChange, initialData, prefillD
                         {formatCurrency(Math.round(subtotalDollars * 100))}
                       </span>
                     </div>
+                    {discountDollars > 0 && (
+                      <div className="flex justify-between text-slate-600">
+                        <span>Discount</span>
+                        <span className="tabular-nums">
+                          -{formatCurrency(Math.round(discountDollars * 100))}
+                        </span>
+                      </div>
+                    )}
                     <div className="flex justify-between text-slate-600">
                       <span>Tax ({taxRate}%)</span>
                       <span className="tabular-nums">

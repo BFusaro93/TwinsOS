@@ -86,6 +86,7 @@ export function useCreatePurchaseOrder() {
           tax_rate_percent: po.taxRatePercent,
           sales_tax: po.salesTax,
           shipping_cost: po.shippingCost,
+          discount_cost: po.discountCost,
           grand_total: po.grandTotal,
           requisition_id: po.requisitionId ?? null,
           payment_submitted_to_ap: po.paymentSubmittedToAP,
@@ -146,6 +147,7 @@ export function useUpdatePurchaseOrder() {
       invoiceNumber,
       taxRatePercent,
       shippingCost,
+      discountCost,
       salesTax,
       grandTotal,
       notes,
@@ -158,6 +160,7 @@ export function useUpdatePurchaseOrder() {
       invoiceNumber: string | null;
       taxRatePercent: number;
       shippingCost: number;
+      discountCost: number;
       salesTax: number;
       grandTotal: number;
       notes: string | null;
@@ -173,6 +176,7 @@ export function useUpdatePurchaseOrder() {
           invoice_number: invoiceNumber ?? undefined,
           tax_rate_percent: taxRatePercent,
           shipping_cost: shippingCost,
+          discount_cost: discountCost,
           sales_tax: salesTax,
           grand_total: grandTotal,
           notes: notes ?? undefined,

@@ -102,7 +102,8 @@ export function LineItemsTable({
     const product = products.find((p) => p.id === addForm.productId);
     if (!product) return;
     const quantity = Math.max(0.01, addForm.quantity || 0.01);
-    const unitCost = Math.round(addForm.unitCost * 100) || 0;
+    // Preserve up to 4 decimal places (fractional cents) for case/bulk pricing accuracy.
+    const unitCost = Math.round(addForm.unitCost * 10000) / 100 || 0;
     const projectId = addForm.projectId === "none" ? null : addForm.projectId;
     const newItem: LineItem = {
       id: crypto.randomUUID(),
@@ -143,7 +144,8 @@ export function LineItemsTable({
   function saveEdit() {
     if (!editingId) return;
     const quantity = Math.max(0.01, editForm.quantity || 0.01);
-    const unitCost = Math.round(editForm.unitCost * 100) || 0;
+    // Preserve up to 4 decimal places (fractional cents) for case/bulk pricing accuracy.
+    const unitCost = Math.round(editForm.unitCost * 10000) / 100 || 0;
     const projectId = editForm.projectId === "none" ? null : editForm.projectId;
     const next = items.map((li) => {
       if (li.id !== editingId) return li;

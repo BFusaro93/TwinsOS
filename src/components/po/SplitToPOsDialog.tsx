@@ -129,6 +129,7 @@ export function SplitToPOsDialog({
           taxRatePercent: requisition.taxRatePercent,
           salesTax,
           shippingCost: 0,
+          discountCost: 0,
           grandTotal,
           requisitionId: requisition.id,
           paymentSubmittedToAP: false,

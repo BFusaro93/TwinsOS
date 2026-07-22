@@ -66,6 +66,7 @@ export function useCreateRequisition() {
       taxRatePercent: number;
       salesTax: number;
       shippingCost: number;
+      discountCost: number;
       grandTotal: number;
       notes?: string | null;
       workOrderId?: string | null;
@@ -93,6 +94,7 @@ export function useCreateRequisition() {
           tax_rate_percent: input.taxRatePercent,
           sales_tax: input.salesTax,
           shipping_cost: input.shippingCost,
+          discount_cost: input.discountCost,
           grand_total: input.grandTotal,
           notes: input.notes ?? null,
           work_order_id: input.workOrderId ?? null,
@@ -196,6 +198,7 @@ export function useUpdateRequisition() {
       vendorName,
       taxRatePercent,
       shippingCost,
+      discountCost,
       salesTax,
       grandTotal,
       notes,
@@ -206,6 +209,7 @@ export function useUpdateRequisition() {
       vendorName: string | null;
       taxRatePercent: number;
       shippingCost: number;
+      discountCost: number;
       salesTax: number;
       grandTotal: number;
       notes: string | null;
@@ -220,6 +224,7 @@ export function useUpdateRequisition() {
           vendor_name: vendorName,
           tax_rate_percent: taxRatePercent,
           shipping_cost: shippingCost,
+          discount_cost: discountCost,
           sales_tax: salesTax,
           grand_total: grandTotal,
           notes,

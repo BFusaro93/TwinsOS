@@ -7,7 +7,7 @@ export interface LineItem {
   productItemName: string;
   partNumber: string;
   quantity: number;
-  unitCost: number; // cents
+  unitCost: number; // cents, fractional-cent precision allowed (e.g. case pricing)
   totalCost: number; // cents
   projectId: string | null;
   notes: string | null;
@@ -28,6 +28,7 @@ export interface Requisition extends BaseRecord {
   taxRatePercent: number; // e.g., 7 for 7%
   salesTax: number; // cents
   shippingCost: number; // cents
+  discountCost: number; // cents — positive magnitude, subtracted from grandTotal
   grandTotal: number; // cents
   notes: string | null;
   workOrderId: string | null;
