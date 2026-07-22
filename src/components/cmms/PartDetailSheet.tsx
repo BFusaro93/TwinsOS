@@ -224,7 +224,7 @@ function DetailsTab({
           <div>
             <div className="mb-2 flex items-center justify-between">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                Interchangeable / Generic Parts
+                Interchangeable Parts
               </p>
               <Button
                 size="sm"
@@ -276,14 +276,14 @@ function DetailsTab({
           <Separator />
           <div>
             <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
-              Interchangeable / Generic Parts
+              Interchangeable Parts
             </p>
             <button
               onClick={() => onLinkSelfAsGeneric()}
               className="flex w-full items-center gap-2 rounded-md border border-dashed border-slate-200 px-3 py-2.5 text-left text-sm text-slate-400 hover:border-brand-300 hover:bg-brand-50 hover:text-brand-600 transition-colors"
             >
               <Plus className="h-3.5 w-3.5 shrink-0" />
-              Link as generic alternative to an OEM part
+              Link as alternative part
             </button>
           </div>
         </>
@@ -319,9 +319,6 @@ function DetailsTab({
                   <p className="text-xs text-slate-500">{parentPart.partNumber}</p>
                 </div>
                 <div className="flex flex-col items-end gap-1">
-                  <span className="rounded-full border border-brand-200 bg-brand-50 px-2 py-0.5 text-[10px] font-medium text-brand-700">
-                    OEM
-                  </span>
                   <p className="text-sm font-medium text-slate-700">
                     {formatCurrency(parentPart.unitCost)}
                   </p>
@@ -1018,12 +1015,12 @@ export function PartDetailSheet({ part, open, onOpenChange }: PartDetailSheetPro
             <DialogContent className="sm:max-w-md">
               <DialogHeader>
                 <DialogTitle>
-                  {isSelfLink ? "Link as Generic Alternative" : "Add Generic Alternative"}
+                  {isSelfLink ? "Link Alternative Part" : "Add Alternative Part"}
                 </DialogTitle>
                 <DialogDescription>
                   {isSelfLink
-                    ? "Select the OEM part that this part is a generic alternative for."
-                    : "Select an existing part to add as a generic alternative for this OEM part."}
+                    ? "Select the part this is interchangeable with."
+                    : "Select an existing part to link as an alternative."}
                 </DialogDescription>
               </DialogHeader>
               <div className="relative">
