@@ -7,6 +7,13 @@
       "runtimeArgs": ["run", "dev:test"],
       "port": 3000,
       "autoPort": true
+    },
+    {
+      "name": "TwinsOS-prod",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "port": 3010,
+      "autoPort": true
     }
   ]
 }
