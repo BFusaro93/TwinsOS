@@ -428,16 +428,23 @@ function HistoryTab({ part, purchaseOrders, onPOClick, onWOClick }: { part: Part
     (part.partNumber && li.partNumber === part.partNumber) ||
     (part.productItemId && li.productItemId === part.productItemId);
 
-  const findLi = (po: { lineItems: { partNumber: string; productItemId: string; unitCost: number; quantity: number }[] }) =>
-    po.lineItems.find(matchesLi)!;
+  // A PO can carry more than one line item for the same part (e.g. a split
+  // order line) — aggregate all matching line items instead of taking just one.
+  const aggregateLi = (po: { lineItems: { partNumber: string; productItemId: string; unitCost: number; quantity: number }[] }) => {
+    const lis = po.lineItems.filter(matchesLi);
+    const quantity = lis.reduce((sum, li) => sum + li.quantity, 0);
+    const totalCost = lis.reduce((sum, li) => sum + li.quantity * li.unitCost, 0);
+    const unitCost = quantity > 0 ? Math.round(totalCost / quantity) : (lis[0]?.unitCost ?? 0);
+    return { quantity, unitCost };
+  };
 
   const pos = (purchaseOrders ?? [])
     .filter((po) => po.lineItems.some(matchesLi))
     .sort((a, b) => new Date(a.poDate ?? a.createdAt).getTime() - new Date(b.poDate ?? b.createdAt).getTime());
 
-  // Build price history: one point per PO (take first matching line item's unitCost)
+  // Build price history: one point per PO (weighted-average unitCost across matching line items)
   const priceHistory = pos.map((po) => {
-    const li = findLi(po);
+    const li = aggregateLi(po);
     const dateStr = po.poDate ?? po.createdAt;
     return {
       date: new Date(dateStr).toLocaleDateString("en-US", {
@@ -586,7 +593,7 @@ function HistoryTab({ part, purchaseOrders, onPOClick, onWOClick }: { part: Part
                   </thead>
                   <tbody>
                     {[...pos].reverse().map((po) => {
-                      const li = findLi(po);
+                      const li = aggregateLi(po);
                       return (
                         <tr key={po.id} className="border-t border-slate-100">
                           <td className="px-3 py-2 font-mono text-xs font-medium">
