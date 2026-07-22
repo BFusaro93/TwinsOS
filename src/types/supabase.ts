@@ -4926,6 +4926,7 @@ export type Database = {
           description: string | null
           description_on_estimate: string | null
           id: string
+          invoice_description: string | null
           is_active: boolean
           monthly_amount_cents: number
           name: string
@@ -4944,6 +4945,7 @@ export type Database = {
           description?: string | null
           description_on_estimate?: string | null
           id?: string
+          invoice_description?: string | null
           is_active?: boolean
           monthly_amount_cents?: number
           name: string
@@ -4962,6 +4964,7 @@ export type Database = {
           description?: string | null
           description_on_estimate?: string | null
           id?: string
+          invoice_description?: string | null
           is_active?: boolean
           monthly_amount_cents?: number
           name?: string
@@ -8497,6 +8500,81 @@ export type Database = {
             columns: ["photo_id"]
             isOneToOne: false
             referencedRelation: "job_photos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      photo_comparisons: {
+        Row: {
+          after_photo_id: string
+          before_photo_id: string
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          id: string
+          label: string | null
+          org_id: string
+          photo_job_id: string
+          updated_at: string
+        }
+        Insert: {
+          after_photo_id: string
+          before_photo_id: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          label?: string | null
+          org_id: string
+          photo_job_id: string
+          updated_at?: string
+        }
+        Update: {
+          after_photo_id?: string
+          before_photo_id?: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          label?: string | null
+          org_id?: string
+          photo_job_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "photo_comparisons_after_photo_id_fkey"
+            columns: ["after_photo_id"]
+            isOneToOne: false
+            referencedRelation: "job_photos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "photo_comparisons_before_photo_id_fkey"
+            columns: ["before_photo_id"]
+            isOneToOne: false
+            referencedRelation: "job_photos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "photo_comparisons_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "photo_comparisons_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "photo_comparisons_photo_job_id_fkey"
+            columns: ["photo_job_id"]
+            isOneToOne: false
+            referencedRelation: "photo_jobs"
             referencedColumns: ["id"]
           },
         ]

@@ -69,6 +69,25 @@ export interface JobPhoto extends BaseRecord {
   annotatedUrl?: string;
 }
 
+/** An explicit before→after photo pairing, created by a user selecting exactly
+ *  two photos. Replaces guessing pairs by tag + array index — a job can have
+ *  several of these (e.g. "Front bed", "Retaining wall"). */
+export interface PhotoComparison {
+  id: string;
+  orgId: string;
+  photoJobId: string;
+  beforePhotoId: string;
+  afterPhotoId: string;
+  label: string | null;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt: string | null;
+  createdBy: string | null;
+  // Derived at read time (joined photo rows)
+  beforePhoto?: JobPhoto;
+  afterPhoto?: JobPhoto;
+}
+
 export interface PhotoAnnotation {
   id: string;
   orgId: string;

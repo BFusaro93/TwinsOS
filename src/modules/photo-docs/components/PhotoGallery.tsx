@@ -2,12 +2,23 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Camera, CheckSquare, MessageSquare, Pencil, SlidersHorizontal, Images, Film, FileText, X } from "lucide-react";
+import { Camera, CheckSquare, MessageSquare, Pencil, SlidersHorizontal, Images, Film, FileText, X, ArrowLeftRight, Trash2, ChevronLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { formatDate } from "@/lib/utils";
 import { useJobPhotos, useDeletePhoto, useBulkUpdatePhotos } from "../hooks/useJobPhotos";
+import { useJobPhotoComparisons, useCreatePhotoComparison, useDeletePhotoComparison } from "../hooks/usePhotoComparisons";
 import { usePhotoAccess } from "../hooks/usePhotoAccess";
 import { PhotoLightbox } from "./PhotoLightbox";
 import { BeforeAfterSlider } from "./BeforeAfterSlider";
@@ -39,12 +50,19 @@ export function PhotoGallery({ projectId }: PhotoGalleryProps) {
   const [fileType, setFileType] = useState<GalleryFileType>("all");
   const [lightboxPhoto, setLightboxPhoto] = useState<JobPhoto | null>(null);
   const [showBeforeAfter, setShowBeforeAfter] = useState(false);
+  const [openComparisonId, setOpenComparisonId] = useState<string | null>(null);
   const [selectMode, setSelectMode] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [pairDialogOpen, setPairDialogOpen] = useState(false);
+  const [pairSwapped, setPairSwapped] = useState(false);
+  const [pairLabel, setPairLabel] = useState("");
 
   const { data: allPhotos = [], isLoading } = useJobPhotos(projectId, tab);
   const { mutate: deletePhoto } = useDeletePhoto(projectId);
   const { mutate: bulkUpdate, isPending: isBulkPending } = useBulkUpdatePhotos(projectId);
+  const { data: comparisons = [] } = useJobPhotoComparisons(projectId);
+  const { mutate: createComparison, isPending: isCreatingComparison } = useCreatePhotoComparison(projectId);
+  const { mutate: deleteComparison } = useDeletePhotoComparison(projectId);
 
   // Client-side file type filter
   const photos = allPhotos.filter((p) => {
@@ -54,9 +72,10 @@ export function PhotoGallery({ projectId }: PhotoGalleryProps) {
     return true;
   });
 
-  const beforePhotos = photos.filter((p) => p.beforeAfter === "before");
-  const afterPhotos = photos.filter((p) => p.beforeAfter === "after");
-  const hasBeforeAfterPairs = beforePhotos.length > 0 && afterPhotos.length > 0;
+  const hasComparisons = comparisons.length > 0;
+  const openComparison = comparisons.find((c) => c.id === openComparisonId) ?? null;
+  const selectedPhotos = photos.filter((p) => selected.has(p.id));
+  const canPair = selectedPhotos.length === 2;
 
   function handleAnnotate(photoId: string) {
     router.push(`/photos/jobs/${projectId}/${photoId}/annotate`);
@@ -78,6 +97,29 @@ export function PhotoGallery({ projectId }: PhotoGalleryProps) {
   function handleBulkTag(flag: BeforeAfterFlag) {
     if (selected.size === 0) return;
     bulkUpdate({ ids: Array.from(selected), beforeAfter: flag }, { onSuccess: exitSelectMode });
+  }
+
+  function openPairDialog() {
+    setPairSwapped(false);
+    setPairLabel("");
+    setPairDialogOpen(true);
+  }
+
+  function handleCreateComparison() {
+    if (!canPair) return;
+    const [first, second] = selectedPhotos;
+    const beforePhotoId = pairSwapped ? second.id : first.id;
+    const afterPhotoId = pairSwapped ? first.id : second.id;
+    createComparison(
+      { beforePhotoId, afterPhotoId, label: pairLabel.trim() || null },
+      {
+        onSuccess: () => {
+          setPairDialogOpen(false);
+          exitSelectMode();
+          setShowBeforeAfter(true);
+        },
+      }
+    );
   }
 
   return (
@@ -120,7 +162,7 @@ export function PhotoGallery({ projectId }: PhotoGalleryProps) {
         </div>
 
         <div className="flex items-center gap-2">
-          {hasBeforeAfterPairs && !selectMode && (
+          {hasComparisons && !selectMode && (
             <Button
               variant="outline"
               size="sm"
@@ -128,7 +170,7 @@ export function PhotoGallery({ projectId }: PhotoGalleryProps) {
                 "gap-1.5 text-xs",
                 showBeforeAfter ? "border-[#2a2a2a] bg-[#2a2a2a] text-white" : "border-slate-200 text-slate-600",
               )}
-              onClick={() => setShowBeforeAfter((v) => !v)}
+              onClick={() => { setShowBeforeAfter((v) => !v); setOpenComparisonId(null); }}
             >
               <SlidersHorizontal className="h-3.5 w-3.5" />
               Before / After
@@ -170,7 +212,7 @@ export function PhotoGallery({ projectId }: PhotoGalleryProps) {
       {selectMode && (
         <div className="flex flex-wrap items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 px-4 py-2.5">
           <span className="text-xs font-medium text-slate-500">
-            {selected.size === 0 ? "Select photos to tag" : `${selected.size} selected`}
+            {selected.size === 0 ? "Select 2 photos to pair, or more to tag" : `${selected.size} selected`}
           </span>
           <div className="flex items-center gap-1.5">
             {(["before", "during", "after", "none"] as BeforeAfterFlag[]).map((flag) => (
@@ -189,6 +231,16 @@ export function PhotoGallery({ projectId }: PhotoGalleryProps) {
                 {flag === "none" ? "Clear tag" : flag.charAt(0).toUpperCase() + flag.slice(1)}
               </button>
             ))}
+            <span className="mx-1 h-4 w-px bg-slate-300" />
+            <button
+              disabled={!canPair}
+              onClick={openPairDialog}
+              title={canPair ? undefined : "Select exactly 2 photos to pair"}
+              className="flex items-center gap-1 rounded-full bg-brand-600 px-2.5 py-0.5 text-xs font-medium text-white transition-colors hover:bg-brand-700 disabled:opacity-40"
+            >
+              <SlidersHorizontal className="h-3 w-3" />
+              Pair as Before/After
+            </button>
           </div>
           {selected.size > 0 && (
             <button onClick={() => setSelected(new Set())} className="ml-auto text-xs text-slate-400 hover:text-slate-600">
@@ -198,18 +250,134 @@ export function PhotoGallery({ projectId }: PhotoGalleryProps) {
         </div>
       )}
 
-      {/* Before/After slider mode */}
-      {showBeforeAfter && hasBeforeAfterPairs && (
+      {/* Before/After comparisons */}
+      {showBeforeAfter && hasComparisons && (
         <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-          <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">
-            Before / After Comparison
-          </p>
-          <BeforeAfterSlider
-            beforePhotos={beforePhotos}
-            afterPhotos={afterPhotos}
-          />
+          {openComparison && openComparison.beforePhoto && openComparison.afterPhoto ? (
+            <>
+              <div className="mb-3 flex items-center gap-2">
+                <button
+                  onClick={() => setOpenComparisonId(null)}
+                  className="flex items-center gap-0.5 text-xs font-semibold uppercase tracking-wide text-slate-400 hover:text-slate-600"
+                >
+                  <ChevronLeft className="h-3.5 w-3.5" />
+                  All Comparisons
+                </button>
+                <span className="text-xs text-slate-300">/</span>
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  {openComparison.label || "Comparison"}
+                </p>
+              </div>
+              <BeforeAfterSlider before={openComparison.beforePhoto} after={openComparison.afterPhoto} />
+            </>
+          ) : (
+            <>
+              <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                Before / After Comparisons
+              </p>
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+                {comparisons.map((c) => (
+                  <div
+                    key={c.id}
+                    className="group relative overflow-hidden rounded-lg border border-slate-200 bg-white"
+                  >
+                    <button
+                      className="grid aspect-[2/1] w-full grid-cols-2 gap-px overflow-hidden bg-slate-100"
+                      onClick={() => setOpenComparisonId(c.id)}
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={c.beforePhoto?.annotatedUrl ?? c.beforePhoto?.publicUrl}
+                        alt="Before"
+                        className="h-full w-full object-cover"
+                      />
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={c.afterPhoto?.annotatedUrl ?? c.afterPhoto?.publicUrl}
+                        alt="After"
+                        className="h-full w-full object-cover"
+                      />
+                    </button>
+                    <div className="flex items-center justify-between px-2 py-1.5">
+                      <span className="truncate text-xs font-medium text-slate-700">
+                        {c.label || "Comparison"}
+                      </span>
+                      <button
+                        onClick={() => deleteComparison(c.id)}
+                        className="shrink-0 text-slate-300 hover:text-red-500"
+                        title="Delete comparison"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
         </div>
       )}
+
+      {/* Create comparison dialog */}
+      <Dialog open={pairDialogOpen} onOpenChange={setPairDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Pair as Before/After</DialogTitle>
+            <DialogDescription>Choose which selected photo is "before" and which is "after".</DialogDescription>
+          </DialogHeader>
+          {selectedPhotos.length === 2 && (
+            <div className="flex flex-col gap-3">
+              <div className="flex items-center gap-2">
+                {(pairSwapped ? [selectedPhotos[1], selectedPhotos[0]] : selectedPhotos).map((photo, i) => (
+                  <div key={photo.id} className="flex-1 space-y-1">
+                    <div className="aspect-square overflow-hidden rounded-lg border">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={photo.annotatedUrl ?? photo.publicUrl}
+                        alt={i === 0 ? "Before" : "After"}
+                        className="h-full w-full object-cover"
+                      />
+                    </div>
+                    <p className={cn(
+                      "text-center text-xs font-semibold uppercase",
+                      i === 0 ? "text-amber-500" : "text-emerald-600",
+                    )}>
+                      {i === 0 ? "Before" : "After"}
+                    </p>
+                  </div>
+                ))}
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="gap-1.5"
+                onClick={() => setPairSwapped((v) => !v)}
+              >
+                <ArrowLeftRight className="h-3.5 w-3.5" />
+                Swap Before/After
+              </Button>
+              <div className="grid gap-1.5">
+                <Label htmlFor="pair-label">Label (optional)</Label>
+                <Input
+                  id="pair-label"
+                  placeholder="e.g. Front bed, Retaining wall"
+                  value={pairLabel}
+                  onChange={(e) => setPairLabel(e.target.value)}
+                />
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setPairDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button type="button" disabled={isCreatingComparison} onClick={handleCreateComparison}>
+              {isCreatingComparison ? "Creating..." : "Create Comparison"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Grid */}
       {isLoading ? (
