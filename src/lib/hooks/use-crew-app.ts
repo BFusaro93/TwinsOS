@@ -198,6 +198,7 @@ export function useVisitPhotos(visitId: string) {
 export function useCrewMemberTimes(visitId: string) {
   return useQuery<CrewMemberTime[]>({
     queryKey: ["crew-member-times", visitId],
+    enabled: !!visitId,
     queryFn: async () => {
       const { supabase } = await getAuthContext();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -245,7 +246,7 @@ export function useMyCrewInfo() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: members } = await (supabase as any)
         .from("crm_crew_members")
-        .select("id, name, role, user_id")
+        .select("id, name, role, employee_id")
         .eq("crew_id", crew.id)
         .order("role")
         .order("name");
@@ -256,7 +257,7 @@ export function useMyCrewInfo() {
         crewColor: crew.color as string | null,
         myRole:    "crew",
         myName:    crew.name as string,
-        members:   (members ?? []) as { id: string; name: string; role: string; userId: string | null }[],
+        members:   (members ?? []) as { id: string; name: string; role: string; employeeId: string | null }[],
       };
     },
   });

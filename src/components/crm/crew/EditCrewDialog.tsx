@@ -19,7 +19,7 @@ interface CrewInfo {
   crewColor: string | null;
   myRole: string;
   myName: string;
-  members: { id: string; name: string; role: string; userId: string | null }[];
+  members: { id: string; name: string; role: string; employeeId: string | null }[];
 }
 
 interface EditCrewDialogProps {
