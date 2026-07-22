@@ -32,6 +32,7 @@ import { useAssets } from "@/lib/hooks/use-assets";
 import { usePMSchedules } from "@/lib/hooks/use-pm-schedules";
 import { useProducts } from "@/lib/hooks/use-products";
 import { useRecentActivityFeed } from "@/lib/hooks/use-audit-log";
+import { useOrgSettings } from "@/lib/hooks/use-org-settings";
 import { formatCurrency, getInitials, getAvatarColor, relativeTime } from "@/lib/utils";
 
 const ACTIVITY_TYPE_LABELS: Record<string, string> = {
@@ -78,6 +79,7 @@ export default function DashboardPage() {
   const { data: pmSchedules = [] } = usePMSchedules();
   const { data: products = [] } = useProducts();
   const { data: activityFeed = [] } = useRecentActivityFeed(8);
+  const { data: orgSettings } = useOrgSettings();
 
   // Build a lookup of productItemId → category so spend charts can filter to maintenance_part only
   const productCategoryMap = useMemo(() => {
@@ -185,7 +187,7 @@ export default function DashboardPage() {
     <div className="flex flex-col gap-6">
       <PageHeader
         title="Dashboard"
-        description="Operational overview for Twins Lawn Service"
+        description={`Operational overview for ${orgSettings?.name ?? "your organization"}`}
       />
 
       {/* Purchasing KPIs */}
