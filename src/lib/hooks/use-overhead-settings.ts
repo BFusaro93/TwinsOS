@@ -42,9 +42,12 @@ export function useOverheadSettings() {
     queryFn: async () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const supabase = createClient() as any;
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not authenticated");
       const { data: profile, error: profileError } = await supabase
         .from("profiles")
         .select("org_id")
+        .eq("id", user.id)
         .single();
       if (profileError) throw profileError;
 
@@ -65,9 +68,12 @@ export function useUpsertOverheadSettings() {
     mutationFn: async (values: Omit<OverheadSettings, "id">) => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const supabase = createClient() as any;
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not authenticated");
       const { data: profile, error: profileError } = await supabase
         .from("profiles")
         .select("org_id")
+        .eq("id", user.id)
         .single();
       if (profileError) throw profileError;
 
