@@ -561,7 +561,7 @@ export function NewPODialog({ open, onOpenChange, initialData, prefillData, onCr
                             <tr className={!hasProjectRow ? "border-b" : ""}>
                               <td className="py-1.5 pr-2 align-top">
                                 <CatalogItemCombobox
-                                  products={allProducts.filter((p) => p.category !== "maintenance_part")}
+                                  products={allProducts}
                                   parts={allParts}
                                   value={li.productItemId}
                                   onValueChange={(val) => handleLineItemProductChange(li.id, val)}
