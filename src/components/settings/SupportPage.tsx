@@ -73,7 +73,7 @@ function FAQItem({ q, a }: { q: string; a: string }) {
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export function SupportPage() {
+export function SupportPage({ docsHref = "/docs" }: { docsHref?: string } = {}) {
   const [search, setSearch] = useState("");
   const [activeSection, setActiveSection] = useState<string>("all");
 
@@ -243,7 +243,7 @@ export function SupportPage() {
               </div>
             </a>
             <a
-              href="/docs"
+              href={docsHref}
               className="flex items-start gap-4 rounded-lg border border-slate-200 bg-white p-5 shadow-sm transition-shadow hover:shadow-md"
             >
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-50">

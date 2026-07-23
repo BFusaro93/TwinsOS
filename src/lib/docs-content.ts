@@ -17,6 +17,12 @@ import {
   ShoppingCart,
   Wrench,
   Settings2,
+  Building2,
+  Calculator,
+  CalendarDays,
+  Snowflake,
+  Receipt,
+  Zap,
 } from "lucide-react";
 import type { ElementType } from "react";
 
@@ -63,7 +69,7 @@ export const DOC_SECTIONS: DocSection[] = [
       {
         id: "platform-overview",
         title: "Platform Overview",
-        summary: "Understand the two core modules and how they work together.",
+        summary: "Understand the three core modules and how they work together.",
         icon: Rocket,
         steps: [
           {
@@ -77,14 +83,19 @@ export const DOC_SECTIONS: DocSection[] = [
               "Handles asset and maintenance lifecycle: Asset registry → Preventive Maintenance schedules → Work Orders → Parts inventory → Labor tracking → Maintenance history. Vehicles are a specialized asset type with service-interval reminders.",
           },
           {
+            step: "Field Service (CRM) Module",
+            detail:
+              "Handles the full customer and field service lifecycle: Clients (with commercial parent/child hierarchies) → Properties → Estimates (built with a production-rate budget engine) → Jobs → Dispatch Board → Invoices → Contracts. Job types include recurring, one-time, waiting list, package, snow, and project work.",
+          },
+          {
             step: "How the modules connect",
             detail:
-              "The two modules share Vendors (same table, both can use it) and Parts inventory (replenished via PO → Receiving → Parts stock). A Work Order can spawn a Purchase Requisition when parts are needed, and automation rules can bridge meter readings to work order creation.",
+              "All three modules share Vendors (one table used by PO, CMMS, and CRM) and Parts inventory (replenished via PO → Receiving → Parts stock). A Work Order or a CRM Job can each spawn a Purchase Requisition when materials are needed, and CRM invoices link back to PO purchase orders for job cost reconciliation.",
           },
           {
             step: "Recommended setup order",
             detail:
-              "1) Go to Settings > Users and invite your team. 2) Configure Approval Flows for Requisitions and POs. 3) Add your vendors. 4) Build the Products catalog. 5) Add your assets and vehicles. 6) Add spare parts and link them to assets. 7) Create PM Schedules. 8) Set up Automations for meter-based maintenance.",
+              "1) Go to Settings > Users and invite your team. 2) Configure Approval Flows for Requisitions and POs. 3) Add your vendors. 4) Build the Products catalog. 5) Add your assets and vehicles. 6) Add spare parts and link them to assets. 7) Create PM Schedules. 8) Set up Automations for meter-based maintenance. 9) In CRM, add your clients and their properties. 10) Configure Services and Production Rates so Estimates can use the budget engine. 11) Build out Packages and Contracts for recurring billing.",
           },
         ],
       },
@@ -516,6 +527,221 @@ export const DOC_SECTIONS: DocSection[] = [
     ],
   },
   {
+    id: "crm",
+    label: "CRM / Field Service",
+    icon: Building2,
+    articles: [
+      {
+        id: "clients-properties",
+        title: "Clients & Properties",
+        summary: "Manage client accounts, commercial hierarchies, service properties, and the activity timeline.",
+        icon: Users,
+        steps: [
+          {
+            step: "Creating a client",
+            detail:
+              "Go to CRM > Clients and click '+ New Client'. The quick-create step captures Display Name, Account Type (Residential or Commercial), phone, and email — click 'Create & Continue' and the full client record opens immediately for billing info, custom fields, and office notes.",
+          },
+          {
+            step: "Client status",
+            detail:
+              "Status is one of Active, Inactive, Lead, or Cancelled. Cancelling a client requires picking a reason — Price, Moved, Unhappy with Service, No Longer Needs Service, or Other — which is kept on the record for churn reporting.",
+          },
+          {
+            step: "Commercial parent/child hierarchy",
+            detail:
+              "Use 'Link Parent Account' on a commercial client to nest it under a property-manager parent. Only a client that isn't already a child itself can be picked as the parent — the hierarchy is one level deep. The parent's record shows a Sub-Accounts banner with the combined balance across all its children.",
+          },
+          {
+            step: "Adding a property",
+            detail:
+              "On a client's detail page, click 'Add Property' under Related Properties. Enter the property name/label, street address, city/state/zip, gate code, and notes to crew. Turf sq ft, mulch bed sq ft, gross sq ft, and linear ft measurements are entered on the client's Custom Fields tab and feed the estimating engine's production-rate calculations.",
+          },
+          {
+            step: "Contacts",
+            detail:
+              "Add contacts from the client detail page with a type — Owner, Primary, Spouse, Property Manager, District Manager, Trustee/Board Member, Employee, Child, or Other. A contact can have multiple phone numbers; toggle the star to mark which one is primary.",
+          },
+          {
+            step: "Activity timeline",
+            detail:
+              "Every note, call, email, invoice, payment, job visit, estimate, contract, automation, and ticket for a client lands in one chronological Activity Timeline, filterable by All History, Notes, Visits, Transactions, or Estimates. Rows deep-link straight to the invoice, estimate, or job they reference.",
+          },
+        ],
+      },
+      {
+        id: "estimates",
+        title: "Estimates & the Budget Engine",
+        summary: "Build client-facing proposals using production rates, labor burden, and overhead markup.",
+        icon: Calculator,
+        steps: [
+          {
+            step: "Creating an estimate",
+            detail:
+              "Go to CRM > Estimates and click '+ New Estimate'. Pick a client (leads are labeled '(lead)' in the picker; inactive or cancelled clients don't appear), set the estimate date and a valid-until date (defaults to 30 days out), and assign a sales rep.",
+          },
+          {
+            step: "Stage vs. approval status",
+            detail:
+              "Stage tracks the sales process: Draft → Quote → Sent → Accepted → Lost → Invoiced. Approval Status (Not Required / Pending / Approved / Rejected) is a separate internal sign-off gate that can hold an estimate back from being sent regardless of its stage.",
+          },
+          {
+            step: "Manual vs. production-rate budgeting",
+            detail:
+              "Each line item snapshots a budget method from its service at the time it's added: Manual (enter budgeted hours directly — Service Autopilot style) or Production Rate (hours = quantity ÷ the service's sq ft per man-hour — Aspire style). Lines with an hourly unit type always use the entered quantity as hours, regardless of method.",
+          },
+          {
+            step: "Cost and overhead",
+            detail:
+              "A labor line's cost pre-fills from your org's breakeven (fully-burdened) rate the first time it's added, and only while it's still zero — edit it directly to override. Overhead markup applies per cost type (Labor, Sub-Contract, Product/Material, Asset/Equipment, Service/Other), each configurable separately in org settings.",
+          },
+          {
+            step: "Reading the line-item grid",
+            detail:
+              "The grid's GM% column color-codes gross margin per line — green at 30%+, gray at 10%+, red below 10% — calculated from Rate, Cost, and Adjusted Rate. Toggle a line between per-unit (×) and fixed total ($) pricing with the Calc Type control.",
+          },
+          {
+            step: "Converting an estimate to a job",
+            detail:
+              "Click 'Convert Estimate to Job', choose which line items to include, and pick a Job Type: One Time, Recurring, Project, or Waiting List. Package and Snow jobs are created directly rather than converted from an estimate. Set the scheduled date and assign a crew before confirming.",
+          },
+        ],
+      },
+      {
+        id: "jobs-dispatch",
+        title: "Jobs, Packages & the Dispatch Board",
+        summary: "Schedule recurring and one-time work, bundle services into packages, and run the daily dispatch board.",
+        icon: CalendarDays,
+        steps: [
+          {
+            step: "Job types",
+            detail:
+              "A CRM Job is one of: recurring, one_time, waiting_list, package, snow, or project. The job itself has a status (Scheduled, In Progress, Completed, Cancelled, Skipped, Hold); each individual scheduled occurrence — a visit — has its own status (Scheduled, Dispatched, In Progress, Completed, Cancelled, Skipped).",
+          },
+          {
+            step: "The Dispatch Board",
+            detail:
+              "CRM > Scheduling > Dispatch Board shows one day at a time with a week strip for picking the date. Click a visit's status pill to cycle it forward — Scheduled → Dispatched → In Progress → Completed (or Skipped) — and assign crews directly from the board.",
+          },
+          {
+            step: "How actual hours are calculated",
+            detail:
+              "Unless a crew clocks in and out manually, a visit's actual hours are calculated as (scheduled end time − scheduled start time) × number of crew members assigned — not a fixed estimate carried over from the job.",
+          },
+          {
+            step: "Packages",
+            detail:
+              "Go to CRM > Settings > Packages to bundle recurring services (e.g. a 7-Step Fertilizer program) under one program. A package's Services tab defines each visit — its service, date window, minimum days between visits, and default budgeted hours/rate. The fixed monthly billing amount, discount, and renewal terms live on the resulting job once a client is signed up, not on the package template itself.",
+          },
+          {
+            step: "Projects",
+            detail:
+              "CRM > Scheduling > Projects tracks one-off landscaping jobs distinct from recurring service — the CRM equivalent of the PO module's Projects/Jobs section, used the same way for cost tracking and reporting.",
+          },
+        ],
+      },
+      {
+        id: "waiting-list-snow",
+        title: "Waiting List & Snow Jobs",
+        summary: "Queue opportunistic work and manage storm-based snow dispatch.",
+        icon: Snowflake,
+        steps: [
+          {
+            step: "What the Waiting List is for",
+            detail:
+              "CRM > Scheduling > Waiting List holds jobs with type Waiting List or Package that don't have a fixed date yet — only a date range (e.g. 'From May 1' or 'May 1 – May 15'). Filter by Client, Service, Date Range, City, Zip, Crew, or Rate.",
+          },
+          {
+            step: "Dispatching from the waiting list",
+            detail:
+              "When a crew has an opening nearby, click 'Dispatch' on a waiting-list job to assign a firm date and crew, converting it into a scheduled visit. Matching today is by City/Zip filtering rather than GPS geofencing.",
+          },
+          {
+            step: "Storm events",
+            detail:
+              "CRM > Scheduling > Snow Jobs is organized around Storm Events, not individual visits. Click '+ New Storm Event', name it (defaults to 'Snow Event' plus the date), and set the event date, forecast depth, and temperature.",
+          },
+          {
+            step: "Dispatching snow visits",
+            detail:
+              "Add jobs to the storm event, then dispatch visits in priority order — High before Normal before Low, set per client. Storm event status moves Pending → Working → Complete.",
+          },
+          {
+            step: "Snow invoicing",
+            detail:
+              "CRM > Accounting > Snow Invoicing groups a client's uninvoiced storm visits and computes the amount from the job's invoice type: a flat rate per event, a rate per inch of snowfall (per event or per push), or an hourly rate × actual hours logged.",
+          },
+        ],
+      },
+      {
+        id: "invoicing-contracts",
+        title: "Invoicing & Contracts",
+        summary: "Bill clients, track payments, and manage recurring service contracts.",
+        icon: Receipt,
+        steps: [
+          {
+            step: "Invoice status",
+            detail:
+              "Invoices move Draft → Sent → Viewed → Partial → Paid, with Overdue and Void as side states. Payments can be recorded against an invoice with a specific method — Cash, Check, ACH/E-Check, AutoPay, Credit Card by network, AR Write-off, or Other.",
+          },
+          {
+            step: "Contracts",
+            detail:
+              "CRM > Accounting > Contracts covers ongoing agreements: a monthly amount, billing frequency (weekly through annual, or one-time), auto-renew, billing day of month, and whether the contract bills a month in advance. Month-by-month amount overrides are supported for seasonal pricing.",
+          },
+          {
+            step: "Sub-properties on one contract",
+            detail:
+              "A commercial contract can be set to include sub-properties — billing every property under a parent client's hierarchy from a single contract rather than issuing one contract per site.",
+          },
+          {
+            step: "The 'PO Number' field is not the internal PO module",
+            detail:
+              "The PO Number shown on an invoice or estimate PDF is a free-text field for the client's own purchase order reference — it has no link to this platform's internal vendor Purchase Orders (Requisitions → POs → Receiving). Don't confuse the two.",
+          },
+          {
+            step: "Linking job costs to vendor POs",
+            detail:
+              "To reconcile what a job actually cost against vendor purchase orders, assign the PO line item to a CRM Project (via the line item's Project field) rather than to a specific job — cost tracking rolls up at the project level.",
+          },
+        ],
+      },
+      {
+        id: "communication-automations",
+        title: "Communication & Automations",
+        summary: "Trigger event-driven emails, texts, and alerts without manual follow-up.",
+        icon: Zap,
+        steps: [
+          {
+            step: "Automation structure",
+            detail:
+              "CRM > Communication > Automations. Each automation contains one or more Sequences; a sequence has Triggers (with optional Trigger Conditions), Stop Conditions, and an ordered list of Events that run once triggered.",
+          },
+          {
+            step: "What can trigger a sequence",
+            detail:
+              "Client/lead events (created, cancelled, converted, card charge failed), dates (a specific date, day of week, or an anniversary of the client's start date), estimate events (sent, won, lost, expiring, no response), form submissions, invoice events (past due, paid), job/visit events (created, cancelled, completed, dispatched, skipped, moved to waiting list), tag added/removed, and ticket events (created, past due, closed, reopened).",
+          },
+          {
+            step: "What an event can do",
+            detail:
+              "Wait (delay), Email, Text Message, Alert (Info / Warning / Urgent), Ticket (with priority Low / Normal / High / Urgent), If/Branch, Note, Update a field, or add/remove Tags.",
+          },
+          {
+            step: "Email send windows",
+            detail:
+              "An email event can be restricted to weekdays only and a specific send-time window, and can require manual approval before it actually sends — useful for anything you want a human to glance at first.",
+          },
+          {
+            step: "Forms and campaigns",
+            detail:
+              "Forms (Draft / Published) capture leads and route submissions into automations via the 'form submitted' trigger. Sales Campaigns (Draft, Scheduled, Sending, Active, Paused, Completed, Cancelled) send email, SMS, or postcard blasts to a segment — All Clients, Active Clients, Leads, Past Clients, or a custom list — and track delivered/opened/clicked/unsubscribed counts.",
+          },
+        ],
+      },
+    ],
+  },
+  {
     id: "administration",
     label: "Administration",
     icon: Settings2,
@@ -584,18 +810,18 @@ export const DOC_SECTIONS: DocSection[] = [
       {
         id: "vendors",
         title: "Managing Vendors",
-        summary: "Vendors are shared across Purchasing and Maintenance.",
+        summary: "Vendors are shared across Purchasing, Maintenance, and CRM.",
         icon: Boxes,
         steps: [
           {
             step: "Shared vendor directory",
             detail:
-              "Vendors live in a single shared table. A vendor can supply both landscape materials (used on POs) and maintenance parts/services (used on work orders). There is no module-specific vendor list.",
+              "Vendors live in a single shared table. A vendor can supply landscape materials (used on POs), maintenance parts/services (used on work orders), or field-service subcontractor/chemical-supplier work (used on CRM jobs and contracts). There is no module-specific vendor list.",
           },
           {
             step: "Adding a vendor",
             detail:
-              "Go to Vendors in the sidebar. Click '+ New Vendor'. Enter name, contact name, email, phone, and address. Vendors are immediately available on all Requisition and PO forms.",
+              "Go to Vendors in the sidebar. Click '+ New Vendor'. Enter name, contact name, email, phone, and address. Vendors are immediately available on all Requisition, PO, and CRM forms.",
           },
           {
             step: "Vendor history",
@@ -720,6 +946,43 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       {
         q: "Does it matter which part I start from when linking two interchangeable parts?",
         a: "No. Whichever part you click 'Link as alternative part' from, and whichever part you pick, is purely which side of the link initiates it — the display is identical either way and neither part is treated as more correct or authoritative.",
+      },
+    ],
+  },
+  {
+    label: "CRM / Field Service",
+    items: [
+      {
+        q: "What's the difference between an estimate's stage and its approval status?",
+        a: "Stage (Draft/Quote/Sent/Accepted/Lost/Invoiced) tracks where the estimate sits in the sales process. Approval Status (Not Required/Pending/Approved/Rejected) is a separate internal sign-off gate — an estimate can be stuck 'Pending' approval even though its stage already says 'Sent', which blocks it from actually going out.",
+      },
+      {
+        q: "Why can't I pick a client as a parent account?",
+        a: "A commercial client can only be linked as a parent if it doesn't already have a parent of its own — the hierarchy is one level deep. If the client you want to use as a parent is itself a sub-account, unlink it from its current parent first.",
+      },
+      {
+        q: "Where do I enter a property's zone measurements, like turf or mulch bed square footage?",
+        a: "On the client's Custom Fields tab, not the Add Property dialog — there's currently no dedicated per-zone editor in the UI. The client-level totals (Turf Sq Ft, Mulch Bed Sq Ft, Gross Sq Ft, Linear Ft Perimeter/Edging, Yards of Mulch) entered there feed the estimating engine's production-rate calculations.",
+      },
+      {
+        q: "Does the 'PO Number' field on an invoice link to a purchase order in the PO module?",
+        a: "No. It's a free-text field for the client's own purchase order reference number and has no connection to this platform's internal Purchase Orders (Requisitions → POs → Receiving). To connect vendor PO spend to a CRM job, assign the PO line item to a Project instead — cost tracking is at the project level, not the individual job.",
+      },
+      {
+        q: "How does the Dispatch Board calculate hours if a crew doesn't clock in?",
+        a: "It falls back to (scheduled end time − scheduled start time) × the number of crew members assigned to the visit. Clocking in/out with actual times overrides this estimate.",
+      },
+      {
+        q: "What's the difference between a job's 'Waiting List' type and the Waiting List page?",
+        a: "They're the same thing — a job with type 'waiting_list' (or 'package', before its recurring dates are set) has no fixed date, only a date range, and automatically surfaces on the Waiting List page for opportunistic dispatch.",
+      },
+      {
+        q: "How is snow invoicing different from a regular invoice?",
+        a: "Snow Invoicing groups a client's uninvoiced storm visits and computes the total from the job's invoice type — a flat rate per storm event, a rate per inch of snowfall, or an hourly rate — rather than itemizing a fixed monthly job the way a regular contract invoice does.",
+      },
+      {
+        q: "Can an automation email send itself before anyone reviews it?",
+        a: "Only if 'require approval' is off for that email event. Turn it on to hold the email for manual approval before it sends — useful when you're not fully confident in a new automation yet.",
       },
     ],
   },

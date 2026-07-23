@@ -120,8 +120,8 @@ const CRM_NAV: NavSection[] = [
       { label: "Packages",  href: "/crm/settings/packages",    icon: Package },
       { label: "Documents", href: "/crm/settings/documents",   icon: FileEdit },
       { label: "Settings",  href: "/crm/settings",             icon: Settings },
-      { label: "Support",   href: "/crm/support",              icon: HelpCircle,   comingSoon: true },
-      { label: "Docs",      href: "/crm/docs",                 icon: Library,      comingSoon: true },
+      { label: "Support",   href: "/crm/support",              icon: HelpCircle },
+      { label: "Docs",      href: "/crm/docs",                 icon: Library },
     ],
   },
 ];
