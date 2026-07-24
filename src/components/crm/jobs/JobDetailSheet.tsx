@@ -80,7 +80,7 @@ export function JobDetailSheet({ jobId, onOpenChange, initialEditing }: Props) {
           </div>
         </div>
         <div className="flex-1 overflow-y-auto bg-white">
-          <JobDetail jobId={jobId} initialEditing={initialEditing} />
+          <JobDetail jobId={jobId} initialEditing={initialEditing} onClose={() => onOpenChange(false)} />
         </div>
       </div>
     </>,

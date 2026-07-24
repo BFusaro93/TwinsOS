@@ -117,9 +117,11 @@ type Tab = "overview" | "services" | "visits" | "notes" | "invoice" | "costing" 
 interface Props {
   jobId: string;
   initialEditing?: boolean;
+  /** When rendered inside a slide-over (JobDetailSheet), closes it instead of navigating away. */
+  onClose?: () => void;
 }
 
-export function JobDetail({ jobId, initialEditing = false }: Props) {
+export function JobDetail({ jobId, initialEditing = false, onClose }: Props) {
   const router = useRouter();
   const { data: job, isLoading, error: jobError } = useJobDetail(jobId);
   const { data: visits = [], isLoading: visitsLoading } = useJobVisits(jobId);
@@ -484,7 +486,7 @@ export function JobDetail({ jobId, initialEditing = false }: Props) {
             variant="ghost"
             size="sm"
             className="h-8 shrink-0 text-xs text-slate-500"
-            onClick={() => router.push("/crm/scheduling")}
+            onClick={() => onClose ? onClose() : router.push("/crm/scheduling")}
           >
             <ArrowLeft className="mr-1 h-3.5 w-3.5" />
             Back
@@ -1089,6 +1091,7 @@ export function JobDetail({ jobId, initialEditing = false }: Props) {
                   <thead>
                     <tr className="bg-slate-50 border-b text-xs font-semibold text-slate-500 uppercase tracking-wide">
                       <th className="px-4 py-3 text-left">Service</th>
+                      <th className="px-4 py-3 text-right">Budgeted Hrs</th>
                       <th className="px-4 py-3 text-right">QTY</th>
                       <th className="px-4 py-3 text-right">Rate</th>
                       <th className="px-4 py-3 text-right">Total</th>
@@ -1098,7 +1101,7 @@ export function JobDetail({ jobId, initialEditing = false }: Props) {
                   <tbody>
                     {services.length === 0 && (
                       <tr>
-                        <td colSpan={5} className="px-4 py-8 text-center text-slate-400 text-sm">
+                        <td colSpan={6} className="px-4 py-8 text-center text-slate-400 text-sm">
                           No services on this job.
                         </td>
                       </tr>
@@ -1106,6 +1109,7 @@ export function JobDetail({ jobId, initialEditing = false }: Props) {
                     {services.map((s) => (
                       <tr key={s.id} className="group border-b last:border-0">
                         <td className="px-4 py-3 font-medium text-slate-800">{s.serviceName}</td>
+                        <td className="px-4 py-3 text-right tabular-nums text-slate-500">{s.budgetedHours ? `${s.budgetedHours}h` : "—"}</td>
                         {editingSvcId === s.id ? (
                           <>
                             <td className="px-2 py-2 text-right">
@@ -1186,6 +1190,11 @@ export function JobDetail({ jobId, initialEditing = false }: Props) {
                               {crmServices.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
                             </SelectContent>
                           </Select>
+                        </td>
+                        <td className="px-2 py-2 text-right">
+                          <Input type="number" min="0" step="0.01" value={newSvcBHrs}
+                            onChange={(e) => setNewSvcBHrs(e.target.value)}
+                            className="h-7 w-20 text-right text-xs ml-auto" />
                         </td>
                         <td className="px-2 py-2 text-right">
                           <Input type="number" min="0" step="0.01" value={newSvcQty}
@@ -1550,7 +1559,9 @@ export function JobDetail({ jobId, initialEditing = false }: Props) {
                   <thead>
                     <tr className="bg-slate-50 border-b text-xs font-semibold text-slate-500 uppercase tracking-wide">
                       <th className="px-4 py-3 text-left">Date</th>
+                      <th className="px-4 py-3 text-left">Service</th>
                       <th className="px-4 py-3 text-left">Crew</th>
+                      <th className="px-4 py-3 text-right">Budgeted Hrs</th>
                       <th className="px-4 py-3 text-right">Actual Hrs</th>
                       <th className="px-4 py-3 text-center">Status</th>
                       <th className="px-4 py-3 text-left">Notes</th>
@@ -1560,7 +1571,7 @@ export function JobDetail({ jobId, initialEditing = false }: Props) {
                   <tbody>
                     {visits.length === 0 && (
                       <tr>
-                        <td colSpan={5} className="px-4 py-8 text-center text-slate-400 text-sm">
+                        <td colSpan={7} className="px-4 py-8 text-center text-slate-400 text-sm">
                           No visits yet. Schedule one above.
                         </td>
                       </tr>
@@ -1778,6 +1789,16 @@ function VisitRow({
     linkedService?.startDate && linkedService?.completeByDate && linkedService.startDate !== linkedService.completeByDate
       ? `${fmtSlash(linkedService.startDate)} to ${fmtSlash(linkedService.completeByDate)}`
       : null;
+  // Which service this specific visit is for — critical on package jobs where
+  // each visit maps to one line item (e.g. "Fert 2 of 5") rather than the
+  // whole job, so the budgeted hours shown are that service's own, not the
+  // job-wide total across every service.
+  const visitServiceName = linkedService
+    ? linkedService.serviceName
+    : services.length > 0
+      ? services.map((s) => s.serviceName).join(", ")
+      : "—";
+  const visitBudgetedHours = linkedService?.budgetedHours ?? visit.budgetedHours ?? null;
   const [editingNote, setEditingNote] = useState(false);
   const [noteVal, setNoteVal] = useState(visit.notesToCrew ?? "");
   const [editingInvoiceDesc, setEditingInvoiceDesc] = useState(false);
@@ -1800,7 +1821,9 @@ function VisitRow({
                 })
               : "—"}
         </td>
+        <td className="px-4 py-3 text-slate-600">{visitServiceName}</td>
         <td className="px-4 py-3 text-slate-600">{visit.crewName ?? <span className="italic text-slate-400">Unassigned</span>}</td>
+        <td className="px-4 py-3 text-right tabular-nums">{visitBudgetedHours ? `${visitBudgetedHours}h` : "—"}</td>
         <td className="px-4 py-3 text-right tabular-nums">{visit.actualHours?.toFixed(1) ?? "—"}</td>
         <td className="px-4 py-3 text-center">
           <Badge className={cn(
