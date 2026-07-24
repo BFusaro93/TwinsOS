@@ -20,6 +20,9 @@ export interface OrgSettingsData {
   defaultBillingTerms: string;
   defaultInvoiceFrequency: string;
   defaultInvoiceDelivery: string;
+  ccProcessingFeeEnabled: boolean;
+  ccProcessingFeePercent: number;
+  ccProcessingFeeThresholdDollars: number;
 }
 
 export interface UpdateOrgSettingsInput {
@@ -37,6 +40,9 @@ export interface UpdateOrgSettingsInput {
   defaultBillingTerms?: string;
   defaultInvoiceFrequency?: string;
   defaultInvoiceDelivery?: string;
+  ccProcessingFeeEnabled?: boolean;
+  ccProcessingFeePercent?: number;
+  ccProcessingFeeThresholdDollars?: number;
 }
 
 function mapOrgSettings(row: Record<string, unknown>): OrgSettingsData {
@@ -64,6 +70,10 @@ function mapOrgSettings(row: Record<string, unknown>): OrgSettingsData {
     defaultBillingTerms: (row.default_billing_terms as string) ?? "due_on_receipt",
     defaultInvoiceFrequency: (row.default_invoice_frequency as string) ?? "daily",
     defaultInvoiceDelivery: (row.default_invoice_delivery as string) ?? "email",
+    ccProcessingFeeEnabled: typeof row.cc_processing_fee_enabled === "boolean" ? row.cc_processing_fee_enabled : true,
+    ccProcessingFeePercent: typeof row.cc_processing_fee_bps === "number" ? row.cc_processing_fee_bps / 100 : 3.5,
+    ccProcessingFeeThresholdDollars:
+      typeof row.cc_processing_fee_threshold_cents === "number" ? row.cc_processing_fee_threshold_cents / 100 : 500,
   };
 }
 
@@ -83,7 +93,7 @@ export function useOrgSettings() {
 
       const { data, error } = await supabase
         .from("organizations")
-        .select("id, slug, name, brand_color, address, tax_rate_percent, cost_method, portal_enabled, customizations, account_number_prefix, account_number_next, account_number_suffix, default_billing_terms, default_invoice_frequency, default_invoice_delivery")
+        .select("id, slug, name, brand_color, address, tax_rate_percent, cost_method, portal_enabled, customizations, account_number_prefix, account_number_next, account_number_suffix, default_billing_terms, default_invoice_frequency, default_invoice_delivery, cc_processing_fee_enabled, cc_processing_fee_bps, cc_processing_fee_threshold_cents")
         .eq("id", profile.org_id)
         .single();
       if (error) throw error;
@@ -120,6 +130,10 @@ export function useUpdateOrgSettings() {
       if (input.defaultBillingTerms !== undefined)     patch.default_billing_terms     = input.defaultBillingTerms;
       if (input.defaultInvoiceFrequency !== undefined) patch.default_invoice_frequency = input.defaultInvoiceFrequency;
       if (input.defaultInvoiceDelivery !== undefined)  patch.default_invoice_delivery  = input.defaultInvoiceDelivery;
+      if (input.ccProcessingFeeEnabled !== undefined) patch.cc_processing_fee_enabled = input.ccProcessingFeeEnabled;
+      if (input.ccProcessingFeePercent !== undefined) patch.cc_processing_fee_bps = Math.round(input.ccProcessingFeePercent * 100);
+      if (input.ccProcessingFeeThresholdDollars !== undefined)
+        patch.cc_processing_fee_threshold_cents = Math.round(input.ccProcessingFeeThresholdDollars * 100);
 
       // Merge customizations with existing values instead of replacing them
       if (input.googleMapsApiKey !== undefined) {

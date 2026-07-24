@@ -5063,8 +5063,10 @@ export type Database = {
           notes: string | null
           org_id: string
           payment_date: string
+          processing_fee_cents: number
           reference: string | null
           refunded_amount_cents: number
+          stripe_payment_intent_id: string | null
           unused_amount_cents: number
           updated_at: string
         }
@@ -5082,8 +5084,10 @@ export type Database = {
           notes?: string | null
           org_id?: string
           payment_date?: string
+          processing_fee_cents?: number
           reference?: string | null
           refunded_amount_cents?: number
+          stripe_payment_intent_id?: string | null
           unused_amount_cents?: number
           updated_at?: string
         }
@@ -5101,8 +5105,10 @@ export type Database = {
           notes?: string | null
           org_id?: string
           payment_date?: string
+          processing_fee_cents?: number
           reference?: string | null
           refunded_amount_cents?: number
+          stripe_payment_intent_id?: string | null
           unused_amount_cents?: number
           updated_at?: string
         }
@@ -8265,6 +8271,9 @@ export type Database = {
           account_number_suffix: string
           address: Json
           brand_color: string
+          cc_processing_fee_bps: number
+          cc_processing_fee_enabled: boolean
+          cc_processing_fee_threshold_cents: number
           cost_method: string
           created_at: string
           customizations: Json
@@ -8276,6 +8285,10 @@ export type Database = {
           plan: string
           portal_enabled: boolean
           slug: string
+          stripe_customer_id: string | null
+          stripe_price_id: string | null
+          stripe_subscription_id: string | null
+          stripe_subscription_status: string | null
           tax_rate_percent: number
           updated_at: string
         }
@@ -8285,6 +8298,9 @@ export type Database = {
           account_number_suffix?: string
           address?: Json
           brand_color?: string
+          cc_processing_fee_bps?: number
+          cc_processing_fee_enabled?: boolean
+          cc_processing_fee_threshold_cents?: number
           cost_method?: string
           created_at?: string
           customizations?: Json
@@ -8296,6 +8312,10 @@ export type Database = {
           plan?: string
           portal_enabled?: boolean
           slug: string
+          stripe_customer_id?: string | null
+          stripe_price_id?: string | null
+          stripe_subscription_id?: string | null
+          stripe_subscription_status?: string | null
           tax_rate_percent?: number
           updated_at?: string
         }
@@ -8305,6 +8325,9 @@ export type Database = {
           account_number_suffix?: string
           address?: Json
           brand_color?: string
+          cc_processing_fee_bps?: number
+          cc_processing_fee_enabled?: boolean
+          cc_processing_fee_threshold_cents?: number
           cost_method?: string
           created_at?: string
           customizations?: Json
@@ -8316,6 +8339,10 @@ export type Database = {
           plan?: string
           portal_enabled?: boolean
           slug?: string
+          stripe_customer_id?: string | null
+          stripe_price_id?: string | null
+          stripe_subscription_id?: string | null
+          stripe_subscription_status?: string | null
           tax_rate_percent?: number
           updated_at?: string
         }

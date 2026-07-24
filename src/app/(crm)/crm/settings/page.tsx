@@ -55,8 +55,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { useOrgSettings, useUpdateOrgSettings } from "@/lib/hooks/use-org-settings";
+import { useSettingsStore, type FieldRequirement } from "@/stores/settings-store";
 import {
   useAllCRMServices,
   useCreateCRMService,
@@ -1070,9 +1072,22 @@ function AccountingTab() {
   const [taxDraft, setTaxDraft] = useState<string>("");
   const [taxSaving, setTaxSaving] = useState(false);
 
+  const [feeEnabledDraft, setFeeEnabledDraft] = useState(true);
+  const [feePercentDraft, setFeePercentDraft] = useState<string>("");
+  const [feeThresholdDraft, setFeeThresholdDraft] = useState<string>("");
+  const [feeSaving, setFeeSaving] = useState(false);
+
   useEffect(() => {
     if (orgSettings) setTaxDraft(String(orgSettings.taxRatePercent ?? ""));
   }, [orgSettings?.taxRatePercent]);
+
+  useEffect(() => {
+    if (orgSettings) {
+      setFeeEnabledDraft(orgSettings.ccProcessingFeeEnabled);
+      setFeePercentDraft(String(orgSettings.ccProcessingFeePercent ?? ""));
+      setFeeThresholdDraft(String(orgSettings.ccProcessingFeeThresholdDollars ?? ""));
+    }
+  }, [orgSettings?.ccProcessingFeeEnabled, orgSettings?.ccProcessingFeePercent, orgSettings?.ccProcessingFeeThresholdDollars]);
 
   async function saveTaxRate() {
     const val = parseFloat(taxDraft);
@@ -1083,6 +1098,28 @@ function AccountingTab() {
       toast.success("Default tax rate saved");
     } catch { toast.error("Failed to save tax rate"); }
     finally { setTaxSaving(false); }
+  }
+
+  const feeDraftDirty =
+    feeEnabledDraft !== orgSettings?.ccProcessingFeeEnabled ||
+    feePercentDraft !== String(orgSettings?.ccProcessingFeePercent ?? "") ||
+    feeThresholdDraft !== String(orgSettings?.ccProcessingFeeThresholdDollars ?? "");
+
+  async function saveProcessingFee() {
+    const percent = parseFloat(feePercentDraft);
+    const threshold = parseFloat(feeThresholdDraft);
+    if (isNaN(percent) || percent < 0 || percent > 100) { toast.error("Enter a valid fee percent"); return; }
+    if (isNaN(threshold) || threshold < 0) { toast.error("Enter a valid threshold"); return; }
+    setFeeSaving(true);
+    try {
+      await updateOrg({
+        ccProcessingFeeEnabled: feeEnabledDraft,
+        ccProcessingFeePercent: percent,
+        ccProcessingFeeThresholdDollars: threshold,
+      });
+      toast.success("Processing fee settings saved");
+    } catch { toast.error("Failed to save processing fee settings"); }
+    finally { setFeeSaving(false); }
   }
 
   return (
@@ -1112,6 +1149,57 @@ function AccountingTab() {
           </div>
           <p className="text-xs text-slate-400">
             This rate is used as the default for new invoices. Each client can have their own tax rate set on their profile — that takes priority over this org default.
+          </p>
+        </div>
+      </AccordionSection>
+      <AccordionSection
+        title="Credit Card Processing Fee"
+        count={0}
+        description="Optional surcharge added when a client pays an invoice by credit card, computed at the moment the card is charged — it never changes the invoice itself."
+      >
+        <div className="space-y-4 p-4">
+          <div className="flex items-center gap-2">
+            <Checkbox
+              id="cc-fee-enabled"
+              checked={feeEnabledDraft}
+              onCheckedChange={(v) => setFeeEnabledDraft(v === true)}
+            />
+            <Label htmlFor="cc-fee-enabled" className="font-normal">
+              Automatically add a processing fee on card payments
+            </Label>
+          </div>
+          <div className="flex items-end gap-3">
+            <div className="flex flex-col gap-1.5 w-48">
+              <Label>Fee (%)</Label>
+              <Input
+                type="number"
+                step="0.1"
+                min="0"
+                max="100"
+                placeholder="e.g. 3.50"
+                value={feePercentDraft}
+                onChange={(e) => setFeePercentDraft(e.target.value)}
+                disabled={!feeEnabledDraft}
+              />
+            </div>
+            <div className="flex flex-col gap-1.5 w-48">
+              <Label>Applies above ($)</Label>
+              <Input
+                type="number"
+                step="1"
+                min="0"
+                placeholder="e.g. 500"
+                value={feeThresholdDraft}
+                onChange={(e) => setFeeThresholdDraft(e.target.value)}
+                disabled={!feeEnabledDraft}
+              />
+            </div>
+            <Button size="sm" onClick={saveProcessingFee} disabled={feeSaving || !feeDraftDirty}>
+              {feeSaving ? "Saving…" : "Save"}
+            </Button>
+          </div>
+          <p className="text-xs text-slate-400">
+            Staff can waive the fee on an individual invoice when charging a card from the invoice detail view.
           </p>
         </div>
       </AccordionSection>
@@ -1302,65 +1390,8 @@ function GoogleMapsCard() {
 }
 
 function IntegrationsTab() {
-  const [stripePublishable, setStripePublishable] = useState("");
-  const [stripeSecret, setStripeSecret] = useState("");
-  const [stripeWebhook, setStripeWebhook] = useState("");
-
-  function handleStripeConnect() {
-    toast.info("Stripe integration coming soon — API keys will be stored securely in environment variables.");
-  }
-
   return (
     <div className="space-y-4">
-
-      {/* Stripe / Card Processing */}
-      <IntegrationCard
-        title="Stripe — Credit Card & ACH Processing"
-        description="Accept credit cards (Visa, MasterCard, AmEx, Discover) and ACH/bank transfers directly from client invoices and the client portal."
-        status="not_connected"
-      >
-        <div className="space-y-3">
-          <div className="rounded-md bg-blue-50 border border-blue-200 px-4 py-3 text-xs text-blue-800">
-            <p className="font-semibold mb-1">Setup required</p>
-            <p>Once connected, clients can pay invoices online via credit card or ACH. AutoPay will charge stored cards automatically on the billing day. Requires a Stripe account.</p>
-          </div>
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-            <div className="flex flex-col gap-1.5">
-              <Label className="text-xs">Publishable Key</Label>
-              <Input
-                className="h-8 font-mono text-xs"
-                type="text"
-                placeholder="pk_live_…"
-                value={stripePublishable}
-                onChange={(e) => setStripePublishable(e.target.value)}
-              />
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label className="text-xs">Secret Key</Label>
-              <Input
-                className="h-8 font-mono text-xs"
-                type="password"
-                placeholder="sk_live_…"
-                value={stripeSecret}
-                onChange={(e) => setStripeSecret(e.target.value)}
-              />
-            </div>
-            <div className="flex flex-col gap-1.5 md:col-span-2">
-              <Label className="text-xs">Webhook Secret</Label>
-              <Input
-                className="h-8 font-mono text-xs"
-                type="password"
-                placeholder="whsec_…"
-                value={stripeWebhook}
-                onChange={(e) => setStripeWebhook(e.target.value)}
-              />
-            </div>
-          </div>
-          <Button size="sm" className="h-8 text-xs" onClick={handleStripeConnect}>
-            Connect Stripe
-          </Button>
-        </div>
-      </IntegrationCard>
 
       {/* QuickBooks */}
       <IntegrationCard
@@ -1714,6 +1745,74 @@ function ImportExportTab() {
   );
 }
 
+// ── Required Fields tab ───────────────────────────────────────────────────────
+// Reuses the same requiredFields store as CMMS/PO settings (organizations
+// .customizations.requiredFields) — just scoped to CRM entities here.
+
+const CRM_ENTITY_DISPLAY: { key: string; name: string }[] = [
+  { key: "client",   name: "Clients" },
+  { key: "ticket",   name: "Tickets" },
+  { key: "estimate", name: "Estimates" },
+  { key: "job",      name: "Jobs" },
+];
+
+function CRMRequiredFieldsTab() {
+  const { requiredFields, setFieldRequirement } = useSettingsStore();
+  const { mutate: updateOrgSettings, isPending: saving } = useUpdateOrgSettings();
+
+  return (
+    <div className="flex flex-col gap-6">
+      {CRM_ENTITY_DISPLAY.map(({ key, name }) => {
+        const fields = requiredFields[key] ?? [];
+        return (
+          <div key={key} className="rounded-lg border bg-white shadow-sm">
+            <div className="px-6 py-4">
+              <h2 className="text-sm font-semibold text-slate-900">{name}</h2>
+              <p className="mt-0.5 text-xs text-slate-500">
+                Set which fields are required, optional, or hidden when creating a {name.toLowerCase().replace(/s$/, "")}
+              </p>
+            </div>
+            <Separator />
+            <table className="w-full">
+              <thead>
+                <tr className="border-b bg-slate-50">
+                  <th className="px-6 py-2 text-left text-xs font-medium text-slate-500">Field</th>
+                  <th className="px-6 py-2 text-right text-xs font-medium text-slate-500">Requirement</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {fields.map((f) => (
+                  <tr key={f.field}>
+                    <td className="px-6 py-3 text-sm text-slate-800">{f.label}</td>
+                    <td className="px-6 py-3 text-right">
+                      <UISelect
+                        value={f.requirement}
+                        onValueChange={(val) => setFieldRequirement(key, f.field, val as FieldRequirement)}
+                      >
+                        <UISelectTrigger className="ml-auto h-8 w-32 text-xs"><UISelectValue /></UISelectTrigger>
+                        <UISelectContent>
+                          <UISelectItem value="required">Required</UISelectItem>
+                          <UISelectItem value="optional">Optional</UISelectItem>
+                          <UISelectItem value="hidden">Hidden</UISelectItem>
+                        </UISelectContent>
+                      </UISelect>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        );
+      })}
+      <div className="flex justify-end">
+        <Button size="sm" disabled={saving} onClick={() => updateOrgSettings({ customizations: { requiredFields } })}>
+          {saving ? "Saving…" : "Save Required Fields"}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 const TAB_KEYS = [
@@ -1724,6 +1823,7 @@ const TAB_KEYS = [
   "services",
   "accounting",
   "chemical_tracking",
+  "required_fields",
   "import_export",
   "integrations",
   "client_portal",
@@ -1740,6 +1840,7 @@ function tabLabel(tab: TabKey): string {
     case "services":          return "Services";
     case "accounting":        return "Accounting";
     case "chemical_tracking": return "Chemical Tracking";
+    case "required_fields":  return "Required Fields";
     case "import_export":     return "Import / Export";
     case "integrations":      return "Integrations";
     case "client_portal":     return "Client Portal";
@@ -1788,6 +1889,9 @@ export default function CRMSettingsPage() {
           </TabsContent>
           <TabsContent value="chemical_tracking" className="mt-0">
             <ChemicalTrackingTab />
+          </TabsContent>
+          <TabsContent value="required_fields" className="mt-0">
+            <CRMRequiredFieldsTab />
           </TabsContent>
           <TabsContent value="import_export" className="mt-0">
             <ImportExportTab />

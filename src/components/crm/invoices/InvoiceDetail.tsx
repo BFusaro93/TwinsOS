@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   useInvoice,
   useUpsertInvoiceLineItem,
@@ -47,12 +48,13 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn, formatCurrency } from "@/lib/utils";
 import { centsToDisplay } from "@/lib/estimate-calc";
-import { Plus, Trash2, Save, DollarSign, ChevronDown, Mail, Printer, Lock, Unlock, Search, MoreVertical, Ban } from "lucide-react";
+import { Plus, Trash2, Save, DollarSign, CreditCard, ChevronDown, Mail, Printer, Lock, Unlock, Search, MoreVertical, Ban } from "lucide-react";
 import { toast } from "sonner";
 import type { InvoiceStatus, InvoiceLineItem, PaymentMethod, CRMPayment } from "@/types/crm-invoices";
 import type { DiscountType, CRMDiscount } from "@/types/crm-discounts";
 import { AuditTrailTab } from "@/components/shared/AuditTrailTab";
 import { LineItemDiscountPopover, type LineItemDiscountPatch } from "@/components/shared/LineItemDiscountPopover";
+import { ChargeCardDialog } from "@/components/crm/invoices/ChargeCardDialog";
 
 // ── constants ─────────────────────────────────────────────────────────────────
 
@@ -519,7 +521,9 @@ export function InvoiceDetail({
   const [lineItemSearch, setLineItemSearch] = useState("");
   const lineItemSearchRef = useRef<HTMLInputElement>(null);
   const [paymentOpen, setPaymentOpen] = useState(false);
+  const [chargeCardOpen, setChargeCardOpen] = useState(false);
   const [selectedPayment, setSelectedPayment] = useState<CRMPayment | null>(null);
+  const queryClient = useQueryClient();
   const [saving, setSaving] = useState(false);
   const [taxRateBps, setTaxRateBps] = useState(0);
   const [discountCents, setDiscountCents] = useState(0);
@@ -790,6 +794,11 @@ export function InvoiceDetail({
             onClick={() => setPaymentOpen(true)}
             disabled={invoice.status === "void" || invoice.balanceCents <= 0}>
             <DollarSign className="mr-1 h-3.5 w-3.5 text-green-500" /> Enter Payment
+          </Button>
+          <Button variant="outline" size="sm" className="h-8 text-xs"
+            onClick={() => setChargeCardOpen(true)}
+            disabled={invoice.status === "void" || invoice.balanceCents <= 0}>
+            <CreditCard className="mr-1 h-3.5 w-3.5 text-brand-500" /> Charge Card
           </Button>
           <Button variant="outline" size="sm" className="h-8 text-xs"
             onClick={handlePrint}>
@@ -1317,6 +1326,16 @@ export function InvoiceDetail({
         balanceCents={invoice.balanceCents}
         open={paymentOpen}
         onOpenChange={setPaymentOpen}
+      />
+      <ChargeCardDialog
+        invoiceId={invoice.id}
+        balanceCents={invoice.balanceCents}
+        open={chargeCardOpen}
+        onOpenChange={setChargeCardOpen}
+        onCharged={() => {
+          queryClient.invalidateQueries({ queryKey: ["crm-invoices"] });
+          setTimeout(() => queryClient.invalidateQueries({ queryKey: ["crm-invoices"] }), 4000);
+        }}
       />
       <PaymentDetailDialog
         payment={selectedPayment}

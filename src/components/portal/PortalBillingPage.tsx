@@ -1,6 +1,9 @@
 "use client";
 
+import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { CreditCard, Download, CheckCircle2, Clock, AlertCircle } from "lucide-react";
+import { PayInvoiceDialog } from "@/components/portal/PayInvoiceDialog";
 
 function fmt(cents: number) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
@@ -31,9 +34,17 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; icon: React.
 };
 
 export default function PortalBillingPage({ invoices }: { invoices: Invoice[] }) {
+  const router = useRouter();
+  const [payingInvoiceId, setPayingInvoiceId] = useState<string | null>(null);
   const open = invoices.filter((i) => ["sent", "partial", "overdue"].includes(i.status));
   const closed = invoices.filter((i) => !["sent", "partial", "overdue"].includes(i.status));
   const totalBalance = open.reduce((sum, i) => sum + i.balance_cents, 0);
+  const payingInvoice = invoices.find((i) => i.id === payingInvoiceId) ?? null;
+
+  function handlePaid() {
+    router.refresh();
+    setTimeout(() => router.refresh(), 4000);
+  }
 
   return (
     <div className="flex flex-col gap-6">
@@ -47,15 +58,27 @@ export default function PortalBillingPage({ invoices }: { invoices: Invoice[] })
             {fmt(totalBalance)}
           </p>
           <div className="mt-4">
-            <button
-              disabled
-              title="Online payments coming soon"
-              className="w-full h-10 rounded-lg bg-brand-500 text-white text-sm font-medium opacity-50 cursor-not-allowed flex items-center justify-center gap-2"
-            >
-              <CreditCard className="h-4 w-4" />
-              Pay Now
-            </button>
-            <p className="text-center text-xs text-slate-400 mt-2">Online payments coming soon</p>
+            {open.length === 1 ? (
+              <button
+                onClick={() => setPayingInvoiceId(open[0].id)}
+                className="w-full h-10 rounded-lg bg-brand-500 text-white text-sm font-medium flex items-center justify-center gap-2"
+              >
+                <CreditCard className="h-4 w-4" />
+                Pay Now
+              </button>
+            ) : (
+              <button
+                disabled
+                title={open.length > 1 ? "Pay individual invoices below" : "No balance due"}
+                className="w-full h-10 rounded-lg bg-brand-500 text-white text-sm font-medium opacity-50 cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                <CreditCard className="h-4 w-4" />
+                Pay Now
+              </button>
+            )}
+            {open.length > 1 && (
+              <p className="text-center text-xs text-slate-400 mt-2">Pay individual invoices below</p>
+            )}
           </div>
         </div>
 
@@ -82,7 +105,7 @@ export default function PortalBillingPage({ invoices }: { invoices: Invoice[] })
           <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-3">Outstanding</h2>
           <ul className="flex flex-col gap-2">
             {open.map((inv) => (
-              <InvoiceRow key={inv.id} invoice={inv} />
+              <InvoiceRow key={inv.id} invoice={inv} onPay={() => setPayingInvoiceId(inv.id)} />
             ))}
           </ul>
         </section>
@@ -105,11 +128,21 @@ export default function PortalBillingPage({ invoices }: { invoices: Invoice[] })
           No invoices on file yet.
         </div>
       )}
+
+      {payingInvoice && (
+        <PayInvoiceDialog
+          invoiceId={payingInvoice.id}
+          balanceCents={payingInvoice.balance_cents}
+          open={payingInvoiceId != null}
+          onClose={() => setPayingInvoiceId(null)}
+          onPaid={handlePaid}
+        />
+      )}
     </div>
   );
 }
 
-function InvoiceRow({ invoice: inv }: { invoice: Invoice }) {
+function InvoiceRow({ invoice: inv, onPay }: { invoice: Invoice; onPay?: () => void }) {
   const cfg = STATUS_CONFIG[inv.status] ?? STATUS_CONFIG.sent;
   const pastDue = ["sent", "partial"].includes(inv.status) && new Date(inv.due_date) < new Date();
   const displayCfg = pastDue ? STATUS_CONFIG.overdue : cfg;
@@ -140,6 +173,16 @@ function InvoiceRow({ invoice: inv }: { invoice: Invoice }) {
           {displayCfg.icon}
           {displayCfg.label}
         </span>
+
+        {onPay && inv.balance_cents > 0 && (
+          <button
+            onClick={onPay}
+            className="flex items-center gap-1 rounded-lg bg-brand-500 px-2.5 py-1 text-xs font-medium text-white"
+          >
+            <CreditCard className="h-3.5 w-3.5" />
+            Pay
+          </button>
+        )}
 
         <a
           href={`/portal/billing/${inv.id}/pdf`}

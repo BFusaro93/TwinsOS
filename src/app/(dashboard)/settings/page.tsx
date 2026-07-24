@@ -10,8 +10,6 @@ import {
   ClipboardCheck,
   Cog,
   Copy,
-  CreditCard,
-  Download,
   ExternalLink,
   FileText,
   Loader2,
@@ -21,7 +19,6 @@ import {
   Trash2,
   Truck,
   Upload,
-  Users,
   X,
 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -46,6 +43,7 @@ import {
 } from "@/components/ui/select";
 import { ApprovalFlowsPage } from "@/components/settings/ApprovalFlowsPage";
 import { NotificationsPage } from "@/components/settings/NotificationsPage";
+import { SubscriptionTab } from "@/components/settings/SubscriptionTab";
 import { useSettingsStore } from "@/stores/settings-store";
 import type { FieldRequirement } from "@/stores/settings-store";
 import type { Part } from "@/types/cmms";
@@ -1539,184 +1537,6 @@ function ImportExportTab() {
   );
 }
 
-// ── Subscription tab ──────────────────────────────────────────────────────────
-
-const MOCK_INVOICES = [
-  { date: "03/02/2026", amount: "$157.97", status: "PAID" },
-  { date: "02/02/2026", amount: "$157.97", status: "PAID" },
-  { date: "01/02/2026", amount: "$157.97", status: "PAID" },
-];
-
-function SubscriptionTab() {
-  const [showBankDetails, setShowBankDetails] = useState(false);
-
-  return (
-    <div className="flex flex-col gap-4">
-      {/* Current Plan */}
-      <div className="rounded-lg border bg-white shadow-sm">
-        <div className="flex flex-col gap-4 p-6 md:flex-row md:items-start md:justify-between">
-          <div>
-            <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
-              Current Plan
-            </p>
-            <h2 className="text-2xl font-bold text-slate-900">Premium Plan</h2>
-            <p className="mt-1 text-sm text-slate-500">
-              Your next invoice is due on{" "}
-              <span className="font-semibold text-slate-700">May 2nd</span>
-            </p>
-          </div>
-          <div className="flex flex-col items-start gap-1 md:items-end">
-            <Button className="bg-brand-500 hover:bg-brand-600">Upgrade</Button>
-            <p className="text-xl font-bold text-slate-900">$148.68</p>
-            <p className="text-xs text-slate-400">$59 × 3 licenses × 1 month</p>
-          </div>
-        </div>
-      </div>
-
-      {/* Billing Period + Licenses */}
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        {/* Billing Period */}
-        <div className="rounded-lg border bg-white p-5 shadow-sm">
-          <div className="mb-3 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-              Billing Period
-            </p>
-            <Button size="sm" variant="outline">Switch to Annual</Button>
-          </div>
-          <p className="text-base font-semibold text-slate-900">Monthly Billing</p>
-          <p className="mt-1 text-sm text-slate-500">
-            Your plan can be billed either annually or monthly.
-          </p>
-        </div>
-
-        {/* Licenses */}
-        <div className="rounded-lg border bg-white p-5 shadow-sm">
-          <div className="mb-3 flex items-center justify-between">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-              Licenses
-            </p>
-            <button className="text-xs font-medium text-brand-600 hover:text-brand-700">
-              Manage
-            </button>
-          </div>
-          <div className="flex items-center gap-2">
-            <Users className="h-4 w-4 text-slate-400" />
-            <p className="text-base font-semibold text-slate-900">3 Licenses</p>
-          </div>
-          <div className="mt-3">
-            <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100">
-              <div className="h-full w-full rounded-full bg-brand-500" />
-            </div>
-            <p className="mt-1.5 text-xs text-slate-500">3 of 3 seats used</p>
-          </div>
-        </div>
-      </div>
-
-      {/* Payment Method + Invoices */}
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        {/* Payment Method */}
-        <div className="rounded-lg border bg-white p-5 shadow-sm">
-          <div className="mb-4 flex items-center justify-between">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-              Payment Method
-            </p>
-            <button className="text-xs font-medium text-brand-600 hover:text-brand-700">
-              Edit
-            </button>
-          </div>
-          <div className="flex flex-col gap-2 text-sm">
-            <div className="flex justify-between">
-              <span className="text-slate-500">Billing Email</span>
-              <span className="font-medium text-slate-900">
-                brandonfusaro@twinslawnservice.com
-              </span>
-            </div>
-            <div className="flex items-center gap-2 pt-1">
-              <span className="rounded bg-blue-100 px-1.5 py-0.5 text-[10px] font-bold text-blue-700">
-                ACH
-              </span>
-              <span className="font-medium text-slate-900">ACH Credit Transfer</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-slate-500">Bank Name:</span>
-              <span className="text-slate-900">Wells Fargo</span>
-            </div>
-            {showBankDetails && (
-              <div className="flex justify-between">
-                <span className="text-slate-500">Account:</span>
-                <span className="text-slate-900">••••• 4821</span>
-              </div>
-            )}
-            <button
-              onClick={() => setShowBankDetails(!showBankDetails)}
-              className="flex items-center gap-1 text-xs font-medium text-brand-600 hover:text-brand-700"
-            >
-              {showBankDetails ? "Hide details" : "Show details"}
-              <ChevronDown
-                className={`h-3 w-3 transition-transform ${showBankDetails ? "rotate-180" : ""}`}
-              />
-            </button>
-            <p className="pt-1 text-xs text-slate-400">Next billing on May 2nd.</p>
-          </div>
-        </div>
-
-        {/* Invoices */}
-        <div className="rounded-lg border bg-white p-5 shadow-sm">
-          <div className="mb-4 flex items-center justify-between">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-              Invoices
-            </p>
-            <button className="text-xs font-medium text-brand-600 hover:text-brand-700">
-              View All
-            </button>
-          </div>
-          <div className="flex flex-col divide-y">
-            {MOCK_INVOICES.map((inv) => (
-              <div key={inv.date} className="flex items-center justify-between py-2">
-                <span className="text-sm text-slate-700">{inv.date}</span>
-                <span className="text-sm font-medium text-slate-900">{inv.amount}</span>
-                <div className="flex items-center gap-2">
-                  <span className="flex items-center gap-1 text-xs font-semibold text-emerald-600">
-                    <Check className="h-3 w-3" />
-                    {inv.status}
-                  </span>
-                  <button
-                    className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
-                    title="Download invoice"
-                  >
-                    <Download className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-          <p className="mt-3 text-xs text-slate-400">All prices are in USD</p>
-        </div>
-      </div>
-
-      {/* Plan features callout */}
-      <div className="rounded-lg border border-brand-100 bg-brand-50 p-5">
-        <div className="flex items-start gap-3">
-          <CreditCard className="mt-0.5 h-5 w-5 shrink-0 text-brand-500" />
-          <div>
-            <p className="text-sm font-semibold text-brand-800">
-              Full billing management coming soon
-            </p>
-            <p className="mt-0.5 text-xs text-brand-600">
-              Upgrade plans, add seats, and download invoices will be fully functional at
-              launch. Contact{" "}
-              <a href="mailto:billing@twinsOS.com" className="underline">
-                billing@twinsOS.com
-              </a>{" "}
-              for changes in the meantime.
-            </p>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // ── Tab label helper ──────────────────────────────────────────────────────────
 
 function tabLabel(tab: string): string {
@@ -1932,7 +1752,7 @@ function IntegrationsTab() {
 export default function SettingsPage() {
   const TAB_KEYS = [
     "general",
-    // "subscription", — hidden until public rollout (internal only, not included in subscriptions)
+    "subscription",
     "customizations",
     "required_fields",
     "approval_flows",
