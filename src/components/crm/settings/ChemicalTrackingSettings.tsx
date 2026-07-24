@@ -169,9 +169,17 @@ function GeneralChemicalSettings() {
 // seeded once when an org first opens Chemical Tracking settings with an
 // empty list. Other lookup types (e.g. Areas Treated) are site-specific and
 // have no universal defaults, so they're left for the user to define.
+// Matches Service Autopilot's Units of Measure list (liquid + weight + metric).
 const DEFAULT_LOOKUP_ITEMS: Partial<Record<ChemicalLookupType, string[]>> = {
-  volume_unit: ["Gallon", "Quart", "Pint", "Fluid Ounce", "Ounce", "Pound"],
-  area_unit: ["Acre", "1,000 Sq Ft", "Square Foot", "Square Yard"],
+  volume_unit: [
+    "Cups", "Gallons", "Grams", "Kilograms", "Liters", "Milliliters",
+    "Ounces - Liquid", "Ounces - Weight", "Pints", "Pounds", "Quarts",
+    "Tablespoons", "Teaspoons",
+  ],
+  // Square Foot and 1,000 Sq Ft kept adjacent (a lawn-chemical rate is almost
+  // always expressed as one or the other) with Acre last, rather than
+  // alphabetical order which splits them apart.
+  area_unit: ["Square Foot", "1,000 Sq Ft", "Acre"],
 };
 
 function LookupListEditor({ listType, addPlaceholder }: { listType: ChemicalLookupType; addPlaceholder: string }) {
@@ -186,8 +194,13 @@ function LookupListEditor({ listType, addPlaceholder }: { listType: ChemicalLook
     const defaults = DEFAULT_LOOKUP_ITEMS[listType];
     if (!defaults || isLoading || seededRef.current || items.length > 0) return;
     seededRef.current = true;
-    defaults.forEach((name) => create.mutate({ listType, name }));
-  }, [listType, isLoading, items.length, create]);
+    (async () => {
+      for (let i = 0; i < defaults.length; i++) {
+        const created = await create.mutateAsync({ listType, name: defaults[i] });
+        await update.mutateAsync({ id: created.id, sortOrder: i });
+      }
+    })();
+  }, [listType, isLoading, items.length, create, update]);
 
   function commitAdd() {
     if (!newName.trim()) return;
