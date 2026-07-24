@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useVendors } from "@/lib/hooks/use-vendors";
 import { useCreateProduct, useUpdateProduct } from "@/lib/hooks/use-products";
 import { VendorCombobox } from "@/components/shared/VendorCombobox";
@@ -69,6 +70,7 @@ export function NewProductDialog({ open, onOpenChange, initialData, onCreated }:
   const [activeIngredients, setActiveIngredients] = useState<ActiveIngredient[]>([]);
   const [reEntryInterval, setReEntryInterval] = useState("");
   const [restrictedProduct, setRestrictedProduct] = useState(false);
+  const [activeTab, setActiveTab] = useState<"details" | "chemical">("details");
 
   const createProduct = useCreateProduct();
   const updateProduct = useUpdateProduct();
@@ -98,6 +100,12 @@ export function NewProductDialog({ open, onOpenChange, initialData, onCreated }:
     }
   }, [open, initialData]);
 
+  // If the user unchecks Track Chemicals while viewing that tab, fall back
+  // to Details rather than leaving the dialog on a tab that no longer exists.
+  useEffect(() => {
+    if (!trackChemicals && activeTab === "chemical") setActiveTab("details");
+  }, [trackChemicals, activeTab]);
+
   const isValid = name.trim() !== "" && category !== "";
 
   function handleClose() {
@@ -122,6 +130,7 @@ export function NewProductDialog({ open, onOpenChange, initialData, onCreated }:
     setActiveIngredients([]);
     setReEntryInterval("");
     setRestrictedProduct(false);
+    setActiveTab("details");
     setExtraVendors([]);
     createProduct.reset();
     updateProduct.reset();
@@ -208,6 +217,12 @@ export function NewProductDialog({ open, onOpenChange, initialData, onCreated }:
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "details" | "chemical")}>
+            <TabsList>
+              <TabsTrigger value="details">Details</TabsTrigger>
+              {trackChemicals && <TabsTrigger value="chemical">Chemical</TabsTrigger>}
+            </TabsList>
+            <TabsContent value="details" className="mt-4">
           <div className="grid grid-cols-2 gap-4">
             {/* Name — full width */}
             <div className="col-span-2 grid gap-1.5">
@@ -386,12 +401,11 @@ export function NewProductDialog({ open, onOpenChange, initialData, onCreated }:
                 </Label>
               </div>
             </div>
+          </div>
+            </TabsContent>
 
             {trackChemicals && (
-              <div className="col-span-2 rounded-md border border-brand-100 bg-brand-50 px-3 py-2.5">
-                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-brand-600">
-                  Chemical Tracking
-                </p>
+              <TabsContent value="chemical" className="mt-4">
                 <div className="grid grid-cols-2 gap-3">
                   <div className="grid gap-1.5">
                     <Label htmlFor="product-scientific-name">Scientific Name</Label>
@@ -512,9 +526,9 @@ export function NewProductDialog({ open, onOpenChange, initialData, onCreated }:
                     Application rates can be managed from the product&apos;s detail panel after saving.
                   </p>
                 )}
-              </div>
+              </TabsContent>
             )}
-          </div>
+          </Tabs>
 
           {saveError && (
             <p className="text-sm text-red-600">
