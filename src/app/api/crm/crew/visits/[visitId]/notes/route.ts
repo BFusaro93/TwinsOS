@@ -24,24 +24,35 @@ export async function POST(
   const parsed = Body.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
 
-  // Fetch current visit to get job_id and client_id
+  // Fetch current visit to get job_id, client_id, and the existing comments
+  // array — this must be appended to, not overwritten, or it clobbers any
+  // comments the office already added from the dispatch board.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: visit, error: visitError } = await (supabase as any)
     .from("crm_job_visits")
-    .select("job_id, client_id, org_id")
+    .select("job_id, client_id, org_id, job_comments")
     .eq("id", visitId)
     .single();
 
   if (visitError) return NextResponse.json({ error: visitError.message }, { status: 500 });
 
   const now = new Date().toISOString();
+  const existingComments = Array.isArray(visit.job_comments)
+    ? visit.job_comments
+    : typeof visit.job_comments === "string" && visit.job_comments
+      ? [{ id: "crew-note", authorName: "Crew", authorId: "", text: visit.job_comments, createdAt: now }]
+      : [];
+  const newComments = [
+    ...existingComments,
+    { id: crypto.randomUUID(), authorName: "Crew", authorId: user.id, text: parsed.data.note, createdAt: now },
+  ];
 
   // Append to job_comments on the visit (dispatchers see this on the board)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: updatedVisit, error: updateError } = await (supabase as any)
     .from("crm_job_visits")
     .update({
-      job_comments: parsed.data.note,
+      job_comments: newComments,
       updated_at:   now,
     })
     .eq("id", visitId)

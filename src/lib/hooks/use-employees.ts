@@ -443,3 +443,59 @@ export function useRemoveCrewMember() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["crm-crews"] }),
   });
 }
+
+// ── per-day crew roster overrides ──────────────────────────────────────────────
+// crm_crew_members is the PERMANENT default roster (managed in Team settings).
+// crm_crew_daily_members lets the dispatch board's Team Assignment dialog move a
+// member onto a different crew for one work date without touching that default.
+
+export function useCrewDailyMembers(workDate: string) {
+  return useQuery({
+    queryKey: ["crm-crew-daily-members", workDate],
+    queryFn: async () => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
+        .from("crm_crew_daily_members")
+        .select("id, member_id, crew_id")
+        .eq("work_date", workDate);
+      if (error) throw error;
+      return data as { id: string; member_id: string; crew_id: string }[];
+    },
+    enabled: !!workDate,
+  });
+}
+
+/** Move a crew member onto `crewId` for `workDate` only — replaces any prior override for that day. */
+export function useSetCrewDailyMember() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ memberId, crewId, workDate }: { memberId: string; crewId: string; workDate: string }) => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase as any)
+        .from("crm_crew_daily_members")
+        .upsert({ member_id: memberId, crew_id: crewId, work_date: workDate }, { onConflict: "work_date,member_id" });
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["crm-crew-daily-members"] }),
+  });
+}
+
+/** Revert a crew member back to their default crew for `workDate` (clears the override). */
+export function useClearCrewDailyMember() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ memberId, workDate }: { memberId: string; workDate: string }) => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase as any)
+        .from("crm_crew_daily_members")
+        .delete()
+        .eq("member_id", memberId)
+        .eq("work_date", workDate);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["crm-crew-daily-members"] }),
+  });
+}

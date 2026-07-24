@@ -63,6 +63,7 @@ import {
   Plus,
   FlaskConical,
   ArrowLeft,
+  MessageSquareText,
 } from "lucide-react";
 import { ChemicalApplicationPanel } from "@/components/crm/chemical/ChemicalApplicationPanel";
 import { createClient } from "@/lib/supabase/client";
@@ -1802,7 +1803,10 @@ function VisitRow({
         <td className="px-4 py-3 text-slate-600">{visit.crewName ?? <span className="italic text-slate-400">Unassigned</span>}</td>
         <td className="px-4 py-3 text-right tabular-nums">{visit.actualHours?.toFixed(1) ?? "—"}</td>
         <td className="px-4 py-3 text-center">
-          <Badge className={cn("gap-1 text-[10px]", VISIT_STATUS_COLOR[visit.status] ?? "bg-slate-50 text-slate-500")}>
+          <Badge className={cn(
+            "gap-1 text-[10px] hover:bg-slate-700 hover:text-white",
+            VISIT_STATUS_COLOR[visit.status] ?? "bg-slate-50 text-slate-500"
+          )}>
             <VisitStatusIcon status={visit.status} className="h-3 w-3" />
             {visit.status}
           </Badge>
@@ -1817,6 +1821,14 @@ function VisitRow({
               <button onClick={() => { setEditingNote(true); setEditingInvoiceDesc(false); }} className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-brand-500 italic">
                 + crew note
               </button>
+            )}
+            {visit.jobComments.length > 0 && (
+              <div className="flex items-start gap-1 text-blue-500" title={visit.jobComments.map((c) => `${c.authorName}: ${c.text}`).join("\n")}>
+                <MessageSquareText className="h-3 w-3 mt-0.5 shrink-0" />
+                <span className="truncate max-w-[190px]">
+                  {visit.jobComments[visit.jobComments.length - 1].text}
+                </span>
+              </div>
             )}
             {visit.invoiceDescription ? (
               <button onClick={() => { setEditingInvoiceDesc(true); setEditingNote(false); }} className="text-indigo-600 hover:text-indigo-700 text-left truncate max-w-[200px] block text-[11px]">

@@ -29,7 +29,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { formatCurrency, cn } from "@/lib/utils";
+import { formatCurrency, cn, relativeTime } from "@/lib/utils";
 import { toast } from "sonner";
 import {
   Calendar,
@@ -55,6 +55,7 @@ import {
   Package,
   FlaskConical,
   MessageSquareText,
+  Clock,
 } from "lucide-react";
 import { ChemicalTrackingWizard } from "@/components/crm/chemical/ChemicalTrackingWizard";
 import {
@@ -70,17 +71,23 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import type { CRMJobVisit, VisitStatus, JobComment } from "@/types/crm-jobs";
-import { useCrews, useUpdateCrewMember } from "@/lib/hooks/use-employees";
+import { useCrews, useCrewDailyMembers, useSetCrewDailyMember, useClearCrewDailyMember } from "@/lib/hooks/use-employees";
 import { useCRMServices } from "@/lib/hooks/use-crm-jobs";
 
 // ── status icon ───────────────────────────────────────────────────────────────
 
 const STATUS_CYCLE: VisitStatus[] = ["scheduled", "dispatched", "in_progress", "completed", "skipped"];
 
-// Actual hours = (end - start) x crew size, mirroring SA's dispatch board.
-// A manually-entered actualHours (e.g. from crew clock-in/out) always wins.
+// Actual hours = time on site (real clock-in/out from the crew tablet) x crew
+// size, mirroring SA's dispatch board. A manually-entered actualHours (an
+// explicit dispatcher override) always wins; the scheduled start/end fields
+// are a dispatcher estimate and only apply before any real punch exists.
 function computeActualHours(visit: CRMJobVisit): number | null {
   if (visit.actualHours != null) return visit.actualHours;
+  if (visit.clockedInAt && visit.clockedOutAt) {
+    const diffHours = (new Date(visit.clockedOutAt).getTime() - new Date(visit.clockedInAt).getTime()) / 3_600_000;
+    if (diffHours > 0) return diffHours * (visit.menCount || 1);
+  }
   if (!visit.startTime || !visit.endTime) return null;
   const [sh, sm] = visit.startTime.split(":").map(Number);
   const [eh, em] = visit.endTime.split(":").map(Number);
@@ -200,6 +207,8 @@ function JobDetailSheet({
   // Sync crewId when the visit prop updates (e.g. after drag-assign or propagate)
   useEffect(() => { setCrewId(visit.crewId ?? job?.crewId ?? ""); }, [visit.id, visit.crewId, job?.crewId]);
 
+  const [editTimesOpen, setEditTimesOpen] = useState(false);
+
   // Notes state
   const [newComment,    setNewComment]    = useState("");
   const [notesToClient, setNotesToClient] = useState(visit.notesToClient ?? "");
@@ -291,6 +300,7 @@ function JobDetailSheet({
   }
 
   return (
+    <>
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side="right"
@@ -443,6 +453,15 @@ function JobDetailSheet({
                   />
                 </div>
               </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="mt-2 h-7 text-xs"
+                onClick={() => setEditTimesOpen(true)}
+              >
+                <Clock className="mr-1.5 h-3 w-3" />
+                Edit Job Times
+              </Button>
             </div>
 
             {/* Notes tabs */}
@@ -705,12 +724,22 @@ function JobDetailSheet({
         </div>
       </SheetContent>
     </Sheet>
+    <EditJobTimesDialog
+      open={editTimesOpen}
+      onOpenChange={setEditTimesOpen}
+      visitId={visit.id}
+      visitDate={visit.scheduledDate}
+      crewId={crewId || null}
+    />
+    </>
   );
 }
 
 // ── print dialog ──────────────────────────────────────────────────────────────
 
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Plus, Trash2 } from "lucide-react";
+import { useCrewMemberTimes, useUpsertCrewMemberTime, useDeleteCrewMemberTime } from "@/lib/hooks/use-crew-app";
 
 function PrintDialog({
   open, onOpenChange, visits, crews, selectedDate,
@@ -825,8 +854,10 @@ function TeamAssignDialog({
   selectedDate: string;
 }) {
   const { mutateAsync: updateVisit } = useUpdateVisit();
-  const { mutateAsync: updateCrewMember } = useUpdateCrewMember();
   const { data: crewsWithMembers } = useCrews(false);
+  const { data: dailyOverrides = [] } = useCrewDailyMembers(selectedDate);
+  const { mutateAsync: setDailyMember } = useSetCrewDailyMember();
+  const { mutateAsync: clearDailyMember } = useClearCrewDailyMember();
   const [pending, setPending] = useState(false);
   const [dragVisitId, setDragVisitId] = useState<string | null>(null);
   const [dragMemberId, setDragMemberId] = useState<string | null>(null);
@@ -834,11 +865,33 @@ function TeamAssignDialog({
   // Use crews-with-members data so member names show up; fall back to the prop
   const richCrews = crewsWithMembers ?? [];
   const unassigned = visits.filter((v) => !v.crewId);
+
+  // crm_crew_members.crew_id is each member's PERMANENT default crew (managed in
+  // Team settings). dailyOverrides moves a member onto a different crew for
+  // selectedDate only — used below to compute each crew's roster for *this* day
+  // without mutating the permanent roster.
+  const defaultCrewByMember = new Map<string, string>();
+  richCrews.forEach((c) => (c.members ?? []).forEach((m) => defaultCrewByMember.set(m.id, c.id)));
+  const overrideCrewByMember = new Map(dailyOverrides.map((o) => [o.member_id, o.crew_id]));
+  const allMembers = richCrews.flatMap((c) => c.members ?? []);
+
   const byCrew = (richCrews.length > 0 ? richCrews : crews).map((c) => ({
     crew: c,
     visits: visits.filter((v) => v.crewId === c.id),
-    members: (c as import("@/types/crm-employees").CRMCrew).members ?? [],
+    members: allMembers.filter((m) => (overrideCrewByMember.get(m.id) ?? defaultCrewByMember.get(m.id)) === c.id),
   }));
+
+  async function moveMember(memberId: string, targetCrewId: string) {
+    try {
+      if (defaultCrewByMember.get(memberId) === targetCrewId) {
+        await clearDailyMember({ memberId, workDate: selectedDate });
+      } else {
+        await setDailyMember({ memberId, crewId: targetCrewId, workDate: selectedDate });
+      }
+    } catch {
+      toast.error("Failed to move member");
+    }
+  }
 
   async function reassign(visitId: string, crewId: string | null, jobId?: string) {
     try {
@@ -934,7 +987,7 @@ function TeamAssignDialog({
                   onDrop={() => {
                     if (dragVisitId) { const jId = visits.find(v => v.id === dragVisitId)?.jobId; void reassign(dragVisitId, crew.id, jId); setDragVisitId(null); }
                     if (dragMemberId) {
-                      void updateCrewMember({ id: dragMemberId, updates: { crew_id: crew.id } }).catch(() => toast.error("Failed to move member"));
+                      void moveMember(dragMemberId, crew.id);
                       setDragMemberId(null);
                     }
                   }}
@@ -942,20 +995,33 @@ function TeamAssignDialog({
                   <p className="text-[10px] font-semibold uppercase text-slate-600 tracking-wide truncate mb-1">
                     {crew.name} ({crewVisits.length})
                   </p>
-                  {/* Draggable member chips */}
+                  {/* Draggable member chips — amber means "on loan" from another
+                      crew for selectedDate only; drag back to their own crew (or
+                      click) to send them back. */}
                   <div className="flex flex-wrap gap-1 mb-2 min-h-[20px]">
-                    {members.map((m) => (
-                      <div
-                        key={m.id}
-                        draggable
-                        onDragStart={() => setDragMemberId(m.id)}
-                        onDragEnd={() => setDragMemberId(null)}
-                        className="flex items-center gap-1 rounded-full bg-brand-100 border border-brand-200 px-2 py-0.5 text-[10px] text-brand-700 font-medium cursor-grab active:cursor-grabbing select-none"
-                        title="Drag to move to another crew"
-                      >
-                        {m.employeeName ?? m.employeeId}
-                      </div>
-                    ))}
+                    {members.map((m) => {
+                      const onLoan = defaultCrewByMember.get(m.id) !== crew.id;
+                      return (
+                        <div
+                          key={m.id}
+                          draggable
+                          onDragStart={() => setDragMemberId(m.id)}
+                          onDragEnd={() => setDragMemberId(null)}
+                          onClick={() => { const home = defaultCrewByMember.get(m.id); if (onLoan && home) void moveMember(m.id, home); }}
+                          className={cn(
+                            "flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium cursor-grab active:cursor-grabbing select-none",
+                            onLoan
+                              ? "bg-amber-100 border-amber-300 text-amber-700"
+                              : "bg-brand-100 border-brand-200 text-brand-700"
+                          )}
+                          title={onLoan
+                            ? `On loan from their usual crew for ${selectedDate} only — click to send back`
+                            : "Drag to move to another crew for today only"}
+                        >
+                          {m.employeeName ?? m.employeeId}
+                        </div>
+                      );
+                    })}
                     {members.length === 0 && (
                       <p className="text-[10px] text-slate-300 italic">No members — drag here</p>
                     )}
@@ -1018,6 +1084,193 @@ function TeamAssignDialog({
   );
 }
 
+// ── edit job times dialog ─────────────────────────────────────────────────────
+// Per-crew-member start/end times for a single visit — manually editable so the
+// office can enter or correct times, not just what the crew tablet punches.
+
+function isoToDateAndTime(iso: string | null, fallbackDate: string): { date: string; time: string } {
+  if (!iso) return { date: fallbackDate, time: "" };
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return {
+    date: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`,
+    time: `${pad(d.getHours())}:${pad(d.getMinutes())}`,
+  };
+}
+
+function dateAndTimeToIso(date: string, time: string): string | null {
+  if (!date || !time) return null;
+  const d = new Date(`${date}T${time}:00`);
+  return Number.isNaN(d.getTime()) ? null : d.toISOString();
+}
+
+function EditJobTimeRow({
+  crewMemberId,
+  memberName,
+  clockedInAt,
+  clockedOutAt,
+  visitDate,
+  onSave,
+  onDelete,
+}: {
+  crewMemberId: string;
+  memberName: string;
+  clockedInAt: string | null;
+  clockedOutAt: string | null;
+  visitDate: string;
+  onSave: (date: string, start: string, end: string) => void;
+  onDelete: () => void;
+}) {
+  const startInit = isoToDateAndTime(clockedInAt, visitDate);
+  const endInit = isoToDateAndTime(clockedOutAt, visitDate);
+  const [date, setDate] = useState(startInit.date || endInit.date || visitDate);
+  const [start, setStart] = useState(startInit.time);
+  const [end, setEnd] = useState(endInit.time);
+
+  useEffect(() => {
+    const s = isoToDateAndTime(clockedInAt, visitDate);
+    const e = isoToDateAndTime(clockedOutAt, visitDate);
+    setDate(s.date || e.date || visitDate);
+    setStart(s.time);
+    setEnd(e.time);
+  }, [clockedInAt, clockedOutAt, visitDate]);
+
+  return (
+    <div className="flex items-center gap-2 py-1.5">
+      <span className="w-32 shrink-0 truncate text-sm text-slate-700">{memberName}</span>
+      <Input type="date" value={date} onChange={(e) => setDate(e.target.value)}
+        onBlur={() => onSave(date, start, end)} className="h-8 w-36 text-xs" />
+      <Input type="time" value={start} onChange={(e) => setStart(e.target.value)}
+        onBlur={() => onSave(date, start, end)} className="h-8 w-28 text-xs" />
+      <span className="text-xs text-slate-400">to</span>
+      <Input type="time" value={end} onChange={(e) => setEnd(e.target.value)}
+        onBlur={() => onSave(date, start, end)} className="h-8 w-28 text-xs" />
+      <button onClick={onDelete} className="shrink-0 text-slate-300 hover:text-red-500" title="Remove">
+        <Trash2 className="h-3.5 w-3.5" />
+      </button>
+    </div>
+  );
+}
+
+function EditJobTimesDialog({
+  open,
+  onOpenChange,
+  visitId,
+  visitDate,
+  crewId,
+}: {
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+  visitId: string;
+  visitDate: string;
+  crewId: string | null;
+}) {
+  const { data: memberTimes = [] } = useCrewMemberTimes(visitId);
+  const { data: crewsWithMembers } = useCrews(false);
+  const upsert = useUpsertCrewMemberTime();
+  const del = useDeleteCrewMemberTime();
+
+  const crew = crewsWithMembers?.find((c) => c.id === crewId);
+  const allMembers = crew?.members ?? [];
+  const assignedIds = new Set(memberTimes.map((t) => t.crewMemberId));
+  const availableMembers = allMembers.filter((m) => !assignedIds.has(m.id));
+
+  const [newMemberId, setNewMemberId] = useState("");
+  const [newDate, setNewDate] = useState(visitDate);
+  const [newStart, setNewStart] = useState("");
+  const [newEnd, setNewEnd] = useState("");
+
+  async function saveRow(memberId: string, date: string, start: string, end: string) {
+    try {
+      await upsert.mutateAsync({
+        visitId,
+        crewMemberId: memberId,
+        clockedInAt: dateAndTimeToIso(date, start),
+        clockedOutAt: dateAndTimeToIso(date, end),
+      });
+    } catch {
+      toast.error("Failed to save time");
+    }
+  }
+
+  async function addRow() {
+    if (!newMemberId) return;
+    await saveRow(newMemberId, newDate, newStart, newEnd);
+    setNewMemberId("");
+    setNewStart("");
+    setNewEnd("");
+  }
+
+  async function removeRow(memberId: string) {
+    try {
+      await del.mutateAsync({ visitId, crewMemberId: memberId });
+    } catch {
+      toast.error("Failed to remove");
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Edit Job Times</DialogTitle>
+        </DialogHeader>
+
+        <div className="divide-y">
+          {memberTimes.map((t) => (
+            <EditJobTimeRow
+              key={t.crewMemberId}
+              crewMemberId={t.crewMemberId}
+              memberName={t.memberName ?? "Crew member"}
+              clockedInAt={t.clockedInAt}
+              clockedOutAt={t.clockedOutAt}
+              visitDate={visitDate}
+              onSave={(date, start, end) => saveRow(t.crewMemberId, date, start, end)}
+              onDelete={() => removeRow(t.crewMemberId)}
+            />
+          ))}
+          {memberTimes.length === 0 && (
+            <p className="py-2 text-xs text-slate-400 italic">No times recorded yet</p>
+          )}
+        </div>
+
+        {availableMembers.length > 0 && (
+          <div className="flex items-center gap-2 border-t pt-3">
+            <Select value={newMemberId || "unassigned"} onValueChange={(v) => setNewMemberId(v === "unassigned" ? "" : v)}>
+              <SelectTrigger className="h-8 w-32 text-xs shrink-0">
+                <SelectValue placeholder="Unassigned" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="unassigned" className="text-xs">Unassigned</SelectItem>
+                {availableMembers.map((m) => (
+                  <SelectItem key={m.id} value={m.id} className="text-xs">{m.employeeName ?? "Crew member"}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Input type="date" value={newDate} onChange={(e) => setNewDate(e.target.value)} className="h-8 w-36 text-xs" />
+            <Input type="time" value={newStart} onChange={(e) => setNewStart(e.target.value)} className="h-8 w-28 text-xs" />
+            <span className="text-xs text-slate-400">to</span>
+            <Input type="time" value={newEnd} onChange={(e) => setNewEnd(e.target.value)} className="h-8 w-28 text-xs" />
+            <button
+              onClick={addRow}
+              disabled={!newMemberId}
+              className="shrink-0 rounded bg-brand-500 p-1.5 text-white hover:bg-brand-600 disabled:opacity-40"
+              title="Add row"
+            >
+              <Plus className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
+
+        <DialogFooter>
+          <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button size="sm" onClick={() => onOpenChange(false)}>Save</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ── visit row ──────────────────────────────────────────────────────────────────
 
 function VisitRow({
@@ -1068,6 +1321,14 @@ function VisitRow({
     updateVisit.mutate({ id: visit.id, updates: { [field]: value || null } });
   }
 
+  const [menVal, setMenVal] = useState(String(visit.menCount ?? ""));
+  useEffect(() => { setMenVal(String(visit.menCount ?? "")); }, [visit.menCount]);
+
+  function saveMenCount(value: string) {
+    const n = parseInt(value, 10);
+    updateVisit.mutate({ id: visit.id, updates: { men_count: Number.isNaN(n) || n < 0 ? 0 : n } });
+  }
+
   const lastSvc = job?.lastServiceDate
     ? new Date(job.lastServiceDate + "T12:00:00").toLocaleDateString("en-US", { month: "numeric", day: "numeric" })
     : "—";
@@ -1079,7 +1340,13 @@ function VisitRow({
   // suppress unused warning — selectedDate is available for future use
   void selectedDate;
 
+  // Fixed cols (checkbox, #, St, Client) + whichever toggleable cols are shown —
+  // used so the note/comment banner rows below can span the full table width.
+  const totalCols = 4 + COL_DEFS.filter((c) => isVisible(c.key)).length;
+  const crewNoteBanner = visit.notesToCrew ?? visit.job?.notesToCrew ?? null;
+
   return (
+    <>
     <tr
       className={cn(
         "group border-b border-slate-100 text-xs cursor-pointer transition-colors",
@@ -1244,7 +1511,16 @@ function VisitRow({
 
       {/* Men */}
       {isVisible("men") && (
-        <td className="px-2 py-2 text-center text-slate-400">{visit.menCount}</td>
+        <td className="px-1 py-1 text-center text-slate-400" onClick={(e) => e.stopPropagation()}>
+          <input
+            type="number"
+            min={0}
+            value={menVal}
+            onChange={(e) => setMenVal(e.target.value)}
+            onBlur={() => saveMenCount(menVal)}
+            className="w-10 rounded border border-transparent bg-transparent px-1 py-0.5 text-center text-xs text-slate-600 hover:border-slate-200 focus:border-brand-400 focus:outline-none"
+          />
+        </td>
       )}
 
       {/* Qty */}
@@ -1268,15 +1544,15 @@ function VisitRow({
         </td>
       )}
 
-      {/* Icons + Notes preview */}
+      {/* Icons — full text now renders in the banner row(s) below instead of
+          being crammed/truncated into this column. */}
       {isVisible("icons") && (() => {
-        const crewNote = visit.notesToCrew ?? visit.job?.notesToCrew ?? null;
         const latestComment = visit.jobComments.length > 0 ? visit.jobComments[visit.jobComments.length - 1] : null;
         return (
-          <td className="px-2 py-2 max-w-[220px]">
+          <td className="px-2 py-2">
             <div className="flex items-center gap-1.5">
-              {(crewNote || visit.job?.notes) && (
-                <span title={crewNote ?? visit.job?.notes ?? ""} className="shrink-0"><StickyNote className="h-3 w-3 text-amber-400" /></span>
+              {(crewNoteBanner || visit.job?.notes) && (
+                <span title={crewNoteBanner ?? visit.job?.notes ?? ""} className="shrink-0"><StickyNote className="h-3 w-3 text-amber-400" /></span>
               )}
               {(visit.job?.productTotalCents ?? 0) > 0 && (
                 <span title="Has products" className="shrink-0"><Package className="h-3 w-3 text-purple-500" /></span>
@@ -1299,20 +1575,27 @@ function VisitRow({
                   <MessageSquareText className="h-3 w-3 text-blue-400" />
                 </span>
               )}
-              {crewNote && (
-                <span className="truncate text-[11px] text-slate-500" title={crewNote}>{crewNote}</span>
-              )}
-              {!crewNote && latestComment && (
-                <span className="truncate text-[11px] text-slate-400 italic" title={latestComment.text}>{latestComment.text}</span>
-              )}
-              {!crewNote && !latestComment && visit.job?.notes && (
-                <span className="truncate text-[11px] text-slate-400 italic" title={visit.job.notes}>{visit.job.notes}</span>
-              )}
             </div>
           </td>
         );
       })()}
     </tr>
+    {crewNoteBanner && (
+      <tr className="border-b border-slate-100 bg-yellow-50/70">
+        <td colSpan={totalCols} className="px-3 py-1.5 text-[11px] text-slate-700">
+          <span className="font-semibold">Scheduling Notes:</span> {crewNoteBanner}
+        </td>
+      </tr>
+    )}
+    {visit.jobComments.map((c) => (
+      <tr key={c.id} className="border-b border-slate-100 bg-slate-50">
+        <td colSpan={totalCols} className="px-3 py-1.5 text-[11px] text-slate-600">
+          <span className="font-medium text-slate-500">{c.text}</span>
+          <span className="ml-2 text-slate-400">{relativeTime(c.createdAt)} by {c.authorName}</span>
+        </td>
+      </tr>
+    ))}
+    </>
   );
 }
 

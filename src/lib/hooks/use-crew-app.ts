@@ -84,7 +84,11 @@ function mapVisit(row: Record<string, unknown>): CRMJobVisit {
     menCount:             (row.men_count as number) ?? 1,
     qty:                  row.qty as number | null,
     rateCents:            row.rate_cents as number | null,
-    jobComments:          [],
+    jobComments:          Array.isArray(row.job_comments)
+      ? (row.job_comments as CRMJobVisit["jobComments"])
+      : typeof row.job_comments === "string" && row.job_comments
+        ? [{ id: "crew-note", authorName: "Crew", authorId: "", text: row.job_comments as string, createdAt: (row.updated_at ?? row.created_at) as string }]
+        : [],
     assignedEmployeeId:   row.assigned_employee_id as string | null,
     dispatchedAt:         row.dispatched_at as string | null,
     clockedInAt:          row.clocked_in_at as string | null,
@@ -392,6 +396,24 @@ export function useUpsertCrewMemberTime() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ crewMemberId, clockedInAt, clockedOutAt }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      return res.json();
+    },
+    onSuccess: (_data, { visitId }) => {
+      qc.invalidateQueries({ queryKey: ["crew-member-times", visitId] });
+    },
+  });
+}
+
+export function useDeleteCrewMemberTime() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ visitId, crewMemberId }: { visitId: string; crewMemberId: string }) => {
+      const res = await fetch(`/api/crm/crew/visits/${visitId}/member-times`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ crewMemberId }),
       });
       if (!res.ok) throw new Error(await res.text());
       return res.json();

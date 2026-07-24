@@ -52,6 +52,38 @@ export async function POST(
   return NextResponse.json(data);
 }
 
+const DeleteBody = z.object({ crewMemberId: z.string().uuid() });
+
+export async function DELETE(
+  request: Request,
+  { params }: { params: Promise<{ visitId: string }> }
+) {
+  const cookieStore = await cookies();
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    { cookies: { getAll: () => cookieStore.getAll(), setAll: () => {} } }
+  );
+
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { visitId } = await params;
+  const body = await request.json();
+  const parsed = DeleteBody.safeParse(body);
+  if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (supabase as any)
+    .from("crm_crew_member_times")
+    .delete()
+    .eq("visit_id", visitId)
+    .eq("crew_member_id", parsed.data.crewMemberId);
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ ok: true });
+}
+
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ visitId: string }> }
