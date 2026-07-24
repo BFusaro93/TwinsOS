@@ -2,12 +2,12 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import {
   useWaitingListJobs,
   useCRMCrews,
   useCreateVisit,
 } from "@/lib/hooks/use-crm-jobs";
+import { JobDetailSheet } from "@/components/crm/jobs/JobDetailSheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -174,6 +174,7 @@ function WaitingJobRow({
   selected,
   onToggle,
   onSchedule,
+  onOpenJob,
 }: {
   job: CRMJob;
   /** When set, this row represents one visit within a package job rather than the whole job. */
@@ -182,6 +183,7 @@ function WaitingJobRow({
   selected: boolean;
   onToggle: () => void;
   onSchedule: () => void;
+  onOpenJob: () => void;
 }) {
   const serviceName = service
     ? service.serviceName
@@ -196,12 +198,11 @@ function WaitingJobRow({
     ? service.rateCents ?? null
     : job.rateCents ?? (serviceTotal > 0 ? serviceTotal : null);
   const isVisible = (key: string) => visibleKeys.includes(key);
-  const router = useRouter();
 
   return (
     <tr
       className={cn("cursor-pointer border-b border-slate-100 text-sm hover:bg-slate-50", selected && "bg-brand-50")}
-      onClick={() => router.push(`/crm/scheduling/jobs/${job.id}`)}
+      onClick={onOpenJob}
     >
       <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
         <input
@@ -289,6 +290,7 @@ export function WaitingList() {
   const [dispatchJobs, setDispatchJobs] = useState<CRMJob[] | null>(null);
   const [dispatchService, setDispatchService] = useState<{ job: CRMJob; service: CRMJobService } | null>(null);
   const [addOpen, setAddOpen] = useState(false);
+  const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
 
   const { data: jobs, isLoading, refetch } = useWaitingListJobs(startDate, endDate);
   const all = jobs ?? [];
@@ -324,11 +326,11 @@ export function WaitingList() {
   // Package jobs carry one crm_job_services row per visit, each with its own
   // date window — expand those into one row per visit so each can be scheduled
   // independently instead of the whole job going out on a single date.
-  // Non-package jobs (or a package with only one visit left) render unchanged.
+  // Non-package jobs render unchanged.
   const visitRows = useMemo(() => {
     const rows: { key: string; job: CRMJob; service: CRMJobService | null }[] = [];
     for (const job of filtered) {
-      if (job.jobType === "package" && (job.services?.length ?? 0) > 1) {
+      if (job.jobType === "package" && (job.services?.length ?? 0) > 0) {
         for (const service of job.services!) {
           // The job-level waiting_list_start/end (used by the server-side date
           // filter) spans the whole package, so a job can pass the filter while
@@ -559,6 +561,7 @@ export function WaitingList() {
                   selected={selectedIds.has(job.id)}
                   onToggle={() => toggleOne(job.id)}
                   onSchedule={() => service ? setDispatchService({ job, service }) : setDispatchJobs([job])}
+                  onOpenJob={() => setSelectedJobId(job.id)}
                 />
               ))
             )}
@@ -582,6 +585,11 @@ export function WaitingList() {
           onDone={() => { refetch(); }}
         />
       )}
+
+      <JobDetailSheet
+        jobId={selectedJobId}
+        onOpenChange={(open) => { if (!open) setSelectedJobId(null); }}
+      />
     </div>
   );
 }

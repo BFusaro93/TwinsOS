@@ -186,7 +186,7 @@ export function useWaitingListJobs(startDate?: string, endDate?: string) {
           crm_crews(name),
           profiles!crm_jobs_sales_rep_id_fkey(name),
           crm_job_services(*),
-          crm_job_visits(id, deleted_at, job_service_id)
+          crm_job_visits(id, deleted_at, job_service_id, status)
         `)
         .in("job_type", ["waiting_list", "package"])
         .is("deleted_at", null)
@@ -210,20 +210,23 @@ export function useWaitingListJobs(startDate?: string, endDate?: string) {
         return !hasActiveVisit;
       });
 
-      // Package jobs carry every visit in crm_job_services regardless of whether
-      // it's already been scheduled — drop the ones a visit already references
-      // via job_service_id so each remaining row represents a visit still
-      // needing a date (see 20260717000001_job_visits_job_service_id.sql).
+      // Package jobs' visits are often bulk-generated up front for the whole
+      // season (one placeholder per service, status='scheduled', sometimes
+      // with a crew pre-assigned) well before anyone actually dispatches them
+      // — that's not the same as being handled. Only drop a service once it
+      // has a visit that's actually moved past that placeholder state (i.e.
+      // been dispatched, worked, or resolved); a still-'scheduled' visit means
+      // the service is still exactly what the Waiting List is for.
       for (const row of rows) {
         if (row.job_type !== "package") continue;
-        const scheduledServiceIds = new Set(
+        const dispatchedServiceIds = new Set(
           (row.crm_job_visits ?? [])
-            .filter((v: any) => !v.deleted_at && v.job_service_id)
+            .filter((v: any) => !v.deleted_at && v.job_service_id && v.status !== "scheduled")
             .map((v: any) => v.job_service_id)
         );
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         row.crm_job_services = (row.crm_job_services ?? []).filter(
-          (s: any) => !scheduledServiceIds.has(s.id)
+          (s: any) => !dispatchedServiceIds.has(s.id)
         );
       }
 
