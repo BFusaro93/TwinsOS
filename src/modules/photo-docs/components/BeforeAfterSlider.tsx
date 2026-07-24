@@ -21,17 +21,17 @@ export function BeforeAfterSlider({ before, after }: BeforeAfterSliderProps) {
               <ReactCompareSliderImage
                 src={beforeUrl}
                 alt="Before"
-                style={{ objectFit: "cover" }}
+                style={{ objectFit: "contain", backgroundColor: "#0f172a" }}
               />
             }
             itemTwo={
               <ReactCompareSliderImage
                 src={afterUrl}
                 alt="After"
-                style={{ objectFit: "cover" }}
+                style={{ objectFit: "contain", backgroundColor: "#0f172a" }}
               />
             }
-            style={{ height: "400px", width: "100%" }}
+            style={{ height: "400px", width: "100%", backgroundColor: "#0f172a" }}
           />
           <div className="mt-2 flex justify-between px-1 text-xs text-slate-500">
             <span className="font-medium text-amber-400">← Before</span>
