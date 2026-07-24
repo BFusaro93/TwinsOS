@@ -162,6 +162,7 @@ const DEFAULT_REQUIRED_FIELDS: RequiredFieldsConfig = {
   client: [
     { field: "primary_phone",  label: "Phone",           requirement: "optional", isBuiltIn: true },
     { field: "primary_email",  label: "Email",           requirement: "optional", isBuiltIn: true },
+    { field: "source",        label: "Source",          requirement: "optional", isBuiltIn: true },
   ],
   ticket: [
     { field: "client",      label: "Client",       requirement: "optional", isBuiltIn: true },
@@ -175,7 +176,6 @@ const DEFAULT_REQUIRED_FIELDS: RequiredFieldsConfig = {
   job: [
     { field: "crew",       label: "Crew",        requirement: "optional", isBuiltIn: true },
     { field: "sales_rep",  label: "Sales Rep",   requirement: "optional", isBuiltIn: true },
-    { field: "source",     label: "Source",      requirement: "optional", isBuiltIn: true },
   ],
 };
 

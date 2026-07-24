@@ -71,6 +71,7 @@ import { useOrgSettings } from "@/lib/hooks/use-org-settings";
 import type { CRMPayment, CRMInvoice, CRMContract } from "@/types/crm-invoices";
 import type { Estimate } from "@/types/crm-estimates";
 import { toast } from "sonner";
+import { useRequiredFields } from "@/lib/hooks/use-required-fields";
 import {
   Phone,
   Mail,
@@ -410,6 +411,7 @@ function ClientCombobox({
 
 function EditClientDialog({ client, open, onOpenChange }: { client: Client; open: boolean; onOpenChange: (o: boolean) => void }) {
   const { mutateAsync: update, isPending } = useUpdateClient();
+  const rf = useRequiredFields("client");
   const { data: fieldDefs = [] } = useCustomFieldDefs();
   const { data: fieldValues = [] } = useClientCustomFieldValues(client.id);
   const { mutateAsync: upsertFieldValue } = useUpsertClientCustomFieldValue();
@@ -556,6 +558,10 @@ function EditClientDialog({ client, open, onOpenChange }: { client: Client; open
   }
 
   async function handleSave() {
+    if (rf.isRequired("source") && !form.source.trim()) {
+      toast.error("Source is required");
+      return;
+    }
     try {
       const serviceAddr = {
         serviceAddress: form.serviceAddress || null,
@@ -808,7 +814,7 @@ function EditClientDialog({ client, open, onOpenChange }: { client: Client; open
                   <Input type="date" value={form.clientSince} onChange={(e) => patch("clientSince", e.target.value)} />
                 </div>
                 <div className="flex flex-col gap-1.5">
-                  <Label>Source</Label>
+                  <Label>Source{rf.req("source")}</Label>
                   <Select value={form.source || "__none__"} onValueChange={(v) => patch("source", v === "__none__" ? "" : v)}>
                     <SelectTrigger><SelectValue placeholder="Select source…" /></SelectTrigger>
                     <SelectContent>
@@ -1027,7 +1033,7 @@ function EditClientDialog({ client, open, onOpenChange }: { client: Client; open
 
           <div className="shrink-0 flex justify-end gap-2 border-t px-6 py-3 bg-white">
             <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-            <Button onClick={handleSave} disabled={isPending}>{isPending ? "Saving…" : "Save Changes"}</Button>
+            <Button onClick={handleSave} disabled={isPending || (rf.isRequired("source") && !form.source.trim())}>{isPending ? "Saving…" : "Save Changes"}</Button>
           </div>
         </Tabs>
       </DialogContent>
