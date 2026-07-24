@@ -17,6 +17,8 @@ export interface ChemicalLookupItem {
   deletedAt: string | null;
 }
 
+export type ChemicalMixType = "none" | "water" | "product";
+
 export interface ChemicalApplicationRate {
   id: string;
   orgId: string;
@@ -28,12 +30,29 @@ export interface ChemicalApplicationRate {
   areaUnitId: string | null;
   productCostCents: number;
   isDefault: boolean;
+  mixType: ChemicalMixType;
+  // "Mixed with Water": dilutionChemicalQty of dilutionChemicalUnitId per dilutionWaterQty of dilutionWaterUnitId
+  dilutionChemicalQty: number | null;
+  dilutionChemicalUnitId: string | null;
+  dilutionWaterQty: number | null;
+  dilutionWaterUnitId: string | null;
+  // "Mixed with Products": mixProductAmountQty of mixProductAmountUnitId (of mixProductId) per mixProductTotalQty of mixProductTotalUnitId
+  mixProductId: string | null;
+  mixProductAmountQty: number | null;
+  mixProductAmountUnitId: string | null;
+  mixProductTotalQty: number | null;
+  mixProductTotalUnitId: string | null;
   createdAt: string;
   updatedAt: string;
   // joined display fields
   applicationMethodName?: string | null;
   unitOfMeasureName?: string | null;
   areaUnitName?: string | null;
+  dilutionChemicalUnitName?: string | null;
+  dilutionWaterUnitName?: string | null;
+  mixProductName?: string | null;
+  mixProductAmountUnitName?: string | null;
+  mixProductTotalUnitName?: string | null;
 }
 
 export interface ServiceChemical {

@@ -7,6 +7,7 @@ import type {
   ChemicalApplicationRate,
   ChemicalLookupItem,
   ChemicalLookupType,
+  ChemicalMixType,
   ChemicalSettings,
   ServiceChemical,
 } from "@/types/chemical-tracking";
@@ -41,11 +42,26 @@ function mapApplicationRate(row: any): ChemicalApplicationRate {
     areaUnitId: row.area_unit_id,
     productCostCents: row.product_cost_cents ?? 0,
     isDefault: row.is_default ?? false,
+    mixType: row.mix_type ?? "none",
+    dilutionChemicalQty: row.dilution_chemical_qty !== null ? Number(row.dilution_chemical_qty) : null,
+    dilutionChemicalUnitId: row.dilution_chemical_unit_id,
+    dilutionWaterQty: row.dilution_water_qty !== null ? Number(row.dilution_water_qty) : null,
+    dilutionWaterUnitId: row.dilution_water_unit_id,
+    mixProductId: row.mix_product_id,
+    mixProductAmountQty: row.mix_product_amount_qty !== null ? Number(row.mix_product_amount_qty) : null,
+    mixProductAmountUnitId: row.mix_product_amount_unit_id,
+    mixProductTotalQty: row.mix_product_total_qty !== null ? Number(row.mix_product_total_qty) : null,
+    mixProductTotalUnitId: row.mix_product_total_unit_id,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     applicationMethodName: row.application_method?.name ?? null,
     unitOfMeasureName: row.unit_of_measure?.name ?? null,
     areaUnitName: row.area_unit?.name ?? null,
+    dilutionChemicalUnitName: row.dilution_chemical_unit?.name ?? null,
+    dilutionWaterUnitName: row.dilution_water_unit?.name ?? null,
+    mixProductName: row.mix_product?.name ?? null,
+    mixProductAmountUnitName: row.mix_product_amount_unit?.name ?? null,
+    mixProductTotalUnitName: row.mix_product_total_unit?.name ?? null,
   };
 }
 
@@ -251,7 +267,9 @@ export function useChemicalApplicationRates(productId: string | undefined) {
       const { data, error } = await supabase
         .from("crm_chemical_application_rates")
         .select(
-          "*, application_method:application_method_id(name), unit_of_measure:unit_of_measure_id(name), area_unit:area_unit_id(name)"
+          "*, application_method:application_method_id(name), unit_of_measure:unit_of_measure_id(name), area_unit:area_unit_id(name), " +
+          "dilution_chemical_unit:dilution_chemical_unit_id(name), dilution_water_unit:dilution_water_unit_id(name), " +
+          "mix_product:mix_product_id(name), mix_product_amount_unit:mix_product_amount_unit_id(name), mix_product_total_unit:mix_product_total_unit_id(name)"
         )
         .eq("product_id", productId!)
         .order("is_default", { ascending: false });
@@ -279,6 +297,16 @@ export function useSaveChemicalApplicationRates() {
         areaUnitId: string | null;
         productCostCents: number;
         isDefault: boolean;
+        mixType: ChemicalMixType;
+        dilutionChemicalQty: number | null;
+        dilutionChemicalUnitId: string | null;
+        dilutionWaterQty: number | null;
+        dilutionWaterUnitId: string | null;
+        mixProductId: string | null;
+        mixProductAmountQty: number | null;
+        mixProductAmountUnitId: string | null;
+        mixProductTotalQty: number | null;
+        mixProductTotalUnitId: string | null;
       }>;
     }) => {
       const supabase = createClient();
@@ -300,6 +328,16 @@ export function useSaveChemicalApplicationRates() {
           area_unit_id: r.areaUnitId,
           product_cost_cents: r.productCostCents,
           is_default: r.isDefault,
+          mix_type: r.mixType,
+          dilution_chemical_qty: r.dilutionChemicalQty,
+          dilution_chemical_unit_id: r.dilutionChemicalUnitId,
+          dilution_water_qty: r.dilutionWaterQty,
+          dilution_water_unit_id: r.dilutionWaterUnitId,
+          mix_product_id: r.mixProductId,
+          mix_product_amount_qty: r.mixProductAmountQty,
+          mix_product_amount_unit_id: r.mixProductAmountUnitId,
+          mix_product_total_qty: r.mixProductTotalQty,
+          mix_product_total_unit_id: r.mixProductTotalUnitId,
         }))
       );
       if (insertError) throw insertError;

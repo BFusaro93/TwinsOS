@@ -19,6 +19,8 @@ import {
   useChemicalSettings,
   useSaveChemicalApplicationRates,
 } from "@/lib/hooks/use-chemical-tracking";
+import { useProducts } from "@/lib/hooks/use-products";
+import type { ChemicalMixType } from "@/types/chemical-tracking";
 
 interface RateRow {
   applicationMethodId: string | null;
@@ -28,6 +30,16 @@ interface RateRow {
   areaUnitId: string | null;
   productCost: string;
   isDefault: boolean;
+  mixType: ChemicalMixType;
+  dilutionChemicalQty: string;
+  dilutionChemicalUnitId: string | null;
+  dilutionWaterQty: string;
+  dilutionWaterUnitId: string | null;
+  mixProductId: string | null;
+  mixProductAmountQty: string;
+  mixProductAmountUnitId: string | null;
+  mixProductTotalQty: string;
+  mixProductTotalUnitId: string | null;
 }
 
 function emptyRow(isDefault: boolean, defaultUnitId: string | null, prevAreaUnitId: string | null): RateRow {
@@ -39,6 +51,16 @@ function emptyRow(isDefault: boolean, defaultUnitId: string | null, prevAreaUnit
     areaUnitId: prevAreaUnitId,
     productCost: "",
     isDefault,
+    mixType: "none",
+    dilutionChemicalQty: "",
+    dilutionChemicalUnitId: null,
+    dilutionWaterQty: "",
+    dilutionWaterUnitId: null,
+    mixProductId: null,
+    mixProductAmountQty: "",
+    mixProductAmountUnitId: null,
+    mixProductTotalQty: "",
+    mixProductTotalUnitId: null,
   };
 }
 
@@ -50,6 +72,8 @@ export function ChemicalApplicationRatesEditor({ productId }: { productId: strin
   const { data: volumeUnits = [] } = useChemicalLookupItems("volume_unit");
   const { data: areaUnits = [] } = useChemicalLookupItems("area_unit");
   const { data: settings } = useChemicalSettings();
+  const { data: allProducts = [] } = useProducts();
+  const mixableProducts = allProducts.filter((p) => p.id !== productId);
   const saveRates = useSaveChemicalApplicationRates();
 
   const [rows, setRows] = useState<RateRow[]>([]);
@@ -67,6 +91,16 @@ export function ChemicalApplicationRatesEditor({ productId }: { productId: strin
             areaUnitId: r.areaUnitId,
             productCost: r.productCostCents ? (r.productCostCents / 100).toFixed(2) : "",
             isDefault: r.isDefault,
+            mixType: r.mixType,
+            dilutionChemicalQty: r.dilutionChemicalQty !== null ? String(r.dilutionChemicalQty) : "",
+            dilutionChemicalUnitId: r.dilutionChemicalUnitId,
+            dilutionWaterQty: r.dilutionWaterQty !== null ? String(r.dilutionWaterQty) : "",
+            dilutionWaterUnitId: r.dilutionWaterUnitId,
+            mixProductId: r.mixProductId,
+            mixProductAmountQty: r.mixProductAmountQty !== null ? String(r.mixProductAmountQty) : "",
+            mixProductAmountUnitId: r.mixProductAmountUnitId,
+            mixProductTotalQty: r.mixProductTotalQty !== null ? String(r.mixProductTotalQty) : "",
+            mixProductTotalUnitId: r.mixProductTotalUnitId,
           }))
         : []
     );
@@ -108,6 +142,16 @@ export function ChemicalApplicationRatesEditor({ productId }: { productId: strin
           areaUnitId: r.areaUnitId,
           productCostCents: r.productCost ? Math.round(parseFloat(r.productCost) * 100) : 0,
           isDefault: r.isDefault,
+          mixType: r.mixType,
+          dilutionChemicalQty: r.mixType === "water" && r.dilutionChemicalQty ? parseFloat(r.dilutionChemicalQty) : null,
+          dilutionChemicalUnitId: r.mixType === "water" ? r.dilutionChemicalUnitId : null,
+          dilutionWaterQty: r.mixType === "water" && r.dilutionWaterQty ? parseFloat(r.dilutionWaterQty) : null,
+          dilutionWaterUnitId: r.mixType === "water" ? r.dilutionWaterUnitId : null,
+          mixProductId: r.mixType === "product" ? r.mixProductId : null,
+          mixProductAmountQty: r.mixType === "product" && r.mixProductAmountQty ? parseFloat(r.mixProductAmountQty) : null,
+          mixProductAmountUnitId: r.mixType === "product" ? r.mixProductAmountUnitId : null,
+          mixProductTotalQty: r.mixType === "product" && r.mixProductTotalQty ? parseFloat(r.mixProductTotalQty) : null,
+          mixProductTotalUnitId: r.mixType === "product" ? r.mixProductTotalUnitId : null,
         })),
       },
       { onSuccess: () => setDirty(false) }
@@ -238,6 +282,140 @@ export function ChemicalApplicationRatesEditor({ productId }: { productId: strin
                 </SelectContent>
               </Select>
             </div>
+          </div>
+
+          <div className="col-span-2 flex flex-col gap-2 rounded-md border border-slate-100 bg-slate-50 p-2">
+            <div className="flex flex-wrap items-center gap-4">
+              {(["none", "water", "product"] as ChemicalMixType[]).map((mt) => (
+                <label key={mt} className="flex items-center gap-1.5 text-xs text-slate-700">
+                  <input
+                    type="radio"
+                    name={`mix-type-${i}`}
+                    checked={row.mixType === mt}
+                    onChange={() => updateRow(i, { mixType: mt })}
+                    className="h-3.5 w-3.5"
+                  />
+                  {mt === "none" ? "Not Mixed" : mt === "water" ? "Mixed with Water" : "Mixed with Products"}
+                </label>
+              ))}
+            </div>
+
+            {row.mixType === "water" && (
+              <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                <span className="text-slate-500">Chemical</span>
+                <Input
+                  className="h-8 w-16 text-xs"
+                  type="number"
+                  step="any"
+                  value={row.dilutionChemicalQty}
+                  onChange={(e) => updateRow(i, { dilutionChemicalQty: e.target.value })}
+                  placeholder="Qty"
+                />
+                <Select
+                  value={row.dilutionChemicalUnitId ?? "none"}
+                  onValueChange={(v) => updateRow(i, { dilutionChemicalUnitId: v === "none" ? null : v })}
+                >
+                  <SelectTrigger className="h-8 w-24 text-xs">
+                    <SelectValue placeholder="Unit" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">—</SelectItem>
+                    {volumeUnits.map((u) => (
+                      <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <span className="text-slate-500">per Water</span>
+                <Input
+                  className="h-8 w-16 text-xs"
+                  type="number"
+                  step="any"
+                  value={row.dilutionWaterQty}
+                  onChange={(e) => updateRow(i, { dilutionWaterQty: e.target.value })}
+                  placeholder="Qty"
+                />
+                <Select
+                  value={row.dilutionWaterUnitId ?? "none"}
+                  onValueChange={(v) => updateRow(i, { dilutionWaterUnitId: v === "none" ? null : v })}
+                >
+                  <SelectTrigger className="h-8 w-24 text-xs">
+                    <SelectValue placeholder="Unit" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">—</SelectItem>
+                    {volumeUnits.map((u) => (
+                      <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            {row.mixType === "product" && (
+              <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                <span className="text-slate-500">Product</span>
+                <Select
+                  value={row.mixProductId ?? "none"}
+                  onValueChange={(v) => updateRow(i, { mixProductId: v === "none" ? null : v })}
+                >
+                  <SelectTrigger className="h-8 w-40 text-xs">
+                    <SelectValue placeholder="Search products…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">—</SelectItem>
+                    {mixableProducts.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <span className="text-slate-500">Amount</span>
+                <Input
+                  className="h-8 w-16 text-xs"
+                  type="number"
+                  step="any"
+                  value={row.mixProductAmountQty}
+                  onChange={(e) => updateRow(i, { mixProductAmountQty: e.target.value })}
+                  placeholder="Qty"
+                />
+                <Select
+                  value={row.mixProductAmountUnitId ?? "none"}
+                  onValueChange={(v) => updateRow(i, { mixProductAmountUnitId: v === "none" ? null : v })}
+                >
+                  <SelectTrigger className="h-8 w-24 text-xs">
+                    <SelectValue placeholder="Unit" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">—</SelectItem>
+                    {volumeUnits.map((u) => (
+                      <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <span className="text-slate-500">per Total</span>
+                <Input
+                  className="h-8 w-16 text-xs"
+                  type="number"
+                  step="any"
+                  value={row.mixProductTotalQty}
+                  onChange={(e) => updateRow(i, { mixProductTotalQty: e.target.value })}
+                  placeholder="Qty"
+                />
+                <Select
+                  value={row.mixProductTotalUnitId ?? "none"}
+                  onValueChange={(v) => updateRow(i, { mixProductTotalUnitId: v === "none" ? null : v })}
+                >
+                  <SelectTrigger className="h-8 w-24 text-xs">
+                    <SelectValue placeholder="Unit" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">—</SelectItem>
+                    {volumeUnits.map((u) => (
+                      <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
           </div>
 
           {row.rateQty && row.productCost && (
