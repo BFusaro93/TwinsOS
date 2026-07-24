@@ -643,9 +643,12 @@ export function useCreateVisit() {
       // panel top bar, client profile upcoming/history icons, jobs list date
       // column) kept showing it as an unscheduled waiting-list entry even
       // though the dispatch board correctly showed the visit as dispatched.
-      // Graduate the job out of waiting_list once it has a real scheduled visit.
+      // Stamp scheduled_date so those views pick up the date, but keep
+      // job_type='waiting_list' — it's the job's category, not its schedule
+      // state, and a job can have multiple line-item visits dispatched
+      // independently of one another (some out, some still pending), so
+      // there's no single "now it's one_time" moment to flip it at.
       if (values.jobType === 'waiting_list') {
-        jobUpdate.job_type = 'one_time';
         jobUpdate.scheduled_date = values.scheduledDate;
       }
 

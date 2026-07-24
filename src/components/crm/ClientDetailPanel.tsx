@@ -32,6 +32,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PhoneInput } from "@/components/shared/PhoneInput";
+import { VisitStatusIcon } from "@/components/shared/VisitStatusIcon";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -1977,6 +1978,11 @@ function fmtDate(iso: string) {
   return new Date(iso + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "2-digit", day: "2-digit", year: "numeric" });
 }
 
+// A visit belongs in "History" once it's reached a terminal state, regardless of
+// its scheduled date — a dispatched-but-not-yet-completed visit for a past date
+// still needs action, so it stays in "Upcoming" until marked completed/cancelled/skipped.
+const TERMINAL_VISIT_STATUSES = new Set(["completed", "cancelled", "skipped"]);
+
 function JobVisitsModal({
   job,
   jobName,
@@ -1990,8 +1996,11 @@ function JobVisitsModal({
   onClose: () => void;
   onOpenJob: (id: string) => void;
 }) {
-  const isWaitingList = job.jobType === "waiting_list";
-  const { data: visits = [], isLoading } = useJobVisits(isWaitingList ? "" : job.id);
+  // job_type stays 'waiting_list' even after a visit is dispatched (see
+  // useCreateVisit), so "still waiting" has to be derived from whether it
+  // has a real visit yet, not from job_type alone.
+  const { data: visits = [], isLoading } = useJobVisits(job.id);
+  const isWaitingList = job.jobType === "waiting_list" && !visits.some((v) => !v.deletedAt);
   const { data: allServices = [] } = useAllCRMServices();
   const serviceCodeMap = useMemo(() => {
     const m: Record<string, string> = {};
@@ -2012,12 +2021,10 @@ function JobVisitsModal({
     const svc = v.jobServiceId ? serviceById[v.jobServiceId] : null;
     return svc ? (serviceCodeMap[svc.serviceId ?? ""] ?? svc.serviceName) : serviceLabel;
   }
-  const today = new Date().toISOString().slice(0, 10);
-
   const filtered = visits.filter((v: CRMJobVisit) => {
     if (v.deletedAt) return false;
-    if (mode === "upcoming") return v.scheduledDate >= today && v.status !== "completed" && v.status !== "cancelled";
-    return v.scheduledDate < today || v.status === "completed";
+    const isTerminal = TERMINAL_VISIT_STATUSES.has(v.status);
+    return mode === "upcoming" ? !isTerminal : isTerminal;
   }).sort((a: CRMJobVisit, b: CRMJobVisit) =>
     mode === "upcoming"
       ? a.scheduledDate.localeCompare(b.scheduledDate)
@@ -2093,8 +2100,6 @@ function JobVisitsModal({
                     </tr>
                   );
                 }) : filtered.map((v: CRMJobVisit) => {
-                  const isCompleted = v.status === "completed";
-                  const isCancelled = v.status === "cancelled";
                   // Fall back to job-level budgeted hours if visit doesn't have its own
                   const hours = mode === "history"
                     ? (v.actualHours != null ? `${v.actualHours}hrs` : "0hrs")
@@ -2105,11 +2110,7 @@ function JobVisitsModal({
                   return (
                     <tr key={v.id} className="cursor-pointer hover:bg-neutral-50" onClick={() => { onClose(); onOpenJob(job.id); }}>
                       <td className="px-4 py-2.5 text-center">
-                        {isCompleted && <CheckCircle className="h-3.5 w-3.5 text-green-500 inline" />}
-                        {isCancelled && <Ban className="h-3.5 w-3.5 text-red-400 inline" />}
-                        {!isCompleted && !isCancelled && (
-                          <div className="h-3.5 w-3.5 rounded-sm bg-neutral-200 inline-block" />
-                        )}
+                        <VisitStatusIcon status={v.status} className="h-3.5 w-3.5 inline" />
                       </td>
                       <td className="px-4 py-2.5 text-neutral-700">{dateStr}</td>
                       <td className="px-4 py-2.5 text-neutral-700">{visitServiceLabel(v)}</td>
@@ -2482,14 +2483,13 @@ function ClientAllVisitsModal({
     }).join(", ");
   }
 
-  const today = new Date().toISOString().slice(0, 10);
   const [historySearch, setHistorySearch] = useState("");
 
   const filtered = visits
     .filter((v: CRMJobVisit) =>
       mode === "upcoming"
-        ? v.scheduledDate >= today && v.status !== "completed" && v.status !== "cancelled"
-        : v.status === "completed" || v.scheduledDate < today
+        ? !TERMINAL_VISIT_STATUSES.has(v.status)
+        : TERMINAL_VISIT_STATUSES.has(v.status)
     )
     .filter((v: CRMJobVisit) => {
       if (!historySearch.trim()) return true;
@@ -2552,8 +2552,6 @@ function ClientAllVisitsModal({
               </thead>
               <tbody className="divide-y">
                 {filtered.map((v: CRMJobVisit) => {
-                  const isCompleted = v.status === "completed";
-                  const isCancelled = v.status === "cancelled";
                   const hours = mode === "history"
                     ? (v.actualHours != null ? `${v.actualHours}hrs` : "0hrs")
                     : (v.budgetedHours != null ? `${v.budgetedHours}hrs` : "—");
@@ -2565,11 +2563,7 @@ function ClientAllVisitsModal({
                       onClick={() => { onClose(); onOpenJob(v.jobId); }}
                     >
                       <td className="px-4 py-2.5 text-center">
-                        {isCompleted && <CheckCircle className="h-3.5 w-3.5 text-green-500 inline" />}
-                        {isCancelled && <Ban className="h-3.5 w-3.5 text-red-400 inline" />}
-                        {!isCompleted && !isCancelled && (
-                          <div className="h-3.5 w-3.5 rounded-sm bg-neutral-200 inline-block" />
-                        )}
+                        <VisitStatusIcon status={v.status} className="h-3.5 w-3.5 inline" />
                       </td>
                       <td className="px-4 py-2.5 text-neutral-700">{fmtDate(v.scheduledDate)}</td>
                       <td className="px-4 py-2.5 text-neutral-700">{visitServiceLabel(v)}</td>

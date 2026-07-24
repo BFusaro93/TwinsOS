@@ -456,6 +456,10 @@ export function JobDetail({ jobId, initialEditing = false }: Props) {
   const jobValueCents = services.length > 0
     ? services.reduce((s, sv) => s + (sv.rateCents ?? 0) * (sv.qty ?? 1), 0)
     : (job.rateCents ?? 0);
+  // A Waiting List job keeps job_type='waiting_list' even after a visit is
+  // dispatched (a job can have multiple line-item visits scheduled out
+  // independently), so show a "Scheduled" qualifier once it has one.
+  const waitingListScheduled = job.jobType === "waiting_list" && visits.length > 0;
 
   // Package jobs never set a single scheduledDate (visits are spread across
   // the season), so fall back to the span of its own visit dates — or the
@@ -499,6 +503,7 @@ export function JobDetail({ jobId, initialEditing = false }: Props) {
               )}
               <span className="ml-2 text-sm font-normal text-slate-400">
                 {JOB_TYPE_LABEL[job.jobType] ?? job.jobType}
+                {waitingListScheduled && " · Scheduled"}
               </span>
             </h1>
             <p className="text-xs text-slate-400 flex items-center gap-2">
@@ -521,7 +526,7 @@ export function JobDetail({ jobId, initialEditing = false }: Props) {
         </div>
 
         <div className="flex items-center gap-1.5">
-          {(job.jobType === "waiting_list" || job.jobType === "package") && (
+          {(job.jobType === "package" || (job.jobType === "waiting_list" && !waitingListScheduled)) && (
             <Button variant="outline" size="sm" className="h-8 text-xs"
               onClick={() => { setTab("visits"); setAddingVisit(true); }}>
               <CalendarPlus className="mr-1 h-3.5 w-3.5 text-brand-500" />
@@ -1726,7 +1731,7 @@ export function JobDetail({ jobId, initialEditing = false }: Props) {
         <div className="w-64 shrink-0 flex flex-col gap-3">
           <div className="rounded-lg border bg-white p-4 shadow-sm text-xs flex flex-col gap-2">
             <p className="font-semibold text-slate-500 text-[10px] uppercase tracking-wide">Job Info</p>
-            <InfoRow icon={<CalendarDays className="h-3.5 w-3.5" />} label="Type" value={JOB_TYPE_LABEL[job.jobType] ?? job.jobType} />
+            <InfoRow icon={<CalendarDays className="h-3.5 w-3.5" />} label="Type" value={(JOB_TYPE_LABEL[job.jobType] ?? job.jobType) + (waitingListScheduled ? " · Scheduled" : "")} />
             <InfoRow icon={<User className="h-3.5 w-3.5" />} label="Crew" value={job.crewName ?? "Unassigned"} />
             <InfoRow icon={<Clock className="h-3.5 w-3.5" />} label="Budgeted" value={job.budgetedHours ? `${job.budgetedHours}h` : "—"} />
             <InfoRow icon={<Receipt className="h-3.5 w-3.5" />} label="Revenue" value={formatCurrency(jobValueCents)} />
