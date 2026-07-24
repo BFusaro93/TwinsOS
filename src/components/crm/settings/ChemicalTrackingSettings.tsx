@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ChevronDown, ChevronUp, Pencil, Star, Trash2, X } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -165,12 +165,29 @@ function GeneralChemicalSettings() {
   );
 }
 
+// Sensible starting points for lists that have well-known standard units —
+// seeded once when an org first opens Chemical Tracking settings with an
+// empty list. Other lookup types (e.g. Areas Treated) are site-specific and
+// have no universal defaults, so they're left for the user to define.
+const DEFAULT_LOOKUP_ITEMS: Partial<Record<ChemicalLookupType, string[]>> = {
+  volume_unit: ["Gallon", "Quart", "Pint", "Fluid Ounce", "Ounce", "Pound"],
+  area_unit: ["Acre", "1,000 Sq Ft", "Square Foot", "Square Yard"],
+};
+
 function LookupListEditor({ listType, addPlaceholder }: { listType: ChemicalLookupType; addPlaceholder: string }) {
-  const { data: items = [] } = useChemicalLookupItems(listType);
+  const { data: items = [], isLoading } = useChemicalLookupItems(listType);
   const create = useCreateChemicalLookupItem();
   const update = useUpdateChemicalLookupItem();
   const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState("");
+  const seededRef = useRef(false);
+
+  useEffect(() => {
+    const defaults = DEFAULT_LOOKUP_ITEMS[listType];
+    if (!defaults || isLoading || seededRef.current || items.length > 0) return;
+    seededRef.current = true;
+    defaults.forEach((name) => create.mutate({ listType, name }));
+  }, [listType, isLoading, items.length, create]);
 
   function commitAdd() {
     if (!newName.trim()) return;
