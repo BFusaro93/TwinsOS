@@ -108,6 +108,7 @@ function DispatchJobsDialog({ jobs, service, onOpenChange, onDone }: DispatchJob
           scheduledDate: date,
           crewId: crewId || null,
           jobServiceId: service?.id ?? null,
+          jobType: job.jobType,
         })
       )
     );
@@ -201,14 +202,12 @@ function WaitingJobRow({
       onClick={onSchedule}
     >
       <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
-        {!service && (
-          <input
-            type="checkbox"
-            checked={selected}
-            onChange={onToggle}
-            className="rounded border-slate-300 accent-brand-500"
-          />
-        )}
+        <input
+          type="checkbox"
+          checked={selected}
+          onChange={onToggle}
+          className="rounded border-slate-300 accent-brand-500"
+        />
       </td>
       {isVisible("client") && (
         <td className="min-w-[200px] px-4 py-3" onClick={(e) => e.stopPropagation()}>

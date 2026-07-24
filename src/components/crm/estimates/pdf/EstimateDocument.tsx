@@ -258,8 +258,7 @@ const S = StyleSheet.create({
   cellService: { flex: 3 },
   cellNum: { flex: 1, textAlign: "right" },
   cellTotal: { flex: 1.2, textAlign: "right" },
-  serviceNameText: { fontSize: 9, fontFamily: "Helvetica-Bold" },
-  serviceDescText: { fontSize: 7.5, color: "#64748b", marginTop: 2, lineHeight: 1.4 },
+  serviceDescText: { fontSize: 7.5, color: "#64748b", lineHeight: 1.4 },
   cellText: { fontSize: 9, color: "#334155" },
 
   // totals
@@ -412,7 +411,6 @@ export function EstimateDocument({ estimate, org }: { estimate: EstimatePDFData;
                 {items.map((li, i) => (
                   <View key={i} style={[S.tableRow, i % 2 === 1 ? S.tableRowAlt : {}]}>
                     <View style={S.cellService}>
-                      <Text style={S.serviceNameText}>{li.serviceName ?? "Service"}</Text>
                       {li.estimateDesc ? (
                         <RichText html={li.estimateDesc} style={S.serviceDescText} />
                       ) : null}
@@ -445,7 +443,6 @@ export function EstimateDocument({ estimate, org }: { estimate: EstimatePDFData;
             {estimate.lineItems.map((li, i) => (
               <View key={i} style={[S.tableRow, i % 2 === 1 ? S.tableRowAlt : {}]}>
                 <View style={S.cellService}>
-                  <Text style={S.serviceNameText}>{li.serviceName ?? "Service"}</Text>
                   {li.estimateDesc ? (
                     <RichText html={li.estimateDesc} style={S.serviceDescText} />
                   ) : null}

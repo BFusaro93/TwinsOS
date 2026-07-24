@@ -30,8 +30,8 @@ import {
 
 const INVOICE_COLUMNS: ColumnDef[] = [
   { key: "number",      label: "Invoice #",  locked: true },
-  { key: "client",      label: "Client" },
   { key: "status",      label: "Status" },
+  { key: "client",      label: "Client" },
   { key: "date",        label: "Date" },
   { key: "due",         label: "Due" },
   { key: "total",       label: "Total" },

@@ -15,7 +15,22 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";
-import { Trash2, Copy, Plus, ChevronDown, ChevronRight, Pencil, Heading2 } from "lucide-react";
+import { Trash2, Copy, Plus, ChevronDown, ChevronRight, Pencil, Heading2, GripVertical } from "lucide-react";
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  verticalListSortingStrategy,
+  useSortable,
+  arrayMove,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { toast } from "sonner";
 import { LineItemNotesPopover, type LineItemNotes } from "./LineItemNotesPopover";
 import { LineItemDiscountPopover, type LineItemDiscountPatch } from "@/components/shared/LineItemDiscountPopover";
@@ -160,6 +175,8 @@ function SectionRow({
   const upsert = useUpsertLineItem();
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(item.sectionName ?? "New Section");
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id });
+  const style = { transform: CSS.Transform.toString(transform), transition };
 
   function saveName() {
     setEditing(false);
@@ -168,9 +185,18 @@ function SectionRow({
   }
 
   return (
-    <tr className="bg-slate-100 border-b border-slate-200">
+    <tr ref={setNodeRef} style={style} className={cn("bg-slate-100 border-b border-slate-200", isDragging && "relative z-10 opacity-70")}>
       <td colSpan={tiersEnabled ? 18 : 17} className="px-3 py-1.5">
         <div className="flex items-center gap-2">
+          <button
+            type="button"
+            {...attributes}
+            {...listeners}
+            className="shrink-0 cursor-grab touch-none text-slate-300 hover:text-slate-500 active:cursor-grabbing"
+            title="Drag to reorder"
+          >
+            <GripVertical className="h-3.5 w-3.5" />
+          </button>
           <Heading2 className="h-3.5 w-3.5 text-slate-400 shrink-0" />
           {editing ? (
             <input
@@ -232,6 +258,8 @@ function LineItemRow({
   const [row, setRow] = useState<RowState>(() => item);
   const [dirty, setDirty] = useState(false);
   const { mutateAsync: upsert, isPending } = useUpsertLineItem();
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id });
+  const dragStyle = { transform: CSS.Transform.toString(transform), transition };
   const [addSubitemOpen, setAddSubitemOpen] = useState(false);
   const { data: subitems = [] } = useLineItemSubitems(item.id);
   const { data: orgSettings } = useOrgSettings();
@@ -337,15 +365,34 @@ function LineItemRow({
   return (
     <>
       {/* ── main row ──────────────────────────────────────────────────────── */}
-      <tr className={cn("group border-b border-slate-100 bg-white text-xs hover:bg-slate-50", selected && "bg-brand-50")}>
-        {/* Checkbox */}
-        <td className="w-8 px-2 py-1.5 text-center">
-          <input
-            type="checkbox"
-            checked={selected}
-            onChange={() => onToggleSelect(row.id)}
-            className="h-3.5 w-3.5 rounded border-slate-300 text-brand-500"
-          />
+      <tr
+        ref={setNodeRef}
+        style={dragStyle}
+        className={cn(
+          "group border-b border-slate-100 bg-white text-xs hover:bg-slate-50",
+          selected && "bg-brand-50",
+          isDragging && "relative z-10 opacity-70"
+        )}
+      >
+        {/* Drag handle + checkbox */}
+        <td className="w-12 px-1 py-1.5">
+          <div className="flex items-center justify-center gap-0.5">
+            <button
+              type="button"
+              {...attributes}
+              {...listeners}
+              className="cursor-grab touch-none text-slate-300 hover:text-slate-500 active:cursor-grabbing"
+              title="Drag to reorder"
+            >
+              <GripVertical className="h-3.5 w-3.5" />
+            </button>
+            <input
+              type="checkbox"
+              checked={selected}
+              onChange={() => onToggleSelect(row.id)}
+              className="h-3.5 w-3.5 rounded border-slate-300 text-brand-500"
+            />
+          </div>
         </td>
 
         {/* Status */}
@@ -678,6 +725,27 @@ export function EstimateLineItemsGrid({ estimateId, items, selectedIds = [], onS
     [upsert, estimateId, items.length]
   );
 
+  const dragSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
+
+  const handleDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      const { active, over } = event;
+      if (!over || active.id === over.id) return;
+      const oldIndex = items.findIndex((i) => i.id === active.id);
+      const newIndex = items.findIndex((i) => i.id === over.id);
+      if (oldIndex === -1 || newIndex === -1) return;
+      const reordered = arrayMove(items, oldIndex, newIndex);
+      reordered.forEach((it, i) => {
+        if (it.sortOrder !== i) {
+          upsert({ estimateId, item: { id: it.id, sort_order: i } }).catch(() =>
+            toast.error("Failed to save new order")
+          );
+        }
+      });
+    },
+    [items, upsert, estimateId]
+  );
+
   async function addService(svc: { name: string; id?: string; unit?: string; productionRate?: number | null; budgetMethod?: BudgetMethod; rateCents?: number | null; estimateDesc?: string | null; invoiceDesc?: string | null }) {
     const unit = svc.unit ?? null;
     const prodRate = svc.productionRate ?? null;
@@ -876,7 +944,7 @@ export function EstimateLineItemsGrid({ estimateId, items, selectedIds = [], onS
         <table className="w-full min-w-[1200px] text-xs">
           <thead className="sticky top-0 text-white" style={{ backgroundColor: orgSettings?.brandColor ?? "#60ab45" }}>
             <tr>
-              <th className="w-8 px-2 py-2 text-center">
+              <th className="w-12 px-1 py-2 text-center">
                 <input
                   type="checkbox"
                   checked={items.length > 0 && selectedIds.length === items.length}
@@ -911,31 +979,35 @@ export function EstimateLineItemsGrid({ estimateId, items, selectedIds = [], onS
                 </td>
               </tr>
             )}
-            {items.map((item) =>
-              item.rowType === "section" ? (
-                <SectionRow
-                  key={item.id}
-                  item={item}
-                  estimateId={estimateId}
-                  onDelete={handleDelete}
-                  tiersEnabled={tiersEnabled}
-                />
-              ) : (
-                <LineItemRow
-                  key={item.id}
-                  item={item}
-                  estimateId={estimateId}
-                  onDelete={handleDelete}
-                  onDuplicate={handleDuplicate}
-                  selected={selectedIds.includes(item.id)}
-                  onToggleSelect={toggleSelect}
-                  expanded={expandedRows.has(item.id)}
-                  onToggleExpand={toggleExpand}
-                  tiersEnabled={tiersEnabled}
-                  discounts={activeDiscounts}
-                />
-              )
-            )}
+            <DndContext sensors={dragSensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+              <SortableContext items={items.map((i) => i.id)} strategy={verticalListSortingStrategy}>
+                {items.map((item) =>
+                  item.rowType === "section" ? (
+                    <SectionRow
+                      key={item.id}
+                      item={item}
+                      estimateId={estimateId}
+                      onDelete={handleDelete}
+                      tiersEnabled={tiersEnabled}
+                    />
+                  ) : (
+                    <LineItemRow
+                      key={item.id}
+                      item={item}
+                      estimateId={estimateId}
+                      onDelete={handleDelete}
+                      onDuplicate={handleDuplicate}
+                      selected={selectedIds.includes(item.id)}
+                      onToggleSelect={toggleSelect}
+                      expanded={expandedRows.has(item.id)}
+                      onToggleExpand={toggleExpand}
+                      tiersEnabled={tiersEnabled}
+                      discounts={activeDiscounts}
+                    />
+                  )
+                )}
+              </SortableContext>
+            </DndContext>
           </tbody>
         </table>
       </div>

@@ -642,7 +642,16 @@ export function ContractDialog({
     endDate: contract?.endDate ?? "",
     lineItems: contract?.invoiceLineItems ?? [],
     defaultService: contract?.defaultService ?? "",
-    monthlyAmounts: contract?.monthlyAmounts ?? {},
+    // Any month not explicitly configured bills at the contract's flat
+    // monthlyAmountCents (same fallback the invoice-generation cron uses) —
+    // pre-fill it here so the grid reflects what will actually be billed
+    // instead of showing $0 for unset months.
+    monthlyAmounts: contract
+      ? MONTHS.reduce((acc, { key }) => {
+          acc[key] = contract.monthlyAmounts[key] ?? contract.monthlyAmountCents ?? 0;
+          return acc;
+        }, {} as MonthlyAmounts)
+      : {},
     billingDayOfMonth: contract?.billingDayOfMonth ?? 1,
     billMonthInAdvance: contract?.billMonthInAdvance ?? false,
     paymentType: contract?.paymentType ?? "",
@@ -677,7 +686,13 @@ export function ContractDialog({
       toast.error("Client and contract name are required");
       return;
     }
-    const totalCents = Object.values(details.monthlyAmounts).reduce((s, v) => s + (v ?? 0), 0);
+    // Billed months are those with a positive amount — averaging over a fixed
+    // 12 undercounts seasonal contracts (e.g. 5 billed months at $750 would
+    // wrongly average to $312.50/mo instead of $750/mo).
+    const billedMonths = Object.values(details.monthlyAmounts).filter((v) => (v ?? 0) > 0);
+    const avgMonthlyCents = billedMonths.length > 0
+      ? Math.round(billedMonths.reduce((s, v) => s + v, 0) / billedMonths.length)
+      : 0;
     try {
       if (isNew) {
         await createContract({
@@ -685,7 +700,7 @@ export function ContractDialog({
           title: details.title,
           startDate: details.startDate || undefined,
           endDate: details.endDate || undefined,
-          monthlyAmountCents: Math.round(totalCents / 12) || 0,
+          monthlyAmountCents: avgMonthlyCents,
           billingDayOfMonth: details.billingDayOfMonth,
           billMonthInAdvance: details.billMonthInAdvance,
           paymentType: details.paymentType || undefined,
@@ -708,7 +723,7 @@ export function ContractDialog({
             title: details.title,
             start_date: details.startDate || null,
             end_date: details.endDate || null,
-            monthly_amount_cents: Math.round(totalCents / 12) || 0,
+            monthly_amount_cents: avgMonthlyCents,
             billing_day_of_month: details.billingDayOfMonth,
             bill_month_in_advance: details.billMonthInAdvance,
             payment_type: details.paymentType || null,

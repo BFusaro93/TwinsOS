@@ -573,14 +573,17 @@ export function useRecordPayment() {
         : activeAllocations.length > 0
           ? `Payment received: ${method}${refLabel}${dateLabel}`
           : `Payment recorded: ${method}${refLabel}${dateLabel}`;
+      // ref_id/ref_table point at the payment itself (not the invoice) so
+      // clicking this activity entry can open the payment's own detail/edit
+      // screen — matches how refunds already reference crm_payments.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await (supabase as any).from("client_activity").insert({
         client_id: clientId,
         activity_type: "payment",
         subject: label,
         amount_cents: amountCents,
-        ref_id: primaryInvoiceId,
-        ref_table: primaryInvoiceId ? "crm_invoices" : null,
+        ref_id: inserted.id,
+        ref_table: "crm_payments",
       });
     },
     onSuccess: (_d, vars) => {
@@ -1055,6 +1058,25 @@ export function usePayments(clientId?: string) {
       if (error) throw error;
       return data.map(mapPaymentFull) as CRMPayment[];
     },
+  });
+}
+
+export function usePayment(id: string | undefined) {
+  return useQuery({
+    queryKey: ["crm-payments", "detail", id],
+    queryFn: async () => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
+        .from("crm_payments")
+        .select("*, clients(display_name, billing_address), crm_invoices(invoice_number)")
+        .eq("id", id)
+        .is("deleted_at", null)
+        .single();
+      if (error) throw error;
+      return mapPaymentFull(data) as CRMPayment;
+    },
+    enabled: !!id,
   });
 }
 

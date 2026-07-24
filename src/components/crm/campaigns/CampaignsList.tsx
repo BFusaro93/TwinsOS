@@ -64,6 +64,7 @@ import {
   PlayCircle,
   Users,
   BarChart2,
+  RotateCcw,
 } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -332,7 +333,10 @@ function CampaignRow({
       : null;
 
   return (
-    <tr className="border-b hover:bg-slate-50 transition-colors">
+    <tr
+      className="cursor-pointer border-b transition-colors hover:bg-slate-50"
+      onClick={() => onEdit(campaign)}
+    >
       <td className="px-4 py-3">
         <div className="flex items-center gap-2.5">
           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-100">
@@ -390,7 +394,7 @@ function CampaignRow({
           ? format(new Date(campaign.sentAt), "MMM d, yyyy")
           : "—"}
       </td>
-      <td className="px-3 py-3 text-right">
+      <td className="px-3 py-3 text-right" onClick={(e) => e.stopPropagation()}>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
@@ -457,7 +461,7 @@ export function CampaignsList() {
   const [deleting, setDeleting] = useState<CRMCampaign | null>(null);
   const [sending, setSending] = useState<CRMCampaign | null>(null);
 
-  const { data: campaigns = [] as CRMCampaign[], isLoading } = useCampaigns();
+  const { data: campaigns = [] as CRMCampaign[], isLoading, refetch: refetchCampaigns } = useCampaigns();
   const { data: allClients = [] } = useClients();
   const { mutateAsync: update } = useUpdateCampaign();
   const { mutateAsync: deleteCampaign, isPending: delPending } = useDeleteCampaign();
@@ -529,50 +533,57 @@ export function CampaignsList() {
         }
       />
 
-      {/* Toolbar */}
-      <div className="flex items-center gap-3 border-b bg-white px-4 py-2 shrink-0">
-        <div className="flex items-center gap-1">
-          {STATUS_TABS.map((t) => {
-            const count =
-              t.key === "all"
-                ? campaigns.length
-                : campaigns.filter((c: CRMCampaign) => c.status === t.key).length;
-            return (
-              <button
-                key={t.key}
-                onClick={() => setStatusTab(t.key)}
-                className={cn(
-                  "rounded px-3 py-1 text-xs font-medium transition-colors",
-                  statusTab === t.key
-                    ? "bg-slate-900 text-white"
-                    : "text-slate-500 hover:bg-slate-100 hover:text-slate-700"
-                )}
-              >
-                {t.label}
-                {count > 0 && (
-                  <span
-                    className={cn(
-                      "ml-1.5 rounded-full px-1.5 py-0.5 text-[10px]",
-                      statusTab === t.key
-                        ? "bg-white/20 text-white"
-                        : "bg-slate-200 text-slate-600"
-                    )}
-                  >
-                    {count}
-                  </span>
-                )}
-              </button>
-            );
-          })}
-        </div>
-        <div className="ml-auto flex items-center gap-2">
-          <div className="relative">
-            <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+      {/* Toolbar — dark actions bar matching Estimates/Invoices */}
+      <div className="flex items-center justify-between bg-[#4a4a4a] px-4 py-2 shrink-0">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => refetchCampaigns()}
+            className="flex h-7 w-7 items-center justify-center rounded border border-[#6a6a6a] bg-[#5a5a5a] text-white hover:bg-[#6a6a6a]"
+            title="Refresh"
+          >
+            <RotateCcw className="h-3.5 w-3.5" />
+          </button>
+          <div className="ml-1 flex items-center gap-1 overflow-x-auto">
+            {STATUS_TABS.map((t) => {
+              const count =
+                t.key === "all"
+                  ? campaigns.length
+                  : campaigns.filter((c: CRMCampaign) => c.status === t.key).length;
+              return (
+                <button
+                  key={t.key}
+                  onClick={() => setStatusTab(t.key)}
+                  className={cn(
+                    "flex items-center gap-1 rounded px-3 py-1 text-xs font-medium transition-colors whitespace-nowrap",
+                    statusTab === t.key
+                      ? "bg-white text-slate-800"
+                      : "text-slate-300 hover:text-white"
+                  )}
+                >
+                  {t.label}
+                  {count > 0 && (
+                    <span
+                      className={cn(
+                        "rounded-full px-1.5 py-0.5 text-[10px] font-semibold",
+                        statusTab === t.key
+                          ? "bg-slate-200 text-slate-700"
+                          : "bg-white/20 text-white"
+                      )}
+                    >
+                      {count}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+          <div className="relative ml-2">
+            <Search className="absolute left-2.5 top-1/2 h-3 w-3 -translate-y-1/2 text-slate-400" />
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search campaigns…"
-              className="h-7 w-52 pl-8 text-xs"
+              className="h-7 w-52 pl-7 text-xs bg-white border-slate-200 focus-visible:ring-0"
             />
           </div>
         </div>

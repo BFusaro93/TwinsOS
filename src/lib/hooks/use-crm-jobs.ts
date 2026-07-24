@@ -557,7 +557,13 @@ export function useVisitsForDate(fromDate: string, toDate?: string) {
         `)
         .is('deleted_at', null)
         .order('priority', { ascending: true })
-        .order('start_time', { ascending: true, nullsFirst: false });
+        .order('start_time', { ascending: true, nullsFirst: false })
+        // Final deterministic tiebreaker — visits sharing the same priority
+        // (the common case before any manual route reorder) and no start_time
+        // otherwise have no stable order, so Postgres can return them in a
+        // different sequence on every refetch, which reads as "the route
+        // reorders itself" after any unrelated edit.
+        .order('created_at', { ascending: true });
 
       if (toDate && toDate !== fromDate) {
         q = q.gte('scheduled_date', fromDate).lte('scheduled_date', toDate);
@@ -600,6 +606,9 @@ export function useCreateVisit() {
       stormEventId?: string | null;
       orderNum?: number | null;
       jobServiceId?: string | null;
+      /** Current job_type of the parent job, e.g. from a Waiting List dispatch —
+       * used to graduate a waiting_list job into a concretely scheduled one below. */
+      jobType?: string;
     }) => {
       const supabase = createClient();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -624,9 +633,25 @@ export function useCreateVisit() {
       if (error) throw error;
 
       // Cascade crew assignment to parent job so it shows everywhere
-      if (values.crewId !== undefined) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const jobUpdate: Record<string, any> = {};
+      if (values.crewId !== undefined) jobUpdate.crew_id = values.crewId ?? null;
+
+      // Dispatching a Waiting List job's first visit only ever created the visit
+      // row — the parent job stayed job_type='waiting_list' with scheduled_date
+      // null forever, so every OTHER view that reads job-level fields (job side
+      // panel top bar, client profile upcoming/history icons, jobs list date
+      // column) kept showing it as an unscheduled waiting-list entry even
+      // though the dispatch board correctly showed the visit as dispatched.
+      // Graduate the job out of waiting_list once it has a real scheduled visit.
+      if (values.jobType === 'waiting_list') {
+        jobUpdate.job_type = 'one_time';
+        jobUpdate.scheduled_date = values.scheduledDate;
+      }
+
+      if (Object.keys(jobUpdate).length > 0) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await (supabase as any).from('crm_jobs').update({ crew_id: values.crewId ?? null }).eq('id', values.jobId);
+        await (supabase as any).from('crm_jobs').update(jobUpdate).eq('id', values.jobId);
       }
 
       return mapVisit(data);
@@ -877,6 +902,9 @@ export function useCreateClientJob() {
         .single();
       if (error) throw error;
 
+      // sort_order -> inserted crm_job_services.id, used below to link each
+      // package visit to the specific service/visit it was generated from.
+      let serviceIdBySortOrder: Record<number, string> = {};
       if (values.services.length > 0) {
         const jobId = (data as { id: string }).id;
         const serviceRows = values.services.map((s, i) => ({
@@ -899,8 +927,13 @@ export function useCreateClientJob() {
           sort_order: i,
         }));
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { error: svcErr } = await (supabase as any).from('crm_job_services').insert(serviceRows);
+        const { data: insertedServices, error: svcErr } = await (supabase as any)
+          .from('crm_job_services')
+          .insert(serviceRows)
+          .select('id, sort_order');
         if (svcErr) throw svcErr;
+        serviceIdBySortOrder = ((insertedServices ?? []) as { id: string; sort_order: number }[])
+          .reduce<Record<number, string>>((acc, row) => { acc[row.sort_order] = row.id; return acc; }, {});
       }
 
       const job = data as { id: string };
@@ -925,10 +958,12 @@ export function useCreateClientJob() {
       // schedule (see NewJobDialog.pickPackage). Create one visit per dated row.
       if (values.jobType === 'package') {
         const visitRows = values.services
-          .filter((s) => s.startDate)
-          .map((s) => ({
+          .map((s, i) => ({ s, i }))
+          .filter(({ s }) => s.startDate)
+          .map(({ s, i }) => ({
             job_id: job.id,
             client_id: values.clientId,
+            job_service_id: serviceIdBySortOrder[i] ?? null,
             scheduled_date: s.startDate,
             status: 'scheduled',
             crew_id: values.crewId || null,

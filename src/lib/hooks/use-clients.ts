@@ -291,7 +291,7 @@ export function useClientActivity(clientId: string) {
         .from("client_activity")
         .select("*, profiles(name)")
         .eq("client_id", clientId)
-        .order("created_at", { ascending: false });
+        .order("occurred_at", { ascending: false });
       if (error) throw error;
       return (data.map(mapActivity)) as ClientActivity[];
     },

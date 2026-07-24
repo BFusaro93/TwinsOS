@@ -24,7 +24,7 @@ import {
 import { TagEditor } from "@/components/crm/TagEditor";
 import { useTicket } from "@/lib/hooks/use-tickets";
 import { useClientJobs, useUpdateJobStatus, useJobVisits, useClientAllVisits, useAllCRMServices } from "@/lib/hooks/use-crm-jobs";
-import { useInvoices, usePayments } from "@/lib/hooks/use-invoices";
+import { useInvoices, usePayments, usePayment } from "@/lib/hooks/use-invoices";
 import { useEstimates } from "@/lib/hooks/use-estimates";
 import { useContracts } from "@/lib/hooks/use-contracts";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -2622,6 +2622,7 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
   const [linkParentOpen, setLinkParentOpen] = useState(false);
   const [newTicketOpen, setNewTicketOpen] = useState(false);
   const [openTicketId, setOpenTicketId] = useState<string | null>(null);
+  const [openPaymentId, setOpenPaymentId] = useState<string | null>(null);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [portalInviteOpen, setPortalInviteOpen] = useState(false);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
@@ -2631,6 +2632,7 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
   const { mutate: removeTag } = useRemoveClientTag();
   const orgTags = useOrgTags();
   const { data: openTicket } = useTicket(openTicketId ?? "");
+  const { data: openPayment } = usePayment(openPaymentId ?? undefined);
   const router = useRouter();
   const isLead = client?.status === "lead";
   const hasChildren = (childClients ?? []).length > 0;
@@ -3125,7 +3127,11 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
         </TabsContent>
 
         <TabsContent value="activity" className="m-0 min-h-[500px]">
-          <ActivityTimeline clientId={clientId} onTicketClick={(id) => setOpenTicketId(id)} />
+          <ActivityTimeline
+            clientId={clientId}
+            onTicketClick={(id) => setOpenTicketId(id)}
+            onPaymentClick={(id) => setOpenPaymentId(id)}
+          />
         </TabsContent>
 
         <TabsContent value="tickets" className="m-0 p-4">
@@ -3240,6 +3246,11 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
       <TicketDetailSheet
         ticket={openTicket ?? null}
         onClose={() => setOpenTicketId(null)}
+      />
+      <AddPaymentDialog
+        open={!!openPaymentId}
+        onOpenChange={(o) => { if (!o) setOpenPaymentId(null); }}
+        payment={openPayment}
       />
     </div>
   );

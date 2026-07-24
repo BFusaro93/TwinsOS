@@ -159,6 +159,24 @@ const DEFAULT_REQUIRED_FIELDS: RequiredFieldsConfig = {
     { field: "model",         label: "Model",         requirement: "optional", isBuiltIn: true },
     { field: "mileage",       label: "Mileage",       requirement: "optional", isBuiltIn: true },
   ],
+  client: [
+    { field: "primary_phone",  label: "Phone",           requirement: "optional", isBuiltIn: true },
+    { field: "primary_email",  label: "Email",           requirement: "optional", isBuiltIn: true },
+  ],
+  ticket: [
+    { field: "client",      label: "Client",       requirement: "optional", isBuiltIn: true },
+    { field: "assigned_to", label: "Assigned To",  requirement: "optional", isBuiltIn: true },
+    { field: "due_date",    label: "Due Date",     requirement: "optional", isBuiltIn: true },
+  ],
+  estimate: [
+    { field: "sales_rep",  label: "Sales Rep",  requirement: "optional", isBuiltIn: true },
+    { field: "valid_until",label: "Valid Until",requirement: "optional", isBuiltIn: true },
+  ],
+  job: [
+    { field: "crew",       label: "Crew",        requirement: "optional", isBuiltIn: true },
+    { field: "sales_rep",  label: "Sales Rep",   requirement: "optional", isBuiltIn: true },
+    { field: "source",     label: "Source",      requirement: "optional", isBuiltIn: true },
+  ],
 };
 
 // ── Quick Reference Part # Fields ────────────────────────────────────────────

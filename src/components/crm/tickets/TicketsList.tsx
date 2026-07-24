@@ -9,6 +9,7 @@ import {
   useBulkImportTickets,
 } from "@/lib/hooks/use-tickets";
 import { useClients } from "@/lib/hooks/use-clients";
+import { useRequiredFields } from "@/lib/hooks/use-required-fields";
 import { useEmployees } from "@/lib/hooks/use-employees";
 import { TicketDetailSheet } from "./TicketDetailSheet";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -131,6 +132,7 @@ export function NewTicketDialog({ open, onOpenChange, defaultClientId, defaultTy
   const { data: clients } = useClients();
   const { data: employees } = useEmployees();
   const createTicket = useCreateTicket();
+  const rf = useRequiredFields("ticket");
   const { data: categoryOptions } = useOrgList("ticket_categories");
   const dialogCategories = categoryOptions && categoryOptions.length > 0
     ? categoryOptions.map((o) => o.value)
@@ -161,7 +163,16 @@ export function NewTicketDialog({ open, onOpenChange, defaultClientId, defaultTy
     setForm((prev) => ({ ...prev, [key]: value }));
   }
 
+  function missingRequiredField(): string | null {
+    if (rf.isRequired("client") && !form.clientId) return "Client is required";
+    if (rf.isRequired("assigned_to") && !form.assignedTo.trim()) return "Assigned To is required";
+    if (rf.isRequired("due_date") && !form.dueDate.trim()) return "Due Date is required";
+    return null;
+  }
+
   async function handleSave() {
+    const missing = missingRequiredField();
+    if (missing) { toast.error(missing); return; }
     await createTicket.mutateAsync(form);
     onOpenChange(false);
     setForm({
@@ -214,7 +225,7 @@ export function NewTicketDialog({ open, onOpenChange, defaultClientId, defaultTy
           </div>
 
           <div className="space-y-1.5">
-            <Label>Client</Label>
+            <Label>Client{rf.req("client")}</Label>
             <div className="relative">
               <button
                 type="button"
@@ -345,7 +356,7 @@ export function NewTicketDialog({ open, onOpenChange, defaultClientId, defaultTy
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label>Assigned To</Label>
+              <Label>Assigned To{rf.req("assigned_to")}</Label>
               <Select
                 value={form.assignedTo || "unassigned"}
                 onValueChange={(v) => set("assignedTo", v === "unassigned" ? "" : v)}
@@ -366,7 +377,7 @@ export function NewTicketDialog({ open, onOpenChange, defaultClientId, defaultTy
             </div>
 
             <div className="space-y-1.5">
-              <Label>Due Date</Label>
+              <Label>Due Date{rf.req("due_date")}</Label>
               <Input
                 type="date"
                 value={form.dueDate}
@@ -381,7 +392,7 @@ export function NewTicketDialog({ open, onOpenChange, defaultClientId, defaultTy
           <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button size="sm" onClick={handleSave} disabled={createTicket.isPending}>
+          <Button size="sm" onClick={handleSave} disabled={createTicket.isPending || !!missingRequiredField()}>
             {createTicket.isPending ? "Saving…" : "Save"}
           </Button>
         </DialogFooter>

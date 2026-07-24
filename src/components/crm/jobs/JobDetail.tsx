@@ -67,7 +67,7 @@ import {
 import { ChemicalApplicationPanel } from "@/components/crm/chemical/ChemicalApplicationPanel";
 import { createClient } from "@/lib/supabase/client";
 import { computeJobServiceBudgetedHours } from "@/lib/estimate-calc";
-import type { CRMJobVisit } from "@/types/crm-jobs";
+import type { CRMJobVisit, CRMJobService } from "@/types/crm-jobs";
 import { JobCostingTab } from "@/components/crm/jobs/JobCostingTab";
 
 const STATUS_COLOR: Record<string, string> = {
@@ -294,6 +294,7 @@ export function JobDetail({ jobId, initialEditing = false }: Props) {
         scheduledDate: newVisitDate,
         crewId: newVisitCrew || null,
         invoiceDescription: newVisitInvoiceDesc || null,
+        jobType: job.jobType,
       });
       setAddingVisit(false);
       setNewVisitInvoiceDesc("");
@@ -1560,6 +1561,7 @@ export function JobDetail({ jobId, initialEditing = false }: Props) {
                     )}
                     {visits.map((v) => (
                       <VisitRow key={v.id} visit={v}
+                        services={services}
                         jobId={job.id}
                         propertyId={job.propertyId}
                         isChemicalJob={isChemicalJob}
@@ -1738,6 +1740,7 @@ export function JobDetail({ jobId, initialEditing = false }: Props) {
 
 function VisitRow({
   visit,
+  services,
   jobId,
   propertyId,
   isChemicalJob,
@@ -1747,6 +1750,7 @@ function VisitRow({
   onSkip,
 }: {
   visit: CRMJobVisit;
+  services: CRMJobService[];
   jobId: string;
   propertyId: string | null;
   isChemicalJob: boolean;
@@ -1755,6 +1759,19 @@ function VisitRow({
   onSaveInvoiceDesc: (desc: string) => Promise<void>;
   onSkip: (reason: string) => Promise<void>;
 }) {
+  // Package visits are tied to a specific service row that carries its own
+  // date window (e.g. "Fert 2 of 5" is due anytime 8/1–8/31) — show that
+  // window instead of just the single day this visit happens to be scheduled
+  // for, so the range the office promised the client stays visible.
+  const linkedService = visit.jobServiceId ? services.find((s) => s.id === visit.jobServiceId) : null;
+  const fmtSlash = (d: string) => {
+    const dt = new Date(d + "T00:00:00");
+    return `${dt.getMonth() + 1}/${dt.getDate()}/${String(dt.getFullYear()).slice(-2)}`;
+  };
+  const serviceWindow =
+    linkedService?.startDate && linkedService?.completeByDate && linkedService.startDate !== linkedService.completeByDate
+      ? `${fmtSlash(linkedService.startDate)} to ${fmtSlash(linkedService.completeByDate)}`
+      : null;
   const [editingNote, setEditingNote] = useState(false);
   const [noteVal, setNoteVal] = useState(visit.notesToCrew ?? "");
   const [editingInvoiceDesc, setEditingInvoiceDesc] = useState(false);
@@ -1769,11 +1786,13 @@ function VisitRow({
     <>
       <tr className="group border-b last:border-0 hover:bg-slate-50">
         <td className="px-4 py-3 text-slate-700">
-          {visit.scheduledDate
-            ? new Date(visit.scheduledDate + "T00:00:00").toLocaleDateString("en-US", {
-                weekday: "short", month: "short", day: "numeric",
-              })
-            : "—"}
+          {serviceWindow
+            ? serviceWindow
+            : visit.scheduledDate
+              ? new Date(visit.scheduledDate + "T00:00:00").toLocaleDateString("en-US", {
+                  weekday: "short", month: "short", day: "numeric",
+                })
+              : "—"}
         </td>
         <td className="px-4 py-3 text-slate-600">{visit.crewName ?? <span className="italic text-slate-400">Unassigned</span>}</td>
         <td className="px-4 py-3 text-right tabular-nums">{visit.actualHours?.toFixed(1) ?? "—"}</td>

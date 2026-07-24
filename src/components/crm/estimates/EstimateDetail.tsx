@@ -1329,7 +1329,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                 </FieldRow>
               </div>
               {((headerEdits.payment_plan_type as string) ?? estimate.paymentPlanType) === "milestones" && (
-                <div className="mt-4 flex flex-col gap-1.5 border-t pt-4 max-w-xl">
+                <div className="mt-4 flex flex-col gap-1.5 border-t pt-4">
                   <Label className="text-xs font-medium text-slate-600">Milestones</Label>
                   <EstimateMilestonesEditor
                     estimateId={estimate.id}

@@ -19,11 +19,11 @@ import {
 } from "@/lib/hooks/use-invoice-pdf-templates";
 import type { InvoicePDFLayoutKey } from "@/types/crm-invoices";
 
-// Only "default" ships today. Add an entry here when a new layoutKey is
-// implemented in InvoiceDocument.tsx (e.g. after importing a customer's own
-// Service Autopilot-style template as a new layout).
+// Add an entry here when a new layoutKey is implemented in InvoiceDocument.tsx
+// (e.g. after importing a customer's own Service Autopilot-style template).
 const LAYOUT_OPTIONS: { value: InvoicePDFLayoutKey; label: string }[] = [
   { value: "default", label: "Default" },
+  { value: "compact", label: "Compact" },
 ];
 
 export function InvoiceTemplatesEditor() {
@@ -124,8 +124,8 @@ export function InvoiceTemplatesEditor() {
       )}
 
       <p className="pt-3 text-xs text-slate-400">
-        The starred template is used for all invoices by default. Only the built-in Default layout is
-        available today — additional layouts can be added here once designed.
+        The starred template is used for all invoices by default. Choose a format when adding a
+        template — additional formats can be added here once designed.
       </p>
     </div>
   );

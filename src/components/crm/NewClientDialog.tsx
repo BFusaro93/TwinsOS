@@ -23,6 +23,7 @@ import { useCreateClient, useClient } from "@/lib/hooks/use-clients";
 import { EditClientDialogExport } from "./ClientDetailPanel";
 import { toast } from "sonner";
 import type { Client } from "@/types/crm";
+import { useRequiredFields } from "@/lib/hooks/use-required-fields";
 
 interface Props {
   open: boolean;
@@ -32,6 +33,7 @@ interface Props {
 
 export function NewClientDialog({ open, onOpenChange, onCreated }: Props) {
   const { mutateAsync: createClient, isPending } = useCreateClient();
+  const rf = useRequiredFields("client");
 
   const [displayName, setDisplayName] = useState("");
   const [accountType, setAccountType] = useState<"residential" | "commercial">("residential");
@@ -45,6 +47,8 @@ export function NewClientDialog({ open, onOpenChange, onCreated }: Props) {
 
   async function handleCreate() {
     if (!displayName.trim()) { toast.error("Display name is required"); return; }
+    if (rf.isRequired("primary_phone") && !primaryPhone.trim()) { toast.error("Phone is required"); return; }
+    if (rf.isRequired("primary_email") && !primaryEmail.trim()) { toast.error("Email is required"); return; }
     try {
       const client = await createClient({
         displayName: displayName.trim(),
@@ -113,23 +117,27 @@ export function NewClientDialog({ open, onOpenChange, onCreated }: Props) {
             </div>
 
             <div className="grid grid-cols-2 gap-3">
-              <div className="flex flex-col gap-1.5">
-                <Label>Phone</Label>
-                <PhoneInput
-                  value={primaryPhone}
-                  onChange={setPrimaryPhone}
-                  placeholder="(978) 555-0100"
-                />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <Label>Email</Label>
-                <Input
-                  value={primaryEmail}
-                  onChange={(e) => setPrimaryEmail(e.target.value)}
-                  type="email"
-                  placeholder="client@email.com"
-                />
-              </div>
+              {rf.isVisible("primary_phone") && (
+                <div className="flex flex-col gap-1.5">
+                  <Label>Phone{rf.req("primary_phone")}</Label>
+                  <PhoneInput
+                    value={primaryPhone}
+                    onChange={setPrimaryPhone}
+                    placeholder="(978) 555-0100"
+                  />
+                </div>
+              )}
+              {rf.isVisible("primary_email") && (
+                <div className="flex flex-col gap-1.5">
+                  <Label>Email{rf.req("primary_email")}</Label>
+                  <Input
+                    value={primaryEmail}
+                    onChange={(e) => setPrimaryEmail(e.target.value)}
+                    type="email"
+                    placeholder="client@email.com"
+                  />
+                </div>
+              )}
             </div>
 
             <p className="text-xs text-slate-400">
@@ -139,7 +147,15 @@ export function NewClientDialog({ open, onOpenChange, onCreated }: Props) {
 
           <DialogFooter>
             <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-            <Button onClick={() => void handleCreate()} disabled={isPending || !displayName.trim()}>
+            <Button
+              onClick={() => void handleCreate()}
+              disabled={
+                isPending ||
+                !displayName.trim() ||
+                (rf.isRequired("primary_phone") && !primaryPhone.trim()) ||
+                (rf.isRequired("primary_email") && !primaryEmail.trim())
+              }
+            >
               {isPending ? "Creating…" : "Create & Continue →"}
             </Button>
           </DialogFooter>

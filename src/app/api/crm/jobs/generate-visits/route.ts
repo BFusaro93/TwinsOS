@@ -152,28 +152,32 @@ await (supabase as any).from("crm_jobs").select("*" as any).eq("id", jobId).sing
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: jobServices } = await (supabase as any)
       .from("crm_job_services")
-      .select("start_date")
+      .select("id, start_date")
       .eq("job_id", jobId);
 
-    const dates: string[] = Array.from(new Set(
-      (jobServices ?? [])
-        .map((s: { start_date: string | null }) => s.start_date)
-        .filter((d: string | null): d is string => !!d)
-    ));
+    const dated = (jobServices ?? []).filter(
+      (s: { id: string; start_date: string | null }): s is { id: string; start_date: string } => !!s.start_date
+    );
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: existingVisits } = await (supabase as any)
       .from("crm_job_visits")
-      .select("scheduled_date")
+      .select("job_service_id, scheduled_date")
       .eq("job_id", jobId)
       .is("deleted_at", null);
-    const existingSet = new Set((existingVisits ?? []).map((v: { scheduled_date: string }) => v.scheduled_date));
+    // Visits created before job_service_id existed only have a date to dedupe
+    // against — keep checking dates too so re-running this doesn't double them up.
+    const existingServiceIds = new Set(
+      (existingVisits ?? []).map((v: { job_service_id: string | null }) => v.job_service_id).filter(Boolean)
+    );
+    const existingDates = new Set((existingVisits ?? []).map((v: { scheduled_date: string }) => v.scheduled_date));
 
-    const toInsert = dates
-      .filter((d) => !existingSet.has(d))
-      .map((d) => ({
+    const toInsert = dated
+      .filter((s: { id: string; start_date: string }) => !existingServiceIds.has(s.id) && !existingDates.has(s.start_date))
+      .map((s: { id: string; start_date: string }) => ({
         job_id: jobId, client_id: jobAny.client_id,
-        crew_id: jobAny.crew_id ?? null, scheduled_date: d,
+        crew_id: jobAny.crew_id ?? null, scheduled_date: s.start_date,
+        job_service_id: s.id,
         priority: jobAny.priority ?? 1, notes_to_crew: jobAny.notes_to_crew ?? null,
       }));
 

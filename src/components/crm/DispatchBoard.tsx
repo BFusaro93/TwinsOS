@@ -1305,6 +1305,9 @@ function VisitRow({
               {!crewNote && latestComment && (
                 <span className="truncate text-[11px] text-slate-400 italic" title={latestComment.text}>{latestComment.text}</span>
               )}
+              {!crewNote && !latestComment && visit.job?.notes && (
+                <span className="truncate text-[11px] text-slate-400 italic" title={visit.job.notes}>{visit.job.notes}</span>
+              )}
             </div>
           </td>
         );
