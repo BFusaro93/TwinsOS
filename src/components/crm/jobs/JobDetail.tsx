@@ -1582,6 +1582,7 @@ export function JobDetail({ jobId, initialEditing = false, onClose }: Props) {
                         jobId={job.id}
                         propertyId={job.propertyId}
                         isChemicalJob={isChemicalJob}
+                        isSlideover={!!onClose}
                         onDelete={async () => {
                           if (!confirm("Delete this visit?")) return;
                           await deleteVisit.mutateAsync(v.id);
@@ -1761,6 +1762,7 @@ function VisitRow({
   jobId,
   propertyId,
   isChemicalJob,
+  isSlideover,
   onDelete,
   onSaveNote,
   onSaveInvoiceDesc,
@@ -1771,6 +1773,7 @@ function VisitRow({
   jobId: string;
   propertyId: string | null;
   isChemicalJob: boolean;
+  isSlideover: boolean;
   onDelete: () => void;
   onSaveNote: (note: string) => Promise<void>;
   onSaveInvoiceDesc: (desc: string) => Promise<void>;
@@ -1826,10 +1829,14 @@ function VisitRow({
         <td className="px-4 py-3 text-right tabular-nums">{visitBudgetedHours ? `${visitBudgetedHours}h` : "—"}</td>
         <td className="px-4 py-3 text-right tabular-nums">{visit.actualHours?.toFixed(1) ?? "—"}</td>
         <td className="px-4 py-3 text-center">
-          <Badge className={cn(
-            "gap-1 text-[10px] hover:bg-slate-700 hover:text-white",
-            VISIT_STATUS_COLOR[visit.status] ?? "bg-slate-50 text-slate-500"
-          )}>
+          <Badge
+            variant={isSlideover ? "outline" : "default"}
+            className={cn(
+              "gap-1 text-[10px] border-transparent",
+              !isSlideover && "hover:bg-slate-700 hover:text-white",
+              VISIT_STATUS_COLOR[visit.status] ?? "bg-slate-50 text-slate-500"
+            )}
+          >
             <VisitStatusIcon status={visit.status} className="h-3 w-3" />
             {visit.status}
           </Badge>

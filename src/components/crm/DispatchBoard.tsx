@@ -166,11 +166,13 @@ function JobDetailSheet({
   open,
   onOpenChange,
   crews,
+  onEditTimes,
 }: {
   visit: CRMJobVisit;
   open: boolean;
   onOpenChange: (o: boolean) => void;
   crews: { id: string; name: string }[];
+  onEditTimes: (v: CRMJobVisit) => void;
 }) {
   const { mutateAsync: updateVisit, isPending } = useUpdateVisit();
   const router = useRouter();
@@ -196,6 +198,7 @@ function JobDetailSheet({
   const [endTime,     setEndTime]     = useState(visit.endTime ?? "");
   const [actualHours, setActualHours] = useState(String(visit.actualHours ?? ""));
   const [menCount,    setMenCount]    = useState(String(visit.menCount));
+  const [budgetedHoursInput, setBudgetedHoursInput] = useState(String(visit.budgetedHours ?? job?.budgetedHours ?? ""));
   const [qty,         setQty]         = useState(String(visit.qty ?? ""));
   const [rateCents,   setRateCents]   = useState(
     String(visit.rateCents != null ? visit.rateCents / 100
@@ -206,8 +209,25 @@ function JobDetailSheet({
 
   // Sync crewId when the visit prop updates (e.g. after drag-assign or propagate)
   useEffect(() => { setCrewId(visit.crewId ?? job?.crewId ?? ""); }, [visit.id, visit.crewId, job?.crewId]);
+  // Same for Start/End — otherwise an edit made elsewhere (e.g. the dispatch
+  // board row's own inline Start/End inputs) never shows up here.
+  useEffect(() => { setStartTime(visit.startTime ?? ""); }, [visit.id, visit.startTime]);
+  useEffect(() => { setEndTime(visit.endTime ?? ""); }, [visit.id, visit.endTime]);
+  useEffect(() => {
+    setBudgetedHoursInput(String(visit.budgetedHours ?? job?.budgetedHours ?? ""));
+  }, [visit.id, visit.budgetedHours, job?.budgetedHours]);
 
-  const [editTimesOpen, setEditTimesOpen] = useState(false);
+  // Appointment Start/End auto-save on blur (like the row's own inline inputs)
+  // instead of requiring the batched Save button below — that button also
+  // commits status/crew/rate together, which is easy to skip when all you
+  // meant to do was fix a time.
+  async function saveAppointmentTime(field: "start_time" | "end_time", value: string) {
+    try {
+      await updateVisit({ id: visit.id, updates: { [field]: value || null } });
+    } catch {
+      toast.error("Failed to save time");
+    }
+  }
 
   // Notes state
   const [newComment,    setNewComment]    = useState("");
@@ -219,7 +239,6 @@ function JobDetailSheet({
   const amt = visit.rateCents != null ? visit.rateCents
             : job?.rateCents != null ? job.rateCents
             : serviceTotal;
-  const budgetedHours = job?.budgetedHours;
 
   async function handleSave() {
     const updates: Parameters<typeof updateVisit>[0]["updates"] = {
@@ -229,6 +248,7 @@ function JobDetailSheet({
       start_time: startTime || null,
       end_time: endTime || null,
       actual_hours: actualHours ? parseFloat(actualHours) : null,
+      budgeted_hours: budgetedHoursInput ? parseFloat(budgetedHoursInput) : null,
       men_count: parseInt(menCount) || 0,
       qty: qty ? parseFloat(qty) : null,
       rate_cents: rateCents ? Math.round(parseFloat(rateCents) * 100) : null,
@@ -300,7 +320,6 @@ function JobDetailSheet({
   }
 
   return (
-    <>
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side="right"
@@ -436,6 +455,7 @@ function JobDetailSheet({
                     type="time"
                     value={startTime}
                     onChange={(e) => setStartTime(e.target.value)}
+                    onBlur={() => saveAppointmentTime("start_time", startTime)}
                     className="h-7 text-xs"
                   />
                 </div>
@@ -449,6 +469,7 @@ function JobDetailSheet({
                     type="time"
                     value={endTime}
                     onChange={(e) => setEndTime(e.target.value)}
+                    onBlur={() => saveAppointmentTime("end_time", endTime)}
                     className="h-7 text-xs"
                   />
                 </div>
@@ -457,7 +478,7 @@ function JobDetailSheet({
                 variant="outline"
                 size="sm"
                 className="mt-2 h-7 text-xs"
-                onClick={() => setEditTimesOpen(true)}
+                onClick={() => onEditTimes(visit)}
               >
                 <Clock className="mr-1.5 h-3 w-3" />
                 Edit Job Times
@@ -469,7 +490,12 @@ function JobDetailSheet({
               <div className="border-b bg-white">
                 <TabsList className="h-9 rounded-none bg-transparent justify-start px-4 gap-0">
                   {(["job-notes","job-comments","client-notes","invoice-desc"] as const).map((v, i) => {
-                    const cnt = v === "job-notes" ? visit.jobComments.length + ((visit.notesToCrew ?? visit.job?.notesToCrew) ? 1 : 0) : 0;
+                    // Job Notes = instructions to the crew (notesToCrew). Job Comments =
+                    // scheduling remarks / crew-tablet submissions (jobComments) — kept as
+                    // two distinct counts so a new comment doesn't read as a new "note".
+                    const cnt = v === "job-notes" ? ((visit.notesToCrew ?? visit.job?.notesToCrew) ? 1 : 0)
+                      : v === "job-comments" ? visit.jobComments.length
+                      : 0;
                     const labels = ["Job Notes","Job Comments","Notes to Client","Invoice Desc."];
                     return (
                       <TabsTrigger
@@ -484,34 +510,25 @@ function JobDetailSheet({
                 </TabsList>
               </div>
 
-              {/* Job Notes */}
+              {/* Job Notes — instructions to the crew (notesToCrew), similar to an
+                  estimate instruction. Distinct from Job Comments below. */}
               <TabsContent value="job-notes" className="m-0 flex-1 p-4">
-                {(visit.notesToCrew ?? visit.job?.notesToCrew) && (
-                  <div className="mb-3 rounded border border-yellow-200 bg-yellow-50 px-3 py-2.5">
+                {(visit.notesToCrew ?? visit.job?.notesToCrew) ? (
+                  <div className="rounded border border-yellow-200 bg-yellow-50 px-3 py-2.5">
                     <p className="text-xs text-slate-700 whitespace-pre-wrap">{visit.notesToCrew ?? visit.job?.notesToCrew}</p>
                   </div>
-                )}
-                {visit.jobComments.length > 0 && (
-                  <div className="space-y-2">
-                    {visit.jobComments.map((c) => (
-                      <div key={c.id} className="rounded bg-slate-50 border px-3 py-2">
-                        <p className="text-[10px] font-semibold text-slate-500 mb-0.5">{c.authorName}</p>
-                        <p className="text-xs text-slate-700">{c.text}</p>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                {!(visit.notesToCrew ?? visit.job?.notesToCrew) && visit.jobComments.length === 0 && (
+                ) : (
                   <p className="text-xs text-slate-400 italic">No job notes yet</p>
                 )}
               </TabsContent>
 
-              {/* Job Comments */}
+              {/* Job Comments — scheduling remarks and notes submitted by the crew
+                  from their tablet back to the office. Distinct from Job Notes above. */}
               <TabsContent value="job-comments" className="m-0 p-4 space-y-3">
                 {visit.jobComments.length > 0 && (
                   <div className="space-y-2 mb-3">
                     {visit.jobComments.map((c) => (
-                      <div key={c.id} className="rounded bg-slate-50 border px-3 py-2">
+                      <div key={c.id} className="rounded bg-orange-50/70 border border-orange-100 px-3 py-2">
                         <p className="text-[10px] font-semibold text-slate-500 mb-0.5">{c.authorName}</p>
                         <p className="text-xs text-slate-700">{c.text}</p>
                       </div>
@@ -639,9 +656,12 @@ function JobDetailSheet({
 
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-[11px] text-slate-500">B. Hours</span>
-                  <span className="text-[11px] font-medium text-slate-700 text-right">
-                    {budgetedHours != null ? budgetedHours.toFixed(2) : "—"}
-                  </span>
+                  <Input
+                    type="number" step="0.25" min={0} value={budgetedHoursInput}
+                    onChange={(e) => setBudgetedHoursInput(e.target.value)}
+                    className="h-6 w-16 text-[11px] text-right px-1"
+                    placeholder="0.00"
+                  />
                 </div>
 
                 <div className="flex items-center justify-between gap-2">
@@ -724,14 +744,6 @@ function JobDetailSheet({
         </div>
       </SheetContent>
     </Sheet>
-    <EditJobTimesDialog
-      open={editTimesOpen}
-      onOpenChange={setEditTimesOpen}
-      visitId={visit.id}
-      visitDate={visit.scheduledDate}
-      crewId={crewId || null}
-    />
-    </>
   );
 }
 
@@ -782,7 +794,7 @@ function PrintDialog({
                 <td className="border border-slate-200 px-2 py-1">{addr || "—"}</td>
                 <td className="border border-slate-200 px-2 py-1">{svc || "—"}</td>
                 <td className="border border-slate-200 px-2 py-1">{v.startTime ?? "—"}</td>
-                <td className="border border-slate-200 px-2 py-1 text-center">{job?.budgetedHours?.toFixed(1) ?? "—"}</td>
+                <td className="border border-slate-200 px-2 py-1 text-center">{(v.budgetedHours ?? job?.budgetedHours)?.toFixed(1) ?? "—"}</td>
                 <td className="border border-slate-200 px-2 py-1 italic text-slate-600">{(v as any).notesToCrew ?? ""}</td>
               </tr>
             );
@@ -1136,15 +1148,15 @@ function EditJobTimeRow({
   }, [clockedInAt, clockedOutAt, visitDate]);
 
   return (
-    <div className="flex items-center gap-2 py-1.5">
-      <span className="w-32 shrink-0 truncate text-sm text-slate-700">{memberName}</span>
+    <div className="flex flex-wrap items-center gap-1.5 py-1.5">
+      <span className="w-28 shrink-0 truncate text-sm text-slate-700">{memberName}</span>
       <Input type="date" value={date} onChange={(e) => setDate(e.target.value)}
-        onBlur={() => onSave(date, start, end)} className="h-8 w-36 text-xs" />
+        onBlur={() => onSave(date, start, end)} className="h-8 w-32 shrink-0 text-xs" />
       <Input type="time" value={start} onChange={(e) => setStart(e.target.value)}
-        onBlur={() => onSave(date, start, end)} className="h-8 w-28 text-xs" />
-      <span className="text-xs text-slate-400">to</span>
+        onBlur={() => onSave(date, start, end)} className="h-8 w-24 shrink-0 text-xs" />
+      <span className="shrink-0 text-xs text-slate-400">to</span>
       <Input type="time" value={end} onChange={(e) => setEnd(e.target.value)}
-        onBlur={() => onSave(date, start, end)} className="h-8 w-28 text-xs" />
+        onBlur={() => onSave(date, start, end)} className="h-8 w-24 shrink-0 text-xs" />
       <button onClick={onDelete} className="shrink-0 text-slate-300 hover:text-red-500" title="Remove">
         <Trash2 className="h-3.5 w-3.5" />
       </button>
@@ -1155,20 +1167,21 @@ function EditJobTimeRow({
 function EditJobTimesDialog({
   open,
   onOpenChange,
-  visitId,
-  visitDate,
-  crewId,
+  visit,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
-  visitId: string;
-  visitDate: string;
-  crewId: string | null;
+  visit: CRMJobVisit;
 }) {
+  const visitId = visit.id;
+  const visitDate = visit.scheduledDate;
+  const crewId = visit.crewId;
+
   const { data: memberTimes = [] } = useCrewMemberTimes(visitId);
   const { data: crewsWithMembers } = useCrews(false);
   const upsert = useUpsertCrewMemberTime();
   const del = useDeleteCrewMemberTime();
+  const updateVisit = useUpdateVisit();
 
   const crew = crewsWithMembers?.find((c) => c.id === crewId);
   const allMembers = crew?.members ?? [];
@@ -1179,6 +1192,17 @@ function EditJobTimesDialog({
   const [newDate, setNewDate] = useState(visitDate);
   const [newStart, setNewStart] = useState("");
   const [newEnd, setNewEnd] = useState("");
+
+  // Keep the dispatch board's Men column in sync with how many crew members
+  // actually have a time entry here — only once there IS at least one entry,
+  // so opening the dialog on a visit with a manually-set Men count (and no
+  // per-member times yet) doesn't zero it out.
+  useEffect(() => {
+    if (memberTimes.length > 0 && memberTimes.length !== visit.menCount) {
+      updateVisit.mutate({ id: visitId, updates: { men_count: memberTimes.length } });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [memberTimes.length, visitId]);
 
   async function saveRow(memberId: string, date: string, start: string, end: string) {
     try {
@@ -1211,7 +1235,7 @@ function EditJobTimesDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>Edit Job Times</DialogTitle>
         </DialogHeader>
@@ -1234,10 +1258,10 @@ function EditJobTimesDialog({
           )}
         </div>
 
-        {availableMembers.length > 0 && (
-          <div className="flex items-center gap-2 border-t pt-3">
+        {availableMembers.length > 0 ? (
+          <div className="flex flex-wrap items-center gap-1.5 border-t pt-3">
             <Select value={newMemberId || "unassigned"} onValueChange={(v) => setNewMemberId(v === "unassigned" ? "" : v)}>
-              <SelectTrigger className="h-8 w-32 text-xs shrink-0">
+              <SelectTrigger className="h-8 w-28 shrink-0 text-xs">
                 <SelectValue placeholder="Unassigned" />
               </SelectTrigger>
               <SelectContent>
@@ -1247,10 +1271,10 @@ function EditJobTimesDialog({
                 ))}
               </SelectContent>
             </Select>
-            <Input type="date" value={newDate} onChange={(e) => setNewDate(e.target.value)} className="h-8 w-36 text-xs" />
-            <Input type="time" value={newStart} onChange={(e) => setNewStart(e.target.value)} className="h-8 w-28 text-xs" />
-            <span className="text-xs text-slate-400">to</span>
-            <Input type="time" value={newEnd} onChange={(e) => setNewEnd(e.target.value)} className="h-8 w-28 text-xs" />
+            <Input type="date" value={newDate} onChange={(e) => setNewDate(e.target.value)} className="h-8 w-32 shrink-0 text-xs" />
+            <Input type="time" value={newStart} onChange={(e) => setNewStart(e.target.value)} className="h-8 w-24 shrink-0 text-xs" />
+            <span className="shrink-0 text-xs text-slate-400">to</span>
+            <Input type="time" value={newEnd} onChange={(e) => setNewEnd(e.target.value)} className="h-8 w-24 shrink-0 text-xs" />
             <button
               onClick={addRow}
               disabled={!newMemberId}
@@ -1260,7 +1284,11 @@ function EditJobTimesDialog({
               <Plus className="h-3.5 w-3.5" />
             </button>
           </div>
-        )}
+        ) : !crewId ? (
+          <p className="border-t pt-3 text-xs text-slate-400 italic">Assign a crew to this visit first to add crew member times.</p>
+        ) : allMembers.length === 0 ? (
+          <p className="border-t pt-3 text-xs text-slate-400 italic">This crew has no members yet — add them in Team settings.</p>
+        ) : null}
 
         <DialogFooter>
           <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>Cancel</Button>
@@ -1278,6 +1306,7 @@ function VisitRow({
   index,
   selectedDate,
   onOpen,
+  onEditTimes,
   driveMinsToNext,
   selected,
   onToggleSelect,
@@ -1292,6 +1321,7 @@ function VisitRow({
   index: number;
   selectedDate: string;
   onOpen: (v: CRMJobVisit) => void;
+  onEditTimes: (v: CRMJobVisit) => void;
   driveMinsToNext?: number;
   selected: boolean;
   onToggleSelect: (id: string) => void;
@@ -1308,7 +1338,7 @@ function VisitRow({
   const serviceTotal = services.reduce((s, svc) => s + (svc.rateCents ?? 0) * (svc.qty ?? 1), 0);
   const effectiveRate = visit.rateCents ?? job?.rateCents ?? (serviceTotal > 0 ? serviceTotal : null);
   const effectiveCrew = visit.crewName ?? job?.crewName ?? null;
-  const budgetedHours = job?.budgetedHours;
+  const budgetedHours = visit.budgetedHours ?? job?.budgetedHours ?? null;
   const actualHours = computeActualHours(visit);
 
   const updateVisit = useUpdateVisit();
@@ -1318,7 +1348,10 @@ function VisitRow({
   useEffect(() => { setEndVal(visit.endTime ?? ""); }, [visit.endTime]);
 
   function saveVisitTime(field: "start_time" | "end_time", value: string) {
-    updateVisit.mutate({ id: visit.id, updates: { [field]: value || null } });
+    updateVisit.mutate(
+      { id: visit.id, updates: { [field]: value || null } },
+      { onError: () => toast.error("Failed to save time") }
+    );
   }
 
   const [menVal, setMenVal] = useState(String(visit.menCount ?? ""));
@@ -1326,7 +1359,21 @@ function VisitRow({
 
   function saveMenCount(value: string) {
     const n = parseInt(value, 10);
-    updateVisit.mutate({ id: visit.id, updates: { men_count: Number.isNaN(n) || n < 0 ? 0 : n } });
+    updateVisit.mutate(
+      { id: visit.id, updates: { men_count: Number.isNaN(n) || n < 0 ? 0 : n } },
+      { onError: () => toast.error("Failed to save crew size") }
+    );
+  }
+
+  const [bHrsVal, setBHrsVal] = useState(String(budgetedHours ?? ""));
+  useEffect(() => { setBHrsVal(String(budgetedHours ?? "")); }, [budgetedHours]);
+
+  function saveBudgetedHours(value: string) {
+    const n = parseFloat(value);
+    updateVisit.mutate(
+      { id: visit.id, updates: { budgeted_hours: value === "" || Number.isNaN(n) ? null : n } },
+      { onError: () => toast.error("Failed to save budgeted hours") }
+    );
   }
 
   const lastSvc = job?.lastServiceDate
@@ -1487,8 +1534,16 @@ function VisitRow({
 
       {/* B Hrs */}
       {isVisible("b_hrs") && (
-        <td className="px-2 py-2 text-right text-slate-500">
-          {budgetedHours != null ? budgetedHours.toFixed(2) : "—"}
+        <td className="px-1 py-1 text-right text-slate-500" onClick={(e) => e.stopPropagation()}>
+          <input
+            type="number"
+            min={0}
+            step="0.25"
+            value={bHrsVal}
+            onChange={(e) => setBHrsVal(e.target.value)}
+            onBlur={() => saveBudgetedHours(bHrsVal)}
+            className="w-14 rounded border border-transparent bg-transparent px-1 py-0.5 text-right text-xs text-slate-600 hover:border-slate-200 focus:border-brand-400 focus:outline-none"
+          />
         </td>
       )}
 
@@ -1551,8 +1606,8 @@ function VisitRow({
         return (
           <td className="px-2 py-2">
             <div className="flex items-center gap-1.5">
-              {(crewNoteBanner || visit.job?.notes) && (
-                <span title={crewNoteBanner ?? visit.job?.notes ?? ""} className="shrink-0"><StickyNote className="h-3 w-3 text-amber-400" /></span>
+              {crewNoteBanner && (
+                <span title={crewNoteBanner} className="shrink-0"><StickyNote className="h-3 w-3 text-amber-400" /></span>
               )}
               {(visit.job?.productTotalCents ?? 0) > 0 && (
                 <span title="Has products" className="shrink-0"><Package className="h-3 w-3 text-purple-500" /></span>
@@ -1575,6 +1630,13 @@ function VisitRow({
                   <MessageSquareText className="h-3 w-3 text-blue-400" />
                 </span>
               )}
+              <button
+                onClick={(e) => { e.stopPropagation(); onEditTimes(visit); }}
+                title="Edit job times"
+                className="shrink-0 text-slate-300 hover:text-brand-600 transition-colors"
+              >
+                <Clock className="h-3 w-3" />
+              </button>
             </div>
           </td>
         );
@@ -1583,12 +1645,12 @@ function VisitRow({
     {crewNoteBanner && (
       <tr className="border-b border-slate-100 bg-yellow-50/70">
         <td colSpan={totalCols} className="px-3 py-1.5 text-[11px] text-slate-700">
-          <span className="font-semibold">Scheduling Notes:</span> {crewNoteBanner}
+          <span className="font-semibold">Job Notes:</span> {crewNoteBanner}
         </td>
       </tr>
     )}
     {visit.jobComments.map((c) => (
-      <tr key={c.id} className="border-b border-slate-100 bg-slate-50">
+      <tr key={c.id} className="border-b border-slate-100 bg-orange-50/70">
         <td colSpan={totalCols} className="px-3 py-1.5 text-[11px] text-slate-600">
           <span className="font-medium text-slate-500">{c.text}</span>
           <span className="ml-2 text-slate-400">{relativeTime(c.createdAt)} by {c.authorName}</span>
@@ -1602,7 +1664,7 @@ function VisitRow({
 // ── totals row ─────────────────────────────────────────────────────────────────
 
 function TotalsRow({ visits, isVisible }: { visits: CRMJobVisit[]; isVisible: (col: ColKey) => boolean }) {
-  const totalBHrs = visits.reduce((s, v) => s + (v.job?.budgetedHours ?? 0), 0);
+  const totalBHrs = visits.reduce((s, v) => s + (v.budgetedHours ?? v.job?.budgetedHours ?? 0), 0);
   const totalAct  = visits.reduce((s, v) => s + (computeActualHours(v) ?? 0), 0);
   const totalAmt  = visits.reduce((s, v) => s + ((v as any).rateCents ?? v.job?.rateCents ?? 0), 0);
 
@@ -1664,6 +1726,7 @@ export function DispatchBoard() {
   const [statusFilter,    setStatusFilter]    = useState<FilterTab>("all");
   const [search,          setSearch]          = useState("");
   const [detailVisit,     setDetailVisit]     = useState<CRMJobVisit | null>(null);
+  const [editTimesVisit,  setEditTimesVisit]  = useState<CRMJobVisit | null>(null);
   const [teamAssignOpen,  setTeamAssignOpen]  = useState(false);
   const [selectedIds,     setSelectedIds]     = useState<Set<string>>(new Set());
   const [colFilterKey,    setColFilterKey]    = useState<string | null>(null);
@@ -1881,7 +1944,7 @@ export function DispatchBoard() {
         v.crewName ?? "",
         v.startTime ?? "",
         v.endTime ?? "",
-        job?.budgetedHours?.toFixed(2) ?? "",
+        (v.budgetedHours ?? job?.budgetedHours)?.toFixed(2) ?? "",
         computeActualHours(v)?.toFixed(2) ?? "",
         (v as any).menCount ?? "",
         (rateCents / 100).toFixed(2),
@@ -1910,12 +1973,12 @@ export function DispatchBoard() {
       id: c.id,
       name: c.name,
       count: cv.length,
-      bHrs: cv.reduce((s, v) => s + (v.job?.budgetedHours ?? 0), 0),
+      bHrs: cv.reduce((s, v) => s + (v.budgetedHours ?? v.job?.budgetedHours ?? 0), 0),
       amt: cv.reduce((s, v) => s + ((v as any).rateCents ?? v.job?.rateCents ?? 0), 0),
     };
   }).filter((s) => s.count > 0);
   const unassignedStatCount  = displayVisits.filter((v) => !v.crewId).length;
-  const unassignedStatBHrs   = displayVisits.filter((v) => !v.crewId).reduce((s, v) => s + (v.job?.budgetedHours ?? 0), 0);
+  const unassignedStatBHrs   = displayVisits.filter((v) => !v.crewId).reduce((s, v) => s + (v.budgetedHours ?? v.job?.budgetedHours ?? 0), 0);
   const unassignedStatAmt    = displayVisits.filter((v) => !v.crewId).reduce((s, v) => s + ((v as any).rateCents ?? v.job?.rateCents ?? 0), 0);
 
   const callAheadVisits = displayVisits.filter((v) => v.job?.callAhead && v.clientPhone);
@@ -2505,6 +2568,7 @@ export function DispatchBoard() {
                   index={i}
                   selectedDate={selectedDate}
                   onOpen={setDetailVisit}
+                  onEditTimes={setEditTimesVisit}
                   driveMinsToNext={driveTimeMap.get(visit.id)}
                   selected={selectedIds.has(visit.id)}
                   onToggleSelect={toggleSelect}
@@ -2528,6 +2592,16 @@ export function DispatchBoard() {
           open={!!detailVisit}
           onOpenChange={(o) => { if (!o) setDetailVisit(null); }}
           crews={crews ?? []}
+          onEditTimes={setEditTimesVisit}
+        />
+      )}
+
+      {/* Edit Job Times — reachable straight from a row, not just via the sheet */}
+      {editTimesVisit && (
+        <EditJobTimesDialog
+          visit={editTimesVisit}
+          open={!!editTimesVisit}
+          onOpenChange={(o) => { if (!o) setEditTimesVisit(null); }}
         />
       )}
 

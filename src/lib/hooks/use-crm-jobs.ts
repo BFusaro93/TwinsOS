@@ -778,6 +778,7 @@ export function useUpdateVisit() {
         start_time: string | null;
         end_time: string | null;
         actual_hours: number | null;
+        budgeted_hours: number | null;
         men_count: number;
         qty: number | null;
         rate_cents: number | null;
