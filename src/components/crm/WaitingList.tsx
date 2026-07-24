@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   useWaitingListJobs,
   useCRMCrews,
@@ -195,11 +196,12 @@ function WaitingJobRow({
     ? service.rateCents ?? null
     : job.rateCents ?? (serviceTotal > 0 ? serviceTotal : null);
   const isVisible = (key: string) => visibleKeys.includes(key);
+  const router = useRouter();
 
   return (
     <tr
       className={cn("cursor-pointer border-b border-slate-100 text-sm hover:bg-slate-50", selected && "bg-brand-50")}
-      onClick={onSchedule}
+      onClick={() => router.push(`/crm/scheduling/jobs/${job.id}`)}
     >
       <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
         <input
@@ -258,7 +260,7 @@ function WaitingJobRow({
           {effectiveRate != null ? formatCurrency(effectiveRate) : "—"}
         </td>
       )}
-      <td className="px-4 py-3">
+      <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
         <Button variant="outline" size="sm" className="h-7 text-xs" onClick={onSchedule}>
           Schedule
         </Button>
