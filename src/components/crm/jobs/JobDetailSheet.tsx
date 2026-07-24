@@ -12,13 +12,21 @@ interface Props {
 }
 
 const MIN_WIDTH = 560;
-const DEFAULT_WIDTH = Math.min(1100, typeof window !== "undefined" ? window.innerWidth * 0.75 : 1100);
 
 export function JobDetailSheet({ jobId, onOpenChange, initialEditing }: Props) {
-  const [width, setWidth] = useState(DEFAULT_WIDTH);
+  const [width, setWidth] = useState(() =>
+    Math.min(1100, typeof window !== "undefined" ? window.innerWidth * 0.75 : 1100)
+  );
   const dragging = useRef(false);
   const startX = useRef(0);
   const startW = useRef(0);
+  const userResized = useRef(false);
+
+  useEffect(() => {
+    if (jobId && !userResized.current && typeof window !== "undefined") {
+      setWidth(Math.min(1100, window.innerWidth * 0.75));
+    }
+  }, [jobId]);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -49,6 +57,7 @@ export function JobDetailSheet({ jobId, onOpenChange, initialEditing }: Props) {
   }, []);
 
   function startDrag(e: React.MouseEvent) {
+    userResized.current = true;
     dragging.current = true;
     startX.current = e.clientX;
     startW.current = width;
