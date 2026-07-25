@@ -97,6 +97,24 @@ function computeActualHours(visit: CRMJobVisit): number | null {
   return diffHours * (visit.menCount || 1);
 }
 
+// How many people are actually on a crew for a given day — the crew's default
+// roster (crm_crew_members), with any same-day-only reassignments from the
+// Team Assignment dialog (crm_crew_daily_members) applied on top. Shared by
+// anything that needs to allocate a headcount from the day's real roster
+// instead of a job's own possibly-stale men_count.
+function effectiveCrewSize(
+  crewId: string | null,
+  richCrews: { id: string; members?: { id: string; crewId?: string }[] }[],
+  dailyOverrides: { member_id: string; crew_id: string }[]
+): number {
+  if (!crewId) return 0;
+  const defaultCrewByMember = new Map<string, string>();
+  richCrews.forEach((c) => (c.members ?? []).forEach((m) => defaultCrewByMember.set(m.id, c.id)));
+  const overrideCrewByMember = new Map(dailyOverrides.map((o) => [o.member_id, o.crew_id]));
+  const allMembers = richCrews.flatMap((c) => c.members ?? []);
+  return allMembers.filter((m) => (overrideCrewByMember.get(m.id) ?? defaultCrewByMember.get(m.id)) === crewId).length;
+}
+
 function StatusCycleButton({ visit }: { visit: CRMJobVisit }) {
   const { mutateAsync: updateStatus, isPending } = useUpdateVisitStatus();
 
@@ -180,15 +198,21 @@ function JobDetailSheet({
 
   const job  = visit.job;
   const services = job?.services ?? [];
+  // Package jobs carry every step (e.g. all 5 Fert applications) on job.services,
+  // but a given visit is only for the ONE step it's linked to — show just that,
+  // not every step on the whole package.
+  const linkedService = visit.jobServiceId ? services.find((s) => s.id === visit.jobServiceId) : null;
   const { data: jobProducts = [] } = useCRMJobProducts(visit.jobId);
-  const serviceName = services.length > 0
-    ? services.map((s) => s.serviceName).join(", ")
-    : "Service Visit";
+  const serviceName = linkedService
+    ? linkedService.serviceName
+    : services.length > 0
+      ? services.map((s) => s.serviceName).join(", ")
+      : "Service Visit";
 
   // Service total as fallback when neither visit nor job has an explicit rate
-  const serviceTotal = (job?.services ?? []).reduce(
-    (s, svc) => s + (svc.rateCents ?? 0) * (svc.qty ?? 1), 0
-  );
+  const serviceTotal = linkedService
+    ? (linkedService.rateCents ?? 0) * (linkedService.qty ?? 1)
+    : services.reduce((s, svc) => s + (svc.rateCents ?? 0) * (svc.qty ?? 1), 0);
 
   // Form state — reset when visit changes
   const [status,      setStatus]      = useState<VisitStatus>(visit.status);
@@ -1204,6 +1228,27 @@ function EditJobTimesDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [memberTimes.length, visitId]);
 
+  // Roll the earliest clock-in / latest clock-out across all crew members up
+  // to the visit's own Start/End — otherwise times entered here never show
+  // on the dispatch board row, never feed Actual Hours, and never appear in
+  // the job panel's Appointment Start/End (which read visit.start_time/end_time).
+  useEffect(() => {
+    const ins = memberTimes.map((t) => t.clockedInAt).filter((v): v is string => !!v);
+    const outs = memberTimes.map((t) => t.clockedOutAt).filter((v): v is string => !!v);
+    if (ins.length === 0 && outs.length === 0) return;
+    const earliestIn = ins.length > 0 ? ins.reduce((a, b) => (a < b ? a : b)) : null;
+    const latestOut = outs.length > 0 ? outs.reduce((a, b) => (a > b ? a : b)) : null;
+    const newStart = earliestIn ? isoToDateAndTime(earliestIn, visitDate).time : null;
+    const newEnd = latestOut ? isoToDateAndTime(latestOut, visitDate).time : null;
+    const updates: { start_time?: string; end_time?: string } = {};
+    if (newStart && newStart !== visit.startTime) updates.start_time = newStart;
+    if (newEnd && newEnd !== visit.endTime) updates.end_time = newEnd;
+    if (Object.keys(updates).length > 0) {
+      updateVisit.mutate({ id: visitId, updates });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [memberTimes, visitId, visitDate]);
+
   async function saveRow(memberId: string, date: string, start: string, end: string) {
     try {
       await upsert.mutateAsync({
@@ -1334,8 +1379,15 @@ function VisitRow({
 }) {
   const job      = visit.job;
   const services = job?.services ?? [];
-  const serviceName = services.length > 0 ? services.map((s) => s.serviceName).join(", ") : "—";
-  const serviceTotal = services.reduce((s, svc) => s + (svc.rateCents ?? 0) * (svc.qty ?? 1), 0);
+  // Same package-step scoping as the job detail sheet — a visit only covers
+  // the one service it's linked to, not every step on the whole package.
+  const linkedService = visit.jobServiceId ? services.find((s) => s.id === visit.jobServiceId) : null;
+  const serviceName = linkedService
+    ? linkedService.serviceName
+    : services.length > 0 ? services.map((s) => s.serviceName).join(", ") : "—";
+  const serviceTotal = linkedService
+    ? (linkedService.rateCents ?? 0) * (linkedService.qty ?? 1)
+    : services.reduce((s, svc) => s + (svc.rateCents ?? 0) * (svc.qty ?? 1), 0);
   const effectiveRate = visit.rateCents ?? job?.rateCents ?? (serviceTotal > 0 ? serviceTotal : null);
   const effectiveCrew = visit.crewName ?? job?.crewName ?? null;
   const budgetedHours = visit.budgetedHours ?? job?.budgetedHours ?? null;
@@ -1347,9 +1399,21 @@ function VisitRow({
   useEffect(() => { setStartVal(visit.startTime ?? ""); }, [visit.startTime]);
   useEffect(() => { setEndVal(visit.endTime ?? ""); }, [visit.endTime]);
 
+  const { data: richCrewsForSize } = useCrews(false);
+  const { data: dailyOverridesForSize = [] } = useCrewDailyMembers(selectedDate);
+
   function saveVisitTime(field: "start_time" | "end_time", value: string) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const updates: Record<string, any> = { [field]: value || null };
+    // Typing a time is what actually sends a crew out for the day — pull the
+    // headcount from who's really on that crew today (Team Assignment),
+    // instead of leaving whatever men_count the visit happened to start with.
+    if (visit.crewId) {
+      const crewSize = effectiveCrewSize(visit.crewId, richCrewsForSize ?? [], dailyOverridesForSize);
+      if (crewSize > 0) updates.men_count = crewSize;
+    }
     updateVisit.mutate(
-      { id: visit.id, updates: { [field]: value || null } },
+      { id: visit.id, updates },
       { onError: () => toast.error("Failed to save time") }
     );
   }
@@ -1830,7 +1894,10 @@ export function DispatchBoard() {
     return true;
   });
 
-  // Sort priority: optimizedOrder > manualOrder > default
+  // Sort priority: optimizedOrder > manualOrder > default (grouped by crew).
+  // Array.sort is stable, so within each crew group visits keep the query's
+  // own priority/start_time/created_at order — this only groups, it doesn't
+  // reorder inside a crew.
   const activeOrder = optimizedOrder ?? manualOrder;
   const displayVisits = activeOrder
     ? [...filtered].sort((a, b) => {
@@ -1841,7 +1908,13 @@ export function DispatchBoard() {
         if (bi === -1) return -1;
         return ai - bi;
       })
-    : filtered;
+    : [...filtered].sort((a, b) => {
+        const an = a.crewName ?? "";
+        const bn = b.crewName ?? "";
+        if (!an && bn) return 1;
+        if (an && !bn) return -1;
+        return an.localeCompare(bn);
+      });
 
   function toggleSelect(id: string) {
     setSelectedIds((prev) => {
@@ -2036,25 +2109,32 @@ export function DispatchBoard() {
             <Route className="h-4 w-4" />
             {optimizing ? "Optimizing…" : optimizedOrder ? "Re-Optimize" : "Optimize Route"}
           </Button>
-          {manualOrder && (
+        </div>
+      </div>
+
+      {/* Save/Clear Order — its own full-width row so it's never pushed off
+          screen by the toolbar above (which can overflow horizontally). */}
+      {(optimizedOrder || manualOrder) && (
+        <div className="flex items-center justify-between gap-3 border-y border-brand-200 bg-brand-50 px-4 py-2 shrink-0">
+          <p className="text-xs font-medium text-brand-700">
+            {manualOrder ? "Order changed — not yet saved." : "Route optimized."}
+          </p>
+          <div className="flex items-center gap-2">
+            {manualOrder && (
+              <Button size="sm" className="h-7 gap-1.5 px-3 text-xs bg-brand-500 hover:bg-brand-600 text-white" onClick={handleSaveOrder}>
+                Save Order
+              </Button>
+            )}
             <Button size="sm" variant="outline"
-              className="h-9 text-sm gap-1.5 px-3 border-brand-400 text-brand-700"
-              onClick={handleSaveOrder}
-            >
-              Save Order
-            </Button>
-          )}
-          {(optimizedOrder || manualOrder) && (
-            <Button size="sm" variant="outline"
-              className="h-9 text-sm gap-1.5 px-3 text-red-500 border-red-200"
+              className="h-7 gap-1.5 px-3 text-xs text-red-500 border-red-200"
               onClick={() => { clearOptimization(); setManualOrder(null); }}
             >
               <XIcon className="h-3.5 w-3.5" />
               Clear Order
             </Button>
-          )}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Select a Filter bar — ABOVE dark bar */}
       <div className="flex items-center gap-1.5 border-b bg-white px-4 py-2 shrink-0">

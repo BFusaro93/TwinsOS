@@ -77,9 +77,9 @@ const CRM_NAV: NavSection[] = [
   {
     label: "Scheduling",
     items: [
-      { label: "Jobs",           href: "/crm/scheduling",              icon: Briefcase },
       { label: "Dispatch Board", href: "/crm/scheduling/dispatch",     icon: CalendarDays },
       { label: "Waiting List",   href: "/crm/scheduling/waiting-list", icon: ListOrdered },
+      { label: "Jobs",           href: "/crm/scheduling",              icon: Briefcase },
       { label: "Snow Jobs",      href: "/crm/scheduling/snow",         icon: Snowflake },
       { label: "Projects",       href: "/crm/scheduling/projects",     icon: FolderKanban },
     ],
