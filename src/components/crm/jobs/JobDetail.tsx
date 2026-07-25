@@ -64,6 +64,7 @@ import {
   FlaskConical,
   ArrowLeft,
   MessageSquareText,
+  Send,
 } from "lucide-react";
 import { ChemicalApplicationPanel } from "@/components/crm/chemical/ChemicalApplicationPanel";
 import { createClient } from "@/lib/supabase/client";
@@ -156,6 +157,7 @@ export function JobDetail({ jobId, initialEditing = false, onClose }: Props) {
     new Date().toISOString().slice(0, 10)
   );
   const [newVisitCrew, setNewVisitCrew] = useState("");
+  const [newVisitServiceId, setNewVisitServiceId] = useState("");
   const [newVisitInvoiceDesc, setNewVisitInvoiceDesc] = useState("");
   const [invoicing, setInvoicing] = useState(false);
   const [generating, setGenerating] = useState(false);
@@ -296,10 +298,12 @@ export function JobDetail({ jobId, initialEditing = false, onClose }: Props) {
         clientId: job.clientId,
         scheduledDate: newVisitDate,
         crewId: newVisitCrew || null,
+        jobServiceId: newVisitServiceId || null,
         invoiceDescription: newVisitInvoiceDesc || null,
         jobType: job.jobType,
       });
       setAddingVisit(false);
+      setNewVisitServiceId("");
       setNewVisitInvoiceDesc("");
       toast.success("Visit scheduled");
     } catch {
@@ -447,6 +451,16 @@ export function JobDetail({ jobId, initialEditing = false, onClose }: Props) {
   }
 
   const services = job.services ?? [];
+  // Package services that haven't actually been dispatched yet — a service
+  // only drops off here once its visit moves past the placeholder
+  // 'scheduled' state, mirroring the Waiting List's own definition of "still
+  // needs scheduling" (see useWaitingListJobs).
+  const pendingServiceIds = new Set(
+    services
+      .filter((s) => !visits.some((v) => v.jobServiceId === s.id && !v.deletedAt && v.status !== "scheduled"))
+      .map((s) => s.id)
+  );
+  const pendingServices = services.filter((s) => pendingServiceIds.has(s.id));
   const jobServiceIds = new Set(services.map((s) => s.serviceId).filter(Boolean));
   const isChemicalJob = crmServices.some((s) => jobServiceIds.has(s.id) && s.trackChemicals);
   const effectiveStatus = (edits.status as string) ?? job.status;
@@ -1524,6 +1538,30 @@ export function JobDetail({ jobId, initialEditing = false, onClose }: Props) {
 
               {addingVisit && (
                 <div className="rounded-lg border bg-blue-50 border-blue-200 p-4 flex items-end gap-3">
+                  {job.jobType === "package" && (
+                    <div className="flex flex-col gap-1">
+                      <Label className="text-xs text-slate-600">Service</Label>
+                      <Select
+                        value={newVisitServiceId || "__none__"}
+                        onValueChange={(v) => {
+                          if (v === "__none__") { setNewVisitServiceId(""); return; }
+                          setNewVisitServiceId(v);
+                          const svc = pendingServices.find((s) => s.id === v);
+                          if (svc?.startDate) setNewVisitDate(svc.startDate);
+                        }}
+                      >
+                        <SelectTrigger className="text-sm w-44">
+                          <SelectValue placeholder="Which service?" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__none__">Not service-specific</SelectItem>
+                          {pendingServices.map((s) => (
+                            <SelectItem key={s.id} value={s.id}>{s.serviceName}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
                   <div className="flex flex-col gap-1">
                     <Label className="text-xs text-slate-600">Date</Label>
                     <Input
@@ -1583,6 +1621,7 @@ export function JobDetail({ jobId, initialEditing = false, onClose }: Props) {
                         propertyId={job.propertyId}
                         isChemicalJob={isChemicalJob}
                         isSlideover={!!onClose}
+                        crews={crews}
                         onDelete={async () => {
                           if (!confirm("Delete this visit?")) return;
                           await deleteVisit.mutateAsync(v.id);
@@ -1599,6 +1638,15 @@ export function JobDetail({ jobId, initialEditing = false, onClose }: Props) {
                         onSkip={async (reason) => {
                           await updateVisit.mutateAsync({ id: v.id, updates: { status: "skipped", completion_notes: reason || null } });
                           toast.success("Visit skipped");
+                        }}
+                        onDispatch={async (date, crewId) => {
+                          await updateVisit.mutateAsync({
+                            id: v.id,
+                            jobId: job.id,
+                            jobType: job.jobType,
+                            updates: { scheduled_date: date, crew_id: crewId, status: "dispatched", dispatched_at: new Date().toISOString() },
+                          });
+                          toast.success("Visit dispatched");
                         }}
                       />
                     ))}
@@ -1763,10 +1811,12 @@ function VisitRow({
   propertyId,
   isChemicalJob,
   isSlideover,
+  crews,
   onDelete,
   onSaveNote,
   onSaveInvoiceDesc,
   onSkip,
+  onDispatch,
 }: {
   visit: CRMJobVisit;
   services: CRMJobService[];
@@ -1774,10 +1824,12 @@ function VisitRow({
   propertyId: string | null;
   isChemicalJob: boolean;
   isSlideover: boolean;
+  crews: { id: string; name: string }[];
   onDelete: () => void;
   onSaveNote: (note: string) => Promise<void>;
   onSaveInvoiceDesc: (desc: string) => Promise<void>;
   onSkip: (reason: string) => Promise<void>;
+  onDispatch: (date: string, crewId: string | null) => Promise<void>;
 }) {
   // Package visits are tied to a specific service row that carries its own
   // date window (e.g. "Fert 2 of 5" is due anytime 8/1–8/31) — show that
@@ -1809,8 +1861,17 @@ function VisitRow({
   const [skipping, setSkipping] = useState(false);
   const [skipReason, setSkipReason] = useState("");
   const [showChemicals, setShowChemicals] = useState(false);
+  const [dispatching, setDispatching] = useState(false);
+  const [dispatchDate, setDispatchDate] = useState(visit.scheduledDate ?? "");
+  const [dispatchCrew, setDispatchCrew] = useState(visit.crewId ?? "");
+  const [dispatchSaving, setDispatchSaving] = useState(false);
 
   const isTerminal = visit.status === "completed" || visit.status === "skipped" || visit.status === "cancelled";
+  // Visits on package/waiting-list jobs commonly start out as unassigned
+  // placeholders (status stays 'scheduled' until the office actually sends
+  // them out) — surface a direct way to pick a date + crew and send it to
+  // the Dispatch Board without having to go back to the Waiting List.
+  const canDispatch = visit.status === "scheduled";
 
   return (
     <>
@@ -1871,8 +1932,17 @@ function VisitRow({
             )}
           </div>
         </td>
-        <td className="px-4 py-3 w-20">
+        <td className="px-4 py-3 w-28">
           <div className="flex items-center gap-1">
+            {canDispatch && (
+              <button
+                onClick={() => { setDispatching(true); setSkipping(false); setEditingNote(false); }}
+                title="Dispatch to a date/crew"
+                className="rounded p-1 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-orange-50 text-slate-300 hover:text-orange-500"
+              >
+                <Send className="h-3.5 w-3.5" />
+              </button>
+            )}
             {isChemicalJob && (
               <button
                 onClick={() => setShowChemicals((v) => !v)}
@@ -1906,14 +1976,14 @@ function VisitRow({
       </tr>
       {showChemicals && (
         <tr className="border-b bg-teal-50/40">
-          <td colSpan={6} className="px-4 py-3">
+          <td colSpan={7} className="px-4 py-3">
             <ChemicalApplicationPanel jobId={jobId} visitId={visit.id} propertyId={propertyId} />
           </td>
         </tr>
       )}
       {skipping && (
         <tr className="border-b bg-amber-50">
-          <td colSpan={6} className="px-4 py-2">
+          <td colSpan={7} className="px-4 py-2">
             <p className="text-xs font-medium text-amber-700 mb-1.5">Skip reason (optional)</p>
             <div className="flex items-end gap-2">
               <Textarea
@@ -1936,9 +2006,53 @@ function VisitRow({
           </td>
         </tr>
       )}
+      {dispatching && (
+        <tr className="border-b bg-orange-50">
+          <td colSpan={7} className="px-4 py-2">
+            <p className="text-xs font-medium text-orange-700 mb-1.5">Dispatch this visit</p>
+            <div className="flex items-end gap-2">
+              <div className="flex flex-col gap-1">
+                <Label className="text-xs text-slate-600">Date</Label>
+                <Input
+                  type="date"
+                  value={dispatchDate}
+                  onChange={(e) => setDispatchDate(e.target.value)}
+                  className="h-8 text-sm w-40 bg-white"
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <Label className="text-xs text-slate-600">Crew</Label>
+                <Select value={dispatchCrew || "__unassigned__"} onValueChange={(v) => setDispatchCrew(v === "__unassigned__" ? "" : v)}>
+                  <SelectTrigger className="h-8 text-sm w-44 bg-white">
+                    <SelectValue placeholder="Unassigned" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__unassigned__">Unassigned</SelectItem>
+                    {crews.map((c) => (
+                      <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <Button size="sm" className="h-8 text-xs bg-orange-600 hover:bg-orange-700" disabled={!dispatchDate || dispatchSaving} onClick={async () => {
+                setDispatchSaving(true);
+                try {
+                  await onDispatch(dispatchDate, dispatchCrew || null);
+                  setDispatching(false);
+                } finally {
+                  setDispatchSaving(false);
+                }
+              }}>
+                {dispatchSaving ? "Dispatching…" : "Dispatch"}
+              </Button>
+              <Button size="sm" variant="ghost" className="h-8 text-xs" onClick={() => setDispatching(false)}>Cancel</Button>
+            </div>
+          </td>
+        </tr>
+      )}
       {editingNote && (
         <tr className="border-b bg-slate-50">
-          <td colSpan={6} className="px-4 py-2">
+          <td colSpan={7} className="px-4 py-2">
             <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide mb-1">Note to Crew</p>
             <div className="flex items-end gap-2">
               <Textarea
@@ -1962,7 +2076,7 @@ function VisitRow({
       )}
       {editingInvoiceDesc && (
         <tr className="border-b bg-indigo-50">
-          <td colSpan={6} className="px-4 py-2">
+          <td colSpan={7} className="px-4 py-2">
             <p className="text-[10px] font-semibold text-indigo-700 uppercase tracking-wide mb-1">Invoice Description</p>
             <div className="flex items-end gap-2">
               <Input

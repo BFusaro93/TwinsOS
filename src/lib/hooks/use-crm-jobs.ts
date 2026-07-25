@@ -774,6 +774,7 @@ export function useUpdateVisit() {
       updates: Partial<{
         status: VisitStatus;
         sub_status: string | null;
+        scheduled_date: string;
         crew_id: string | null;
         start_time: string | null;
         end_time: string | null;

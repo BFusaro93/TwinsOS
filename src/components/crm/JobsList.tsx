@@ -191,13 +191,13 @@ export function JobsList() {
       {/* Active / Completed toggle + filters */}
       <div className="flex flex-wrap items-center gap-2">
         {/* View mode tabs */}
-        <div className="flex rounded-md border overflow-hidden text-sm shrink-0">
+        <div className="flex h-10 rounded-md border overflow-hidden text-sm shrink-0">
           {(["active", "unscheduled", "completed"] as const).map((mode) => (
             <button
               key={mode}
               onClick={() => setViewMode(mode)}
               className={cn(
-                "px-3 py-1.5 capitalize transition-colors",
+                "px-3 capitalize transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
                 viewMode === mode
                   ? "bg-slate-800 text-white"
                   : "bg-white text-slate-600 hover:bg-slate-50"
