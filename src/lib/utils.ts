@@ -59,15 +59,19 @@ export function formatDateTime(isoString: string | null | undefined): string {
   return `${datePart} at ${timePart}`;
 }
 
+/** MM/DD/YY, zero-padded (e.g. "07/25/26"). */
 export function formatDateShort(isoString: string | null | undefined): string {
   if (!isoString) return "—";
-  const d = new Date(isoString);
+  // Date-only strings (YYYY-MM-DD) must be parsed as local time — see formatDate.
+  const normalized = /^\d{4}-\d{2}-\d{2}$/.test(isoString)
+    ? `${isoString}T00:00:00`
+    : isoString;
+  const d = new Date(normalized);
   if (isNaN(d.getTime())) return "—";
-  return new Intl.DateTimeFormat("en-US", {
-    month: "numeric",
-    day: "numeric",
-    year: "2-digit",
-  }).format(d);
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  const yy = String(d.getFullYear()).slice(-2);
+  return `${mm}/${dd}/${yy}`;
 }
 
 export function getInitials(name: string): string {

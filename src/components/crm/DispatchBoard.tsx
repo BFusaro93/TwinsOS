@@ -29,7 +29,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { formatCurrency, cn, relativeTime } from "@/lib/utils";
+import { formatCurrency, cn, relativeTime, formatDateShort } from "@/lib/utils";
 import { toast } from "sonner";
 import {
   Calendar,
@@ -143,12 +143,11 @@ function StatusCycleButton({ visit }: { visit: CRMJobVisit }) {
 
 // ── column visibility ─────────────────────────────────────────────────────────
 
-type ColKey = "service" | "date" | "address" | "city" | "zip" | "assigned" | "last_svc" | "start" | "end" | "b_hrs" | "actual" | "men" | "qty" | "rate" | "amt" | "icons";
+type ColKey = "service" | "date" | "city" | "zip" | "assigned" | "last_svc" | "start" | "end" | "b_hrs" | "actual" | "men" | "qty" | "rate" | "amt" | "icons";
 
 const COL_DEFS: { key: ColKey; label: string }[] = [
   { key: "service",  label: "Service" },
   { key: "date",     label: "Date" },
-  { key: "address",  label: "Address" },
   { key: "city",     label: "City" },
   { key: "zip",      label: "Zip" },
   { key: "assigned", label: "Assigned" },
@@ -1384,6 +1383,7 @@ function VisitRow({
   isDragOver,
   isVisible,
   onReorder,
+  serviceCodeById,
 }: {
   visit: CRMJobVisit;
   /** 1-based position of this visit within its own crew's stops for the day (not the global row index). */
@@ -1399,6 +1399,7 @@ function VisitRow({
   onDragEnd: () => void;
   isDragOver: boolean;
   isVisible: (col: ColKey) => boolean;
+  serviceCodeById: Map<string, string>;
   onReorder?: (id: string, newIndex: number) => void;
 }) {
   const job      = visit.job;
@@ -1406,9 +1407,11 @@ function VisitRow({
   // Same package-step scoping as the job detail sheet — a visit only covers
   // the one service it's linked to, not every step on the whole package.
   const linkedService = visit.jobServiceId ? services.find((s) => s.id === visit.jobServiceId) : null;
+  const codeOrName = (s: { serviceId: string | null; serviceName: string }) =>
+    (s.serviceId && serviceCodeById.get(s.serviceId)) || s.serviceName;
   const serviceName = linkedService
-    ? linkedService.serviceName
-    : services.length > 0 ? services.map((s) => s.serviceName).join(", ") : "—";
+    ? codeOrName(linkedService)
+    : services.length > 0 ? services.map(codeOrName).join(", ") : "—";
   const serviceTotal = linkedService
     ? (linkedService.rateCents ?? 0) * (linkedService.qty ?? 1)
     : services.reduce((s, svc) => s + (svc.rateCents ?? 0) * (svc.qty ?? 1), 0);
@@ -1538,7 +1541,8 @@ function VisitRow({
         <StatusCycleButton visit={visit} />
       </td>
 
-      {/* Client */}
+      {/* Client (+ address below, like the Jobs screen — City/Zip stay in
+          their own columns since they're used for routing) */}
       <td className="min-w-[140px] px-2 py-2" onClick={(e) => e.stopPropagation()}>
         <Link
           href={`/crm/clients/${visit.clientId}`}
@@ -1546,6 +1550,9 @@ function VisitRow({
         >
           {visit.clientName ?? "—"}
         </Link>
+        {job?.serviceAddress && (
+          <p className="truncate max-w-[140px] text-[10px] text-slate-400">{job.serviceAddress}</p>
+        )}
       </td>
 
       {/* Service */}
@@ -1562,14 +1569,7 @@ function VisitRow({
 
       {/* Date */}
       {isVisible("date") && (
-        <td className="px-2 py-2 text-slate-500 whitespace-nowrap">{visit.scheduledDate}</td>
-      )}
-
-      {/* Address */}
-      {isVisible("address") && (
-        <td className="min-w-[140px] px-2 py-2 text-slate-500 text-[10px]">
-          <p className="truncate max-w-[140px]">{job?.serviceAddress ?? "—"}</p>
-        </td>
+        <td className="px-2 py-2 text-slate-500 whitespace-nowrap">{formatDateShort(visit.scheduledDate)}</td>
       )}
 
       {/* City */}
@@ -1579,7 +1579,7 @@ function VisitRow({
 
       {/* Zip */}
       {isVisible("zip") && (
-        <td className="px-2 py-2 text-slate-400">{job?.serviceZip ?? "—"}</td>
+        <td className="px-2 py-2 text-slate-500">{job?.serviceZip ?? "—"}</td>
       )}
 
       {/* Assigned */}
@@ -1755,7 +1755,7 @@ function TotalsRow({ visits, isVisible }: { visits: CRMJobVisit[]; isVisible: (c
 
   // Fixed always-visible cols: checkbox(1), #(1), St(1), Client(1) = 4
   // Toggleable cols that appear before B Hrs:
-  const preHrsKeys: ColKey[] = ["service", "date", "address", "city", "zip", "assigned", "last_svc", "start", "end"];
+  const preHrsKeys: ColKey[] = ["service", "date", "city", "zip", "assigned", "last_svc", "start", "end"];
   const labelSpan = 4 + preHrsKeys.filter((k) => isVisible(k)).length;
 
   return (
@@ -1842,6 +1842,10 @@ export function DispatchBoard() {
   const qc = useQueryClient();
 
   const allVisits = visits ?? [];
+  // Service column shows each service's configured short code (Settings > Services)
+  // instead of its full name, e.g. "Lawn Mowing" -> "MOW" — falls back to the
+  // full name for services that don't have one set.
+  const serviceCodeById = new Map((allServices ?? []).map((s) => [s.id, s.code]).filter((e): e is [string, string] => !!e[1]));
   const chemicalServiceIds = new Set((allServices ?? []).filter((s) => s.trackChemicals).map((s) => s.id));
   const hasChemicalVisits = allVisits.some((v) =>
     (v.job?.services ?? []).some((s) => s.serviceId && chemicalServiceIds.has(s.serviceId))
@@ -2649,7 +2653,6 @@ export function DispatchBoard() {
               <th className="min-w-[140px] px-2 py-2.5">Client</th>
               {isVisible("service")  && <th className="min-w-[110px] px-2 py-2.5">Service</th>}
               {isVisible("date")     && <th className="px-2 py-2.5">Date</th>}
-              {isVisible("address")  && <th className="min-w-[140px] px-2 py-2.5">Address</th>}
               {isVisible("city")     && <th className="px-2 py-2.5">City</th>}
               {isVisible("zip")      && <th className="px-2 py-2.5">Zip</th>}
               {isVisible("assigned") && <th className="min-w-[90px] px-2 py-2.5">Assigned</th>}
@@ -2706,6 +2709,7 @@ export function DispatchBoard() {
                   isDragOver={dragOverId === visit.id}
                   isVisible={isVisible}
                   onReorder={handleReorder}
+                  serviceCodeById={serviceCodeById}
                 />
               ))
             )}
