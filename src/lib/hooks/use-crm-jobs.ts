@@ -1681,21 +1681,21 @@ export function useUpdateJobService() {
 export function useAddJobService() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ jobId, clientId, serviceId, serviceName, qty, rateCents, budgetedHours, budgetMethod }: {
+    mutationFn: async ({ jobId, serviceId, serviceName, qty, rateCents, budgetedHours, budgetMethod, startDate, completeByDate }: {
       jobId: string;
-      clientId: string;
       serviceId?: string | null;
       serviceName: string;
       qty: number;
       rateCents: number | null;
       budgetedHours: number;
       budgetMethod?: BudgetMethod;
+      startDate?: string | null;
+      completeByDate?: string | null;
     }) => {
       const supabase = createClient();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error } = await (supabase as any).from('crm_job_services').insert({
+      const { data, error } = await (supabase as any).from('crm_job_services').insert({
         job_id: jobId,
-        client_id: clientId,
         service_id: serviceId || null,
         service_name: serviceName,
         qty,
@@ -1705,12 +1705,29 @@ export function useAddJobService() {
         team_size: 1,
         days_count: 1,
         included: true,
-      });
+        start_date: startDate || null,
+        complete_by_date: completeByDate || null,
+      }).select().single();
       if (error) throw error;
+
+      // A package service with a start date needs its first visit right away —
+      // otherwise it silently sits unscheduled until someone remembers to click
+      // "Generate Visits" (see the reconciliation route for why this can't just
+      // happen at insert time: it also has to dedupe against pre-existing visits).
+      if (startDate) {
+        await fetch('/api/crm/jobs/generate-visits', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ jobId }),
+        }).catch(() => {});
+      }
+
+      return data;
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['crm-job-detail'] });
       qc.invalidateQueries({ queryKey: ['crm-jobs'] });
+      qc.invalidateQueries({ queryKey: ['crm-job-visits'] });
     },
   });
 }

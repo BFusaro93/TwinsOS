@@ -172,6 +172,7 @@ export function JobDetail({ jobId, initialEditing = false, onClose }: Props) {
   const [newSvcRate, setNewSvcRate] = useState("");
   const [newSvcQty, setNewSvcQty] = useState("1");
   const [newSvcBHrs, setNewSvcBHrs] = useState("0");
+  const [newSvcStartDate, setNewSvcStartDate] = useState("");
 
   // product tab state
   const [addingProduct, setAddingProduct] = useState(false);
@@ -365,20 +366,21 @@ export function JobDetail({ jobId, initialEditing = false, onClose }: Props) {
     try {
       await addJobService.mutateAsync({
         jobId: job.id,
-        clientId: job.clientId,
         serviceId: svc.id,
         serviceName: svc.name,
         qty: parseFloat(newSvcQty) || 1,
         rateCents: newSvcRate ? Math.round(parseFloat(newSvcRate) * 100) : (svc.defaultRateCents ?? null),
         budgetedHours: parseFloat(newSvcBHrs) || 0,
         budgetMethod: svc.budgetMethod,
+        startDate: newSvcStartDate || null,
       });
       setAddingSvc(false);
       setNewSvcId("");
       setNewSvcRate("");
       setNewSvcQty("1");
       setNewSvcBHrs("0");
-      toast.success("Service added");
+      setNewSvcStartDate("");
+      toast.success(newSvcStartDate ? "Service added and visit scheduled" : "Service added");
     } catch {
       toast.error("Failed to add service");
     }
@@ -494,8 +496,8 @@ export function JobDetail({ jobId, initialEditing = false, onClose }: Props) {
     <div className="flex h-full flex-col overflow-hidden">
 
       {/* ── top bar ── */}
-      <div className="flex items-center justify-between border-b bg-white px-6 py-3 shadow-sm">
-        <div className="flex items-center gap-3">
+      <div className="flex items-center justify-between gap-4 border-b bg-white px-6 py-3 shadow-sm">
+        <div className="flex flex-1 items-center gap-3 min-w-0">
           <Button
             variant="ghost"
             size="sm"
@@ -505,23 +507,9 @@ export function JobDetail({ jobId, initialEditing = false, onClose }: Props) {
             <ArrowLeft className="mr-1 h-3.5 w-3.5" />
             Back
           </Button>
-          <div>
-            <h1 className="text-base font-semibold text-slate-900">
+          <div className="min-w-0">
+            <h1 className="text-base font-semibold text-slate-900 truncate">
               {job.clientName ?? "Job"}
-              <span className="ml-2">
-                <Badge className={cn("text-[10px]", STATUS_COLOR[effectiveStatus] ?? "bg-slate-100 text-slate-500")}>
-                  {STATUS_LABEL[effectiveStatus] ?? effectiveStatus}
-                </Badge>
-              </span>
-              {isOverdue && (
-                <span className="ml-1">
-                  <Badge className="text-[10px] bg-red-100 text-red-700">Overdue</Badge>
-                </span>
-              )}
-              <span className="ml-2 text-sm font-normal text-slate-400">
-                {JOB_TYPE_LABEL[job.jobType] ?? job.jobType}
-                {waitingListScheduled && " · Scheduled"}
-              </span>
             </h1>
             <p className="text-xs text-slate-400 flex items-center gap-2">
               {job.scheduledDate
@@ -539,6 +527,18 @@ export function JobDetail({ jobId, initialEditing = false, onClose }: Props) {
                 </span>
               )}
             </p>
+          </div>
+          <div className="ml-auto flex shrink-0 items-center gap-2 pl-4">
+            <Badge className={cn("text-[10px]", STATUS_COLOR[effectiveStatus] ?? "bg-slate-100 text-slate-500")}>
+              {STATUS_LABEL[effectiveStatus] ?? effectiveStatus}
+            </Badge>
+            {isOverdue && (
+              <Badge className="text-[10px] bg-red-100 text-red-700">Overdue</Badge>
+            )}
+            <span className="text-sm font-normal text-slate-400 whitespace-nowrap">
+              {JOB_TYPE_LABEL[job.jobType] ?? job.jobType}
+              {waitingListScheduled && " · Scheduled"}
+            </span>
           </div>
         </div>
 
@@ -1191,19 +1191,30 @@ export function JobDetail({ jobId, initialEditing = false, onClose }: Props) {
                     {addingSvc && (
                       <tr className="border-t bg-slate-50">
                         <td className="px-2 py-2">
-                          <Select value={newSvcId} onValueChange={(v) => {
-                            const svc = crmServices.find((s) => s.id === v);
-                            setNewSvcId(v);
-                            if (svc) {
-                              setNewSvcRate(svc.defaultRateCents != null ? String(svc.defaultRateCents / 100) : "");
-                              setNewSvcBHrs(String(computeJobServiceBudgetedHours(svc, parseFloat(newSvcQty) || 1)));
-                            }
-                          }}>
-                            <SelectTrigger className="h-7 text-xs"><SelectValue placeholder="Select service…" /></SelectTrigger>
-                            <SelectContent>
-                              {crmServices.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
-                            </SelectContent>
-                          </Select>
+                          <div className="flex flex-col gap-1">
+                            <Select value={newSvcId} onValueChange={(v) => {
+                              const svc = crmServices.find((s) => s.id === v);
+                              setNewSvcId(v);
+                              if (svc) {
+                                setNewSvcRate(svc.defaultRateCents != null ? String(svc.defaultRateCents / 100) : "");
+                                setNewSvcBHrs(String(computeJobServiceBudgetedHours(svc, parseFloat(newSvcQty) || 1)));
+                              }
+                            }}>
+                              <SelectTrigger className="h-7 text-xs"><SelectValue placeholder="Select service…" /></SelectTrigger>
+                              <SelectContent>
+                                {crmServices.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                              </SelectContent>
+                            </Select>
+                            {job.jobType === "package" && (
+                              <Input
+                                type="date"
+                                value={newSvcStartDate}
+                                onChange={(e) => setNewSvcStartDate(e.target.value)}
+                                title="Start date — leave blank to schedule later via Generate Visits"
+                                className="h-7 text-xs"
+                              />
+                            )}
+                          </div>
                         </td>
                         <td className="px-2 py-2 text-right">
                           <Input type="number" min="0" step="0.01" value={newSvcBHrs}
@@ -1592,8 +1603,8 @@ export function JobDetail({ jobId, initialEditing = false, onClose }: Props) {
                 </div>
               )}
 
-              <div className="rounded-lg border bg-white shadow-sm overflow-hidden">
-                <table className="w-full text-sm">
+              <div className="rounded-lg border bg-white shadow-sm overflow-x-auto">
+                <table className="w-full min-w-[720px] text-sm">
                   <thead>
                     <tr className="bg-slate-50 border-b text-xs font-semibold text-slate-500 uppercase tracking-wide">
                       <th className="px-4 py-3 text-left">Date</th>
@@ -1603,7 +1614,7 @@ export function JobDetail({ jobId, initialEditing = false, onClose }: Props) {
                       <th className="px-4 py-3 text-right">Actual Hrs</th>
                       <th className="px-4 py-3 text-center">Status</th>
                       <th className="px-4 py-3 text-left">Notes</th>
-                      <th className="w-10" />
+                      <th className="w-28" />
                     </tr>
                   </thead>
                   <tbody>
@@ -1620,7 +1631,6 @@ export function JobDetail({ jobId, initialEditing = false, onClose }: Props) {
                         jobId={job.id}
                         propertyId={job.propertyId}
                         isChemicalJob={isChemicalJob}
-                        isSlideover={!!onClose}
                         crews={crews}
                         onDelete={async () => {
                           if (!confirm("Delete this visit?")) return;
@@ -1788,17 +1798,23 @@ export function JobDetail({ jobId, initialEditing = false, onClose }: Props) {
 
         </div>
 
-        {/* ── right sidebar ── */}
-        <div className="w-64 shrink-0 flex flex-col gap-3">
-          <div className="rounded-lg border bg-white p-4 shadow-sm text-xs flex flex-col gap-2">
-            <p className="font-semibold text-slate-500 text-[10px] uppercase tracking-wide">Job Info</p>
-            <InfoRow icon={<CalendarDays className="h-3.5 w-3.5" />} label="Type" value={(JOB_TYPE_LABEL[job.jobType] ?? job.jobType) + (waitingListScheduled ? " · Scheduled" : "")} />
-            <InfoRow icon={<User className="h-3.5 w-3.5" />} label="Crew" value={job.crewName ?? "Unassigned"} />
-            <InfoRow icon={<Clock className="h-3.5 w-3.5" />} label="Budgeted" value={job.budgetedHours ? `${job.budgetedHours}h` : "—"} />
-            <InfoRow icon={<Receipt className="h-3.5 w-3.5" />} label="Revenue" value={formatCurrency(jobValueCents)} />
-            {job.source && <InfoRow icon={<User className="h-3.5 w-3.5" />} label="Source" value={job.source} />}
+        {/* ── right sidebar ──
+             In a slide-over, the Visits tab's table (Date/Service/Crew/Budgeted
+             Hrs/Actual Hrs/Status/Notes + actions) is too wide to share space
+             with this column — drop it there so the table has room to breathe
+             instead of clipping its rightmost action buttons. */}
+        {!(onClose && tab === "visits") && (
+          <div className="w-64 shrink-0 flex flex-col gap-3">
+            <div className="rounded-lg border bg-white p-4 shadow-sm text-xs flex flex-col gap-2">
+              <p className="font-semibold text-slate-500 text-[10px] uppercase tracking-wide">Job Info</p>
+              <InfoRow icon={<CalendarDays className="h-3.5 w-3.5" />} label="Type" value={(JOB_TYPE_LABEL[job.jobType] ?? job.jobType) + (waitingListScheduled ? " · Scheduled" : "")} />
+              <InfoRow icon={<User className="h-3.5 w-3.5" />} label="Crew" value={job.crewName ?? "Unassigned"} />
+              <InfoRow icon={<Clock className="h-3.5 w-3.5" />} label="Budgeted" value={job.budgetedHours ? `${job.budgetedHours}h` : "—"} />
+              <InfoRow icon={<Receipt className="h-3.5 w-3.5" />} label="Revenue" value={formatCurrency(jobValueCents)} />
+              {job.source && <InfoRow icon={<User className="h-3.5 w-3.5" />} label="Source" value={job.source} />}
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );
@@ -1810,7 +1826,6 @@ function VisitRow({
   jobId,
   propertyId,
   isChemicalJob,
-  isSlideover,
   crews,
   onDelete,
   onSaveNote,
@@ -1823,7 +1838,6 @@ function VisitRow({
   jobId: string;
   propertyId: string | null;
   isChemicalJob: boolean;
-  isSlideover: boolean;
   crews: { id: string; name: string }[];
   onDelete: () => void;
   onSaveNote: (note: string) => Promise<void>;
@@ -1891,10 +1905,9 @@ function VisitRow({
         <td className="px-4 py-3 text-right tabular-nums">{visit.actualHours?.toFixed(1) ?? "—"}</td>
         <td className="px-4 py-3 text-center">
           <Badge
-            variant={isSlideover ? "outline" : "default"}
+            variant="outline"
             className={cn(
               "gap-1 text-[10px] border-transparent",
-              !isSlideover && "hover:bg-slate-700 hover:text-white",
               VISIT_STATUS_COLOR[visit.status] ?? "bg-slate-50 text-slate-500"
             )}
           >
