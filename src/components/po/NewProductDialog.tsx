@@ -218,10 +218,26 @@ export function NewProductDialog({ open, onOpenChange, initialData, onCreated }:
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "details" | "chemical")}>
-            <TabsList>
-              <TabsTrigger value="details">Details</TabsTrigger>
-              {trackChemicals && <TabsTrigger value="chemical">Chemical</TabsTrigger>}
-            </TabsList>
+            {/* Only worth showing a tab bar once there's a second tab to switch to —
+                matches the underline style used on the read-only product sheet. */}
+            {trackChemicals && (
+              <div className="border-b">
+                <TabsList className="h-9 bg-transparent p-0">
+                  <TabsTrigger
+                    value="details"
+                    className="h-9 rounded-none border-b-2 border-transparent px-3 text-sm font-medium text-slate-500 data-[state=active]:border-brand-500 data-[state=active]:text-brand-600 data-[state=active]:shadow-none"
+                  >
+                    Details
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="chemical"
+                    className="h-9 rounded-none border-b-2 border-transparent px-3 text-sm font-medium text-slate-500 data-[state=active]:border-brand-500 data-[state=active]:text-brand-600 data-[state=active]:shadow-none"
+                  >
+                    Chemical
+                  </TabsTrigger>
+                </TabsList>
+              </div>
+            )}
             <TabsContent value="details" className="mt-4">
           <div className="grid grid-cols-2 gap-4">
             {/* Name — full width */}
