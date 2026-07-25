@@ -12,6 +12,9 @@ function mapTemplate(row: any): InvoicePDFTemplate {
     name: row.name,
     layoutKey: row.layout_key as InvoicePDFLayoutKey,
     isDefault: row.is_default ?? false,
+    logoUrl: row.logo_url ?? null,
+    accentColor: row.accent_color ?? null,
+    showNotes: row.show_notes ?? true,
     deletedAt: row.deleted_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -57,12 +60,33 @@ export function useCreateInvoicePDFTemplate() {
 export function useUpdateInvoicePDFTemplate() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, name }: { id: string; name: string }) => {
+    mutationFn: async ({
+      id,
+      name,
+      layoutKey,
+      logoUrl,
+      accentColor,
+      showNotes,
+    }: {
+      id: string;
+      name?: string;
+      layoutKey?: InvoicePDFLayoutKey;
+      logoUrl?: string | null;
+      accentColor?: string | null;
+      showNotes?: boolean;
+    }) => {
       const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const updates: Record<string, any> = {};
+      if (name !== undefined) updates.name = name;
+      if (layoutKey !== undefined) updates.layout_key = layoutKey;
+      if (logoUrl !== undefined) updates.logo_url = logoUrl;
+      if (accentColor !== undefined) updates.accent_color = accentColor;
+      if (showNotes !== undefined) updates.show_notes = showNotes;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any)
         .from("crm_invoice_pdf_templates")
-        .update({ name })
+        .update(updates)
         .eq("id", id);
       if (error) throw error;
     },

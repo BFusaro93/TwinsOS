@@ -31,7 +31,7 @@ export async function GET(
       *,
       clients(display_name, billing_address, billing_city, billing_state, billing_zip),
       crm_invoice_line_items(*),
-      crm_invoice_pdf_templates(layout_key)
+      crm_invoice_pdf_templates(layout_key, logo_url, accent_color, show_notes)
     `)
     .eq("id", id)
     .single();
@@ -40,20 +40,22 @@ export async function GET(
     return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
   }
 
-  // ── resolve which layout to render ───────────────────────────────────────────
+  // ── resolve which template to render ─────────────────────────────────────────
   // Invoice's own pdf_template_id wins; otherwise fall back to the org's default template.
-  let layoutKey: InvoicePDFLayoutKey = (inv.crm_invoice_pdf_templates?.layout_key as InvoicePDFLayoutKey) ?? null;
-  if (!layoutKey) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let template: any = inv.crm_invoice_pdf_templates ?? null;
+  if (!template) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: defaultTemplate } = await (supabase as any)
       .from("crm_invoice_pdf_templates")
-      .select("layout_key")
+      .select("layout_key, logo_url, accent_color, show_notes")
       .eq("org_id", inv.org_id)
       .eq("is_default", true)
       .is("deleted_at", null)
       .maybeSingle();
-    layoutKey = (defaultTemplate?.layout_key as InvoicePDFLayoutKey) ?? "default";
+    template = defaultTemplate ?? null;
   }
+  const layoutKey: InvoicePDFLayoutKey = (template?.layout_key as InvoicePDFLayoutKey) ?? "default";
 
   // ── fetch org settings ──────────────────────────────────────────────────────
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -86,7 +88,7 @@ export async function GET(
     dueDate: inv.due_date as string | null,
     poNumber: inv.po_number as string | null,
     terms: inv.terms as string | null,
-    notes: inv.notes as string | null,
+    notes: template?.show_notes === false ? null : (inv.notes as string | null),
     clientName: inv.clients?.display_name ?? null,
     clientAddress: inv.clients?.billing_address ?? null,
     clientCity: inv.clients?.billing_city ?? null,
@@ -109,8 +111,8 @@ export async function GET(
     state: addr.state ?? "",
     zip: addr.zip ?? "",
     phone: addr.phone ?? "",
-    brandColor: (org?.brand_color as string) ?? "#60ab45",
-    logoUrl: (customizations.logoDataUrl as string) ?? null,
+    brandColor: (template?.accent_color as string) || (org?.brand_color as string) || "#60ab45",
+    logoUrl: (template?.logo_url as string) || (customizations.logoDataUrl as string) || null,
   };
 
   // ── render ──────────────────────────────────────────────────────────────────

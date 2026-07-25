@@ -521,7 +521,7 @@ export function CampaignsList() {
     <div className="flex h-full flex-col">
       <PageHeader
         title="Sales Campaigns"
-        description="Send targeted email and SMS campaigns to clients and leads."
+        description={!isLoading ? `${campaigns.length} campaigns` : undefined}
         action={
           <Button
             size="sm"

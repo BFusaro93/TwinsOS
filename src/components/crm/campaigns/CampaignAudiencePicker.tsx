@@ -2,6 +2,9 @@
 
 import { useMemo, useState } from "react";
 import { useClients } from "@/lib/hooks/use-clients";
+import { useClientFilterFields } from "@/lib/hooks/use-client-filter-fields";
+import { ClientFilterPopover } from "@/components/crm/shared/ClientFilterPopover";
+import { matchesAllFilterRows, type FilterRow } from "@/lib/client-filters";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Search } from "lucide-react";
@@ -15,16 +18,18 @@ export function CampaignAudiencePicker({
   onChange: (ids: string[]) => void;
 }) {
   const { data: clients = [], isLoading } = useClients();
+  const { fields, ctx } = useClientFilterFields();
   const [search, setSearch] = useState("");
   const [hideDoNotMarket, setHideDoNotMarket] = useState(true);
+  const [filterRows, setFilterRows] = useState<FilterRow[]>([]);
 
   const filtered = useMemo(() => {
     return clients.filter((c) => {
       if (hideDoNotMarket && c.doNotMarket) return false;
       if (search && !c.displayName.toLowerCase().includes(search.toLowerCase())) return false;
-      return true;
+      return matchesAllFilterRows(c, filterRows, ctx);
     });
-  }, [clients, search, hideDoNotMarket]);
+  }, [clients, search, hideDoNotMarket, filterRows, ctx]);
 
   const selectedSet = new Set(selectedIds);
   const toggle = (id: string) => {
@@ -43,6 +48,7 @@ export function CampaignAudiencePicker({
             className="h-7 pl-6 text-xs"
           />
         </div>
+        <ClientFilterPopover fields={fields} rows={filterRows} onRowsChange={setFilterRows} />
         <label className="flex shrink-0 items-center gap-1.5 text-xs text-slate-600">
           <Checkbox
             checked={hideDoNotMarket}

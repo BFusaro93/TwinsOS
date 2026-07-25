@@ -46,15 +46,7 @@ function formatTime(iso: string) {
 }
 
 function activityHref(item: ClientActivity): string | null {
-  if (item.activityType === "invoice" && item.refId) return `/crm/accounting/invoices/${item.refId}`;
-  // Legacy payment rows only ever stored the invoice they applied to — fall
-  // back to that for rows recorded before payments referenced themselves
-  // (ref_table === "crm_payments", handled via onPaymentClick below).
-  if (item.activityType === "payment" && item.refTable === "crm_invoices" && item.refId)
-    return `/crm/accounting/invoices/${item.refId}`;
   if (item.activityType === "estimate" && item.refId) return `/crm/estimates/${item.refId}`;
-  if ((item.activityType === "job" || item.activityType === "job_visit") && item.refId)
-    return `/crm/clients/${item.clientId}?tab=jobs`;
   return null;
 }
 
@@ -62,10 +54,14 @@ function ActivityRow({
   item,
   onTicketClick,
   onPaymentClick,
+  onInvoiceClick,
+  onJobClick,
 }: {
   item: ClientActivity;
   onTicketClick?: (id: string) => void;
   onPaymentClick?: (id: string) => void;
+  onInvoiceClick?: (id: string) => void;
+  onJobClick?: (id: string) => void;
 }) {
   const meta = TYPE_META[item.activityType] ?? TYPE_META.note;
   const Icon = meta.icon;
@@ -73,14 +69,24 @@ function ActivityRow({
   const href = activityHref(item);
   const isTicketEntry = (item.activityType === "ticket" || item.refTable === "crm_tickets") && !!item.refId;
   const isPaymentEntry = item.activityType === "payment" && item.refTable === "crm_payments" && !!item.refId;
+  // "invoice" rows, plus legacy "payment" rows that only ever stored the
+  // invoice they applied to (recorded before payments referenced themselves).
+  const isInvoiceEntry = !!item.refId && (
+    item.activityType === "invoice" ||
+    (item.activityType === "payment" && item.refTable === "crm_invoices")
+  );
+  const isJobEntry = (item.activityType === "job" || item.activityType === "job_visit") && !!item.refId;
 
   function handleClick() {
     if (isTicketEntry && onTicketClick) onTicketClick(item.refId!);
     else if (isPaymentEntry && onPaymentClick) onPaymentClick(item.refId!);
+    else if (isInvoiceEntry && onInvoiceClick) onInvoiceClick(item.refId!);
+    else if (isJobEntry && onJobClick) onJobClick(item.refId!);
     else if (href) router.push(href);
   }
 
-  const isClickable = (isTicketEntry && !!onTicketClick) || (isPaymentEntry && !!onPaymentClick) || !!href;
+  const isClickable = (isTicketEntry && !!onTicketClick) || (isPaymentEntry && !!onPaymentClick)
+    || (isInvoiceEntry && !!onInvoiceClick) || (isJobEntry && !!onJobClick) || !!href;
 
   return (
     <div
@@ -125,9 +131,11 @@ interface Props {
   clientId: string;
   onTicketClick?: (ticketId: string) => void;
   onPaymentClick?: (paymentId: string) => void;
+  onInvoiceClick?: (invoiceId: string) => void;
+  onJobClick?: (jobId: string) => void;
 }
 
-export function ActivityTimeline({ clientId, onTicketClick, onPaymentClick }: Props) {
+export function ActivityTimeline({ clientId, onTicketClick, onPaymentClick, onInvoiceClick, onJobClick }: Props) {
   const { data: activity, isLoading } = useClientActivity(clientId);
   const { mutateAsync: addNote, isPending } = useAddClientNote();
   const [noteText, setNoteText] = useState("");
@@ -211,7 +219,14 @@ export function ActivityTimeline({ clientId, onTicketClick, onPaymentClick }: Pr
         ) : (
           <div className="divide-y">
             {visible.map((item) => (
-              <ActivityRow key={item.id} item={item} onTicketClick={onTicketClick} onPaymentClick={onPaymentClick} />
+              <ActivityRow
+                key={item.id}
+                item={item}
+                onTicketClick={onTicketClick}
+                onPaymentClick={onPaymentClick}
+                onInvoiceClick={onInvoiceClick}
+                onJobClick={onJobClick}
+              />
             ))}
           </div>
         )}

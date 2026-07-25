@@ -20,36 +20,58 @@ import { Search, Calendar, ChevronRight, Plus } from "lucide-react";
 import { NewJobDialog } from "@/components/crm/jobs/NewJobDialog";
 import type { CRMJob } from "@/types/crm-jobs";
 
-// A single row in the Jobs list. Recurring/package/waiting_list jobs can have
-// many generated visits, each on its own date — so a job expands into one
-// occurrence per visit instead of a single row keyed by the job's own (often
-// stale) scheduled_date. Jobs with no visits yet fall back to a single row.
-interface JobOccurrence {
+// One row per JOB, not per visit. Recurring/package jobs can have dozens of
+// generated visits — showing one row per visit made the same job appear to
+// be in "Active" and "Completed" at once (and inflated the revenue stat,
+// since job.rateCents got summed once per visit row). Instead, roll a job's
+// visits up to a single representative occurrence: whichever visit is still
+// pending (earliest upcoming), or if every visit is done, the job counts as
+// completed. Jobs with no visits yet fall back to the job's own fields.
+interface JobSummary {
   key: string;
   job: CRMJob;
   date: string | null;
   status: string;
   crewName: string | null;
+  jobServiceId: string | null;
+  visitCount: number;
+  completedCount: number;
 }
 
-function expandJob(job: CRMJob): JobOccurrence[] {
+const TERMINAL_VISIT_STATUSES = new Set(["completed", "cancelled", "skipped"]);
+
+function summarizeJob(job: CRMJob): JobSummary {
   const visits = job.visits ?? [];
-  if (visits.length > 0) {
-    return visits.map((v) => ({
-      key: `${job.id}-${v.id}`,
+  if (visits.length === 0) {
+    return {
+      key: job.id,
       job,
-      date: v.scheduledDate,
-      status: v.status,
-      crewName: v.crewName ?? job.crewName ?? null,
-    }));
+      date: job.scheduledDate,
+      status: job.status,
+      crewName: job.crewName ?? null,
+      jobServiceId: null,
+      visitCount: 0,
+      completedCount: 0,
+    };
   }
-  return [{
+  const sorted = [...visits].sort((a, b) => a.scheduledDate.localeCompare(b.scheduledDate));
+  const pending = sorted.filter((v) => !TERMINAL_VISIT_STATUSES.has(v.status));
+  const completedCount = sorted.filter((v) => v.status === "completed").length;
+  // Still something to do → show the next upcoming visit. Otherwise every
+  // visit has reached a terminal state — the job is done, so it belongs in
+  // Completed even if its very last visit was skipped/cancelled rather than
+  // literally completed (nothing pending means there's nothing left to act on).
+  const rep = pending[0] ?? sorted[sorted.length - 1];
+  return {
     key: job.id,
     job,
-    date: job.scheduledDate,
-    status: job.status,
-    crewName: job.crewName ?? null,
-  }];
+    date: rep.scheduledDate,
+    status: pending.length > 0 ? rep.status : "completed",
+    crewName: rep.crewName ?? job.crewName ?? null,
+    jobServiceId: rep.jobServiceId,
+    visitCount: sorted.length,
+    completedCount,
+  };
 }
 
 const STATUS_COLOR: Record<string, string> = {
@@ -97,9 +119,9 @@ export function JobsList() {
     jobType: typeFilter !== "all" ? typeFilter : undefined,
   });
 
-  const occurrences = useMemo(() => jobs.flatMap(expandJob), [jobs]);
+  const summaries = useMemo(() => jobs.map(summarizeJob), [jobs]);
 
-  const viewFiltered = occurrences.filter((o) => {
+  const viewFiltered = summaries.filter((o) => {
     if (viewMode === "unscheduled") return o.date === null;
     if (viewMode === "completed") return o.status === "completed";
     // active
@@ -122,7 +144,7 @@ export function JobsList() {
     : viewFiltered;
 
   // group by date — completed view uses the visit/job's updatedAt so rows without a date still sort sensibly
-  const grouped = filtered.reduce<Record<string, JobOccurrence[]>>((acc, o) => {
+  const grouped = filtered.reduce<Record<string, JobSummary[]>>((acc, o) => {
     let key: string;
     if (viewMode === "completed") {
       key = o.date ?? (o.job.updatedAt ? o.job.updatedAt.slice(0, 10) : "Unknown");
@@ -197,7 +219,7 @@ export function JobsList() {
               key={mode}
               onClick={() => setViewMode(mode)}
               className={cn(
-                "px-3 capitalize transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                "px-3 capitalize transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2",
                 viewMode === mode
                   ? "bg-slate-800 text-white"
                   : "bg-white text-slate-600 hover:bg-slate-50"
@@ -321,9 +343,16 @@ export function JobsList() {
   );
 }
 
-function JobRow({ occurrence, onClick }: { occurrence: JobOccurrence; onClick: () => void }) {
-  const { job, status, crewName } = occurrence;
-  const serviceNames = (job.services ?? []).map((s) => s.serviceName).filter(Boolean).join(", ");
+function JobRow({ occurrence, onClick }: { occurrence: JobSummary; onClick: () => void }) {
+  const { job, status, crewName, jobServiceId, visitCount, completedCount } = occurrence;
+  // Package jobs carry every step (e.g. all 5 Fert applications) on job.services,
+  // but this occurrence is only for the ONE step its visit is linked to — show
+  // just that, not every step on the whole package (same fix as Waiting List
+  // and the Dispatch Board).
+  const linkedService = jobServiceId ? (job.services ?? []).find((s) => s.id === jobServiceId) : null;
+  const serviceNames = linkedService
+    ? linkedService.serviceName
+    : (job.services ?? []).map((s) => s.serviceName).filter(Boolean).join(", ");
 
   return (
     <tr className="border-b last:border-0 hover:bg-slate-50 transition-colors cursor-pointer" onClick={onClick}>
@@ -350,9 +379,12 @@ function JobRow({ occurrence, onClick }: { occurrence: JobOccurrence; onClick: (
         {job.rateCents != null ? formatCurrency(job.rateCents) : "—"}
       </td>
       <td className="px-4 py-3 text-center">
-        <Badge className={cn("text-[10px]", STATUS_COLOR[status] ?? "bg-slate-100 text-slate-500")}>
+        <Badge variant="outline" className={cn("text-[10px] border-transparent", STATUS_COLOR[status] ?? "bg-slate-100 text-slate-500")}>
           {STATUS_LABEL[status] ?? status}
         </Badge>
+        {visitCount > 1 && (
+          <p className="mt-0.5 text-[10px] text-slate-400">{completedCount}/{visitCount} visits</p>
+        )}
       </td>
       <td className="px-4 py-3 text-center">
         <ChevronRight className="h-4 w-4 text-slate-300" />

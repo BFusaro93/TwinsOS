@@ -163,7 +163,7 @@ export interface CRMJob {
   salesRepName?: string | null;
   services?: CRMJobService[];
   /** Populated only by useJobsList — the job's actual scheduled/generated visit occurrences. */
-  visits?: { id: string; scheduledDate: string; status: VisitStatus; crewName: string | null }[];
+  visits?: { id: string; scheduledDate: string; status: VisitStatus; crewName: string | null; jobServiceId: string | null }[];
 }
 
 export interface NewJobFormValues {

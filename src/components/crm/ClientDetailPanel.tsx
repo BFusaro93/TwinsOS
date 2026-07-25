@@ -2623,6 +2623,8 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
   const [newTicketOpen, setNewTicketOpen] = useState(false);
   const [openTicketId, setOpenTicketId] = useState<string | null>(null);
   const [openPaymentId, setOpenPaymentId] = useState<string | null>(null);
+  const [openInvoiceId, setOpenInvoiceId] = useState<string | null>(null);
+  const [openJobId, setOpenJobId] = useState<string | null>(null);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [portalInviteOpen, setPortalInviteOpen] = useState(false);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
@@ -3131,6 +3133,8 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
             clientId={clientId}
             onTicketClick={(id) => setOpenTicketId(id)}
             onPaymentClick={(id) => setOpenPaymentId(id)}
+            onInvoiceClick={(id) => setOpenInvoiceId(id)}
+            onJobClick={(id) => setOpenJobId(id)}
           />
         </TabsContent>
 
@@ -3251,6 +3255,14 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
         open={!!openPaymentId}
         onOpenChange={(o) => { if (!o) setOpenPaymentId(null); }}
         payment={openPayment}
+      />
+      <InvoiceDetailSheet
+        invoiceId={openInvoiceId}
+        onOpenChange={(o) => { if (!o) setOpenInvoiceId(null); }}
+      />
+      <JobDetailSheet
+        jobId={openJobId}
+        onOpenChange={(o) => { if (!o) setOpenJobId(null); }}
       />
     </div>
   );

@@ -529,11 +529,11 @@ export function JobDetail({ jobId, initialEditing = false, onClose }: Props) {
             </p>
           </div>
           <div className="ml-auto flex shrink-0 items-center gap-2 pl-4">
-            <Badge className={cn("text-[10px]", STATUS_COLOR[effectiveStatus] ?? "bg-slate-100 text-slate-500")}>
+            <Badge variant="outline" className={cn("text-[10px] border-transparent", STATUS_COLOR[effectiveStatus] ?? "bg-slate-100 text-slate-500")}>
               {STATUS_LABEL[effectiveStatus] ?? effectiveStatus}
             </Badge>
             {isOverdue && (
-              <Badge className="text-[10px] bg-red-100 text-red-700">Overdue</Badge>
+              <Badge variant="outline" className="text-[10px] border-transparent bg-red-100 text-red-700">Overdue</Badge>
             )}
             <span className="text-sm font-normal text-slate-400 whitespace-nowrap">
               {JOB_TYPE_LABEL[job.jobType] ?? job.jobType}
@@ -543,13 +543,6 @@ export function JobDetail({ jobId, initialEditing = false, onClose }: Props) {
         </div>
 
         <div className="flex items-center gap-1.5">
-          {(job.jobType === "package" || (job.jobType === "waiting_list" && !waitingListScheduled)) && (
-            <Button variant="outline" size="sm" className="h-8 text-xs"
-              onClick={() => { setTab("visits"); setAddingVisit(true); }}>
-              <CalendarPlus className="mr-1 h-3.5 w-3.5 text-brand-500" />
-              Schedule Visit
-            </Button>
-          )}
           {effectiveStatus !== "completed" && job.jobType !== "recurring" && job.jobType !== "package" && (
             <Button variant="outline" size="sm" className="h-8 text-xs"
               onClick={() => handleStatus("completed")}>
@@ -949,7 +942,7 @@ export function JobDetail({ jobId, initialEditing = false, onClose }: Props) {
                     </div>
                     <div className="flex justify-between">
                       <dt className="text-xs text-slate-500">Status</dt>
-                      <dd><Badge className={cn("text-[10px]", STATUS_COLOR[job.status] ?? "bg-slate-100 text-slate-500")}>{STATUS_LABEL[job.status] ?? job.status}</Badge></dd>
+                      <dd><Badge variant="outline" className={cn("text-[10px] border-transparent", STATUS_COLOR[job.status] ?? "bg-slate-100 text-slate-500")}>{STATUS_LABEL[job.status] ?? job.status}</Badge></dd>
                     </div>
                     {job.jobType === "waiting_list" && (
                       <div className="flex justify-between">

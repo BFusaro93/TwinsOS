@@ -149,6 +149,23 @@ export function useClientCustomFieldValues(clientId: string) {
   });
 }
 
+/** Every client's custom field values in one query, for bulk filtering (e.g.
+ *  the Sales Campaigns audience filter) rather than one row at a time. */
+export function useAllClientCustomFieldValues() {
+  return useQuery({
+    queryKey: ["crm_client_custom_field_values", "all"],
+    queryFn: async () => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
+        .from("crm_client_custom_field_values")
+        .select("*");
+      if (error) throw error;
+      return (data ?? []).map(mapValue) as ClientCustomFieldValue[];
+    },
+  });
+}
+
 export function useUpsertClientCustomFieldValue() {
   const qc = useQueryClient();
   return useMutation({

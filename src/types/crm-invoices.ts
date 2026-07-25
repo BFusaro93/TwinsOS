@@ -214,6 +214,9 @@ export interface InvoicePDFTemplate {
   name: string;
   layoutKey: InvoicePDFLayoutKey;
   isDefault: boolean;
+  logoUrl: string | null;
+  accentColor: string | null;
+  showNotes: boolean;
   deletedAt: string | null;
   createdAt: string;
   updatedAt: string;
