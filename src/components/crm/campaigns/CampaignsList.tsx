@@ -518,7 +518,7 @@ export function CampaignsList() {
   }
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full flex-col gap-4">
       <PageHeader
         title="Sales Campaigns"
         description={!isLoading ? `${campaigns.length} campaigns` : undefined}

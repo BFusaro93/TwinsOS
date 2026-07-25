@@ -480,6 +480,23 @@ export function JobDetail({ jobId, initialEditing = false, onClose }: Props) {
   // independently), so show a "Scheduled" qualifier once it has one.
   const waitingListScheduled = job.jobType === "waiting_list" && visits.length > 0;
 
+  // A job's own crew_id is only meaningful when every visit actually agrees
+  // with it — once a multi-service job has its services split across visits
+  // (e.g. Spring Clean-up to one crew, Mulch to another), showing job.crewName
+  // here is misleading. Fall back to a per-crew breakdown when they differ.
+  const distinctVisitCrewNames = Array.from(new Set(visits.map((v) => v.crewName ?? "Unassigned")));
+  const crewSummary = visits.length === 0
+    ? (job.crewName ?? "Unassigned")
+    : distinctVisitCrewNames.length <= 1
+      ? distinctVisitCrewNames[0]
+      : "Multiple";
+  const crewSummaryTitle = distinctVisitCrewNames.length > 1
+    ? visits.map((v) => {
+        const svcName = services.find((s) => s.id === v.jobServiceId)?.serviceName;
+        return `${svcName ? `${svcName}: ` : ""}${v.crewName ?? "Unassigned"} (${v.scheduledDate})`;
+      }).join("\n")
+    : undefined;
+
   // Package jobs never set a single scheduledDate (visits are spread across
   // the season), so fall back to the span of its own visit dates — or the
   // waiting-list-style window set at creation if no visits exist yet.
@@ -938,7 +955,7 @@ export function JobDetail({ jobId, initialEditing = false, onClose }: Props) {
                     </div>
                     <div className="flex justify-between">
                       <dt className="text-xs text-slate-500">Crew</dt>
-                      <dd className="text-xs font-medium text-slate-800">{crews.find((c) => c.id === job.crewId)?.name ?? "Unassigned"}</dd>
+                      <dd className="text-xs font-medium text-slate-800" title={crewSummaryTitle}>{crewSummary}</dd>
                     </div>
                     <div className="flex justify-between">
                       <dt className="text-xs text-slate-500">Status</dt>
@@ -1643,13 +1660,19 @@ export function JobDetail({ jobId, initialEditing = false, onClose }: Props) {
                           toast.success("Visit skipped");
                         }}
                         onDispatch={async (date, crewId) => {
-                          await updateVisit.mutateAsync({
-                            id: v.id,
-                            jobId: job.id,
-                            jobType: job.jobType,
-                            updates: { scheduled_date: date, crew_id: crewId, status: "dispatched", dispatched_at: new Date().toISOString() },
-                          });
-                          toast.success("Visit dispatched");
+                          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                          const updates: Record<string, any> = { scheduled_date: date, crew_id: crewId };
+                          // Only flip status/dispatched_at the first time this visit
+                          // actually goes out — reassigning an already-dispatched (or
+                          // in-progress) visit to a different date/crew shouldn't
+                          // regress or re-stamp its status.
+                          const isFirstDispatch = v.status === "scheduled";
+                          if (isFirstDispatch) {
+                            updates.status = "dispatched";
+                            updates.dispatched_at = new Date().toISOString();
+                          }
+                          await updateVisit.mutateAsync({ id: v.id, jobId: job.id, jobType: job.jobType, updates });
+                          toast.success(isFirstDispatch ? "Visit dispatched" : "Visit updated");
                         }}
                       />
                     ))}
@@ -1801,7 +1824,7 @@ export function JobDetail({ jobId, initialEditing = false, onClose }: Props) {
             <div className="rounded-lg border bg-white p-4 shadow-sm text-xs flex flex-col gap-2">
               <p className="font-semibold text-slate-500 text-[10px] uppercase tracking-wide">Job Info</p>
               <InfoRow icon={<CalendarDays className="h-3.5 w-3.5" />} label="Type" value={(JOB_TYPE_LABEL[job.jobType] ?? job.jobType) + (waitingListScheduled ? " · Scheduled" : "")} />
-              <InfoRow icon={<User className="h-3.5 w-3.5" />} label="Crew" value={job.crewName ?? "Unassigned"} />
+              <InfoRow icon={<User className="h-3.5 w-3.5" />} label="Crew" value={crewSummary} title={crewSummaryTitle} />
               <InfoRow icon={<Clock className="h-3.5 w-3.5" />} label="Budgeted" value={job.budgetedHours ? `${job.budgetedHours}h` : "—"} />
               <InfoRow icon={<Receipt className="h-3.5 w-3.5" />} label="Revenue" value={formatCurrency(jobValueCents)} />
               {job.source && <InfoRow icon={<User className="h-3.5 w-3.5" />} label="Source" value={job.source} />}
@@ -1872,13 +1895,24 @@ function VisitRow({
   const [dispatchDate, setDispatchDate] = useState(visit.scheduledDate ?? "");
   const [dispatchCrew, setDispatchCrew] = useState(visit.crewId ?? "");
   const [dispatchSaving, setDispatchSaving] = useState(false);
+  // Re-sync when the visit's own date/crew changes elsewhere (e.g. edited on
+  // the Dispatch Board) so reopening this editor doesn't show stale values.
+  useEffect(() => {
+    setDispatchDate(visit.scheduledDate ?? "");
+    setDispatchCrew(visit.crewId ?? "");
+  }, [visit.id, visit.scheduledDate, visit.crewId]);
 
   const isTerminal = visit.status === "completed" || visit.status === "skipped" || visit.status === "cancelled";
   // Visits on package/waiting-list jobs commonly start out as unassigned
   // placeholders (status stays 'scheduled' until the office actually sends
   // them out) — surface a direct way to pick a date + crew and send it to
-  // the Dispatch Board without having to go back to the Waiting List.
-  const canDispatch = visit.status === "scheduled";
+  // the Dispatch Board without having to go back to the Waiting List. Once
+  // dispatched, the same control lets you move the visit to a different
+  // date/crew (e.g. two services on one job split across crews) without
+  // having to go find it on the Dispatch Board — anything short of a
+  // finished visit can still be reassigned.
+  const isFreshDispatch = visit.status === "scheduled";
+  const canDispatch = !isTerminal;
 
   return (
     <>
@@ -1943,7 +1977,7 @@ function VisitRow({
             {canDispatch && (
               <button
                 onClick={() => { setDispatching(true); setSkipping(false); setEditingNote(false); }}
-                title="Dispatch to a date/crew"
+                title={isFreshDispatch ? "Dispatch to a date/crew" : "Change date/crew"}
                 className="rounded p-1 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-orange-50 text-slate-300 hover:text-orange-500"
               >
                 <Send className="h-3.5 w-3.5" />
@@ -2015,7 +2049,7 @@ function VisitRow({
       {dispatching && (
         <tr className="border-b bg-orange-50">
           <td colSpan={7} className="px-4 py-2">
-            <p className="text-xs font-medium text-orange-700 mb-1.5">Dispatch this visit</p>
+            <p className="text-xs font-medium text-orange-700 mb-1.5">{isFreshDispatch ? "Dispatch this visit" : "Change date / crew"}</p>
             <div className="flex items-end gap-2">
               <div className="flex flex-col gap-1">
                 <Label className="text-xs text-slate-600">Date</Label>
@@ -2049,7 +2083,7 @@ function VisitRow({
                   setDispatchSaving(false);
                 }
               }}>
-                {dispatchSaving ? "Dispatching…" : "Dispatch"}
+                {dispatchSaving ? "Saving…" : isFreshDispatch ? "Dispatch" : "Save"}
               </Button>
               <Button size="sm" variant="ghost" className="h-8 text-xs" onClick={() => setDispatching(false)}>Cancel</Button>
             </div>
@@ -2107,12 +2141,12 @@ function VisitRow({
   );
 }
 
-function InfoRow({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
+function InfoRow({ icon, label, value, title }: { icon: React.ReactNode; label: string; value: string; title?: string }) {
   return (
     <div className="flex items-center gap-2 text-slate-600">
       <span className="text-slate-400">{icon}</span>
       <span className="text-slate-400 w-16">{label}</span>
-      <span className="font-medium truncate">{value}</span>
+      <span className="font-medium truncate" title={title}>{value}</span>
     </div>
   );
 }
