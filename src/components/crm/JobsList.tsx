@@ -74,6 +74,15 @@ function summarizeJob(job: CRMJob): JobSummary {
   };
 }
 
+// job.rateCents is a single shared value that predates per-service line items
+// (or goes stale once a job has several services split across visits, e.g.
+// Spring Clean-up + Mulch added together) — sum the services when there are
+// any, falling back to the job-level rate only for jobs with none.
+function jobRevenueCents(job: CRMJob): number {
+  const serviceTotal = (job.services ?? []).reduce((s, sv) => s + (sv.rateCents ?? 0) * (sv.qty ?? 1), 0);
+  return serviceTotal > 0 ? serviceTotal : (job.rateCents ?? 0);
+}
+
 const STATUS_COLOR: Record<string, string> = {
   scheduled:   "bg-blue-100 text-blue-700",
   in_progress: "bg-yellow-100 text-yellow-700",
@@ -169,7 +178,7 @@ export function JobsList() {
     scheduled:  filtered.filter((o) => o.status === "scheduled").length,
     inProgress: filtered.filter((o) => o.status === "in_progress").length,
     completed:  filtered.filter((o) => o.status === "completed").length,
-    revenue:    filtered.reduce((s, o) => s + (o.job.rateCents ?? 0), 0),
+    revenue:    filtered.reduce((s, o) => s + jobRevenueCents(o.job), 0),
   };
 
   return (
@@ -376,7 +385,7 @@ function JobRow({ occurrence, onClick }: { occurrence: JobSummary; onClick: () =
         {crewName ?? <span className="text-slate-400 italic">Unassigned</span>}
       </td>
       <td className="px-4 py-3 text-right tabular-nums text-slate-700 text-sm">
-        {job.rateCents != null ? formatCurrency(job.rateCents) : "—"}
+        {formatCurrency(jobRevenueCents(job))}
       </td>
       <td className="px-4 py-3 text-center">
         <Badge variant="outline" className={cn("text-[10px] border-transparent", STATUS_COLOR[status] ?? "bg-slate-100 text-slate-500")}>

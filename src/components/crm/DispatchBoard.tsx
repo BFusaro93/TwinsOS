@@ -212,6 +212,14 @@ function JobDetailSheet({
   const serviceTotal = linkedService
     ? (linkedService.rateCents ?? 0) * (linkedService.qty ?? 1)
     : services.reduce((s, svc) => s + (svc.rateCents ?? 0) * (svc.qty ?? 1), 0);
+  // job.rateCents is one shared value for the whole job — only a sensible
+  // fallback for a visit covering the whole job. Once a visit is linked to
+  // ONE specific service (a multi-service job split across visits), it must
+  // use that service's own rate instead, or every visit on the job would
+  // show the same job-level amount regardless of which service it's for.
+  const rateFallbackCents = linkedService
+    ? (serviceTotal || null)
+    : (job?.rateCents ?? (serviceTotal > 0 ? serviceTotal : null));
 
   // Form state — reset when visit changes
   const [status,      setStatus]      = useState<VisitStatus>(visit.status);
@@ -225,8 +233,7 @@ function JobDetailSheet({
   const [qty,         setQty]         = useState(String(visit.qty ?? ""));
   const [rateCents,   setRateCents]   = useState(
     String(visit.rateCents != null ? visit.rateCents / 100
-         : job?.rateCents != null ? job.rateCents / 100
-         : serviceTotal > 0 ? serviceTotal / 100
+         : rateFallbackCents != null ? rateFallbackCents / 100
          : "")
   );
 
@@ -275,10 +282,8 @@ function JobDetailSheet({
     }
   }
 
-  const effectiveRate = visit.rateCents ?? job?.rateCents ?? (serviceTotal > 0 ? serviceTotal : null);
-  const amt = visit.rateCents != null ? visit.rateCents
-            : job?.rateCents != null ? job.rateCents
-            : serviceTotal;
+  const effectiveRate = visit.rateCents ?? rateFallbackCents;
+  const amt = visit.rateCents ?? rateFallbackCents ?? 0;
 
   async function handleSave() {
     const updates: Parameters<typeof updateVisit>[0]["updates"] = {
@@ -1417,7 +1422,12 @@ function VisitRow({
   const serviceTotal = linkedService
     ? (linkedService.rateCents ?? 0) * (linkedService.qty ?? 1)
     : services.reduce((s, svc) => s + (svc.rateCents ?? 0) * (svc.qty ?? 1), 0);
-  const effectiveRate = visit.rateCents ?? job?.rateCents ?? (serviceTotal > 0 ? serviceTotal : null);
+  // job.rateCents is one shared value for the whole job — fine as a fallback
+  // for a visit covering the whole job, but wrong once a visit is linked to
+  // ONE specific service (a multi-service job split across visits), where it
+  // would show the same job-level amount on every one of that job's visits
+  // instead of each service's own rate.
+  const effectiveRate = visit.rateCents ?? (linkedService ? (serviceTotal || null) : (job?.rateCents ?? (serviceTotal > 0 ? serviceTotal : null)));
   const effectiveCrewId = visit.crewId ?? job?.crewId ?? null;
   const effectiveCrewName = visit.crewName ?? job?.crewName ?? null;
   const effectiveCrew = (effectiveCrewId && crewCodeById.get(effectiveCrewId)) || effectiveCrewName;
