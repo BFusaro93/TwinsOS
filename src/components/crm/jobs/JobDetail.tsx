@@ -1018,7 +1018,7 @@ export function JobDetail({ jobId, initialEditing = false, onClose }: Props) {
                     )}
                     {job.notesToCrew && (
                       <div className="flex flex-col gap-0.5">
-                        <dt className="text-xs text-slate-500">Notes to Crew</dt>
+                        <dt className="text-xs text-slate-500">Notes to Crew / Job Notes</dt>
                         <dd className="text-xs text-slate-700">{job.notesToCrew}</dd>
                       </div>
                     )}
@@ -1029,7 +1029,7 @@ export function JobDetail({ jobId, initialEditing = false, onClose }: Props) {
               {/* Notes to Crew — always visible when set */}
               {(job.notesToCrew || editing) && (
                 <div className="rounded-lg border bg-blue-50 border-blue-200 p-4 shadow-sm col-span-2">
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-blue-700 mb-1">Notes to Crew</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-blue-700 mb-1">Notes to Crew / Job Notes</p>
                   {editing ? (
                     <Textarea
                       rows={2}
@@ -1662,7 +1662,7 @@ export function JobDetail({ jobId, initialEditing = false, onClose }: Props) {
           {tab === "notes" && (
             <div className="rounded-lg border bg-white p-4 shadow-sm flex flex-col gap-3">
               <div className="flex flex-col gap-1">
-                <Label className="text-xs font-medium text-slate-600">Notes to Crew</Label>
+                <Label className="text-xs font-medium text-slate-600">Notes to Crew / Job Notes</Label>
                 <Textarea
                   rows={4}
                   defaultValue={job.notesToCrew ?? ""}

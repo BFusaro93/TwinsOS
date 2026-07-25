@@ -233,7 +233,7 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
           </div>
 
           <div className="flex flex-col gap-1 col-span-2">
-            <Label className="text-xs font-medium text-slate-600">Notes to Crew</Label>
+            <Label className="text-xs font-medium text-slate-600">Notes to Crew / Job Notes</Label>
             <Textarea
               value={notesToCrew}
               onChange={(e) => setNotesToCrew(e.target.value)}

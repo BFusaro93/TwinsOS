@@ -608,7 +608,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
 
             {/* Notes */}
             <div className="flex flex-col gap-1.5">
-              <Label>Notes to Crew</Label>
+              <Label>Notes to Crew / Job Notes</Label>
               <Textarea value={notesToCrew} onChange={(e) => setNotesToCrew(e.target.value)} placeholder="Optional notes visible to the crew…" rows={2} />
             </div>
           </div>

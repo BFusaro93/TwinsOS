@@ -258,6 +258,23 @@ function JobDetailSheet({
   const [notesToClient, setNotesToClient] = useState(visit.notesToClient ?? "");
   // Fall back to job-level master invoice description when visit has none
   const [invoiceDesc,   setInvoiceDesc]   = useState(visit.invoiceDescription ?? job?.invoiceDescription ?? "");
+  const [notesToCrewInput, setNotesToCrewInput] = useState(visit.notesToCrew ?? job?.notesToCrew ?? "");
+  const [savingNotesToCrew, setSavingNotesToCrew] = useState(false);
+  useEffect(() => {
+    setNotesToCrewInput(visit.notesToCrew ?? job?.notesToCrew ?? "");
+  }, [visit.id, visit.notesToCrew, job?.notesToCrew]);
+
+  async function saveNotesToCrew() {
+    setSavingNotesToCrew(true);
+    try {
+      await updateVisit({ id: visit.id, updates: { notes_to_crew: notesToCrewInput || null } });
+      toast.success("Notes saved");
+    } catch {
+      toast.error("Failed to save notes");
+    } finally {
+      setSavingNotesToCrew(false);
+    }
+  }
 
   const effectiveRate = visit.rateCents ?? job?.rateCents ?? (serviceTotal > 0 ? serviceTotal : null);
   const amt = visit.rateCents != null ? visit.rateCents
@@ -535,15 +552,21 @@ function JobDetailSheet({
               </div>
 
               {/* Job Notes — instructions to the crew (notesToCrew), similar to an
-                  estimate instruction. Distinct from Job Comments below. */}
-              <TabsContent value="job-notes" className="m-0 flex-1 p-4">
-                {(visit.notesToCrew ?? visit.job?.notesToCrew) ? (
-                  <div className="rounded border border-yellow-200 bg-yellow-50 px-3 py-2.5">
-                    <p className="text-xs text-slate-700 whitespace-pre-wrap">{visit.notesToCrew ?? visit.job?.notesToCrew}</p>
-                  </div>
-                ) : (
-                  <p className="text-xs text-slate-400 italic">No job notes yet</p>
-                )}
+                  estimate instruction. Distinct from Job Comments below. Editable
+                  here (was previously read-only, the only way to set it was the
+                  Jobs screen's Visits tab). Deliberately NOT rendered as a banner
+                  row on the dispatch board itself — these can run long and would
+                  clog up the board, unlike short job comments. */}
+              <TabsContent value="job-notes" className="m-0 p-4 space-y-3">
+                <Textarea
+                  value={notesToCrewInput}
+                  onChange={(e) => setNotesToCrewInput(e.target.value)}
+                  placeholder="Instructions for the crew…"
+                  className="h-24 resize-none text-xs"
+                />
+                <Button size="sm" className="h-7 text-xs" onClick={saveNotesToCrew} disabled={savingNotesToCrew}>
+                  {savingNotesToCrew ? "Saving…" : "Save Notes"}
+                </Button>
               </TabsContent>
 
               {/* Job Comments — scheduling remarks and notes submitted by the crew
@@ -1348,7 +1371,7 @@ function EditJobTimesDialog({
 
 function VisitRow({
   visit,
-  index,
+  orderNum,
   selectedDate,
   onOpen,
   onEditTimes,
@@ -1363,7 +1386,8 @@ function VisitRow({
   onReorder,
 }: {
   visit: CRMJobVisit;
-  index: number;
+  /** 1-based position of this visit within its own crew's stops for the day (not the global row index). */
+  orderNum: number;
   selectedDate: string;
   onOpen: (v: CRMJobVisit) => void;
   onEditTimes: (v: CRMJobVisit) => void;
@@ -1481,8 +1505,8 @@ function VisitRow({
           {onReorder ? (
             <input
               type="number"
-              defaultValue={index + 1}
-              key={index}
+              defaultValue={orderNum}
+              key={orderNum}
               min={1}
               className="w-7 text-center text-[10px] text-slate-600 bg-transparent border border-slate-200 rounded focus:outline-none focus:border-brand-400"
               onClick={(e) => e.stopPropagation()}
@@ -1499,7 +1523,7 @@ function VisitRow({
               }}
             />
           ) : (
-            <span className="text-slate-400 text-[10px]">{index + 1}</span>
+            <span className="text-slate-400 text-[10px]">{orderNum}</span>
           )}
         </div>
         {driveMinsToNext !== undefined && (
@@ -1706,13 +1730,10 @@ function VisitRow({
         );
       })()}
     </tr>
-    {crewNoteBanner && (
-      <tr className="border-b border-slate-100 bg-yellow-50/70">
-        <td colSpan={totalCols} className="px-3 py-1.5 text-[11px] text-slate-700">
-          <span className="font-semibold">Job Notes:</span> {crewNoteBanner}
-        </td>
-      </tr>
-    )}
+    {/* Job Notes intentionally has no banner row here — they can run long
+        (see the Job Notes tab) and would clog up the board; the sticky-note
+        icon above with its tooltip is the only on-board indicator. Job
+        Comments (short scheduling remarks) still get the full banner below. */}
     {visit.jobComments.map((c) => (
       <tr key={c.id} className="border-b border-slate-100 bg-orange-50/70">
         <td colSpan={totalCols} className="px-3 py-1.5 text-[11px] text-slate-600">
@@ -1916,6 +1937,22 @@ export function DispatchBoard() {
         return an.localeCompare(bn);
       });
 
+  // Order numbers and drag/drop reordering are scoped per crew — each crew
+  // runs its own separate route, so "#3" should mean the 3rd stop for THAT
+  // crew, and reordering one crew's stops must never renumber another's.
+  const visitById = new Map(displayVisits.map((v) => [v.id, v]));
+  const crewKeyOf = (id: string) => visitById.get(id)?.crewId ?? "unassigned";
+  const crewOrderNumById = new Map<string, number>();
+  {
+    const counters = new Map<string, number>();
+    for (const v of displayVisits) {
+      const key = v.crewId ?? "unassigned";
+      const next = (counters.get(key) ?? 0) + 1;
+      counters.set(key, next);
+      crewOrderNumById.set(v.id, next);
+    }
+  }
+
   function toggleSelect(id: string) {
     setSelectedIds((prev) => {
       const next = new Set(prev);
@@ -1932,14 +1969,20 @@ export function DispatchBoard() {
     }
   }
 
-  function handleReorder(id: string, newIndex: number) {
+  function handleReorder(id: string, crewRelativeNewIndex: number) {
     const cur = manualOrder ?? displayVisits.map((v) => v.id);
-    const from = cur.indexOf(id);
+    const crewKey = crewKeyOf(id);
+    const crewIds = cur.filter((vid) => crewKeyOf(vid) === crewKey);
+    const from = crewIds.indexOf(id);
     if (from === -1) return;
-    const clamped = Math.max(0, Math.min(newIndex, cur.length - 1));
-    const next = [...cur];
-    next.splice(from, 1);
-    next.splice(clamped, 0, id);
+    const clamped = Math.max(0, Math.min(crewRelativeNewIndex, crewIds.length - 1));
+    const reordered = [...crewIds];
+    reordered.splice(from, 1);
+    reordered.splice(clamped, 0, id);
+    // Splice the reordered crew subsequence back in place — every other
+    // crew's ids keep their exact existing positions.
+    let ptr = 0;
+    const next = cur.map((vid) => (crewKeyOf(vid) === crewKey ? reordered[ptr++] : vid));
     setManualOrder(next);
     if (optimizedOrder) { setOptimizedOrder(null); setDriveTimeMap(new Map()); setTotalDriveMins(null); }
   }
@@ -1962,6 +2005,11 @@ export function DispatchBoard() {
 
   function handleDragOver(overId: string) {
     if (!dragId || dragId === overId) return;
+    // Each crew runs its own route — dropping a stop into another crew's
+    // block here would silently renumber that crew's stops too, so only
+    // allow reordering within the same crew (reassigning crew is still done
+    // via the Team Assignment dialog, not by dragging rows here).
+    if (crewKeyOf(dragId) !== crewKeyOf(overId)) return;
     setDragOverId(overId);
     setManualOrder((prev) => {
       const order = prev ?? displayVisits.map((v) => v.id);
@@ -2641,11 +2689,11 @@ export function DispatchBoard() {
                 </td>
               </tr>
             ) : (
-              displayVisits.map((visit, i) => (
+              displayVisits.map((visit) => (
                 <VisitRow
                   key={visit.id}
                   visit={visit}
-                  index={i}
+                  orderNum={crewOrderNumById.get(visit.id) ?? 1}
                   selectedDate={selectedDate}
                   onOpen={setDetailVisit}
                   onEditTimes={setEditTimesVisit}
