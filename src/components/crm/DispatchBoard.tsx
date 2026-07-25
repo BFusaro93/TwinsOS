@@ -1384,6 +1384,7 @@ function VisitRow({
   isVisible,
   onReorder,
   serviceCodeById,
+  crewCodeById,
 }: {
   visit: CRMJobVisit;
   /** 1-based position of this visit within its own crew's stops for the day (not the global row index). */
@@ -1400,6 +1401,7 @@ function VisitRow({
   isDragOver: boolean;
   isVisible: (col: ColKey) => boolean;
   serviceCodeById: Map<string, string>;
+  crewCodeById: Map<string, string>;
   onReorder?: (id: string, newIndex: number) => void;
 }) {
   const job      = visit.job;
@@ -1416,7 +1418,9 @@ function VisitRow({
     ? (linkedService.rateCents ?? 0) * (linkedService.qty ?? 1)
     : services.reduce((s, svc) => s + (svc.rateCents ?? 0) * (svc.qty ?? 1), 0);
   const effectiveRate = visit.rateCents ?? job?.rateCents ?? (serviceTotal > 0 ? serviceTotal : null);
-  const effectiveCrew = visit.crewName ?? job?.crewName ?? null;
+  const effectiveCrewId = visit.crewId ?? job?.crewId ?? null;
+  const effectiveCrewName = visit.crewName ?? job?.crewName ?? null;
+  const effectiveCrew = (effectiveCrewId && crewCodeById.get(effectiveCrewId)) || effectiveCrewName;
   const budgetedHours = visit.budgetedHours ?? job?.budgetedHours ?? null;
   const actualHours = computeActualHours(visit);
 
@@ -1842,6 +1846,10 @@ export function DispatchBoard() {
   const qc = useQueryClient();
 
   const allVisits = visits ?? [];
+  // Assigned column shows each crew's team code (Settings > Team) instead of
+  // its full name, e.g. "Maintenance 1" -> "MAINT1" — falls back to the name
+  // for crews that don't have one set.
+  const crewCodeById = new Map((crews ?? []).map((c) => [c.id, c.code]).filter((e): e is [string, string] => !!e[1]));
   // Service column shows each service's configured short code (Settings > Services)
   // instead of its full name, e.g. "Lawn Mowing" -> "MOW" — falls back to the
   // full name for services that don't have one set.
@@ -2710,6 +2718,7 @@ export function DispatchBoard() {
                   isVisible={isVisible}
                   onReorder={handleReorder}
                   serviceCodeById={serviceCodeById}
+                  crewCodeById={crewCodeById}
                 />
               ))
             )}

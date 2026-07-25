@@ -61,6 +61,7 @@ export interface CRMCrew {
   id: string;
   orgId: string;
   name: string;
+  code: string | null;
   color: string | null;
   isActive: boolean;
   deletedAt: string | null;

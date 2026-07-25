@@ -135,6 +135,7 @@ function mapCrew(row: any): CRMCrew {
     id: row.id,
     orgId: row.org_id,
     name: row.name,
+    code: row.code ?? null,
     color: row.color,
     isActive: row.is_active,
     deletedAt: row.deleted_at,
@@ -947,18 +948,36 @@ export function useCreateClientJob() {
       const job = data as { id: string };
 
       // Auto-create the first visit for jobs with a fixed scheduled date
-      // Recurring jobs get their first visit here; Generate Visits handles future ones
+      // Recurring jobs get their first visit here; Generate Visits handles future ones.
+      // A job with MORE THAN ONE service gets one visit per service instead of a
+      // single combined visit — otherwise there's no way to send one service to
+      // a different crew than another (e.g. Spring Clean-up to one crew, Mulch
+      // to another) even though they were added together on the same job.
       const autoVisitTypes = ['one_time', 'snow', 'project', 'recurring'];
       if (values.scheduledDate && autoVisitTypes.includes(values.jobType)) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await (supabase as any).from('crm_job_visits').insert({
-          job_id: job.id,
-          client_id: values.clientId,
-          scheduled_date: values.scheduledDate,
-          status: values.isComplete ? 'completed' : 'scheduled',
-          crew_id: values.crewId || null,
-          completed_at: values.isComplete ? new Date().toISOString() : null,
-        });
+        if (values.services.length > 1) {
+          const visitRows = values.services.map((_s, i) => ({
+            job_id: job.id,
+            client_id: values.clientId,
+            job_service_id: serviceIdBySortOrder[i] ?? null,
+            scheduled_date: values.scheduledDate,
+            status: values.isComplete ? 'completed' : 'scheduled',
+            crew_id: values.crewId || null,
+            completed_at: values.isComplete ? new Date().toISOString() : null,
+          }));
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          await (supabase as any).from('crm_job_visits').insert(visitRows);
+        } else {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          await (supabase as any).from('crm_job_visits').insert({
+            job_id: job.id,
+            client_id: values.clientId,
+            scheduled_date: values.scheduledDate,
+            status: values.isComplete ? 'completed' : 'scheduled',
+            crew_id: values.crewId || null,
+            completed_at: values.isComplete ? new Date().toISOString() : null,
+          });
+        }
       }
 
       // Package jobs don't have a single scheduledDate — each service row

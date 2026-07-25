@@ -325,19 +325,27 @@ export function WaitingList() {
 
   // Package jobs carry one crm_job_services row per visit, each with its own
   // date window — expand those into one row per visit so each can be scheduled
-  // independently instead of the whole job going out on a single date.
-  // Non-package jobs render unchanged.
+  // independently instead of the whole job going out on a single date. Any
+  // OTHER job type with more than one service (e.g. a waiting-list job added
+  // with both "Spring Clean-up" and "Mulch" on it) gets the same treatment —
+  // otherwise dispatching creates one combined visit for both services, and
+  // there's no way to send one to a different crew than the other.
   const visitRows = useMemo(() => {
     const rows: { key: string; job: CRMJob; service: CRMJobService | null }[] = [];
     for (const job of filtered) {
-      if (job.jobType === "package" && (job.services?.length ?? 0) > 0) {
-        for (const service of job.services!) {
+      const services = job.services ?? [];
+      if (job.jobType === "package" && services.length > 0) {
+        for (const service of services) {
           // The job-level waiting_list_start/end (used by the server-side date
           // filter) spans the whole package, so a job can pass the filter while
           // individual visits inside it fall outside the selected range — only
           // show visits whose own date window actually overlaps it.
           if (service.completeByDate && service.completeByDate < startDate) continue;
           if (service.startDate && service.startDate > endDate) continue;
+          rows.push({ key: `${job.id}-${service.id}`, job, service });
+        }
+      } else if (services.length > 1) {
+        for (const service of services) {
           rows.push({ key: `${job.id}-${service.id}`, job, service });
         }
       } else {
