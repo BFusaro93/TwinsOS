@@ -535,17 +535,19 @@ function JobDetailSheet({
                       value={startTime}
                       onChange={(e) => setStartTime(e.target.value)}
                       onKeyDown={(e) => { if (/^[0-9apAP]$/.test(e.key)) setAppointmentStartTouched(true); }}
-                      onBlur={(e) => {
+                      onBlur={() => {
                         setEditingAppointmentStart(false);
                         if (appointmentStartTouched && !startTime) toast.error("Start time wasn't set — pick AM or PM before leaving the field");
                         setAppointmentStartTouched(false);
                         void saveAppointmentTime("start_time", startTime);
-                        // See the row's identical Start->End handling — only
-                        // jump into End once focus has genuinely left Start
-                        // (tabbed past its last internal segment), not on
-                        // every Tab press moving between Start's own
-                        // hour/minute/AM-PM segments.
-                        if (e.relatedTarget === appointmentEndButtonRef.current) setEditingAppointmentEnd(true);
+                        // See the row's identical Start->End handling —
+                        // relatedTarget isn't reliably populated on blur for
+                        // this composite input across browsers, so defer one
+                        // tick and check document.activeElement directly
+                        // once the browser's own focus change has settled.
+                        setTimeout(() => {
+                          if (document.activeElement === appointmentEndButtonRef.current) setEditingAppointmentEnd(true);
+                        }, 0);
                       }}
                       className="h-7 text-xs"
                     />
@@ -1731,7 +1733,7 @@ function VisitRow({
               value={startVal}
               onChange={(e) => setStartVal(e.target.value)}
               onKeyDown={(e) => { if (/^[0-9apAP]$/.test(e.key)) setStartTouched(true); }}
-              onBlur={(e) => {
+              onBlur={() => {
                 setEditingStart(false);
                 if (startTouched && !startVal) toast.error("Start time wasn't set — pick AM or PM before leaving the field");
                 setStartTouched(false);
@@ -1739,13 +1741,16 @@ function VisitRow({
                 // A native time input has its own internal hour/minute/AM-PM
                 // segments — Tab moves between THOSE first, only actually
                 // leaving the input (firing this blur) once you tab past the
-                // last one. At that point the browser's default tab order
-                // lands on whatever's next in the DOM, which is End's button
-                // (it's only a real <input> once clicked) — checking for
-                // that specific relatedTarget is how we tell "really tabbed
-                // out of Start" apart from "moved to the next segment inside
-                // it" without needing to preventDefault Tab at all.
-                if (e.relatedTarget === endButtonRef.current) setEditingEnd(true);
+                // last one, landing on whatever's next in the DOM (End's
+                // button — it's only a real <input> once clicked). blur's own
+                // relatedTarget isn't reliably populated for this across
+                // browsers for a composite input like this, so defer one
+                // tick and check document.activeElement directly instead —
+                // that's set for real once the browser's own focus change
+                // has actually finished.
+                setTimeout(() => {
+                  if (document.activeElement === endButtonRef.current) setEditingEnd(true);
+                }, 0);
               }}
               className="w-[92px] rounded border border-brand-400 bg-transparent px-1 py-0.5 text-xs text-slate-600 focus:outline-none"
             />
