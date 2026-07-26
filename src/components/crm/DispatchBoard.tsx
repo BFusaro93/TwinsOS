@@ -260,6 +260,11 @@ function JobDetailSheet({
   // digits like 12:30 instead of blank on some platforms).
   const [editingAppointmentStart, setEditingAppointmentStart] = useState(false);
   const [editingAppointmentEnd,   setEditingAppointmentEnd]   = useState(false);
+  // See the row's identical startTouched/endTouched — a native time input
+  // with hour+minute typed but no AM/PM chosen reports empty, same as never
+  // having typed anything, so warn rather than silently no-op.
+  const [appointmentStartTouched, setAppointmentStartTouched] = useState(false);
+  const [appointmentEndTouched,   setAppointmentEndTouched]   = useState(false);
   useEffect(() => {
     setBudgetedHoursInput(String(visit.budgetedHours ?? job?.budgetedHours ?? ""));
   }, [visit.id, visit.budgetedHours, job?.budgetedHours]);
@@ -519,7 +524,13 @@ function JobDetailSheet({
                       autoFocus
                       value={startTime}
                       onChange={(e) => setStartTime(e.target.value)}
-                      onBlur={() => { setEditingAppointmentStart(false); void saveAppointmentTime("start_time", startTime); }}
+                      onKeyDown={(e) => { if (/^[0-9apAP]$/.test(e.key)) setAppointmentStartTouched(true); }}
+                      onBlur={() => {
+                        setEditingAppointmentStart(false);
+                        if (appointmentStartTouched && !startTime) toast.error("Start time wasn't set — pick AM or PM before leaving the field");
+                        setAppointmentStartTouched(false);
+                        void saveAppointmentTime("start_time", startTime);
+                      }}
                       className="h-7 text-xs"
                     />
                   ) : (
@@ -544,7 +555,13 @@ function JobDetailSheet({
                       autoFocus
                       value={endTime}
                       onChange={(e) => setEndTime(e.target.value)}
-                      onBlur={() => { setEditingAppointmentEnd(false); void saveAppointmentTime("end_time", endTime); }}
+                      onKeyDown={(e) => { if (/^[0-9apAP]$/.test(e.key)) setAppointmentEndTouched(true); }}
+                      onBlur={() => {
+                        setEditingAppointmentEnd(false);
+                        if (appointmentEndTouched && !endTime) toast.error("End time wasn't set — pick AM or PM before leaving the field");
+                        setAppointmentEndTouched(false);
+                        void saveAppointmentTime("end_time", endTime);
+                      }}
                       className="h-7 text-xs"
                     />
                   ) : (
@@ -1503,6 +1520,14 @@ function VisitRow({
   // plain read-only "—"/formatted-time span sidesteps that entirely.
   const [editingStart, setEditingStart] = useState(false);
   const [editingEnd,   setEditingEnd]   = useState(false);
+  // A native time input's value is all-or-nothing — typing hour+minute but
+  // leaving AM/PM unset (e.g. tabbing or clicking away before choosing it)
+  // reports an EMPTY value, identical to never having typed anything. There's
+  // no way to tell those two apart from the DOM, so instead of saving a
+  // silent no-op, warn whenever the field was actually engaged with (onChange
+  // fired at least once) but still comes out empty on blur.
+  const [startTouched, setStartTouched] = useState(false);
+  const [endTouched,   setEndTouched]   = useState(false);
 
   const { data: richCrewsForSize } = useCrews(false);
   const { data: dailyOverridesForSize = [] } = useCrewDailyMembers(selectedDate);
@@ -1684,7 +1709,13 @@ function VisitRow({
               autoFocus
               value={startVal}
               onChange={(e) => setStartVal(e.target.value)}
-              onBlur={() => { setEditingStart(false); void saveVisitTime("start_time", startVal); }}
+              onKeyDown={(e) => { if (/^[0-9apAP]$/.test(e.key)) setStartTouched(true); }}
+              onBlur={() => {
+                setEditingStart(false);
+                if (startTouched && !startVal) toast.error("Start time wasn't set — pick AM or PM before leaving the field");
+                setStartTouched(false);
+                void saveVisitTime("start_time", startVal);
+              }}
               className="w-[92px] rounded border border-brand-400 bg-transparent px-1 py-0.5 text-xs text-slate-600 focus:outline-none"
             />
           ) : (
@@ -1708,7 +1739,13 @@ function VisitRow({
               autoFocus
               value={endVal}
               onChange={(e) => setEndVal(e.target.value)}
-              onBlur={() => { setEditingEnd(false); void saveVisitTime("end_time", endVal); }}
+              onKeyDown={(e) => { if (/^[0-9apAP]$/.test(e.key)) setEndTouched(true); }}
+              onBlur={() => {
+                setEditingEnd(false);
+                if (endTouched && !endVal) toast.error("End time wasn't set — pick AM or PM before leaving the field");
+                setEndTouched(false);
+                void saveVisitTime("end_time", endVal);
+              }}
               className="w-[92px] rounded border border-brand-400 bg-transparent px-1 py-0.5 text-xs text-slate-600 focus:outline-none"
             />
           ) : (
@@ -2678,19 +2715,28 @@ export function DispatchBoard() {
                 Move to Day…
               </DropdownMenuItem>
 
-              {/* Manually Route — sets manual order to selected visits first */}
+              {/* Move to Top — each crew runs its own separate route (see
+                  crewOrderNumById above), so this puts the selected visit(s)
+                  first WITHIN THEIR OWN CREW's stops, not first overall. If
+                  you select visits on 2 different crews, both end up showing
+                  "#1" — one each, for their own crew — not a single #1/#2. */}
               <DropdownMenuItem
                 className="text-xs"
                 onSelect={() => {
                   const selectedArr = [...selectedIds];
                   const rest = displayVisits.filter((v) => !selectedIds.has(v.id)).map((v) => v.id);
                   setManualOrder([...selectedArr, ...rest]);
+                  const crewCount = new Set(selectedArr.map((id) => crewKeyOf(id))).size;
                   setSelectedIds(new Set());
-                  toast.success("Selected visits moved to top of route");
+                  toast.success(
+                    crewCount > 1
+                      ? "Moved to the top of each selected crew's route"
+                      : "Selected visits moved to top of route"
+                  );
                 }}
               >
                 <Route className="mr-2 h-3.5 w-3.5 text-slate-400" />
-                Manually Route (Move to Top)
+                Move to Top of Crew&apos;s Route
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
