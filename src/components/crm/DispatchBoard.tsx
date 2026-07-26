@@ -238,7 +238,12 @@ function JobDetailSheet({
   const [crewId,      setCrewId]      = useState(visit.crewId ?? job?.crewId ?? "");
   const [startTime,   setStartTime]   = useState(visit.startTime ?? "");
   const [endTime,     setEndTime]     = useState(visit.endTime ?? "");
-  const [actualHours, setActualHours] = useState(String(visit.actualHours ?? ""));
+  // Same fallback the dispatch board row uses (computeActualHours) — an
+  // explicit visit.actualHours override if one's been set, else derived from
+  // clock-in/out or Start/End × men. Reading visit.actualHours directly here
+  // showed 0/blank whenever there was no explicit override, even when the
+  // row was correctly showing a computed value from real times.
+  const [actualHours, setActualHours] = useState(String(computeActualHours(visit) ?? ""));
   const [menCount,    setMenCount]    = useState(String(visit.menCount));
   const [budgetedHoursInput, setBudgetedHoursInput] = useState(String(visit.budgetedHours ?? job?.budgetedHours ?? ""));
   const [qty,         setQty]         = useState(String(visit.qty ?? ""));
@@ -268,6 +273,10 @@ function JobDetailSheet({
   useEffect(() => {
     setBudgetedHoursInput(String(visit.budgetedHours ?? job?.budgetedHours ?? ""));
   }, [visit.id, visit.budgetedHours, job?.budgetedHours]);
+  useEffect(() => {
+    setActualHours(String(computeActualHours(visit) ?? ""));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visit.id, visit.actualHours, visit.startTime, visit.endTime, visit.clockedInAt, visit.clockedOutAt, visit.menCount]);
 
   // Appointment Start/End auto-save on blur (like the row's own inline inputs)
   // instead of requiring the batched Save button below — that button also
@@ -1528,6 +1537,10 @@ function VisitRow({
   // fired at least once) but still comes out empty on blur.
   const [startTouched, setStartTouched] = useState(false);
   const [endTouched,   setEndTouched]   = useState(false);
+  // Set right before we programmatically commit+unmount Start on Tab (see
+  // below) so the blur that unmounting a focused input naturally fires
+  // doesn't commit it a second time.
+  const startCommittingRef = useRef(false);
 
   const { data: richCrewsForSize } = useCrews(false);
   const { data: dailyOverridesForSize = [] } = useCrewDailyMembers(selectedDate);
@@ -1709,9 +1722,25 @@ function VisitRow({
               autoFocus
               value={startVal}
               onChange={(e) => setStartVal(e.target.value)}
-              onKeyDown={(e) => { if (/^[0-9apAP]$/.test(e.key)) setStartTouched(true); }}
+              onKeyDown={(e) => {
+                if (/^[0-9apAP]$/.test(e.key)) setStartTouched(true);
+                // Tab naturally lands on End's read-only button (it's only a
+                // real <input> once clicked), which just stops there — feels
+                // like Tab skipped straight past End to B Hrs. Commit Start
+                // and jump straight into editing End instead.
+                if (e.key === "Tab" && !e.shiftKey) {
+                  e.preventDefault();
+                  startCommittingRef.current = true;
+                  setEditingStart(false);
+                  if (startTouched && !startVal) toast.error("Start time wasn't set — pick AM or PM before leaving the field");
+                  setStartTouched(false);
+                  void saveVisitTime("start_time", startVal);
+                  setEditingEnd(true);
+                }
+              }}
               onBlur={() => {
                 setEditingStart(false);
+                if (startCommittingRef.current) { startCommittingRef.current = false; return; }
                 if (startTouched && !startVal) toast.error("Start time wasn't set — pick AM or PM before leaving the field");
                 setStartTouched(false);
                 void saveVisitTime("start_time", startVal);
@@ -2158,6 +2187,12 @@ export function DispatchBoard() {
     const supabase = createClient();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await Promise.all(order.map((id, i) => (supabase as any).from("crm_job_visits").update({ priority: i + 1 }).eq("id", id)));
+    // Without this, the just-saved priorities only exist in the database —
+    // the visits list in memory still has the OLD priority values, so
+    // clearing manualOrder (which was the only thing keeping the new order
+    // on screen) snapped the table back to how it looked before saving,
+    // until something else happened to trigger a refetch.
+    await qc.invalidateQueries({ queryKey: ["crm-job-visits"] });
     setManualOrder(null);
     toast.success("Route order saved");
   }
@@ -2723,10 +2758,29 @@ export function DispatchBoard() {
               <DropdownMenuItem
                 className="text-xs"
                 onSelect={() => {
-                  const selectedArr = [...selectedIds];
-                  const rest = displayVisits.filter((v) => !selectedIds.has(v.id)).map((v) => v.id);
-                  setManualOrder([...selectedArr, ...rest]);
-                  const crewCount = new Set(selectedArr.map((id) => crewKeyOf(id))).size;
+                  // Same splice-in-place approach as handleReorder — move
+                  // each crew's selected stops to the front of THAT crew's
+                  // own subsequence only. Prepending every selected id to
+                  // the front of the whole displayVisits array (the old
+                  // behavior) shoved the row to the physical top of the
+                  // table above unrelated crews, even though the per-crew
+                  // "#" number came out right.
+                  let cur = manualOrder ?? displayVisits.map((v) => v.id);
+                  const selectedByCrew = new Map<string, string[]>();
+                  for (const id of selectedIds) {
+                    const key = crewKeyOf(id);
+                    if (!selectedByCrew.has(key)) selectedByCrew.set(key, []);
+                    selectedByCrew.get(key)!.push(id);
+                  }
+                  for (const [crewKey, ids] of selectedByCrew) {
+                    const crewIds = cur.filter((vid) => crewKeyOf(vid) === crewKey);
+                    const rest = crewIds.filter((vid) => !ids.includes(vid));
+                    const reordered = [...ids, ...rest];
+                    let ptr = 0;
+                    cur = cur.map((vid) => (crewKeyOf(vid) === crewKey ? reordered[ptr++] : vid));
+                  }
+                  setManualOrder(cur);
+                  const crewCount = selectedByCrew.size;
                   setSelectedIds(new Set());
                   toast.success(
                     crewCount > 1
