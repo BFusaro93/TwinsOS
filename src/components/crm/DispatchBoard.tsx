@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { ColumnChooser } from "@/components/shared/ColumnChooser";
 import { useRouter } from "next/navigation";
@@ -95,6 +95,17 @@ function computeActualHours(visit: CRMJobVisit): number | null {
   const diffHours = (eh * 60 + em - (sh * 60 + sm)) / 60;
   if (diffHours <= 0) return null;
   return diffHours * (visit.menCount || 1);
+}
+
+// Formats a "HH:MM" / "HH:MM:SS" 24h time string (the shape a native
+// <input type="time"> value/DB `time` column uses) into "3:00 PM" for
+// read-only display.
+function formatTimeShort(value: string): string {
+  const [h, m] = value.split(":").map(Number);
+  if (Number.isNaN(h) || Number.isNaN(m)) return value;
+  const period = h >= 12 ? "PM" : "AM";
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return `${h12}:${String(m).padStart(2, "0")} ${period}`;
 }
 
 // How many people are actually on a crew for a given day — the crew's default
@@ -243,6 +254,12 @@ function JobDetailSheet({
   // board row's own inline Start/End inputs) never shows up here.
   useEffect(() => { setStartTime(visit.startTime ?? ""); }, [visit.id, visit.startTime]);
   useEffect(() => { setEndTime(visit.endTime ?? ""); }, [visit.id, visit.endTime]);
+  // Same reasoning as the dispatch board row: only mount the actual native
+  // time input while actively editing, so an unset field never sits around
+  // in its browser-dependent "empty" rendering (which can show real-looking
+  // digits like 12:30 instead of blank on some platforms).
+  const [editingAppointmentStart, setEditingAppointmentStart] = useState(false);
+  const [editingAppointmentEnd,   setEditingAppointmentEnd]   = useState(false);
   useEffect(() => {
     setBudgetedHoursInput(String(visit.budgetedHours ?? job?.budgetedHours ?? ""));
   }, [visit.id, visit.budgetedHours, job?.budgetedHours]);
@@ -496,13 +513,24 @@ function JobDetailSheet({
                   <label className="block text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1">
                     Appointment Start
                   </label>
-                  <Input
-                    type="time"
-                    value={startTime}
-                    onChange={(e) => setStartTime(e.target.value)}
-                    onBlur={() => saveAppointmentTime("start_time", startTime)}
-                    className="h-7 text-xs"
-                  />
+                  {editingAppointmentStart ? (
+                    <Input
+                      type="time"
+                      autoFocus
+                      value={startTime}
+                      onChange={(e) => setStartTime(e.target.value)}
+                      onBlur={() => { setEditingAppointmentStart(false); void saveAppointmentTime("start_time", startTime); }}
+                      className="h-7 text-xs"
+                    />
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setEditingAppointmentStart(true)}
+                      className="flex h-7 w-full items-center rounded-md border border-input bg-background px-3 text-left text-xs hover:bg-slate-50"
+                    >
+                      {startTime ? formatTimeShort(startTime) : <span className="text-slate-400">Not set</span>}
+                    </button>
+                  )}
                 </div>
 
                 {/* Appointment End */}
@@ -510,13 +538,24 @@ function JobDetailSheet({
                   <label className="block text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1">
                     Appointment End
                   </label>
-                  <Input
-                    type="time"
-                    value={endTime}
-                    onChange={(e) => setEndTime(e.target.value)}
-                    onBlur={() => saveAppointmentTime("end_time", endTime)}
-                    className="h-7 text-xs"
-                  />
+                  {editingAppointmentEnd ? (
+                    <Input
+                      type="time"
+                      autoFocus
+                      value={endTime}
+                      onChange={(e) => setEndTime(e.target.value)}
+                      onBlur={() => { setEditingAppointmentEnd(false); void saveAppointmentTime("end_time", endTime); }}
+                      className="h-7 text-xs"
+                    />
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setEditingAppointmentEnd(true)}
+                      className="flex h-7 w-full items-center rounded-md border border-input bg-background px-3 text-left text-xs hover:bg-slate-50"
+                    >
+                      {endTime ? formatTimeShort(endTime) : <span className="text-slate-400">Not set</span>}
+                    </button>
+                  )}
                 </div>
               </div>
               <Button
@@ -1244,6 +1283,22 @@ function EditJobTimesDialog({
   const [newStart, setNewStart] = useState("");
   const [newEnd, setNewEnd] = useState("");
 
+  // Auto-allocate every member of the visit's crew as soon as this dialog
+  // opens with none entered yet, seeded with the visit's own Start/End if it
+  // already has one — otherwise this always started completely empty and
+  // required adding each crew member one at a time by hand even though the
+  // crew (and often the time) was already known.
+  const seededRef = useRef(false);
+  useEffect(() => {
+    if (seededRef.current) return;
+    if (memberTimes.length > 0 || allMembers.length === 0) return;
+    seededRef.current = true;
+    const clockedInAt = visit.startTime ? dateAndTimeToIso(visitDate, visit.startTime.slice(0, 5)) : null;
+    const clockedOutAt = visit.endTime ? dateAndTimeToIso(visitDate, visit.endTime.slice(0, 5)) : null;
+    allMembers.forEach((m) => upsert.mutate({ visitId, crewMemberId: m.id, clockedInAt, clockedOutAt }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [memberTimes.length, allMembers.length]);
+
   // Keep the dispatch board's Men column in sync with how many crew members
   // actually have a time entry here — only once there IS at least one entry,
   // so opening the dialog on a visit with a manually-set Men count (and no
@@ -1441,11 +1496,18 @@ function VisitRow({
   const [endVal, setEndVal] = useState(visit.endTime ?? "");
   useEffect(() => { setStartVal(visit.startTime ?? ""); }, [visit.startTime]);
   useEffect(() => { setEndVal(visit.endTime ?? ""); }, [visit.endTime]);
+  // Only render the actual <input type="time"> while the field is being
+  // edited — otherwise a native time input with no value renders its "empty"
+  // state however the browser/OS feels like (some show real-looking digits
+  // like 12:30 instead of blank dashes), which reads as a fake default. A
+  // plain read-only "—"/formatted-time span sidesteps that entirely.
+  const [editingStart, setEditingStart] = useState(false);
+  const [editingEnd,   setEditingEnd]   = useState(false);
 
   const { data: richCrewsForSize } = useCrews(false);
   const { data: dailyOverridesForSize = [] } = useCrewDailyMembers(selectedDate);
 
-  function saveVisitTime(field: "start_time" | "end_time", value: string) {
+  async function saveVisitTime(field: "start_time" | "end_time", value: string) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const updates: Record<string, any> = { [field]: value || null };
     // Typing a time is what actually sends a crew out for the day — pull the
@@ -1455,10 +1517,11 @@ function VisitRow({
       const crewSize = effectiveCrewSize(visit.crewId, richCrewsForSize ?? [], dailyOverridesForSize);
       if (crewSize > 0) updates.men_count = crewSize;
     }
-    updateVisit.mutate(
-      { id: visit.id, updates },
-      { onError: () => toast.error("Failed to save time") }
-    );
+    try {
+      await updateVisit.mutateAsync({ id: visit.id, updates });
+    } catch {
+      toast.error("Failed to save time");
+    }
   }
 
   const [menVal, setMenVal] = useState(String(visit.menCount ?? ""));
@@ -1615,26 +1678,48 @@ function VisitRow({
       {/* Start */}
       {isVisible("start") && (
         <td className="px-1 py-1 text-slate-400 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
-          <input
-            type="time"
-            value={startVal}
-            onChange={(e) => setStartVal(e.target.value)}
-            onBlur={() => saveVisitTime("start_time", startVal)}
-            className="w-[92px] rounded border border-transparent bg-transparent px-1 py-0.5 text-xs text-slate-600 hover:border-slate-200 focus:border-brand-400 focus:outline-none"
-          />
+          {editingStart ? (
+            <input
+              type="time"
+              autoFocus
+              value={startVal}
+              onChange={(e) => setStartVal(e.target.value)}
+              onBlur={() => { setEditingStart(false); void saveVisitTime("start_time", startVal); }}
+              className="w-[92px] rounded border border-brand-400 bg-transparent px-1 py-0.5 text-xs text-slate-600 focus:outline-none"
+            />
+          ) : (
+            <button
+              type="button"
+              onClick={() => setEditingStart(true)}
+              className="w-[92px] rounded border border-transparent px-1 py-0.5 text-left text-xs text-slate-600 hover:border-slate-200 hover:bg-slate-50"
+            >
+              {startVal ? formatTimeShort(startVal) : <span className="text-slate-300 italic">—</span>}
+            </button>
+          )}
         </td>
       )}
 
       {/* End */}
       {isVisible("end") && (
         <td className="px-1 py-1 text-slate-400 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
-          <input
-            type="time"
-            value={endVal}
-            onChange={(e) => setEndVal(e.target.value)}
-            onBlur={() => saveVisitTime("end_time", endVal)}
-            className="w-[92px] rounded border border-transparent bg-transparent px-1 py-0.5 text-xs text-slate-600 hover:border-slate-200 focus:border-brand-400 focus:outline-none"
-          />
+          {editingEnd ? (
+            <input
+              type="time"
+              autoFocus
+              value={endVal}
+              onChange={(e) => setEndVal(e.target.value)}
+              onBlur={() => { setEditingEnd(false); void saveVisitTime("end_time", endVal); }}
+              className="w-[92px] rounded border border-brand-400 bg-transparent px-1 py-0.5 text-xs text-slate-600 focus:outline-none"
+            />
+          ) : (
+            <button
+              type="button"
+              onClick={() => setEditingEnd(true)}
+              className="w-[92px] rounded border border-transparent px-1 py-0.5 text-left text-xs text-slate-600 hover:border-slate-200 hover:bg-slate-50"
+            >
+              {endVal ? formatTimeShort(endVal) : <span className="text-slate-300 italic">—</span>}
+            </button>
+          )}
         </td>
       )}
 
