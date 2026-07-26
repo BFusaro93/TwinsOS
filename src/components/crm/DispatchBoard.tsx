@@ -1390,6 +1390,7 @@ function VisitRow({
   onReorder,
   serviceCodeById,
   crewCodeById,
+  manualRouteMode,
 }: {
   visit: CRMJobVisit;
   /** 1-based position of this visit within its own crew's stops for the day (not the global row index). */
@@ -1408,6 +1409,7 @@ function VisitRow({
   serviceCodeById: Map<string, string>;
   crewCodeById: Map<string, string>;
   onReorder?: (id: string, newIndex: number) => void;
+  manualRouteMode: boolean;
 }) {
   const job      = visit.job;
   const services = job?.services ?? [];
@@ -1505,9 +1507,9 @@ function VisitRow({
         isDragOver ? "bg-brand-50 border-brand-300" : selected ? "bg-blue-50 hover:bg-blue-100" : "hover:bg-slate-50"
       )}
       onClick={() => onOpen(visit)}
-      draggable
-      onDragStart={() => onDragStart(visit.id)}
-      onDragOver={(e) => { e.preventDefault(); onDragOver(visit.id); }}
+      draggable={manualRouteMode}
+      onDragStart={() => manualRouteMode && onDragStart(visit.id)}
+      onDragOver={(e) => { if (manualRouteMode) { e.preventDefault(); onDragOver(visit.id); } }}
       onDragEnd={onDragEnd}
     >
       {/* Checkbox */}
@@ -1515,11 +1517,13 @@ function VisitRow({
         <Checkbox checked={selected} onCheckedChange={() => onToggleSelect(visit.id)} className="h-3.5 w-3.5" />
       </td>
 
-      {/* Drag handle + Order */}
+      {/* Drag handle + Order — only interactive in Manual Route mode, so
+          clicking into a row's other fields (e.g. Start/End time) can never
+          be mistaken by the browser for starting a drag on the row. */}
       <td className="w-10 px-1 py-2 text-center font-mono">
         <div className="flex items-center justify-center gap-0.5">
-          <GripVertical className="h-3 w-3 text-slate-300 cursor-grab active:cursor-grabbing shrink-0" />
-          {onReorder ? (
+          <GripVertical className={cn("h-3 w-3 shrink-0", manualRouteMode ? "text-slate-300 cursor-grab active:cursor-grabbing" : "text-slate-200")} />
+          {onReorder && manualRouteMode ? (
             <input
               type="number"
               defaultValue={orderNum}
@@ -1839,6 +1843,13 @@ export function DispatchBoard() {
   const [dragId,          setDragId]          = useState<string | null>(null);
   const [dragOverId,      setDragOverId]      = useState<string | null>(null);
   const [manualOrder,     setManualOrder]     = useState<string[] | null>(null);
+  // Off by default — rows are only draggable/reorderable once explicitly turned
+  // on. Without this gate, every row is a native `draggable` element, so
+  // clicking into a Start/End time input to position the cursor can itself
+  // register as a drag gesture starting on that row, pinning a "changed"
+  // order (identical to the current one) and popping the Save/Clear Order
+  // bar despite nothing actually having moved.
+  const [manualRouteMode, setManualRouteMode] = useState(false);
   const [visibleKeys,     setVisibleKeys]     = useState<string[]>(COL_DEFS.map((d) => d.key));
   const [statsOpen,       setStatsOpen]       = useState(false);
   const [callAheadOpen,   setCallAheadOpen]   = useState(false);
@@ -2349,6 +2360,15 @@ export function DispatchBoard() {
               </div>
             </PopoverContent>
           </Popover>
+          <Button
+            size="sm" variant="outline"
+            className={cn("h-7 gap-1.5 px-2.5 text-xs", manualRouteMode && "border-brand-400 text-brand-700 bg-brand-50")}
+            onClick={() => setManualRouteMode((m) => !m)}
+            title="Enable drag-and-drop and manual # editing to reorder stops"
+          >
+            <GripVertical className="h-3.5 w-3.5" />
+            Manual Route
+          </Button>
           <Button size="sm" variant="outline" className="h-7 gap-1.5 px-2.5 text-xs" onClick={handleReverseRoute} title="Reverse route order">
             <ArrowUpDown className="h-3.5 w-3.5" />
             Reverse
@@ -2739,6 +2759,7 @@ export function DispatchBoard() {
                   onReorder={handleReorder}
                   serviceCodeById={serviceCodeById}
                   crewCodeById={crewCodeById}
+                  manualRouteMode={manualRouteMode}
                 />
               ))
             )}
