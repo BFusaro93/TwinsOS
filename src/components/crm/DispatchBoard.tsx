@@ -1824,8 +1824,14 @@ export function DispatchBoard() {
   const [crewFilters,     setCrewFilters]     = useState<string[]>([]);
   const [statusFilter,    setStatusFilter]    = useState<FilterTab>("all");
   const [search,          setSearch]          = useState("");
-  const [detailVisit,     setDetailVisit]     = useState<CRMJobVisit | null>(null);
-  const [editTimesVisit,  setEditTimesVisit]  = useState<CRMJobVisit | null>(null);
+  // IDs, not the visit objects themselves — looked up fresh from `visits` on
+  // every render (below) so the sheet/dialog always reflects the latest
+  // fetched data. Storing the object itself would freeze it at whatever it
+  // was when the row was clicked, so an edit made on the row (or a refetch
+  // after any save) would never show up if the sheet was opened before that
+  // update landed — it'd keep showing what the visit looked like at click time.
+  const [detailVisitId,    setDetailVisitId]    = useState<string | null>(null);
+  const [editTimesVisitId, setEditTimesVisitId] = useState<string | null>(null);
   const [teamAssignOpen,  setTeamAssignOpen]  = useState(false);
   const [selectedIds,     setSelectedIds]     = useState<Set<string>>(new Set());
   const [colFilterKey,    setColFilterKey]    = useState<string | null>(null);
@@ -1856,6 +1862,10 @@ export function DispatchBoard() {
   const qc = useQueryClient();
 
   const allVisits = visits ?? [];
+  // Derived fresh from the live query every render (not stored as its own
+  // state) so the sheet/dialog can never go stale relative to the table.
+  const detailVisit    = detailVisitId    ? allVisits.find((v) => v.id === detailVisitId)    ?? null : null;
+  const editTimesVisit = editTimesVisitId ? allVisits.find((v) => v.id === editTimesVisitId) ?? null : null;
   // Assigned column shows each crew's team code (Settings > Team) instead of
   // its full name, e.g. "Maintenance 1" -> "MAINT1" — falls back to the name
   // for crews that don't have one set.
@@ -2716,8 +2726,8 @@ export function DispatchBoard() {
                   visit={visit}
                   orderNum={crewOrderNumById.get(visit.id) ?? 1}
                   selectedDate={selectedDate}
-                  onOpen={setDetailVisit}
-                  onEditTimes={setEditTimesVisit}
+                  onOpen={(v) => setDetailVisitId(v.id)}
+                  onEditTimes={(v) => setEditTimesVisitId(v.id)}
                   driveMinsToNext={driveTimeMap.get(visit.id)}
                   selected={selectedIds.has(visit.id)}
                   onToggleSelect={toggleSelect}
@@ -2736,14 +2746,17 @@ export function DispatchBoard() {
         </table>
       </div>
 
-      {/* Job detail sheet */}
+      {/* Job detail sheet — looked up fresh by id every render, not the frozen
+          object captured at click time, so a save made on the row (or any
+          other refetch while the sheet is open) is reflected immediately
+          instead of only after closing and reopening it. */}
       {detailVisit && (
         <JobDetailSheet
           visit={detailVisit}
           open={!!detailVisit}
-          onOpenChange={(o) => { if (!o) setDetailVisit(null); }}
+          onOpenChange={(o) => { if (!o) setDetailVisitId(null); }}
           crews={crews ?? []}
-          onEditTimes={setEditTimesVisit}
+          onEditTimes={(v) => setEditTimesVisitId(v.id)}
         />
       )}
 
@@ -2752,7 +2765,7 @@ export function DispatchBoard() {
         <EditJobTimesDialog
           visit={editTimesVisit}
           open={!!editTimesVisit}
-          onOpenChange={(o) => { if (!o) setEditTimesVisit(null); }}
+          onOpenChange={(o) => { if (!o) setEditTimesVisitId(null); }}
         />
       )}
 

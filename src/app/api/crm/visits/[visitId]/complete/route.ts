@@ -29,7 +29,7 @@ export async function POST(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: visit, error: visitErr } = await (supabase as any)
     .from("crm_job_visits")
-    .select("job_id, client_id, invoice_description, scheduled_date, status")
+    .select("job_id, client_id, invoice_description, scheduled_date, status, job_service_id")
     .eq("id", visitId)
     .single();
 
@@ -65,10 +65,31 @@ export async function POST(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const j = job as any;
 
-  // Jobs that close on completion (no more scheduled visits expected)
+  // Jobs that close on completion (no more scheduled visits expected).
+  // A one_time/waiting_list job can still have MORE THAN ONE visit when its
+  // services were split one-visit-per-service (see per-service visit
+  // splitting) — only close the job once every sibling visit has also
+  // reached a terminal status, or a job with an unfinished service (e.g.
+  // Mulch still scheduled) gets marked "completed" the moment its FIRST
+  // service visit does, which then hides that sibling visit from the
+  // dispatch board (parent-job-done filter treats it as abandoned).
   const terminalTypes = new Set(["one_time", "waiting_list"]);
+  const terminalVisitStatuses = new Set(["completed", "cancelled", "skipped"]);
 
+  let allSiblingVisitsDone = true;
   if (j && terminalTypes.has(j.job_type)) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: siblingVisits } = await (supabase as any)
+      .from("crm_job_visits")
+      .select("id, status")
+      .eq("job_id", j.id)
+      .is("deleted_at", null);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    allSiblingVisitsDone = ((siblingVisits ?? []) as { id: string; status: string }[])
+      .every((sv) => sv.id === visitId || terminalVisitStatuses.has(sv.status));
+  }
+
+  if (j && terminalTypes.has(j.job_type) && allSiblingVisitsDone) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { error: jErr } = await (supabase as any)
       .from("crm_jobs")
@@ -87,16 +108,20 @@ export async function POST(
   // Auto-invoice: create a draft invoice for any completed visit whose job has no contract.
   // Jobs linked to a contract are billed on the contract's billing cycle instead.
   // Recurring/package/project jobs can have many visits so each visit gets its own invoice.
-  // One-time and waiting-list jobs are terminal (one visit) so we guard against duplicates.
+  // One-time and waiting-list jobs used to be exactly one visit, so we guarded against a
+  // duplicate invoice per job — but per-service visit splitting means a one_time/waiting_list
+  // job can now have several visits (one per service), each completing independently, so that
+  // guard is only valid for a visit with no linked service (the legacy single-visit case).
   // Snow jobs are excluded — they're billed exclusively through the dedicated Snow Invoicing
   // page (per-inch/hourly rates this flat auto-invoice can't compute), matching the SA guide's
   // "separate, manual Invoicing" design for snow.
   const shouldAutoInvoice = orgId && j && !j.contract_id && j.job_type !== "snow";
   const isTerminalJobType = j && (j.job_type === "one_time" || j.job_type === "waiting_list");
+  const visitJobServiceId: string | null = (visit as any).job_service_id ?? null;
 
   if (shouldAutoInvoice) {
     let skipInvoice = false;
-    if (isTerminalJobType) {
+    if (isTerminalJobType && !visitJobServiceId) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: existingInvoice } = await (supabase as any)
         .from("crm_invoices")
@@ -108,8 +133,16 @@ export async function POST(
     }
 
     if (!skipInvoice) {
+      // A visit linked to one specific service (the per-service-split case) bills only
+      // that service — otherwise every visit on a multi-service job would re-bill every
+      // OTHER service too, including ones that aren't done yet. A visit covering the
+      // whole job (no linked service) falls back to all of the job's services, same as
+      // before splitting existed.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const services: { service_name: string; qty: number; rate_cents: number; crm_services: { invoice_description: string | null } | null }[] = j.crm_job_services ?? [];
+      const allServices: { id: string; service_name: string; qty: number; rate_cents: number; crm_services: { invoice_description: string | null } | null }[] = j.crm_job_services ?? [];
+      const services = visitJobServiceId
+        ? allServices.filter((s) => s.id === visitJobServiceId)
+        : allServices;
       const visitInvoiceDescription: string | null = (visit as any).invoice_description ?? null;
 
       // Build line items from services; fall back to a single line from job rate_cents.
