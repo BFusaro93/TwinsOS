@@ -32,7 +32,8 @@ export type AuditRecordType =
   | "estimate"
   | "contract"
   | "service"
-  | "package";
+  | "package"
+  | "job_visit";
 
 export interface AuditEntry extends BaseRecord {
   recordType: AuditRecordType;

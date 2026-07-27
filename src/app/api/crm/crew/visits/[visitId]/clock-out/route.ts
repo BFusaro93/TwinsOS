@@ -5,6 +5,9 @@ import { z } from "zod";
 
 const Body = z.object({
   notes: z.string().optional(),
+  // HH:mm in the crew member's local time — the server (Vercel) runs in UTC,
+  // so the actual local time-of-day must come from the client's browser clock.
+  localTime: z.string().regex(/^\d{2}:\d{2}$/).optional(),
 });
 
 export async function POST(
@@ -25,30 +28,21 @@ export async function POST(
   const body = await request.json().catch(() => ({}));
   const parsed = Body.safeParse(body);
   const notes = parsed.success ? parsed.data.notes : undefined;
+  const localTime = parsed.success ? parsed.data.localTime : undefined;
   const now = new Date().toISOString();
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const existing = await (supabase as any)
-    .from("crm_job_visits")
-    .select("clocked_in_at")
-    .eq("id", visitId)
-    .single();
-
-  const clockedInAt = existing.data?.clocked_in_at as string | null;
-  let actualHours: number | null = null;
-  if (clockedInAt) {
-    const diffMs = new Date(now).getTime() - new Date(clockedInAt).getTime();
-    actualHours = Math.round((diffMs / 3_600_000) * 100) / 100;
-  }
-
+  // actual_hours is intentionally not written here — it derives from
+  // start_time/end_time (or clocked_in_at/out) x men_count via the
+  // crm_recompute_job_actual_hours trigger, so it's correctly multiplied
+  // by crew size instead of reflecting only the raw clock duration.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data, error } = await (supabase as any)
     .from("crm_job_visits")
     .update({
       clocked_out_at:   now,
+      end_time:         localTime ? `${localTime}:00` : undefined,
       completed_at:     now,
       status:           "completed",
-      actual_hours:     actualHours,
       completion_notes: notes ?? null,
       updated_at:       now,
     })

@@ -17,6 +17,7 @@ import { WeekStrip } from "./WeekStrip";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/shared/PageHeader";
+import { AuditTrailTab } from "@/components/shared/AuditTrailTab";
 import { VisitStatusIcon } from "@/components/shared/VisitStatusIcon";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -284,8 +285,18 @@ function JobDetailSheet({
   // commits status/crew/rate together, which is easy to skip when all you
   // meant to do was fix a time.
   async function saveAppointmentTime(field: "start_time" | "end_time", value: string) {
+    // Job Start/End are the actual times (crew punches often need dispatcher
+    // correction) — keep clocked_in_at/clocked_out_at in sync so the crew
+    // app and report date-filters agree with whatever the dispatcher enters.
+    const clockField = field === "start_time" ? "clocked_in_at" : "clocked_out_at";
     try {
-      await updateVisit({ id: visit.id, updates: { [field]: value || null } });
+      await updateVisit({
+        id: visit.id,
+        updates: {
+          [field]: value || null,
+          [clockField]: value ? dateAndTimeToIso(visit.scheduledDate, value) : null,
+        },
+      });
     } catch {
       toast.error("Failed to save time");
     }
@@ -523,10 +534,10 @@ function JobDetailSheet({
                   </Select>
                 </div>
 
-                {/* Appointment Start */}
+                {/* Job Start */}
                 <div>
                   <label className="block text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1">
-                    Appointment Start
+                    Job Start
                   </label>
                   {editingAppointmentStart ? (
                     <Input
@@ -562,10 +573,10 @@ function JobDetailSheet({
                   )}
                 </div>
 
-                {/* Appointment End */}
+                {/* Job End */}
                 <div>
                   <label className="block text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1">
-                    Appointment End
+                    Job End
                   </label>
                   {editingAppointmentEnd ? (
                     <Input
@@ -609,14 +620,14 @@ function JobDetailSheet({
             <Tabs defaultValue="job-notes" className="flex flex-col flex-1">
               <div className="border-b bg-white">
                 <TabsList className="h-9 rounded-none bg-transparent justify-start px-4 gap-0">
-                  {(["job-notes","job-comments","client-notes","invoice-desc"] as const).map((v, i) => {
+                  {(["job-notes","job-comments","client-notes","invoice-desc","audit"] as const).map((v, i) => {
                     // Job Notes = instructions to the crew (notesToCrew). Job Comments =
                     // scheduling remarks / crew-tablet submissions (jobComments) — kept as
                     // two distinct counts so a new comment doesn't read as a new "note".
                     const cnt = v === "job-notes" ? ((visit.notesToCrew ?? visit.job?.notesToCrew) ? 1 : 0)
                       : v === "job-comments" ? visit.jobComments.length
                       : 0;
-                    const labels = ["Job Notes","Job Comments","Notes to Client","Invoice Desc."];
+                    const labels = ["Job Notes","Job Comments","Notes to Client","Invoice Desc.","Audit"];
                     return (
                       <TabsTrigger
                         key={v}
@@ -703,6 +714,11 @@ function JobDetailSheet({
                   className="h-32 resize-none text-xs"
                 />
                 <p className="text-[10px] text-slate-400">Saved when you click Save below.</p>
+              </TabsContent>
+
+              {/* Audit */}
+              <TabsContent value="audit" className="m-0 p-4">
+                <AuditTrailTab recordType="job_visit" recordId={visit.id} />
               </TabsContent>
             </Tabs>
 
@@ -1558,6 +1574,11 @@ function VisitRow({
   async function saveVisitTime(field: "start_time" | "end_time", value: string) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const updates: Record<string, any> = { [field]: value || null };
+    // Start/End are the actual times (crew punches often need dispatcher
+    // correction) — keep clocked_in_at/clocked_out_at in sync so the crew
+    // app and report date-filters agree with whatever the dispatcher enters.
+    const clockField = field === "start_time" ? "clocked_in_at" : "clocked_out_at";
+    updates[clockField] = value ? dateAndTimeToIso(visit.scheduledDate, value) : null;
     // Typing a time is what actually sends a crew out for the day — pull the
     // headcount from who's really on that crew today (Team Assignment),
     // instead of leaving whatever men_count the visit happened to start with.

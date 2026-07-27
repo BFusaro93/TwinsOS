@@ -779,6 +779,8 @@ export function useUpdateVisit() {
         crew_id: string | null;
         start_time: string | null;
         end_time: string | null;
+        clocked_in_at: string | null;
+        clocked_out_at: string | null;
         actual_hours: number | null;
         budgeted_hours: number | null;
         men_count: number;

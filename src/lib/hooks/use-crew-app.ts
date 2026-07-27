@@ -273,7 +273,12 @@ export function useClockIn() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (visitId: string) => {
-      const res = await fetch(`/api/crm/crew/visits/${visitId}/clock-in`, { method: "POST" });
+      const localTime = new Date().toTimeString().slice(0, 5);
+      const res = await fetch(`/api/crm/crew/visits/${visitId}/clock-in`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ localTime }),
+      });
       if (!res.ok) throw new Error(await res.text());
       return res.json();
     },
@@ -289,10 +294,11 @@ export function useClockOut() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ visitId, notes }: { visitId: string; notes?: string }) => {
+      const localTime = new Date().toTimeString().slice(0, 5);
       const res = await fetch(`/api/crm/crew/visits/${visitId}/clock-out`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ notes }),
+        body: JSON.stringify({ notes, localTime }),
       });
       if (!res.ok) throw new Error(await res.text());
       return res.json();
