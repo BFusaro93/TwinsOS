@@ -27,7 +27,7 @@ export type AuditRecordType =
   | "ticket"
   | "client"
   | "lead"
-  | "crm_job"
+  | "job"
   | "invoice"
   | "estimate"
   | "contract"

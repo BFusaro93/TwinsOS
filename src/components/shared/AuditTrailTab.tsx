@@ -1,7 +1,7 @@
 "use client";
 
 import { ArrowRight, Plus, RefreshCw, TrendingUp, Truck, Package, Trash2 } from "lucide-react";
-import { useAuditLog } from "@/lib/hooks/use-audit-log";
+import { useAuditLog, useMultiRecordAuditLog } from "@/lib/hooks/use-audit-log";
 import type { AuditAction, AuditRecordType, AuditEntry } from "@/types";
 
 const ACTION_CONFIG: Record<
@@ -147,12 +147,21 @@ function AuditRow({ entry }: { entry: AuditEntry }) {
 }
 
 interface AuditTrailTabProps {
-  recordType: AuditRecordType;
-  recordId: string;
+  // Single-record mode — most callers (one record, one record_id space).
+  recordType?: AuditRecordType;
+  recordId?: string;
+  // Multi-group mode — combines several (recordType, recordIds[]) groups
+  // into one chronological feed, e.g. a job's own entries plus every one
+  // of its visits' entries, which live under different record_ids.
+  groups?: { recordType: AuditRecordType; recordIds: string[] }[];
 }
 
-export function AuditTrailTab({ recordType, recordId }: AuditTrailTabProps) {
-  const { data: entries, isLoading } = useAuditLog(recordType, recordId);
+export function AuditTrailTab({ recordType, recordId, groups }: AuditTrailTabProps) {
+  // Rules of hooks: call both unconditionally: each disables itself
+  // (`enabled: false`) when its own inputs are missing/empty.
+  const single = useAuditLog(recordType ?? "job_visit", recordId ?? "");
+  const multi = useMultiRecordAuditLog(groups ?? []);
+  const { data: entries, isLoading } = groups ? multi : single;
 
   if (isLoading) {
     return (

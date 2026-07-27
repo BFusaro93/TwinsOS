@@ -27,6 +27,41 @@ export function useAuditLog(recordType: AuditRecordType, recordId: string) {
   });
 }
 
+/**
+ * Combines several (recordType, recordIds[]) groups into one chronological
+ * feed — e.g. a job's own entries plus every one of its visits' entries,
+ * which audit_log can't express as a single query since job and job_visit
+ * rows use different record_id spaces.
+ */
+export function useMultiRecordAuditLog(groups: { recordType: AuditRecordType; recordIds: string[] }[]) {
+  const nonEmptyGroups = groups.filter((g) => g.recordIds.length > 0);
+  const queryKey = ["audit-log-multi", ...nonEmptyGroups.map((g) => `${g.recordType}:${g.recordIds.slice().sort().join(",")}`)];
+
+  return useQuery({
+    queryKey,
+    queryFn: async () => {
+      const supabase = createClient();
+      const results = await Promise.all(
+        nonEmptyGroups.map(async (g) => {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { data, error } = await (supabase as any)
+            .from("audit_log")
+            .select("*")
+            .eq("record_type", g.recordType)
+            .in("record_id", g.recordIds);
+          if (error) throw error;
+          return data;
+        })
+      );
+      const merged = (results.flat().map(mapAuditEntry)) as AuditEntry[];
+      merged.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      return merged;
+    },
+    enabled: nonEmptyGroups.length > 0,
+    staleTime: 0,
+  });
+}
+
 const CMMS_RECORD_TYPES = [
   "work_order",
   "po",
