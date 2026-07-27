@@ -433,6 +433,7 @@ function mapJobServiceFull(s: any): CRMJobService {
     timeEnd: s.time_end ?? null,
     included: s.included ?? true,
     sortOrder: s.sort_order ?? 0,
+    serviceInvoiceDescription: s.crm_services?.invoice_description ?? null,
   };
 }
 
@@ -1412,7 +1413,7 @@ export function useJobDetail(id: string) {
           *,
           clients(display_name, billing_address, billing_city, billing_state, billing_zip, primary_phone, client_since),
           crm_crews(name),
-          crm_job_services(*)
+          crm_job_services(*, crm_services(invoice_description))
         `)
         .eq('id', id)
         .is('deleted_at', null)

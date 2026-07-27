@@ -2,6 +2,27 @@ import { NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 
+// Billing-period boundaries (inclusive, "YYYY-MM-DD") for batching auto-invoices
+// under a client's weekly/monthly invoice_frequency. Computed in UTC to avoid
+// server-timezone drift shifting a date across a period boundary.
+function getMonthRange(dateStr: string): { start: string; end: string } {
+  const [y, m] = dateStr.split("-").map(Number);
+  const start = `${y}-${String(m).padStart(2, "0")}-01`;
+  const end = new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10);
+  return { start, end };
+}
+
+function getWeekRange(dateStr: string): { start: string; end: string } {
+  const d = new Date(`${dateStr}T00:00:00Z`);
+  const day = d.getUTCDay(); // 0 = Sunday .. 6 = Saturday
+  const diffToMonday = day === 0 ? -6 : 1 - day;
+  const monday = new Date(d);
+  monday.setUTCDate(d.getUTCDate() + diffToMonday);
+  const sunday = new Date(monday);
+  sunday.setUTCDate(monday.getUTCDate() + 6);
+  return { start: monday.toISOString().slice(0, 10), end: sunday.toISOString().slice(0, 10) };
+}
+
 export async function POST(
   _request: Request,
   { params }: { params: Promise<{ visitId: string }> }
@@ -57,7 +78,7 @@ export async function POST(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: job } = await (supabase as any)
     .from("crm_jobs")
-    .select("id, job_type, contract_id, client_id, invoice_description, rate_cents, po_number, sales_rep_id, crm_job_services(id, service_name, qty, rate_cents, crm_services(invoice_description))")
+    .select("id, job_type, contract_id, client_id, invoice_description, rate_cents, po_number, sales_rep_id, crm_job_services(id, service_name, qty, rate_cents, crm_services(invoice_description)), clients(invoice_frequency)")
     .eq("id", (visit as any).job_id)
     .single();
 
@@ -152,7 +173,7 @@ export async function POST(
       const visitDate: string | null = (visit as any).scheduled_date ?? null;
       const lineItems = services.length > 0
         ? services.map((s) => {
-            const description = s.crm_services?.invoice_description || s.service_name;
+            const description = visitInvoiceDescription || s.crm_services?.invoice_description || s.service_name;
             return {
               name: s.service_name,
               description,
@@ -169,67 +190,132 @@ export async function POST(
       const subtotal = lineItems.reduce((s: number, li: { total_cents: number }) => s + li.total_cents, 0);
 
       if (subtotal > 0) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data: newInvoice } = await (supabase as any)
-          .from("crm_invoices")
-          .insert({
-            org_id: orgId,
-            client_id: j.client_id,
-            crm_job_id: j.id,
-            sales_rep_id: j.sales_rep_id ?? null,
-            description: visitInvoiceDescription ?? j.invoice_description ?? "Service",
-            invoice_date: visitDate ?? today,
-            status: "draft",
-            subtotal_cents: subtotal,
-            tax_rate_bps: 0,
-            tax_cents: 0,
-            total_cents: subtotal,
-            balance_cents: subtotal,
-            amount_paid_cents: 0,
-            po_number: j.po_number ?? null,
-          })
-          .select("id, invoice_number")
-          .single();
+        // Clients billed weekly/monthly get every visit in the same period folded into
+        // one invoice instead of one invoice per visit. "daily" and "upon_completion"
+        // clients keep the original one-invoice-per-visit behavior.
+        const invoiceFrequency: string = j.clients?.invoice_frequency ?? "daily";
+        const periodDate = visitDate ?? today;
+        const period = invoiceFrequency === "monthly"
+          ? getMonthRange(periodDate)
+          : invoiceFrequency === "weekly"
+            ? getWeekRange(periodDate)
+            : null;
 
-        if (newInvoice && lineItems.length > 0) {
+        let existingInvoice: { id: string; subtotal_cents: number; total_cents: number; balance_cents: number } | null = null;
+        if (period && j.client_id) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { data: openInvoice } = await (supabase as any)
+            .from("crm_invoices")
+            .select("id, subtotal_cents, total_cents, balance_cents")
+            .eq("client_id", j.client_id)
+            .eq("status", "draft")
+            .is("deleted_at", null)
+            .gte("invoice_date", period.start)
+            .lte("invoice_date", period.end)
+            .order("invoice_date", { ascending: true })
+            .limit(1)
+            .maybeSingle();
+          existingInvoice = openInvoice ?? null;
+        }
+
+        if (existingInvoice) {
+          const invoiceId = existingInvoice.id;
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { count: existingItemCount } = await (supabase as any)
+            .from("crm_invoice_line_items")
+            .select("id", { count: "exact", head: true })
+            .eq("invoice_id", invoiceId);
+
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           await (supabase as any).from("crm_invoice_line_items").insert(
             lineItems.map((li: { name: string; description: string; qty: number; rate_cents: number; total_cents: number; service_date: string | null }, i: number) => ({
-              invoice_id: (newInvoice as any).id,
+              invoice_id: invoiceId,
               name: li.name,
               description: li.description,
               qty: li.qty,
               rate_cents: li.rate_cents,
               total_cents: li.total_cents,
               service_date: li.service_date,
-              sort_order: i,
+              sort_order: (existingItemCount ?? 0) + i,
             }))
           );
-        }
-
-        if (newInvoice && j.client_id) {
-          // Auto-created invoices skip the manual "assign on save" flow, so
-          // assign the number here or it stays null indefinitely.
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const { data: invoiceNumber } = await (supabase.rpc as any)(
-            "assign_invoice_number",
-            { p_invoice_id: (newInvoice as any).id }
-          );
-
-          // Sync the client's outstanding balance to include this new invoice
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          await (supabase.rpc as any)("sync_client_balance", { p_client_id: j.client_id });
 
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          await (supabase as any).from("client_activity").insert({
-            client_id: j.client_id,
-            activity_type: "invoice",
-            subject: `Invoice #${invoiceNumber}`,
-            amount_cents: subtotal,
-            ref_id: (newInvoice as any).id,
-            ref_table: "crm_invoices",
-          });
+          await (supabase as any)
+            .from("crm_invoices")
+            .update({
+              subtotal_cents: existingInvoice.subtotal_cents + subtotal,
+              total_cents: existingInvoice.total_cents + subtotal,
+              balance_cents: existingInvoice.balance_cents + subtotal,
+            })
+            .eq("id", invoiceId);
+
+          if (j.client_id) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            await (supabase.rpc as any)("sync_client_balance", { p_client_id: j.client_id });
+          }
+        } else {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { data: newInvoice } = await (supabase as any)
+            .from("crm_invoices")
+            .insert({
+              org_id: orgId,
+              client_id: j.client_id,
+              crm_job_id: j.id,
+              sales_rep_id: j.sales_rep_id ?? null,
+              description: visitInvoiceDescription ?? j.invoice_description ?? "Service",
+              invoice_date: visitDate ?? today,
+              status: "draft",
+              subtotal_cents: subtotal,
+              tax_rate_bps: 0,
+              tax_cents: 0,
+              total_cents: subtotal,
+              balance_cents: subtotal,
+              amount_paid_cents: 0,
+              po_number: j.po_number ?? null,
+            })
+            .select("id, invoice_number")
+            .single();
+
+          if (newInvoice && lineItems.length > 0) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            await (supabase as any).from("crm_invoice_line_items").insert(
+              lineItems.map((li: { name: string; description: string; qty: number; rate_cents: number; total_cents: number; service_date: string | null }, i: number) => ({
+                invoice_id: (newInvoice as any).id,
+                name: li.name,
+                description: li.description,
+                qty: li.qty,
+                rate_cents: li.rate_cents,
+                total_cents: li.total_cents,
+                service_date: li.service_date,
+                sort_order: i,
+              }))
+            );
+          }
+
+          if (newInvoice && j.client_id) {
+            // Auto-created invoices skip the manual "assign on save" flow, so
+            // assign the number here or it stays null indefinitely.
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const { data: invoiceNumber } = await (supabase.rpc as any)(
+              "assign_invoice_number",
+              { p_invoice_id: (newInvoice as any).id }
+            );
+
+            // Sync the client's outstanding balance to include this new invoice
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            await (supabase.rpc as any)("sync_client_balance", { p_client_id: j.client_id });
+
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            await (supabase as any).from("client_activity").insert({
+              client_id: j.client_id,
+              activity_type: "invoice",
+              subject: `Invoice #${invoiceNumber}`,
+              amount_cents: subtotal,
+              ref_id: (newInvoice as any).id,
+              ref_table: "crm_invoices",
+            });
+          }
         }
       }
     }

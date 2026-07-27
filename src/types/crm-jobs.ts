@@ -87,6 +87,7 @@ export interface CRMJobService {
   timeEnd: string | null;
   included: boolean;
   sortOrder: number;
+  serviceInvoiceDescription: string | null; // from crm_services.invoice_description, for the job-level invoice-desc fallback preview
 }
 
 export interface CRMJob {

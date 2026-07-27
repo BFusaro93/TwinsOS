@@ -133,10 +133,14 @@ export function GlobalSearchDialog({ open, onOpenChange }: GlobalSearchDialogPro
 
         {showFullSearch && clients.length > 0 && (
           <CommandGroup heading="Clients">
-            {clients.map((client) => (
+            {clients.map((client) => {
+              const phones = [client.primaryPhone, ...client.phones.map((p) => p.phone)].filter(
+                (p): p is string => Boolean(p)
+              );
+              return (
               <CommandItem
                 key={client.id}
-                value={`${client.displayName} ${client.primaryEmail ?? ""} ${typeof client.billingAddress === "object" && client.billingAddress ? Object.values(client.billingAddress).filter(Boolean).join(" ") : ""} client`}
+                value={`${client.displayName} ${client.primaryEmail ?? ""} ${typeof client.billingAddress === "object" && client.billingAddress ? Object.values(client.billingAddress).filter(Boolean).join(" ") : ""} ${[client.serviceAddress, client.serviceCity, client.serviceState, client.serviceZip].filter(Boolean).join(" ")} ${phones.join(" ")} ${phones.map((p) => p.replace(/\D/g, "")).join(" ")} client`}
                 onSelect={() => go(`/crm/clients/${client.id}`)}
                 className="flex items-center gap-3"
               >
@@ -144,12 +148,13 @@ export function GlobalSearchDialog({ open, onOpenChange }: GlobalSearchDialogPro
                 <div className="flex min-w-0 flex-1 flex-col">
                   <span className="truncate text-sm font-medium">{client.displayName}</span>
                   <span className="truncate text-xs text-slate-400">
-                    {[client.primaryEmail, typeof client.billingAddress === "object" && client.billingAddress ? (client.billingAddress as Record<string, string>).city : null].filter(Boolean).join(" · ")}
+                    {[client.primaryPhone, client.primaryEmail, typeof client.billingAddress === "object" && client.billingAddress ? (client.billingAddress as Record<string, string>).city : null].filter(Boolean).join(" · ")}
                   </span>
                 </div>
                 <StatusBadge variant={client.status as Parameters<typeof StatusBadge>[0]["variant"]} label={client.status} />
               </CommandItem>
-            ))}
+              );
+            })}
           </CommandGroup>
         )}
 
@@ -157,10 +162,14 @@ export function GlobalSearchDialog({ open, onOpenChange }: GlobalSearchDialogPro
 
         {showFullSearch && leads.length > 0 && (
           <CommandGroup heading="Leads">
-            {leads.map((lead) => (
+            {leads.map((lead) => {
+              const phones = [lead.primaryPhone, ...lead.phones.map((p) => p.phone)].filter(
+                (p): p is string => Boolean(p)
+              );
+              return (
               <CommandItem
                 key={lead.id}
-                value={`${lead.displayName} ${lead.primaryEmail ?? ""} ${typeof lead.billingAddress === "object" && lead.billingAddress ? Object.values(lead.billingAddress).filter(Boolean).join(" ") : ""} lead`}
+                value={`${lead.displayName} ${lead.primaryEmail ?? ""} ${typeof lead.billingAddress === "object" && lead.billingAddress ? Object.values(lead.billingAddress).filter(Boolean).join(" ") : ""} ${[lead.serviceAddress, lead.serviceCity, lead.serviceState, lead.serviceZip].filter(Boolean).join(" ")} ${phones.join(" ")} ${phones.map((p) => p.replace(/\D/g, "")).join(" ")} lead`}
                 onSelect={() => go(`/crm/clients/${lead.id}`)}
                 className="flex items-center gap-3"
               >
@@ -168,11 +177,12 @@ export function GlobalSearchDialog({ open, onOpenChange }: GlobalSearchDialogPro
                 <div className="flex min-w-0 flex-1 flex-col">
                   <span className="truncate text-sm font-medium">{lead.displayName}</span>
                   <span className="truncate text-xs text-slate-400">
-                    {[lead.primaryEmail, typeof lead.billingAddress === "object" && lead.billingAddress ? (lead.billingAddress as Record<string, string>).city : null].filter(Boolean).join(" · ")}
+                    {[lead.primaryPhone, lead.primaryEmail, typeof lead.billingAddress === "object" && lead.billingAddress ? (lead.billingAddress as Record<string, string>).city : null].filter(Boolean).join(" · ")}
                   </span>
                 </div>
               </CommandItem>
-            ))}
+              );
+            })}
           </CommandGroup>
         )}
 

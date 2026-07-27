@@ -41,6 +41,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn, formatCurrency } from "@/lib/utils";
+import { computeActualHours } from "@/lib/utils/visit-hours";
 import { toast } from "sonner";
 import {
   CalendarPlus,
@@ -1627,6 +1628,7 @@ export function JobDetail({ jobId, initialEditing = false, onClose }: Props) {
                       <VisitRow key={v.id} visit={v}
                         services={services}
                         jobId={job.id}
+                        jobNotesToCrew={job.notesToCrew ?? null}
                         propertyId={job.propertyId}
                         isChemicalJob={isChemicalJob}
                         crews={crews}
@@ -1700,19 +1702,29 @@ export function JobDetail({ jobId, initialEditing = false, onClose }: Props) {
               </div>
             </div>
           )}
-          {tab === "invoice" && (
+          {tab === "invoice" && (() => {
+            // Each service already bills under its own invoice description (or its
+            // plain name as a fallback) regardless of this field — this preview shows
+            // that default so "blank" doesn't look like nothing is configured.
+            const defaultPreview = (job.services ?? [])
+              .map((s) => s.serviceInvoiceDescription || s.serviceName)
+              .filter(Boolean)
+              .join(", ");
+            return (
             <div className="rounded-lg border bg-white p-4 shadow-sm flex flex-col gap-3">
               <div>
                 <Label className="text-xs font-medium text-slate-600 mb-1 block">Invoice Description</Label>
                 <p className="text-xs text-slate-500 mb-2">
-                  This master description appears on all invoices generated for this job. Leave blank to use the default service name(s).
+                  {defaultPreview
+                    ? `Overrides the description shown on this job's invoices. Leave blank to keep using each service's own description: "${defaultPreview}".`
+                    : "This master description appears on all invoices generated for this job. Leave blank to use the default service name(s)."}
                 </p>
                 <Textarea
                   rows={6}
                   defaultValue={job.invoiceDescription ?? ""}
                   onChange={(e) => patch("invoice_description", e.target.value)}
                   className="text-sm resize-none"
-                  placeholder="e.g. Weekly lawn maintenance — mow, trim, blow…"
+                  placeholder={defaultPreview || "e.g. Weekly lawn maintenance — mow, trim, blow…"}
                 />
               </div>
               <div className="flex justify-end">
@@ -1722,7 +1734,8 @@ export function JobDetail({ jobId, initialEditing = false, onClose }: Props) {
                 </Button>
               </div>
             </div>
-          )}
+            );
+          })()}
           {tab === "costing" && (
             <JobCostingTab jobId={job.id} estimateId={job.estimateId ?? null} />
           )}
@@ -1766,6 +1779,7 @@ function VisitRow({
   visit,
   services,
   jobId,
+  jobNotesToCrew,
   propertyId,
   isChemicalJob,
   crews,
@@ -1778,6 +1792,7 @@ function VisitRow({
   visit: CRMJobVisit;
   services: CRMJobService[];
   jobId: string;
+  jobNotesToCrew: string | null;
   propertyId: string | null;
   isChemicalJob: boolean;
   crews: { id: string; name: string }[];
@@ -1855,7 +1870,7 @@ function VisitRow({
         <td className="px-4 py-3 text-slate-600">{visitServiceName}</td>
         <td className="px-4 py-3 text-slate-600">{visit.crewName ?? <span className="italic text-slate-400">Unassigned</span>}</td>
         <td className="px-4 py-3 text-right tabular-nums">{visitBudgetedHours ? `${visitBudgetedHours}h` : "—"}</td>
-        <td className="px-4 py-3 text-right tabular-nums">{visit.actualHours?.toFixed(1) ?? "—"}</td>
+        <td className="px-4 py-3 text-right tabular-nums">{computeActualHours(visit)?.toFixed(1) ?? "—"}</td>
         <td className="px-4 py-3 text-center">
           <Badge
             variant="outline"
@@ -1870,6 +1885,11 @@ function VisitRow({
         </td>
         <td className="px-4 py-3 text-xs max-w-xs">
           <div className="flex flex-col gap-0.5">
+            {jobNotesToCrew && (
+              <div className="truncate max-w-[200px] text-amber-700" title={jobNotesToCrew}>
+                <span className="font-semibold">Job note:</span> {jobNotesToCrew}
+              </div>
+            )}
             {visit.notesToCrew ? (
               <button onClick={() => { setEditingNote(true); setEditingInvoiceDesc(false); }} className="text-slate-600 hover:text-brand-600 text-left truncate max-w-[200px] block">
                 {visit.notesToCrew}

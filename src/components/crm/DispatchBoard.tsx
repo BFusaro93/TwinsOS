@@ -31,6 +31,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { formatCurrency, cn, relativeTime, formatDateShort } from "@/lib/utils";
+import { computeActualHours } from "@/lib/utils/visit-hours";
 import { toast } from "sonner";
 import {
   Calendar,
@@ -78,25 +79,6 @@ import { useCRMServices } from "@/lib/hooks/use-crm-jobs";
 // ── status icon ───────────────────────────────────────────────────────────────
 
 const STATUS_CYCLE: VisitStatus[] = ["scheduled", "dispatched", "in_progress", "completed", "skipped"];
-
-// Actual hours = time on site (real clock-in/out from the crew tablet) x crew
-// size, mirroring SA's dispatch board. A manually-entered actualHours (an
-// explicit dispatcher override) always wins; the scheduled start/end fields
-// are a dispatcher estimate and only apply before any real punch exists.
-function computeActualHours(visit: CRMJobVisit): number | null {
-  if (visit.actualHours != null) return visit.actualHours;
-  if (visit.clockedInAt && visit.clockedOutAt) {
-    const diffHours = (new Date(visit.clockedOutAt).getTime() - new Date(visit.clockedInAt).getTime()) / 3_600_000;
-    if (diffHours > 0) return diffHours * (visit.menCount || 1);
-  }
-  if (!visit.startTime || !visit.endTime) return null;
-  const [sh, sm] = visit.startTime.split(":").map(Number);
-  const [eh, em] = visit.endTime.split(":").map(Number);
-  if ([sh, sm, eh, em].some((n) => Number.isNaN(n))) return null;
-  const diffHours = (eh * 60 + em - (sh * 60 + sm)) / 60;
-  if (diffHours <= 0) return null;
-  return diffHours * (visit.menCount || 1);
-}
 
 // Formats a "HH:MM" / "HH:MM:SS" 24h time string (the shape a native
 // <input type="time"> value/DB `time` column uses) into "3:00 PM" for
@@ -155,7 +137,7 @@ function StatusCycleButton({ visit }: { visit: CRMJobVisit }) {
 
 // ── column visibility ─────────────────────────────────────────────────────────
 
-type ColKey = "service" | "date" | "city" | "zip" | "assigned" | "last_svc" | "start" | "end" | "b_hrs" | "actual" | "men" | "qty" | "rate" | "amt" | "icons";
+type ColKey = "service" | "date" | "city" | "zip" | "assigned" | "last_svc" | "start" | "end" | "b_hrs" | "actual" | "variance" | "men" | "qty" | "rate" | "amt" | "icons";
 
 const COL_DEFS: { key: ColKey; label: string }[] = [
   { key: "service",  label: "Service" },
@@ -168,6 +150,7 @@ const COL_DEFS: { key: ColKey; label: string }[] = [
   { key: "end",      label: "End" },
   { key: "b_hrs",    label: "B Hrs" },
   { key: "actual",   label: "Actual Hrs" },
+  { key: "variance", label: "Hr Variance" },
   { key: "men",      label: "Men" },
   { key: "qty",      label: "Qty" },
   { key: "rate",     label: "Rate" },
@@ -648,6 +631,11 @@ function JobDetailSheet({
                   row on the dispatch board itself — these can run long and would
                   clog up the board, unlike short job comments. */}
               <TabsContent value="job-notes" className="m-0 p-4 space-y-3">
+                {job?.notesToCrew && (
+                  <p className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded px-2 py-1.5">
+                    <span className="font-semibold">Job note:</span> {job.notesToCrew}
+                  </p>
+                )}
                 <Textarea
                   value={notesToCrewInput}
                   onChange={(e) => setNotesToCrewInput(e.target.value)}
@@ -1850,6 +1838,20 @@ function VisitRow({
         </td>
       )}
 
+      {/* Variance = actual - budgeted. Green means under budget (actual < budgeted),
+          red means over budget (actual > budgeted). */}
+      {isVisible("variance") && (
+        <td className="px-2 py-2 text-right tabular-nums">
+          {actualHours != null && budgetedHours != null ? (
+            <span className={cn("font-medium", actualHours > budgetedHours ? "text-red-600" : actualHours < budgetedHours ? "text-green-600" : "text-slate-500")}>
+              {actualHours > budgetedHours ? "+" : ""}{(actualHours - budgetedHours).toFixed(2)}
+            </span>
+          ) : (
+            <span className="text-slate-300">—</span>
+          )}
+        </td>
+      )}
+
       {/* Men */}
       {isVisible("men") && (
         <td className="px-1 py-1 text-center text-slate-400" onClick={(e) => e.stopPropagation()}>
@@ -1961,6 +1963,11 @@ function TotalsRow({ visits, isVisible }: { visits: CRMJobVisit[]; isVisible: (c
       <td colSpan={labelSpan} className="px-2 py-1.5 text-right text-slate-500">Totals</td>
       {isVisible("b_hrs")   && <td className="px-2 py-1.5 text-right">{totalBHrs > 0 ? totalBHrs.toFixed(2) : "—"}</td>}
       {isVisible("actual")  && <td className="px-2 py-1.5 text-right">{totalAct  > 0 ? totalAct.toFixed(2)  : "—"}</td>}
+      {isVisible("variance") && (
+        <td className={cn("px-2 py-1.5 text-right", totalAct > 0 && totalAct > totalBHrs ? "text-red-600" : totalAct > 0 && totalAct < totalBHrs ? "text-green-600" : "")}>
+          {totalAct > 0 ? `${totalAct > totalBHrs ? "+" : ""}${(totalAct - totalBHrs).toFixed(2)}` : "—"}
+        </td>
+      )}
       {isVisible("men")     && <td />}
       {isVisible("qty")     && <td />}
       {isVisible("rate")    && <td />}
@@ -2923,6 +2930,7 @@ export function DispatchBoard() {
               {isVisible("end")      && <th className="px-2 py-2.5">End</th>}
               {isVisible("b_hrs")    && <th className="px-2 py-2.5 text-right">B Hrs</th>}
               {isVisible("actual")   && <th className="px-2 py-2.5 text-right">Actual</th>}
+              {isVisible("variance") && <th className="px-2 py-2.5 text-right">Variance</th>}
               {isVisible("men")      && <th className="px-2 py-2.5 text-center">Men</th>}
               {isVisible("qty")      && <th className="px-2 py-2.5 text-right">Qty</th>}
               {isVisible("rate")     && <th className="px-2 py-2.5 text-right">Rate</th>}

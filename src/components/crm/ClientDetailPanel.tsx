@@ -68,6 +68,7 @@ import {
 } from "@/lib/hooks/use-client-custom-fields";
 import { useOrgList } from "@/lib/hooks/use-org-lists";
 import { formatCurrency } from "@/lib/utils";
+import { computeActualHours } from "@/lib/utils/visit-hours";
 import { useOrgSettings } from "@/lib/hooks/use-org-settings";
 import type { CRMPayment, CRMInvoice, CRMContract } from "@/types/crm-invoices";
 import type { Estimate } from "@/types/crm-estimates";
@@ -2102,7 +2103,7 @@ function JobVisitsModal({
                 }) : filtered.map((v: CRMJobVisit) => {
                   // Fall back to job-level budgeted hours if visit doesn't have its own
                   const hours = mode === "history"
-                    ? (v.actualHours != null ? `${v.actualHours}hrs` : "0hrs")
+                    ? (() => { const h = computeActualHours(v); return h != null ? `${h.toFixed(1)}hrs` : "0hrs"; })()
                     : (v.budgetedHours != null ? `${v.budgetedHours}hrs` : job.budgetedHours != null ? `${job.budgetedHours}hrs` : "—");
                   const amount = v.rateCents != null ? `$${(v.rateCents / 100).toFixed(2)}` : (job.rateCents != null ? `$${(job.rateCents / 100).toFixed(2)}` : "—");
                   const dateStr = fmtDate(v.scheduledDate);
@@ -2553,7 +2554,7 @@ function ClientAllVisitsModal({
               <tbody className="divide-y">
                 {filtered.map((v: CRMJobVisit) => {
                   const hours = mode === "history"
-                    ? (v.actualHours != null ? `${v.actualHours}hrs` : "0hrs")
+                    ? (() => { const h = computeActualHours(v); return h != null ? `${h.toFixed(1)}hrs` : "0hrs"; })()
                     : (v.budgetedHours != null ? `${v.budgetedHours}hrs` : "—");
                   const amount = v.rateCents != null ? `$${(v.rateCents / 100).toFixed(2)}` : "—";
                   return (

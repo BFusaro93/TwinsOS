@@ -60,7 +60,7 @@ export function ReportsSidebar() {
                 className="h-7 w-7 shrink-0 rounded-md object-contain"
               />
               {!sidebarCollapsed && (
-                <span className="truncate text-lg font-bold text-brand-400">Equipt</span>
+                <span className="truncate text-lg font-bold text-brand-400">Dashboards</span>
               )}
               {sidebarCollapsed && <span className="sr-only">{orgName}</span>}
             </>
@@ -70,7 +70,7 @@ export function ReportsSidebar() {
                 <Leaf className="h-4 w-4 text-white" />
               </div>
               {!sidebarCollapsed && (
-                <span className="truncate text-lg font-bold text-brand-400">Equipt</span>
+                <span className="truncate text-lg font-bold text-brand-400">Dashboards</span>
               )}
             </>
           )}
