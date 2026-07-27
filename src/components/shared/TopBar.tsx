@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import Link from "next/link";
 import { Menu, PanelLeftClose, Plus, Search, UserCog } from "lucide-react";
 import { useUIStore, useCurrentUserStore, useQuickAddStore } from "@/stores";
 import type { QuickAddType } from "@/stores/quick-add-store";
@@ -110,16 +109,16 @@ const CRM_QUICK_ADD: { label: string; quickAdd: QuickAddType }[] = [
   { label: "Payment",  quickAdd: "payment" },
 ];
 
-const EQUIPT_QUICK_ADD = [
-  { label: "Requisition",  href: "/po/requisitions" },
-  { label: "Purchase Order", href: "/po/orders" },
-  { label: "Work Order",   href: "/cmms/work-orders" },
-  { label: "Vendor",       href: "/vendors" },
+const EQUIPT_QUICK_ADD: { label: string; quickAdd: QuickAddType }[] = [
+  { label: "Requisition",    quickAdd: "requisition" },
+  { label: "Purchase Order", quickAdd: "purchase_order" },
+  { label: "Work Order",     quickAdd: "work_order" },
+  { label: "Vendor",         quickAdd: "vendor" },
 ];
 
-const CREW_QUICK_ADD = [
-  { label: "Requisition", href: "/po/requisitions" },
-  { label: "Work Order",  href: "/cmms/work-orders" },
+const CREW_QUICK_ADD: { label: string; quickAdd: QuickAddType }[] = [
+  { label: "Requisition", quickAdd: "requisition" },
+  { label: "Work Order",  quickAdd: "work_order" },
 ];
 
 function QuickAddMenu() {
@@ -127,6 +126,12 @@ function QuickAddMenu() {
   const { currentUser } = useCurrentUserStore();
   const { open: openQuickAdd } = useQuickAddStore();
   const isCRM = pathname.startsWith("/crm");
+
+  const items = currentUser.role === "crew"
+    ? CREW_QUICK_ADD
+    : isCRM
+      ? CRM_QUICK_ADD
+      : EQUIPT_QUICK_ADD;
 
   return (
     <DropdownMenu>
@@ -143,19 +148,11 @@ function QuickAddMenu() {
           <Plus className="h-3 w-3" /> Quick Add
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
-        {isCRM && currentUser.role !== "crew" ? (
-          CRM_QUICK_ADD.map((item) => (
-            <DropdownMenuItem key={item.label} onSelect={() => openQuickAdd(item.quickAdd!)}>
-              {item.label}
-            </DropdownMenuItem>
-          ))
-        ) : (
-          (currentUser.role === "crew" ? CREW_QUICK_ADD : EQUIPT_QUICK_ADD).map((item) => (
-            <DropdownMenuItem key={item.href} asChild>
-              <Link href={item.href} className="cursor-pointer">{item.label}</Link>
-            </DropdownMenuItem>
-          ))
-        )}
+        {items.map((item) => (
+          <DropdownMenuItem key={item.label} onSelect={() => openQuickAdd(item.quickAdd!)}>
+            {item.label}
+          </DropdownMenuItem>
+        ))}
       </DropdownMenuContent>
     </DropdownMenu>
   );

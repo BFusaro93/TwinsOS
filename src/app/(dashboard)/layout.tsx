@@ -6,6 +6,7 @@ import { AppSidebar } from "@/components/shared/AppSidebar";
 import { TopBar } from "@/components/shared/TopBar";
 import { RealtimeSync } from "@/components/shared/RealtimeSync";
 import { SettingsLoader } from "@/components/shared/SettingsLoader";
+import { EquiptQuickAddOverlay } from "@/components/shared/EquiptQuickAddOverlay";
 import { useUIStore } from "@/stores";
 import { useIsCrewOnly } from "@/lib/hooks/use-permissions";
 
@@ -36,6 +37,7 @@ export default function DashboardLayout({
     <div className="flex h-dvh overflow-hidden bg-slate-50">
       <RealtimeSync />
       <SettingsLoader />
+      <EquiptQuickAddOverlay />
 
       {/* Desktop sidebar */}
       <div className="hidden h-full md:flex">

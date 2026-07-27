@@ -2,7 +2,18 @@
 
 import { create } from "zustand";
 
-export type QuickAddType = "client" | "estimate" | "ticket" | "invoice" | "payment" | "job" | null;
+export type QuickAddType =
+  | "client"
+  | "estimate"
+  | "ticket"
+  | "invoice"
+  | "payment"
+  | "job"
+  | "requisition"
+  | "purchase_order"
+  | "work_order"
+  | "vendor"
+  | null;
 
 interface QuickAddState {
   type: QuickAddType;
