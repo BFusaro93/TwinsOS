@@ -1878,8 +1878,18 @@ export type Database = {
           area_qty: number | null
           area_unit_id: string | null
           created_at: string
+          dilution_chemical_qty: number | null
+          dilution_chemical_unit_id: string | null
+          dilution_water_qty: number | null
+          dilution_water_unit_id: string | null
           id: string
           is_default: boolean
+          mix_product_amount_qty: number | null
+          mix_product_amount_unit_id: string | null
+          mix_product_id: string | null
+          mix_product_total_qty: number | null
+          mix_product_total_unit_id: string | null
+          mix_type: string
           org_id: string
           product_cost_cents: number
           product_id: string
@@ -1892,8 +1902,18 @@ export type Database = {
           area_qty?: number | null
           area_unit_id?: string | null
           created_at?: string
+          dilution_chemical_qty?: number | null
+          dilution_chemical_unit_id?: string | null
+          dilution_water_qty?: number | null
+          dilution_water_unit_id?: string | null
           id?: string
           is_default?: boolean
+          mix_product_amount_qty?: number | null
+          mix_product_amount_unit_id?: string | null
+          mix_product_id?: string | null
+          mix_product_total_qty?: number | null
+          mix_product_total_unit_id?: string | null
+          mix_type?: string
           org_id?: string
           product_cost_cents?: number
           product_id: string
@@ -1906,8 +1926,18 @@ export type Database = {
           area_qty?: number | null
           area_unit_id?: string | null
           created_at?: string
+          dilution_chemical_qty?: number | null
+          dilution_chemical_unit_id?: string | null
+          dilution_water_qty?: number | null
+          dilution_water_unit_id?: string | null
           id?: string
           is_default?: boolean
+          mix_product_amount_qty?: number | null
+          mix_product_amount_unit_id?: string | null
+          mix_product_id?: string | null
+          mix_product_total_qty?: number | null
+          mix_product_total_unit_id?: string | null
+          mix_type?: string
           org_id?: string
           product_cost_cents?: number
           product_id?: string
@@ -1926,6 +1956,48 @@ export type Database = {
           {
             foreignKeyName: "crm_chemical_application_rates_area_unit_id_fkey"
             columns: ["area_unit_id"]
+            isOneToOne: false
+            referencedRelation: "crm_chemical_lookup_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_chemical_application_rates_dilution_chemical_unit_id_fkey"
+            columns: ["dilution_chemical_unit_id"]
+            isOneToOne: false
+            referencedRelation: "crm_chemical_lookup_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_chemical_application_rates_dilution_water_unit_id_fkey"
+            columns: ["dilution_water_unit_id"]
+            isOneToOne: false
+            referencedRelation: "crm_chemical_lookup_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_chemical_application_rates_mix_product_amount_unit_id_fkey"
+            columns: ["mix_product_amount_unit_id"]
+            isOneToOne: false
+            referencedRelation: "crm_chemical_lookup_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_chemical_application_rates_mix_product_id_fkey"
+            columns: ["mix_product_id"]
+            isOneToOne: false
+            referencedRelation: "product_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_chemical_application_rates_mix_product_id_fkey"
+            columns: ["mix_product_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_chemical_application_rates_mix_product_total_unit_id_fkey"
+            columns: ["mix_product_total_unit_id"]
             isOneToOne: false
             referencedRelation: "crm_chemical_lookup_items"
             referencedColumns: ["id"]
@@ -2492,6 +2564,65 @@ export type Database = {
             columns: ["sales_rep_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      crm_crew_daily_members: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          crew_id: string
+          id: string
+          member_id: string
+          org_id: string
+          work_date: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          crew_id: string
+          id?: string
+          member_id: string
+          org_id?: string
+          work_date: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          crew_id?: string
+          id?: string
+          member_id?: string
+          org_id?: string
+          work_date?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_crew_daily_members_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_crew_daily_members_crew_id_fkey"
+            columns: ["crew_id"]
+            isOneToOne: false
+            referencedRelation: "crm_crews"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_crew_daily_members_member_id_fkey"
+            columns: ["member_id"]
+            isOneToOne: false
+            referencedRelation: "crm_crew_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_crew_daily_members_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
         ]
@@ -3768,36 +3899,45 @@ export type Database = {
       }
       crm_invoice_pdf_templates: {
         Row: {
+          accent_color: string | null
           created_at: string
           created_by: string | null
           deleted_at: string | null
           id: string
           is_default: boolean
           layout_key: string
+          logo_url: string | null
           name: string
           org_id: string
+          show_notes: boolean
           updated_at: string
         }
         Insert: {
+          accent_color?: string | null
           created_at?: string
           created_by?: string | null
           deleted_at?: string | null
           id?: string
           is_default?: boolean
           layout_key?: string
+          logo_url?: string | null
           name: string
           org_id?: string
+          show_notes?: boolean
           updated_at?: string
         }
         Update: {
+          accent_color?: string | null
           created_at?: string
           created_by?: string | null
           deleted_at?: string | null
           id?: string
           is_default?: boolean
           layout_key?: string
+          logo_url?: string | null
           name?: string
           org_id?: string
+          show_notes?: boolean
           updated_at?: string
         }
         Relationships: [
@@ -11065,6 +11205,10 @@ export type Database = {
         Returns: undefined
       }
       assign_invoice_number: { Args: { p_invoice_id: string }; Returns: number }
+      crm_recompute_job_actual_hours: {
+        Args: { p_job_id: string }
+        Returns: undefined
+      }
       crm_run_report: {
         Args: {
           p_aggregates?: Json
