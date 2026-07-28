@@ -213,7 +213,7 @@ export default function JobCostingReportPage() {
                   const hrsPositive = r.hoursVariance <= 0;
                   const marginGood = r.marginPct >= 40;
                   return (
-                    <tr key={r.jobId} className="border-b last:border-0 hover:bg-slate-50">
+                    <tr key={r.visitId} className="border-b last:border-0 hover:bg-slate-50">
                       <td className="px-3 py-2 text-slate-500 whitespace-nowrap">
                         {r.completedAt ? new Date(r.completedAt).toLocaleDateString() : "—"}
                       </td>
