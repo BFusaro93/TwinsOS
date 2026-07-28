@@ -31,7 +31,7 @@ function SummaryKPI({ label, value, sub, color }: { label: string; value: string
 
 function downloadCSV(rows: COGSReportRow[]) {
   const headers = [
-    "Service", "Jobs", "Bgt Hrs", "Act Hrs", "Hrs Var %",
+    "Service", "Visits", "Bgt Hrs", "Act Hrs", "Hrs Var %",
     "Gross Sales", "Labor Cost", "Labor %", "Materials", "Materials %",
     "Direct Cost", "Gross Profit", "Margin %", "Avg Rev/Man Hr", "Target/Man Hr", "Avg Over/Under",
   ];
@@ -39,7 +39,7 @@ function downloadCSV(rows: COGSReportRow[]) {
   for (const r of rows) {
     lines.push([
       `"${r.serviceName}"`,
-      r.jobCount,
+      r.visitCount,
       r.budgetedHours.toFixed(1),
       r.actualStaffHrs.toFixed(1),
       r.hoursVariancePct.toFixed(1) + "%",
@@ -89,7 +89,7 @@ export default function COGSReportPage() {
   const totals = useMemo(() => {
     if (rows.length === 0) return null;
     return {
-      jobCount: rows.reduce((s, r) => s + r.jobCount, 0),
+      visitCount: rows.reduce((s, r) => s + r.visitCount, 0),
       budgetedHours: rows.reduce((s, r) => s + r.budgetedHours, 0),
       actualStaffHrs: rows.reduce((s, r) => s + r.actualStaffHrs, 0),
       grossSalesCents: rows.reduce((s, r) => s + r.grossSalesCents, 0),
@@ -137,7 +137,7 @@ export default function COGSReportPage() {
       {/* Summary strip */}
       {totals && (
         <div className="flex gap-3 flex-wrap">
-          <SummaryKPI label="Services" value={String(rows.length)} sub={`${totals.jobCount} total jobs`} />
+          <SummaryKPI label="Services" value={String(rows.length)} sub={`${totals.visitCount} total visits`} />
           <SummaryKPI label="Gross Sales" value={formatCurrency(totals.grossSalesCents)} />
           <SummaryKPI label="Labor Cost" value={formatCurrency(totals.laborCostCents)} sub={`${overallLaborPct.toFixed(1)}% of sales`} />
           <SummaryKPI label="Materials" value={formatCurrency(totals.materialsCostCents)} />
@@ -169,7 +169,7 @@ export default function COGSReportPage() {
               <thead>
                 <tr className="bg-slate-50 border-b text-[10px] font-semibold text-slate-500 uppercase tracking-wide">
                   <th className="px-3 py-2.5 text-left whitespace-nowrap">Service</th>
-                  <th className="px-3 py-2.5 text-right whitespace-nowrap">Jobs</th>
+                  <th className="px-3 py-2.5 text-right whitespace-nowrap">Visits</th>
                   <th className="px-3 py-2.5 text-right whitespace-nowrap">Bgt Hrs</th>
                   <th className="px-3 py-2.5 text-right whitespace-nowrap">Act Hrs</th>
                   <th className="px-3 py-2.5 text-right whitespace-nowrap">Hrs Var</th>
@@ -189,7 +189,7 @@ export default function COGSReportPage() {
                 {rows.map((r) => (
                   <tr key={r.serviceId} className="border-b last:border-0 hover:bg-slate-50">
                     <td className="px-3 py-2.5 font-medium text-slate-800 whitespace-nowrap">{r.serviceName}</td>
-                    <td className="px-3 py-2 text-right tabular-nums text-slate-600">{r.jobCount}</td>
+                    <td className="px-3 py-2 text-right tabular-nums text-slate-600">{r.visitCount}</td>
                     <td className="px-3 py-2 text-right tabular-nums text-slate-500">
                       {r.budgetedHours > 0 ? r.budgetedHours.toFixed(1) : "—"}
                     </td>
@@ -237,7 +237,7 @@ export default function COGSReportPage() {
                 <tfoot>
                   <tr className="border-t-2 border-slate-200 bg-slate-50 font-semibold text-xs">
                     <td className="px-3 py-2.5 text-slate-600">Total</td>
-                    <td className="px-3 py-2.5 text-right tabular-nums text-slate-700">{totals.jobCount}</td>
+                    <td className="px-3 py-2.5 text-right tabular-nums text-slate-700">{totals.visitCount}</td>
                     <td className="px-3 py-2.5 text-right tabular-nums text-slate-600">{totals.budgetedHours.toFixed(1)}</td>
                     <td className="px-3 py-2.5 text-right tabular-nums text-slate-800">{totals.actualStaffHrs.toFixed(1)}</td>
                     <td />
