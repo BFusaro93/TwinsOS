@@ -5,10 +5,13 @@ import { cn } from "@/lib/utils";
 import { centsToDisplay, computeDirectCostOverhead } from "@/lib/estimate-calc";
 import { useUpsertDirectCost, useDeleteDirectCost } from "@/lib/hooks/use-estimates";
 import { useOverheadSettings, OVERHEAD_SETTINGS_DEFAULTS, type OverheadSettings } from "@/lib/hooks/use-overhead-settings";
+import { useProducts } from "@/lib/hooks/use-products";
+import { CatalogItemCombobox } from "@/components/shared/CatalogItemCombobox";
 import { Button } from "@/components/ui/button";
 import { Trash2, Plus } from "lucide-react";
 import { toast } from "sonner";
 import type { EstimateDirectCost, DirectCostType } from "@/types/crm-estimates";
+import type { ProductItem } from "@/types";
 
 const COST_TYPE_LABELS: Record<DirectCostType, string> = {
   labor:            "Labor",
@@ -23,10 +26,12 @@ function DirectCostRow({
   item,
   estimateId,
   overheadSettings,
+  products,
 }: {
   item: EstimateDirectCost;
   estimateId: string;
   overheadSettings: OverheadSettings;
+  products: ProductItem[];
 }) {
   const [row, setRow] = useState(item);
   const [dirty, setDirty] = useState(false);
@@ -43,6 +48,36 @@ function DirectCostRow({
     setDirty(true);
   }
 
+  async function selectProduct(value: string) {
+    const productId = value.startsWith("product:") ? value.slice("product:".length) : null;
+    const product = productId ? products.find((p) => p.id === productId) ?? null : null;
+    const next = {
+      ...row,
+      productItemId: productId,
+      description: product ? product.name : row.description,
+    };
+    setRow(next);
+    try {
+      await upsert({
+        estimateId,
+        item: {
+          id: next.id,
+          description: next.description,
+          cost_type: next.costType,
+          product_item_id: next.productItemId,
+          qty: next.qty,
+          rate_cents: next.rateCents,
+          total_cents: next.totalCents,
+          overhead_cents: next.overheadCents,
+          sort_order: next.sortOrder,
+        },
+      });
+      setDirty(false);
+    } catch {
+      toast.error("Failed to save cost");
+    }
+  }
+
   async function save() {
     if (!dirty) return;
     try {
@@ -52,6 +87,7 @@ function DirectCostRow({
           id: row.id,
           description: row.description,
           cost_type: row.costType,
+          product_item_id: row.productItemId,
           qty: row.qty,
           rate_cents: row.rateCents,
           total_cents: row.totalCents,
@@ -77,12 +113,32 @@ function DirectCostRow({
     <tr className="group border-b border-slate-100 text-xs hover:bg-slate-50">
       {/* Description */}
       <td className="min-w-[160px] px-3 py-1.5">
-        <input
-          value={row.description}
-          onChange={(e) => update("description", e.target.value)}
-          onBlur={save}
-          className="w-full rounded border border-slate-200 bg-white px-1.5 py-0.5 text-xs focus:border-brand-400 focus:outline-none"
-        />
+        {row.costType === "product_material" ? (
+          <div className="flex flex-col gap-1">
+            <CatalogItemCombobox
+              products={products}
+              parts={[]}
+              value={row.productItemId ? `product:${row.productItemId}` : ""}
+              onValueChange={selectProduct}
+              placeholder="Select product…"
+              size="sm"
+            />
+            <input
+              value={row.description}
+              onChange={(e) => update("description", e.target.value)}
+              onBlur={save}
+              placeholder="Description override"
+              className="w-full rounded border border-slate-200 bg-white px-1.5 py-0.5 text-xs focus:border-brand-400 focus:outline-none"
+            />
+          </div>
+        ) : (
+          <input
+            value={row.description}
+            onChange={(e) => update("description", e.target.value)}
+            onBlur={save}
+            className="w-full rounded border border-slate-200 bg-white px-1.5 py-0.5 text-xs focus:border-brand-400 focus:outline-none"
+          />
+        )}
       </td>
 
       {/* Type */}
@@ -161,6 +217,8 @@ export function EstimateDirectCostsGrid({
 }) {
   const { mutateAsync: upsert } = useUpsertDirectCost();
   const { data: overheadSettings = OVERHEAD_SETTINGS_DEFAULTS } = useOverheadSettings();
+  const { data: allProducts = [] } = useProducts();
+  const products = allProducts.filter((p) => p.category !== "maintenance_part");
 
   async function addItem() {
     try {
@@ -200,7 +258,7 @@ export function EstimateDirectCostsGrid({
         </thead>
         <tbody>
           {items.map((item) => (
-            <DirectCostRow key={item.id} item={item} estimateId={estimateId} overheadSettings={overheadSettings} />
+            <DirectCostRow key={item.id} item={item} estimateId={estimateId} overheadSettings={overheadSettings} products={products} />
           ))}
           {/* totals row */}
           <tr className="border-t bg-slate-50 text-xs font-semibold text-slate-600">

@@ -63,6 +63,7 @@ function mapDirectCost(row: any): EstimateDirectCost {
     estimateId: row.estimate_id,
     description: row.description,
     costType: row.cost_type,
+    productItemId: row.product_item_id ?? null,
     qty: Number(row.qty),
     rateCents: row.rate_cents,
     totalCents: row.total_cents,

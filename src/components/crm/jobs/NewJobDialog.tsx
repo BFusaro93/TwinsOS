@@ -62,10 +62,12 @@ interface ServiceRow {
   budgetedHours: number;
   budgetMethod: BudgetMethod;
   teamSize: number;
+  /** Days that must elapse after this service's visit completes before the next package-sequenced service is due. */
+  minDays: number | null;
 }
 
 function blankServiceRow(date: string): ServiceRow {
-  return { serviceId: "", serviceName: "", startDate: date, completeByDate: "", qty: 1, rateCents: 0, budgetedHours: 0, budgetMethod: "manual", teamSize: 1 };
+  return { serviceId: "", serviceName: "", startDate: date, completeByDate: "", qty: 1, rateCents: 0, budgetedHours: 0, budgetMethod: "manual", teamSize: 1, minDays: null };
 }
 
 interface Props {
@@ -169,6 +171,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
                 : service.defaultBHrs ?? 0,
               budgetMethod: matchingService?.budgetMethod ?? "manual",
               teamSize: 1,
+              minDays: service.minDays ?? null,
             };
           })
         : [blankServiceRow(startDate)]
@@ -289,6 +292,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
           timeEnd: null,
           included: true,
           sortOrder: idx,
+          minDays: s.minDays,
         })),
       });
       toast.success("Job created");

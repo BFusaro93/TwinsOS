@@ -68,6 +68,7 @@ export interface EstimateDirectCost {
   estimateId: string;
   description: string;
   costType: DirectCostType;
+  productItemId: string | null;
   qty: number;
   rateCents: number;
   totalCents: number;

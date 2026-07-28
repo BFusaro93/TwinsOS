@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
+import { recalcNextPackageVisitDate } from "@/lib/package-visit-recalc";
 
 // Billing-period boundaries (inclusive, "YYYY-MM-DD") for batching auto-invoices
 // under a client's weekly/monthly invoice_frequency. Computed in UTC to avoid
@@ -73,6 +74,19 @@ export async function POST(
     .eq("id", visitId);
 
   if (vErr) return NextResponse.json({ error: vErr.message }, { status: 500 });
+
+  // Push the next package-sequenced visit's date out if this one completed later
+  // than its static schedule assumed. Non-fatal — a failure here shouldn't block
+  // the rest of the completion flow (invoicing, activity logging).
+  try {
+    await recalcNextPackageVisitDate(
+      supabase,
+      (visit as { job_service_id: string | null }).job_service_id,
+      new Date().toISOString().slice(0, 10)
+    );
+  } catch (err) {
+    console.error("[visits/complete] package min_days recalc failed:", err);
+  }
 
   // Fetch the full job to determine type and contract linkage
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

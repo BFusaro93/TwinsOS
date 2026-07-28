@@ -74,7 +74,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import type { CRMJobVisit, VisitStatus, JobComment } from "@/types/crm-jobs";
 import { useCrews, useCrewDailyMembers, useSetCrewDailyMember, useClearCrewDailyMember } from "@/lib/hooks/use-employees";
-import { useCRMServices } from "@/lib/hooks/use-crm-jobs";
+import { useCRMServices, useCreateVisit } from "@/lib/hooks/use-crm-jobs";
+import { useNearbyWaitingListJobs } from "@/lib/hooks/use-nearby-waiting-list";
 
 // ── status icon ───────────────────────────────────────────────────────────────
 
@@ -704,9 +705,17 @@ function JobDetailSheet({
                 <p className="text-[10px] text-slate-400">Saved when you click Save below.</p>
               </TabsContent>
 
-              {/* Audit */}
+              {/* Audit — includes the parent job's own entries (schedule, crew,
+                  budgeted hours, rate, etc. are job-level fields), not just this
+                  one visit's, so edits made anywhere on the job aren't invisible
+                  from here. */}
               <TabsContent value="audit" className="m-0 p-4">
-                <AuditTrailTab recordType="job_visit" recordId={visit.id} />
+                <AuditTrailTab
+                  groups={[
+                    { recordType: "job", recordIds: job ? [job.id] : [] },
+                    { recordType: "job_visit", recordIds: [visit.id] },
+                  ]}
+                />
               </TabsContent>
             </Tabs>
 
@@ -2042,6 +2051,7 @@ export function DispatchBoard() {
   const [callAheadOpen,   setCallAheadOpen]   = useState(false);
   const [printOpen,       setPrintOpen]       = useState(false);
   const [chemicalWizardOpen, setChemicalWizardOpen] = useState(false);
+  const [nearbyOpen,       setNearbyOpen]       = useState(false);
 
   // Move-to-day dialog state
   const [moveDayDate, setMoveDayDate] = useState("");
@@ -2058,6 +2068,8 @@ export function DispatchBoard() {
   const { data: crews }             = useCRMCrews();
   const { data: allServices }       = useCRMServices();
   const qc = useQueryClient();
+  const createVisit = useCreateVisit();
+  const { matches: nearbyMatches, loading: nearbyLoading, error: nearbyError, findNearby } = useNearbyWaitingListJobs(3);
 
   const allVisits = visits ?? [];
   // Derived fresh from the live query every render (not stored as its own
@@ -2392,6 +2404,12 @@ export function DispatchBoard() {
           >
             <Route className="h-4 w-4" />
             {optimizing ? "Optimizing…" : optimizedOrder ? "Re-Optimize" : "Optimize Route"}
+          </Button>
+          <Button size="sm" variant="outline" className="h-9 text-sm gap-1.5 px-3"
+            onClick={() => { setNearbyOpen(true); findNearby(allVisits); }}
+          >
+            <MapPin className="h-4 w-4" />
+            Nearby Waiting List
           </Button>
         </div>
       </div>
@@ -3089,6 +3107,58 @@ export function DispatchBoard() {
         crews={crews ?? []}
         selectedDate={selectedDate}
       />
+
+      {/* Nearby Waiting List — geo-fenced against today's scheduled route */}
+      <Dialog open={nearbyOpen} onOpenChange={setNearbyOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Nearby Waiting List — {selectedDate}</DialogTitle>
+          </DialogHeader>
+          {nearbyLoading ? (
+            <p className="py-8 text-center text-sm text-slate-500">Checking proximity to today&rsquo;s route…</p>
+          ) : nearbyError ? (
+            <p className="py-8 text-center text-sm text-red-600">{nearbyError}</p>
+          ) : !nearbyMatches || nearbyMatches.length === 0 ? (
+            <p className="py-8 text-center text-sm text-slate-500">
+              No waiting-list jobs within 3 miles of today&rsquo;s scheduled visits.
+            </p>
+          ) : (
+            <div className="divide-y rounded-md border">
+              {nearbyMatches.map((m) => (
+                <div key={m.jobId} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
+                  <div className="min-w-0">
+                    <p className="truncate font-medium text-slate-800">{m.clientName ?? "Unknown client"}</p>
+                    <p className="truncate text-xs text-slate-500">{m.address || "No address"}</p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <span className="text-xs text-slate-400">{m.distanceMiles} mi</span>
+                    <Button
+                      size="sm"
+                      className="h-7 text-xs bg-brand-500 hover:bg-brand-600 text-white"
+                      onClick={async () => {
+                        try {
+                          await createVisit.mutateAsync({
+                            jobId: m.jobId,
+                            clientId: m.clientId,
+                            scheduledDate: selectedDate,
+                            jobType: "waiting_list",
+                          });
+                          toast.success(`Added ${m.clientName ?? "job"} to today's schedule`);
+                          refetch();
+                        } catch {
+                          toast.error("Failed to schedule job");
+                        }
+                      }}
+                    >
+                      Schedule Today
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

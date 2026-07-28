@@ -71,6 +71,7 @@
     "zustand": "^5.0.0"
   },
   "devDependencies": {
+    "@types/google.maps": "^3.65.3",
     "@types/node": "^22.10.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",

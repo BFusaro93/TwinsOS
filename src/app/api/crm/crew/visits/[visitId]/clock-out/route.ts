@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { z } from "zod";
+import { recalcNextPackageVisitDate } from "@/lib/package-visit-recalc";
 
 const Body = z.object({
   notes: z.string().optional(),
@@ -51,6 +52,15 @@ export async function POST(
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // Push the next package-sequenced visit's date out if this one completed later
+  // than its static schedule assumed. Non-fatal — a failure here shouldn't block
+  // the clock-out response.
+  try {
+    await recalcNextPackageVisitDate(supabase, data?.job_service_id as string | null, now.slice(0, 10));
+  } catch (err) {
+    console.error("[crew/clock-out] package min_days recalc failed:", err);
+  }
 
   // Compute actual labor cost from crew member times × individual burden rates
   const jobId = data?.job_id as string | undefined;

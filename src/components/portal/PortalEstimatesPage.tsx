@@ -35,6 +35,7 @@ interface LineItem {
   description: string;
   quantity: number;
   unit_price_cents: number;
+  status: string;
 }
 
 interface SignDialogProps {
@@ -47,16 +48,39 @@ function SignDialog({ estimate, onClose, onAccepted }: SignDialogProps) {
   const [name, setName] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const hasLineItems = !!estimate.line_items && estimate.line_items.length > 0;
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(
+    () => new Set((estimate.line_items ?? []).filter((li) => li.status !== "lost").map((li) => li.id))
+  );
+
+  function toggleItem(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+
+  const selectedTotal = hasLineItems
+    ? (estimate.line_items ?? [])
+        .filter((li) => selectedIds.has(li.id))
+        .reduce((sum, li) => sum + li.unit_price_cents * li.quantity, 0)
+    : estimate.total_price_cents;
 
   async function handleAccept() {
     if (!name.trim()) { setError("Please type your full name to sign."); return; }
+    if (hasLineItems && selectedIds.size === 0) { setError("Please select at least one item to accept."); return; }
     setLoading(true);
     setError(null);
     try {
       const res = await fetch(`/api/portal/estimates/${estimate.id}/action`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "accept", signatureName: name.trim() }),
+        body: JSON.stringify({
+          action: "accept",
+          signatureName: name.trim(),
+          acceptedLineItemIds: hasLineItems ? Array.from(selectedIds) : undefined,
+        }),
       });
       if (!res.ok) {
         const d = await res.json();
@@ -81,26 +105,37 @@ function SignDialog({ estimate, onClose, onAccepted }: SignDialogProps) {
           </p>
         </div>
 
-        {/* Line items summary if available */}
-        {estimate.line_items && estimate.line_items.length > 0 && (
-          <div className="bg-slate-50 rounded-xl border border-slate-200 divide-y divide-slate-100 text-sm">
-            {estimate.line_items.map((li) => (
-              <div key={li.id} className="flex items-center justify-between px-3 py-2">
-                <span className="text-slate-700 truncate flex-1">{li.description}</span>
-                <span className="text-slate-500 text-xs ml-2 shrink-0">×{li.quantity}</span>
-                <span className="text-slate-800 font-medium ml-3 shrink-0">{fmt(li.unit_price_cents * li.quantity)}</span>
-              </div>
+        {/* Per-item selection — uncheck anything you don't want to accept */}
+        {hasLineItems && (
+          <div className="bg-slate-50 rounded-xl border border-slate-200 divide-y divide-slate-100 text-sm max-h-64 overflow-y-auto">
+            {estimate.line_items!.map((li) => (
+              <label
+                key={li.id}
+                className={`flex cursor-pointer items-start gap-2.5 px-3 py-2 transition-colors ${selectedIds.has(li.id) ? "bg-green-50/60" : ""}`}
+              >
+                <input
+                  type="checkbox"
+                  checked={selectedIds.has(li.id)}
+                  onChange={() => toggleItem(li.id)}
+                  className="mt-0.5 h-4 w-4 rounded border-slate-300 cursor-pointer accent-brand-500"
+                />
+                <span className="text-slate-700 flex-1 min-w-0">
+                  {li.description}
+                  {li.quantity > 1 && <span className="text-slate-400 text-xs ml-1">×{li.quantity}</span>}
+                </span>
+                <span className="text-slate-800 font-medium shrink-0">{fmt(li.unit_price_cents * li.quantity)}</span>
+              </label>
             ))}
             <div className="flex items-center justify-between px-3 py-2 font-semibold">
-              <span className="text-slate-900">Total</span>
-              <span className="text-slate-900">{fmt(estimate.total_price_cents)}</span>
+              <span className="text-slate-900">Selected Total</span>
+              <span className="text-slate-900">{fmt(selectedTotal)}</span>
             </div>
           </div>
         )}
 
         <div>
           <p className="text-xs text-slate-500 mb-2">
-            By typing your full name below you agree to the services described in this estimate. This acts as your electronic signature.
+            By typing your full name below you agree to {hasLineItems ? "the items you've selected above" : "the services described in this estimate"}. This acts as your electronic signature.
           </p>
           <input
             type="text"

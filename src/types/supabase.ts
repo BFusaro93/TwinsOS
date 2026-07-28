@@ -4245,6 +4245,7 @@ export type Database = {
         Row: {
           created_at: string
           created_by: string | null
+          deleted_at: string | null
           id: string
           job_id: string
           notes: string | null
@@ -4259,6 +4260,7 @@ export type Database = {
         Insert: {
           created_at?: string
           created_by?: string | null
+          deleted_at?: string | null
           id?: string
           job_id: string
           notes?: string | null
@@ -4273,6 +4275,7 @@ export type Database = {
         Update: {
           created_at?: string
           created_by?: string | null
+          deleted_at?: string | null
           id?: string
           job_id?: string
           notes?: string | null
@@ -4333,6 +4336,7 @@ export type Database = {
           id: string
           included: boolean
           job_id: string
+          min_days: number | null
           org_id: string
           qty: number | null
           rate_cents: number | null
@@ -4355,6 +4359,7 @@ export type Database = {
           id?: string
           included?: boolean
           job_id: string
+          min_days?: number | null
           org_id?: string
           qty?: number | null
           rate_cents?: number | null
@@ -4377,6 +4382,7 @@ export type Database = {
           id?: string
           included?: boolean
           job_id?: string
+          min_days?: number | null
           org_id?: string
           qty?: number | null
           rate_cents?: number | null
@@ -4649,6 +4655,8 @@ export type Database = {
           job_number: number
           job_type: string
           last_service_date: string | null
+          lat: number | null
+          lng: number | null
           man_count: number | null
           map_code: string | null
           notes: string | null
@@ -4721,6 +4729,8 @@ export type Database = {
           job_number?: number
           job_type?: string
           last_service_date?: string | null
+          lat?: number | null
+          lng?: number | null
           man_count?: number | null
           map_code?: string | null
           notes?: string | null
@@ -4793,6 +4803,8 @@ export type Database = {
           job_number?: number
           job_type?: string
           last_service_date?: string | null
+          lat?: number | null
+          lng?: number | null
           man_count?: number | null
           map_code?: string | null
           notes?: string | null
@@ -6703,6 +6715,7 @@ export type Database = {
           id: string
           org_id: string
           overhead_cents: number
+          product_item_id: string | null
           qty: number
           rate_cents: number
           sort_order: number
@@ -6717,6 +6730,7 @@ export type Database = {
           id?: string
           org_id?: string
           overhead_cents?: number
+          product_item_id?: string | null
           qty?: number
           rate_cents?: number
           sort_order?: number
@@ -6731,6 +6745,7 @@ export type Database = {
           id?: string
           org_id?: string
           overhead_cents?: number
+          product_item_id?: string | null
           qty?: number
           rate_cents?: number
           sort_order?: number
@@ -6757,6 +6772,20 @@ export type Database = {
             columns: ["org_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estimate_direct_costs_product_item_id_fkey"
+            columns: ["product_item_id"]
+            isOneToOne: false
+            referencedRelation: "product_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estimate_direct_costs_product_item_id_fkey"
+            columns: ["product_item_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_products"
             referencedColumns: ["id"]
           },
         ]

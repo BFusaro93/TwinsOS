@@ -20,6 +20,8 @@ export interface PropertyZone {
   type: 'turf' | 'mulch_bed' | 'parking_lot' | 'other';
   sqft: number;
   notes?: string;
+  /** Traced polygon vertices from the aerial measurement tool, if this zone was drawn on the map. */
+  path?: { lat: number; lng: number }[];
 }
 
 export interface Client {

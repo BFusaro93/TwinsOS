@@ -88,6 +88,8 @@ export interface CRMJobService {
   included: boolean;
   sortOrder: number;
   serviceInvoiceDescription: string | null; // from crm_services.invoice_description, for the job-level invoice-desc fallback preview
+  /** Days that must elapse after this service's visit completes before the next package-sequenced service is due, if this row came from a Package. */
+  minDays: number | null;
 }
 
 export interface CRMJob {
@@ -119,6 +121,9 @@ export interface CRMJob {
   serviceState: string | null;
   serviceZip: string | null;
   mapCode: string | null;
+  /** Geocoded from the service address, cached so proximity checks (e.g. nearby waiting-list jobs) don't need a live API call. */
+  lat: number | null;
+  lng: number | null;
   lastServiceDate: string | null;
   notesToCrew: string | null;
   completionNotes: string | null;
@@ -378,4 +383,6 @@ export interface NewClientJobServiceValues {
   timeEnd: string | null;
   included: boolean;
   sortOrder: number;
+  /** Days that must elapse after this service's visit completes before the next package-sequenced service is due, if this row came from a Package. */
+  minDays: number | null;
 }

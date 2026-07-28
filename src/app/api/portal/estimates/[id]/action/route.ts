@@ -11,7 +11,12 @@ export async function POST(
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id } = await params;
-  const { action, signatureName, message } = await req.json();
+  const { action, signatureName, message, acceptedLineItemIds } = await req.json() as {
+    action: string;
+    signatureName?: string;
+    message?: string;
+    acceptedLineItemIds?: string[];
+  };
 
   if (!["accept", "decline", "request_changes"].includes(action)) {
     return NextResponse.json({ error: "Invalid action" }, { status: 400 });
@@ -56,7 +61,7 @@ export async function POST(
       estimateId: estimate.id,
       clientId: estimate.client_id,
       estimateNumber: estimate.estimate_number,
-      message: message.trim(),
+      message: message!.trim(), // guarded above: request_changes requires a non-empty message
       requesterName: client?.display_name ?? ctx.email,
       requesterEmail: ctx.email,
     });
@@ -69,7 +74,7 @@ export async function POST(
       ? {
           stage: "accepted",
           portal_accepted_at: now,
-          portal_signature_name: signatureName.trim(),
+          portal_signature_name: signatureName!.trim(), // guarded above: accept requires a signature name
           portal_user_id: ctx.userId,
         }
       : {
@@ -88,6 +93,35 @@ export async function POST(
   if (error) {
     console.error("[portal/estimates/action] Failed to update estimate:", error);
     return NextResponse.json({ error: "Failed to update estimate" }, { status: 500 });
+  }
+
+  // Per-line-item accept/reject — anything the client left unchecked is marked lost,
+  // matching the token-based public proposal flow's behavior.
+  if (action === "accept" && acceptedLineItemIds?.length) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (supabase as any)
+      .from("estimate_line_items")
+      .update({ status: "won" })
+      .eq("estimate_id", id)
+      .in("id", acceptedLineItemIds)
+      .is("deleted_at", null);
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (supabase as any)
+      .from("estimate_line_items")
+      .update({ status: "lost" })
+      .eq("estimate_id", id)
+      .eq("status", "quote")
+      .not("id", "in", `(${acceptedLineItemIds.map((itemId) => `'${itemId}'`).join(",")})`)
+      .is("deleted_at", null);
+  } else if (action === "accept") {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (supabase as any)
+      .from("estimate_line_items")
+      .update({ status: "won" })
+      .eq("estimate_id", id)
+      .eq("status", "quote")
+      .is("deleted_at", null);
   }
 
   return NextResponse.json({ success: true, status: patch.stage });

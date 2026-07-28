@@ -10,6 +10,7 @@ import type {
   ClientActivity,
   ContactPhone,
   NewClientFormValues,
+  PropertyZone,
 } from "@/types/crm";
 
 // ── mappers ───────────────────────────────────────────────────────────────────
@@ -322,6 +323,48 @@ export function useAddClientProperty() {
         notes_to_crew: property.notesToCrew,
         is_master: false,
       });
+      if (error) throw error;
+    },
+    onSuccess: (_data, { clientId }) => {
+      qc.invalidateQueries({ queryKey: ["clients", clientId, "properties"] });
+    },
+  });
+}
+
+export function useUpdateClientPropertyZones() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      clientId,
+      propertyId,
+      zones,
+    }: {
+      clientId: string;
+      propertyId: string;
+      zones: PropertyZone[];
+    }) => {
+      const supabase = createClient();
+      const sums = zones.reduce(
+        (acc, z) => {
+          acc.gross += z.sqft;
+          if (z.type === "turf") acc.turf += z.sqft;
+          if (z.type === "mulch_bed") acc.mulch += z.sqft;
+          if (z.type === "parking_lot") acc.parking += z.sqft;
+          return acc;
+        },
+        { gross: 0, turf: 0, mulch: 0, parking: 0 }
+      );
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase as any)
+        .from("client_properties")
+        .update({
+          zones,
+          turf_sqft: sums.turf || null,
+          mulch_bed_sqft: sums.mulch || null,
+          parking_lot_sqft: sums.parking || null,
+          gross_sqft: sums.gross || null,
+        })
+        .eq("id", propertyId);
       if (error) throw error;
     },
     onSuccess: (_data, { clientId }) => {

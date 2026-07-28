@@ -61,6 +61,7 @@ import { ClientFilesTab } from "./ClientFilesTab";
 import { SendClientEmailDialog } from "./SendClientEmailDialog";
 import { ClientProjectsTab } from "./ClientProjectsTab";
 import { ClientPhotosTab } from "./ClientPhotosTab";
+import { AerialMeasurementDialog } from "./AerialMeasurementDialog";
 import {
   useCustomFieldDefs,
   useClientCustomFieldValues,
@@ -2620,6 +2621,7 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
   const [editContact, setEditContact] = useState<ClientContact | null>(null);
   const [allContactsOpen, setAllContactsOpen] = useState(false);
   const [addPropertyOpen, setAddPropertyOpen] = useState(false);
+  const [aerialMeasurementOpen, setAerialMeasurementOpen] = useState(false);
   const [linkParentOpen, setLinkParentOpen] = useState(false);
   const [newTicketOpen, setNewTicketOpen] = useState(false);
   const [openTicketId, setOpenTicketId] = useState<string | null>(null);
@@ -2840,6 +2842,9 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
                     </DropdownMenuItem>
                     <DropdownMenuItem onClick={() => { setAddPropertyOpen(true); }}>
                       <Plus className="mr-2 h-3.5 w-3.5" /> Add Property
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => { setAerialMeasurementOpen(true); }}>
+                      <Map className="mr-2 h-3.5 w-3.5" /> Aerial Measurement
                     </DropdownMenuItem>
                     <DropdownMenuItem onClick={() => setLinkParentOpen(true)}>
                       <Building2 className="mr-2 h-3.5 w-3.5" /> {client.parentClientId ? "Change Parent Account" : "Link Parent Account"}
@@ -3240,6 +3245,7 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
         />
       )}
       <AddPropertyDialog clientId={clientId} open={addPropertyOpen} onOpenChange={setAddPropertyOpen} />
+      <AerialMeasurementDialog clientId={clientId} open={aerialMeasurementOpen} onOpenChange={setAerialMeasurementOpen} />
       <NewTicketDialog open={newTicketOpen} onOpenChange={setNewTicketOpen} defaultClientId={clientId} />
       <LinkParentDialog
         clientId={clientId}

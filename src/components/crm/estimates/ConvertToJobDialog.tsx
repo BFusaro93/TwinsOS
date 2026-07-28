@@ -24,7 +24,7 @@ import { CalendarDays, Briefcase } from "lucide-react";
 import { toast } from "sonner";
 import { formatCurrency } from "@/lib/utils";
 import { useCreateJobsFromEstimate, useCRMCrews } from "@/lib/hooks/use-crm-jobs";
-import type { Estimate, EstimateLineItem } from "@/types/crm-estimates";
+import type { Estimate, EstimateLineItem, EstimateDirectCost } from "@/types/crm-estimates";
 
 const JOB_TYPES = [
   { value: "one_time",    label: "One Time" },
@@ -42,9 +42,22 @@ interface Props {
 
 export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Props) {
   const lineItems = (estimate.lineItems ?? []).filter((li) => !li.deletedAt);
+  // Only catalog-linked product/material direct costs feed forward into job-level
+  // demand (crm_job_products) — free-text costs have nothing to link an order to.
+  const materialItems = (estimate.directCosts ?? []).filter(
+    (dc) => dc.costType === "product_material" && !!dc.productItemId
+  );
 
+  // Default to items the client actually accepted — items marked "lost" on a per-item
+  // acceptance (portal or public proposal) are left unchecked, but still selectable.
   const [selected, setSelected] = useState<Set<string>>(
-    () => new Set(lineItems.map((li) => li.id))
+    () => new Set(lineItems.filter((li) => li.status !== "lost").map((li) => li.id))
+  );
+  const [selectedMaterials, setSelectedMaterials] = useState<Set<string>>(
+    () => new Set(materialItems.map((dc) => dc.id))
+  );
+  const [materialQty, setMaterialQty] = useState<Record<string, number>>(
+    () => Object.fromEntries(materialItems.map((dc) => [dc.id, dc.qty]))
   );
   const [jobType,       setJobType]       = useState("one_time");
   const [scheduledDate, setScheduledDate] = useState("");
@@ -69,8 +82,18 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
     });
   }
 
+  function toggleMaterial(id: string) {
+    setSelectedMaterials((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
   const selectedItems = lineItems.filter((li) => selected.has(li.id));
   const totalCents = selectedItems.reduce((s, li) => s + li.totalCents, 0);
+  const selectedMaterialItems = materialItems.filter((dc) => selectedMaterials.has(dc.id));
 
   async function handleCreate() {
     if (selectedItems.length === 0) {
@@ -92,6 +115,12 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
           qty:         li.qty,
           rateCents:   li.rateCents,
           totalCents:  li.totalCents,
+        })),
+        materials: selectedMaterialItems.map((dc) => ({
+          productItemId: dc.productItemId as string,
+          productName:   dc.description,
+          qty:           materialQty[dc.id] ?? dc.qty,
+          unitCostCents: dc.rateCents,
         })),
       });
 
@@ -186,6 +215,41 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
             </table>
           </div>
         </div>
+
+        {/* Materials selector */}
+        {materialItems.length > 0 && (
+          <div className="flex flex-col gap-1">
+            <Label className="text-xs font-semibold text-slate-600 uppercase tracking-wide">
+              Materials to Include
+            </Label>
+            <div className="rounded-lg border overflow-hidden">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-slate-50 border-b text-xs text-slate-500 font-semibold uppercase tracking-wide">
+                    <th className="w-10 px-3 py-2" />
+                    <th className="px-3 py-2 text-left">Product</th>
+                    <th className="px-3 py-2 text-right">Qty</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {materialItems.map((dc) => (
+                    <MaterialRow
+                      key={dc.id}
+                      item={dc}
+                      checked={selectedMaterials.has(dc.id)}
+                      qty={materialQty[dc.id] ?? dc.qty}
+                      onToggle={() => toggleMaterial(dc.id)}
+                      onQtyChange={(qty) => setMaterialQty((prev) => ({ ...prev, [dc.id]: qty }))}
+                    />
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className="text-[11px] text-slate-400">
+              Selected materials are added to the job&apos;s Products section so upcoming demand shows on the Materials Needed report.
+            </p>
+          </div>
+        )}
 
         {/* Job settings */}
         <div className="grid grid-cols-2 gap-3">
@@ -290,6 +354,40 @@ function ServiceRow({
       <td className="px-3 py-2.5 text-right tabular-nums text-slate-600">{li.qty}</td>
       <td className="px-3 py-2.5 text-right tabular-nums font-medium">
         {formatCurrency(li.totalCents)}
+      </td>
+    </tr>
+  );
+}
+
+function MaterialRow({
+  item,
+  checked,
+  qty,
+  onToggle,
+  onQtyChange,
+}: {
+  item: EstimateDirectCost;
+  checked: boolean;
+  qty: number;
+  onToggle: () => void;
+  onQtyChange: (qty: number) => void;
+}) {
+  return (
+    <tr className={`border-b last:border-0 transition-colors ${checked ? "bg-green-50" : "hover:bg-slate-50"}`}>
+      <td className="px-3 py-2.5 text-center cursor-pointer" onClick={onToggle}>
+        <Checkbox checked={checked} onCheckedChange={onToggle} onClick={(e) => e.stopPropagation()} />
+      </td>
+      <td className="px-3 py-2.5 font-medium text-slate-800 cursor-pointer" onClick={onToggle}>
+        {item.description}
+      </td>
+      <td className="px-3 py-2.5 text-right">
+        <Input
+          type="number"
+          value={qty}
+          onChange={(e) => onQtyChange(Number(e.target.value) || 0)}
+          onClick={(e) => e.stopPropagation()}
+          className="h-7 w-20 text-right text-xs ml-auto"
+        />
       </td>
     </tr>
   );

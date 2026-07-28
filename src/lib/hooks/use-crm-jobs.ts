@@ -37,6 +37,8 @@ export function mapJob(row: any): CRMJob {
     serviceState: row.service_state,
     serviceZip: row.service_zip,
     mapCode: row.map_code,
+    lat: row.lat ?? null,
+    lng: row.lng ?? null,
     lastServiceDate: row.last_service_date,
     notesToCrew: row.notes_to_crew,
     completionNotes: row.completion_notes,
@@ -231,12 +233,15 @@ export function useWaitingListJobs(startDate?: string, endDate?: string) {
         );
       }
 
-      return (rows.map((row) => mapJob({
-        ...row,
-        service_address: row.service_address ?? row.clients?.billing_address ?? null,
-        service_city:    row.service_city    ?? row.clients?.billing_city    ?? null,
-        service_state:   row.service_state   ?? row.clients?.billing_state   ?? null,
-        service_zip:     row.service_zip     ?? row.clients?.billing_zip     ?? null,
+      return (rows.map((row) => ({
+        ...mapJob({
+          ...row,
+          service_address: row.service_address ?? row.clients?.billing_address ?? null,
+          service_city:    row.service_city    ?? row.clients?.billing_city    ?? null,
+          service_state:   row.service_state   ?? row.clients?.billing_state   ?? null,
+          service_zip:     row.service_zip     ?? row.clients?.billing_zip     ?? null,
+        }),
+        clientName: row.clients?.display_name ?? null,
       }))) as CRMJob[];
     },
   });
@@ -434,6 +439,7 @@ function mapJobServiceFull(s: any): CRMJobService {
     included: s.included ?? true,
     sortOrder: s.sort_order ?? 0,
     serviceInvoiceDescription: s.crm_services?.invoice_description ?? null,
+    minDays: s.min_days ?? null,
   };
 }
 
@@ -937,6 +943,7 @@ export function useCreateClientJob() {
           time_end: s.timeEnd || null,
           included: s.included,
           sort_order: i,
+          min_days: s.minDays ?? null,
         }));
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data: insertedServices, error: svcErr } = await (supabase as any)
@@ -1323,6 +1330,7 @@ export function useCreateJobsFromEstimate() {
       crewId,
       notesToCrew,
       services,
+      materials,
     }: {
       estimateId: string;
       clientId: string;
@@ -1331,6 +1339,7 @@ export function useCreateJobsFromEstimate() {
       crewId: string | null;
       notesToCrew: string | null;
       services: { serviceName: string; serviceId: string | null; qty: number; rateCents: number | null; totalCents: number }[];
+      materials?: { productItemId: string; productName: string; qty: number; unitCostCents: number | null }[];
     }) => {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
@@ -1380,6 +1389,23 @@ export function useCreateJobsFromEstimate() {
             }))
           );
         if (svcError) throw svcError;
+      }
+
+      if (materials && materials.length > 0) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error: matError } = await (supabase as any)
+          .from("crm_job_products")
+          .insert(
+            materials.map((m) => ({
+              job_id: jobId,
+              product_id: m.productItemId,
+              product_name: m.productName,
+              qty: m.qty,
+              unit_price_cents: 0,
+              unit_cost_cents: m.unitCostCents,
+            }))
+          );
+        if (matError) throw matError;
       }
 
       // Mark estimate accepted
@@ -1806,6 +1832,7 @@ export function useCRMJobProducts(jobId: string) {
         .from('crm_job_products')
         .select('*')
         .eq('job_id', jobId)
+        .is('deleted_at', null)
         .order('created_at');
       if (error) throw error;
       return (data as Record<string, unknown>[]).map(mapJobProduct);
@@ -1876,7 +1903,10 @@ export function useDeleteCRMJobProduct() {
     mutationFn: async (p: { id: string; jobId: string }) => {
       const supabase = createClient();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error } = await (supabase as any).from('crm_job_products').delete().eq('id', p.id);
+      const { error } = await (supabase as any)
+        .from('crm_job_products')
+        .update({ deleted_at: new Date().toISOString() })
+        .eq('id', p.id);
       if (error) throw error;
     },
     onSuccess: (_, v) => {
