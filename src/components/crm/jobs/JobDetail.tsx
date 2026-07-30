@@ -114,16 +114,17 @@ const VISIT_STATUS_COLOR: Record<string, string> = {
   skipped:     "bg-slate-50 text-slate-500",
 };
 
-type Tab = "overview" | "services" | "visits" | "notes" | "invoice" | "costing" | "audit";
+export type Tab = "overview" | "services" | "visits" | "notes" | "invoice" | "costing" | "audit";
 
 interface Props {
   jobId: string;
   initialEditing?: boolean;
+  initialTab?: Tab;
   /** When rendered inside a slide-over (JobDetailSheet), closes it instead of navigating away. */
   onClose?: () => void;
 }
 
-export function JobDetail({ jobId, initialEditing = false, onClose }: Props) {
+export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }: Props) {
   const router = useRouter();
   const { data: job, isLoading, error: jobError } = useJobDetail(jobId);
   const { data: visits = [], isLoading: visitsLoading } = useJobVisits(jobId);
@@ -149,7 +150,7 @@ export function JobDetail({ jobId, initialEditing = false, onClose }: Props) {
   const createSchedule = useCreateCRMSchedule();
   const qc = useQueryClient();
 
-  const [tab, setTab] = useState<Tab>("overview");
+  const [tab, setTab] = useState<Tab>(initialTab ?? "overview");
   const [editing, setEditing] = useState(initialEditing);
   const [edits, setEdits] = useState<Record<string, unknown>>({});
   const [saving, setSaving] = useState(false);
@@ -168,6 +169,7 @@ export function JobDetail({ jobId, initialEditing = false, onClose }: Props) {
   const [editingSvcId, setEditingSvcId] = useState<string | null>(null);
   const [svcQty, setSvcQty] = useState("");
   const [svcRate, setSvcRate] = useState("");
+  const [svcBHrs, setSvcBHrs] = useState("");
   const [addingSvc, setAddingSvc] = useState(false);
   const [newSvcId, setNewSvcId] = useState("");
   const [newSvcRate, setNewSvcRate] = useState("");
@@ -325,10 +327,11 @@ export function JobDetail({ jobId, initialEditing = false, onClose }: Props) {
     }
   }
 
-  function startEditSvc(s: { id: string; qty: number | null; rateCents: number | null }) {
+  function startEditSvc(s: { id: string; qty: number | null; rateCents: number | null; budgetedHours: number | null }) {
     setEditingSvcId(s.id);
     setSvcQty(String(s.qty ?? 1));
     setSvcRate(s.rateCents != null ? String(s.rateCents / 100) : "");
+    setSvcBHrs(s.budgetedHours != null ? String(s.budgetedHours) : "0");
   }
 
   async function saveEditSvc() {
@@ -339,6 +342,7 @@ export function JobDetail({ jobId, initialEditing = false, onClose }: Props) {
         patch: {
           qty: parseFloat(svcQty) || 1,
           rate_cents: svcRate ? Math.round(parseFloat(svcRate) * 100) : null,
+          budgeted_hours: parseFloat(svcBHrs) || 0,
         },
       });
       setEditingSvcId(null);
@@ -1122,9 +1126,18 @@ export function JobDetail({ jobId, initialEditing = false, onClose }: Props) {
                     {services.map((s) => (
                       <tr key={s.id} className="group border-b last:border-0">
                         <td className="px-4 py-3 font-medium text-slate-800">{s.serviceName}</td>
-                        <td className="px-4 py-3 text-right tabular-nums text-slate-500">{s.budgetedHours ? `${s.budgetedHours}h` : "—"}</td>
                         {editingSvcId === s.id ? (
                           <>
+                            <td className="px-2 py-2 text-right">
+                              <Input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                value={svcBHrs}
+                                onChange={(e) => setSvcBHrs(e.target.value)}
+                                className="h-7 w-20 text-right text-sm ml-auto"
+                              />
+                            </td>
                             <td className="px-2 py-2 text-right">
                               <Input
                                 type="number"
@@ -1159,6 +1172,7 @@ export function JobDetail({ jobId, initialEditing = false, onClose }: Props) {
                           </>
                         ) : (
                           <>
+                            <td className="px-4 py-3 text-right tabular-nums text-slate-500">{s.budgetedHours ? `${s.budgetedHours}h` : "—"}</td>
                             <td className="px-4 py-3 text-right tabular-nums">{s.qty ?? 1}</td>
                             <td className="px-4 py-3 text-right tabular-nums">
                               {s.rateCents != null ? formatCurrency(s.rateCents) : "—"}

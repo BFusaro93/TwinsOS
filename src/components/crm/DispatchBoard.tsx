@@ -1290,12 +1290,12 @@ function EditJobTimeRow({
     <div className="flex flex-wrap items-center gap-1.5 py-1.5">
       <span className="w-28 shrink-0 truncate text-sm text-slate-700">{memberName}</span>
       <Input type="date" value={date} onChange={(e) => setDate(e.target.value)}
-        onBlur={() => onSave(date, start, end)} className="h-8 w-32 shrink-0 text-xs" />
+        onBlur={() => onSave(date, start, end)} className="h-8 w-36 shrink-0 text-xs" />
       <Input type="time" value={start} onChange={(e) => setStart(e.target.value)}
-        onBlur={() => onSave(date, start, end)} className="h-8 w-24 shrink-0 text-xs" />
+        onBlur={() => onSave(date, start, end)} className="h-8 w-32 shrink-0 text-xs" />
       <span className="shrink-0 text-xs text-slate-400">to</span>
       <Input type="time" value={end} onChange={(e) => setEnd(e.target.value)}
-        onBlur={() => onSave(date, start, end)} className="h-8 w-24 shrink-0 text-xs" />
+        onBlur={() => onSave(date, start, end)} className="h-8 w-32 shrink-0 text-xs" />
       <button onClick={onDelete} className="shrink-0 text-slate-300 hover:text-red-500" title="Remove">
         <Trash2 className="h-3.5 w-3.5" />
       </button>
@@ -1447,10 +1447,10 @@ function EditJobTimesDialog({
                 ))}
               </SelectContent>
             </Select>
-            <Input type="date" value={newDate} onChange={(e) => setNewDate(e.target.value)} className="h-8 w-32 shrink-0 text-xs" />
-            <Input type="time" value={newStart} onChange={(e) => setNewStart(e.target.value)} className="h-8 w-24 shrink-0 text-xs" />
+            <Input type="date" value={newDate} onChange={(e) => setNewDate(e.target.value)} className="h-8 w-36 shrink-0 text-xs" />
+            <Input type="time" value={newStart} onChange={(e) => setNewStart(e.target.value)} className="h-8 w-32 shrink-0 text-xs" />
             <span className="shrink-0 text-xs text-slate-400">to</span>
-            <Input type="time" value={newEnd} onChange={(e) => setNewEnd(e.target.value)} className="h-8 w-24 shrink-0 text-xs" />
+            <Input type="time" value={newEnd} onChange={(e) => setNewEnd(e.target.value)} className="h-8 w-32 shrink-0 text-xs" />
             <button
               onClick={addRow}
               disabled={!newMemberId}

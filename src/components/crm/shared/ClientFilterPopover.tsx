@@ -6,15 +6,96 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { SlidersHorizontal, X } from "lucide-react";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator } from "@/components/ui/command";
+import { Check, ChevronsUpDown, SlidersHorizontal, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   operatorsFor,
   defaultOperator,
+  parseMultiValue,
   type FilterFieldDef,
   type FilterRow,
   type FilterOperator,
 } from "@/lib/client-filters";
+
+// Value control for "select"-type fields (status, sales rep, client source,
+// tags, ...) — lets a filter row match several options at once ("is any of").
+// Uses Popover+Command instead of the plain Select used elsewhere in this
+// file: selecting an item here must NOT close the dropdown (the user keeps
+// picking more), which also sidesteps the dismiss-cascade issue a
+// self-closing nested Popover caused here previously (see git history).
+function MultiSelectValue({
+  options,
+  value,
+  onChange,
+}: {
+  options: { v: string; l: string }[];
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const selected = parseMultiValue(value);
+
+  function toggle(v: string) {
+    const next = selected.includes(v) ? selected.filter((x) => x !== v) : [...selected, v];
+    onChange(next.join(","));
+  }
+
+  const triggerLabel =
+    selected.length === 0 ? "Select…"
+    : selected.length === 1 ? (options.find((o) => o.v === selected[0])?.l ?? selected[0])
+    : `${selected.length} selected`;
+
+  return (
+    <Popover open={open} onOpenChange={setOpen} modal>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          className={cn("h-7 w-full justify-between px-2 text-xs font-normal", selected.length === 0 && "text-slate-400")}
+        >
+          <span className="truncate">{triggerLabel}</span>
+          <ChevronsUpDown className="ml-1 h-3 w-3 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-56 p-0" align="start">
+        <Command>
+          <CommandInput placeholder="Filter: Enter keywords" className="h-8 text-xs" />
+          <CommandList className="max-h-56">
+            <CommandEmpty>No options found.</CommandEmpty>
+            <CommandGroup>
+              {options.map((o) => {
+                const isSelected = selected.includes(o.v);
+                return (
+                  <CommandItem key={o.v} value={o.l} onSelect={() => toggle(o.v)} className="text-xs">
+                    <div className={cn(
+                      "mr-2 flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border transition-colors",
+                      isSelected ? "border-brand-500 bg-brand-500" : "border-slate-300 bg-white"
+                    )}>
+                      {isSelected && <Check className="h-2.5 w-2.5 text-white" strokeWidth={3} />}
+                    </div>
+                    {o.l}
+                  </CommandItem>
+                );
+              })}
+            </CommandGroup>
+            {selected.length > 0 && (
+              <>
+                <CommandSeparator />
+                <CommandGroup>
+                  <CommandItem value="__clear__" onSelect={() => onChange("")} className="justify-center text-xs text-slate-500">
+                    Clear selection
+                  </CommandItem>
+                </CommandGroup>
+              </>
+            )}
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
 
 export function ClientFilterPopover({
   fields,
@@ -87,7 +168,7 @@ export function ClientFilterPopover({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="max-h-64">
-                    <div className="px-2 py-1.5 sticky top-0 bg-white border-b">
+                    <div className="px-2 py-1.5 border-b bg-white">
                       <Input
                         className="h-6 text-xs"
                         placeholder="Filter: Enter keywords"
@@ -127,14 +208,11 @@ export function ClientFilterPopover({
                       </SelectContent>
                     </Select>
                   ) : fieldDef.type === "select" && fieldDef.options && fieldDef.options.length > 0 ? (
-                    <Select value={row.value} onValueChange={(v) => updateRow(row.id, { value: v })}>
-                      <SelectTrigger className="h-7 text-xs w-full"><SelectValue placeholder="Select…" /></SelectTrigger>
-                      <SelectContent className="max-h-48">
-                        {fieldDef.options.map((opt) => (
-                          <SelectItem key={opt.v} value={opt.v} className="text-xs">{opt.l}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <MultiSelectValue
+                      options={fieldDef.options}
+                      value={row.value}
+                      onChange={(v) => updateRow(row.id, { value: v })}
+                    />
                   ) : fieldDef.type === "date" ? (
                     <Input type="date" className="h-7 text-xs w-full" value={row.value}
                       onChange={(e) => updateRow(row.id, { value: e.target.value })} />

@@ -154,6 +154,7 @@ export async function POST(
   const isTerminalJobType = j && (j.job_type === "one_time" || j.job_type === "waiting_list");
   const visitJobServiceId: string | null = (visit as any).job_service_id ?? null;
 
+  try {
   if (shouldAutoInvoice) {
     let skipInvoice = false;
     if (isTerminalJobType && !visitJobServiceId) {
@@ -334,16 +335,38 @@ export async function POST(
       }
     }
   }
+  } catch (err) {
+    // Auto-invoicing is best-effort — a failure here (e.g. a bad line-item
+    // shape, a client with unusual invoice_frequency data) must not swallow
+    // the "Visit completed" activity-timeline entry logged just below, which
+    // previously happened silently whenever this block threw.
+    console.error("[visits/complete] auto-invoice failed:", err);
+  }
 
-  // Log visit completion to client activity timeline
+  // Log visit completion to client activity timeline. Include the specific
+  // service and date so this entry is useful on its own — otherwise every
+  // visit across every job reads as the same bare "Visit completed" with no
+  // way to tell them apart in the timeline.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const v = visit as any;
   if (v.client_id) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const visitService = visitJobServiceId
+      ? ((j?.crm_job_services ?? []) as { id: string; service_name: string }[]).find((s) => s.id === visitJobServiceId)
+      : null;
+    const detailLabel: string | null = v.invoice_description || visitService?.service_name || null;
+    const visitDateLabel = v.scheduled_date
+      ? new Date(`${v.scheduled_date}T00:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+      : null;
+    const subject = ["Visit completed", detailLabel ? `— ${detailLabel}` : null, visitDateLabel ? `(${visitDateLabel})` : null]
+      .filter(Boolean)
+      .join(" ");
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await (supabase as any).from("client_activity").insert({
       client_id: v.client_id,
       activity_type: "job",
-      subject: `Visit completed${v.invoice_description ? `: ${v.invoice_description}` : ""}`,
+      subject,
       ref_id: v.job_id,
       ref_table: "crm_jobs",
       created_by: user.id,

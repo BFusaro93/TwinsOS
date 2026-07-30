@@ -582,7 +582,7 @@ export function CampaignsList() {
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search campaigns…"
+              placeholder="Search…"
               className="h-7 w-52 pl-7 text-xs bg-white border-slate-200 focus-visible:ring-0"
             />
           </div>

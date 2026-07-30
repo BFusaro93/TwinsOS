@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useClients } from "@/lib/hooks/use-clients";
 import { useClientFilterFields } from "@/lib/hooks/use-client-filter-fields";
 import { ClientFilterPopover } from "@/components/crm/shared/ClientFilterPopover";
-import { matchesAllFilterRows, type FilterRow } from "@/lib/client-filters";
+import { matchesAllFilterRows, parseMultiValue, type FilterRow } from "@/lib/client-filters";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -73,7 +73,9 @@ export function ClientList({ selectedId, onSelect }: Props) {
               const fieldLabel = fieldDef?.label ?? row.field;
               const opLabels: Record<string, string> = { eq: "=", neq: "≠", contains: "~", starts_with: "^", lt: "<", gt: ">", lte: "≤", gte: "≥" };
               const opLabel = opLabels[row.operator] ?? row.operator;
-              const valLabel = fieldDef?.options?.find((o) => o.v === row.value)?.l ?? row.value;
+              const valLabel = fieldDef?.options
+                ? parseMultiValue(row.value).map((v) => fieldDef.options!.find((o) => o.v === v)?.l ?? v).join(", ")
+                : row.value;
               return (
                 <Badge
                   key={row.id}

@@ -52,6 +52,7 @@ import { TicketsList, NewTicketDialog } from "./tickets/TicketsList";
 import { NewEstimateDialog } from "./estimates/NewEstimateDialog";
 import { EstimateDetailSheet } from "./estimates/EstimateDetailSheet";
 import { JobDetailSheet } from "./jobs/JobDetailSheet";
+import type { Tab } from "./jobs/JobDetail";
 import { NewJobDialog } from "./jobs/NewJobDialog";
 import { InvoiceDetailSheet } from "./invoices/InvoiceDetailSheet";
 import { NewInvoiceSheet } from "./invoices/NewInvoiceSheet";
@@ -2628,6 +2629,7 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
   const [openPaymentId, setOpenPaymentId] = useState<string | null>(null);
   const [openInvoiceId, setOpenInvoiceId] = useState<string | null>(null);
   const [openJobId, setOpenJobId] = useState<string | null>(null);
+  const [openJobInitialTab, setOpenJobInitialTab] = useState<Tab | undefined>(undefined);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [portalInviteOpen, setPortalInviteOpen] = useState(false);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
@@ -3140,7 +3142,7 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
             onTicketClick={(id) => setOpenTicketId(id)}
             onPaymentClick={(id) => setOpenPaymentId(id)}
             onInvoiceClick={(id) => setOpenInvoiceId(id)}
-            onJobClick={(id) => setOpenJobId(id)}
+            onJobClick={(id, opts) => { setOpenJobId(id); setOpenJobInitialTab(opts?.openVisitsTab ? "visits" : undefined); }}
           />
         </TabsContent>
 
@@ -3269,7 +3271,8 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
       />
       <JobDetailSheet
         jobId={openJobId}
-        onOpenChange={(o) => { if (!o) setOpenJobId(null); }}
+        initialTab={openJobInitialTab}
+        onOpenChange={(o) => { if (!o) { setOpenJobId(null); setOpenJobInitialTab(undefined); } }}
       />
     </div>
   );

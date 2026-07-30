@@ -24,11 +24,19 @@ export interface FilterRow {
 export function operatorsFor(type: FilterFieldType): { value: FilterOperator; label: string }[] {
   switch (type) {
     case "text":    return [{ value: "contains", label: "Contains" }, { value: "starts_with", label: "Starts With" }, { value: "eq", label: "= Equal To" }];
-    case "select":  return [{ value: "eq", label: "= Equal To" }, { value: "neq", label: "≠ Does Not Equal" }];
+    // Select-type fields pick zero or more of their options (see ClientFilterPopover's
+    // multi-select value control) — "eq"/"neq" here mean "is any of" / "is none of".
+    case "select":  return [{ value: "eq", label: "Is Any Of" }, { value: "neq", label: "Is None Of" }];
     case "number":
     case "date":    return [{ value: "lt", label: "< Less Than" }, { value: "gt", label: "> Greater Than" }, { value: "eq", label: "= Equal To" }, { value: "lte", label: "≤ Less Than Or Equal To" }, { value: "gte", label: "≥ Greater Than Or Equal To" }];
     case "boolean": return [{ value: "eq", label: "= Equal To" }];
   }
+}
+
+/** Select-type field values are stored as a comma-joined list of option
+ *  values so a filter row can match "is any of" several selections at once. */
+export function parseMultiValue(raw: string): string[] {
+  return raw.split(",").map((s) => s.trim()).filter(Boolean);
 }
 
 export function defaultOperator(type: FilterFieldType): FilterOperator {
@@ -56,14 +64,18 @@ export function matchesFilterRow(c: Client, row: FilterRow, ctx?: FilterContext)
   if (!row.value) return true;
   const op = row.operator;
   switch (true) {
-    case row.field === "status":
-      if (op === "eq" && c.status !== row.value) return false;
-      if (op === "neq" && c.status === row.value) return false;
+    case row.field === "status": {
+      const has = parseMultiValue(row.value).includes(c.status);
+      if (op === "eq"  && !has) return false;
+      if (op === "neq" && has)  return false;
       return true;
-    case row.field === "account_type":
-      if (op === "eq" && c.accountType !== row.value) return false;
-      if (op === "neq" && c.accountType === row.value) return false;
+    }
+    case row.field === "account_type": {
+      const has = parseMultiValue(row.value).includes(c.accountType);
+      if (op === "eq"  && !has) return false;
+      if (op === "neq" && has)  return false;
       return true;
+    }
     case row.field === "balance": {
       const bal = (c.balanceOutstandingCents ?? 0) / 100;
       const val = parseFloat(row.value);
@@ -97,18 +109,23 @@ export function matchesFilterRow(c: Client, row: FilterRow, ctx?: FilterContext)
       if (op === "contains" && !zip.includes(row.value))   return false;
       return true;
     }
-    case row.field === "source":
-      if (op === "eq"  && c.source !== row.value) return false;
-      if (op === "neq" && c.source === row.value) return false;
+    case row.field === "source": {
+      const has = !!c.source && parseMultiValue(row.value).includes(c.source);
+      if (op === "eq"  && !has) return false;
+      if (op === "neq" && has)  return false;
       return true;
-    case row.field === "sales_rep":
-      if (op === "eq"  && c.salesRepId !== row.value) return false;
-      if (op === "neq" && c.salesRepId === row.value) return false;
+    }
+    case row.field === "sales_rep": {
+      const has = !!c.salesRepId && parseMultiValue(row.value).includes(c.salesRepId);
+      if (op === "eq"  && !has) return false;
+      if (op === "neq" && has)  return false;
       return true;
+    }
     case row.field === "priority": {
       const pri = c.priority ?? "normal";
-      if (op === "eq"  && pri !== row.value) return false;
-      if (op === "neq" && pri === row.value) return false;
+      const has = parseMultiValue(row.value).includes(pri);
+      if (op === "eq"  && !has) return false;
+      if (op === "neq" && has)  return false;
       return true;
     }
     case row.field === "client_since": {
@@ -122,14 +139,18 @@ export function matchesFilterRow(c: Client, row: FilterRow, ctx?: FilterContext)
       if (op === "gte" && cDate < val)   return false;
       return true;
     }
-    case row.field === "tags":
-      if (op === "eq"  && !(c.tags ?? []).includes(row.value)) return false;
-      if (op === "neq" && (c.tags ?? []).includes(row.value))  return false;
+    case row.field === "tags": {
+      const selected = parseMultiValue(row.value);
+      const clientTags = c.tags ?? [];
+      const hasAny = selected.some((v) => clientTags.includes(v));
+      if (op === "eq"  && !hasAny) return false;
+      if (op === "neq" && hasAny)  return false;
       return true;
+    }
     case row.field === "scheduled_service":
-      return ctx?.scheduledServiceClientIds?.(row.value).has(c.id) ?? true;
+      return parseMultiValue(row.value).some((v) => ctx?.scheduledServiceClientIds?.(v).has(c.id) ?? true);
     case row.field === "completed_service":
-      return ctx?.completedServiceClientIds?.(row.value).has(c.id) ?? true;
+      return parseMultiValue(row.value).some((v) => ctx?.completedServiceClientIds?.(v).has(c.id) ?? true);
     case row.field === "referred_by":
       if (op === "eq" && row.value === "yes" && !c.referredBy)  return false;
       if (op === "eq" && row.value === "no"  && !!c.referredBy) return false;

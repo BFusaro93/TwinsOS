@@ -3,18 +3,19 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { X, GripVertical } from "lucide-react";
-import { JobDetail } from "./JobDetail";
+import { JobDetail, type Tab } from "./JobDetail";
 
 interface Props {
   jobId: string | null;
   onOpenChange: (open: boolean) => void;
   initialEditing?: boolean;
+  initialTab?: Tab;
 }
 
 const MIN_WIDTH = 560;
 const DEFAULT_WIDTH = Math.min(1100, typeof window !== "undefined" ? window.innerWidth * 0.75 : 1100);
 
-export function JobDetailSheet({ jobId, onOpenChange, initialEditing }: Props) {
+export function JobDetailSheet({ jobId, onOpenChange, initialEditing, initialTab }: Props) {
   const [width, setWidth] = useState(DEFAULT_WIDTH);
   const dragging = useRef(false);
   const startX = useRef(0);
@@ -80,7 +81,7 @@ export function JobDetailSheet({ jobId, onOpenChange, initialEditing }: Props) {
           </div>
         </div>
         <div className="flex-1 overflow-y-auto bg-white">
-          <JobDetail jobId={jobId} initialEditing={initialEditing} onClose={() => onOpenChange(false)} />
+          <JobDetail jobId={jobId} initialEditing={initialEditing} initialTab={initialTab} onClose={() => onOpenChange(false)} />
         </div>
       </div>
     </>,

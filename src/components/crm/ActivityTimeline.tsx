@@ -61,7 +61,7 @@ function ActivityRow({
   onTicketClick?: (id: string) => void;
   onPaymentClick?: (id: string) => void;
   onInvoiceClick?: (id: string) => void;
-  onJobClick?: (id: string) => void;
+  onJobClick?: (id: string, opts?: { openVisitsTab?: boolean }) => void;
 }) {
   const meta = TYPE_META[item.activityType] ?? TYPE_META.note;
   const Icon = meta.icon;
@@ -76,12 +76,16 @@ function ActivityRow({
     (item.activityType === "payment" && item.refTable === "crm_invoices")
   );
   const isJobEntry = (item.activityType === "job" || item.activityType === "job_visit") && !!item.refId;
+  // A visit-completion entry (see the /api/crm/visits/[visitId]/complete route)
+  // always uses this literal subject prefix — jump straight to the job's
+  // Visits tab instead of Overview, since that's the row this entry is about.
+  const isVisitCompletionEntry = item.activityType === "job" && !!item.subject?.startsWith("Visit completed");
 
   function handleClick() {
     if (isTicketEntry && onTicketClick) onTicketClick(item.refId!);
     else if (isPaymentEntry && onPaymentClick) onPaymentClick(item.refId!);
     else if (isInvoiceEntry && onInvoiceClick) onInvoiceClick(item.refId!);
-    else if (isJobEntry && onJobClick) onJobClick(item.refId!);
+    else if (isJobEntry && onJobClick) onJobClick(item.refId!, { openVisitsTab: isVisitCompletionEntry });
     else if (href) router.push(href);
   }
 
@@ -132,7 +136,7 @@ interface Props {
   onTicketClick?: (ticketId: string) => void;
   onPaymentClick?: (paymentId: string) => void;
   onInvoiceClick?: (invoiceId: string) => void;
-  onJobClick?: (jobId: string) => void;
+  onJobClick?: (jobId: string, opts?: { openVisitsTab?: boolean }) => void;
 }
 
 export function ActivityTimeline({ clientId, onTicketClick, onPaymentClick, onInvoiceClick, onJobClick }: Props) {
