@@ -472,18 +472,35 @@ import type { NewClientJobFormValues, CRMJobService, CRMJobVisit, VisitStatus } 
 function applyJobServiceFallback(visit: CRMJobVisit, row: any): CRMJobVisit {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const services: any[] = row.crm_jobs?.crm_job_services ?? [];
+  // Package jobs link each visit to a single service (e.g. "Fert 2 of 5") via
+  // job_service_id — use that one service's own rate/hours/name instead of
+  // summing across every service on the job, which double/quintuple-counts.
+  const linkedService = visit.jobServiceId
+    ? services.find((s: any) => s.id === visit.jobServiceId)
+    : null;
   if (visit.rateCents == null) {
-    const total = services.reduce((sum: number, s: any) => sum + (s.rate_cents ?? 0) * (s.qty ?? 1), 0);
-    if (total > 0) visit.rateCents = total;
+    if (linkedService) {
+      visit.rateCents = (linkedService.rate_cents ?? 0) * (linkedService.qty ?? 1);
+    } else {
+      const total = services.reduce((sum: number, s: any) => sum + (s.rate_cents ?? 0) * (s.qty ?? 1), 0);
+      if (total > 0) visit.rateCents = total;
+    }
     // Also try direct job rate_cents
     if (visit.rateCents == null && row.crm_jobs?.rate_cents != null) visit.rateCents = row.crm_jobs.rate_cents;
   }
   if (visit.budgetedHours == null) {
-    const total = services.reduce((sum: number, s: any) => sum + (Number(s.budgeted_hours) ?? 0) * (s.qty ?? 1), 0);
-    if (total > 0) visit.budgetedHours = total;
+    if (linkedService) {
+      visit.budgetedHours = Number(linkedService.budgeted_hours ?? 0) * (linkedService.qty ?? 1);
+    } else {
+      const total = services.reduce((sum: number, s: any) => sum + (Number(s.budgeted_hours) ?? 0) * (s.qty ?? 1), 0);
+      if (total > 0) visit.budgetedHours = total;
+    }
     if (visit.budgetedHours == null && row.crm_jobs?.budgeted_hours != null) visit.budgetedHours = Number(row.crm_jobs.budgeted_hours);
   }
-  if (services.length > 0) {
+  if (linkedService) {
+    visit.serviceNames = linkedService.service_name ? [linkedService.service_name as string] : [];
+    visit.serviceIds = [(linkedService.service_id as string | null) ?? null];
+  } else if (services.length > 0) {
     visit.serviceNames = services.map((s: any) => s.service_name as string).filter(Boolean);
     visit.serviceIds = services.map((s: any) => (s.service_id as string | null) ?? null);
   }
@@ -1498,7 +1515,7 @@ export function useJobVisits(jobId: string) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
         .from('crm_job_visits')
-        .select('*, crm_crews(name), crm_jobs(budgeted_hours, rate_cents, crm_job_services(rate_cents, budgeted_hours, qty, service_name, service_id))')
+        .select('*, crm_crews(name), crm_jobs(budgeted_hours, rate_cents, crm_job_services(id, rate_cents, budgeted_hours, qty, service_name, service_id))')
         .eq('job_id', jobId)
         .is('deleted_at', null)
         .order('scheduled_date', { ascending: true });
@@ -1518,7 +1535,7 @@ export function useClientAllVisits(clientId: string) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
         .from('crm_job_visits')
-        .select('*, crm_crews(name), crm_jobs(budgeted_hours, rate_cents, crm_job_services(rate_cents, budgeted_hours, qty, service_name, service_id))')
+        .select('*, crm_crews(name), crm_jobs(budgeted_hours, rate_cents, crm_job_services(id, rate_cents, budgeted_hours, qty, service_name, service_id))')
         .eq('client_id', clientId)
         .is('deleted_at', null)
         .order('scheduled_date', { ascending: false });

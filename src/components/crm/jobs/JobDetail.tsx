@@ -1879,13 +1879,17 @@ function VisitRow({
     <>
       <tr className="group border-b last:border-0 hover:bg-slate-50">
         <td className="px-4 py-3 text-slate-700">
-          {serviceWindow
-            ? serviceWindow
-            : visit.scheduledDate
-              ? new Date(visit.scheduledDate + "T00:00:00").toLocaleDateString("en-US", {
-                  weekday: "short", month: "short", day: "numeric",
-                })
-              : "—"}
+          {visit.status === "completed" && visit.completedAt
+            ? new Date(visit.completedAt).toLocaleDateString("en-US", {
+                weekday: "short", month: "short", day: "numeric",
+              })
+            : serviceWindow
+              ? serviceWindow
+              : visit.scheduledDate
+                ? new Date(visit.scheduledDate + "T00:00:00").toLocaleDateString("en-US", {
+                    weekday: "short", month: "short", day: "numeric",
+                  })
+                : "—"}
         </td>
         <td className="px-4 py-3 text-slate-600">{visitServiceName}</td>
         <td className="px-4 py-3 text-slate-600">{visit.crewName ?? <span className="italic text-slate-400">Unassigned</span>}</td>
