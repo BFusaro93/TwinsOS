@@ -1709,7 +1709,7 @@ export function useUpdateJobService() {
   return useMutation({
     mutationFn: async ({ id, patch }: {
       id: string;
-      patch: { qty?: number; rate_cents?: number | null };
+      patch: { qty?: number; rate_cents?: number | null; budgeted_hours?: number };
     }) => {
       const supabase = createClient();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
