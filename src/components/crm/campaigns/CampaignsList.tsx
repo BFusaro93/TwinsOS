@@ -9,6 +9,8 @@ import {
   useSendCampaign,
 } from "@/lib/hooks/use-crm-campaigns";
 import { useClients } from "@/lib/hooks/use-clients";
+import { useDocumentTemplates, useDocumentTemplate } from "@/lib/hooks/use-crm-documents";
+import { renderBlocksToHtml, SAMPLE_MERGE_VALUES } from "@/lib/utils/document-template-renderer";
 import { CampaignAudiencePicker } from "./CampaignAudiencePicker";
 import type { CRMCampaign, CampaignStatus, NewCampaignFormValues } from "@/types/crm-campaigns";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -147,13 +149,43 @@ function CampaignDialog({
     campaign ? formFromCampaign(campaign) : emptyForm
   );
 
+  // Message Body can be typed free-form or loaded from an existing "Marketing"
+  // document template — the template's rendered HTML is copied into `form.body`
+  // once picked, same as if it had been typed there, so there's nothing extra
+  // to persist on the campaign itself.
+  const [bodyMode, setBodyMode] = useState<"custom" | "template">("custom");
+  const [templateId, setTemplateId] = useState<string>("");
+  const { data: allTemplates = [] } = useDocumentTemplates();
+  const marketingTemplates = useMemo(
+    () => allTemplates.filter((t) => t.docType === "marketing" && t.status === "active"),
+    [allTemplates]
+  );
+  const { data: templateDetail } = useDocumentTemplate(templateId);
+
   // Radix only calls onOpenChange for user-initiated closes, not when the
   // parent flips `open` true — so re-sync here whenever the dialog opens or
   // the campaign being edited changes, instead of relying on onOpenChange.
   useEffect(() => {
-    if (open) setForm(campaign ? formFromCampaign(campaign) : emptyForm);
+    if (open) {
+      setForm(campaign ? formFromCampaign(campaign) : emptyForm);
+      setBodyMode("custom");
+      setTemplateId("");
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, campaign]);
+
+  // Leave merge tags ([clientfirstname], etc.) unresolved here — the send
+  // route resolves them per recipient. Only the preview (below) uses sample
+  // values so the user can see what a real send will look like.
+  useEffect(() => {
+    if (!templateDetail) return;
+    const html = renderBlocksToHtml(templateDetail.blocks, {});
+    setForm((p) => ({
+      ...p,
+      body: html,
+      subject: p.subject.trim() ? p.subject : (templateDetail.subject ?? p.subject),
+    }));
+  }, [templateDetail]);
 
   const handleOpenChange = (o: boolean) => {
     if (!o) onClose();
@@ -274,13 +306,67 @@ function CampaignDialog({
           )}
 
           <div className="space-y-1.5">
-            <Label>Message Body</Label>
-            <Textarea
-              value={form.body}
-              onChange={(e) => setForm((p) => ({ ...p, body: e.target.value }))}
-              placeholder="Write your message here…"
-              rows={5}
-            />
+            <div className="flex items-center justify-between">
+              <Label>Message Body</Label>
+              {form.type === "email" && (
+                <div className="flex items-center gap-0.5 rounded-md bg-slate-100 p-0.5 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setBodyMode("custom")}
+                    className={cn(
+                      "rounded px-2 py-1 font-medium transition-colors",
+                      bodyMode === "custom" ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700"
+                    )}
+                  >
+                    Write Your Own
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setBodyMode("template")}
+                    className={cn(
+                      "rounded px-2 py-1 font-medium transition-colors",
+                      bodyMode === "template" ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700"
+                    )}
+                  >
+                    Use a Template
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {bodyMode === "template" && form.type === "email" ? (
+              <div className="space-y-2">
+                <Select value={templateId} onValueChange={setTemplateId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder={marketingTemplates.length > 0 ? "Choose a template…" : "No marketing templates yet"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {marketingTemplates.map((t) => (
+                      <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {marketingTemplates.length === 0 ? (
+                  <p className="text-xs text-slate-400">
+                    No &ldquo;Marketing&rdquo; templates yet — create one under Settings → Documents, then it&rsquo;ll show up here.
+                  </p>
+                ) : templateDetail ? (
+                  <div className="max-h-56 overflow-y-auto rounded-md border bg-white p-3">
+                    <p className="mb-2 text-[10px] font-medium uppercase tracking-wide text-slate-400">
+                      Preview with sample data — the real client&rsquo;s details are used when sent
+                    </p>
+                    <div dangerouslySetInnerHTML={{ __html: renderBlocksToHtml(templateDetail.blocks, SAMPLE_MERGE_VALUES) }} />
+                  </div>
+                ) : null}
+              </div>
+            ) : (
+              <Textarea
+                value={form.body}
+                onChange={(e) => setForm((p) => ({ ...p, body: e.target.value }))}
+                placeholder="Write your message here…"
+                rows={5}
+              />
+            )}
           </div>
 
           <div className="space-y-1.5">

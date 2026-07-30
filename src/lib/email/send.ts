@@ -38,6 +38,12 @@ export function buildClientMergeVars(
     "[companyname]": org.name ?? "Your Service Provider",
     "[companyphonenumber]": org.addressPhone ?? "",
     "[accountbalance]": balance,
+    // Aliases for the Documents module's merge-tag vocabulary (src/types/crm-documents.ts)
+    // — a "marketing" template picked into a campaign uses those tag names, not the
+    // ones above, so both must resolve or picked-template tags render as literal text.
+    "[clientname]": displayName,
+    "[companyphone]": org.addressPhone ?? "",
+    "[clientaccountbalance]": balance,
   };
 }
 
