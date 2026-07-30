@@ -259,6 +259,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
       if (status === "completed" && job.jobType === "one_time") {
         try {
           const today = new Date().toISOString().slice(0, 10);
+          const serviceDate = job.scheduledDate ?? today;
           const svcs = job.services ?? [];
           const subtotal = svcs.reduce((s, sv) => s + (sv.rateCents ?? 0) * (sv.qty ?? 1), 0) || (job.rateCents ?? 0);
           await createInvoice.mutateAsync({
@@ -267,8 +268,8 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
             description: `Service: ${svcs.map((s) => s.serviceName).join(", ") || "Job"}`,
             invoiceDate: today,
             lineItems: svcs.length > 0
-              ? svcs.map((s) => ({ description: s.serviceName || "Service", qty: s.qty ?? 1, rateCents: s.rateCents ?? 0, totalCents: (s.rateCents ?? 0) * (s.qty ?? 1) }))
-              : [{ description: "Service", qty: 1, rateCents: job.rateCents ?? 0, totalCents: job.rateCents ?? 0 }],
+              ? svcs.map((s) => ({ name: s.serviceName, description: s.serviceName || "Service", qty: s.qty ?? 1, rateCents: s.rateCents ?? 0, totalCents: (s.rateCents ?? 0) * (s.qty ?? 1), serviceDate }))
+              : [{ name: "Service", description: "Service", qty: 1, rateCents: job.rateCents ?? 0, totalCents: job.rateCents ?? 0, serviceDate }],
             subtotalCents: subtotal,
             taxRateBps: 0,
             taxCents: 0,
@@ -393,8 +394,9 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
     setInvoicing(true);
     try {
       const today = new Date().toISOString().slice(0, 10);
+      const serviceDate = job.scheduledDate ?? today;
       const services = job.services ?? [];
-      const subtotal = services.reduce((s, sv) => s + (sv.rateCents ?? 0), 0) || (job.rateCents ?? 0);
+      const subtotal = services.reduce((s, sv) => s + (sv.rateCents ?? 0) * (sv.qty ?? 1), 0) || (job.rateCents ?? 0);
       const invoice = await createInvoice.mutateAsync({
         jobId: job.id,
         clientId: job.clientId,
@@ -402,16 +404,20 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
         invoiceDate: today,
         lineItems: services.length > 0
           ? services.map((s) => ({
+              name: s.serviceName,
               description: s.serviceName || "Service",
               qty: s.qty ?? 1,
               rateCents: s.rateCents ?? 0,
               totalCents: (s.rateCents ?? 0) * (s.qty ?? 1),
+              serviceDate,
             }))
           : [{
+              name: job.clientName ? `Service for ${job.clientName}` : "Service",
               description: job.clientName ? `Service for ${job.clientName}` : "Service",
               qty: 1,
               rateCents: job.rateCents ?? 0,
               totalCents: job.rateCents ?? 0,
+              serviceDate,
             }],
         subtotalCents: subtotal,
         taxRateBps: 0,

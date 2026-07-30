@@ -365,11 +365,14 @@ function JobDetailSheet({
 
   async function handleInvoice() {
     try {
+      const serviceDate = visit.scheduledDate ?? new Date().toISOString().slice(0, 10);
       const lineItems = services.map((s) => ({
+        name: s.serviceName,
         description: s.serviceName,
         qty: s.qty ?? 1,
         rateCents: s.rateCents ?? 0,
         totalCents: (s.qty ?? 1) * (s.rateCents ?? 0),
+        serviceDate,
       }));
       const subtotalCents = lineItems.reduce((sum, li) => sum + li.totalCents, 0);
       const invoice = await createInvoice({

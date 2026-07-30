@@ -1126,7 +1126,7 @@ export function useCreateInvoiceFromJob() {
       invoiceDate: string;
       dueDate?: string;
       poNumber?: string | null;
-      lineItems: { description: string; qty: number; rateCents: number; totalCents: number }[];
+      lineItems: { name?: string; description: string; qty: number; rateCents: number; totalCents: number; serviceDate?: string | null }[];
       subtotalCents: number;
       taxRateBps: number;
       taxCents: number;
@@ -1171,10 +1171,12 @@ export function useCreateInvoiceFromJob() {
         await (supabase as any).from("crm_invoice_line_items").insert(
           lineItems.map((li, i) => ({
             invoice_id: invoiceId,
+            name: li.name ?? null,
             description: li.description,
             qty: li.qty,
             rate_cents: li.rateCents,
             total_cents: li.totalCents,
+            service_date: li.serviceDate ?? null,
             sort_order: i,
           }))
         );

@@ -883,7 +883,12 @@ export function useCreateClientJob() {
           created_by: user?.id ?? null,
           client_id: values.clientId,
           job_type: values.jobType,
-          status: values.isComplete ? 'completed' : 'scheduled',
+          // Never insert as already-completed, even when the "already done"
+          // checkbox is checked — completion has to go through the real
+          // /complete route below (auto-invoice, activity-timeline log) or
+          // those side effects never happen, same as they wouldn't for a
+          // visit completed from the dispatch board.
+          status: 'scheduled',
           contract_id: values.contractId || null,
           crew_id: values.crewId || null,
           schedule: values.schedule || null,
@@ -911,7 +916,7 @@ export function useCreateClientJob() {
           waiting_list_end: values.waitingListEnd || null,
           start_date_window: values.startDateWindow || null,
           end_date_window: values.endDateWindow || null,
-          is_complete: values.isComplete,
+          is_complete: false,
           notes: values.notes || null,
           notes_to_crew: values.notesToCrew || null,
           budgeted_hours: values.services.reduce((sum, s) => sum + (s.budgetedHours || 0) * (s.teamSize || 1), 0) || null,
@@ -964,6 +969,7 @@ export function useCreateClientJob() {
       // a different crew than another (e.g. Spring Clean-up to one crew, Mulch
       // to another) even though they were added together on the same job.
       const autoVisitTypes = ['one_time', 'snow', 'project', 'recurring'];
+      let createdVisitIds: string[] = [];
       if (values.scheduledDate && autoVisitTypes.includes(values.jobType)) {
         if (values.services.length > 1) {
           const visitRows = values.services.map((_s, i) => ({
@@ -971,22 +977,29 @@ export function useCreateClientJob() {
             client_id: values.clientId,
             job_service_id: serviceIdBySortOrder[i] ?? null,
             scheduled_date: values.scheduledDate,
-            status: values.isComplete ? 'completed' : 'scheduled',
+            status: 'scheduled',
             crew_id: values.crewId || null,
-            completed_at: values.isComplete ? new Date().toISOString() : null,
           }));
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          await (supabase as any).from('crm_job_visits').insert(visitRows);
+          const { data: insertedVisits } = await (supabase as any)
+            .from('crm_job_visits')
+            .insert(visitRows)
+            .select('id');
+          createdVisitIds = ((insertedVisits ?? []) as { id: string }[]).map((v) => v.id);
         } else {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          await (supabase as any).from('crm_job_visits').insert({
-            job_id: job.id,
-            client_id: values.clientId,
-            scheduled_date: values.scheduledDate,
-            status: values.isComplete ? 'completed' : 'scheduled',
-            crew_id: values.crewId || null,
-            completed_at: values.isComplete ? new Date().toISOString() : null,
-          });
+          const { data: insertedVisit } = await (supabase as any)
+            .from('crm_job_visits')
+            .insert({
+              job_id: job.id,
+              client_id: values.clientId,
+              scheduled_date: values.scheduledDate,
+              status: 'scheduled',
+              crew_id: values.crewId || null,
+            })
+            .select('id')
+            .single();
+          if (insertedVisit) createdVisitIds = [(insertedVisit as { id: string }).id];
         }
       }
 
@@ -1008,6 +1021,32 @@ export function useCreateClientJob() {
         if (visitRows.length > 0) {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           await (supabase as any).from('crm_job_visits').insert(visitRows);
+        }
+      }
+
+      // The "already completed" checkbox (one-time jobs only) logs work that's
+      // already done. Route each freshly-created visit through the same
+      // /complete endpoint the dispatch board uses instead of inserting it
+      // pre-completed — that's the only place auto-invoicing and the
+      // "Visit completed" activity-timeline entry are created, so skipping it
+      // silently drops both.
+      if (values.isComplete) {
+        if (createdVisitIds.length > 0) {
+          for (const visitId of createdVisitIds) {
+            const res = await fetch(`/api/crm/visits/${visitId}/complete`, { method: 'POST' });
+            if (!res.ok) {
+              const body = await res.json() as { error?: string };
+              throw new Error(body.error ?? 'Job was created, but failed to mark it complete');
+            }
+          }
+        } else {
+          // No Job Date means no visit was created to route through — nothing
+          // to complete via the endpoint, so just flag the job directly.
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          await (supabase as any)
+            .from('crm_jobs')
+            .update({ status: 'completed', is_complete: true })
+            .eq('id', job.id);
         }
       }
 
