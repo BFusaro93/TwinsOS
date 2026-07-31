@@ -21,11 +21,16 @@ export interface ServiceJobCostRow {
 }
 
 /**
- * Completed job instances of a single service, for the Service dialog's Job
+ * Completed visits of a single service, for the Service dialog's Job
  * Costing tab. Reads production-rate accuracy fields from rpt_job_services
  * (same view the Report Center's Production Rate Accuracy report uses) and
  * merges in rate_cents from crm_job_services (the view has no $ columns —
  * it's scoped to hours/rate accuracy) to compute revenue per instance.
+ *
+ * Filters on visit_status, not job_status: recurring/package/project/snow
+ * jobs never flip their own status to "completed" (only one_time/waiting_list
+ * jobs do — see visits/[visitId]/complete/route.ts), so a recurring job's
+ * completed visits would otherwise never show up here.
  */
 export function useServiceJobCosting(serviceId: string) {
   return useQuery({
@@ -38,7 +43,7 @@ export function useServiceJobCosting(serviceId: string) {
           .from("rpt_job_services")
           .select("*")
           .eq("service_id", serviceId)
-          .eq("job_status", "completed")
+          .eq("visit_status", "completed")
           .order("scheduled_date", { ascending: false })
           .limit(1000),
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -58,7 +63,7 @@ export function useServiceJobCosting(serviceId: string) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       return (viewRes.data ?? []).map((r: any) => {
         const qty = Number(r.qty) || 0;
-        const rateCents = rateCentsById.get(r.id) ?? 0;
+        const rateCents = rateCentsById.get(r.job_service_id) ?? 0;
         return {
           id: r.id,
           jobId: r.job_id,

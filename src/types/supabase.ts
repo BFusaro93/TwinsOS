@@ -10966,6 +10966,7 @@ export type Database = {
           is_complete: boolean | null
           job_actual_hours: number | null
           job_id: string | null
+          job_service_id: string | null
           job_status: string | null
           man_count: number | null
           qty: number | null
@@ -10975,6 +10976,8 @@ export type Database = {
           service_id: string | null
           service_name: string | null
           service_unit: string | null
+          visit_id: string | null
+          visit_status: string | null
         }
         Relationships: [
           {

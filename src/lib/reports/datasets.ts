@@ -155,6 +155,7 @@ export const REPORT_DATASETS: ReportDataset[] = [
     description: "Each service on a job compared against its assumed production rate — flags services where the actual sq ft/hr achieved differs from what was budgeted.",
     defaultDateField: "scheduled_date",
     fields: [
+      { key: "visit_status", label: "Visit Status", type: "text" },
       { key: "job_status", label: "Job Status", type: "text" },
       { key: "is_complete", label: "Complete", type: "boolean" },
       { key: "scheduled_date", label: "Scheduled Date", type: "date" },

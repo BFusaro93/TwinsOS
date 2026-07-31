@@ -115,7 +115,7 @@ export const JOB_COSTING_REPORTS: PrebuiltReportDef[] = [
       ],
       filters: [
         { column: "budget_method", op: "eq", value: "production_rate" },
-        { column: "job_status", op: "eq", value: "completed" },
+        { column: "visit_status", op: "eq", value: "completed" },
         ...dateRangeFilters("scheduled_date", params, { preset: "this_month" }),
       ],
       groupBy: [],
