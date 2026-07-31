@@ -4,13 +4,14 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { format } from "date-fns";
 import { MapPin, Clock, Users, ChevronRight, CheckCircle2, XCircle, AlertCircle } from "lucide-react";
-import { useMyCrewVisits, useMyCrewInfo } from "@/lib/hooks/use-crew-app";
+import { useMyCrewStops, useMyCrewInfo } from "@/lib/hooks/use-crew-app";
 import { EditCrewDialog } from "@/components/crm/crew/EditCrewDialog";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import type { CRMJobVisit } from "@/types/crm-jobs";
+import { visitServiceNames } from "@/lib/utils/visit-stops";
+import type { Stop } from "@/lib/utils/visit-stops";
+import type { VisitStatus } from "@/types/crm-jobs";
 
-const STATUS_CONFIG: Record<CRMJobVisit["status"], { label: string; color: string; icon: React.ReactNode }> = {
+const STATUS_CONFIG: Record<VisitStatus, { label: string; color: string; icon: React.ReactNode }> = {
   scheduled:   { label: "Not Started",  color: "bg-slate-100 text-slate-600",   icon: <Clock className="h-3 w-3" /> },
   dispatched:  { label: "Dispatched",   color: "bg-blue-100 text-blue-700",     icon: <Clock className="h-3 w-3" /> },
   in_progress: { label: "In Progress",  color: "bg-amber-100 text-amber-700",   icon: <AlertCircle className="h-3 w-3" /> },
@@ -19,10 +20,10 @@ const STATUS_CONFIG: Record<CRMJobVisit["status"], { label: string; color: strin
   skipped:     { label: "Skipped",      color: "bg-orange-100 text-orange-700", icon: <XCircle className="h-3 w-3" /> },
 };
 
-function VisitCard({ visit, onClick }: { visit: CRMJobVisit; onClick: () => void }) {
-  const cfg = STATUS_CONFIG[visit.status];
-  const services = visit.job?.services?.map(s => s.serviceName).join(", ") ?? "";
-  const addr = [visit.job?.serviceAddress, visit.job?.serviceCity].filter(Boolean).join(", ");
+function StopCard({ stop, onClick }: { stop: Stop; onClick: () => void }) {
+  const cfg = STATUS_CONFIG[stop.derivedStatus];
+  const services = stop.visits.flatMap(visitServiceNames).join(", ");
+  const startTime = stop.visits.find((v) => v.startTime)?.startTime;
 
   return (
     <button
@@ -31,20 +32,27 @@ function VisitCard({ visit, onClick }: { visit: CRMJobVisit; onClick: () => void
     >
       <div className="flex items-start justify-between gap-2">
         <div className="flex-1 min-w-0">
-          <p className="font-semibold text-slate-900 truncate">{visit.clientName ?? "—"}</p>
-          {addr && (
+          <div className="flex items-center gap-1.5">
+            <p className="font-semibold text-slate-900 truncate">{stop.clientName ?? "—"}</p>
+            {stop.visits.length > 1 && (
+              <span className="shrink-0 inline-flex items-center rounded-full bg-slate-100 text-slate-500 text-[10px] font-medium px-1.5 py-0.5">
+                {stop.visits.length} services
+              </span>
+            )}
+          </div>
+          {stop.address && (
             <p className="text-sm text-slate-500 flex items-center gap-1 mt-0.5 truncate">
               <MapPin className="h-3 w-3 shrink-0" />
-              {addr}
+              {stop.address}
             </p>
           )}
           {services && (
             <p className="text-sm text-slate-600 mt-1 truncate">{services}</p>
           )}
-          {visit.startTime && (
+          {startTime && (
             <p className="text-xs text-slate-400 mt-1 flex items-center gap-1">
               <Clock className="h-3 w-3" />
-              {visit.startTime}
+              {startTime}
             </p>
           )}
         </div>
@@ -53,16 +61,16 @@ function VisitCard({ visit, onClick }: { visit: CRMJobVisit; onClick: () => void
             {cfg.icon}
             {cfg.label}
           </span>
-          {visit.clockedInAt && !visit.clockedOutAt && (
+          {stop.clockedInAt && !stop.clockedOutAt && (
             <span className="text-xs text-amber-600 font-medium">Running</span>
           )}
           <ChevronRight className="h-4 w-4 text-slate-300 mt-1" />
         </div>
       </div>
-      {visit.job?.notesToCrew && (
+      {stop.notesToCrew && (
         <div className="mt-2 pt-2 border-t border-slate-100">
           <p className="text-xs text-amber-700 bg-amber-50 rounded px-2 py-1 line-clamp-2">
-            📋 {visit.job.notesToCrew}
+            📋 {stop.notesToCrew}
           </p>
         </div>
       )}
@@ -73,12 +81,12 @@ function VisitCard({ visit, onClick }: { visit: CRMJobVisit; onClick: () => void
 export default function CrewSchedulePage() {
   const router = useRouter();
   const today = format(new Date(), "yyyy-MM-dd");
-  const { data: visits = [], isLoading } = useMyCrewVisits(today);
+  const { data: stops = [], isLoading } = useMyCrewStops(today);
   const { data: crewInfo } = useMyCrewInfo();
   const [editCrewOpen, setEditCrewOpen] = useState(false);
 
-  const completed = visits.filter(v => v.status === "completed").length;
-  const total     = visits.length;
+  const completed = stops.filter(s => s.derivedStatus === "completed").length;
+  const total     = stops.length;
 
   return (
     <div className="flex flex-col min-h-dvh">
@@ -121,7 +129,7 @@ export default function CrewSchedulePage() {
         )}
       </div>
 
-      {/* Job list */}
+      {/* Stop list */}
       <main className="flex-1 px-4 py-4 space-y-3">
         {isLoading && (
           <div className="space-y-3">
@@ -131,7 +139,7 @@ export default function CrewSchedulePage() {
           </div>
         )}
 
-        {!isLoading && visits.length === 0 && (
+        {!isLoading && stops.length === 0 && (
           <div className="flex flex-col items-center justify-center py-20 text-center">
             <CheckCircle2 className="h-12 w-12 text-slate-300 mb-3" />
             <p className="font-medium text-slate-600">No jobs scheduled today</p>
@@ -139,25 +147,25 @@ export default function CrewSchedulePage() {
           </div>
         )}
 
-        {visits.map((visit, idx) => (
-          <div key={visit.id} className="flex gap-3">
+        {stops.map((stop, idx) => (
+          <div key={stop.key} className="flex gap-3">
             <div className="flex flex-col items-center pt-5">
               <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
-                visit.status === "completed" ? "bg-green-500 text-white" :
-                visit.status === "in_progress" ? "bg-amber-500 text-white" :
-                visit.status === "skipped" ? "bg-slate-300 text-slate-600" :
+                stop.derivedStatus === "completed" ? "bg-green-500 text-white" :
+                stop.derivedStatus === "in_progress" ? "bg-amber-500 text-white" :
+                stop.derivedStatus === "skipped" ? "bg-slate-300 text-slate-600" :
                 "bg-slate-200 text-slate-600"
               }`}>
                 {idx + 1}
               </div>
-              {idx < visits.length - 1 && (
+              {idx < stops.length - 1 && (
                 <div className="w-px flex-1 bg-slate-200 mt-1" />
               )}
             </div>
             <div className="flex-1 pb-1">
-              <VisitCard
-                visit={visit}
-                onClick={() => router.push(`/crm/crew/jobs/${visit.id}`)}
+              <StopCard
+                stop={stop}
+                onClick={() => router.push(`/crm/crew/stops/${stop.anchorVisitId}`)}
               />
             </div>
           </div>
@@ -176,13 +184,13 @@ export default function CrewSchedulePage() {
             </div>
             <div>
               <p className="text-xl font-bold text-amber-600">
-                {visits.filter(v => v.status === "in_progress").length}
+                {stops.filter(s => s.derivedStatus === "in_progress").length}
               </p>
               <p className="text-xs text-slate-500">Active</p>
             </div>
             <div>
               <p className="text-xl font-bold text-slate-400">
-                {visits.filter(v => v.status === "scheduled" || v.status === "dispatched").length}
+                {stops.filter(s => s.derivedStatus === "scheduled" || s.derivedStatus === "dispatched").length}
               </p>
               <p className="text-xs text-slate-500">Remaining</p>
             </div>
@@ -195,7 +203,7 @@ export default function CrewSchedulePage() {
           open={editCrewOpen}
           onOpenChange={setEditCrewOpen}
           crewInfo={crewInfo}
-          visitId={visits.find(v => v.status === "in_progress")?.id}
+          visitId={stops.find(s => s.derivedStatus === "in_progress")?.anchorVisitId}
         />
       )}
     </div>

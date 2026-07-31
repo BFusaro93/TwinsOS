@@ -207,14 +207,27 @@ await (supabase as any).from("crm_jobs").select("*" as any).eq("id", jobId).sing
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: existing } = await (supabase as any)
     .from("crm_job_visits")
-    .select("scheduled_date")
+    .select("scheduled_date, job_service_id, clocked_in_at")
     .eq("job_id", jobId)
     .gte("scheduled_date", fromStr)
     .lte("scheduled_date", toStr)
     .is("deleted_at", null);
 
-
-  const existingSet = new Set((existing ?? []).map((v: { scheduled_date: string }) => v.scheduled_date));
+  // Per-(date, service) dedupe so a multi-service job can generate one visit
+  // per service per date without re-running this endless times. A date with
+  // an existing UNLINKED visit (a legacy combined visit, or one manually
+  // added via the crew-facing "Add Visit" dialog without picking a service)
+  // is skipped entirely rather than layering per-service visits on top of
+  // it — and a date already clocked in is left alone so a mid-day
+  // regeneration can't insert a new row into a stop that's already running.
+  const existingDateServiceKeys = new Set<string>();
+  const datesWithUnlinkedVisit = new Set<string>();
+  const datesAlreadyStarted = new Set<string>();
+  for (const row of (existing ?? []) as { scheduled_date: string; job_service_id: string | null; clocked_in_at: string | null }[]) {
+    if (row.clocked_in_at) datesAlreadyStarted.add(row.scheduled_date);
+    if (row.job_service_id) existingDateServiceKeys.add(`${row.scheduled_date}|${row.job_service_id}`);
+    else datesWithUnlinkedVisit.add(row.scheduled_date);
+  }
 
   const j = jobAny as {
     org_id: string | null; client_id: string; crew_id: string | null;
@@ -273,12 +286,32 @@ await (supabase as any).from("crm_jobs").select("*" as any).eq("id", jobId).sing
   if (rules.length === 0 && monthlyDates.length === 0) {
     rules = parseSchedule(j.schedule, j.schedule_days ?? []);
   }
+
+  // Recurring visits otherwise never link to a service at all (unlike
+  // package visits, which always do) — but when a date is unambiguous
+  // (zero or one active service), link it the same way, so per-visit
+  // budget/actual reporting doesn't depend on whether a visit came from
+  // this auto-generator or the manual "Add Visit" dialog (which lets you
+  // pick a service). A job with 2+ services generates one visit PER
+  // SERVICE per date instead of one combined visit — mirroring the package
+  // branch above and the per-service split useCreateClientJob already does
+  // for a job's very first day — so per-service reports stay accurate for
+  // the common case of a crew doing multiple services in one stop.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: recurringServices } = await (supabase as any)
+    .from("crm_job_services")
+    .select("id, sort_order, included, start_recurring")
+    .eq("job_id", jobId)
+    .order("sort_order");
+  const activeServices = ((recurringServices ?? []) as { id: string; included: boolean | null; start_recurring: string | null }[])
+    .filter((s) => s.included !== false);
+
   const toInsert: object[] = [];
   const allOccurrences = [...rules.flatMap((rule) => occurrencesInRange(rule, windowStart, effectiveEnd)), ...monthlyDates];
 
   for (const d of allOccurrences) {
     const dateStr = toISODate(d);
-    if (existingSet.has(dateStr)) continue;
+    if (datesWithUnlinkedVisit.has(dateStr) || datesAlreadyStarted.has(dateStr)) continue;
 
     // Apply season window: only generate visits whose MM-DD falls within the season.
     if (seasonFilter) {
@@ -289,12 +322,28 @@ await (supabase as any).from("crm_jobs").select("*" as any).eq("id", jobId).sing
       if (!inSeason) continue;
     }
 
-    toInsert.push({
-      job_id: jobId, client_id: j.client_id,
-      crew_id: j.crew_id ?? null, scheduled_date: dateStr,
-      priority: j.priority ?? 1, notes_to_crew: j.notes_to_crew ?? null,
-    });
-    existingSet.add(dateStr);
+    if (activeServices.length === 0) {
+      toInsert.push({
+        job_id: jobId, client_id: j.client_id,
+        crew_id: j.crew_id ?? null, scheduled_date: dateStr,
+        job_service_id: null,
+        priority: j.priority ?? 1, notes_to_crew: j.notes_to_crew ?? null,
+      });
+      continue;
+    }
+
+    for (const svc of activeServices) {
+      if (svc.start_recurring && dateStr < svc.start_recurring) continue;
+      const key = `${dateStr}|${svc.id}`;
+      if (existingDateServiceKeys.has(key)) continue;
+      toInsert.push({
+        job_id: jobId, client_id: j.client_id,
+        crew_id: j.crew_id ?? null, scheduled_date: dateStr,
+        job_service_id: svc.id,
+        priority: j.priority ?? 1, notes_to_crew: j.notes_to_crew ?? null,
+      });
+      existingDateServiceKeys.add(key);
+    }
   }
 
   if (toInsert.length === 0) {

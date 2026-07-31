@@ -28,3 +28,59 @@ export function computeActualHours(visit: VisitHoursInput): number | null {
   if (diffHours <= 0) return null;
   return diffHours * (visit.menCount || 1);
 }
+
+export interface AllocateStopHoursVisit {
+  id: string;
+  jobServiceId: string | null;
+  // Loosely typed (not the full CRMJobService) so server routes working with
+  // raw DB rows can reuse this without constructing a full client-side type.
+  job?: { services?: { id: string; budgetedHours: number; teamSize: number }[] };
+}
+
+/**
+ * Splits one measured stop duration across the stop's visits, weighted by
+ * each visit's own linked service's budgeted_hours × team_size — falling
+ * back to an even split if none of them have a budget set. The result is
+ * written as each visit's explicit actual_hours override, so it MUST already
+ * be men-multiplied: computeActualHours() above never re-multiplies an
+ * explicit override, only the derived clock/start-end tiers. Getting this
+ * backwards double- or under-counts every downstream job/report rollup.
+ * Rounds to 2 decimals and assigns any rounding remainder to the
+ * largest-weight visit so the per-visit sum always equals totalStopHours
+ * exactly (the job-level rollup trigger sums these — drift would otherwise
+ * surface as a job-level discrepancy).
+ */
+export function allocateStopHours({
+  durationHours,
+  menCount,
+  visits,
+}: {
+  durationHours: number;
+  menCount: number;
+  visits: AllocateStopHoursVisit[];
+}): Map<string, number> | null {
+  if (durationHours <= 0 || visits.length === 0) return null;
+
+  const totalStopHours = durationHours * (menCount || 1);
+
+  const weights = visits.map((v) => {
+    const services = v.job?.services ?? [];
+    const linked = v.jobServiceId ? services.find((s) => s.id === v.jobServiceId) : services[0];
+    return linked ? linked.budgetedHours * linked.teamSize : 0;
+  });
+  const sumWeights = weights.reduce((s, w) => s + w, 0);
+  const effectiveWeights = sumWeights > 0 ? weights : visits.map(() => 1);
+  const effectiveSum = effectiveWeights.reduce((s, w) => s + w, 0);
+
+  const rounded = effectiveWeights.map((w) => Math.round(((totalStopHours * w) / effectiveSum) * 100) / 100);
+  const roundedSum = Math.round(rounded.reduce((s, n) => s + n, 0) * 100) / 100;
+  const diff = Math.round((totalStopHours - roundedSum) * 100) / 100;
+  if (diff !== 0) {
+    const maxIdx = effectiveWeights.indexOf(Math.max(...effectiveWeights));
+    rounded[maxIdx] = Math.round((rounded[maxIdx] + diff) * 100) / 100;
+  }
+
+  const result = new Map<string, number>();
+  visits.forEach((v, i) => result.set(v.id, rounded[i]));
+  return result;
+}
