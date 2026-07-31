@@ -2,6 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
+import { groupVisitsIntoStops, type Stop } from "@/lib/utils/visit-stops";
 import type { CRMJob, CRMJobVisit, VisitPhoto, CrewMemberTime } from "@/types/crm-jobs";
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -22,18 +23,22 @@ async function getAuthContext() {
 function mapJobRow(job: Record<string, unknown>): CRMJob {
   const services = Array.isArray(job.crm_job_services)
     ? (job.crm_job_services as Record<string, unknown>[]).map(s => ({
-        id:          s.id as string,
-        jobId:       s.job_id as string,
-        serviceId:   s.service_id as string | null,
-        serviceName: s.service_name as string,
-        qty:         s.qty as number,
-        rateCents:   s.rate_cents as number | null,
+        id:            s.id as string,
+        jobId:         s.job_id as string,
+        serviceId:     s.service_id as string | null,
+        serviceName:   s.service_name as string,
+        qty:           s.qty as number,
+        rateCents:     s.rate_cents as number | null,
+        budgetedHours: (s.budgeted_hours as number) ?? 0,
+        teamSize:      (s.team_size as number) ?? 1,
+        sortOrder:     (s.sort_order as number) ?? 0,
       }))
     : [];
   return {
     id:             job.id as string,
     orgId:          job.org_id as string,
     clientId:       job.client_id as string,
+    propertyId:     (job.property_id as string) ?? null,
     jobType:        job.job_type as CRMJob["jobType"],
     status:         job.status as string,
     notesToCrew:    (job.notes_to_crew as string) ?? null,
@@ -143,6 +148,17 @@ export function useMyCrewVisits(date: string) {
   });
 }
 
+// ── useMyCrewStops ────────────────────────────────────────────────────────────
+// Groups today's visits into stops (one per client/day/crew) for the crew
+// tablet's list — a pure client-side transform of useMyCrewVisits, sharing
+// its cache entry rather than issuing a second fetch.
+
+export function useMyCrewStops(date: string) {
+  const query = useMyCrewVisits(date);
+  const stops: Stop[] = query.data ? groupVisitsIntoStops(query.data) : [];
+  return { ...query, data: stops };
+}
+
 // ── useVisitDetail ─────────────────────────────────────────────────────────────
 
 export function useVisitDetail(visitId: string) {
@@ -165,6 +181,53 @@ export function useVisitDetail(visitId: string) {
 
       if (error) throw error;
       return mapVisit(data as Record<string, unknown>);
+    },
+  });
+}
+
+// ── useStopDetail ──────────────────────────────────────────────────────────────
+// Fetches the anchor visit plus every sibling visit sharing its stop (same
+// client/day/crew), for the crew tablet's stop page. A dedicated query
+// (rather than deriving from the list) so a hard refresh or deep link works
+// on a cold cache.
+
+export function useStopDetail(anchorVisitId: string) {
+  return useQuery<Stop | null>({
+    queryKey: ["crew-app-stop", anchorVisitId],
+    queryFn: async () => {
+      const { supabase } = await getAuthContext();
+      const select = `
+        *,
+        clients(display_name, primary_phone, billing_address, billing_city, billing_state, billing_zip),
+        crm_crews(name),
+        crm_jobs(*, crm_job_services(*))
+      `;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: anchorRow, error: anchorErr } = await (supabase as any)
+        .from("crm_job_visits")
+        .select(select)
+        .eq("id", anchorVisitId)
+        .is("deleted_at", null)
+        .single();
+      if (anchorErr) throw anchorErr;
+      const anchor = mapVisit(anchorRow as Record<string, unknown>);
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: siblingRows, error: siblingErr } = await (supabase as any)
+        .from("crm_job_visits")
+        .select(select)
+        .eq("client_id", anchor.clientId)
+        .eq("scheduled_date", anchor.scheduledDate)
+        .is("deleted_at", null);
+      if (siblingErr) throw siblingErr;
+
+      const crewId = anchor.crewId;
+      const siblings = (siblingRows as Record<string, unknown>[])
+        .map(mapVisit)
+        .filter((v) => (v.crewId ?? null) === (crewId ?? null));
+
+      const stops = groupVisitsIntoStops(siblings.length > 0 ? siblings : [anchor]);
+      return stops.find((s) => s.visits.some((v) => v.id === anchorVisitId)) ?? stops[0] ?? null;
     },
   });
 }
@@ -193,6 +256,47 @@ export function useVisitPhotos(visitId: string) {
         uploadedBy:  r.uploaded_by as string | null,
         createdAt:   r.created_at as string,
       }));
+    },
+  });
+}
+
+// ── useCrewMemberTimesForDate ─────────────────────────────────────────────────
+// Batched by scheduled_date instead of one useCrewMemberTimes(visitId) call per
+// row — the Dispatch Board needs every visible visit's member times at once
+// (to detect per-member divergence), and firing N queries for N rows on the
+// board would be its own N+1 problem.
+
+export function useCrewMemberTimesForDate(fromDate: string, toDate?: string) {
+  return useQuery<CrewMemberTime[]>({
+    queryKey: ["crew-member-times", "date", fromDate, toDate ?? fromDate],
+    enabled: !!fromDate,
+    queryFn: async () => {
+      const { supabase } = await getAuthContext();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let q = (supabase as any)
+        .from("crm_crew_member_times")
+        .select("*, crm_crew_members(name, role), crm_job_visits!inner(scheduled_date)")
+        .order("created_at");
+      q = (toDate && toDate !== fromDate)
+        ? q.gte("crm_job_visits.scheduled_date", fromDate).lte("crm_job_visits.scheduled_date", toDate)
+        : q.eq("crm_job_visits.scheduled_date", fromDate);
+
+      const { data, error } = await q;
+      if (error) throw error;
+      return (data as Record<string, unknown>[]).map(r => {
+        const member = r.crm_crew_members as Record<string, unknown> | null;
+        return {
+          id:            r.id as string,
+          visitId:       r.visit_id as string,
+          crewMemberId:  r.crew_member_id as string,
+          memberName:    (member?.name as string) ?? null,
+          memberRole:    (member?.role as string) ?? null,
+          clockedInAt:   r.clocked_in_at as string | null,
+          clockedOutAt:  r.clocked_out_at as string | null,
+          breakMinutes:  (r.break_minutes as number) ?? 0,
+          lunchMinutes:  (r.lunch_minutes as number) ?? 0,
+        };
+      });
     },
   });
 }
@@ -311,6 +415,51 @@ export function useClockOut() {
   });
 }
 
+export function useStopClockIn() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (anchorVisitId: string) => {
+      const localTime = new Date().toTimeString().slice(0, 5);
+      const res = await fetch(`/api/crm/crew/stops/${anchorVisitId}/clock-in`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ localTime }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      return res.json();
+    },
+    onSuccess: (_data, anchorVisitId) => {
+      qc.invalidateQueries({ queryKey: ["crew-app-stop", anchorVisitId] });
+      qc.invalidateQueries({ queryKey: ["crew-app-visit"] });
+      qc.invalidateQueries({ queryKey: ["crew-app-visits"] });
+      qc.invalidateQueries({ queryKey: ["crm-job-visits"] });
+    },
+  });
+}
+
+export function useStopClockOut() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ anchorVisitId, notes }: { anchorVisitId: string; notes?: string }) => {
+      const localTime = new Date().toTimeString().slice(0, 5);
+      const res = await fetch(`/api/crm/crew/stops/${anchorVisitId}/clock-out`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ notes, localTime }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      return res.json();
+    },
+    onSuccess: (_data, { anchorVisitId }) => {
+      qc.invalidateQueries({ queryKey: ["crew-app-stop", anchorVisitId] });
+      qc.invalidateQueries({ queryKey: ["crew-app-visit"] });
+      qc.invalidateQueries({ queryKey: ["crew-app-visits"] });
+      qc.invalidateQueries({ queryKey: ["crm-jobs"] });
+      qc.invalidateQueries({ queryKey: ["crm-job-visits"] });
+    },
+  });
+}
+
 export function useSkipVisit() {
   const qc = useQueryClient();
   return useMutation({
@@ -326,6 +475,7 @@ export function useSkipVisit() {
     onSuccess: (_data, { visitId }) => {
       qc.invalidateQueries({ queryKey: ["crew-app-visit", visitId] });
       qc.invalidateQueries({ queryKey: ["crew-app-visits"] });
+      qc.invalidateQueries({ queryKey: ["crew-app-stop"] });
       qc.invalidateQueries({ queryKey: ["crm-job-visits"] });
     },
   });
@@ -341,6 +491,7 @@ export function useAcknowledgeNotes() {
     },
     onSuccess: (_data, visitId) => {
       qc.invalidateQueries({ queryKey: ["crew-app-visit", visitId] });
+      qc.invalidateQueries({ queryKey: ["crew-app-stop"] });
     },
   });
 }
@@ -359,6 +510,7 @@ export function useAddCrewNote() {
     },
     onSuccess: (_data, { visitId }) => {
       qc.invalidateQueries({ queryKey: ["crew-app-visit", visitId] });
+      qc.invalidateQueries({ queryKey: ["crew-app-stop"] });
       qc.invalidateQueries({ queryKey: ["crm-job-visits"] });
     },
   });

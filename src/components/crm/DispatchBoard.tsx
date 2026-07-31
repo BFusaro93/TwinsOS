@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import Link from "next/link";
 import { ColumnChooser } from "@/components/shared/ColumnChooser";
 import { useRouter } from "next/navigation";
@@ -72,7 +72,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import type { CRMJobVisit, VisitStatus, JobComment } from "@/types/crm-jobs";
+import type { CRMJobVisit, VisitStatus, JobComment, CrewMemberTime } from "@/types/crm-jobs";
 import { useCrews, useCrewDailyMembers, useSetCrewDailyMember, useClearCrewDailyMember } from "@/lib/hooks/use-employees";
 import { useCRMServices, useCreateVisit } from "@/lib/hooks/use-crm-jobs";
 import { useNearbyWaitingListJobs } from "@/lib/hooks/use-nearby-waiting-list";
@@ -80,6 +80,10 @@ import { useNearbyWaitingListJobs } from "@/lib/hooks/use-nearby-waiting-list";
 // ── status icon ───────────────────────────────────────────────────────────────
 
 const STATUS_CYCLE: VisitStatus[] = ["scheduled", "dispatched", "in_progress", "completed", "skipped"];
+// Stable empty-array reference for visits with no per-member time rows — avoids
+// handing VisitRow a fresh [] every render, which would otherwise defeat any
+// memoization keyed on this array's identity.
+const EMPTY_MEMBER_TIMES: CrewMemberTime[] = [];
 
 // Formats a "HH:MM" / "HH:MM:SS" 24h time string (the shape a native
 // <input type="time"> value/DB `time` column uses) into "3:00 PM" for
@@ -108,6 +112,24 @@ function effectiveCrewSize(
   const overrideCrewByMember = new Map(dailyOverrides.map((o) => [o.member_id, o.crew_id]));
   const allMembers = richCrews.flatMap((c) => c.members ?? []);
   return allMembers.filter((m) => (overrideCrewByMember.get(m.id) ?? defaultCrewByMember.get(m.id)) === crewId).length;
+}
+
+// Same roster resolution as effectiveCrewSize, but returning the member ids
+// themselves — used to know exactly WHO a Start/End correction on the board
+// row should be written down to in crm_crew_member_times.
+function effectiveCrewMemberIds(
+  crewId: string | null,
+  richCrews: { id: string; members?: { id: string; crewId?: string }[] }[],
+  dailyOverrides: { member_id: string; crew_id: string }[]
+): string[] {
+  if (!crewId) return [];
+  const defaultCrewByMember = new Map<string, string>();
+  richCrews.forEach((c) => (c.members ?? []).forEach((m) => defaultCrewByMember.set(m.id, c.id)));
+  const overrideCrewByMember = new Map(dailyOverrides.map((o) => [o.member_id, o.crew_id]));
+  const allMembers = richCrews.flatMap((c) => c.members ?? []);
+  return allMembers
+    .filter((m) => (overrideCrewByMember.get(m.id) ?? defaultCrewByMember.get(m.id)) === crewId)
+    .map((m) => m.id);
 }
 
 function StatusCycleButton({ visit }: { visit: CRMJobVisit }) {
@@ -180,12 +202,15 @@ function JobDetailSheet({
   onOpenChange,
   crews,
   onEditTimes,
+  memberTimes,
 }: {
   visit: CRMJobVisit;
   open: boolean;
   onOpenChange: (o: boolean) => void;
   crews: { id: string; name: string }[];
   onEditTimes: (v: CRMJobVisit) => void;
+  /** Same per-member punch records the row uses — see VisitRow for why. */
+  memberTimes: CrewMemberTime[];
 }) {
   const { mutateAsync: updateVisit, isPending } = useUpdateVisit();
   const router = useRouter();
@@ -264,6 +289,23 @@ function JobDetailSheet({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visit.id, visit.actualHours, visit.startTime, visit.endTime, visit.clockedInAt, visit.clockedOutAt, visit.menCount]);
 
+  // Same divergence detection and crew-member feed-down as the dispatch board
+  // row (see VisitRow) — kept in sync here so a dispatcher fixing a time from
+  // the slideover gets identical behavior to fixing it from the row.
+  const { data: richCrewsForSheet } = useCrews(false);
+  const { data: dailyOverridesForSheet = [] } = useCrewDailyMembers(visit.scheduledDate);
+  const upsertMemberTimeForSheet = useUpsertCrewMemberTime();
+  const distinctInsForSheet  = new Set(memberTimes.map((t) => t.clockedInAt).filter((v): v is string => !!v));
+  const distinctOutsForSheet = new Set(memberTimes.map((t) => t.clockedOutAt).filter((v): v is string => !!v));
+  const startHasMultipleTimes = distinctInsForSheet.size > 1;
+  const endHasMultipleTimes   = distinctOutsForSheet.size > 1;
+  // Same real-punch-vs-displayed divergence check as the row — see VisitRow's
+  // startPunchDiffers comment for why this is the one case worth surfacing.
+  const startClockTime = isoToDateAndTime(visit.clockedInAt, visit.scheduledDate).time;
+  const endClockTime   = isoToDateAndTime(visit.clockedOutAt, visit.scheduledDate).time;
+  const startPunchDiffers = startClockTime !== "" && startClockTime !== (startTime || "").slice(0, 5);
+  const endPunchDiffers   = endClockTime   !== "" && endClockTime   !== (endTime   || "").slice(0, 5);
+
   // Appointment Start/End auto-save on blur (like the row's own inline inputs)
   // instead of requiring the batched Save button below — that button also
   // commits status/crew/rate together, which is easy to skip when all you
@@ -273,14 +315,31 @@ function JobDetailSheet({
     // correction) — keep clocked_in_at/clocked_out_at in sync so the crew
     // app and report date-filters agree with whatever the dispatcher enters.
     const clockField = field === "start_time" ? "clocked_in_at" : "clocked_out_at";
+    const clockIso = value ? dateAndTimeToIso(visit.scheduledDate, value) : null;
     try {
       await updateVisit({
         id: visit.id,
         updates: {
           [field]: value || null,
-          [clockField]: value ? dateAndTimeToIso(visit.scheduledDate, value) : null,
+          [clockField]: clockIso,
         },
       });
+      // Only reached in the non-divergent case (see the "Multiple times"
+      // guard around the inputs below) — every member already tracked here
+      // shares the same value on the side not being edited, safe to carry
+      // forward unchanged. No member tracked yet → seed the whole crew
+      // roster, same as Edit Job Times does when it first opens.
+      const effectiveCrewId = visit.crewId ?? job?.crewId ?? null;
+      const targets = memberTimes.length > 0
+        ? memberTimes.map((t) => ({ crewMemberId: t.crewMemberId, otherClockedInAt: t.clockedInAt, otherClockedOutAt: t.clockedOutAt }))
+        : effectiveCrewMemberIds(effectiveCrewId, richCrewsForSheet ?? [], dailyOverridesForSheet)
+            .map((id) => ({ crewMemberId: id, otherClockedInAt: null, otherClockedOutAt: null }));
+      await Promise.all(targets.map((t) => upsertMemberTimeForSheet.mutateAsync({
+        visitId: visit.id,
+        crewMemberId: t.crewMemberId,
+        clockedInAt:  field === "start_time" ? clockIso : t.otherClockedInAt,
+        clockedOutAt: field === "end_time"   ? clockIso : t.otherClockedOutAt,
+      })));
     } catch {
       toast.error("Failed to save time");
     }
@@ -526,7 +585,16 @@ function JobDetailSheet({
                   <label className="block text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1">
                     Job Start
                   </label>
-                  {editingAppointmentStart ? (
+                  {startHasMultipleTimes ? (
+                    <button
+                      type="button"
+                      onClick={() => onEditTimes(visit)}
+                      title="Crew members have different clock-in times — open Edit Job Times"
+                      className="flex h-7 w-full items-center rounded-md border border-input bg-background px-3 text-left text-xs italic text-amber-600 hover:bg-slate-50"
+                    >
+                      Multiple times
+                    </button>
+                  ) : editingAppointmentStart ? (
                     <Input
                       type="time"
                       autoFocus
@@ -558,6 +626,14 @@ function JobDetailSheet({
                       {startTime ? formatTimeShort(startTime) : <span className="text-slate-400">Not set</span>}
                     </button>
                   )}
+                  {startPunchDiffers && (
+                    <p
+                      className="mt-0.5 text-[10px] text-amber-500"
+                      title={`Crew punched in at ${formatTimeShort(startClockTime)} — different from what's shown above`}
+                    >
+                      ⏱ Punched in {formatTimeShort(startClockTime)}
+                    </p>
+                  )}
                 </div>
 
                 {/* Job End */}
@@ -565,7 +641,16 @@ function JobDetailSheet({
                   <label className="block text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1">
                     Job End
                   </label>
-                  {editingAppointmentEnd ? (
+                  {endHasMultipleTimes ? (
+                    <button
+                      type="button"
+                      onClick={() => onEditTimes(visit)}
+                      title="Crew members have different clock-out times — open Edit Job Times"
+                      className="flex h-7 w-full items-center rounded-md border border-input bg-background px-3 text-left text-xs italic text-amber-600 hover:bg-slate-50"
+                    >
+                      Multiple times
+                    </button>
+                  ) : editingAppointmentEnd ? (
                     <Input
                       type="time"
                       autoFocus
@@ -589,6 +674,14 @@ function JobDetailSheet({
                     >
                       {endTime ? formatTimeShort(endTime) : <span className="text-slate-400">Not set</span>}
                     </button>
+                  )}
+                  {endPunchDiffers && (
+                    <p
+                      className="mt-0.5 text-[10px] text-amber-500"
+                      title={`Crew punched out at ${formatTimeShort(endClockTime)} — different from what's shown above`}
+                    >
+                      ⏱ Punched out {formatTimeShort(endClockTime)}
+                    </p>
                   )}
                 </div>
               </div>
@@ -893,7 +986,7 @@ function JobDetailSheet({
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Plus, Trash2 } from "lucide-react";
-import { useCrewMemberTimes, useUpsertCrewMemberTime, useDeleteCrewMemberTime } from "@/lib/hooks/use-crew-app";
+import { useCrewMemberTimes, useCrewMemberTimesForDate, useUpsertCrewMemberTime, useDeleteCrewMemberTime } from "@/lib/hooks/use-crew-app";
 
 function PrintDialog({
   open, onOpenChange, visits, crews, selectedDate,
@@ -1498,6 +1591,7 @@ function VisitRow({
   serviceCodeById,
   crewCodeById,
   manualRouteMode,
+  memberTimes,
 }: {
   visit: CRMJobVisit;
   /** 1-based position of this visit within its own crew's stops for the day (not the global row index). */
@@ -1517,6 +1611,11 @@ function VisitRow({
   crewCodeById: Map<string, string>;
   onReorder?: (id: string, newIndex: number) => void;
   manualRouteMode: boolean;
+  /** This visit's per-crew-member punch records — used to detect whether the
+   * crew was actually on site for the same window (safe to show/edit as one
+   * Start/End pair) or genuinely different times (must show "Multiple times"
+   * and route editing through the Edit Job Times dialog instead). */
+  memberTimes: CrewMemberTime[];
 }) {
   const job      = visit.job;
   const services = job?.services ?? [];
@@ -1570,15 +1669,43 @@ function VisitRow({
 
   const { data: richCrewsForSize } = useCrews(false);
   const { data: dailyOverridesForSize = [] } = useCrewDailyMembers(selectedDate);
+  const upsertMemberTime = useUpsertCrewMemberTime();
+
+  // Does the crew actually on this visit have different punch times from each
+  // other? If so, a single Start/End pair on the row can't represent reality —
+  // the cell shows "Multiple times" instead and editing has to go through the
+  // Edit Job Times dialog, same as SA does. Checked independently per side:
+  // it's possible only clock-outs differ (crew left staggered) while everyone
+  // arrived together.
+  const distinctIns  = new Set(memberTimes.map((t) => t.clockedInAt).filter((v): v is string => !!v));
+  const distinctOuts = new Set(memberTimes.map((t) => t.clockedOutAt).filter((v): v is string => !!v));
+  const startHasMultipleTimes = distinctIns.size > 1;
+  const endHasMultipleTimes   = distinctOuts.size > 1;
+
+  // Start/End and Clocked In/Out are two different fields (see saveVisitTime)
+  // that only ever get FORCED to match when a dispatcher edits Start/End here
+  // — a real crew-app punch that nobody has reconciled into Start/End yet
+  // writes clocked_in_at/out directly and leaves Start/End exactly as it was
+  // (often blank). That's the one case worth surfacing: a real punch exists
+  // that this row's Start/End doesn't yet reflect. When they already agree
+  // (the normal case after a correction), showing it again would just be the
+  // redundant duplicate this replaced.
+  const startClockTime = isoToDateAndTime(visit.clockedInAt, visit.scheduledDate).time;
+  const endClockTime   = isoToDateAndTime(visit.clockedOutAt, visit.scheduledDate).time;
+  const startPunchDiffers = startClockTime !== "" && startClockTime !== (startVal || "").slice(0, 5);
+  const endPunchDiffers   = endClockTime   !== "" && endClockTime   !== (endVal   || "").slice(0, 5);
 
   async function saveVisitTime(field: "start_time" | "end_time", value: string) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const updates: Record<string, any> = { [field]: value || null };
-    // Start/End are the actual times (crew punches often need dispatcher
-    // correction) — keep clocked_in_at/clocked_out_at in sync so the crew
-    // app and report date-filters agree with whatever the dispatcher enters.
+    // Start/End IS the crew's actual time on site (a dispatcher correction of
+    // — or manual stand-in for — a real punch), not just a scheduled
+    // appointment window. Keep clocked_in_at/clocked_out_at in sync so the
+    // crew app and report date-filters agree with whatever the dispatcher
+    // enters.
     const clockField = field === "start_time" ? "clocked_in_at" : "clocked_out_at";
-    updates[clockField] = value ? dateAndTimeToIso(visit.scheduledDate, value) : null;
+    const clockIso = value ? dateAndTimeToIso(visit.scheduledDate, value) : null;
+    updates[clockField] = clockIso;
     // Typing a time is what actually sends a crew out for the day — pull the
     // headcount from who's really on that crew today (Team Assignment),
     // instead of leaving whatever men_count the visit happened to start with.
@@ -1588,6 +1715,22 @@ function VisitRow({
     }
     try {
       await updateVisit.mutateAsync({ id: visit.id, updates });
+      // This is only reached in the non-divergent case (the input is only
+      // editable when startHasMultipleTimes/endHasMultipleTimes is false) —
+      // so every member already tracked here shares the same value on the
+      // side NOT being edited, safe to carry forward unchanged per member.
+      // If no member has been tracked yet, seed the visit's whole crew
+      // roster instead, same as Edit Job Times does when it first opens.
+      const targets = memberTimes.length > 0
+        ? memberTimes.map((t) => ({ crewMemberId: t.crewMemberId, otherClockedInAt: t.clockedInAt, otherClockedOutAt: t.clockedOutAt }))
+        : effectiveCrewMemberIds(visit.crewId, richCrewsForSize ?? [], dailyOverridesForSize)
+            .map((id) => ({ crewMemberId: id, otherClockedInAt: null, otherClockedOutAt: null }));
+      await Promise.all(targets.map((t) => upsertMemberTime.mutateAsync({
+        visitId: visit.id,
+        crewMemberId: t.crewMemberId,
+        clockedInAt:  field === "start_time" ? clockIso : t.otherClockedInAt,
+        clockedOutAt: field === "end_time"   ? clockIso : t.otherClockedOutAt,
+      })));
     } catch {
       toast.error("Failed to save time");
     }
@@ -1747,42 +1890,66 @@ function VisitRow({
       {/* Start */}
       {isVisible("start") && (
         <td className="px-1 py-1 text-slate-400 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
-          {editingStart ? (
-            <input
-              type="time"
-              autoFocus
-              value={startVal}
-              onChange={(e) => setStartVal(e.target.value)}
-              onKeyDown={(e) => { if (/^[0-9apAP]$/.test(e.key)) setStartTouched(true); }}
-              onBlur={() => {
-                setEditingStart(false);
-                if (startTouched && !startVal) toast.error("Start time wasn't set — pick AM or PM before leaving the field");
-                setStartTouched(false);
-                void saveVisitTime("start_time", startVal);
-                // A native time input has its own internal hour/minute/AM-PM
-                // segments — Tab moves between THOSE first, only actually
-                // leaving the input (firing this blur) once you tab past the
-                // last one, landing on whatever's next in the DOM (End's
-                // button — it's only a real <input> once clicked). blur's own
-                // relatedTarget isn't reliably populated for this across
-                // browsers for a composite input like this, so defer one
-                // tick and check document.activeElement directly instead —
-                // that's set for real once the browser's own focus change
-                // has actually finished.
-                setTimeout(() => {
-                  if (document.activeElement === endButtonRef.current) setEditingEnd(true);
-                }, 0);
-              }}
-              className="w-[92px] rounded border border-brand-400 bg-transparent px-1 py-0.5 text-xs text-slate-600 focus:outline-none"
-            />
-          ) : (
+          {startHasMultipleTimes ? (
             <button
               type="button"
-              onClick={() => setEditingStart(true)}
-              className="w-[92px] rounded border border-transparent px-1 py-0.5 text-left text-xs text-slate-600 hover:border-slate-200 hover:bg-slate-50"
+              onClick={() => onEditTimes(visit)}
+              title="Crew members have different clock-in times — open Edit Job Times"
+              className="w-[92px] rounded border border-transparent px-1 py-0.5 text-left text-[11px] italic text-amber-600 hover:border-slate-200 hover:bg-slate-50"
             >
-              {startVal ? formatTimeShort(startVal) : <span className="text-slate-300 italic">—</span>}
+              Multiple times
             </button>
+          ) : (
+            <div className="flex flex-col gap-0.5">
+              {editingStart ? (
+                <input
+                  type="time"
+                  autoFocus
+                  value={startVal}
+                  onChange={(e) => setStartVal(e.target.value)}
+                  onKeyDown={(e) => { if (/^[0-9apAP]$/.test(e.key)) setStartTouched(true); }}
+                  onBlur={() => {
+                    setEditingStart(false);
+                    if (startTouched && !startVal) toast.error("Start time wasn't set — pick AM or PM before leaving the field");
+                    setStartTouched(false);
+                    void saveVisitTime("start_time", startVal);
+                    // A native time input has its own internal hour/minute/AM-PM
+                    // segments — Tab moves between THOSE first, only actually
+                    // leaving the input (firing this blur) once you tab past the
+                    // last one, landing on whatever's next in the DOM (End's
+                    // button — it's only a real <input> once clicked). blur's own
+                    // relatedTarget isn't reliably populated for this across
+                    // browsers for a composite input like this, so defer one
+                    // tick and check document.activeElement directly instead —
+                    // that's set for real once the browser's own focus change
+                    // has actually finished.
+                    setTimeout(() => {
+                      if (document.activeElement === endButtonRef.current) setEditingEnd(true);
+                    }, 0);
+                  }}
+                  className="w-[92px] rounded border border-brand-400 bg-transparent px-1 py-0.5 text-xs text-slate-600 focus:outline-none"
+                />
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setEditingStart(true)}
+                  className="w-[92px] rounded border border-transparent px-1 py-0.5 text-left text-xs text-slate-600 hover:border-slate-200 hover:bg-slate-50"
+                >
+                  {startVal ? formatTimeShort(startVal) : <span className="text-slate-300 italic">—</span>}
+                </button>
+              )}
+              {/* A real crew-app punch exists that Start doesn't reflect yet —
+                  see the startPunchDiffers comment above for why this is the
+                  one case worth surfacing instead of just duplicating Start. */}
+              {startPunchDiffers && (
+                <span
+                  className="text-[9px] leading-none text-amber-500"
+                  title={`Crew punched in at ${formatTimeShort(startClockTime)} — different from what's shown above`}
+                >
+                  ⏱ {formatTimeShort(startClockTime)}
+                </span>
+              )}
+            </div>
           )}
         </td>
       )}
@@ -1790,31 +1957,65 @@ function VisitRow({
       {/* End */}
       {isVisible("end") && (
         <td className="px-1 py-1 text-slate-400 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
-          {editingEnd ? (
-            <input
-              type="time"
-              autoFocus
-              value={endVal}
-              onChange={(e) => setEndVal(e.target.value)}
-              onKeyDown={(e) => { if (/^[0-9apAP]$/.test(e.key)) setEndTouched(true); }}
-              onBlur={() => {
-                setEditingEnd(false);
-                if (endTouched && !endVal) toast.error("End time wasn't set — pick AM or PM before leaving the field");
-                setEndTouched(false);
-                void saveVisitTime("end_time", endVal);
-              }}
-              className="w-[92px] rounded border border-brand-400 bg-transparent px-1 py-0.5 text-xs text-slate-600 focus:outline-none"
-            />
-          ) : (
-            <button
-              type="button"
-              ref={endButtonRef}
-              onClick={() => setEditingEnd(true)}
-              className="w-[92px] rounded border border-transparent px-1 py-0.5 text-left text-xs text-slate-600 hover:border-slate-200 hover:bg-slate-50"
-            >
-              {endVal ? formatTimeShort(endVal) : <span className="text-slate-300 italic">—</span>}
-            </button>
-          )}
+          <div className="flex flex-col gap-0.5">
+            <div className="flex items-center gap-0.5">
+              {endHasMultipleTimes ? (
+                <button
+                  type="button"
+                  onClick={() => onEditTimes(visit)}
+                  title="Crew members have different clock-out times — open Edit Job Times"
+                  className="w-[92px] rounded border border-transparent px-1 py-0.5 text-left text-[11px] italic text-amber-600 hover:border-slate-200 hover:bg-slate-50"
+                >
+                  Multiple times
+                </button>
+              ) : editingEnd ? (
+                <input
+                  type="time"
+                  autoFocus
+                  value={endVal}
+                  onChange={(e) => setEndVal(e.target.value)}
+                  onKeyDown={(e) => { if (/^[0-9apAP]$/.test(e.key)) setEndTouched(true); }}
+                  onBlur={() => {
+                    setEditingEnd(false);
+                    if (endTouched && !endVal) toast.error("End time wasn't set — pick AM or PM before leaving the field");
+                    setEndTouched(false);
+                    void saveVisitTime("end_time", endVal);
+                  }}
+                  className="w-[92px] rounded border border-brand-400 bg-transparent px-1 py-0.5 text-xs text-slate-600 focus:outline-none"
+                />
+              ) : (
+                <button
+                  type="button"
+                  ref={endButtonRef}
+                  onClick={() => setEditingEnd(true)}
+                  className="w-[92px] rounded border border-transparent px-1 py-0.5 text-left text-xs text-slate-600 hover:border-slate-200 hover:bg-slate-50"
+                >
+                  {endVal ? formatTimeShort(endVal) : <span className="text-slate-300 italic">—</span>}
+                </button>
+              )}
+              {/* Only way to correct per-crew-member times, or to split a single
+                  Start/End pair apart once the crew's times actually diverge —
+                  relocated here (next to Start/End, where the times it edits
+                  actually live) instead of the far-right Notes/icons column. */}
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); onEditTimes(visit); }}
+                title="Edit job times"
+                className="shrink-0 text-slate-300 hover:text-brand-600 transition-colors"
+              >
+                <Clock className="h-3 w-3" />
+              </button>
+            </div>
+            {/* Same real-punch-vs-displayed-End divergence check as Start. */}
+            {endPunchDiffers && (
+              <span
+                className="text-[9px] leading-none text-amber-500"
+                title={`Crew punched out at ${formatTimeShort(endClockTime)} — different from what's shown above`}
+              >
+                ⏱ {formatTimeShort(endClockTime)}
+              </span>
+            )}
+          </div>
         </td>
       )}
 
@@ -1833,20 +2034,13 @@ function VisitRow({
         </td>
       )}
 
-      {/* Actual */}
+      {/* Actual — used to also show a small "Clocked in: HH:MM–HH:MM" caption
+          here, but that's just clockedInAt/clockedOutAt, which (per
+          saveVisitTime) always equals whatever Start/End show — showing it
+          twice was the confusing part, so it's gone from here entirely. */}
       {isVisible("actual") && (
         <td className="px-2 py-2 text-right text-slate-500">
-          <div className="flex flex-col items-end gap-0.5">
-            {actualHours != null ? actualHours.toFixed(2) : "—"}
-            {visit.clockedInAt && (
-              <span className="text-[10px] text-slate-400" title={`Clocked in: ${visit.clockedInAt}`}>
-                ⏱ {new Date(visit.clockedInAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                {visit.clockedOutAt && (
-                  <> – {new Date(visit.clockedOutAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</>
-                )}
-              </span>
-            )}
-          </div>
+          {actualHours != null ? actualHours.toFixed(2) : "—"}
         </td>
       )}
 
@@ -1930,13 +2124,6 @@ function VisitRow({
                   <MessageSquareText className="h-3 w-3 text-blue-400" />
                 </span>
               )}
-              <button
-                onClick={(e) => { e.stopPropagation(); onEditTimes(visit); }}
-                title="Edit job times"
-                className="shrink-0 text-slate-300 hover:text-brand-600 transition-colors"
-              >
-                <Clock className="h-3 w-3" />
-              </button>
             </div>
           </td>
         );
@@ -2070,6 +2257,18 @@ export function DispatchBoard() {
   const { data: visits, isLoading, refetch } = useVisitsForDate(selectedDate, effectiveEnd);
   const { data: crews }             = useCRMCrews();
   const { data: allServices }       = useCRMServices();
+  // Batched by date, not per-row — every VisitRow needs its own visit's member
+  // times to detect per-member time divergence, and firing one query per
+  // visible row would be its own N+1 problem.
+  const { data: allMemberTimes = [] } = useCrewMemberTimesForDate(selectedDate, effectiveEnd);
+  const memberTimesByVisitId = useMemo(() => {
+    const m = new Map<string, CrewMemberTime[]>();
+    for (const t of allMemberTimes) {
+      const arr = m.get(t.visitId);
+      if (arr) arr.push(t); else m.set(t.visitId, [t]);
+    }
+    return m;
+  }, [allMemberTimes]);
   const qc = useQueryClient();
   const createVisit = useCreateVisit();
   const { matches: nearbyMatches, loading: nearbyLoading, error: nearbyError, findNearby } = useNearbyWaitingListJobs(3);
@@ -3003,6 +3202,7 @@ export function DispatchBoard() {
                   serviceCodeById={serviceCodeById}
                   crewCodeById={crewCodeById}
                   manualRouteMode={manualRouteMode}
+                  memberTimes={memberTimesByVisitId.get(visit.id) ?? EMPTY_MEMBER_TIMES}
                 />
               ))
             )}
@@ -3021,6 +3221,7 @@ export function DispatchBoard() {
           onOpenChange={(o) => { if (!o) setDetailVisitId(null); }}
           crews={crews ?? []}
           onEditTimes={(v) => setEditTimesVisitId(v.id)}
+          memberTimes={memberTimesByVisitId.get(detailVisit.id) ?? EMPTY_MEMBER_TIMES}
         />
       )}
 
