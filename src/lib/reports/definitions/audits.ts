@@ -212,7 +212,7 @@ export const AUDIT_REPORTS: PrebuiltReportDef[] = [
       filters: [
         ...dateRangeFilters("invoice_date", params),
         ...eqFilter("sales_rep", params.sales_rep),
-        { column: "status", op: "in", value: ["sent", "viewed", "partial", "paid", "overdue"] },
+        { column: "status", op: "in", value: ["printed", "sent", "viewed", "partial", "paid", "overdue"] },
       ],
       groupBy: [],
       aggregates: [],

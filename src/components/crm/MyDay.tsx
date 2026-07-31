@@ -25,6 +25,7 @@ const STAGE_COLOR: Record<EstimateStage, string> = {
 
 const INVOICE_STATUS_COLOR: Record<InvoiceStatus, string> = {
   draft:   "bg-slate-100 text-slate-600",
+  printed: "bg-indigo-100 text-indigo-700",
   sent:    "bg-blue-100 text-blue-700",
   viewed:  "bg-purple-100 text-purple-700",
   partial: "bg-yellow-100 text-yellow-700",

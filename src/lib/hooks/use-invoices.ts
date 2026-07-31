@@ -48,6 +48,7 @@ function mapPayment(row: any): CRMPayment {
     memo: row.memo ?? null,
     notes: row.notes,
     isPrepayment: row.is_prepayment ?? false,
+    isCredit: row.is_credit ?? false,
     deletedAt: row.deleted_at ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -100,6 +101,7 @@ export function mapInvoice(row: any): CRMInvoice {
     clientDefaultTerms: row.clients?.default_terms ?? "due_on_receipt",
     clientDefaultPaymentMethod: row.clients?.default_payment_method ?? null,
     salesRepName: row.profiles?.name ?? null,
+    clientInvoiceDelivery: row.clients?.invoice_delivery ?? "email",
     lineItems: (row.crm_invoice_line_items ?? []).map(mapLineItem),
     payments: (row.crm_payments ?? []).map(mapPayment),
   };
@@ -115,7 +117,7 @@ export function useInvoices(clientId?: string) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let q = (supabase as any)
         .from("crm_invoices")
-        .select("*, clients(display_name, billing_address, billing_city, billing_state, billing_zip), profiles!crm_invoices_sales_rep_id_fkey(name), crm_invoice_line_items(id, name, description, total_cents, is_taxable)")
+        .select("*, clients(display_name, billing_address, billing_city, billing_state, billing_zip, invoice_delivery), profiles!crm_invoices_sales_rep_id_fkey(name), crm_invoice_line_items(id, name, description, total_cents, is_taxable)")
         .is("deleted_at", null)
         .order("invoice_date", { ascending: false });
       if (clientId) q = q.eq("client_id", clientId);
@@ -486,14 +488,15 @@ export function useUpdateInvoiceHeader() {
 async function applyPaymentToInvoice(supabase: any, invoiceId: string, deltaCents: number) {
   const { data: inv, error: invErr } = await supabase
     .from("crm_invoices")
-    .select("total_cents, amount_paid_cents")
+    .select("total_cents, amount_paid_cents, status")
     .eq("id", invoiceId)
     .single();
   if (invErr) throw invErr;
 
   const newPaid = Math.max(0, inv.amount_paid_cents + deltaCents);
   const newBalance = Math.max(0, inv.total_cents - newPaid);
-  const newStatus = newBalance <= 0 ? "paid" : newPaid > 0 ? "partial" : "sent";
+  const openStatus = inv.status === "printed" ? "printed" : "sent";
+  const newStatus = newBalance <= 0 ? "paid" : newPaid > 0 ? "partial" : openStatus;
 
   const { error: updErr } = await supabase
     .from("crm_invoices")
@@ -513,6 +516,7 @@ export function useRecordPayment() {
       reference,
       memo,
       isPrepayment,
+      isCredit,
       allocations,
     }: {
       clientId: string;
@@ -522,6 +526,7 @@ export function useRecordPayment() {
       reference?: string;
       memo?: string;
       isPrepayment?: boolean;
+      isCredit?: boolean;
       allocations?: { invoiceId: string; amountCents: number }[];
     }) => {
       const supabase = createClient();
@@ -541,6 +546,7 @@ export function useRecordPayment() {
         reference: reference ?? null,
         memo: memo ?? null,
         is_prepayment: isPrepayment ?? false,
+        is_credit: isCredit ?? false,
       }).select("id").single();
       if (pmtErr) throw pmtErr;
 
@@ -568,11 +574,13 @@ export function useRecordPayment() {
 
       const refLabel = reference ? ` #${reference}` : "";
       const dateLabel = paymentDate ? ` on ${paymentDate}` : "";
-      const label = isPrepayment
-        ? `Prepayment recorded: ${method}${refLabel}${dateLabel}`
-        : activeAllocations.length > 0
-          ? `Payment received: ${method}${refLabel}${dateLabel}`
-          : `Payment recorded: ${method}${refLabel}${dateLabel}`;
+      const label = isCredit
+        ? `Account credit issued${memo ? `: ${memo}` : ""}${dateLabel}`
+        : isPrepayment
+          ? `Prepayment recorded: ${method}${refLabel}${dateLabel}`
+          : activeAllocations.length > 0
+            ? `Payment received: ${method}${refLabel}${dateLabel}`
+            : `Payment recorded: ${method}${refLabel}${dateLabel}`;
       // ref_id/ref_table point at the payment itself (not the invoice) so
       // clicking this activity entry can open the payment's own detail/edit
       // screen — matches how refunds already reference crm_payments.
@@ -963,6 +971,7 @@ function mapPaymentFull(row: any): CRMPayment {
     memo: row.memo ?? null,
     notes: row.notes,
     isPrepayment: row.is_prepayment ?? false,
+    isCredit: row.is_credit ?? false,
     deletedAt: row.deleted_at ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,

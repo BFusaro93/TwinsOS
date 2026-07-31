@@ -82,14 +82,15 @@ export async function POST(request: Request) {
   try {
     const { data: invoice, error: invoiceErr } = await supabase
       .from("crm_invoices")
-      .select("total_cents, amount_paid_cents")
+      .select("total_cents, amount_paid_cents, status")
       .eq("id", invoiceId)
       .single();
     if (invoiceErr) throw invoiceErr;
 
     const newPaid = Math.max(0, invoice.amount_paid_cents + balanceCents);
     const newBalance = Math.max(0, invoice.total_cents - newPaid);
-    const newStatus = newBalance <= 0 ? "paid" : newPaid > 0 ? "partial" : "sent";
+    const openStatus = invoice.status === "printed" ? "printed" : "sent";
+    const newStatus = newBalance <= 0 ? "paid" : newPaid > 0 ? "partial" : openStatus;
 
     const { error: updateErr } = await supabase
       .from("crm_invoices")

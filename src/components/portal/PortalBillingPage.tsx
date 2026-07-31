@@ -26,6 +26,7 @@ interface Invoice {
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
   draft:   { label: "Draft",    color: "bg-slate-100 text-slate-500 border-slate-200",     icon: <Clock className="h-3.5 w-3.5" /> },
+  printed: { label: "Open",     color: "bg-blue-50 text-blue-700 border-blue-200",          icon: <Clock className="h-3.5 w-3.5" /> },
   sent:    { label: "Open",     color: "bg-blue-50 text-blue-700 border-blue-200",          icon: <Clock className="h-3.5 w-3.5" /> },
   partial: { label: "Partial",  color: "bg-yellow-50 text-yellow-700 border-yellow-200",    icon: <AlertCircle className="h-3.5 w-3.5" /> },
   overdue: { label: "Overdue",  color: "bg-red-50 text-red-600 border-red-200",             icon: <AlertCircle className="h-3.5 w-3.5" /> },
@@ -36,8 +37,8 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; icon: React.
 export default function PortalBillingPage({ invoices }: { invoices: Invoice[] }) {
   const router = useRouter();
   const [payingInvoiceId, setPayingInvoiceId] = useState<string | null>(null);
-  const open = invoices.filter((i) => ["sent", "partial", "overdue"].includes(i.status));
-  const closed = invoices.filter((i) => !["sent", "partial", "overdue"].includes(i.status));
+  const open = invoices.filter((i) => ["printed", "sent", "partial", "overdue"].includes(i.status));
+  const closed = invoices.filter((i) => !["printed", "sent", "partial", "overdue"].includes(i.status));
   const totalBalance = open.reduce((sum, i) => sum + i.balance_cents, 0);
   const payingInvoice = invoices.find((i) => i.id === payingInvoiceId) ?? null;
 
@@ -144,7 +145,7 @@ export default function PortalBillingPage({ invoices }: { invoices: Invoice[] })
 
 function InvoiceRow({ invoice: inv, onPay }: { invoice: Invoice; onPay?: () => void }) {
   const cfg = STATUS_CONFIG[inv.status] ?? STATUS_CONFIG.sent;
-  const pastDue = ["sent", "partial"].includes(inv.status) && new Date(inv.due_date) < new Date();
+  const pastDue = ["printed", "sent", "partial"].includes(inv.status) && new Date(inv.due_date) < new Date();
   const displayCfg = pastDue ? STATUS_CONFIG.overdue : cfg;
   const isPaid = inv.status === "paid";
 

@@ -41,6 +41,7 @@ const INVOICE_COLUMNS: ColumnDef[] = [
 
 const STATUS_COLOR: Record<InvoiceStatus, string> = {
   draft:   "bg-slate-100 text-slate-600",
+  printed: "bg-indigo-100 text-indigo-700",
   sent:    "bg-blue-100 text-blue-700",
   viewed:  "bg-purple-100 text-purple-700",
   partial: "bg-yellow-100 text-yellow-700",
@@ -81,6 +82,7 @@ const FILTER_BUTTONS: { key: ActiveFilterKey; label: string }[] = [
 
 type QuickFilter =
   | "all"
+  | "uninvoiced"
   | "open"
   | "past_due"
   | "to_email"
@@ -89,25 +91,42 @@ type QuickFilter =
   | "void";
 
 const QUICK_FILTERS: { key: QuickFilter; label: string }[] = [
-  { key: "all",      label: "All Invoices" },
-  { key: "open",     label: "Open" },
-  { key: "past_due", label: "Past Due" },
-  { key: "to_email", label: "To Email" },
-  { key: "to_print", label: "To Print" },
-  { key: "paid",     label: "Paid" },
-  { key: "void",     label: "Void" },
+  { key: "all",        label: "All Invoices" },
+  { key: "uninvoiced", label: "Uninvoiced" },
+  { key: "open",       label: "Open" },
+  { key: "past_due",   label: "Past Due" },
+  { key: "to_email",   label: "To Email" },
+  { key: "to_print",   label: "To Print" },
+  { key: "paid",       label: "Paid" },
+  { key: "void",       label: "Void" },
 ];
 
+// A client's invoice_delivery preference ("email" | "print" | "both") gates which
+// queue an invoice belongs to — a print-only client's invoices never clutter the
+// email queue and vice versa. "both" clients appear in whichever queue still
+// hasn't happened yet for that delivery leg.
+function needsPrint(i: CRMInvoice) {
+  return (i.clientInvoiceDelivery ?? "email") !== "email" && i.status === "draft";
+}
+function needsEmail(i: CRMInvoice) {
+  return (i.clientInvoiceDelivery ?? "email") !== "print" && (i.status === "draft" || i.status === "printed");
+}
+
+// Draft invoices are "uninvoiced" — an SA-style holding area for a client's
+// weekly/monthly-billed work in progress, not a real invoice yet. They never
+// show in the normal invoice views (All/Open/etc.), only in their own tab,
+// until finalized (moved to sent/printed) via the To Email/To Print queues.
 function applyQuickFilter(invoices: CRMInvoice[], filter: QuickFilter): CRMInvoice[] {
   const today = new Date();
   switch (filter) {
-    case "open":     return invoices.filter((i) => i.balanceCents > 0 && i.status !== "void");
-    case "past_due": return invoices.filter((i) => isOverdue(i));
-    case "to_email": return invoices.filter((i) => i.status === "draft" || i.status === "sent");
-    case "to_print": return invoices.filter((i) => i.status === "draft");
+    case "uninvoiced": return invoices.filter((i) => i.status === "draft");
+    case "open":     return invoices.filter((i) => i.status !== "draft" && i.balanceCents > 0 && i.status !== "void");
+    case "past_due": return invoices.filter((i) => i.status !== "draft" && isOverdue(i));
+    case "to_email": return invoices.filter(needsEmail);
+    case "to_print": return invoices.filter(needsPrint);
     case "paid":     return invoices.filter((i) => i.status === "paid");
     case "void":     return invoices.filter((i) => i.status === "void");
-    default:         return invoices;
+    default:         return invoices.filter((i) => i.status !== "draft");
   }
   void today;
 }
@@ -121,17 +140,24 @@ const INVOICE_TEMPLATE_COLUMNS = [
 ];
 
 export function InvoicesList({ clientId }: Props) {
-  const { data: invoices, isLoading, refetch: refetchInvoices } = useInvoices(clientId);
+  const searchParams = useSearchParams();
+  // Lets the standalone /crm/accounting/invoices page be deep-linked scoped to
+  // one client (e.g. clicking "Uninvoiced" on that client's Balance card) —
+  // an embedded usage that already passes clientId as a prop takes precedence.
+  const effectiveClientId = clientId ?? (searchParams.get("clientId") || undefined);
+  const { data: invoices, isLoading, refetch: refetchInvoices } = useInvoices(effectiveClientId);
   const { mutateAsync: updateStatus } = useUpdateInvoiceStatus();
   const { mutateAsync: bulkImportInvoices } = useBulkImportInvoices();
   const [newSheetOpen, setNewSheetOpen] = useState(false);
   const [openInvoiceId, setOpenInvoiceId] = useState<string | null>(null);
-  const searchParams = useSearchParams();
   useEffect(() => {
     const id = searchParams.get("open");
     if (id) setOpenInvoiceId(id);
   }, [searchParams]);
-  const [quickFilter, setQuickFilter] = useState<QuickFilter>("all");
+  const [quickFilter, setQuickFilter] = useState<QuickFilter>(() => {
+    const f = searchParams.get("filter");
+    return (QUICK_FILTERS.some((q) => q.key === f) ? f : "all") as QuickFilter;
+  });
   const [search, setSearch] = useState("");
   const [activeFilterKey, setActiveFilterKey] = useState<ActiveFilterKey | null>(null);
   const [filterValue, setFilterValue] = useState("");
@@ -145,15 +171,17 @@ export function InvoicesList({ clientId }: Props) {
 
   const allInvoices = invoices ?? [];
 
-  // Badge counts for filter tabs
+  // Badge counts for filter tabs — reuse applyQuickFilter so a tab's count
+  // always matches what clicking it actually shows.
   const counts = useMemo(() => ({
-    all:      allInvoices.length,
-    open:     allInvoices.filter((i) => i.balanceCents > 0 && i.status !== "void").length,
-    past_due: allInvoices.filter(isOverdue).length,
-    to_email: allInvoices.filter((i) => i.status === "draft" || i.status === "sent").length,
-    to_print: allInvoices.filter((i) => i.status === "draft").length,
-    paid:     allInvoices.filter((i) => i.status === "paid").length,
-    void:     allInvoices.filter((i) => i.status === "void").length,
+    all:        applyQuickFilter(allInvoices, "all").length,
+    uninvoiced: applyQuickFilter(allInvoices, "uninvoiced").length,
+    open:       applyQuickFilter(allInvoices, "open").length,
+    past_due:   applyQuickFilter(allInvoices, "past_due").length,
+    to_email:   applyQuickFilter(allInvoices, "to_email").length,
+    to_print:   applyQuickFilter(allInvoices, "to_print").length,
+    paid:       applyQuickFilter(allInvoices, "paid").length,
+    void:       applyQuickFilter(allInvoices, "void").length,
   }), [allInvoices]);
 
   const filtered = useMemo(() => {
@@ -251,7 +279,7 @@ export function InvoicesList({ clientId }: Props) {
     });
   }
 
-  const visibleColumns = clientId
+  const visibleColumns = effectiveClientId
     ? INVOICE_COLUMNS.filter((c) => c.key !== "client" && visibleKeys.includes(c.key))
     : INVOICE_COLUMNS.filter((c) => visibleKeys.includes(c.key));
   const colSpan = visibleColumns.length + 2; // +checkbox +actions
@@ -260,7 +288,7 @@ export function InvoicesList({ clientId }: Props) {
     <div className="flex h-full flex-col gap-4">
 
       {/* ── Page header ── */}
-      {!clientId && (
+      {!effectiveClientId && (
         <PageHeader
           title="Invoices"
           description={!isLoading ? `${allInvoices.length} invoices` : undefined}
@@ -341,7 +369,7 @@ export function InvoicesList({ clientId }: Props) {
             </>
           )}
         </div>
-        {clientId && (
+        {effectiveClientId && (
           <div className="ml-auto">
             <PermissionGate permission="acct_add_modify_invoices">
               <Button size="sm" className="h-7 text-xs" onClick={() => setNewSheetOpen(true)}>
@@ -465,7 +493,7 @@ export function InvoicesList({ clientId }: Props) {
         </div>
 
         <ColumnChooser
-          columns={clientId ? INVOICE_COLUMNS.filter((c) => c.key !== "client") : INVOICE_COLUMNS}
+          columns={effectiveClientId ? INVOICE_COLUMNS.filter((c) => c.key !== "client") : INVOICE_COLUMNS}
           visibleKeys={visibleKeys}
           onVisibleKeysChange={setVisibleKeys}
         />
@@ -616,7 +644,7 @@ export function InvoicesList({ clientId }: Props) {
       <NewInvoiceSheet
         open={newSheetOpen}
         onClose={() => setNewSheetOpen(false)}
-        defaultClientId={clientId}
+        defaultClientId={effectiveClientId}
       />
       <InvoiceDetailSheet
         invoiceId={openInvoiceId}

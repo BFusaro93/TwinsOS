@@ -60,6 +60,7 @@ import { ChargeCardDialog } from "@/components/crm/invoices/ChargeCardDialog";
 
 const STATUS_COLOR: Record<InvoiceStatus, string> = {
   draft:   "bg-slate-100 text-slate-600",
+  printed: "bg-indigo-100 text-indigo-700",
   sent:    "bg-blue-100 text-blue-700",
   viewed:  "bg-purple-100 text-purple-700",
   partial: "bg-yellow-100 text-yellow-700",
@@ -68,7 +69,7 @@ const STATUS_COLOR: Record<InvoiceStatus, string> = {
   void:    "bg-slate-200 text-slate-500",
 };
 
-const STATUSES: InvoiceStatus[] = ["draft","sent","viewed","partial","paid","overdue","void"];
+const STATUSES: InvoiceStatus[] = ["draft","printed","sent","viewed","partial","paid","overdue","void"];
 
 export const TERMS_OPTIONS = [
   { value: "due_on_receipt", label: "Due on Receipt", days: 0 },
@@ -663,8 +664,15 @@ export function InvoiceDetail({
   function handlePrint() {
     const win = window.open(`/api/crm/invoices/${invoice!.id}/pdf`, "_blank");
     if (win) win.addEventListener("load", () => win.print(), { once: true });
-    // Lock after print
-    setLock({ id: invoice!.id, locked: true })
+    // A printed invoice has gone out to the client on paper even though no
+    // email was sent — move it out of "draft" the same way emailing does, so
+    // auto-invoicing (visits/[visitId]/complete) treats the period as closed
+    // and starts a new draft instead of appending more visits to this one.
+    const wasDraft = invoice!.status === "draft";
+    Promise.all([
+      setLock({ id: invoice!.id, locked: true }),
+      wasDraft ? updateStatus({ id: invoice!.id, status: "printed" }) : Promise.resolve(),
+    ])
       .then(() => toast.info("Invoice locked after print"))
       .catch(() => {});
   }

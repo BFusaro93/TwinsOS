@@ -132,8 +132,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Failed to send email" }, { status: 500 });
   }
 
-  // Update invoice status to "sent" if it was draft
-  if (inv.status === "draft") {
+  // Update invoice status to "sent" if it hasn't been emailed yet. "printed" is
+  // included so a "both" delivery-method client's invoice — printed first, then
+  // emailed — correctly progresses instead of staying stuck at "printed" forever.
+  if (inv.status === "draft" || inv.status === "printed") {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await (supabase as any).from("crm_invoices").update({ status: "sent" }).eq("id", invoiceId);
   }

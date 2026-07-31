@@ -218,12 +218,16 @@ export async function POST(
 
         let existingInvoice: { id: string; subtotal_cents: number; total_cents: number; balance_cents: number } | null = null;
         if (period && j.client_id) {
+          // A locked invoice (printed/manually locked for review) must not be
+          // silently appended to — fall through to creating a fresh draft for
+          // this period instead, same as if no open invoice existed yet.
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const { data: openInvoice } = await (supabase as any)
             .from("crm_invoices")
             .select("id, subtotal_cents, total_cents, balance_cents")
             .eq("client_id", j.client_id)
             .eq("status", "draft")
+            .eq("locked", false)
             .is("deleted_at", null)
             .gte("invoice_date", period.start)
             .lte("invoice_date", period.end)

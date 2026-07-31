@@ -2,6 +2,7 @@ import type { DiscountType } from "./crm-discounts";
 
 export type InvoiceStatus =
   | 'draft'
+  | 'printed'
   | 'sent'
   | 'viewed'
   | 'partial'
@@ -114,6 +115,7 @@ export interface CRMInvoice {
   clientDefaultTerms?: string;
   clientDefaultPaymentMethod?: string | null;
   salesRepName?: string | null;
+  clientInvoiceDelivery?: 'email' | 'print' | 'both';
   lineItems?: InvoiceLineItem[];
   payments?: CRMPayment[];
 }
@@ -134,6 +136,7 @@ export interface CRMPayment {
   memo: string | null;
   notes: string | null;
   isPrepayment: boolean;
+  isCredit: boolean;
   deletedAt: string | null;
   createdAt: string;
   updatedAt?: string;

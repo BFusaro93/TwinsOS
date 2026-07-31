@@ -31,7 +31,7 @@ export default async function PortalHomePage() {
       .select("id, invoice_number, total_cents, balance_cents, due_date, status")
       .eq("client_id", ctx.clientId)
       .eq("org_id", ctx.orgId)
-      .in("status", ["sent", "partial", "overdue"])
+      .in("status", ["printed", "sent", "partial", "overdue"])
       .is("deleted_at", null)
       .order("due_date", { ascending: true })
       .limit(5),

@@ -838,12 +838,15 @@ export function useUpdateVisit() {
       if (error) throw error;
 
       // Cascade completion to parent job via server route
+      let clientId: string | undefined;
       if (updates.status === 'completed' && id) {
         const res = await fetch(`/api/crm/visits/${id}/complete`, { method: 'POST' });
         if (!res.ok) {
           const body = await res.json() as { error?: string };
           throw new Error(body.error ?? 'Failed to complete job');
         }
+        const body = await res.json() as { clientId?: string };
+        clientId = body.clientId;
       }
 
       // Cascade crew assignment to parent job so it shows everywhere
@@ -851,10 +854,19 @@ export function useUpdateVisit() {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         await (supabase as any).from('crm_jobs').update({ crew_id: updates.crew_id }).eq('id', jobId);
       }
+
+      return { clientId };
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ['crm-job-visits'] });
       qc.invalidateQueries({ queryKey: ['crm-jobs'] });
+      const clientId = (data as { clientId?: string } | undefined)?.clientId;
+      if (clientId) {
+        qc.invalidateQueries({ queryKey: ['clients', clientId, 'activity'] });
+        qc.invalidateQueries({ queryKey: ['clients', clientId] });
+        qc.invalidateQueries({ queryKey: ['crm-invoices'] });
+      }
+      qc.invalidateQueries({ queryKey: ['clients'] });
     },
   });
 }
