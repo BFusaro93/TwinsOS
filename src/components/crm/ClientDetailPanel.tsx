@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import {
   useClient,
   useClients,
@@ -150,9 +151,17 @@ function BalanceCard({ client }: { client: Client }) {
         <div className="space-y-2">
           <div className="flex justify-between text-xs">
             <span className="text-white/60">Uninvoiced</span>
-            <span className={uninvoiced > 0 ? "font-medium text-amber-300" : "text-white/40"}>
-              {uninvoiced > 0 ? formatCurrency(uninvoiced) : "$0.00"}
-            </span>
+            {uninvoiced > 0 ? (
+              <Link
+                href={`/crm/accounting/invoices?clientId=${client.id}&filter=uninvoiced`}
+                className="font-medium text-amber-300 hover:underline"
+                title="View this client's uninvoiced (draft) invoices"
+              >
+                {formatCurrency(uninvoiced)}
+              </Link>
+            ) : (
+              <span className="text-white/40">$0.00</span>
+            )}
           </div>
           <div className="flex justify-between text-xs">
             <span className="text-white/60">Credits</span>

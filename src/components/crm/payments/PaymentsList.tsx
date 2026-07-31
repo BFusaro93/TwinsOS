@@ -58,6 +58,11 @@ export const PAYMENT_METHODS = [
   "Other",
 ] as const;
 
+// Not a real payment method the client used — set automatically when issuing
+// an account credit (see AddPaymentDialog's "credit" mode) since crm_payments.method
+// is required but a credit isn't received via check/card/etc.
+const ACCOUNT_CREDIT_METHOD = "Account Credit";
+
 // ── add payment dialog ────────────────────────────────────────────────────────
 
 interface InvoiceAllocation {
@@ -77,13 +82,20 @@ export function AddPaymentDialog({
   onOpenChange,
   defaultClientId,
   payment,
+  mode = "payment",
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   defaultClientId?: string;
   payment?: CRMPayment | null;
+  /** "credit" opens this dialog purpose-built for issuing an account credit —
+   *  no payment method/check# (a credit isn't received via either), forced
+   *  is_credit, distinct copy. Editing an existing credit auto-detects this
+   *  from payment.isCredit regardless of what's passed here. */
+  mode?: "payment" | "credit";
 }) {
   const isEdit = !!payment;
+  const isCreditMode = mode === "credit" || (isEdit && !!payment?.isCredit);
   const { data: clients } = useClients();
   const { mutateAsync: record, isPending: isRecording } = useRecordPayment();
   const { mutateAsync: update, isPending: isUpdating } = useUpdatePayment();
@@ -98,7 +110,7 @@ export function AddPaymentDialog({
   const [paymentDate, setPaymentDate] = useState(payment?.paymentDate ?? todayLocal());
   const [amount, setAmount] = useState(payment ? (payment.amountCents / 100).toFixed(2) : "");
   const [checkNumber, setCheckNumber] = useState(payment?.reference ?? "");
-  const [method, setMethod] = useState<string>(payment?.method ?? "Check");
+  const [method, setMethod] = useState<string>(payment?.method ?? (mode === "credit" ? ACCOUNT_CREDIT_METHOD : "Check"));
   const [memo, setMemo] = useState(payment?.memo ?? "");
   const [isPrepayment, setIsPrepayment] = useState(payment?.isPrepayment ?? false);
   const [autoAllocate, setAutoAllocate] = useState(false);
@@ -232,7 +244,7 @@ export function AddPaymentDialog({
     setPaymentDate(todayLocal());
     setAmount("");
     setCheckNumber("");
-    setMethod("Check");
+    setMethod(mode === "credit" ? ACCOUNT_CREDIT_METHOD : "Check");
     setMemo("");
     setIsPrepayment(false);
     setAutoAllocate(false);
@@ -242,6 +254,10 @@ export function AddPaymentDialog({
   async function submit(andNew: boolean) {
     if (!clientId || !amount) {
       toast.error("Client and amount are required");
+      return;
+    }
+    if (isCreditMode && !memo.trim()) {
+      toast.error("A reason is required for an account credit");
       return;
     }
     const activeAllocations = allocations
@@ -259,7 +275,7 @@ export function AddPaymentDialog({
           memo: memo || undefined,
           allocations: activeAllocations,
         });
-        toast.success("Payment updated");
+        toast.success(isCreditMode ? "Credit updated" : "Payment updated");
         onOpenChange(false);
       } else {
         await record({
@@ -270,9 +286,10 @@ export function AddPaymentDialog({
           reference: checkNumber || undefined,
           memo: memo || undefined,
           isPrepayment,
+          isCredit: isCreditMode,
           allocations: activeAllocations,
         });
-        toast.success("Payment recorded");
+        toast.success(isCreditMode ? "Credit issued" : "Payment recorded");
         if (andNew) {
           resetForm();
         } else {
@@ -280,7 +297,9 @@ export function AddPaymentDialog({
           resetForm();
         }
       }
-    } catch { toast.error(isEdit ? "Failed to update payment" : "Failed to record payment"); }
+    } catch {
+      toast.error(isEdit ? "Failed to update" : isCreditMode ? "Failed to issue credit" : "Failed to record payment");
+    }
   }
 
   const selectedClient = (clients ?? []).find((c) => c.id === clientId);
@@ -289,7 +308,9 @@ export function AddPaymentDialog({
     <Dialog open={open} onOpenChange={(o) => { if (!o) resetForm(); onOpenChange(o); }}>
       <DialogContent className="max-w-3xl p-0 gap-0">
         <DialogHeader className="px-6 py-4 border-b">
-          <DialogTitle className="text-lg font-semibold">{isEdit ? "Edit Payment" : "Add Payment"}</DialogTitle>
+          <DialogTitle className="text-lg font-semibold">
+            {isCreditMode ? (isEdit ? "Edit Account Credit" : "Issue Account Credit") : (isEdit ? "Edit Payment" : "Add Payment")}
+          </DialogTitle>
         </DialogHeader>
 
         <div className="flex gap-0">
@@ -297,7 +318,7 @@ export function AddPaymentDialog({
           <div className="flex-1 p-6 space-y-4">
             {/* Payment Details section header */}
             <div className="rounded bg-[#4a4a4a] px-3 py-1.5 text-sm font-semibold text-white">
-              Payment Details
+              {isCreditMode ? "Credit Details" : "Payment Details"}
             </div>
 
             <div className="grid grid-cols-[120px_1fr] items-center gap-x-4 gap-y-3">
@@ -359,39 +380,48 @@ export function AddPaymentDialog({
                 </div>
               </div>
 
-              <Label className="text-right text-sm font-medium">Check #</Label>
-              <Input
-                className="h-8 w-40 text-sm"
-                value={checkNumber}
-                onChange={(e) => setCheckNumber(e.target.value)}
-                placeholder=""
-              />
+              {!isCreditMode && (
+                <>
+                  <Label className="text-right text-sm font-medium">Check #</Label>
+                  <Input
+                    className="h-8 w-40 text-sm"
+                    value={checkNumber}
+                    onChange={(e) => setCheckNumber(e.target.value)}
+                    placeholder=""
+                  />
 
-              <Label className="text-right text-sm font-medium">Payment Method</Label>
-              <Select value={method} onValueChange={setMethod}>
-                <SelectTrigger className="h-8 w-56 text-sm">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {PAYMENT_METHODS.map((m) => (
-                    <SelectItem key={m} value={m}>{m}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                  <Label className="text-right text-sm font-medium">Payment Method</Label>
+                  <Select value={method} onValueChange={setMethod}>
+                    <SelectTrigger className="h-8 w-56 text-sm">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {PAYMENT_METHODS.map((m) => (
+                        <SelectItem key={m} value={m}>{m}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </>
+              )}
 
-              <Label className="text-right text-sm font-medium">Memo</Label>
+              <Label className="text-right text-sm font-medium">{isCreditMode ? "Reason" : "Memo"}</Label>
               <Input
                 className="h-8 text-sm"
                 value={memo}
                 onChange={(e) => setMemo(e.target.value)}
+                placeholder={isCreditMode ? "e.g. Billing correction, goodwill credit…" : undefined}
               />
 
-              <Label htmlFor="prepayment-check" className="text-right text-sm font-medium cursor-pointer whitespace-nowrap">Is a pre-payment?</Label>
-              <Checkbox
-                id="prepayment-check"
-                checked={isPrepayment}
-                onCheckedChange={(c) => setIsPrepayment(!!c)}
-              />
+              {!isCreditMode && (
+                <>
+                  <Label htmlFor="prepayment-check" className="text-right text-sm font-medium cursor-pointer whitespace-nowrap">Is a pre-payment?</Label>
+                  <Checkbox
+                    id="prepayment-check"
+                    checked={isPrepayment}
+                    onCheckedChange={(c) => setIsPrepayment(!!c)}
+                  />
+                </>
+              )}
             </div>
           </div>
 
@@ -585,6 +615,7 @@ export function PaymentsList({ clientId }: Props) {
   const searchParams = useSearchParams();
   const [activeTab, setActiveTab] = useState<Tab>("last30");
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [creditDialogOpen, setCreditDialogOpen] = useState(false);
   const [editPayment, setEditPayment] = useState<CRMPayment | null>(null);
   const [refundPayment, setRefundPayment] = useState<CRMPayment | null>(null);
 
@@ -716,7 +747,10 @@ export function PaymentsList({ clientId }: Props) {
           )}
         </div>
         {clientId && (
-          <div className="ml-auto">
+          <div className="ml-auto flex items-center gap-1.5">
+            <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setCreditDialogOpen(true)}>
+              <Plus className="mr-1 h-3 w-3" /> Issue Credit
+            </Button>
             <Button size="sm" className="h-7 text-xs" onClick={() => setDialogOpen(true)}>
               <Plus className="mr-1 h-3 w-3" /> Record Payment
             </Button>
@@ -858,6 +892,13 @@ export function PaymentsList({ clientId }: Props) {
         open={dialogOpen}
         onOpenChange={setDialogOpen}
         defaultClientId={clientId}
+      />
+
+      <AddPaymentDialog
+        open={creditDialogOpen}
+        onOpenChange={setCreditDialogOpen}
+        defaultClientId={clientId}
+        mode="credit"
       />
 
       <AddPaymentDialog
