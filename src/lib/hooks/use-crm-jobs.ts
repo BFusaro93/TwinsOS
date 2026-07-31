@@ -2001,7 +2001,7 @@ export function useClientServiceHistory() {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (supabase as any).from("crm_job_visits").select("job_id, client_id, status, job_service_id").is("deleted_at", null),
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (supabase as any).from("crm_job_services").select("id, job_id, service_name").is("deleted_at", null),
+        (supabase as any).from("crm_job_services").select("id, job_id, service_name"),
       ]);
       if (visitsRes.error) throw visitsRes.error;
       if (servicesRes.error) throw servicesRes.error;
