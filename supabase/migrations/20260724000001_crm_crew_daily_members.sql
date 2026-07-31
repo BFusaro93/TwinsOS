@@ -14,10 +14,11 @@ create table if not exists crm_crew_daily_members (
 );
 
 alter table crm_crew_daily_members enable row level security;
+drop policy if exists "org members manage crew daily overrides" on crm_crew_daily_members;
 create policy "org members manage crew daily overrides"
   on crm_crew_daily_members for all
   using (org_id = (select org_id from profiles where id = auth.uid()))
   with check (org_id = (select org_id from profiles where id = auth.uid()));
 
-create index on crm_crew_daily_members (org_id, work_date);
-create index on crm_crew_daily_members (member_id);
+create index if not exists crm_crew_daily_members_org_id_work_date_idx on crm_crew_daily_members (org_id, work_date);
+create index if not exists crm_crew_daily_members_member_id_idx on crm_crew_daily_members (member_id);
