@@ -4264,7 +4264,7 @@ export type Database = {
           id?: string
           job_id: string
           notes?: string | null
-          org_id: string
+          org_id?: string
           product_id?: string | null
           product_name: string
           qty?: number

@@ -1406,7 +1406,7 @@ export function useCreateJobsFromEstimate() {
       scheduledDate: string | null;
       crewId: string | null;
       notesToCrew: string | null;
-      services: { serviceName: string; serviceId: string | null; qty: number; rateCents: number | null; totalCents: number }[];
+      services: { serviceName: string; serviceId: string | null; qty: number; rateCents: number | null; totalCents: number; budgetedHours?: number; budgetMethod?: string }[];
       materials?: { productItemId: string; productName: string; qty: number; unitCostCents: number | null }[];
     }) => {
       const supabase = createClient();
@@ -1451,7 +1451,8 @@ export function useCreateJobsFromEstimate() {
               rate_cents: s.rateCents,
               sort_order: i,
               included: true,
-              budgeted_hours: 0,
+              budgeted_hours: s.budgetedHours ?? 0,
+              budget_method: s.budgetMethod ?? 'manual',
               team_size: 1,
               days_count: 1,
             }))

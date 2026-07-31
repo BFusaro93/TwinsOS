@@ -679,15 +679,12 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                     </div>
                     <div className="flex flex-col gap-1">
                       <Label className="text-xs text-slate-500">Budgeted Hours</Label>
-                      <Input
-                        type="number"
-                        step="0.25"
-                        min="0"
-                        defaultValue={job.budgetedHours ?? ""}
-                        onChange={(e) => patch("budgeted_hours", e.target.value ? parseFloat(e.target.value) : null)}
-                        className="text-sm"
-                        placeholder="0.0"
-                      />
+                      <p className="text-sm text-slate-500 py-1.5">
+                        {job.budgetedHours != null ? `${job.budgetedHours}h` : "—"}
+                        <span className="text-[10px] text-slate-400 ml-1.5">
+                          (sum of service hours — edit per-service on the Services tab)
+                        </span>
+                      </p>
                     </div>
                     <div className="flex flex-col gap-1">
                       <Label className="text-xs text-slate-500">Crew</Label>
@@ -1844,7 +1841,10 @@ function VisitRow({
     : services.length > 0
       ? services.map((s) => s.serviceName).join(", ")
       : "—";
-  const visitBudgetedHours = linkedService?.budgetedHours ?? visit.budgetedHours ?? null;
+  // An explicit override on the visit itself (e.g. a dispatcher bumped this
+  // one occurrence up for site conditions) should win over the service's
+  // default — not the other way around.
+  const visitBudgetedHours = visit.budgetedHours ?? linkedService?.budgetedHours ?? null;
   const [editingNote, setEditingNote] = useState(false);
   const [noteVal, setNoteVal] = useState(visit.notesToCrew ?? "");
   const [editingInvoiceDesc, setEditingInvoiceDesc] = useState(false);

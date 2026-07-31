@@ -126,6 +126,30 @@ export function computeJobServiceBudgetedHours(
 }
 
 /**
+ * Budgeted hours to carry from an accepted estimate's line item into the new
+ * job's crm_job_services row (per-occurrence, matching how budgeted_hours is
+ * used everywhere else in the job/service/visit chain). `computeLineItem`
+ * already keeps `budgetedHours` correct on every line-item edit, so this is
+ * normally just a direct read — the production-rate recompute here is only a
+ * defensive fallback for a stale/zero stored value, not the primary path.
+ */
+export function budgetedHoursFromLineItem(
+  li: Pick<EstimateLineItem, "budgetedHours" | "budgetMethod" | "productionRateSqftPerHr" | "unitType" | "qty">
+): number {
+  if (li.budgetedHours > 0) return li.budgetedHours;
+  if (
+    li.budgetMethod === "production_rate" &&
+    li.productionRateSqftPerHr &&
+    li.productionRateSqftPerHr > 0 &&
+    li.unitType !== "hr" &&
+    li.qty > 0
+  ) {
+    return li.qty / li.productionRateSqftPerHr;
+  }
+  return 0;
+}
+
+/**
  * Maps a direct cost's cost_type to the matching org-level overhead bps
  * (crm_overhead_settings). 'labor' picks up both labor overhead and labor
  * burden. 'service' has no dedicated bucket in the settings table — treated

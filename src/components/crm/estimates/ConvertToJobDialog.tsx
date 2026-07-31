@@ -24,6 +24,7 @@ import { CalendarDays, Briefcase } from "lucide-react";
 import { toast } from "sonner";
 import { formatCurrency } from "@/lib/utils";
 import { useCreateJobsFromEstimate, useCRMCrews } from "@/lib/hooks/use-crm-jobs";
+import { budgetedHoursFromLineItem } from "@/lib/estimate-calc";
 import type { Estimate, EstimateLineItem, EstimateDirectCost } from "@/types/crm-estimates";
 
 const JOB_TYPES = [
@@ -110,11 +111,13 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
         crewId: crewId || null,
         notesToCrew: notesToCrew || null,
         services: selectedItems.map((li) => ({
-          serviceName: li.serviceName ?? "Service",
-          serviceId:   li.serviceId ?? null,
-          qty:         li.qty,
-          rateCents:   li.rateCents,
-          totalCents:  li.totalCents,
+          serviceName:   li.serviceName ?? "Service",
+          serviceId:     li.serviceId ?? null,
+          qty:           li.qty,
+          rateCents:     li.rateCents,
+          totalCents:    li.totalCents,
+          budgetedHours: budgetedHoursFromLineItem(li),
+          budgetMethod:  li.budgetMethod,
         })),
         materials: selectedMaterialItems.map((dc) => ({
           productItemId: dc.productItemId as string,
