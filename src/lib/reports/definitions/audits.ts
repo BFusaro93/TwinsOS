@@ -97,6 +97,36 @@ export const AUDIT_REPORTS: PrebuiltReportDef[] = [
     section: "audits",
     name: "Income Not Invoiced",
     description:
+      "Shows draft invoices — revenue already entered on a job but not yet finalized and sent to the client.",
+    filters: [dateRangeFilterDef("Invoice Date", "this_month")],
+    notes: [
+      "Draft invoices only. A row drops off once the invoice is finalized/sent (or the underlying client_uninvoiced_cents balance clears).",
+    ],
+    analysis: (params) => ({
+      dataset: "rpt_invoices",
+      columns: [
+        "invoice_number",
+        "invoice_date",
+        "client_name",
+        "description",
+        "service_address",
+        "total_cents",
+      ],
+      filters: [
+        ...dateRangeFilters("invoice_date", params),
+        { column: "status", op: "eq", value: "draft" },
+      ],
+      groupBy: [],
+      aggregates: [],
+      sortColumn: "invoice_date",
+      sortDir: "desc",
+    }),
+  },
+  {
+    key: "visits-client-balance-due",
+    section: "audits",
+    name: "Visits — Client Has Balance Due",
+    description:
       "Shows completed and in-progress visits for clients who still have an outstanding balance.",
     filters: [dateRangeFilterDef("Visit Date", "this_month")],
     run: async ({ supabase, params }) => {
