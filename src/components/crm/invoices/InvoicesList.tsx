@@ -590,14 +590,21 @@ export function InvoicesList({ clientId }: Props) {
                             )}
                           </td>
                         );
-                      case "status":
+                      case "status": {
+                        // A draft past its would-be due date hasn't actually been sent —
+                        // nobody's late on a bill they were never billed. Flag it red like
+                        // a real overdue invoice, but keep the "Draft" label so it isn't
+                        // confused with one that's actually been sent and is unpaid.
+                        const overdue = isOverdue(inv);
+                        const showOverdueLabel = overdue && inv.status !== "draft";
                         return (
                           <td key={col.key} className="px-4 py-3">
-                            <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-medium capitalize", STATUS_COLOR[isOverdue(inv) ? "overdue" : inv.status])}>
-                              {isOverdue(inv) ? "overdue" : inv.status}
+                            <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-medium capitalize", overdue ? STATUS_COLOR.overdue : STATUS_COLOR[inv.status])}>
+                              {showOverdueLabel ? "overdue" : inv.status}
                             </span>
                           </td>
                         );
+                      }
                       case "date":
                         return <td key={col.key} className="px-4 py-3 text-xs text-slate-500">{formatDate(inv.invoiceDate)}</td>;
                       case "due":
