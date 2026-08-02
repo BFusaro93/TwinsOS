@@ -31,6 +31,7 @@ export function NewInvoiceSheet({ open, onClose, defaultClientId }: Props) {
   const savedRef = useRef(false);
 
   const { data: clients } = useClients();
+  const invoiceableClients = (clients ?? []).filter((c) => c.status !== "lead");
   const { mutateAsync: createInvoice } = useCreateInvoice();
   const { mutateAsync: deleteInvoice } = useDeleteInvoice();
 
@@ -168,7 +169,7 @@ export function NewInvoiceSheet({ open, onClose, defaultClientId }: Props) {
                   <ClientCombobox
                     value=""
                     onValueChange={handleSelectClient}
-                    clients={clients ?? []}
+                    clients={invoiceableClients}
                     noneLabel="Search clients..."
                     disabled={creating}
                   />

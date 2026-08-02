@@ -677,6 +677,10 @@ export function ContractDialog({
       toast.error("Client and contract name are required");
       return;
     }
+    if (details.lineItems.length === 0) {
+      toast.error("At least one invoice line item is required");
+      return;
+    }
     const totalCents = Object.values(details.monthlyAmounts).reduce((s, v) => s + (v ?? 0), 0);
     try {
       if (isNew) {

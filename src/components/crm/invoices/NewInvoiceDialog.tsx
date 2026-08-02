@@ -45,6 +45,7 @@ interface Props {
 
 export function NewInvoiceDialog({ open, onOpenChange, defaultClientId, onCreated }: Props) {
   const { data: clients } = useClients();
+  const invoiceableClients = (clients ?? []).filter((c) => c.status !== "lead");
   const { data: employees } = useEmployees();
   const salesReps = (employees ?? []).filter((e) => e.isSalesRep && e.userId);
   const { mutateAsync: create, isPending } = useCreateInvoice();
@@ -90,7 +91,7 @@ export function NewInvoiceDialog({ open, onOpenChange, defaultClientId, onCreate
               <ClientCombobox
                 value={watch("clientId")}
                 onValueChange={(v) => setValue("clientId", v)}
-                clients={clients ?? []}
+                clients={invoiceableClients}
                 noneLabel="Select client..."
               />
               {errors.clientId && <p className="text-xs text-red-500">{errors.clientId.message}</p>}

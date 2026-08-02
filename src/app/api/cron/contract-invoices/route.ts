@@ -154,15 +154,34 @@ export async function GET(request: Request) {
     }
 
     // ── create a line item row on the invoice ─────────────────────────────
+    // org_id must be set explicitly: the column's default reads it off
+    // auth.uid() via my_org_id(), which is null under this route's
+    // service-role session, so omitting it here silently fails the insert
+    // (NOT NULL violation) and leaves the invoice with zero line items.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-await (sb as any).from("crm_invoice_line_items").insert({
+    const { error: liErr } = await (sb as any).from("crm_invoice_line_items").insert({
+      org_id: contract.org_id,
       invoice_id: invoice.id,
+      name: contract.title,
       description: contract.title,
       qty: 1,
       rate_cents: monthAmount,
       total_cents: monthAmount,
       sort_order: 1,
     });
+
+    if (liErr) {
+      console.error(`[contract-invoices] line item insert error for contract ${contract.id}:`, liErr);
+      results.push({ contractId: contract.id, status: "skipped", reason: `line item insert failed: ${liErr.message}` });
+      continue;
+    }
+
+    // ── assign the invoice number now that it's fully populated ────────────
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error: numErr } = await (sb as any).rpc("assign_invoice_number", { p_invoice_id: invoice.id });
+    if (numErr) {
+      console.error(`[contract-invoices] invoice number assignment error for contract ${contract.id}:`, numErr);
+    }
 
     // ── update last_billed_date ───────────────────────────────────────────
     await sb
