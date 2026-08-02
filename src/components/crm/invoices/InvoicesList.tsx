@@ -279,7 +279,12 @@ export function InvoicesList({ clientId }: Props) {
     });
   }
 
-  const visibleColumns = effectiveClientId
+  // Client column/page-header collapse only for a genuinely embedded usage
+  // (clientId passed as a real prop by a parent that already shows the
+  // client context) — NOT for the ?clientId= query-string deep link from a
+  // client's "Uninvoiced" balance, which should render exactly like the
+  // standalone Uninvoiced tab (same columns, same header).
+  const visibleColumns = clientId
     ? INVOICE_COLUMNS.filter((c) => c.key !== "client" && visibleKeys.includes(c.key))
     : INVOICE_COLUMNS.filter((c) => visibleKeys.includes(c.key));
   const colSpan = visibleColumns.length + 2; // +checkbox +actions
@@ -288,7 +293,7 @@ export function InvoicesList({ clientId }: Props) {
     <div className="flex h-full flex-col gap-4">
 
       {/* ── Page header ── */}
-      {!effectiveClientId && (
+      {!clientId && (
         <PageHeader
           title="Invoices"
           description={!isLoading ? `${allInvoices.length} invoices` : undefined}
@@ -369,7 +374,7 @@ export function InvoicesList({ clientId }: Props) {
             </>
           )}
         </div>
-        {effectiveClientId && (
+        {clientId && (
           <div className="ml-auto">
             <PermissionGate permission="acct_add_modify_invoices">
               <Button size="sm" className="h-7 text-xs" onClick={() => setNewSheetOpen(true)}>
@@ -493,7 +498,7 @@ export function InvoicesList({ clientId }: Props) {
         </div>
 
         <ColumnChooser
-          columns={effectiveClientId ? INVOICE_COLUMNS.filter((c) => c.key !== "client") : INVOICE_COLUMNS}
+          columns={clientId ? INVOICE_COLUMNS.filter((c) => c.key !== "client") : INVOICE_COLUMNS}
           visibleKeys={visibleKeys}
           onVisibleKeysChange={setVisibleKeys}
         />
@@ -588,7 +593,7 @@ export function InvoicesList({ clientId }: Props) {
                       case "status":
                         return (
                           <td key={col.key} className="px-4 py-3">
-                            <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-medium capitalize", STATUS_COLOR[inv.status])}>
+                            <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-medium capitalize", STATUS_COLOR[isOverdue(inv) ? "overdue" : inv.status])}>
                               {isOverdue(inv) ? "overdue" : inv.status}
                             </span>
                           </td>

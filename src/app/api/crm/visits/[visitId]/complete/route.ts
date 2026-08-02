@@ -316,24 +316,31 @@ export async function POST(
             // Auto-created invoices skip the manual "assign on save" flow, so
             // assign the number here or it stays null indefinitely.
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const { data: invoiceNumber } = await (supabase.rpc as any)(
+            const { data: invoiceNumber, error: assignErr } = await (supabase.rpc as any)(
               "assign_invoice_number",
               { p_invoice_id: (newInvoice as any).id }
             );
+            if (assignErr) console.error("[visits/complete] assign_invoice_number failed:", assignErr);
 
             // Sync the client's outstanding balance to include this new invoice
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             await (supabase.rpc as any)("sync_client_balance", { p_client_id: j.client_id });
 
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            await (supabase as any).from("client_activity").insert({
-              client_id: j.client_id,
-              activity_type: "invoice",
-              subject: `Invoice #${invoiceNumber}`,
-              amount_cents: subtotal,
-              ref_id: (newInvoice as any).id,
-              ref_table: "crm_invoices",
-            });
+            // Skip logging if the number assignment failed — a broken "Invoice
+            // #null" entry is worse than none; the invoice will still get a
+            // correct timeline entry whenever it's next saved manually (see
+            // useAssignInvoiceNumber).
+            if (invoiceNumber != null) {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              await (supabase as any).from("client_activity").insert({
+                client_id: j.client_id,
+                activity_type: "invoice",
+                subject: `Invoice #${invoiceNumber}`,
+                amount_cents: subtotal,
+                ref_id: (newInvoice as any).id,
+                ref_table: "crm_invoices",
+              });
+            }
           }
         }
       }
