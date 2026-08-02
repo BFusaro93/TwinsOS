@@ -19,6 +19,7 @@ import type { ReportFilterDef } from "@/types/crm-reports";
 
 const PRESET_OPTIONS = [
   { value: "this_month", label: "This Month" },
+  { value: "last_month", label: "Last Month" },
   { value: "last_30", label: "Last 30 Days" },
   { value: "last_90", label: "Last 90 Days" },
   { value: "this_year", label: "This Year" },
@@ -39,6 +40,11 @@ export function computePresetRange(preset: string): { from: string; to: string }
   switch (preset) {
     case "this_month":
       return { from: iso(new Date(now.getFullYear(), now.getMonth(), 1)), to };
+    case "last_month":
+      return {
+        from: iso(new Date(now.getFullYear(), now.getMonth() - 1, 1)),
+        to: iso(new Date(now.getFullYear(), now.getMonth(), 0)),
+      };
     case "last_30":
       return { from: iso(new Date(now.getTime() - 30 * 86400000)), to };
     case "last_90":

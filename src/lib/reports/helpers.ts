@@ -13,6 +13,7 @@ import type { ReportParams } from "@/lib/reports/definition-types";
 
 export type DateRangePreset =
   | "this_month"
+  | "last_month"
   | "last_30"
   | "last_90"
   | "this_year"
@@ -34,6 +35,9 @@ export function resolveDateRange(
     to = iso(now);
     if (preset === "this_month") {
       from = iso(new Date(now.getFullYear(), now.getMonth(), 1));
+    } else if (preset === "last_month") {
+      from = iso(new Date(now.getFullYear(), now.getMonth() - 1, 1));
+      to = iso(new Date(now.getFullYear(), now.getMonth(), 0));
     } else if (preset === "last_30") {
       from = iso(new Date(now.getTime() - 30 * 86400000));
     } else if (preset === "last_90") {
