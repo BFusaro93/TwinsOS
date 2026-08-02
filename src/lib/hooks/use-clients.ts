@@ -903,7 +903,7 @@ export function useCancelClient() {
       const supabase = createClient();
       const { error } = await supabase
         .from("clients")
-        .update({ status: "cancelled", cancellation_reason: reason })
+        .update({ status: "cancelled", cancellation_reason: reason, closed_at: new Date().toISOString() })
         .eq("id", clientId);
       if (error) throw error;
     },
@@ -978,7 +978,7 @@ export function useBulkCancelClients() {
       const supabase = createClient();
       const { error } = await supabase
         .from("clients")
-        .update({ status: "cancelled", cancellation_reason: reason })
+        .update({ status: "cancelled", cancellation_reason: reason, closed_at: new Date().toISOString() })
         .in("id", clientIds);
       if (error) throw error;
     },

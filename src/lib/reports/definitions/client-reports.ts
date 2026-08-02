@@ -62,26 +62,42 @@ export const CLIENT_REPORTS: PrebuiltReportDef[] = [
       "Shows a client contact list with the ability to sort by account balance and sales rep.",
     filters: [
       { key: "sales_rep", label: "Sales Rep", type: "select", optionsSource: "salesReps" },
+      {
+        key: "sort_by",
+        label: "Sort By",
+        type: "select",
+        defaultValue: "client_name",
+        options: [
+          { value: "client_name", label: "Client Name" },
+          { value: "balance_outstanding_cents", label: "Account Balance" },
+          { value: "sales_rep", label: "Sales Rep" },
+        ],
+      },
     ],
-    analysis: (params) => ({
-      dataset: "rpt_client_contacts",
-      columns: [
-        "client_name",
-        "first_name",
-        "last_name",
-        "contact_type",
-        "phone",
-        "email",
-        "is_primary",
-        "sales_rep",
-        "balance_outstanding_cents",
-      ],
-      filters: [...eqFilter("sales_rep", params.sales_rep)],
-      groupBy: [],
-      aggregates: [],
-      sortColumn: "client_name",
-      sortDir: "asc",
-    }),
+    analysis: (params) => {
+      const sortColumn = ["client_name", "balance_outstanding_cents", "sales_rep"].includes(params.sort_by ?? "")
+        ? params.sort_by
+        : "client_name";
+      return {
+        dataset: "rpt_client_contacts",
+        columns: [
+          "client_name",
+          "first_name",
+          "last_name",
+          "contact_type",
+          "phone",
+          "email",
+          "is_primary",
+          "sales_rep",
+          "balance_outstanding_cents",
+        ],
+        filters: [...eqFilter("sales_rep", params.sales_rep)],
+        groupBy: [],
+        aggregates: [],
+        sortColumn,
+        sortDir: sortColumn === "balance_outstanding_cents" ? "desc" : "asc",
+      };
+    },
   },
   {
     key: "client-phone-list",
