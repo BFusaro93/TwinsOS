@@ -178,9 +178,25 @@ export async function GET(request: Request) {
 
     // ── assign the invoice number now that it's fully populated ────────────
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { error: numErr } = await (sb as any).rpc("assign_invoice_number", { p_invoice_id: invoice.id });
+    const { data: invoiceNumber, error: numErr } = await (sb as any).rpc("assign_invoice_number", { p_invoice_id: invoice.id });
     if (numErr) {
       console.error(`[contract-invoices] invoice number assignment error for contract ${contract.id}:`, numErr);
+    }
+
+    // ── log to client activity timeline ───────────────────────────────────
+    // org_id set explicitly for the same reason as the line item insert above:
+    // my_org_id() reads auth.uid(), which is null under this route's service-role session.
+    const { error: activityErr } = await sb.from("client_activity").insert({
+      org_id: contract.org_id,
+      client_id: contract.client_id,
+      activity_type: "invoice",
+      subject: `Invoice #${invoiceNumber}`,
+      amount_cents: monthAmount,
+      ref_id: invoice.id,
+      ref_table: "crm_invoices",
+    });
+    if (activityErr) {
+      console.error(`[contract-invoices] client activity insert error for contract ${contract.id}:`, activityErr);
     }
 
     // ── update last_billed_date ───────────────────────────────────────────
