@@ -60,6 +60,7 @@ export async function POST(request: Request) {
       invoice_id: invoiceId,
       client_id: clientId,
       amount_cents: balanceCents,
+      unused_amount_cents: 0,
       payment_date: new Date().toISOString().slice(0, 10),
       method: methodForCardBrand(cardBrand),
       memo: "Paid online via card",

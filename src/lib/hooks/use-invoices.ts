@@ -534,6 +534,7 @@ export function useRecordPayment() {
       const { data: { user } } = await supabase.auth.getUser();
       const activeAllocations = (allocations ?? []).filter((a) => a.amountCents > 0);
       const primaryInvoiceId = activeAllocations.length === 1 ? activeAllocations[0].invoiceId : null;
+      const allocatedCents = activeAllocations.reduce((s, a) => s + a.amountCents, 0);
 
       // insert payment row
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -542,6 +543,7 @@ export function useRecordPayment() {
         invoice_id: primaryInvoiceId,
         client_id: clientId,
         amount_cents: amountCents,
+        unused_amount_cents: amountCents - allocatedCents,
         payment_date: paymentDate,
         method,
         reference: reference ?? null,
@@ -665,6 +667,7 @@ export function useUpdatePayment() {
 
       const activeAllocations = (allocations ?? []).filter((a) => a.amountCents > 0);
       const primaryInvoiceId = activeAllocations.length === 1 ? activeAllocations[0].invoiceId : null;
+      const allocatedCents = activeAllocations.reduce((s, a) => s + a.amountCents, 0);
 
       // apply new allocations to invoices
       for (const alloc of activeAllocations) {
@@ -677,6 +680,7 @@ export function useUpdatePayment() {
       const { error } = await (supabase as any).from("crm_payments").update({
         invoice_id: primaryInvoiceId,
         amount_cents: amountCents,
+        unused_amount_cents: amountCents - allocatedCents,
         payment_date: paymentDate,
         method,
         reference: reference ?? null,
@@ -1025,6 +1029,7 @@ export function useBulkImportPayments() {
           client_id: clientId,
           invoice_id: invoiceId,
           amount_cents: amountCents,
+          unused_amount_cents: invoiceId ? 0 : amountCents,
           payment_date: r.paymentDate?.trim() || new Date().toISOString().split("T")[0],
           method,
           reference: r.reference?.trim() || null,
