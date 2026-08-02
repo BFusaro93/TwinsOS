@@ -686,6 +686,10 @@ export function ContractDialog({
       toast.error("Client and contract name are required");
       return;
     }
+    if (details.lineItems.length === 0) {
+      toast.error("At least one invoice line item is required");
+      return;
+    }
     // Billed months are those with a positive amount — averaging over a fixed
     // 12 undercounts seasonal contracts (e.g. 5 billed months at $750 would
     // wrongly average to $312.50/mo instead of $750/mo).

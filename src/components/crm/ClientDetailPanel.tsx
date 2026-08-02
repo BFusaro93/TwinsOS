@@ -70,7 +70,7 @@ import {
   useUpsertClientCustomFieldValue,
 } from "@/lib/hooks/use-client-custom-fields";
 import { useOrgList } from "@/lib/hooks/use-org-lists";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, formatDate } from "@/lib/utils";
 import { computeActualHours } from "@/lib/utils/visit-hours";
 import { useOrgSettings } from "@/lib/hooks/use-org-settings";
 import type { CRMPayment, CRMInvoice, CRMContract } from "@/types/crm-invoices";
@@ -1671,7 +1671,7 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
                         )}
                         {job.scheduledDate && (
                           <p className="text-[10px] text-slate-400">
-                            {new Date(job.scheduledDate).toLocaleDateString()}
+                            {formatDate(job.scheduledDate)}
                           </p>
                         )}
                       </div>

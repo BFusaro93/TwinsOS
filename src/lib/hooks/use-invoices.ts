@@ -356,7 +356,7 @@ export function useBulkImportInvoices() {
 export function useAssignInvoiceNumber() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, clientId }: { id: string; clientId: string }) => {
+    mutationFn: async ({ id, clientId, amountCents }: { id: string; clientId: string; amountCents?: number }) => {
       const supabase = createClient();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: num, error } = await (supabase.rpc as any)("assign_invoice_number", { p_invoice_id: id });
@@ -369,6 +369,7 @@ export function useAssignInvoiceNumber() {
         subject: `Invoice #${num}`,
         ref_id: id,
         ref_table: "crm_invoices",
+        amount_cents: amountCents ?? 0,
       });
       return num as number;
     },
@@ -762,6 +763,7 @@ export function useRefundPayment() {
         subject: `Refund issued: ${formatCents(refundAmountCents)}`,
         ref_id: id,
         ref_table: "crm_payments",
+        amount_cents: -refundAmountCents,
       });
     },
     onSuccess: (_d, vars) => {

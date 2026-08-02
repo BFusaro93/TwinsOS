@@ -694,7 +694,7 @@ export function InvoiceDetail({
     try {
       // If this is a fresh draft (no number yet), assign one now
       if (invoice!.invoiceNumber == null) {
-        await assignNumber({ id: invoice!.id, clientId: invoice!.clientId });
+        await assignNumber({ id: invoice!.id, clientId: invoice!.clientId, amountCents: previewTotal });
       }
       await Promise.all([
         updateFinancials({
