@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn, formatCurrency, formatDate } from "@/lib/utils";
@@ -96,6 +96,14 @@ export function ReportTable({ result }: { result: ReportResult }) {
   );
   const showPager = result.rows.length > PAGE_SIZE;
 
+  // A sectionColumn (e.g. "group_type" on breakdown reports) renders as a
+  // full-width divider header instead of a regular column — CSV export
+  // still uses result.columns/rows directly, so it's untouched there.
+  const sectionKey = result.sectionColumn;
+  const displayColumns = sectionKey
+    ? result.columns.filter((c) => c.key !== sectionKey)
+    : result.columns;
+
   return (
     <div className="flex flex-col gap-2">
       <div className="rounded-lg border bg-white shadow-sm overflow-hidden">
@@ -116,7 +124,7 @@ export function ReportTable({ result }: { result: ReportResult }) {
             <table className="w-full text-xs">
               <thead>
                 <tr className="border-b bg-slate-50 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                  {result.columns.map((col) => (
+                  {displayColumns.map((col) => (
                     <th
                       key={col.key}
                       className={cn(
@@ -132,30 +140,44 @@ export function ReportTable({ result }: { result: ReportResult }) {
                 </tr>
               </thead>
               <tbody>
-                {pagedRows.map((row, i) => (
-                  <tr
-                    key={i}
-                    className="border-b last:border-0 hover:bg-slate-50"
-                  >
-                    {result.columns.map((col) => (
-                      <td
-                        key={col.key}
-                        className={cn(
-                          "px-3 py-2 text-slate-700",
-                          NUMERIC_TYPES.includes(col.type) &&
-                            "text-right tabular-nums"
-                        )}
-                      >
-                        {formatCellValue(row[col.key], col.type)}
-                      </td>
-                    ))}
-                  </tr>
-                ))}
+                {pagedRows.map((row, i) => {
+                  const section = sectionKey ? String(row[sectionKey] ?? "") : null;
+                  const prevSection = sectionKey && i > 0 ? String(pagedRows[i - 1][sectionKey] ?? "") : null;
+                  const showSectionHeader = section !== null && section !== prevSection;
+                  return (
+                    <Fragment key={i}>
+                      {showSectionHeader && (
+                        <tr className="border-b bg-slate-100">
+                          <td
+                            colSpan={displayColumns.length}
+                            className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-600"
+                          >
+                            {section}
+                          </td>
+                        </tr>
+                      )}
+                      <tr className="border-b last:border-0 hover:bg-slate-50">
+                        {displayColumns.map((col) => (
+                          <td
+                            key={col.key}
+                            className={cn(
+                              "px-3 py-2 text-slate-700",
+                              NUMERIC_TYPES.includes(col.type) &&
+                                "text-right tabular-nums"
+                            )}
+                          >
+                            {formatCellValue(row[col.key], col.type)}
+                          </td>
+                        ))}
+                      </tr>
+                    </Fragment>
+                  );
+                })}
               </tbody>
               {result.totals && (
                 <tfoot>
                   <tr className="border-t bg-slate-50 font-medium text-slate-800">
-                    {result.columns.map((col, i) => {
+                    {displayColumns.map((col, i) => {
                       const total = result.totals?.[col.key];
                       const hasTotal = col.totalable && total !== undefined && total !== null;
                       return (

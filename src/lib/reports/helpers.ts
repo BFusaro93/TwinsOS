@@ -105,7 +105,8 @@ export function col(
 export function buildResult(
   columns: ReportColumnDef[],
   rows: ReportResultRow[],
-  notes?: string[]
+  notes?: string[],
+  sectionColumn?: string
 ): ReportResult {
   return {
     columns,
@@ -114,6 +115,7 @@ export function buildResult(
     rowCount: rows.length,
     generatedAt: new Date().toISOString(),
     notes,
+    sectionColumn,
   };
 }
 

@@ -178,6 +178,13 @@ export interface ReportResult {
   generatedAt: string;
   /** SA-style footnote definitions rendered under the table. */
   notes?: string[];
+  /**
+   * Row key to group by, rendered as a full-width divider header instead of
+   * a regular column (e.g. "group_type" for breakdown reports like New
+   * Client Count). A header renders whenever this key's value changes
+   * between consecutive rows.
+   */
+  sectionColumn?: string;
 }
 
 // ---------- Pre-built report catalog metadata ----------

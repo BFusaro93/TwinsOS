@@ -324,7 +324,9 @@ export const CLIENT_REPORTS: PrebuiltReportDef[] = [
           col("count", "Count", "number", false),
           col("percent", "Percent", "percent"),
         ],
-        resultRows
+        resultRows,
+        undefined,
+        "group_type"
       );
     },
   },
@@ -384,7 +386,9 @@ export const CLIENT_REPORTS: PrebuiltReportDef[] = [
           col("count", "Count", "number", false),
           col("percent", "Percent", "percent"),
         ],
-        resultRows
+        resultRows,
+        undefined,
+        "group_type"
       );
     },
   },

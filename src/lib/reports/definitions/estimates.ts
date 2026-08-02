@@ -38,6 +38,7 @@ export const ESTIMATE_REPORTS: PrebuiltReportDef[] = [
       columns: [
         "stage",
         "estimate_number",
+        "description",
         "estimate_date",
         "client_name",
         "client_status",
