@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   useEstimate,
   useUpdateEstimate,
@@ -12,6 +13,7 @@ import {
   useEstimateVersions,
   useEstimateChangeRequests,
   useResolveChangeRequest,
+  recalcEstimateTotals,
   type AIDraftLineItem,
   type EstimateVersion,
 } from "@/lib/hooks/use-estimates";
@@ -326,6 +328,7 @@ interface Props {
 
 export function EstimateDetail({ estimateId, onClose, compact = false }: Props) {
   const router = useRouter();
+  const qc = useQueryClient();
   const { data: estimate, isLoading } = useEstimate(estimateId);
   const { data: templates } = useEstimateTemplates();
   const { data: clients }   = useClients();
@@ -438,6 +441,17 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
     }
   }
 
+  // Final authoritative recalc after a batch of concurrent line-item upserts.
+  // Each upsert already triggers its own recalc, but concurrent writes can race
+  // each other's recalc reads — this runs once all of them have fully settled
+  // (write + their own recalc) so it sees every committed change.
+  async function refreshEstimateTotals() {
+    if (!estimate) return;
+    await recalcEstimateTotals(estimate.id);
+    qc.invalidateQueries({ queryKey: ["estimates", "detail", estimate.id] });
+    qc.invalidateQueries({ queryKey: ["estimates"] });
+  }
+
   async function handleRateIncrease(amount: number, isPercent: boolean) {
     if (!estimate) return;
     const affected = (estimate.lineItems ?? []).filter(
@@ -478,7 +492,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
           });
         })
       );
-      await handleSaveFinancials();
+      await refreshEstimateTotals();
       toast.success(`Rate updated on ${affected.length} line item${affected.length !== 1 ? "s" : ""}`);
       setSelectedLineItemIds([]);
     } catch {
@@ -530,7 +544,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
           });
         })
       );
-      await handleSaveFinancials();
+      await refreshEstimateTotals();
       toast.success(`Added ${items.length} line item${items.length !== 1 ? "s" : ""} from AI draft`);
     } catch {
       toast.error("Failed to add AI-drafted items");

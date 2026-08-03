@@ -8,8 +8,8 @@ import type {
   EstimateDirectCost,
   EstimateChangeRequest,
 } from "@/types/crm-estimates";
-import type { OverheadSettings } from "@/lib/hooks/use-overhead-settings";
-import { computeDirectCostOverhead } from "@/lib/estimate-calc";
+import { OVERHEAD_SETTINGS_DEFAULTS, type OverheadSettings } from "@/lib/hooks/use-overhead-settings";
+import { computeDirectCostOverhead, hasPerTypeOverhead } from "@/lib/estimate-calc";
 
 // ── mappers ───────────────────────────────────────────────────────────────────
 
@@ -138,6 +138,102 @@ function mapEstimate(row: any): Estimate {
     lineItems: (row.estimate_line_items ?? []).map(mapLineItem),
     directCosts: (row.estimate_direct_costs ?? []).map(mapDirectCost),
   };
+}
+
+// ── recompute + persist parent estimate rollups ───────────────────────────────
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapOverheadSettingsRow(row: any): OverheadSettings {
+  return {
+    id: row.id,
+    laborOhBps: row.labor_oh_bps ?? 0,
+    laborBurdenBps: row.labor_burden_bps ?? 0,
+    contractOhBps: row.contract_oh_bps ?? 0,
+    equipmentOhBps: row.equipment_oh_bps ?? 0,
+    materialsOhBps: row.materials_oh_bps ?? 0,
+    otherOhBps: row.other_oh_bps ?? 0,
+  };
+}
+
+/**
+ * Recomputes the estimate's subtotal/tax/total/profit rollups from the
+ * currently-committed line items and direct costs (read fresh from the DB,
+ * not from React Query's cache — a caller's in-memory `estimate` can be a
+ * render behind the write that just happened) and persists them. Mirrors the
+ * math in useSaveEstimateFinancials, minus the tax/overhead/discount inputs
+ * a caller might be actively editing (those come from the estimate row as-is).
+ * Every mutation that adds/edits/removes a line item or direct cost must call
+ * this so the parent row never goes stale.
+ */
+export async function recalcEstimateTotals(estimateId: string) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const supabase = createClient() as any;
+
+  const { data: est, error: estError } = await supabase
+    .from("estimates")
+    .select("org_id, tax_rate_bps, overhead_rate_bps, discount_cents")
+    .eq("id", estimateId)
+    .single();
+  if (estError) throw estError;
+
+  const { data: lineItems, error: liError } = await supabase
+    .from("estimate_line_items")
+    .select("total_cents, discount_cents, total_cost_cents, total_budgeted_hours")
+    .eq("estimate_id", estimateId)
+    .is("deleted_at", null);
+  if (liError) throw liError;
+
+  const { data: directCosts, error: dcError } = await supabase
+    .from("estimate_direct_costs")
+    .select("total_cents, cost_type")
+    .eq("estimate_id", estimateId);
+  if (dcError) throw dcError;
+
+  const { data: overheadRow } = await supabase
+    .from("crm_overhead_settings")
+    .select("*")
+    .eq("org_id", est.org_id)
+    .maybeSingle();
+  const overheadSettings = overheadRow ? mapOverheadSettingsRow(overheadRow) : OVERHEAD_SETTINGS_DEFAULTS;
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const subtotalCents = (lineItems ?? []).reduce((s: number, li: any) => s + (li.total_cents - (li.discount_cents ?? 0)), 0);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const totalCostCents = (lineItems ?? []).reduce((s: number, li: any) => s + li.total_cost_cents, 0);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const directTotal = (directCosts ?? []).reduce((s: number, dc: any) => s + dc.total_cents, 0);
+  const discountCents = est.discount_cents ?? 0;
+  const revenueCents = subtotalCents - discountCents;
+  const taxCents = Math.round((revenueCents * (est.tax_rate_bps ?? 0)) / 10000);
+  const totalCents = revenueCents + taxCents;
+
+  const overheadCostCents = hasPerTypeOverhead(overheadSettings)
+    ? (directCosts ?? []).reduce(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (sum: number, dc: any) => sum + computeDirectCostOverhead(dc.cost_type, dc.total_cents, overheadSettings),
+        0
+      )
+    : Math.round((totalCostCents * (est.overhead_rate_bps ?? 0)) / 10000);
+
+  const grossProfitCents = revenueCents - totalCostCents - directTotal;
+  const netProfitCents = grossProfitCents - overheadCostCents;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const totalBudgetedHours = (lineItems ?? []).reduce((s: number, li: any) => s + Number(li.total_budgeted_hours ?? 0), 0);
+
+  const { error: updError } = await supabase
+    .from("estimates")
+    .update({
+      subtotal_cents: subtotalCents,
+      tax_cents: taxCents,
+      total_cents: totalCents,
+      revenue_cents: revenueCents,
+      overhead_cost_cents: overheadCostCents,
+      gross_profit_cents: grossProfitCents,
+      net_profit_cents: netProfitCents,
+      total_budgeted_hours: totalBudgetedHours,
+    })
+    .eq("id", estimateId);
+  if (updError) throw updError;
 }
 
 // ── list ──────────────────────────────────────────────────────────────────────
@@ -406,6 +502,7 @@ export function useUpsertLineItem() {
           .insert({ estimate_id: estimateId, ...item });
         if (error) throw error;
       }
+      await recalcEstimateTotals(estimateId);
     },
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: ["estimates", "detail", vars.estimateId] });
@@ -426,6 +523,7 @@ export function useDeleteLineItem() {
         .update({ deleted_at: new Date().toISOString() })
         .eq("id", id);
       if (error) throw error;
+      await recalcEstimateTotals(estimateId);
       return { estimateId };
     },
     onSuccess: (_data, vars) => {
@@ -454,6 +552,7 @@ export function useUpsertDirectCost() {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         .upsert({ estimate_id: estimateId, ...item } as any);
       if (error) throw error;
+      await recalcEstimateTotals(estimateId);
     },
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: ["estimates", "detail", vars.estimateId] });
@@ -474,6 +573,7 @@ export function useDeleteDirectCost() {
         .delete()
         .eq("id", id);
       if (error) throw error;
+      await recalcEstimateTotals(estimateId);
       return { estimateId };
     },
     onSuccess: (_data, vars) => {
