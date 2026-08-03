@@ -21,7 +21,7 @@ const LEAD_TEMPLATE_COLUMNS = [
 export default function LeadsPage() {
   const { data: leads } = useLeads();
   const { mutateAsync: bulkImportLeads } = useBulkImportLeads();
-  const [viewMode, setViewMode] = useState<"table" | "list">("table");
+  const [viewMode, setViewMode] = useState<"table" | "list">("list");
   const [newOpen, setNewOpen] = useState(false);
   const [selected, setSelected] = useState<Client | null>(null);
 

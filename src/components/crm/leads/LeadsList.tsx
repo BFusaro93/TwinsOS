@@ -32,6 +32,27 @@ import { Plus, UserCheck, Search, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import type { Client } from "@/types/crm";
 import { useEstimates } from "@/lib/hooks/use-estimates";
+import { ColumnSelector, type ColumnDef } from "@/components/crm/shared/ColumnSelector";
+import { useColumnPrefs } from "@/lib/hooks/use-column-prefs";
+
+// ── Column visibility ─────────────────────────────────────────────────────────
+
+const LEAD_COLUMNS: ColumnDef[] = [
+  { key: "type",        label: "Type" },
+  { key: "phone",       label: "Phone" },
+  { key: "email",       label: "Email" },
+  { key: "city",        label: "City" },
+  { key: "source",      label: "Source" },
+  { key: "potential",   label: "Potential/yr" },
+  { key: "dateAdded",   label: "Date Added" },
+  { key: "zip",         label: "Zip" },
+];
+
+// Default view = every column already shown today.
+const LEAD_DEFAULT_VISIBLE: Record<string, boolean> = {
+  type: true, phone: true, email: true, city: true, source: true, potential: true, dateAdded: true,
+  zip: false,
+};
 
 function LeadRevenuePotential({ leadId }: { leadId: string }) {
   const { data: estimates } = useEstimates(leadId);
@@ -235,6 +256,10 @@ export function LeadsList({ newDialogOpen, onNewDialogOpenChange, onSelect }: Le
   const [convertLead, setConvertLead] = useState<Client | undefined>();
   const [closeLead, setCloseLead] = useState<Client | undefined>();
 
+  const { visible: cols, toggle: toggleCol } = useColumnPrefs("crm-leads-table-columns", LEAD_DEFAULT_VISIBLE);
+  // +name +actions
+  const visibleColumnCount = 2 + LEAD_COLUMNS.filter((c) => cols[c.key] ?? true).length;
+
   const controlled = newDialogOpen !== undefined;
   const dialogOpen = controlled ? newDialogOpen : internalDialogOpen;
   function setDialogOpen(o: boolean) {
@@ -262,13 +287,14 @@ export function LeadsList({ newDialogOpen, onNewDialogOpenChange, onSelect }: Le
         <div className="flex items-center gap-3 text-sm text-slate-500">
           <span>{isLoading ? "…" : `${filtered.length} lead${filtered.length !== 1 ? "s" : ""}`}</span>
         </div>
-        {!controlled && (
-          <div className="ml-auto">
+        <div className={cn("flex items-center gap-2", !controlled && "ml-auto")}>
+          <ColumnSelector columns={LEAD_COLUMNS} visible={cols} onToggle={toggleCol} />
+          {!controlled && (
             <Button size="sm" className="h-8 text-xs" onClick={() => setDialogOpen(true)}>
               <Plus className="mr-1 h-3.5 w-3.5" /> Add Lead
             </Button>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       {/* Table */}
@@ -277,13 +303,14 @@ export function LeadsList({ newDialogOpen, onNewDialogOpenChange, onSelect }: Le
           <thead className="sticky top-0 bg-slate-50">
             <tr className="border-b text-left text-xs font-semibold uppercase tracking-wide text-slate-400">
               <th className="min-w-[180px] px-4 py-3">Name</th>
-              <th className="px-4 py-3">Type</th>
-              <th className="px-4 py-3">Phone</th>
-              <th className="px-4 py-3">Email</th>
-              <th className="px-4 py-3">City</th>
-              <th className="px-4 py-3">Source</th>
-              <th className="px-4 py-3 text-right">Potential/yr</th>
-              <th className="px-4 py-3">Date Added</th>
+              {cols.type && <th className="px-4 py-3">Type</th>}
+              {cols.phone && <th className="px-4 py-3">Phone</th>}
+              {cols.email && <th className="px-4 py-3">Email</th>}
+              {cols.city && <th className="px-4 py-3">City</th>}
+              {cols.source && <th className="px-4 py-3">Source</th>}
+              {cols.potential && <th className="px-4 py-3 text-right">Potential/yr</th>}
+              {cols.dateAdded && <th className="px-4 py-3">Date Added</th>}
+              {cols.zip && <th className="px-4 py-3">Zip</th>}
               <th className="px-4 py-3" />
             </tr>
           </thead>
@@ -291,14 +318,14 @@ export function LeadsList({ newDialogOpen, onNewDialogOpenChange, onSelect }: Le
             {isLoading ? (
               Array.from({ length: 5 }).map((_, i) => (
                 <tr key={i} className="border-b">
-                  {Array.from({ length: 9 }).map((__, j) => (
+                  {Array.from({ length: visibleColumnCount }).map((__, j) => (
                     <td key={j} className="px-4 py-3"><Skeleton className="h-4 w-full" /></td>
                   ))}
                 </tr>
               ))
             ) : filtered.length === 0 ? (
               <tr>
-                <td colSpan={9} className="py-16 text-center text-sm text-slate-400">
+                <td colSpan={visibleColumnCount} className="py-16 text-center text-sm text-slate-400">
                   {search ? "No leads match your search" : "No leads yet — add your first lead"}
                 </td>
               </tr>
@@ -317,25 +344,38 @@ export function LeadsList({ newDialogOpen, onNewDialogOpenChange, onSelect }: Le
                       {lead.displayName}
                     </button>
                   </td>
-                  <td className="px-4 py-2.5">
-                    <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-medium capitalize", ACCOUNT_COLOR[lead.accountType] ?? "bg-slate-100 text-slate-500")}>
-                      {lead.accountType}
-                    </span>
-                  </td>
-                  <td className="px-4 py-2.5 text-slate-600">{lead.primaryPhone ?? "—"}</td>
-                  <td className="px-4 py-2.5 text-slate-600">{lead.primaryEmail ?? "—"}</td>
-                  <td className="px-4 py-2.5 text-slate-500">
-                    {[lead.serviceAddress, lead.serviceCity, lead.serviceState].filter(Boolean).join(", ") || "—"}
-                  </td>
-                  <td className="px-4 py-2.5 text-slate-500">{lead.source ?? "—"}</td>
-                  <td className="px-4 py-2.5 text-right">
-                    <LeadRevenuePotential leadId={lead.id} />
-                  </td>
-                  <td className="px-4 py-2.5 text-xs text-slate-400">
-                    {lead.clientSince
-                      ? new Date(lead.clientSince + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
-                      : "—"}
-                  </td>
+                  {cols.type && (
+                    <td className="px-4 py-2.5">
+                      <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-medium capitalize", ACCOUNT_COLOR[lead.accountType] ?? "bg-slate-100 text-slate-500")}>
+                        {lead.accountType}
+                      </span>
+                    </td>
+                  )}
+                  {cols.phone && <td className="px-4 py-2.5 text-slate-600">{lead.primaryPhone ?? "—"}</td>}
+                  {cols.email && <td className="px-4 py-2.5 text-slate-600">{lead.primaryEmail ?? "—"}</td>}
+                  {cols.city && (
+                    <td className="px-4 py-2.5 text-slate-500">
+                      {[lead.serviceAddress, lead.serviceCity, lead.serviceState].filter(Boolean).join(", ") || "—"}
+                    </td>
+                  )}
+                  {cols.source && <td className="px-4 py-2.5 text-slate-500">{lead.source ?? "—"}</td>}
+                  {cols.potential && (
+                    <td className="px-4 py-2.5 text-right">
+                      <LeadRevenuePotential leadId={lead.id} />
+                    </td>
+                  )}
+                  {cols.dateAdded && (
+                    <td className="px-4 py-2.5 text-xs text-slate-400">
+                      {lead.clientSince
+                        ? new Date(lead.clientSince + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+                        : "—"}
+                    </td>
+                  )}
+                  {cols.zip && (
+                    <td className="px-4 py-2.5 text-slate-500">
+                      {lead.serviceZip || lead.billingZip || "—"}
+                    </td>
+                  )}
                   <td className="px-4 py-2.5">
                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100">
                       <Button size="sm" variant="outline" className="h-6 gap-1 px-2 text-[11px]" onClick={(e) => { e.stopPropagation(); setConvertLead(lead); }}>

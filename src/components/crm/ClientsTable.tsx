@@ -28,6 +28,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { BulkTagDialog } from "@/components/crm/BulkTagDialog";
+import { ColumnSelector, type ColumnDef } from "@/components/crm/shared/ColumnSelector";
+import { useColumnPrefs } from "@/lib/hooks/use-column-prefs";
 import {
   Search, Building2, Home, Maximize2, Tag, X, ChevronDown,
   SlidersHorizontal, Ban, CheckCircle, Pencil,
@@ -35,6 +37,27 @@ import {
 import { cn, formatCurrency } from "@/lib/utils";
 import { toast } from "sonner";
 import type { Client, ClientStatus, AccountType } from "@/types/crm";
+
+// ── Column visibility ─────────────────────────────────────────────────────────
+
+const CLIENT_COLUMNS: ColumnDef[] = [
+  { key: "tags",          label: "Tags" },
+  { key: "type",          label: "Type" },
+  { key: "status",        label: "Status" },
+  { key: "phone",         label: "Phone" },
+  { key: "email",         label: "Email" },
+  { key: "city",          label: "City" },
+  { key: "balance",       label: "Balance" },
+  { key: "source",        label: "Source" },
+  { key: "clientSince",   label: "Client Since" },
+  { key: "accountNumber", label: "Account #" },
+];
+
+// Default view = every column already shown today, plus Email.
+const CLIENT_DEFAULT_VISIBLE: Record<string, boolean> = {
+  tags: true, type: true, status: true, phone: true, email: true, city: true, balance: true,
+  source: false, clientSince: false, accountNumber: false,
+};
 
 // ── Filter query builder types ────────────────────────────────────────────────
 
@@ -240,6 +263,10 @@ export function ClientsTable({ onSelect }: Props) {
   const [bulkCancelOpen, setBulkCancelOpen] = useState(false);
   const [bulkEditOpen, setBulkEditOpen] = useState(false);
   const router = useRouter();
+
+  const { visible: cols, toggle: toggleCol } = useColumnPrefs("crm-clients-table-columns", CLIENT_DEFAULT_VISIBLE);
+  // +checkbox +name +actions
+  const visibleColumnCount = 3 + CLIENT_COLUMNS.filter((c) => cols[c.key] ?? true).length;
 
   // Derived options for dynamic select fields
   const uniqueSources = useMemo(() =>
@@ -615,6 +642,8 @@ export function ClientsTable({ onSelect }: Props) {
           </div>
         )}
 
+        <ColumnSelector columns={CLIENT_COLUMNS} visible={cols} onToggle={toggleCol} />
+
         {/* Bulk Actions */}
         {selectedCount > 0 ? (
           <DropdownMenu>
@@ -676,12 +705,16 @@ export function ClientsTable({ onSelect }: Props) {
                 />
               </th>
               <th className="px-4 py-3">Name</th>
-              <th className="px-4 py-3">Tags</th>
-              <th className="px-4 py-3">Type</th>
-              <th className="px-4 py-3">Status</th>
-              <th className="px-4 py-3">Phone</th>
-              <th className="px-4 py-3">City</th>
-              <th className="px-4 py-3 text-right">Balance</th>
+              {cols.tags && <th className="px-4 py-3">Tags</th>}
+              {cols.type && <th className="px-4 py-3">Type</th>}
+              {cols.status && <th className="px-4 py-3">Status</th>}
+              {cols.phone && <th className="px-4 py-3">Phone</th>}
+              {cols.email && <th className="px-4 py-3">Email</th>}
+              {cols.city && <th className="px-4 py-3">City</th>}
+              {cols.balance && <th className="px-4 py-3 text-right">Balance</th>}
+              {cols.source && <th className="px-4 py-3">Source</th>}
+              {cols.clientSince && <th className="px-4 py-3">Client Since</th>}
+              {cols.accountNumber && <th className="px-4 py-3">Account #</th>}
               <th className="px-4 py-3" />
             </tr>
           </thead>
@@ -689,14 +722,14 @@ export function ClientsTable({ onSelect }: Props) {
             {isLoading ? (
               Array.from({ length: 8 }).map((_, i) => (
                 <tr key={i} className="border-b">
-                  {Array.from({ length: 9 }).map((__, j) => (
+                  {Array.from({ length: visibleColumnCount }).map((__, j) => (
                     <td key={j} className="px-4 py-3"><Skeleton className="h-4 w-full" /></td>
                   ))}
                 </tr>
               ))
             ) : filtered.length === 0 ? (
               <tr>
-                <td colSpan={9} className="py-16 text-center text-sm text-slate-400">
+                <td colSpan={visibleColumnCount} className="py-16 text-center text-sm text-slate-400">
                   {search || activeFilterCount > 0 ? "No clients match your filters" : "No clients yet"}
                 </td>
               </tr>
@@ -722,32 +755,50 @@ export function ClientsTable({ onSelect }: Props) {
                         {client.doNotMarket && <span className="text-[9px] text-slate-400 border rounded px-1">DNM</span>}
                       </div>
                     </td>
-                    <td className="px-4 py-2.5">
-                      {tags.length > 0 ? (
-                        <div className="flex flex-wrap gap-1">
-                          {tags.map((tag) => (
-                            <span key={tag} className="rounded-full px-1.5 py-0 text-[10px] font-medium bg-slate-100 text-slate-500">
-                              {tag}
-                            </span>
-                          ))}
-                        </div>
-                      ) : <span className="text-slate-300">—</span>}
-                    </td>
-                    <td className="px-4 py-2.5 capitalize text-slate-500 text-xs">{client.accountType}</td>
-                    <td className="px-4 py-2.5">
-                      <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-medium capitalize", STATUS_COLOR[client.status] ?? "bg-slate-100 text-slate-500")}>
-                        {client.status}
-                      </span>
-                    </td>
-                    <td className="px-4 py-2.5 text-slate-600">{client.primaryPhone ?? "—"}</td>
-                    <td className="px-4 py-2.5 text-slate-500">
-                      {[client.serviceAddress, client.serviceCity, client.serviceState].filter(Boolean).join(", ") || "—"}
-                    </td>
-                    <td className="px-4 py-2.5 text-right">
-                      {client.balanceOutstandingCents > 0
-                        ? <span className="font-semibold text-red-600">{formatCurrency(client.balanceOutstandingCents)}</span>
-                        : <span className="text-slate-400">—</span>}
-                    </td>
+                    {cols.tags && (
+                      <td className="px-4 py-2.5">
+                        {tags.length > 0 ? (
+                          <div className="flex flex-wrap gap-1">
+                            {tags.map((tag) => (
+                              <span key={tag} className="rounded-full px-1.5 py-0 text-[10px] font-medium bg-slate-100 text-slate-500">
+                                {tag}
+                              </span>
+                            ))}
+                          </div>
+                        ) : <span className="text-slate-300">—</span>}
+                      </td>
+                    )}
+                    {cols.type && <td className="px-4 py-2.5 capitalize text-slate-500 text-xs">{client.accountType}</td>}
+                    {cols.status && (
+                      <td className="px-4 py-2.5">
+                        <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-medium capitalize", STATUS_COLOR[client.status] ?? "bg-slate-100 text-slate-500")}>
+                          {client.status}
+                        </span>
+                      </td>
+                    )}
+                    {cols.phone && <td className="px-4 py-2.5 text-slate-600">{client.primaryPhone ?? "—"}</td>}
+                    {cols.email && <td className="px-4 py-2.5 text-slate-600">{client.primaryEmail ?? "—"}</td>}
+                    {cols.city && (
+                      <td className="px-4 py-2.5 text-slate-500">
+                        {[client.serviceAddress, client.serviceCity, client.serviceState].filter(Boolean).join(", ") || "—"}
+                      </td>
+                    )}
+                    {cols.balance && (
+                      <td className="px-4 py-2.5 text-right">
+                        {client.balanceOutstandingCents > 0
+                          ? <span className="font-semibold text-red-600">{formatCurrency(client.balanceOutstandingCents)}</span>
+                          : <span className="text-slate-400">—</span>}
+                      </td>
+                    )}
+                    {cols.source && <td className="px-4 py-2.5 text-slate-500">{client.source ?? "—"}</td>}
+                    {cols.clientSince && (
+                      <td className="px-4 py-2.5 text-xs text-slate-400">
+                        {client.clientSince
+                          ? new Date(client.clientSince + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+                          : "—"}
+                      </td>
+                    )}
+                    {cols.accountNumber && <td className="px-4 py-2.5 text-slate-500">{client.accountNumber ?? "—"}</td>}
                     <td className="px-4 py-2.5">
                       <button
                         onClick={(e) => { e.stopPropagation(); router.push(`/crm/clients/${client.id}`); }}

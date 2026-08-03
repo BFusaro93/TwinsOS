@@ -42,7 +42,8 @@ function LeadItem({ lead, isSelected, onSelect }: { lead: Client; isSelected: bo
         )}
       </div>
       <span className="truncate text-xs text-slate-500">
-        {lead.primaryPhone || lead.primaryEmail || lead.billingCity || "—"}
+        {[lead.serviceAddress, lead.serviceCity, lead.serviceState].filter(Boolean).join(", ") ||
+          lead.primaryPhone || lead.primaryEmail || "—"}
       </span>
     </button>
   );

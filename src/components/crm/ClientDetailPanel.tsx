@@ -128,7 +128,25 @@ const STATUS_COLOR: Record<string, string> = {
   cancelled: "bg-red-100 text-red-600 border-red-200",
 };
 
-function BalanceCard({ client }: { client: Client }) {
+function BalanceCard({ client, revenuePotentialCents }: { client: Client; revenuePotentialCents?: number }) {
+  const isLead = client.status === "lead";
+
+  if (isLead) {
+    return (
+      <div className="relative ml-3">
+        <div className="rounded-lg bg-[#4a4a4a] pr-3 pb-3 pl-3" style={{ paddingTop: "92px" }} />
+        <div className="absolute top-3 -left-3 right-3 rounded-lg bg-brand-600 px-4 py-3 text-center shadow-md">
+          <p className="text-xl font-bold tabular-nums text-white leading-tight">
+            {formatCurrency(revenuePotentialCents ?? 0)}
+          </p>
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-white/75 mt-0.5">
+            Revenue Potential
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   const outstanding = client.balanceOutstandingCents;
   const uninvoiced  = client.balanceUninvoicedCents;
   const credits     = client.balanceCreditsCents;
@@ -2653,6 +2671,10 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
   const isLead = client?.status === "lead";
   const hasChildren = (childClients ?? []).length > 0;
   const totalChildBalance = (childClients ?? []).reduce((sum, c) => sum + c.balanceOutstandingCents, 0);
+  const { data: leadEstimates } = useEstimates(clientId);
+  const revenuePotentialCents = (leadEstimates ?? [])
+    .filter((e) => e.stage !== "accepted" && e.stage !== "lost")
+    .reduce((sum, e) => sum + e.totalCents, 0);
 
   if (isLoading) {
     return (
@@ -2889,7 +2911,7 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
             </div>
 
             <div className="w-48 mt-4">
-              <BalanceCard client={client} />
+              <BalanceCard client={client} revenuePotentialCents={revenuePotentialCents} />
             </div>
           </div>
         </div>
