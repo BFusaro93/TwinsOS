@@ -96,6 +96,8 @@ export function useUpdateAsset() {
         ...(input.model !== undefined && { model: input.model }),
         ...(input.year !== undefined && { year: input.year }),
         ...(input.serialNumber !== undefined && { serial_number: input.serialNumber }),
+        ...(input.engineModel !== undefined && { engine_model: input.engineModel }),
+        ...(input.engineSerialNumber !== undefined && { engine_serial_number: input.engineSerialNumber }),
         ...(input.division !== undefined && { division: input.division }),
         ...(input.location !== undefined && { location: input.location }),
         ...(input.notes !== undefined && { notes: input.notes }),

@@ -186,6 +186,7 @@ export interface MeterReading extends BaseRecord {
   readingAt: string; // ISO datetime
   source: "manual" | "samsara";
   recordedByName: string | null;
+  notes: string | null;
 }
 
 export interface WOPart extends BaseRecord {

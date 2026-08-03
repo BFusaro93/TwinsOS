@@ -34,6 +34,7 @@ export function useAddMeterReading() {
         reading_at: input.readingAt,
         source: input.source,
         recorded_by_name: input.recordedByName,
+        notes: input.notes,
       }).select().single();
       if (error) throw error;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any

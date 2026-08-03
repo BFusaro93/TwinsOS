@@ -198,13 +198,13 @@ export function EstimateSummaryPanel({ estimate, onRecalculate, recalcPending }:
           label="Tax Rate"
           value={taxRateStr}
           onChange={setTaxRateStr}
-          onBlur={handleRecalc}
+          onBlur={() => handleRecalc()}
         />
         <RateRow
           label="Overhead Rate"
           value={overheadRateStr}
           onChange={setOverheadRateStr}
-          onBlur={handleRecalc}
+          onBlur={() => handleRecalc()}
         />
         {perTypeOverheadActive && (
           <p className="mb-1 text-[10px] leading-tight text-slate-400">
