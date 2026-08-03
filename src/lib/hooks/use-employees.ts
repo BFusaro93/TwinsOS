@@ -389,7 +389,7 @@ export function useAddCrewMember() {
     }) => {
       const supabase = createClient();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error } = await (supabase as any)
+      const { data, error } = await (supabase as any)
         .from("crm_crew_members")
         .insert({
           crew_id: crewId,
@@ -397,8 +397,11 @@ export function useAddCrewMember() {
           name,
           is_foreman: isForeman ?? false,
           days_of_week: daysOfWeek ?? [0, 1, 2, 3, 4, 5, 6],
-        });
+        })
+        .select("id")
+        .single();
       if (error) throw error;
+      return data as { id: string };
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["crm-crews"] }),
   });

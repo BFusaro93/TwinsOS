@@ -26,7 +26,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -73,9 +75,10 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import type { CRMJobVisit, VisitStatus, JobComment, CrewMemberTime } from "@/types/crm-jobs";
-import { useCrews, useCrewDailyMembers, useSetCrewDailyMember, useClearCrewDailyMember } from "@/lib/hooks/use-employees";
+import { useCrews, useCrewDailyMembers, useSetCrewDailyMember, useClearCrewDailyMember, useEmployees, useAddCrewMember } from "@/lib/hooks/use-employees";
 import { useCRMServices, useCreateVisit } from "@/lib/hooks/use-crm-jobs";
 import { useNearbyWaitingListJobs } from "@/lib/hooks/use-nearby-waiting-list";
+import { groupVisitsIntoStops } from "@/lib/utils/visit-stops";
 
 // ── status icon ───────────────────────────────────────────────────────────────
 
@@ -203,6 +206,7 @@ function JobDetailSheet({
   crews,
   onEditTimes,
   memberTimes,
+  anchorVisitId,
 }: {
   visit: CRMJobVisit;
   open: boolean;
@@ -211,6 +215,9 @@ function JobDetailSheet({
   onEditTimes: (v: CRMJobVisit) => void;
   /** Same per-member punch records the row uses — see VisitRow for why. */
   memberTimes: CrewMemberTime[];
+  /** The stop's anchor visit id — see EditJobTimesDialog for why member-time
+   * writes must target this instead of visit.id. */
+  anchorVisitId: string;
 }) {
   const { mutateAsync: updateVisit, isPending } = useUpdateVisit();
   const router = useRouter();
@@ -316,26 +323,32 @@ function JobDetailSheet({
     // app and report date-filters agree with whatever the dispatcher enters.
     const clockField = field === "start_time" ? "clocked_in_at" : "clocked_out_at";
     const clockIso = value ? dateAndTimeToIso(visit.scheduledDate, value) : null;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const updates: Record<string, any> = { [field]: value || null, [clockField]: clockIso };
+    // A genuine change means any actual_hours override measured before this
+    // correction (e.g. the stop clock-out flow's figure) is now stale —
+    // clear it so computeActualHours() and the DB rollup recompute from the
+    // corrected time instead of staying frozen. Guarded on an actual change
+    // so a blur with no edit doesn't wipe a real measured value.
+    const existingValue = field === "start_time" ? visit.startTime : visit.endTime;
+    if ((value || null) !== (existingValue || null)) updates.actual_hours = null;
     try {
-      await updateVisit({
-        id: visit.id,
-        updates: {
-          [field]: value || null,
-          [clockField]: clockIso,
-        },
-      });
+      await updateVisit({ id: visit.id, updates });
       // Only reached in the non-divergent case (see the "Multiple times"
       // guard around the inputs below) — every member already tracked here
       // shares the same value on the side not being edited, safe to carry
       // forward unchanged. No member tracked yet → seed the whole crew
       // roster, same as Edit Job Times does when it first opens.
+      // Targets the stop's shared anchor visit id, not this visit's own id
+      // — see EditJobTimesDialog for why crm_crew_member_times always lives
+      // against the anchor even for a sibling service visit like this one.
       const effectiveCrewId = visit.crewId ?? job?.crewId ?? null;
       const targets = memberTimes.length > 0
         ? memberTimes.map((t) => ({ crewMemberId: t.crewMemberId, otherClockedInAt: t.clockedInAt, otherClockedOutAt: t.clockedOutAt }))
         : effectiveCrewMemberIds(effectiveCrewId, richCrewsForSheet ?? [], dailyOverridesForSheet)
             .map((id) => ({ crewMemberId: id, otherClockedInAt: null, otherClockedOutAt: null }));
       await Promise.all(targets.map((t) => upsertMemberTimeForSheet.mutateAsync({
-        visitId: visit.id,
+        visitId: anchorVisitId,
         crewMemberId: t.crewMemberId,
         clockedInAt:  field === "start_time" ? clockIso : t.otherClockedInAt,
         clockedOutAt: field === "end_time"   ? clockIso : t.otherClockedOutAt,
@@ -1403,25 +1416,41 @@ function EditJobTimesDialog({
   open,
   onOpenChange,
   visit,
+  anchorVisitId,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   visit: CRMJobVisit;
+  /** The stop's anchor visit id — a "stop" (same client/day/crew/address)
+   * clocks in/out as one unit, so crm_crew_member_times rows always live
+   * against the anchor, even when this dialog was opened for one of its
+   * sibling services. Reads and writes here must target that same id or a
+   * sibling's edits fork off a second, orphaned set of member-time rows. */
+  anchorVisitId: string;
 }) {
   const visitId = visit.id;
   const visitDate = visit.scheduledDate;
   const crewId = visit.crewId;
 
-  const { data: memberTimes = [] } = useCrewMemberTimes(visitId);
+  const { data: memberTimes = [] } = useCrewMemberTimes(anchorVisitId);
   const { data: crewsWithMembers } = useCrews(false);
+  const { data: allEmployees = [] } = useEmployees(true);
   const upsert = useUpsertCrewMemberTime();
   const del = useDeleteCrewMemberTime();
   const updateVisit = useUpdateVisit();
+  const addCrewMember = useAddCrewMember();
 
   const crew = crewsWithMembers?.find((c) => c.id === crewId);
   const allMembers = crew?.members ?? [];
   const assignedIds = new Set(memberTimes.map((t) => t.crewMemberId));
   const availableMembers = allMembers.filter((m) => !assignedIds.has(m.id));
+  // Anyone org-wide who isn't already on this crew's roster — e.g. someone
+  // borrowed from another crew for the day. Picking one of these auto-adds
+  // them to this crew's roster (see addRow) so a crm_crew_members row exists
+  // to hang the time entry off of; existing roster members already covered
+  // by availableMembers above are excluded so no one is offered twice.
+  const rosterEmployeeIds = new Set(allMembers.map((m) => m.employeeId));
+  const otherEmployees = allEmployees.filter((e) => !rosterEmployeeIds.has(e.id));
 
   const [newMemberId, setNewMemberId] = useState("");
   const [newDate, setNewDate] = useState(visitDate);
@@ -1440,7 +1469,7 @@ function EditJobTimesDialog({
     seededRef.current = true;
     const clockedInAt = visit.startTime ? dateAndTimeToIso(visitDate, visit.startTime.slice(0, 5)) : null;
     const clockedOutAt = visit.endTime ? dateAndTimeToIso(visitDate, visit.endTime.slice(0, 5)) : null;
-    allMembers.forEach((m) => upsert.mutate({ visitId, crewMemberId: m.id, clockedInAt, clockedOutAt }));
+    allMembers.forEach((m) => upsert.mutate({ visitId: anchorVisitId, crewMemberId: m.id, clockedInAt, clockedOutAt }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [memberTimes.length, allMembers.length]);
 
@@ -1467,9 +1496,19 @@ function EditJobTimesDialog({
     const latestOut = outs.length > 0 ? outs.reduce((a, b) => (a > b ? a : b)) : null;
     const newStart = earliestIn ? isoToDateAndTime(earliestIn, visitDate).time : null;
     const newEnd = latestOut ? isoToDateAndTime(latestOut, visitDate).time : null;
-    const updates: { start_time?: string; end_time?: string } = {};
-    if (newStart && newStart !== visit.startTime) updates.start_time = newStart;
-    if (newEnd && newEnd !== visit.endTime) updates.end_time = newEnd;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const updates: Record<string, any> = {};
+    // A rolled-up Start/End change means the real punch times moved —
+    // clear any explicit actual_hours override (e.g. the men-multiplied
+    // figure the stop clock-out flow wrote) so computeActualHours() and the
+    // crm_recompute_job_actual_hours DB trigger both fall back to deriving
+    // it fresh from these corrected times instead of a now-stale number.
+    // Compare against just the HH:MM portion — isoToDateAndTime().time never
+    // includes seconds, but visit.startTime/endTime come straight from a
+    // Postgres `time` column (HH:MM:SS) and would otherwise never equal it,
+    // firing this update (and clearing actual_hours) on every render.
+    if (newStart && newStart !== (visit.startTime ?? "").slice(0, 5)) { updates.start_time = newStart; updates.actual_hours = null; }
+    if (newEnd && newEnd !== (visit.endTime ?? "").slice(0, 5)) { updates.end_time = newEnd; updates.actual_hours = null; }
     if (Object.keys(updates).length > 0) {
       updateVisit.mutate({ id: visitId, updates });
     }
@@ -1479,7 +1518,7 @@ function EditJobTimesDialog({
   async function saveRow(memberId: string, date: string, start: string, end: string) {
     try {
       await upsert.mutateAsync({
-        visitId,
+        visitId: anchorVisitId,
         crewMemberId: memberId,
         clockedInAt: dateAndTimeToIso(date, start),
         clockedOutAt: dateAndTimeToIso(date, end),
@@ -1491,15 +1530,35 @@ function EditJobTimesDialog({
 
   async function addRow() {
     if (!newMemberId) return;
-    await saveRow(newMemberId, newDate, newStart, newEnd);
-    setNewMemberId("");
-    setNewStart("");
-    setNewEnd("");
+    try {
+      let memberId = newMemberId;
+      // An "other employee" pick (not on this crew's roster) needs a real
+      // crm_crew_members row first — crm_crew_member_times.crew_member_id
+      // references that table, not employees directly.
+      if (newMemberId.startsWith("emp:")) {
+        if (!crewId) return;
+        const employeeId = newMemberId.slice(4);
+        const emp = otherEmployees.find((e) => e.id === employeeId);
+        if (!emp) return;
+        const created = await addCrewMember.mutateAsync({
+          crewId,
+          employeeId,
+          name: `${emp.firstName} ${emp.lastName}`,
+        });
+        memberId = created.id;
+      }
+      await saveRow(memberId, newDate, newStart, newEnd);
+      setNewMemberId("");
+      setNewStart("");
+      setNewEnd("");
+    } catch {
+      toast.error("Failed to add crew member");
+    }
   }
 
   async function removeRow(memberId: string) {
     try {
-      await del.mutateAsync({ visitId, crewMemberId: memberId });
+      await del.mutateAsync({ visitId: anchorVisitId, crewMemberId: memberId });
     } catch {
       toast.error("Failed to remove");
     }
@@ -1530,17 +1589,32 @@ function EditJobTimesDialog({
           )}
         </div>
 
-        {availableMembers.length > 0 ? (
+        {!crewId ? (
+          <p className="border-t pt-3 text-xs text-slate-400 italic">Assign a crew to this visit first to add crew member times.</p>
+        ) : availableMembers.length > 0 || otherEmployees.length > 0 ? (
           <div className="flex flex-wrap items-center gap-1.5 border-t pt-3">
             <Select value={newMemberId || "unassigned"} onValueChange={(v) => setNewMemberId(v === "unassigned" ? "" : v)}>
-              <SelectTrigger className="h-8 w-28 shrink-0 text-xs">
+              <SelectTrigger className="h-8 w-36 shrink-0 text-xs">
                 <SelectValue placeholder="Unassigned" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="unassigned" className="text-xs">Unassigned</SelectItem>
-                {availableMembers.map((m) => (
-                  <SelectItem key={m.id} value={m.id} className="text-xs">{m.employeeName ?? "Crew member"}</SelectItem>
-                ))}
+                {availableMembers.length > 0 && (
+                  <SelectGroup>
+                    <SelectLabel className="text-[10px]">This crew</SelectLabel>
+                    {availableMembers.map((m) => (
+                      <SelectItem key={m.id} value={m.id} className="text-xs">{m.employeeName ?? "Crew member"}</SelectItem>
+                    ))}
+                  </SelectGroup>
+                )}
+                {otherEmployees.length > 0 && (
+                  <SelectGroup>
+                    <SelectLabel className="text-[10px]">Other employees</SelectLabel>
+                    {otherEmployees.map((e) => (
+                      <SelectItem key={e.id} value={`emp:${e.id}`} className="text-xs">{e.firstName} {e.lastName}</SelectItem>
+                    ))}
+                  </SelectGroup>
+                )}
               </SelectContent>
             </Select>
             <Input type="date" value={newDate} onChange={(e) => setNewDate(e.target.value)} className="h-8 w-36 shrink-0 text-xs" />
@@ -1556,11 +1630,9 @@ function EditJobTimesDialog({
               <Plus className="h-3.5 w-3.5" />
             </button>
           </div>
-        ) : !crewId ? (
-          <p className="border-t pt-3 text-xs text-slate-400 italic">Assign a crew to this visit first to add crew member times.</p>
-        ) : allMembers.length === 0 ? (
+        ) : (
           <p className="border-t pt-3 text-xs text-slate-400 italic">This crew has no members yet — add them in Team settings.</p>
-        ) : null}
+        )}
 
         <DialogFooter>
           <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>Cancel</Button>
@@ -1592,6 +1664,7 @@ function VisitRow({
   crewCodeById,
   manualRouteMode,
   memberTimes,
+  anchorVisitId,
 }: {
   visit: CRMJobVisit;
   /** 1-based position of this visit within its own crew's stops for the day (not the global row index). */
@@ -1616,6 +1689,9 @@ function VisitRow({
    * Start/End pair) or genuinely different times (must show "Multiple times"
    * and route editing through the Edit Job Times dialog instead). */
   memberTimes: CrewMemberTime[];
+  /** The stop's anchor visit id (see EditJobTimesDialog) — crm_crew_member_times
+   * rows always live here, even for a sibling service visit like this one. */
+  anchorVisitId: string;
 }) {
   const job      = visit.job;
   const services = job?.services ?? [];
@@ -1706,6 +1782,14 @@ function VisitRow({
     const clockField = field === "start_time" ? "clocked_in_at" : "clocked_out_at";
     const clockIso = value ? dateAndTimeToIso(visit.scheduledDate, value) : null;
     updates[clockField] = clockIso;
+    // A genuine change to Start/End means whatever actual_hours was measured
+    // before (e.g. the stop clock-out flow's men-multiplied figure) no longer
+    // reflects reality — clear the override so computeActualHours() and the
+    // DB rollup both fall back to deriving it fresh from the corrected time.
+    // Guarded on an actual change so merely focusing/blurring the field
+    // without editing it doesn't silently wipe a real measured value.
+    const existingValue = field === "start_time" ? visit.startTime : visit.endTime;
+    if ((value || null) !== (existingValue || null)) updates.actual_hours = null;
     // Typing a time is what actually sends a crew out for the day — pull the
     // headcount from who's really on that crew today (Team Assignment),
     // instead of leaving whatever men_count the visit happened to start with.
@@ -1721,12 +1805,16 @@ function VisitRow({
       // side NOT being edited, safe to carry forward unchanged per member.
       // If no member has been tracked yet, seed the visit's whole crew
       // roster instead, same as Edit Job Times does when it first opens.
+      // Targets the stop's shared anchor visit id, not this row's own id —
+      // crm_crew_member_times always lives against the anchor (see
+      // EditJobTimesDialog), so writing to visit.id here would fork off a
+      // second, orphaned set of member-time rows for a sibling service.
       const targets = memberTimes.length > 0
         ? memberTimes.map((t) => ({ crewMemberId: t.crewMemberId, otherClockedInAt: t.clockedInAt, otherClockedOutAt: t.clockedOutAt }))
         : effectiveCrewMemberIds(visit.crewId, richCrewsForSize ?? [], dailyOverridesForSize)
             .map((id) => ({ crewMemberId: id, otherClockedInAt: null, otherClockedOutAt: null }));
       await Promise.all(targets.map((t) => upsertMemberTime.mutateAsync({
-        visitId: visit.id,
+        visitId: anchorVisitId,
         crewMemberId: t.crewMemberId,
         clockedInAt:  field === "start_time" ? clockIso : t.otherClockedInAt,
         clockedOutAt: field === "end_time"   ? clockIso : t.otherClockedOutAt,
@@ -2261,7 +2349,24 @@ export function DispatchBoard() {
   // times to detect per-member time divergence, and firing one query per
   // visible row would be its own N+1 problem.
   const { data: allMemberTimes = [] } = useCrewMemberTimesForDate(selectedDate, effectiveEnd);
-  const memberTimesByVisitId = useMemo(() => {
+  const allVisits = visits ?? [];
+  // A "stop" (same client/day/crew/address) clocks in and out as one unit —
+  // crm_crew_member_times rows are only ever written against the stop's
+  // anchor visit (see crew/stops/[visitId]/clock-out), even though every
+  // sibling service on that stop has its own crm_job_visits row. Looking
+  // member times up by each row's OWN id left every non-anchor visit with an
+  // empty roster (blank per-employee times) and, worse, made edits from a
+  // sibling row seed a brand-new set of member-time rows under the wrong
+  // visit id instead of reusing the shared ones. Resolve every visit to its
+  // stop's anchor id first so reads and writes agree on one place per stop.
+  const anchorVisitIdByVisitId = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const stop of groupVisitsIntoStops(allVisits)) {
+      for (const v of stop.visits) m.set(v.id, stop.anchorVisitId);
+    }
+    return m;
+  }, [allVisits]);
+  const memberTimesByAnchorId = useMemo(() => {
     const m = new Map<string, CrewMemberTime[]>();
     for (const t of allMemberTimes) {
       const arr = m.get(t.visitId);
@@ -2269,11 +2374,18 @@ export function DispatchBoard() {
     }
     return m;
   }, [allMemberTimes]);
+  const memberTimesByVisitId = useMemo(() => {
+    const m = new Map<string, CrewMemberTime[]>();
+    for (const visit of allVisits) {
+      const anchorId = anchorVisitIdByVisitId.get(visit.id) ?? visit.id;
+      m.set(visit.id, memberTimesByAnchorId.get(anchorId) ?? EMPTY_MEMBER_TIMES);
+    }
+    return m;
+  }, [allVisits, anchorVisitIdByVisitId, memberTimesByAnchorId]);
   const qc = useQueryClient();
   const createVisit = useCreateVisit();
   const { matches: nearbyMatches, loading: nearbyLoading, error: nearbyError, findNearby } = useNearbyWaitingListJobs(3);
 
-  const allVisits = visits ?? [];
   // Derived fresh from the live query every render (not stored as its own
   // state) so the sheet/dialog can never go stale relative to the table.
   const detailVisit    = detailVisitId    ? allVisits.find((v) => v.id === detailVisitId)    ?? null : null;
@@ -3203,6 +3315,7 @@ export function DispatchBoard() {
                   crewCodeById={crewCodeById}
                   manualRouteMode={manualRouteMode}
                   memberTimes={memberTimesByVisitId.get(visit.id) ?? EMPTY_MEMBER_TIMES}
+                  anchorVisitId={anchorVisitIdByVisitId.get(visit.id) ?? visit.id}
                 />
               ))
             )}
@@ -3222,6 +3335,7 @@ export function DispatchBoard() {
           crews={crews ?? []}
           onEditTimes={(v) => setEditTimesVisitId(v.id)}
           memberTimes={memberTimesByVisitId.get(detailVisit.id) ?? EMPTY_MEMBER_TIMES}
+          anchorVisitId={anchorVisitIdByVisitId.get(detailVisit.id) ?? detailVisit.id}
         />
       )}
 
@@ -3231,6 +3345,7 @@ export function DispatchBoard() {
           visit={editTimesVisit}
           open={!!editTimesVisit}
           onOpenChange={(o) => { if (!o) setEditTimesVisitId(null); }}
+          anchorVisitId={anchorVisitIdByVisitId.get(editTimesVisit.id) ?? editTimesVisit.id}
         />
       )}
 
