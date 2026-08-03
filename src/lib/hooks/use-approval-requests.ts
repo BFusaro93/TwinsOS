@@ -301,11 +301,25 @@ export function useDecideApproval(entityId: string) {
         .single();
       if (fetchErr) throw fetchErr;
 
+      // .select().single() (rather than a bare update) so an out-of-turn
+      // attempt — blocked server-side by the only_approver_can_update RLS
+      // policy's chain-order check — surfaces as a real error instead of a
+      // silent no-op: RLS filters the row out of the update entirely, so
+      // PostgREST returns zero rows and .single() throws.
       const { error: updateErr } = await supabase
         .from("approval_requests")
         .update({ status, comment: comment ?? null, decided_at: now })
-        .eq("id", requestId);
-      if (updateErr) throw updateErr;
+        .eq("id", requestId)
+        .select("id")
+        .single();
+      if (updateErr) {
+        // PGRST116 = "no rows returned" from .single() — here that means RLS
+        // filtered the row out of the update rather than a real DB error.
+        if (updateErr.code === "PGRST116") {
+          throw new Error("It's not your turn to approve this yet — an earlier step is still pending.");
+        }
+        throw updateErr;
+      }
 
       if (decided.flow_step_id) {
         await supabase

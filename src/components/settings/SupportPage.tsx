@@ -4,7 +4,6 @@ import { useState, useMemo } from "react";
 import {
   LifeBuoy,
   Mail,
-  MessageSquare,
   BookOpen,
   ChevronDown,
   Search,
@@ -215,7 +214,7 @@ export function SupportPage({ docsHref = "/docs" }: { docsHref?: string } = {}) 
           <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-slate-400">
             Get in Touch
           </h2>
-          <div className="grid gap-4 sm:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-2">
             <a
               href="mailto:support@twinsOS.com"
               className="flex items-start gap-4 rounded-lg border border-slate-200 bg-white p-5 shadow-sm transition-shadow hover:shadow-md"
@@ -227,19 +226,6 @@ export function SupportPage({ docsHref = "/docs" }: { docsHref?: string } = {}) 
                 <p className="text-sm font-semibold text-slate-800">Email Support</p>
                 <p className="mt-0.5 text-sm font-medium text-brand-600">support@twinsOS.com</p>
                 <p className="mt-1 text-xs text-slate-500">We typically respond within one business day.</p>
-              </div>
-            </a>
-            <a
-              href="#"
-              className="flex items-start gap-4 rounded-lg border border-slate-200 bg-white p-5 shadow-sm transition-shadow hover:shadow-md"
-            >
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-50">
-                <MessageSquare className="h-5 w-5 text-brand-600" />
-              </div>
-              <div>
-                <p className="text-sm font-semibold text-slate-800">Live Chat</p>
-                <p className="mt-0.5 text-sm font-medium text-brand-600">Open chat</p>
-                <p className="mt-1 text-xs text-slate-500">Available Mon – Fri, 9 am – 5 pm ET.</p>
               </div>
             </a>
             <a

@@ -934,6 +934,38 @@ export function ContractsList({ clientId }: Props) {
     }
   }
 
+  function handleExport() {
+    const ids = selected.size > 0 ? selected : null;
+    const rows = ids ? filtered.filter((c) => ids.has(c.id)) : filtered;
+    if (rows.length === 0) {
+      toast.info("No contracts to export");
+      return;
+    }
+    const header = ["Client", "Contract", "Status", "Billing Day", "Monthly Amount", "Start Date", "End Date", "Last Bill Date"];
+    const csvEscape = (v: string) => `"${v.replace(/"/g, '""')}"`;
+    const lines = [header.map(csvEscape).join(",")];
+    for (const c of rows) {
+      lines.push([
+        c.clientName ?? "",
+        c.title,
+        c.status,
+        ordinal(c.billingDayOfMonth),
+        c.monthlyAmountCents > 0 ? formatCurrency(c.monthlyAmountCents) : "",
+        fmtDate(c.startDate),
+        fmtDate(c.endDate),
+        fmtDate(c.lastBilledDate),
+      ].map((v) => csvEscape(String(v ?? ""))).join(","));
+    }
+    const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `contracts-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success(`Exported ${rows.length} contract${rows.length !== 1 ? "s" : ""}`);
+  }
+
   async function handleDelete(c: CRMContract) {
     if (!confirm(`Delete "${c.title}"?`)) return;
     try { await del(c.id); toast.success("Deleted"); }
@@ -994,7 +1026,7 @@ export function ContractsList({ clientId }: Props) {
             <DropdownMenuItem onSelect={handleCreateInvoices} disabled={generatingInvoices}>
               {generatingInvoices ? "Creating…" : "Create Invoices"}
             </DropdownMenuItem>
-            <DropdownMenuItem>Export</DropdownMenuItem>
+            <DropdownMenuItem onSelect={handleExport}>Export</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
 

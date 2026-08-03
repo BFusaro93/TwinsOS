@@ -33,15 +33,22 @@ export async function recalcNextPackageVisitDate(
   const nextService = nextServices?.[0] as { id: string; min_days: number | null } | undefined;
   if (!nextService?.min_days) return;
 
-  // That service's own visit — skip if it's already done or was cancelled.
+  // That service's own visit — one job_service_id can now have many visit rows
+  // (per-service recurring visits generate one per occurrence), so this MUST
+  // filter out completed/cancelled ones and order by date itself rather than
+  // trusting an arbitrary unordered row: without both, `.limit(1)` could just
+  // as easily return an already-completed occurrence, silently no-opping this
+  // whole recalc even though a real future visit still needs pushing out.
   const { data: nextVisits } = await supabase
     .from("crm_job_visits")
     .select("id, scheduled_date, status")
     .eq("job_service_id", nextService.id)
     .is("deleted_at", null)
+    .not("status", "in", "(completed,cancelled)")
+    .order("scheduled_date", { ascending: true })
     .limit(1);
   const nextVisit = nextVisits?.[0] as { id: string; scheduled_date: string; status: string } | undefined;
-  if (!nextVisit || nextVisit.status === "completed" || nextVisit.status === "cancelled") return;
+  if (!nextVisit) return;
 
   const candidate = new Date(`${completedDateStr}T00:00:00`);
   candidate.setDate(candidate.getDate() + nextService.min_days);

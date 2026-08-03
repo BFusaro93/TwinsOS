@@ -235,9 +235,13 @@ export function useJobCosting(jobId: string, estimateId?: string | null): {
         );
       }
 
+      // crm_jobs.actual_hours is already man-hours (crm_recompute_job_actual_hours
+      // sums each visit's duration × its own men_count) — multiplying by this
+      // job's men_count again here double-counted crew size, halving the
+      // displayed actual revenue-per-man-hour for any multi-person crew.
       const actualHours = Number(jobRow.actual_hours ?? 0);
       const menCount = Number(visitRow?.men_count ?? 1);
-      const actualStaffHrs = actualHours * menCount;
+      const actualStaffHrs = actualHours;
       const actualRevRateCents: number = visitRow?.rate_cents ?? 0;
       const actualRevPerManHrCents = actualStaffHrs > 0
         ? Math.round(actualRevRateCents / actualStaffHrs)

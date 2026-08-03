@@ -86,9 +86,14 @@ export async function GET(request: Request) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const rows: JobCostingReportRow[] = (jobs ?? []).map((job: any): JobCostingReportRow => {
     const visit = visitMap.get(job.id);
+    // crm_jobs.actual_hours is already man-hours — crm_recompute_job_actual_hours
+    // sums each visit's (duration × its own men_count), so multiplying by this
+    // job's most-recent-visit men_count again here double-counted crew size,
+    // halving revPerManHr and doubling the reported hours variance for any
+    // job with more than one crew member.
     const actualHours = Number(job.actual_hours ?? 0);
     const menCount = Number(visit?.men_count ?? 1);
-    const actualStaffHrs = actualHours * menCount;
+    const actualStaffHrs = actualHours;
     const rateCents: number = visit?.rate_cents ?? 0;
     const revPerManHrCents = actualStaffHrs > 0 ? Math.round(rateCents / actualStaffHrs) : 0;
     const targetRateCents: number = job.crm_services?.target_rate_cents_per_hr ?? 0;

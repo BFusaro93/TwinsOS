@@ -116,9 +116,11 @@ export async function GET(request: Request) {
 
     const bucket = byService.get(svcId)!;
     const visit = visitMap.get(job.id);
+    // crm_jobs.actual_hours is already man-hours (see job-costing/route.ts
+    // for the full explanation) — multiplying by men_count again here
+    // double-counted crew size across this whole service's rollup.
     const actualHours = Number(job.actual_hours ?? 0);
-    const menCount = Number(visit?.men_count ?? 1);
-    const actualStaffHrs = actualHours * menCount;
+    const actualStaffHrs = actualHours;
     const rateCents: number = visit?.rate_cents ?? 0;
     const revPerManHr = actualStaffHrs > 0 ? Math.round(rateCents / actualStaffHrs) : 0;
 

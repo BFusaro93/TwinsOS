@@ -136,8 +136,15 @@ export function JobsList() {
     // active
     if (o.date === null) return false;
     if (o.status === "completed" || o.status === "cancelled") return false;
-    if (fromDate && o.date < fromDate) return false;
-    if (toDate && o.date > toDate) return false;
+    // An overdue job (its earliest still-pending visit is in the past —
+    // nobody ever marked it completed/skipped) always shows regardless of
+    // the From/To window, which defaults to today onward. Otherwise a stale
+    // recurring job just silently disappears from the default Active view
+    // instead of surfacing as needing attention.
+    if (o.date >= today) {
+      if (fromDate && o.date < fromDate) return false;
+      if (toDate && o.date > toDate) return false;
+    }
     return true;
   });
 

@@ -2233,12 +2233,28 @@ function VisitRow({
   );
 }
 
+// Same per-service rate fallback VisitRow's own Amt/Rate cells use — a
+// recurring job's price usually comes from its linked crm_job_services row,
+// not visit.rateCents or job.rateCents directly. Every aggregate below
+// (Totals row, crew stat cards) must apply this same fallback or those jobs
+// silently contribute $0, understating the total by whatever fraction of
+// visits price this way (the common case).
+function visitAmountCents(visit: CRMJobVisit): number {
+  const job = visit.job;
+  const services = job?.services ?? [];
+  const linkedService = visit.jobServiceId ? services.find((s) => s.id === visit.jobServiceId) : null;
+  const serviceTotal = linkedService
+    ? (linkedService.rateCents ?? 0) * (linkedService.qty ?? 1)
+    : services.reduce((s, svc) => s + (svc.rateCents ?? 0) * (svc.qty ?? 1), 0);
+  return visit.rateCents ?? (linkedService ? serviceTotal : (job?.rateCents ?? serviceTotal));
+}
+
 // ── totals row ─────────────────────────────────────────────────────────────────
 
 function TotalsRow({ visits, isVisible }: { visits: CRMJobVisit[]; isVisible: (col: ColKey) => boolean }) {
   const totalBHrs = visits.reduce((s, v) => s + (v.budgetedHours ?? v.job?.budgetedHours ?? 0), 0);
   const totalAct  = visits.reduce((s, v) => s + (computeActualHours(v) ?? 0), 0);
-  const totalAmt  = visits.reduce((s, v) => s + ((v as any).rateCents ?? v.job?.rateCents ?? 0), 0);
+  const totalAmt  = visits.reduce((s, v) => s + visitAmountCents(v), 0);
 
   // Fixed always-visible cols: checkbox(1), #(1), St(1), Client(1) = 4
   // Toggleable cols that appear before B Hrs:
@@ -2657,12 +2673,12 @@ export function DispatchBoard() {
       name: c.name,
       count: cv.length,
       bHrs: cv.reduce((s, v) => s + (v.budgetedHours ?? v.job?.budgetedHours ?? 0), 0),
-      amt: cv.reduce((s, v) => s + ((v as any).rateCents ?? v.job?.rateCents ?? 0), 0),
+      amt: cv.reduce((s, v) => s + visitAmountCents(v), 0),
     };
   }).filter((s) => s.count > 0);
   const unassignedStatCount  = displayVisits.filter((v) => !v.crewId).length;
   const unassignedStatBHrs   = displayVisits.filter((v) => !v.crewId).reduce((s, v) => s + (v.budgetedHours ?? v.job?.budgetedHours ?? 0), 0);
-  const unassignedStatAmt    = displayVisits.filter((v) => !v.crewId).reduce((s, v) => s + ((v as any).rateCents ?? v.job?.rateCents ?? 0), 0);
+  const unassignedStatAmt    = displayVisits.filter((v) => !v.crewId).reduce((s, v) => s + visitAmountCents(v), 0);
 
   const callAheadVisits = displayVisits.filter((v) => v.job?.callAhead && v.clientPhone);
 
