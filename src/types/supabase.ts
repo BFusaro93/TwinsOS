@@ -8241,6 +8241,7 @@ export type Database = {
           deleted_at: string | null
           id: string
           meter_id: string
+          notes: string | null
           org_id: string
           reading_at: string
           recorded_by_name: string | null
@@ -8254,6 +8255,7 @@ export type Database = {
           deleted_at?: string | null
           id?: string
           meter_id: string
+          notes?: string | null
           org_id?: string
           reading_at?: string
           recorded_by_name?: string | null
@@ -8267,6 +8269,7 @@ export type Database = {
           deleted_at?: string | null
           id?: string
           meter_id?: string
+          notes?: string | null
           org_id?: string
           reading_at?: string
           recorded_by_name?: string | null

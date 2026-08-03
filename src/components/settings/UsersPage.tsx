@@ -616,6 +616,7 @@ export function UsersPage() {
                           <SelectItem value="manager">Manager</SelectItem>
                           <SelectItem value="purchaser">Purchaser</SelectItem>
                           <SelectItem value="technician">Technician</SelectItem>
+                          <SelectItem value="crew">Crew</SelectItem>
                           <SelectItem value="viewer">Viewer</SelectItem>
                           <SelectItem value="requestor">Requestor</SelectItem>
                         </SelectContent>

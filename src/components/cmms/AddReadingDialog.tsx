@@ -67,6 +67,7 @@ export function AddReadingDialog({ open, onOpenChange, meter }: AddReadingDialog
         readingAt: readingAtISO,
         source: meter.source,
         recordedByName: null,
+        notes: notes.trim() || null,
       },
       { onSuccess: () => handleClose() }
     );

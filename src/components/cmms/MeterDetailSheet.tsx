@@ -11,7 +11,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
-import { X, Trash2 } from "lucide-react";
+import { X, Trash2, StickyNote } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import {
@@ -167,7 +167,16 @@ function MeterContent({ meter }: { meter: Meter }) {
               <tbody>
                 {sorted.map((r) => (
                   <tr key={r.id} className="group border-t border-slate-100">
-                    <td className="px-3 py-2 text-slate-600">{formatDate(r.readingAt)}</td>
+                    <td className="px-3 py-2 text-slate-600">
+                      <span className="inline-flex items-center gap-1.5">
+                        {formatDate(r.readingAt)}
+                        {r.notes && (
+                          <span title={r.notes}>
+                            <StickyNote className="h-3 w-3 shrink-0 text-amber-400" />
+                          </span>
+                        )}
+                      </span>
+                    </td>
                     <td className="px-3 py-2 text-right font-medium text-slate-900">
                       {r.value.toLocaleString()}
                       <span className="ml-1 text-xs font-normal text-slate-400">{meter.unit}</span>

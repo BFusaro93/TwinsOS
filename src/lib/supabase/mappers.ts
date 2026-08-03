@@ -590,6 +590,7 @@ export function mapMeterReading(row: MeterReadingRow): MeterReading {
     readingAt: row.reading_at,
     source: row.source as "manual" | "samsara",
     recordedByName: row.recorded_by_name,
+    notes: row.notes,
   };
 }
 

@@ -511,6 +511,7 @@ export function useUpdateClient() {
           billing_same_as_service: updates.billingSameAsService,
           source: updates.source,
           ok_to_email: updates.okToEmail,
+          do_not_market: updates.doNotMarket,
           payment_method: updates.paymentMethod,
           billing_terms: updates.billingTerms,
           invoice_frequency: updates.invoiceFrequency,

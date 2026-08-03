@@ -203,6 +203,8 @@ export function useUpdateWorkOrder() {
         ...(input.assetId !== undefined && { asset_id: input.assetId }),
         ...(input.assetName !== undefined && { asset_name: input.assetName }),
         ...(input.linkedEntityType !== undefined && { linked_entity_type: input.linkedEntityType }),
+        ...(input.isRecurring !== undefined && { is_recurring: input.isRecurring }),
+        ...(input.recurrenceFrequency !== undefined && { recurrence_frequency: input.recurrenceFrequency }),
       }).eq("id", id).select().single();
       if (error) throw error;
       return mapWorkOrder(data);

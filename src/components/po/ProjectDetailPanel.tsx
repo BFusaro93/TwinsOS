@@ -48,8 +48,8 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { PROJECT_STATUS_LABELS } from "@/lib/constants";
-import { useRequisitions } from "@/lib/hooks/use-requisitions";
-import { usePurchaseOrders } from "@/lib/hooks/use-purchase-orders";
+import { useRequisitions, useAddRequisitionLineItem } from "@/lib/hooks/use-requisitions";
+import { usePurchaseOrders, useAddPOLineItem } from "@/lib/hooks/use-purchase-orders";
 import { useDeleteProject, useUpdateProject, useArchiveProject } from "@/lib/hooks/use-projects";
 import {
   useProjectDirectItems,
@@ -137,6 +137,8 @@ function MaterialsTab({ project }: { project: Project }) {
   const { mutate: addDirectItem } = useAddProjectDirectItem();
   const { mutate: updateDirectItem } = useUpdateProjectDirectItem();
   const { mutate: deleteDirectItem } = useDeleteProjectDirectItem();
+  const { mutateAsync: addReqLineItem } = useAddRequisitionLineItem();
+  const { mutateAsync: addPOLineItem } = useAddPOLineItem();
 
   // Build the initial list from linked REQ / PO line items.
   // Skip requisitions that have been converted to a PO (status "ordered"
@@ -261,7 +263,7 @@ function MaterialsTab({ project }: { project: Project }) {
   const [poOpen, setPoOpen] = useState(false);
   const [poPrefill, setPoPrefill] = useState<{ projectId: string; items: POPrefillItem[] } | null>(null);
 
-  function handleAddConfirm(draftItems: AddMaterialsDraftItem[], destination: AddMaterialsDestination) {
+  async function handleAddConfirm(draftItems: AddMaterialsDraftItem[], destination: AddMaterialsDestination) {
     const toProjectItems = (src: AddMaterialsDraftItem[], sourceNumber: string, sourceType: ProjectLineItem["sourceType"], sourceId = ""): ProjectLineItem[] =>
       src.map((i) => ({
         id: `${sourceType}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
@@ -304,9 +306,82 @@ function MaterialsTab({ project }: { project: Project }) {
         );
       });
     } else if (destination.type === "existing_req") {
-      // Items added to existing REQ will appear via TanStack Query cache invalidation
+      const req = requisitions?.find((r) => r.id === destination.reqId);
+      if (!req) { toast.error("That requisition could no longer be found"); return; }
+      try {
+        // requisition_line_items has no per-line taxable flag — tax applies to
+        // the whole subtotal (see RequisitionDetailPanel's own totals()), so a
+        // running subtotal is enough; each add is sequenced so newSubtotal
+        // reflects everything added so far, not just this one item.
+        let runningSubtotal = req.lineItems.reduce((s, li) => s + li.quantity * li.unitCost, 0);
+        for (const i of draftItems) {
+          const isPart = i.productKey.startsWith("part:");
+          const rawId = i.productKey.replace(/^(product:|part:)/, "");
+          const unitCostCents = Math.round(i.unitCost * 100);
+          runningSubtotal += i.quantity * unitCostCents;
+          const taxableAfterDiscount = Math.max(0, runningSubtotal - req.discountCost);
+          const salesTax = Math.round((taxableAfterDiscount * req.taxRatePercent) / 100);
+          const grandTotal = runningSubtotal - req.discountCost + salesTax + req.shippingCost;
+          await addReqLineItem({
+            requisitionId: req.id,
+            lineItem: {
+              productItemId: isPart ? "" : rawId,
+              partId: isPart ? rawId : null,
+              productItemName: i.productName,
+              partNumber: i.partNumber,
+              quantity: i.quantity,
+              unitCost: unitCostCents,
+              totalCost: i.quantity * unitCostCents,
+              projectId: project.id,
+              notes: null,
+              taxable: true,
+            },
+            newSubtotal: runningSubtotal,
+            newSalesTax: salesTax,
+            newGrandTotal: grandTotal,
+          });
+        }
+        toast.success(`Added ${draftItems.length} item${draftItems.length !== 1 ? "s" : ""} to ${req.requisitionNumber}`);
+      } catch {
+        toast.error("Failed to add materials to the requisition", { description: "Please try again." });
+      }
     } else if (destination.type === "existing_po") {
-      // Items added to existing PO will appear via TanStack Query cache invalidation
+      const po = purchaseOrders?.find((p) => p.id === destination.poId);
+      if (!po) { toast.error("That purchase order could no longer be found"); return; }
+      try {
+        // po_line_items DOES have a per-line taxable flag, so totals must be
+        // recomputed from the full running item list each time (mirrors
+        // PODetailPanel's own totals()), not just a running subtotal.
+        let items = [...po.lineItems];
+        for (const i of draftItems) {
+          const isPart = i.productKey.startsWith("part:");
+          const rawId = i.productKey.replace(/^(product:|part:)/, "");
+          const unitCostCents = Math.round(i.unitCost * 100);
+          const newItem = {
+            id: crypto.randomUUID(),
+            productItemId: isPart ? "" : rawId,
+            partId: isPart ? rawId : null,
+            productItemName: i.productName,
+            partNumber: i.partNumber,
+            quantity: i.quantity,
+            unitCost: unitCostCents,
+            totalCost: i.quantity * unitCostCents,
+            projectId: project.id,
+            notes: null,
+            taxable: true,
+          };
+          items = [...items, newItem];
+          const subtotal = Math.round(items.reduce((s, li) => s + li.quantity * li.unitCost, 0));
+          const taxableSubtotal = Math.round(items.filter((li) => li.taxable !== false).reduce((s, li) => s + li.quantity * li.unitCost, 0));
+          const taxableAfterDiscount = Math.max(0, taxableSubtotal - po.discountCost);
+          const salesTax = Math.round((taxableAfterDiscount * po.taxRatePercent) / 100);
+          const grandTotal = subtotal - po.discountCost + salesTax + po.shippingCost;
+          await addPOLineItem({ poId: po.id, item: newItem, subtotal, salesTax, grandTotal });
+        }
+        toast.success(`Added ${draftItems.length} item${draftItems.length !== 1 ? "s" : ""} to ${po.poNumber}`);
+      } catch {
+        toast.error("Failed to add materials to the purchase order", { description: "Please try again." });
+      }
     } else if (destination.type === "new_req") {
       setReqPrefill({
         projectId: project.id,
