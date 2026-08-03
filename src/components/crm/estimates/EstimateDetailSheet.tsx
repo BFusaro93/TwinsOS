@@ -11,10 +11,12 @@ interface Props {
 }
 
 const MIN_WIDTH = 600;
-const DEFAULT_WIDTH = Math.min(1200, typeof window !== "undefined" ? window.innerWidth * 0.85 : 1200);
 
 export function EstimateDetailSheet({ estimateId, onOpenChange }: Props) {
-  const [width, setWidth] = useState(DEFAULT_WIDTH);
+  // Lazy-initialized on mount (not at module scope) so it reflects the
+  // actual viewport instead of whatever window.innerWidth was when this
+  // chunk first happened to be evaluated.
+  const [width, setWidth] = useState(() => Math.max(MIN_WIDTH, Math.min(1200, typeof window !== "undefined" ? window.innerWidth * 0.85 : 1200)));
   const dragging = useRef(false);
   const startX = useRef(0);
   const startW = useRef(0);
