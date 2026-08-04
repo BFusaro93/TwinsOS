@@ -56,10 +56,10 @@ const LEAD_COLUMNS: ColumnDef[] = [
   { key: "phone",       label: "Phone" },
   { key: "email",       label: "Email" },
   { key: "city",        label: "City" },
+  { key: "zip",         label: "Zip" },
   { key: "source",      label: "Source" },
   { key: "potential",   label: "Potential/yr" },
   { key: "dateAdded",   label: "Date Added" },
-  { key: "zip",         label: "Zip" },
 ];
 
 // Default view = every column already shown today.
@@ -456,10 +456,10 @@ export function LeadsList({ newDialogOpen, onNewDialogOpenChange, onSelect }: Le
               {cols.phone && <th className="px-4 py-3">Phone</th>}
               {cols.email && <th className="px-4 py-3">Email</th>}
               {cols.city && <th className="px-4 py-3">City</th>}
+              {cols.zip && <th className="px-4 py-3">Zip</th>}
               {cols.source && <th className="px-4 py-3">Source</th>}
               {cols.potential && <th className="px-4 py-3 text-right">Potential/yr</th>}
               {cols.dateAdded && <th className="px-4 py-3">Date Added</th>}
-              {cols.zip && <th className="px-4 py-3">Zip</th>}
               <th className="px-4 py-3" />
             </tr>
           </thead>
@@ -517,6 +517,11 @@ export function LeadsList({ newDialogOpen, onNewDialogOpenChange, onSelect }: Le
                         {[lead.serviceAddress, lead.serviceCity, lead.serviceState].filter(Boolean).join(", ") || "—"}
                       </td>
                     )}
+                    {cols.zip && (
+                      <td className="px-4 py-2.5 text-slate-500">
+                        {lead.serviceZip || lead.billingZip || "—"}
+                      </td>
+                    )}
                     {cols.source && <td className="px-4 py-2.5 text-slate-500">{lead.source ?? "—"}</td>}
                     {cols.potential && (
                       <td className="px-4 py-2.5 text-right">
@@ -528,11 +533,6 @@ export function LeadsList({ newDialogOpen, onNewDialogOpenChange, onSelect }: Le
                         {lead.clientSince
                           ? new Date(lead.clientSince + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
                           : "—"}
-                      </td>
-                    )}
-                    {cols.zip && (
-                      <td className="px-4 py-2.5 text-slate-500">
-                        {lead.serviceZip || lead.billingZip || "—"}
                       </td>
                     )}
                     <td className="px-4 py-2.5">

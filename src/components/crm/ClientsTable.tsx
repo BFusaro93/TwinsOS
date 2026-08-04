@@ -48,11 +48,11 @@ const CLIENT_COLUMNS: ColumnDef[] = [
   { key: "phone",         label: "Phone" },
   { key: "email",         label: "Email" },
   { key: "city",          label: "City" },
+  { key: "zip",           label: "Zip" },
   { key: "balance",       label: "Balance" },
   { key: "source",        label: "Source" },
   { key: "clientSince",   label: "Client Since" },
   { key: "accountNumber", label: "Account #" },
-  { key: "zip",           label: "Zip" },
 ];
 
 // Default view = every column already shown today, plus Email.
@@ -714,11 +714,11 @@ export function ClientsTable({ onSelect }: Props) {
               {cols.phone && <th className="px-4 py-3">Phone</th>}
               {cols.email && <th className="px-4 py-3">Email</th>}
               {cols.city && <th className="px-4 py-3">City</th>}
+              {cols.zip && <th className="px-4 py-3">Zip</th>}
               {cols.balance && <th className="px-4 py-3 text-right">Balance</th>}
               {cols.source && <th className="px-4 py-3">Source</th>}
               {cols.clientSince && <th className="px-4 py-3">Client Since</th>}
               {cols.accountNumber && <th className="px-4 py-3">Account #</th>}
-              {cols.zip && <th className="px-4 py-3">Zip</th>}
               <th className="px-4 py-3" />
             </tr>
           </thead>
@@ -793,6 +793,7 @@ export function ClientsTable({ onSelect }: Props) {
                         {[client.serviceAddress, client.serviceCity, client.serviceState].filter(Boolean).join(", ") || "—"}
                       </td>
                     )}
+                    {cols.zip && <td className="px-4 py-2.5 text-slate-500">{client.serviceZip || client.billingZip || "—"}</td>}
                     {cols.balance && (
                       <td className="px-4 py-2.5 text-right">
                         {client.balanceOutstandingCents > 0
@@ -809,7 +810,6 @@ export function ClientsTable({ onSelect }: Props) {
                       </td>
                     )}
                     {cols.accountNumber && <td className="px-4 py-2.5 text-slate-500">{client.accountNumber ?? "—"}</td>}
-                    {cols.zip && <td className="px-4 py-2.5 text-slate-500">{client.serviceZip || client.billingZip || "—"}</td>}
                     <td className="px-4 py-2.5">
                       <button
                         onClick={(e) => { e.stopPropagation(); router.push(`/crm/clients/${client.id}`); }}
