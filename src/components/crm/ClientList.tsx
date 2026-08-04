@@ -18,6 +18,7 @@ const STATUS_COLOR: Record<string, string> = {
   inactive:  "bg-slate-100 text-slate-500",
   lead:      "bg-yellow-100 text-yellow-700",
   cancelled: "bg-red-100 text-red-600",
+  lost:      "bg-orange-100 text-orange-700",
 };
 
 interface Props {

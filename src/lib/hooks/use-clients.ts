@@ -934,7 +934,8 @@ export function useActivateClient() {
   });
 }
 
-/** Close a lead as lost — sets closed_at and status to inactive. */
+/** Close a lead as lost — sets closed_at and status to lost. Distinct from
+ *  'inactive' (a former active client), since this lead never became a client. */
 export function useCloseLeadAsLost() {
   const qc = useQueryClient();
   return useMutation({
@@ -942,13 +943,31 @@ export function useCloseLeadAsLost() {
       const supabase = createClient();
       const { error } = await supabase
         .from("clients")
-        .update({ status: "inactive", cancellation_reason: reason, closed_at: new Date().toISOString() })
+        .update({ status: "lost", cancellation_reason: reason, closed_at: new Date().toISOString() })
         .eq("id", clientId);
       if (error) throw error;
     },
     onSuccess: (_d, { clientId }) => {
       qc.invalidateQueries({ queryKey: ["clients"] });
       qc.invalidateQueries({ queryKey: ["clients", clientId] });
+    },
+  });
+}
+
+/** Bulk close leads as lost — same semantics as useCloseLeadAsLost, for multiple leads at once. */
+export function useBulkCloseLeadsAsLost() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ clientIds, reason }: { clientIds: string[]; reason: string }) => {
+      const supabase = createClient();
+      const { error } = await supabase
+        .from("clients")
+        .update({ status: "lost", cancellation_reason: reason, closed_at: new Date().toISOString() })
+        .in("id", clientIds);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["clients"] });
     },
   });
 }

@@ -37,6 +37,7 @@ import {
 import { cn, formatCurrency } from "@/lib/utils";
 import { toast } from "sonner";
 import type { Client, ClientStatus, AccountType } from "@/types/crm";
+import { ACCOUNT_TYPE_COLOR } from "@/lib/account-type-colors";
 
 // ── Column visibility ─────────────────────────────────────────────────────────
 
@@ -51,12 +52,13 @@ const CLIENT_COLUMNS: ColumnDef[] = [
   { key: "source",        label: "Source" },
   { key: "clientSince",   label: "Client Since" },
   { key: "accountNumber", label: "Account #" },
+  { key: "zip",           label: "Zip" },
 ];
 
 // Default view = every column already shown today, plus Email.
 const CLIENT_DEFAULT_VISIBLE: Record<string, boolean> = {
   tags: true, type: true, status: true, phone: true, email: true, city: true, balance: true,
-  source: false, clientSince: false, accountNumber: false,
+  source: false, clientSince: false, accountNumber: false, zip: false,
 };
 
 // ── Filter query builder types ────────────────────────────────────────────────
@@ -102,6 +104,7 @@ const STATUS_COLOR: Record<string, string> = {
   inactive:  "bg-slate-100 text-slate-500",
   lead:      "bg-yellow-100 text-yellow-700",
   cancelled: "bg-red-100 text-red-600",
+  lost:      "bg-orange-100 text-orange-700",
 };
 
 // ── Cancel dialog ─────────────────────────────────────────────────────────────
@@ -173,7 +176,7 @@ function BulkEditDialog({
   const [saving, setSaving] = useState(false);
 
   const FIELDS = [
-    { key: "status",       label: "Status",       options: ["active", "inactive", "lead", "cancelled"] },
+    { key: "status",       label: "Status",       options: ["active", "inactive", "lead", "cancelled", "lost"] },
     { key: "account_type", label: "Account Type", options: ["residential", "commercial"] },
     { key: "source",       label: "Source",       options: [] },
     { key: "priority",     label: "Priority",     options: ["low", "normal", "high"] },
@@ -290,7 +293,7 @@ export function ClientsTable({ onSelect }: Props) {
 
   const FILTER_FIELDS: FilterFieldDef[] = useMemo(() => [
     { value: "status",         label: "Status",           type: "select",
-      options: [{ v: "active", l: "Active" }, { v: "lead", l: "Lead" }, { v: "inactive", l: "Inactive" }, { v: "cancelled", l: "Cancelled" }] },
+      options: [{ v: "active", l: "Active" }, { v: "lead", l: "Lead" }, { v: "inactive", l: "Inactive" }, { v: "cancelled", l: "Cancelled" }, { v: "lost", l: "Lost" }] },
     { value: "account_type",   label: "Account Type",     type: "select",
       options: [{ v: "residential", l: "Residential" }, { v: "commercial", l: "Commercial" }] },
     { value: "balance",        label: "Balance",          type: "number" },
@@ -715,6 +718,7 @@ export function ClientsTable({ onSelect }: Props) {
               {cols.source && <th className="px-4 py-3">Source</th>}
               {cols.clientSince && <th className="px-4 py-3">Client Since</th>}
               {cols.accountNumber && <th className="px-4 py-3">Account #</th>}
+              {cols.zip && <th className="px-4 py-3">Zip</th>}
               <th className="px-4 py-3" />
             </tr>
           </thead>
@@ -768,7 +772,13 @@ export function ClientsTable({ onSelect }: Props) {
                         ) : <span className="text-slate-300">—</span>}
                       </td>
                     )}
-                    {cols.type && <td className="px-4 py-2.5 capitalize text-slate-500 text-xs">{client.accountType}</td>}
+                    {cols.type && (
+                      <td className="px-4 py-2.5">
+                        <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-medium capitalize", ACCOUNT_TYPE_COLOR[client.accountType] ?? "bg-slate-100 text-slate-500")}>
+                          {client.accountType}
+                        </span>
+                      </td>
+                    )}
                     {cols.status && (
                       <td className="px-4 py-2.5">
                         <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-medium capitalize", STATUS_COLOR[client.status] ?? "bg-slate-100 text-slate-500")}>
@@ -799,6 +809,7 @@ export function ClientsTable({ onSelect }: Props) {
                       </td>
                     )}
                     {cols.accountNumber && <td className="px-4 py-2.5 text-slate-500">{client.accountNumber ?? "—"}</td>}
+                    {cols.zip && <td className="px-4 py-2.5 text-slate-500">{client.serviceZip || client.billingZip || "—"}</td>}
                     <td className="px-4 py-2.5">
                       <button
                         onClick={(e) => { e.stopPropagation(); router.push(`/crm/clients/${client.id}`); }}

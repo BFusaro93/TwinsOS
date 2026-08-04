@@ -39,7 +39,7 @@ export function useClientFilterFields() {
 
   const fields: FilterFieldDef[] = useMemo(() => [
     { value: "status",         label: "Status",            type: "select",
-      options: [{ v: "active", l: "Active" }, { v: "lead", l: "Lead" }, { v: "inactive", l: "Inactive" }, { v: "cancelled", l: "Cancelled" }] },
+      options: [{ v: "active", l: "Active" }, { v: "lead", l: "Lead" }, { v: "inactive", l: "Inactive" }, { v: "cancelled", l: "Cancelled" }, { v: "lost", l: "Lost" }] },
     { value: "account_type",   label: "Account Type",      type: "select",
       options: [{ v: "residential", l: "Residential" }, { v: "commercial", l: "Commercial" }] },
     { value: "balance",        label: "Balance",           type: "number" },

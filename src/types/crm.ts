@@ -1,4 +1,4 @@
-export type ClientStatus = 'active' | 'inactive' | 'lead' | 'cancelled';
+export type ClientStatus = 'active' | 'inactive' | 'lead' | 'cancelled' | 'lost';
 export type AccountType = 'residential' | 'commercial';
 export type InvoiceFrequency = 'daily' | 'weekly' | 'monthly' | 'upon_completion';
 export type InvoiceDelivery = 'email' | 'print' | 'both';
