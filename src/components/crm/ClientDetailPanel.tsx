@@ -130,9 +130,11 @@ const STATUS_COLOR: Record<string, string> = {
 };
 
 function BalanceCard({ client, revenuePotentialCents }: { client: Client; revenuePotentialCents?: number }) {
-  const isLead = client.status === "lead";
+  // A closed-lost lead never became a client either — show the same
+  // Revenue Potential card as an open lead rather than an empty balance card.
+  const isLeadLike = client.status === "lead" || client.status === "lost";
 
-  if (isLead) {
+  if (isLeadLike) {
     return (
       <div className="relative ml-3">
         <div className="rounded-lg bg-[#4a4a4a] pr-3 pb-3 pl-3" style={{ paddingTop: "92px" }} />
@@ -2670,6 +2672,9 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
   const { data: openPayment } = usePayment(openPaymentId ?? undefined);
   const router = useRouter();
   const isLead = client?.status === "lead";
+  // A closed-lost lead never became a client either — keep the same simplified
+  // lead layout (no Jobs/Accounting/Contracts) rather than the full client view.
+  const isLeadLike = isLead || client?.status === "lost";
   const hasChildren = (childClients ?? []).length > 0;
   const totalChildBalance = (childClients ?? []).reduce((sum, c) => sum + c.balanceOutstandingCents, 0);
   const { data: leadEstimates } = useEstimates(clientId);
@@ -3146,7 +3151,7 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
               { value: "home",      label: "Home" },
               { value: "activity",  label: "Activity" },
               { value: "tickets",   label: "Tickets" },
-              ...(!isLead ? [{ value: "contracts", label: "Contracts" }] : []),
+              ...(!isLeadLike ? [{ value: "contracts", label: "Contracts" }] : []),
               { value: "projects",  label: "Projects" },
               { value: "photos",    label: "Photos" },
               { value: "files",     label: "Files" },
@@ -3165,7 +3170,7 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
         </TabsList>
 
         <TabsContent value="home" className="m-0 pt-2">
-          <HomeTab clientId={clientId} isLead={isLead} onSwitchTab={setActiveTab} />
+          <HomeTab clientId={clientId} isLead={isLeadLike} onSwitchTab={setActiveTab} />
         </TabsContent>
 
         <TabsContent value="activity" className="m-0 min-h-[500px]">
