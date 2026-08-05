@@ -29,6 +29,30 @@ export function computeActualHours(visit: VisitHoursInput): number | null {
   return diffHours * (visit.menCount || 1);
 }
 
+export interface VisitBudgetedHoursInput {
+  budgetedHours: number | null;
+  jobServiceId: string | null;
+  job?: { budgetedHours: number | null; services?: { id: string; budgetedHours: number; teamSize: number }[] };
+}
+
+/**
+ * Budgeted hours for one visit — an explicit per-visit override always wins;
+ * otherwise the visit's own linked service (budgeted_hours × team_size, same
+ * units as everything else here — s.budgeted_hours alone is per-person, see
+ * allocateStopHours below); otherwise the job-level rollup total, which is
+ * only meaningful as a last resort for a visit with no service link (e.g. a
+ * single-service job whose visit was never linked). Skipping straight from
+ * the visit to the job total — the bug this replaced — collapses every
+ * visit of a multi-service job to the SAME job-wide number instead of each
+ * one's own service hours.
+ */
+export function computeBudgetedHours(visit: VisitBudgetedHoursInput): number | null {
+  if (visit.budgetedHours != null) return visit.budgetedHours;
+  const linked = visit.jobServiceId ? visit.job?.services?.find((s) => s.id === visit.jobServiceId) : null;
+  if (linked) return linked.budgetedHours * (linked.teamSize || 1);
+  return visit.job?.budgetedHours ?? null;
+}
+
 export interface AllocateStopHoursVisit {
   id: string;
   jobServiceId: string | null;
