@@ -280,6 +280,7 @@ function ProjectDetailDialog({
   onOpenChange: (o: boolean) => void;
 }) {
   const [editMode, setEditMode] = useState(false);
+  const [activeTab, setActiveTab] = useState("milestone");
 
   const clientLabel = project.clientName ?? project.customerName;
 
@@ -314,7 +315,14 @@ function ProjectDetailDialog({
                 {project.progressPct.toFixed(2)}%
               </span>
             </div>
-            <Button variant="outline" size="sm" className="h-8 text-xs gap-1">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 text-xs gap-1"
+              disabled={!project.clientId}
+              title={project.clientId ? undefined : "No client linked to this project yet"}
+              onClick={() => setActiveTab("billing")}
+            >
               <FileText className="h-3.5 w-3.5" />
               View Invoice
             </Button>
@@ -322,7 +330,7 @@ function ProjectDetailDialog({
         </div>
 
         {/* Tabs */}
-        <Tabs defaultValue="milestone" className="flex flex-1 flex-col overflow-hidden">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-1 flex-col overflow-hidden">
           <TabsList className="shrink-0 border-b bg-slate-100 rounded-none justify-start px-4 py-0 h-10 gap-0">
             {[
               { value: "milestone", label: "Milestone" },
