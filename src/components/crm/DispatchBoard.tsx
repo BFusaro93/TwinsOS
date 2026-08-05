@@ -18,6 +18,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { AuditTrailTab } from "@/components/shared/AuditTrailTab";
+import { AttachmentsSection } from "@/components/shared/AttachmentsSection";
 import { VisitStatusIcon } from "@/components/shared/VisitStatusIcon";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -970,10 +971,19 @@ function JobDetailSheet({
 
         {/* Footer */}
         <div className="flex items-center justify-between shrink-0 border-t bg-white px-5 py-3">
-          <p className="text-[10px] text-slate-400">
-            Show: <span className="text-brand-600 cursor-pointer hover:underline">Attachments</span>,{" "}
-            <span className="text-brand-600 cursor-pointer hover:underline">Forms</span>
-          </p>
+          <Popover>
+            <PopoverTrigger asChild>
+              <button type="button" className="text-[10px] text-brand-600 hover:underline">
+                Show: Attachments
+              </button>
+            </PopoverTrigger>
+            <PopoverContent side="top" align="start" className="w-80">
+              <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                Attachments
+              </p>
+              <AttachmentsSection recordType="job" recordId={visit.jobId} />
+            </PopoverContent>
+          </Popover>
           <div className="flex items-center gap-3">
             <Button
               className="bg-brand-500 hover:bg-brand-600 text-white h-8 text-xs px-6"
