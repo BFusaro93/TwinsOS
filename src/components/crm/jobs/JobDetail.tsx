@@ -72,6 +72,7 @@ import { computeJobServiceBudgetedHours } from "@/lib/estimate-calc";
 import type { CRMJobVisit, CRMJobService } from "@/types/crm-jobs";
 import { JobCostingTab } from "@/components/crm/jobs/JobCostingTab";
 import { AuditTrailTab } from "@/components/shared/AuditTrailTab";
+import { AttachmentsSection } from "@/components/shared/AttachmentsSection";
 
 const STATUS_COLOR: Record<string, string> = {
   scheduled:   "bg-blue-100 text-blue-700",
@@ -114,7 +115,7 @@ const VISIT_STATUS_COLOR: Record<string, string> = {
   skipped:     "bg-slate-50 text-slate-500",
 };
 
-export type Tab = "overview" | "services" | "visits" | "notes" | "invoice" | "costing" | "audit";
+export type Tab = "overview" | "services" | "visits" | "notes" | "invoice" | "costing" | "attachments" | "audit";
 
 interface Props {
   jobId: string;
@@ -616,7 +617,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
 
       {/* ── tabs ── */}
       <div className="flex gap-0 border-b bg-white px-6">
-        {(["overview", "services", "visits", "notes", "invoice", "costing", "audit"] as Tab[]).map((t) => (
+        {(["overview", "services", "visits", "notes", "invoice", "costing", "attachments", "audit"] as Tab[]).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -1759,6 +1760,12 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
           })()}
           {tab === "costing" && (
             <JobCostingTab jobId={job.id} estimateId={job.estimateId ?? null} />
+          )}
+
+          {tab === "attachments" && (
+            <div className="rounded-lg border bg-white p-4 shadow-sm">
+              <AttachmentsSection recordType="job" recordId={job.id} />
+            </div>
           )}
 
           {tab === "audit" && (

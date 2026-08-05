@@ -1418,6 +1418,7 @@ export function useCreateJobsFromEstimate() {
         .insert({
           created_by: user?.id ?? null,
           client_id: clientId,
+          estimate_id: estimateId,
           job_type: jobType,
           status: scheduledDate ? "scheduled" : "hold",
           scheduled_date: scheduledDate,
@@ -1475,6 +1476,58 @@ export function useCreateJobsFromEstimate() {
             }))
           );
         if (matError) throw matError;
+      }
+
+      // Copy the estimate's photos and attachments over to the new job so the
+      // crew doesn't lose site-visit photos the estimator already captured.
+      // Best-effort: a copy failure here shouldn't block job creation.
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: estimatePhotos } = await (supabase as any)
+          .from("estimate_photos")
+          .select("storage_path, file_name, file_size, mime_type")
+          .eq("estimate_id", estimateId)
+          .is("deleted_at", null);
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: estimateAttachments } = await (supabase as any)
+          .from("attachments")
+          .select("storage_path, file_name, file_size, file_type")
+          .eq("record_type", "estimate")
+          .eq("record_id", estimateId)
+          .is("deleted_at", null);
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const sources: { storage_path: string; file_name: string; file_size: number | null; file_type: string | null }[] = [
+          ...((estimatePhotos ?? []) as any[]).map((p) => ({
+            storage_path: p.storage_path, file_name: p.file_name, file_size: p.file_size, file_type: p.mime_type,
+          })),
+          ...((estimateAttachments ?? []) as any[]).map((a) => ({
+            storage_path: a.storage_path, file_name: a.file_name, file_size: a.file_size, file_type: a.file_type,
+          })),
+        ];
+
+        for (let i = 0; i < sources.length; i++) {
+          const source = sources[i];
+          const newPath = `job/${jobId}/${Date.now()}-${i}-${source.file_name}`;
+          const { error: copyError } = await supabase.storage
+            .from("attachments")
+            .copy(source.storage_path, newPath);
+          if (copyError) continue;
+
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          await (supabase as any).from("attachments").insert({
+            record_type: "job",
+            record_id: jobId,
+            file_name: source.file_name,
+            file_size: source.file_size ?? 0,
+            file_type: source.file_type ?? "",
+            storage_path: newPath,
+            uploaded_by_name: "Transferred from estimate",
+          });
+        }
+      } catch {
+        // Non-fatal — the job itself was created successfully above.
       }
 
       // Mark estimate accepted
