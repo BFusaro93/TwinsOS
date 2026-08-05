@@ -34,7 +34,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { formatCurrency, cn, relativeTime, formatDateShort } from "@/lib/utils";
-import { computeActualHours } from "@/lib/utils/visit-hours";
+import { computeActualHours, computeBudgetedHours } from "@/lib/utils/visit-hours";
 import { toast } from "sonner";
 import {
   Calendar,
@@ -263,7 +263,7 @@ function JobDetailSheet({
   // row was correctly showing a computed value from real times.
   const [actualHours, setActualHours] = useState(String(computeActualHours(visit) ?? ""));
   const [menCount,    setMenCount]    = useState(String(visit.menCount));
-  const [budgetedHoursInput, setBudgetedHoursInput] = useState(String(visit.budgetedHours ?? job?.budgetedHours ?? ""));
+  const [budgetedHoursInput, setBudgetedHoursInput] = useState(String(computeBudgetedHours(visit) ?? ""));
   const [qty,         setQty]         = useState(String(visit.qty ?? ""));
   const [rateCents,   setRateCents]   = useState(
     String(visit.rateCents != null ? visit.rateCents / 100
@@ -290,7 +290,7 @@ function JobDetailSheet({
   const [appointmentEndTouched,   setAppointmentEndTouched]   = useState(false);
   const appointmentEndButtonRef = useRef<HTMLButtonElement>(null);
   useEffect(() => {
-    setBudgetedHoursInput(String(visit.budgetedHours ?? job?.budgetedHours ?? ""));
+    setBudgetedHoursInput(String(computeBudgetedHours(visit) ?? ""));
   }, [visit.id, visit.budgetedHours, job?.budgetedHours]);
   useEffect(() => {
     setActualHours(String(computeActualHours(visit) ?? ""));
@@ -1052,7 +1052,7 @@ function PrintDialog({
                 <td className="border border-slate-200 px-2 py-1">{addr || "—"}</td>
                 <td className="border border-slate-200 px-2 py-1">{svc || "—"}</td>
                 <td className="border border-slate-200 px-2 py-1">{v.startTime ?? "—"}</td>
-                <td className="border border-slate-200 px-2 py-1 text-center">{(v.budgetedHours ?? job?.budgetedHours)?.toFixed(1) ?? "—"}</td>
+                <td className="border border-slate-200 px-2 py-1 text-center">{computeBudgetedHours(v)?.toFixed(1) ?? "—"}</td>
                 <td className="border border-slate-200 px-2 py-1 italic text-slate-600">{(v as any).notesToCrew ?? ""}</td>
               </tr>
             );
@@ -1725,7 +1725,7 @@ function VisitRow({
   const effectiveCrewId = visit.crewId ?? job?.crewId ?? null;
   const effectiveCrewName = visit.crewName ?? job?.crewName ?? null;
   const effectiveCrew = (effectiveCrewId && crewCodeById.get(effectiveCrewId)) || effectiveCrewName;
-  const budgetedHours = visit.budgetedHours ?? job?.budgetedHours ?? null;
+  const budgetedHours = computeBudgetedHours(visit);
   const actualHours = computeActualHours(visit);
 
   const updateVisit = useUpdateVisit();
@@ -2262,7 +2262,7 @@ function visitAmountCents(visit: CRMJobVisit): number {
 // ── totals row ─────────────────────────────────────────────────────────────────
 
 function TotalsRow({ visits, isVisible }: { visits: CRMJobVisit[]; isVisible: (col: ColKey) => boolean }) {
-  const totalBHrs = visits.reduce((s, v) => s + (v.budgetedHours ?? v.job?.budgetedHours ?? 0), 0);
+  const totalBHrs = visits.reduce((s, v) => s + (computeBudgetedHours(v) ?? 0), 0);
   const totalAct  = visits.reduce((s, v) => s + (computeActualHours(v) ?? 0), 0);
   const totalAmt  = visits.reduce((s, v) => s + visitAmountCents(v), 0);
 
@@ -2653,7 +2653,7 @@ export function DispatchBoard() {
         v.crewName ?? "",
         v.startTime ?? "",
         v.endTime ?? "",
-        (v.budgetedHours ?? job?.budgetedHours)?.toFixed(2) ?? "",
+        computeBudgetedHours(v)?.toFixed(2) ?? "",
         computeActualHours(v)?.toFixed(2) ?? "",
         (v as any).menCount ?? "",
         (rateCents / 100).toFixed(2),
@@ -2682,12 +2682,12 @@ export function DispatchBoard() {
       id: c.id,
       name: c.name,
       count: cv.length,
-      bHrs: cv.reduce((s, v) => s + (v.budgetedHours ?? v.job?.budgetedHours ?? 0), 0),
+      bHrs: cv.reduce((s, v) => s + (computeBudgetedHours(v) ?? 0), 0),
       amt: cv.reduce((s, v) => s + visitAmountCents(v), 0),
     };
   }).filter((s) => s.count > 0);
   const unassignedStatCount  = displayVisits.filter((v) => !v.crewId).length;
-  const unassignedStatBHrs   = displayVisits.filter((v) => !v.crewId).reduce((s, v) => s + (v.budgetedHours ?? v.job?.budgetedHours ?? 0), 0);
+  const unassignedStatBHrs   = displayVisits.filter((v) => !v.crewId).reduce((s, v) => s + (computeBudgetedHours(v) ?? 0), 0);
   const unassignedStatAmt    = displayVisits.filter((v) => !v.crewId).reduce((s, v) => s + visitAmountCents(v), 0);
 
   const callAheadVisits = displayVisits.filter((v) => v.job?.callAhead && v.clientPhone);

@@ -215,7 +215,9 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
           crewId: job.crewId ?? null,
         });
         await qc.invalidateQueries({ queryKey: ['crm-job-visits', 'job', job.id] });
-      } catch { /* silent */ }
+      } catch {
+        toast.error("Failed to auto-schedule this job's visit — add one manually");
+      }
     })();
   }, [job, visits, visitsLoading]);
 
@@ -277,7 +279,9 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
             totalCents: subtotal,
           });
           toast.success("Invoice created automatically — check Accounting");
-        } catch { /* non-fatal */ }
+        } catch {
+          toast.error("Job marked completed, but the automatic invoice failed to create — add one manually");
+        }
       }
     } catch {
       toast.error("Failed to update status");
@@ -1850,8 +1854,12 @@ function VisitRow({
       : "—";
   // An explicit override on the visit itself (e.g. a dispatcher bumped this
   // one occurrence up for site conditions) should win over the service's
-  // default — not the other way around.
-  const visitBudgetedHours = visit.budgetedHours ?? linkedService?.budgetedHours ?? null;
+  // default — not the other way around. The service's own budgeted_hours is
+  // per-person (see computeBudgetedHours in visit-hours.ts), so it needs the
+  // same × teamSize the job-level rollup trigger applies, or a multi-person
+  // service would under-report here relative to everywhere else.
+  const visitBudgetedHours =
+    visit.budgetedHours ?? (linkedService ? linkedService.budgetedHours * (linkedService.teamSize || 1) : null);
   const [editingNote, setEditingNote] = useState(false);
   const [noteVal, setNoteVal] = useState(visit.notesToCrew ?? "");
   const [editingInvoiceDesc, setEditingInvoiceDesc] = useState(false);
