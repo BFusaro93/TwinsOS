@@ -318,6 +318,17 @@ function JobDetailSheet({
   // commits status/crew/rate together, which is easy to skip when all you
   // meant to do was fix a time.
   async function saveAppointmentTime(field: "start_time" | "end_time", value: string) {
+    // Reject a save that would put End at or before Start — independently
+    // editing the two fields (this is on-blur, one field at a time) has no
+    // other guard against that, and a visit with End before Start silently
+    // breaks every hours computation that reads it.
+    const newStart = field === "start_time" ? value : startTime;
+    const newEnd = field === "end_time" ? value : endTime;
+    if (isEndBeforeStart(newStart, newEnd)) {
+      toast.error("End time must be after Start time");
+      if (field === "start_time") setStartTime(visit.startTime ?? ""); else setEndTime(visit.endTime ?? "");
+      return;
+    }
     // Job Start/End are the actual times (crew punches often need dispatcher
     // correction) — keep clocked_in_at/clocked_out_at in sync so the crew
     // app and report date-filters agree with whatever the dispatcher enters.
@@ -1360,6 +1371,15 @@ function dateAndTimeToIso(date: string, time: string): string | null {
   return Number.isNaN(d.getTime()) ? null : d.toISOString();
 }
 
+// Native <input type="time"> always yields zero-padded 24h "HH:MM", so a
+// plain string compare is a valid time-of-day ordering — no Date parsing
+// needed. Only rejects when BOTH sides are actually set; an empty value
+// means "not entered yet" (e.g. saving Start before End exists), not a
+// real end-before-start problem, and must be allowed through.
+function isEndBeforeStart(start: string, end: string): boolean {
+  return !!start && !!end && end <= start;
+}
+
 function EditJobTimeRow({
   crewMemberId,
   memberName,
@@ -1512,6 +1532,10 @@ function EditJobTimesDialog({
   }, [memberTimes, visitId, visitDate]);
 
   async function saveRow(memberId: string, date: string, start: string, end: string) {
+    if (isEndBeforeStart(start, end)) {
+      toast.error("End time must be after Start time");
+      return;
+    }
     try {
       await upsert.mutateAsync({
         visitId: anchorVisitId,
@@ -1768,6 +1792,16 @@ function VisitRow({
   const endPunchDiffers   = endClockTime   !== "" && endClockTime   !== (endVal   || "").slice(0, 5);
 
   async function saveVisitTime(field: "start_time" | "end_time", value: string) {
+    // Same End-after-Start guard as the job panel's saveAppointmentTime —
+    // editing Start/End independently (one field at a time, on blur) has no
+    // other check keeping them in order.
+    const newStart = field === "start_time" ? value : startVal;
+    const newEnd = field === "end_time" ? value : endVal;
+    if (isEndBeforeStart(newStart, newEnd)) {
+      toast.error("End time must be after Start time");
+      if (field === "start_time") setStartVal(visit.startTime ?? ""); else setEndVal(visit.endTime ?? "");
+      return;
+    }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const updates: Record<string, any> = { [field]: value || null };
     // Start/End IS the crew's actual time on site (a dispatcher correction of
