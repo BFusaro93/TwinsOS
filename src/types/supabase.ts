@@ -1870,6 +1870,13 @@ export type Database = {
             foreignKeyName: "crm_chemical_application_emails_visit_id_fkey"
             columns: ["visit_id"]
             isOneToOne: false
+            referencedRelation: "rpt_job_services"
+            referencedColumns: ["visit_id"]
+          },
+          {
+            foreignKeyName: "crm_chemical_application_emails_visit_id_fkey"
+            columns: ["visit_id"]
+            isOneToOne: false
             referencedRelation: "rpt_job_visits"
             referencedColumns: ["id"]
           },
@@ -2196,6 +2203,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "crm_job_visits"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_chemical_applications_visit_id_fkey"
+            columns: ["visit_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_job_services"
+            referencedColumns: ["visit_id"]
           },
           {
             foreignKeyName: "crm_chemical_applications_visit_id_fkey"
@@ -2681,6 +2695,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "crm_job_visits"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_crew_member_times_visit_id_fkey"
+            columns: ["visit_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_job_services"
+            referencedColumns: ["visit_id"]
           },
           {
             foreignKeyName: "crm_crew_member_times_visit_id_fkey"
@@ -3895,6 +3916,13 @@ export type Database = {
             foreignKeyName: "crm_invoice_line_items_visit_id_fkey"
             columns: ["visit_id"]
             isOneToOne: false
+            referencedRelation: "rpt_job_services"
+            referencedColumns: ["visit_id"]
+          },
+          {
+            foreignKeyName: "crm_invoice_line_items_visit_id_fkey"
+            columns: ["visit_id"]
+            isOneToOne: false
             referencedRelation: "rpt_job_visits"
             referencedColumns: ["id"]
           },
@@ -4234,6 +4262,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "crm_job_visits"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_job_materials_visit_id_fkey"
+            columns: ["visit_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_job_services"
+            referencedColumns: ["visit_id"]
           },
           {
             foreignKeyName: "crm_job_materials_visit_id_fkey"
@@ -4618,7 +4653,7 @@ export type Database = {
             columns: ["job_service_id"]
             isOneToOne: false
             referencedRelation: "rpt_job_services"
-            referencedColumns: ["id"]
+            referencedColumns: ["job_service_id"]
           },
           {
             foreignKeyName: "crm_job_visits_storm_event_id_fkey"
@@ -4649,6 +4684,7 @@ export type Database = {
           deleted_at: string | null
           end_date_window: string | null
           end_time: string | null
+          estimate_id: string | null
           id: string
           inch_trigger: number | null
           invoice_description: string | null
@@ -4723,6 +4759,7 @@ export type Database = {
           deleted_at?: string | null
           end_date_window?: string | null
           end_time?: string | null
+          estimate_id?: string | null
           id?: string
           inch_trigger?: number | null
           invoice_description?: string | null
@@ -4797,6 +4834,7 @@ export type Database = {
           deleted_at?: string | null
           end_date_window?: string | null
           end_time?: string | null
+          estimate_id?: string | null
           id?: string
           inch_trigger?: number | null
           invoice_description?: string | null
@@ -4893,6 +4931,20 @@ export type Database = {
             columns: ["crew_id"]
             isOneToOne: false
             referencedRelation: "crm_crews"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_jobs_estimate_id_fkey"
+            columns: ["estimate_id"]
+            isOneToOne: false
+            referencedRelation: "estimates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_jobs_estimate_id_fkey"
+            columns: ["estimate_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_estimates"
             referencedColumns: ["id"]
           },
           {
@@ -5212,6 +5264,7 @@ export type Database = {
           deleted_at: string | null
           id: string
           invoice_id: string | null
+          is_credit: boolean
           is_prepayment: boolean
           memo: string | null
           method: string
@@ -5233,6 +5286,7 @@ export type Database = {
           deleted_at?: string | null
           id?: string
           invoice_id?: string | null
+          is_credit?: boolean
           is_prepayment?: boolean
           memo?: string | null
           method?: string
@@ -5254,6 +5308,7 @@ export type Database = {
           deleted_at?: string | null
           id?: string
           invoice_id?: string | null
+          is_credit?: boolean
           is_prepayment?: boolean
           memo?: string | null
           method?: string
@@ -6461,6 +6516,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "crm_job_visits"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_visit_photos_visit_id_fkey"
+            columns: ["visit_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_job_services"
+            referencedColumns: ["visit_id"]
           },
           {
             foreignKeyName: "crm_visit_photos_visit_id_fkey"
@@ -10972,6 +11034,7 @@ export type Database = {
           is_complete: boolean | null
           job_actual_hours: number | null
           job_id: string | null
+          job_service_id: string | null
           job_status: string | null
           man_count: number | null
           qty: number | null
@@ -10981,22 +11044,10 @@ export type Database = {
           service_id: string | null
           service_name: string | null
           service_unit: string | null
+          visit_id: string | null
+          visit_status: string | null
         }
         Relationships: [
-          {
-            foreignKeyName: "crm_job_services_job_id_fkey"
-            columns: ["job_id"]
-            isOneToOne: false
-            referencedRelation: "crm_jobs"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "crm_job_services_job_id_fkey"
-            columns: ["job_id"]
-            isOneToOne: false
-            referencedRelation: "rpt_jobs"
-            referencedColumns: ["id"]
-          },
           {
             foreignKeyName: "crm_job_services_service_id_fkey"
             columns: ["service_id"]
@@ -11009,6 +11060,20 @@ export type Database = {
             columns: ["service_id"]
             isOneToOne: false
             referencedRelation: "rpt_services"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_job_visits_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "crm_jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_job_visits_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_jobs"
             referencedColumns: ["id"]
           },
         ]
@@ -11241,6 +11306,10 @@ export type Database = {
       }
       assign_invoice_number: { Args: { p_invoice_id: string }; Returns: number }
       crm_recompute_job_actual_hours: {
+        Args: { p_job_id: string }
+        Returns: undefined
+      }
+      crm_recompute_job_budgeted_hours: {
         Args: { p_job_id: string }
         Returns: undefined
       }
