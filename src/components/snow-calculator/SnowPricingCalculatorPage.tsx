@@ -1,8 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Download, FileText } from "lucide-react";
 import { formatCurrency } from "@/components/calculators/shared";
 import { Switch } from "@/components/ui/switch";
+import { Button } from "@/components/ui/button";
+import { useSettingsStore } from "@/stores/settings-store";
+import { downloadCSV } from "@/lib/csv";
+import type { SnowPricingPdfData } from "./SnowPricingPdfDocument";
 
 const LBS_PER_YARD_SALT = 2160;
 const SQFT_PER_ACRE = 43560;
@@ -99,6 +104,9 @@ function SectionCard({
 }
 
 export function SnowPricingCalculatorPage() {
+  const { orgName } = useSettingsStore();
+  const [exportingPdf, setExportingPdf] = useState(false);
+
   // Salting
   const [saltSqFt, setSaltSqFt] = useState("50000");
   const [saltLbsPerAcre, setSaltLbsPerAcre] = useState("1000");
@@ -186,14 +194,158 @@ export function SnowPricingCalculatorPage() {
   const rate9to12 = rate6to9 * num(mult9to12);
   const rate12plus = rate1to3 * num(mult12plus);
 
+  // Shared export data — used by both the CSV and PDF downloads below
+  const exportSections = [
+    {
+      title: "Salting — Roads, Drive Lanes & Driveways",
+      subtotal: saltSeasonTotal,
+      rows: [
+        {
+          label: "Salt applications",
+          detail: `${saltAcres.toFixed(2)} acres · ${saltYardsPerApp.toFixed(2)} yds/app · ${num(saltApplications)} applications`,
+          amount: saltSeasonTotal,
+        },
+      ],
+    },
+    {
+      title: "Ice Melt",
+      subtotal: iceSeasonTotal,
+      rows: [
+        {
+          label: "Ice melt applications",
+          detail: `${num(iceBagsPerStorm)} bags/storm × ${formatCurrency(num(iceCostPerBag))} × ${num(iceApplications)} applications`,
+          amount: iceSeasonTotal,
+        },
+      ],
+    },
+    {
+      title: "Machines",
+      subtotal: machineTotal,
+      rows: machines
+        .filter((m) => num(m.monthlyRate) * num(m.months) * num(m.qty) !== 0)
+        .map((m) => ({
+          label: m.label,
+          detail: `${formatCurrency(num(m.monthlyRate))}/mo × ${num(m.months)} months × qty ${num(m.qty)}`,
+          amount: num(m.monthlyRate) * num(m.months) * num(m.qty),
+        })),
+    },
+    {
+      title: "Plowing",
+      subtotal: plowTotal,
+      rows: [
+        {
+          label: "Plowing labor",
+          detail: `${num(plowOperators)} operators × ${plowHours.toFixed(1)} hrs × ${formatCurrency(num(plowRatePerHour))}/hr`,
+          amount: plowTotal,
+        },
+      ],
+    },
+    {
+      title: "Shoveling",
+      subtotal: shovelTotal,
+      rows: [
+        {
+          label: "Shoveling labor",
+          detail: `${num(shovelWorkers)} shovelers × ${shovelHours.toFixed(1)} hrs × ${formatCurrency(num(shovelRatePerHour))}/hr`,
+          amount: shovelTotal,
+        },
+      ],
+    },
+    ...(storageEnabled
+      ? [
+          {
+            title: "Storage Unit",
+            subtotal: storageTotal,
+            rows: [
+              {
+                label: "Storage rental",
+                detail: `${formatCurrency(num(storageMonthly))}/mo × ${num(storageMonths)} months`,
+                amount: storageTotal,
+              },
+            ],
+          },
+        ]
+      : []),
+  ];
+
+  const exportPerStorm = [
+    { label: "1-3 inches", amount: rate1to3 },
+    { label: "3-6 inches", amount: rate3to6 },
+    { label: "6-9 inches", amount: rate6to9 },
+    { label: "9-12 inches", amount: rate9to12 },
+    { label: "12+ inches", amount: rate12plus },
+  ];
+
+  function handleExportExcel() {
+    const headers = ["Section", "Line Item", "Detail", "Amount"];
+    const rows: unknown[][] = [];
+    exportSections.forEach((section) => {
+      section.rows.forEach((row) => {
+        rows.push([section.title, row.label, row.detail ?? "", row.amount.toFixed(2)]);
+      });
+      rows.push([section.title, "Section Subtotal", "", section.subtotal.toFixed(2)]);
+    });
+    rows.push(["Totals", "Sub-Total", "", subtotal.toFixed(2)]);
+    rows.push(["Totals", `Markup (${num(markupPct)}%)`, "", (totalWithMarkup - subtotal).toFixed(2)]);
+    rows.push(["Totals", "Season Total", "", totalWithMarkup.toFixed(2)]);
+    rows.push(["Totals", "Per Inch (÷60)", "", perInchCost.toFixed(2)]);
+    exportPerStorm.forEach((r) => {
+      rows.push(["Per-Storm Pricing", r.label, "", r.amount.toFixed(2)]);
+    });
+    downloadCSV("snow-pricing-calculator.csv", headers, rows);
+  }
+
+  async function handleExportPdf() {
+    setExportingPdf(true);
+    try {
+      const [{ pdf }, { SnowPricingPdfDocument }] = await Promise.all([
+        import("@react-pdf/renderer"),
+        import("./SnowPricingPdfDocument"),
+      ]);
+      const data: SnowPricingPdfData = {
+        orgName,
+        generatedOn: new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }),
+        sections: exportSections,
+        subtotal,
+        markupPct: num(markupPct),
+        totalWithMarkup,
+        perInchCost,
+        perStorm: exportPerStorm,
+      };
+      const blob = await pdf(<SnowPricingPdfDocument data={data} />).toBlob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "snow-pricing-calculator.pdf";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } finally {
+      setExportingPdf(false);
+    }
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-xl font-bold">Snow Pricing Calculator</h1>
-        <p className="text-sm text-muted-foreground mt-0.5">
-          Estimate full-season snow & ice management costs and per-storm pricing.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-bold">Snow Pricing Calculator</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            Estimate full-season snow & ice management costs and per-storm pricing.
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={handleExportExcel}>
+            <Download className="mr-1.5 h-3.5 w-3.5" />
+            Export Excel
+          </Button>
+          <Button variant="outline" size="sm" onClick={handleExportPdf} disabled={exportingPdf}>
+            <FileText className="mr-1.5 h-3.5 w-3.5" />
+            {exportingPdf ? "Generating…" : "Export PDF"}
+          </Button>
+        </div>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[1fr_380px]">
