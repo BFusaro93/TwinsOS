@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ArrowLeft, Leaf, Calculator, PenLine, DollarSign, ShieldAlert } from "lucide-react";
+import { ArrowLeft, Leaf, Calculator, PenLine, DollarSign, ShieldAlert, Snowflake } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useUIStore, useCurrentUserStore } from "@/stores";
 import { useSettingsStore } from "@/stores/settings-store";
@@ -21,6 +21,7 @@ const TOOLS_NAV: ToolsNavItem[] = [
   { label: "Job Costing",       href: "/tools/job-costing",      icon: DollarSign,   description: "Track per-job material costs",        hideFromCrew: true },
   { label: "Damage Cases",      href: "/tools/damage-cases",     icon: ShieldAlert,  description: "Track property damage & warranty",    hideFromCrew: true },
   { label: "Calculators",       href: "/tools/calculators",      icon: Calculator,   description: "Material quantity calculators" },
+  { label: "Snow Pricing Calculator", href: "/tools/snow-calculator", icon: Snowflake, description: "Season & per-storm snow pricing" },
 ];
 
 export function ToolsSidebar() {
