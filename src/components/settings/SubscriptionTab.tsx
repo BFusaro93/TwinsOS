@@ -4,6 +4,7 @@ import { useState } from "react";
 import { loadStripe, type Stripe as StripeJs } from "@stripe/stripe-js";
 import { EmbeddedCheckoutProvider, EmbeddedCheckout } from "@stripe/react-stripe-js";
 import { CreditCard, Check, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
@@ -51,8 +52,14 @@ export function SubscriptionTab() {
       return;
     }
     try {
-      const { clientSecret } = await createCheckoutSession.mutateAsync(plan);
-      setCheckoutClientSecret(clientSecret);
+      const result = await createCheckoutSession.mutateAsync(plan);
+      if ("updated" in result) {
+        // Already had a live subscription — its price was changed in place,
+        // no checkout needed.
+        toast.success("Plan updated");
+        return;
+      }
+      setCheckoutClientSecret(result.clientSecret);
     } catch (err) {
       setCheckoutError(err instanceof Error ? err.message : "Failed to start checkout");
     }

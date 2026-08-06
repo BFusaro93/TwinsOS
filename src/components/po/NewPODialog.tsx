@@ -198,9 +198,8 @@ export function NewPODialog({ open, onOpenChange, initialData, prefillData, onCr
     }
   }, [open, initialData, prefillData]);
 
-  const isValid = (isEditing
-    ? vendorId !== "" && vendorId !== "none"
-    : vendorId !== "" && vendorId !== "none" && lineItems.every((li) => li.productItemId !== ""))
+  const isValid = (!rf.isRequired("vendor") || (vendorId !== "" && vendorId !== "none"))
+    && (isEditing || lineItems.every((li) => li.productItemId !== ""))
     && (!rf.isRequired("notes") || notes.trim() !== "")
     && (!rf.isRequired("shipping_cost") || shippingCost !== "");
 
@@ -458,20 +457,22 @@ export function NewPODialog({ open, onOpenChange, initialData, prefillData, onCr
         <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
           <div className="flex-1 overflow-y-auto px-1">
             <div className="space-y-4 pb-4">
-              {/* Vendor — full width, required */}
-              <div className="grid gap-1.5">
-                <Label>
-                  Vendor <span className="text-red-500">*</span>
-                </Label>
-                <VendorCombobox
-                  vendors={allVendors}
-                  value={vendorId}
-                  onValueChange={setVendorId}
-                  noneLabel="Select vendor"
-                  required
-                  onCreateNew={() => setVendorDialogOpen(true)}
-                />
-              </div>
+              {/* Vendor — full width */}
+              {rf.isVisible("vendor") && (
+                <div className="grid gap-1.5">
+                  <Label>
+                    Vendor{rf.isRequired("vendor") && <span className="text-red-500"> *</span>}
+                  </Label>
+                  <VendorCombobox
+                    vendors={allVendors}
+                    value={vendorId}
+                    onValueChange={setVendorId}
+                    noneLabel="Select vendor"
+                    required={rf.isRequired("vendor")}
+                    onCreateNew={() => setVendorDialogOpen(true)}
+                  />
+                </div>
+              )}
 
               {/* PO Date + Payment Type + Invoice # — three columns */}
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">

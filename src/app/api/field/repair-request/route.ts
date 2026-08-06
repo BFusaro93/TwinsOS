@@ -1,20 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
-import { z } from "zod";
 import type { Database } from "@/types/supabase";
+import { submitWorkRequest } from "@/lib/field/submit-work-request";
 
-const schema = z.object({
-  title: z.string().min(1).max(200),
-  equipmentName: z.string().min(1),
-  equipmentType: z.string().optional().nullable(),
-  location: z.string().optional().nullable(),
-  description: z.string().min(1),
-  priority: z.enum(["low", "medium", "high", "critical"]),
-  hasRepairTag: z.boolean().default(false),
-  requestedByName: z.string().min(1),
-});
-
+/**
+ * POST /api/field/repair-request — internal field-crew submission.
+ *
+ * Previously the field page (/photos/field/repair-request) rendered the same
+ * PortalForm as the public portal and posted straight to the anonymous
+ * /api/public/work-requests route, so a logged-in crew member's submission
+ * was indistinguishable from an anonymous one — no requested_by_id/created_by,
+ * just a free-text name. This route mirrors that one's insert logic (shared
+ * via submitWorkRequest) but resolves the org and attribution from the
+ * authenticated session instead of an org slug in the body.
+ */
 export async function POST(req: NextRequest) {
   const cookieStore = await cookies();
   const supabase = createServerClient<Database>(
@@ -23,49 +23,48 @@ export async function POST(req: NextRequest) {
     { cookies: { getAll: () => cookieStore.getAll(), setAll: () => {} } }
   );
 
-  const { data: { user }, error: authErr } = await supabase.auth.getUser();
-  if (authErr || !user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  let body: unknown;
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("org_id")
+    .eq("id", user.id)
+    .single();
+  if (!profile) return NextResponse.json({ error: "Profile not found" }, { status: 403 });
+
+  let body: Record<string, unknown>;
   try {
     body = await req.json();
   } catch {
-    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const parsed = schema.safeParse(body);
-  if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.flatten() }, { status: 422 });
-  }
+  const requestedBy = (body.requestedBy as string | undefined)?.trim();
+  const title = (body.title as string | undefined)?.trim();
+  if (!requestedBy) return NextResponse.json({ error: "requestedBy is required" }, { status: 400 });
+  if (!title) return NextResponse.json({ error: "title is required" }, { status: 400 });
 
-  const d = parsed.data;
-  const requestNumber = `MR-${new Date().getFullYear()}-${Date.now().toString().slice(-5)}`;
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data, error } = await (supabase as any)
-    .from("maintenance_requests")
-    .insert({
-      request_number: requestNumber,
-      title: d.title,
-      description: d.description,
-      priority: d.priority,
-      status: "open",
-      requested_by_name: d.requestedByName,
-      asset_name: d.equipmentName,
-      equipment_type: d.equipmentType ?? null,
-      repair_category: d.location ?? null,
-      has_repair_tag: d.hasRepairTag,
-      created_by: user.id,
-    })
-    .select("id, request_number")
-    .single();
-
-  if (error) {
-    console.error("[field/repair-request] insert error:", error);
+  try {
+    const result = await submitWorkRequest(
+      supabase,
+      { id: profile.org_id },
+      {
+        requestedBy,
+        title,
+        description: body.description as string | undefined,
+        priority: body.priority as string | undefined,
+        equipment: body.equipment as string | undefined,
+        assetId: body.assetId as string | undefined,
+        equipmentType: body.equipmentType as string | undefined,
+        repairCategory: body.repairCategory as string | undefined,
+        hasRepairTag: body.hasRepairTag,
+      },
+      { createdBy: user.id, requestedById: user.id }
+    );
+    return NextResponse.json(result, { status: 201 });
+  } catch (err) {
+    console.error("[field/repair-request] error:", err);
     return NextResponse.json({ error: "Failed to submit request" }, { status: 500 });
   }
-
-  return NextResponse.json({ id: data.id, requestNumber: data.request_number }, { status: 201 });
 }

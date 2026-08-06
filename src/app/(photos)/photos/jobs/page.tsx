@@ -399,7 +399,7 @@ function JobDetailPane({ jobId }: { jobId: string }) {
 
 export default function PhotoJobsPage() {
   const router = useRouter();
-  const { canUpload } = usePhotoAccess();
+  const { canUpload, canDelete } = usePhotoAccess();
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [archiveFilter, setArchiveFilter] = useState<ArchiveFilter>("active");
   const [search, setSearch] = useState("");
@@ -668,7 +668,7 @@ export default function PhotoJobsPage() {
                       </div>
                       <p className="shrink-0 text-xs text-slate-400">{formatDate(job.createdAt)}</p>
                     </button>
-                    {canUpload && (
+                    {canDelete && (
                       <button
                         className="shrink-0 rounded-md p-1.5 text-slate-300 opacity-0 transition-opacity hover:bg-red-50 hover:text-red-500 group-hover:opacity-100"
                         title="Delete job"

@@ -35,7 +35,10 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     .is("deleted_at", null)
     .order("sort_order", { ascending: true });
 
-  const { data: countData } = await db
+  // head: true means Supabase returns the row count on `count`, not `data`
+  // (data is null for a head request) — this previously destructured `data`
+  // and always got 0, so the Responses tab label always read "Responses (0)".
+  const { count: responseCount } = await db
     .from("crm_form_responses")
     .select("id", { count: "exact", head: true })
     .eq("form_id", id)
@@ -67,7 +70,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     autoManageAccounts: form.auto_manage_accounts ?? false,
     accountMatchingStrategy: form.account_matching_strategy ?? "email",
     accountUpdateStrategy: form.account_update_strategy ?? "add_new",
-    responseCount: countData ?? 0,
+    responseCount: responseCount ?? 0,
     createdAt: form.created_at,
     updatedAt: form.updated_at,
     fields: mappedFields,

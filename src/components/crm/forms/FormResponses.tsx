@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { toast } from "sonner";
 import { useFormResponses } from "@/lib/hooks/use-crm-forms";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -12,8 +13,35 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { ChevronDown, RotateCcw, Search } from "lucide-react";
+import { ChevronDown, Paperclip, RotateCcw, Search } from "lucide-react";
 import type { CRMFormResponse, FormResponseStatus } from "@/types/crm-forms";
+
+// ── Attachment values ─────────────────────────────────────────────────────────
+
+interface AttachmentValue {
+  path: string;
+  name: string;
+  size: number;
+}
+
+function isAttachmentValue(v: unknown): v is AttachmentValue {
+  return typeof v === "object" && v !== null && "path" in v && "name" in v;
+}
+
+async function downloadAttachment(path: string) {
+  try {
+    const res = await fetch("/api/crm/forms/attachments/signed-url", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path }),
+    });
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.error ?? "Failed to get download link");
+    window.open(body.url, "_blank", "noopener,noreferrer");
+  } catch (err) {
+    toast.error(err instanceof Error ? err.message : "Failed to download attachment");
+  }
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -70,7 +98,20 @@ function ResponseDetailPanel({ response, onClose }: { response: CRMFormResponse;
             {Object.entries(response.data).map(([k, v]) => (
               <div key={k} className="px-3 py-2 flex gap-3">
                 <span className="w-32 shrink-0 font-medium text-slate-600">{k}</span>
-                <span className="text-slate-800 break-all">{String(v)}</span>
+                {isAttachmentValue(v) ? (
+                  <button
+                    type="button"
+                    onClick={() => downloadAttachment(v.path)}
+                    className="flex items-center gap-1 text-brand-600 hover:underline"
+                  >
+                    <Paperclip className="h-3 w-3 shrink-0" />
+                    {v.name} ({Math.round(v.size / 1024)} KB)
+                  </button>
+                ) : v == null ? (
+                  <span className="text-slate-400">—</span>
+                ) : (
+                  <span className="text-slate-800 break-all">{String(v)}</span>
+                )}
               </div>
             ))}
             {Object.keys(response.data).length === 0 && (

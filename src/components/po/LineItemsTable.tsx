@@ -29,6 +29,7 @@ import {
 import { formatCurrency, cn } from "@/lib/utils";
 import { useProjects } from "@/lib/hooks/use-projects";
 import { useProducts } from "@/lib/hooks/use-products";
+import { useParts } from "@/lib/hooks/use-parts";
 import {
   Command,
   CommandEmpty,
@@ -84,33 +85,58 @@ export function LineItemsTable({
 
   const { data: projects = [] } = useProjects(true);
   const { data: products = [] } = useProducts();
+  const { data: parts = [] } = useParts();
+
+  // Combined catalog for the add-item picker — Products AND Parts, matching
+  // RequisitionDetailPanel's own add flow. Parts are always maintenance_part
+  // (CLAUDE.md: only project_material/stocked_material may carry a project_id),
+  // so they never get a project assignment here.
+  const catalog = [
+    ...products.map((p) => ({ key: `product:${p.id}`, name: p.name, partNumber: p.partNumber, unitCost: p.unitCost, isMaintPart: p.category === "maintenance_part" })),
+    ...parts.map((p) => ({ key: `part:${p.id}`, name: p.name, partNumber: p.partNumber, unitCost: p.unitCost, isMaintPart: true })),
+  ];
+
+  /** True if this line item is a maintenance_part — via its linked Part, or
+   *  its linked Product's category if no Part is linked. Such items must
+   *  never carry a project_id (CLAUDE.md: only project_material/stocked_material
+   *  line items may be assigned to a Project). */
+  function isMaintPartItem(li: { partId?: string | null; productItemId?: string | null }): boolean {
+    if (li.partId) return true;
+    if (li.productItemId) return products.find((p) => p.id === li.productItemId)?.category === "maintenance_part";
+    return false;
+  }
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({ quantity: 0, unitCost: 0, projectId: "none", taxable: true });
 
   // Add line item dialog state
   const [addOpen, setAddOpen] = useState(false);
-  const [addForm, setAddForm] = useState({ productId: "", quantity: 1, unitCost: 0, projectId: "none", taxable: true });
+  const [addForm, setAddForm] = useState({ catalogKey: "", quantity: 1, unitCost: 0, projectId: "none", taxable: true });
   const [productComboOpen, setProductComboOpen] = useState(false);
+  const selectedCatalogItem = catalog.find((c) => c.key === addForm.catalogKey) ?? null;
 
   function openAdd() {
-    setAddForm({ productId: "", quantity: 1, unitCost: 0, projectId: "none", taxable: true });
+    setAddForm({ catalogKey: "", quantity: 1, unitCost: 0, projectId: "none", taxable: true });
     setAddOpen(true);
   }
 
   function saveAdd() {
-    const product = products.find((p) => p.id === addForm.productId);
-    if (!product) return;
+    const selected = selectedCatalogItem;
+    if (!selected) return;
     const quantity = Math.max(0.01, addForm.quantity || 0.01);
     // Preserve up to 4 decimal places (fractional cents) for case/bulk pricing accuracy.
     const unitCost = Math.round(addForm.unitCost * 10000) / 100 || 0;
-    const projectId = addForm.projectId === "none" ? null : addForm.projectId;
+    const isPart = selected.key.startsWith("part:");
+    const bareId = selected.key.replace(/^(product:|part:)/, "");
+    // Never let a maintenance_part item carry a project_id, regardless of
+    // what the (hidden, for these items) project dropdown holds.
+    const projectId = selected.isMaintPart ? null : (addForm.projectId === "none" ? null : addForm.projectId);
     const newItem: LineItem = {
       id: crypto.randomUUID(),
-      productItemId: product.id,
-      partId: null,
-      productItemName: product.name,
-      partNumber: product.partNumber ?? "",
+      productItemId: isPart ? "" : bareId,
+      partId: isPart ? bareId : null,
+      productItemName: selected.name,
+      partNumber: selected.partNumber ?? "",
       quantity,
       unitCost,
       totalCost: Math.round(quantity * unitCost),
@@ -125,6 +151,7 @@ export function LineItemsTable({
   }
 
   const editingItem = editingId ? items.find((li) => li.id === editingId) ?? null : null;
+  const editingItemIsMaintPart = editingItem ? isMaintPartItem(editingItem) : false;
 
   function applyChange(next: LineItem[]) {
     setItems(next);
@@ -146,7 +173,7 @@ export function LineItemsTable({
     const quantity = Math.max(0.01, editForm.quantity || 0.01);
     // Preserve up to 4 decimal places (fractional cents) for case/bulk pricing accuracy.
     const unitCost = Math.round(editForm.unitCost * 10000) / 100 || 0;
-    const projectId = editForm.projectId === "none" ? null : editForm.projectId;
+    const projectId = editingItemIsMaintPart ? null : (editForm.projectId === "none" ? null : editForm.projectId);
     const next = items.map((li) => {
       if (li.id !== editingId) return li;
       const cost = unitCost || li.unitCost;
@@ -348,23 +375,27 @@ export function LineItemsTable({
                 </div>
               </div>
               {showProject && projects.length > 0 && (
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs font-medium text-slate-600">Project</label>
-                  <Select
-                    value={editForm.projectId}
-                    onValueChange={(val) => setEditForm((f) => ({ ...f, projectId: val }))}
-                  >
-                    <SelectTrigger className="text-sm">
-                      <SelectValue placeholder="No project" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">No project</SelectItem>
-                      {projects.map((p) => (
-                        <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+                editingItemIsMaintPart ? (
+                  <p className="text-xs text-slate-400">Maintenance parts can&apos;t be assigned to a project.</p>
+                ) : (
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs font-medium text-slate-600">Project</label>
+                    <Select
+                      value={editForm.projectId}
+                      onValueChange={(val) => setEditForm((f) => ({ ...f, projectId: val }))}
+                    >
+                      <SelectTrigger className="text-sm">
+                        <SelectValue placeholder="No project" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">No project</SelectItem>
+                        {projects.map((p) => (
+                          <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )
               )}
               <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer select-none">
                 <input
@@ -387,11 +418,11 @@ export function LineItemsTable({
           <DialogContent className="sm:max-w-sm">
             <DialogHeader>
               <DialogTitle>Add Line Item</DialogTitle>
-              <DialogDescription>Select a product and enter quantity and unit cost.</DialogDescription>
+              <DialogDescription>Select a product or part and enter quantity and unit cost.</DialogDescription>
             </DialogHeader>
             <div className="flex flex-col gap-3">
               <div className="flex flex-col gap-1">
-                <label className="text-xs font-medium text-slate-600">Product</label>
+                <label className="text-xs font-medium text-slate-600">Product / Part</label>
                 <Popover open={productComboOpen} onOpenChange={setProductComboOpen}>
                   <PopoverTrigger asChild>
                     <Button
@@ -400,10 +431,8 @@ export function LineItemsTable({
                       aria-expanded={productComboOpen}
                       className="w-full justify-between font-normal text-sm"
                     >
-                      <span className={cn("truncate", !addForm.productId && "text-muted-foreground")}>
-                        {addForm.productId
-                          ? products.find((p) => p.id === addForm.productId)?.name ?? "Select product…"
-                          : "Select product…"}
+                      <span className={cn("truncate", !addForm.catalogKey && "text-muted-foreground")}>
+                        {selectedCatalogItem?.name ?? "Select product or part…"}
                       </span>
                       <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                     </Button>
@@ -414,30 +443,30 @@ export function LineItemsTable({
                     }>
                       <CommandInput placeholder="Search by name or part #…" />
                       <CommandList className="!max-h-[220px]">
-                        <CommandEmpty>No products found.</CommandEmpty>
+                        <CommandEmpty>No products or parts found.</CommandEmpty>
                         <CommandGroup>
-                          {products.map((p) => {
-                            const searchStr = [p.name, p.partNumber].filter(Boolean).join(" ");
+                          {catalog.map((c) => {
+                            const searchStr = [c.name, c.partNumber].filter(Boolean).join(" ");
                             return (
                               <CommandItem
-                                key={p.id}
+                                key={c.key}
                                 value={searchStr}
                                 onSelect={() => {
                                   setAddForm((f) => ({
                                     ...f,
-                                    productId: p.id,
-                                    unitCost: p.unitCost != null
-                                      ? p.unitCost / 100
-                                      : f.unitCost,
+                                    catalogKey: c.key,
+                                    unitCost: c.unitCost != null ? c.unitCost / 100 : f.unitCost,
+                                    // Maintenance parts can never carry a project_id
+                                    projectId: c.isMaintPart ? "none" : f.projectId,
                                   }));
                                   setProductComboOpen(false);
                                 }}
                               >
-                                <Check className={cn("mr-2 h-4 w-4 shrink-0", addForm.productId === p.id ? "opacity-100" : "opacity-0")} />
+                                <Check className={cn("mr-2 h-4 w-4 shrink-0", addForm.catalogKey === c.key ? "opacity-100" : "opacity-0")} />
                                 <div className="min-w-0">
-                                  <p className="truncate text-sm font-medium">{p.name}</p>
-                                  {p.partNumber && (
-                                    <p className="font-mono text-xs text-slate-400">{p.partNumber}</p>
+                                  <p className="truncate text-sm font-medium">{c.name}</p>
+                                  {c.partNumber && (
+                                    <p className="font-mono text-xs text-slate-400">{c.partNumber}</p>
                                   )}
                                 </div>
                               </CommandItem>
@@ -470,23 +499,27 @@ export function LineItemsTable({
                 </div>
               </div>
               {showProject && projects.length > 0 && (
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs font-medium text-slate-600">Project</label>
-                  <Select
-                    value={addForm.projectId}
-                    onValueChange={(val) => setAddForm((f) => ({ ...f, projectId: val }))}
-                  >
-                    <SelectTrigger className="text-sm">
-                      <SelectValue placeholder="No project" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">No project</SelectItem>
-                      {projects.map((p) => (
-                        <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+                selectedCatalogItem?.isMaintPart ? (
+                  <p className="text-xs text-slate-400">Maintenance parts can&apos;t be assigned to a project.</p>
+                ) : (
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs font-medium text-slate-600">Project</label>
+                    <Select
+                      value={addForm.projectId}
+                      onValueChange={(val) => setAddForm((f) => ({ ...f, projectId: val }))}
+                    >
+                      <SelectTrigger className="text-sm">
+                        <SelectValue placeholder="No project" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">No project</SelectItem>
+                        {projects.map((p) => (
+                          <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )
               )}
               <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer select-none">
                 <input
@@ -497,7 +530,7 @@ export function LineItemsTable({
                 />
                 Taxable
               </label>
-              <Button onClick={saveAdd} disabled={!addForm.productId} className="mt-1">
+              <Button onClick={saveAdd} disabled={!addForm.catalogKey} className="mt-1">
                 Add to PO
               </Button>
             </div>

@@ -1,8 +1,17 @@
 import { NextResponse } from "next/server";
 import type Stripe from "stripe";
+import { Resend } from "resend";
 import { createServiceClient } from "@/lib/supabase/server";
 import { getStripe, isStripeConfigured } from "@/lib/stripe/server";
 import { getPlanForPriceId } from "@/lib/stripe/plans";
+
+// Subscription statuses that mean the org is no longer in good standing and
+// should lose paid-plan access — not just the literal "canceled" event.
+// unpaid/incomplete_expired/paused all mean Stripe has given up billing this
+// subscription (retries exhausted or it was paused), same practical outcome
+// as a cancellation. past_due/trialing/active are NOT included — those are
+// still-active or still-retrying states, not a final "not paying" outcome.
+const DOWNGRADE_STATUSES = new Set(["canceled", "unpaid", "incomplete_expired", "paused"]);
 
 export async function POST(request: Request) {
   if (!isStripeConfigured() || !process.env.STRIPE_WEBHOOK_SECRET) {
@@ -26,17 +35,58 @@ export async function POST(request: Request) {
   }
 
   const supabase = createServiceClient();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const db = supabase as any;
+
+  const subscriptionId = extractSubscriptionId(event);
+  const eventCreated = new Date(event.created * 1000).toISOString();
+
+  // ── Idempotency: record this event id before processing. A duplicate
+  // delivery of the same event hits the PRIMARY KEY constraint and is
+  // treated as "already handled" — skip processing entirely. ────────────────
+  const { error: dedupeErr } = await db.from("stripe_webhook_events").insert({
+    event_id: event.id,
+    event_type: event.type,
+    subscription_id: subscriptionId,
+    event_created: eventCreated,
+  });
+  if (dedupeErr) {
+    if (dedupeErr.code === "23505") {
+      return NextResponse.json({ received: true, duplicate: true });
+    }
+    console.error("[stripe webhook] failed to record event id:", dedupeErr);
+    return NextResponse.json({ error: "Webhook handler failed" }, { status: 500 });
+  }
+
+  // ── Stale/out-of-order guard: if a later event for the same subscription
+  // has already been processed, this one arrived late (Stripe doesn't
+  // guarantee delivery order) — applying it now would revert already-current
+  // state back to something older. ──────────────────────────────────────────
+  if (subscriptionId) {
+    const { data: newerEvent } = await db
+      .from("stripe_webhook_events")
+      .select("event_id")
+      .eq("subscription_id", subscriptionId)
+      .neq("event_id", event.id)
+      .gt("event_created", eventCreated)
+      .limit(1)
+      .maybeSingle();
+    if (newerEvent) {
+      console.info(`[stripe webhook] skipping stale event ${event.id} (${event.type}) — a newer event for subscription ${subscriptionId} was already processed`);
+      return NextResponse.json({ received: true, stale: true });
+    }
+  }
 
   try {
     switch (event.type) {
       case "checkout.session.completed": {
         const session = event.data.object as Stripe.Checkout.Session;
         const orgId = session.client_reference_id;
-        const subscriptionId =
+        const sessionSubscriptionId =
           typeof session.subscription === "string" ? session.subscription : session.subscription?.id;
-        if (orgId && subscriptionId) {
-          const subscription = await stripe.subscriptions.retrieve(subscriptionId);
-          await applySubscriptionToOrg(supabase, { id: orgId }, subscription);
+        if (orgId && sessionSubscriptionId) {
+          const subscription = await stripe.subscriptions.retrieve(sessionSubscriptionId);
+          await applySubscriptionToOrg(db, { id: orgId }, subscription);
         }
         break;
       }
@@ -45,7 +95,16 @@ export async function POST(request: Request) {
         const subscription = event.data.object as Stripe.Subscription;
         const customerId =
           typeof subscription.customer === "string" ? subscription.customer : subscription.customer.id;
-        await applySubscriptionToOrg(supabase, { stripeCustomerId: customerId }, subscription);
+        await applySubscriptionToOrg(db, { stripeCustomerId: customerId }, subscription);
+        break;
+      }
+      case "invoice.payment_failed": {
+        const invoice = event.data.object as Stripe.Invoice;
+        const customerId =
+          typeof invoice.customer === "string" ? invoice.customer : invoice.customer?.id;
+        if (customerId) {
+          await notifyPaymentFailed(db, customerId, invoice);
+        }
         break;
       }
       default:
@@ -59,30 +118,110 @@ export async function POST(request: Request) {
   return NextResponse.json({ received: true });
 }
 
+/** Pulls the subscription id an event is about, if any, for idempotency/ordering tracking. */
+function extractSubscriptionId(event: Stripe.Event): string | null {
+  switch (event.type) {
+    case "checkout.session.completed": {
+      const session = event.data.object as Stripe.Checkout.Session;
+      return typeof session.subscription === "string" ? session.subscription : session.subscription?.id ?? null;
+    }
+    case "customer.subscription.updated":
+    case "customer.subscription.deleted": {
+      const subscription = event.data.object as Stripe.Subscription;
+      return subscription.id;
+    }
+    case "invoice.payment_failed": {
+      const invoice = event.data.object as Stripe.Invoice;
+      const sub = invoice.parent?.subscription_details?.subscription;
+      return typeof sub === "string" ? sub : sub?.id ?? null;
+    }
+    default:
+      return null;
+  }
+}
+
 async function applySubscriptionToOrg(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  supabase: any,
+  db: any,
   lookup: { id: string } | { stripeCustomerId: string },
   subscription: Stripe.Subscription
 ) {
   const priceId = subscription.items.data[0]?.price.id ?? null;
   const plan = priceId ? getPlanForPriceId(priceId) : null;
-  const isCanceled = subscription.status === "canceled";
 
   const patch: Record<string, unknown> = {
     stripe_subscription_id: subscription.id,
     stripe_subscription_status: subscription.status,
     stripe_price_id: priceId,
   };
-  if (isCanceled) {
+  if (DOWNGRADE_STATUSES.has(subscription.status)) {
     patch.plan = "trial";
   } else if (plan) {
     patch.plan = plan;
   }
 
-  const query = supabase.from("organizations").update(patch);
+  const query = db.from("organizations").update(patch);
   const { error } =
     "id" in lookup ? await query.eq("id", lookup.id) : await query.eq("stripe_customer_id", lookup.stripeCustomerId);
 
   if (error) throw error;
+}
+
+/** Emails the org's admins that a subscription renewal payment failed. Best-effort. */
+async function notifyPaymentFailed(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  db: any,
+  stripeCustomerId: string,
+  invoice: Stripe.Invoice
+) {
+  const { data: org } = await db
+    .from("organizations")
+    .select("id, name")
+    .eq("stripe_customer_id", stripeCustomerId)
+    .maybeSingle();
+  if (!org) return;
+
+  const { data: admins } = await db
+    .from("profiles")
+    .select("email, name")
+    .eq("org_id", org.id)
+    .eq("role", "admin");
+  const recipients = (admins ?? []).map((a: { email: string | null }) => a.email).filter(Boolean) as string[];
+  if (recipients.length === 0) return;
+
+  if (!process.env.RESEND_API_KEY) {
+    console.warn(`[stripe webhook] payment failed for org ${org.id} but RESEND_API_KEY is not set — skipping notification email`);
+    return;
+  }
+
+  const amountDisplay = invoice.amount_due != null
+    ? new Intl.NumberFormat("en-US", { style: "currency", currency: (invoice.currency ?? "usd").toUpperCase() }).format(invoice.amount_due / 100)
+    : null;
+  const portalUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://twins-os.vercel.app";
+
+  const resend = new Resend(process.env.RESEND_API_KEY);
+  try {
+    await resend.emails.send({
+      from: "Equipt <noreply@twinslawnservice.com>",
+      to: recipients,
+      subject: `Payment failed for ${org.name}'s subscription`,
+      html: `
+        <div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px 24px">
+          <h2 style="margin:0 0 8px;font-size:20px;color:#0f172a">Subscription payment failed</h2>
+          <p style="margin:0 0 24px;color:#475569">
+            A renewal payment${amountDisplay ? ` of <strong>${amountDisplay}</strong>` : ""} for <strong>${org.name}</strong>'s subscription failed.
+            Please update the payment method in Billing Settings to avoid service interruption.
+          </p>
+          <a
+            href="${portalUrl}/settings"
+            style="display:inline-block;padding:12px 24px;background:#60ab45;color:#fff;text-decoration:none;border-radius:6px;font-weight:600"
+          >
+            Update Payment Method
+          </a>
+        </div>
+      `,
+    });
+  } catch (err) {
+    console.error(`[stripe webhook] failed to send payment-failed notification for org ${org.id}:`, err);
+  }
 }

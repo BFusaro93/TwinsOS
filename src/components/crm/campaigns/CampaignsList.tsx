@@ -249,8 +249,13 @@ function CampaignDialog({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="email">Email</SelectItem>
-                  <SelectItem value="sms">SMS</SelectItem>
-                  <SelectItem value="postcard">Postcard</SelectItem>
+                  {/* SMS/Postcard have no send integration yet — only email
+                      campaigns can actually be sent (see Send Now gating and
+                      /api/crm/campaigns/[id]/send). Disabled rather than
+                      removed so existing sms/postcard campaigns (if any)
+                      still display correctly; just can't be created new. */}
+                  <SelectItem value="sms" disabled>SMS (coming soon)</SelectItem>
+                  <SelectItem value="postcard" disabled>Postcard (coming soon)</SelectItem>
                 </SelectContent>
               </Select>
             </div>

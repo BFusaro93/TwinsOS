@@ -2,6 +2,7 @@
 
 import { use, useEffect, useState } from "react";
 import { Leaf } from "lucide-react";
+import { createClient } from "@/lib/supabase/client";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -26,10 +27,25 @@ interface PublicForm {
   fields: FormField[];
 }
 
+interface AttachmentValue {
+  path: string;
+  name: string;
+  size: number;
+}
+
 type PageState = "loading" | "not_found" | "ready" | "submitting" | "success" | "error";
 
 const MULTI_VALUE_TYPES = ["checklist"];
+// "hidden" is not user-facing and is excluded from validation like the other
+// display-only types, but unlike them it DOES carry a value — its configured
+// defaultValue — that must still be included in the submitted data.
 const DISPLAY_TYPES = ["header", "paragraph", "divider", "hidden"];
+
+// Mirrors the form-attachments Storage bucket's own limits (20260806000006) —
+// checked client-side too so a bad file is rejected before attempting an
+// upload that Storage would reject anyway.
+const MAX_ATTACHMENT_BYTES = 15 * 1024 * 1024;
+const ALLOWED_ATTACHMENT_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif", "application/pdf"]);
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
@@ -39,6 +55,9 @@ export default function PublicFormPage({ params }: { params: Promise<{ slug: str
   const [state, setState] = useState<PageState>("loading");
   const [values, setValues] = useState<Record<string, string>>({});
   const [multiValues, setMultiValues] = useState<Record<string, string[]>>({});
+  const [attachments, setAttachments] = useState<Record<string, AttachmentValue>>({});
+  const [attachmentUploading, setAttachmentUploading] = useState<Record<string, boolean>>({});
+  const [attachmentErrors, setAttachmentErrors] = useState<Record<string, string>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitError, setSubmitError] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
@@ -78,6 +97,34 @@ export default function PublicFormPage({ params }: { params: Promise<{ slug: str
     if (errors[id]) setErrors((prev) => { const e = { ...prev }; delete e[id]; return e; });
   }
 
+  async function handleAttachmentSelect(fieldId: string, file: File | null) {
+    setAttachmentErrors((prev) => { const e = { ...prev }; delete e[fieldId]; return e; });
+    if (!file || !form) return;
+
+    if (file.size > MAX_ATTACHMENT_BYTES) {
+      setAttachmentErrors((prev) => ({ ...prev, [fieldId]: "File is too large (max 15 MB)." }));
+      return;
+    }
+    if (!ALLOWED_ATTACHMENT_TYPES.has(file.type)) {
+      setAttachmentErrors((prev) => ({ ...prev, [fieldId]: "Unsupported file type — images and PDFs only." }));
+      return;
+    }
+
+    setAttachmentUploading((prev) => ({ ...prev, [fieldId]: true }));
+    try {
+      const supabase = createClient();
+      const path = `${form.id}/${crypto.randomUUID()}-${file.name}`;
+      const { error } = await supabase.storage.from("form-attachments").upload(path, file, { upsert: false });
+      if (error) throw error;
+      setAttachments((prev) => ({ ...prev, [fieldId]: { path, name: file.name, size: file.size } }));
+      if (errors[fieldId]) setErrors((prev) => { const e = { ...prev }; delete e[fieldId]; return e; });
+    } catch (err) {
+      setAttachmentErrors((prev) => ({ ...prev, [fieldId]: err instanceof Error ? err.message : "Upload failed" }));
+    } finally {
+      setAttachmentUploading((prev) => ({ ...prev, [fieldId]: false }));
+    }
+  }
+
   function validatePage(fieldsToValidate: FormField[]): boolean {
     const newErrors: Record<string, string> = {};
     for (const field of fieldsToValidate) {
@@ -86,6 +133,10 @@ export default function PublicFormPage({ params }: { params: Promise<{ slug: str
 
       if (MULTI_VALUE_TYPES.includes(field.fieldType)) {
         if ((multiValues[field.id] ?? []).length === 0) {
+          newErrors[field.id] = `${field.label || "This field"} is required`;
+        }
+      } else if (field.fieldType === "attachment") {
+        if (!attachments[field.id]) {
           newErrors[field.id] = `${field.label || "This field"} is required`;
         }
       } else {
@@ -126,9 +177,15 @@ export default function PublicFormPage({ params }: { params: Promise<{ slug: str
 
     const data: Record<string, unknown> = {};
     for (const field of form.fields) {
+      if (field.fieldType === "hidden") {
+        data[field.label || field.id] = (field.config?.defaultValue as string | undefined) ?? "";
+        continue;
+      }
       if (DISPLAY_TYPES.includes(field.fieldType)) continue;
       const key = field.label || field.id;
-      if (MULTI_VALUE_TYPES.includes(field.fieldType)) {
+      if (field.fieldType === "attachment") {
+        data[key] = attachments[field.id] ?? null;
+      } else if (MULTI_VALUE_TYPES.includes(field.fieldType)) {
         data[key] = multiValues[field.id] ?? [];
       } else {
         data[key] = values[field.id] ?? "";
@@ -245,6 +302,10 @@ export default function PublicFormPage({ params }: { params: Promise<{ slug: str
             error={errors[field.id]}
             onChange={(v) => setValue(field.id, v)}
             onToggleMulti={(opt) => toggleMultiValue(field.id, opt)}
+            attachment={attachments[field.id] ?? null}
+            attachmentUploading={attachmentUploading[field.id] ?? false}
+            attachmentError={attachmentErrors[field.id]}
+            onAttachmentSelect={(file) => handleAttachmentSelect(field.id, file)}
           />
         ))}
 
@@ -293,6 +354,7 @@ export default function PublicFormPage({ params }: { params: Promise<{ slug: str
 
 function FieldRenderer({
   field, value, multiValue, error, onChange, onToggleMulti,
+  attachment, attachmentUploading, attachmentError, onAttachmentSelect,
 }: {
   field: FormField;
   value: string;
@@ -300,6 +362,10 @@ function FieldRenderer({
   error?: string;
   onChange: (v: string) => void;
   onToggleMulti: (opt: string) => void;
+  attachment: AttachmentValue | null;
+  attachmentUploading: boolean;
+  attachmentError?: string;
+  onAttachmentSelect: (file: File | null) => void;
 }) {
   const inputBase =
     "mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm " +
@@ -542,8 +608,18 @@ function FieldRenderer({
         {fieldLabel}
         <input
           type="file"
-          className="mt-1 block w-full text-sm text-slate-600 file:mr-3 file:rounded-md file:border-0 file:bg-brand-50 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-brand-700 hover:file:bg-brand-100 cursor-pointer"
+          accept="image/jpeg,image/png,image/webp,image/gif,application/pdf"
+          disabled={attachmentUploading}
+          onChange={(e) => onAttachmentSelect(e.target.files?.[0] ?? null)}
+          className="mt-1 block w-full text-sm text-slate-600 file:mr-3 file:rounded-md file:border-0 file:bg-brand-50 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-brand-700 hover:file:bg-brand-100 cursor-pointer disabled:opacity-60"
         />
+        {attachmentUploading && <p className="mt-1 text-xs text-slate-500">Uploading…</p>}
+        {attachment && !attachmentUploading && (
+          <p className="mt-1 text-xs text-emerald-600">
+            ✓ {attachment.name} ({Math.round(attachment.size / 1024)} KB)
+          </p>
+        )}
+        {attachmentError && <p className="mt-1 text-xs text-red-600">{attachmentError}</p>}
         {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
       </div>
     );

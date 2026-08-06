@@ -332,7 +332,9 @@ function MaterialsTab({ project }: { project: Project }) {
               quantity: i.quantity,
               unitCost: unitCostCents,
               totalCost: i.quantity * unitCostCents,
-              projectId: project.id,
+              // Parts are always maintenance_part — never carry a project_id
+              // (CLAUDE.md: only project_material/stocked_material may).
+              projectId: isPart ? null : project.id,
               notes: null,
               taxable: true,
             },
@@ -366,7 +368,9 @@ function MaterialsTab({ project }: { project: Project }) {
             quantity: i.quantity,
             unitCost: unitCostCents,
             totalCost: i.quantity * unitCostCents,
-            projectId: project.id,
+            // Parts are always maintenance_part — never carry a project_id
+            // (CLAUDE.md: only project_material/stocked_material may).
+            projectId: isPart ? null : project.id,
             notes: null,
             taxable: true,
           };

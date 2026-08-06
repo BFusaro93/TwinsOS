@@ -27,8 +27,8 @@ export function useProjects(includeArchived = false) {
         .from("projects")
         .select(`
           *,
-          po_line_items(quantity, unit_cost, total_cost, taxable, purchase_orders(tax_rate_percent, shipping_cost, subtotal)),
-          requisition_line_items(quantity, unit_cost, total_cost, requisitions(tax_rate_percent, status, converted_po_id)),
+          po_line_items(quantity, unit_cost, total_cost, taxable, purchase_orders(tax_rate_percent, shipping_cost, subtotal, deleted_at)),
+          requisition_line_items(quantity, unit_cost, total_cost, requisitions(tax_rate_percent, status, converted_po_id, deleted_at)),
           project_direct_items(quantity, unit_cost, deleted_at),
           project_subcontract_costs(amount, deleted_at)
         `)
@@ -42,14 +42,22 @@ export function useProjects(includeArchived = false) {
         // Mirrors the Materials tab (ProjectDetailPanel) so the list total and the
         // Materials + Other Costs tabs on a project's detail view always agree —
         // both must include PO tax/shipping and pending (unconverted) REQ costs.
+        // Exclude lines whose parent PO/Requisition was soft-deleted — a
+        // canceled PO's cost must drop out of the project total, mirroring
+        // ProjectDetailPanel's own totals (which source from usePurchaseOrders()/
+        // useRequisitions(), both already filtered to deleted_at IS NULL).
         const poLines: {
           quantity: number; unit_cost: number; total_cost: number; taxable: boolean | null;
-          purchase_orders: { tax_rate_percent: number; shipping_cost: number; subtotal: number } | null;
-        }[] = row.po_line_items ?? [];
+          purchase_orders: { tax_rate_percent: number; shipping_cost: number; subtotal: number; deleted_at: string | null } | null;
+        }[] = (row.po_line_items ?? []).filter(
+          (li: { purchase_orders: { deleted_at: string | null } | null }) => !li.purchase_orders?.deleted_at
+        );
         const reqLines: {
           quantity: number; unit_cost: number; total_cost: number;
-          requisitions: { tax_rate_percent: number; status: string; converted_po_id: string | null } | null;
-        }[] = row.requisition_line_items ?? [];
+          requisitions: { tax_rate_percent: number; status: string; converted_po_id: string | null; deleted_at: string | null } | null;
+        }[] = (row.requisition_line_items ?? []).filter(
+          (li: { requisitions: { deleted_at: string | null } | null }) => !li.requisitions?.deleted_at
+        );
         const directItems: { quantity: number; unit_cost: number; deleted_at: string | null }[] =
           row.project_direct_items ?? [];
         const subcontractCosts: { amount: number; deleted_at: string | null }[] =

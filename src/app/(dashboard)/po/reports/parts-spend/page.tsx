@@ -60,8 +60,13 @@ export default function PartsSpendReportPage() {
     return map;
   }, [products]);
 
+  // Only POs actually placed with the vendor count as spend — "requested"/
+  // "pending"/"approved" haven't been ordered yet, and "rejected"/"canceled"
+  // never will be. ("draft" isn't a real purchase_orders status; the old
+  // filter here excluding it was dead code copied from requisition-status
+  // filtering, which let requested/pending/approved/rejected POs all count.)
   const orderedPOs = useMemo(
-    () => purchaseOrders.filter((po) => !["canceled", "draft"].includes(po.status)),
+    () => purchaseOrders.filter((po) => ["ordered", "partially_fulfilled", "completed"].includes(po.status)),
     [purchaseOrders]
   );
 

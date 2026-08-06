@@ -64,6 +64,35 @@ export async function POST(request: Request) {
     if (updateError) {
       return NextResponse.json({ error: updateError.message }, { status: 500 });
     }
+  } else {
+    // Guard against creating a second, independent subscription: mode:
+    // "subscription" checkout always creates a NEW subscription — it never
+    // updates/replaces an existing one. If this customer already has a live
+    // subscription, change its price in place (with proration) instead of
+    // starting a second Stripe subscription that would double-bill the org
+    // and leave the first one orphaned once stripe_subscription_id gets
+    // overwritten by whichever webhook event lands last.
+    const existingSubs = await stripe.subscriptions.list({
+      customer: stripeCustomerId,
+      status: "all",
+      limit: 5,
+    });
+    const activeSub = existingSubs.data.find((s) =>
+      ["active", "trialing", "past_due"].includes(s.status)
+    );
+    if (activeSub) {
+      const item = activeSub.items.data[0];
+      if (item && item.price.id === priceId) {
+        return NextResponse.json({ error: "This organization is already subscribed to this plan" }, { status: 422 });
+      }
+      await stripe.subscriptions.update(activeSub.id, {
+        items: item ? [{ id: item.id, price: priceId }] : [{ price: priceId }],
+        proration_behavior: "create_prorations",
+      });
+      // The customer.subscription.updated webhook will apply the new plan/
+      // price to organizations once Stripe processes this change.
+      return NextResponse.json({ updated: true });
+    }
   }
 
   const origin = new URL(request.url).origin;

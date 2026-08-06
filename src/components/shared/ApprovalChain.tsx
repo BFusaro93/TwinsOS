@@ -106,20 +106,22 @@ function ApproverRow({
   request,
   isActiveStep,
   isCurrentUser,
-  isAdmin,
+  canOverride,
   onDecide,
   deciding,
 }: {
   request: ApprovalRequest;
   isActiveStep: boolean;
   isCurrentUser: boolean;
-  isAdmin: boolean;
+  /** Admin OR manager — RLS grants both roles chain-override on the backend
+   *  (20260803000000_enforce_approval_chain_order.sql); this must match. */
+  canOverride: boolean;
   onDecide: (status: "approved" | "rejected", comment: string) => void;
   deciding: boolean;
 }) {
-  const isOverride = isAdmin && !isCurrentUser && isActiveStep && request.status === "pending";
-  const canAct = isActiveStep && request.status === "pending" && (isCurrentUser || isAdmin);
-  const [expanded, setExpanded] = useState(isActiveStep && (isCurrentUser || isAdmin) && request.status === "pending");
+  const isOverride = canOverride && !isCurrentUser && isActiveStep && request.status === "pending";
+  const canAct = isActiveStep && request.status === "pending" && (isCurrentUser || canOverride);
+  const [expanded, setExpanded] = useState(isActiveStep && (isCurrentUser || canOverride) && request.status === "pending");
   const [comment, setComment] = useState("");
 
   return (
@@ -220,7 +222,7 @@ function ApproverRow({
                 {isOverride ? (
                   <>
                     <ShieldAlert className="h-3 w-3" />
-                    Admin Override
+                    Override
                   </>
                 ) : (
                   <>
@@ -233,7 +235,7 @@ function ApproverRow({
           </div>
         )}
 
-        {isActiveStep && !isCurrentUser && !isAdmin && request.status === "pending" && (
+        {isActiveStep && !isCurrentUser && !canOverride && request.status === "pending" && (
           <p className="mt-0.5 text-xs text-slate-400">
             Waiting for {request.approverName} to review
           </p>
@@ -251,7 +253,7 @@ function StepGroupCard({
   isActive,
   isLast,
   currentUserId,
-  isAdmin,
+  canOverride,
   onDecide,
   deciding,
 }: {
@@ -260,7 +262,7 @@ function StepGroupCard({
   isActive: boolean;
   isLast: boolean;
   currentUserId: string;
-  isAdmin: boolean;
+  canOverride: boolean;
   onDecide: (request: ApprovalRequest, status: "approved" | "rejected", comment: string) => void;
   deciding: boolean;
 }) {
@@ -328,7 +330,7 @@ function StepGroupCard({
                 request={request}
                 isActiveStep={isActive}
                 isCurrentUser={request.approverId === currentUserId}
-                isAdmin={isAdmin}
+                canOverride={canOverride}
                 onDecide={(status, comment) => onDecide(request, status, comment)}
                 deciding={deciding}
               />
@@ -344,7 +346,9 @@ function StepGroupCard({
 
 export function ApprovalChain({ entityId, onApproved, onRejected }: ApprovalChainProps) {
   const { currentUser } = useCurrentUserStore();
-  const isAdmin = currentUser.role === "admin";
+  // Matches the RLS chain-override grant (admin OR manager) — see
+  // 20260803000000_enforce_approval_chain_order.sql.
+  const canOverride = currentUser.role === "admin" || currentUser.role === "manager";
   const { data: requests = [], isLoading } = useApprovalRequests(entityId);
   const { mutate: decide, isPending: deciding, isError: decideError } = useDecideApproval(entityId);
 
@@ -424,7 +428,7 @@ export function ApprovalChain({ entityId, onApproved, onRejected }: ApprovalChai
           isActive={group.flowStepId === activeGroup?.flowStepId}
           isLast={i === groups.length - 1}
           currentUserId={currentUser.id}
-          isAdmin={isAdmin}
+          canOverride={canOverride}
           onDecide={handleDecide}
           deciding={deciding}
         />

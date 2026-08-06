@@ -46,6 +46,13 @@ export default async function RequestPortalSlugPage({ params }: PageProps) {
     .filter((c) => c.enabled)
     .map((c) => c.label);
 
+  const [{ data: assets }, { data: vehicles }] = await Promise.all([
+    supabase.from("assets").select("id, name").eq("org_id", org.id).eq("status", "active").is("deleted_at", null),
+    supabase.from("vehicles").select("id, name").eq("org_id", org.id).eq("status", "active").is("deleted_at", null),
+  ]);
+  const equipmentOptions = [...(assets ?? []), ...(vehicles ?? [])]
+    .sort((a, b) => a.name.localeCompare(b.name));
+
   return (
     <PortalForm
       orgSlug={slug}
@@ -54,6 +61,7 @@ export default async function RequestPortalSlugPage({ params }: PageProps) {
       portalEnabled={org.portal_enabled ?? false}
       assetTypes={assetTypes}
       woCategories={woCategories}
+      equipmentOptions={equipmentOptions}
     />
   );
 }

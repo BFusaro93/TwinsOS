@@ -351,23 +351,29 @@ export function FormBuilder({ form, publicBaseUrl }: Props) {
         });
       }
 
-      // Save rules, resolving field keys to real ids
-      await saveRules.mutateAsync(
-        rules.map((r, i) => ({
-          sourceFieldId: r.sourceFieldKey
-            ? (newFieldMap.get(r.sourceFieldKey) ?? fields.find((f) => f._key === r.sourceFieldKey)?._savedId ?? null)
-            : null,
-          ruleType: "page" as const,
-          operator: r.operator,
-          operand: r.operand,
-          action: r.action,
-          actionValue: r.actionValue,
-          sortOrder: i,
-        }))
-      );
-
-      setDirty(false);
-      toast.success("Form saved");
+      // Save rules, resolving field keys to real ids. Kept in its own
+      // try/catch — Fields already saved successfully above, so a Rules-only
+      // failure must not report the whole form as unsaved.
+      try {
+        await saveRules.mutateAsync(
+          rules.map((r, i) => ({
+            sourceFieldId: r.sourceFieldKey
+              ? (newFieldMap.get(r.sourceFieldKey) ?? fields.find((f) => f._key === r.sourceFieldKey)?._savedId ?? null)
+              : null,
+            ruleType: "page" as const,
+            operator: r.operator,
+            operand: r.operand,
+            action: r.action,
+            actionValue: r.actionValue,
+            sortOrder: i,
+          }))
+        );
+        setDirty(false);
+        toast.success("Form saved");
+      } catch {
+        setDirty(false);
+        toast.error("Fields saved, but rules failed to save — try again.");
+      }
     } catch {
       toast.error("Failed to save form");
     } finally {

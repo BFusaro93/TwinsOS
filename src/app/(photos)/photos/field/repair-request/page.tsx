@@ -50,6 +50,13 @@ export default async function FieldRepairRequestPage() {
     .filter((c) => c.enabled)
     .map((c) => c.label);
 
+  const [{ data: assets }, { data: vehicles }] = await Promise.all([
+    supabase.from("assets").select("id, name").eq("org_id", orgId).eq("status", "active").is("deleted_at", null),
+    supabase.from("vehicles").select("id, name").eq("org_id", orgId).eq("status", "active").is("deleted_at", null),
+  ]);
+  const equipmentOptions = [...(assets ?? []), ...(vehicles ?? [])]
+    .sort((a, b) => a.name.localeCompare(b.name));
+
   return (
     <PortalForm
       orgSlug={org.slug}
@@ -58,6 +65,8 @@ export default async function FieldRepairRequestPage() {
       portalEnabled={true}
       assetTypes={assetTypes}
       woCategories={woCategories}
+      equipmentOptions={equipmentOptions}
+      endpoint="/api/field/repair-request"
     />
   );
 }

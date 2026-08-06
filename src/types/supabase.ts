@@ -3681,6 +3681,8 @@ export type Database = {
           action: string
           action_value: string | null
           created_at: string
+          created_by: string | null
+          deleted_at: string | null
           form_id: string
           id: string
           operand: string | null
@@ -3695,6 +3697,8 @@ export type Database = {
           action: string
           action_value?: string | null
           created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
           form_id: string
           id?: string
           operand?: string | null
@@ -3709,6 +3713,8 @@ export type Database = {
           action?: string
           action_value?: string | null
           created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
           form_id?: string
           id?: string
           operand?: string | null
@@ -10112,6 +10118,30 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      stripe_webhook_events: {
+        Row: {
+          event_created: string
+          event_id: string
+          event_type: string
+          processed_at: string
+          subscription_id: string | null
+        }
+        Insert: {
+          event_created: string
+          event_id: string
+          event_type: string
+          processed_at?: string
+          subscription_id?: string | null
+        }
+        Update: {
+          event_created?: string
+          event_id?: string
+          event_type?: string
+          processed_at?: string
+          subscription_id?: string | null
+        }
+        Relationships: []
       }
       ticket_contributors: {
         Row: {

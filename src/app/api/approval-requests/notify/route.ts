@@ -81,8 +81,16 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: true, sent: 0 });
   }
 
+  // Only notify the currently-active step — the lowest `order` among pending
+  // requests — not every future step's approver at once. A later step's
+  // approver can't act yet (chain order is RLS-enforced server-side), so
+  // emailing them immediately is both premature and confusing: they'd get an
+  // actionable-looking email for something the app then refuses to let them do.
+  const activeOrder = requests[0].order;
+  const activeRequests = requests.filter((r) => r.order === activeOrder);
+
   // 4. Fetch approver emails from profiles
-  const approverIds = [...new Set(requests.map((r) => r.approver_id))];
+  const approverIds = [...new Set(activeRequests.map((r) => r.approver_id))];
   const { data: profiles } = await adminClient
     .from("profiles")
     .select("id, email, name")
@@ -108,7 +116,7 @@ export async function POST(request: Request) {
   const entityLabel = meta.label;
 
   let sent = 0;
-  for (const req of requests) {
+  for (const req of activeRequests) {
     const toEmail = emailMap.get(req.approver_id);
     if (!toEmail) continue;
 

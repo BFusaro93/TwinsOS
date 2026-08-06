@@ -446,18 +446,20 @@ export function NewRequisitionDialog({ open, onOpenChange, initialData, prefillD
               </div>
 
               {/* Preferred Vendor — half width */}
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <div className="grid gap-1.5">
-                  <Label>Vendor{rf.req("vendor")}</Label>
-                  <VendorCombobox
-                    vendors={allVendors}
-                    value={vendorId}
-                    onValueChange={setVendorId}
-                    noneLabel="No preference"
-                    onCreateNew={() => setVendorDialogOpen(true)}
-                  />
+              {rf.isVisible("vendor") && (
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div className="grid gap-1.5">
+                    <Label>Vendor{rf.req("vendor")}</Label>
+                    <VendorCombobox
+                      vendors={allVendors}
+                      value={vendorId}
+                      onValueChange={setVendorId}
+                      noneLabel="No preference"
+                      onCreateNew={() => setVendorDialogOpen(true)}
+                    />
+                  </div>
                 </div>
-              </div>
+              )}
 
               {/* Notes — full width */}
               {rf.isVisible("notes") && (

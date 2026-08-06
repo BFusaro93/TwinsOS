@@ -41,8 +41,12 @@ interface PortalFormProps {
   orgName: string;
   brandColor: string;
   portalEnabled: boolean;
-    assetTypes?: string[];
+  assetTypes?: string[];
   woCategories?: string[];
+  /** Real assets/vehicles to suggest in the Equipment/Asset field (name shown, id linked when matched). */
+  equipmentOptions?: { id: string; name: string }[];
+  /** Where to POST the submission — public/anonymous portal vs. the authenticated internal field route. */
+  endpoint?: string;
 }
 
 interface SubmitResult {
@@ -58,12 +62,16 @@ export function PortalForm({
   orgName,
   brandColor,
   portalEnabled,
+  woCategories = [],
+  equipmentOptions = [],
+  endpoint = "/api/public/work-requests",
 }: PortalFormProps) {
   const [name, setName]                     = useState("");
   const [title, setTitle]                   = useState("");
   const [description, setDescription]       = useState("");
   const [priority, setPriority]             = useState<WorkOrderPriority>("medium");
   const [equipment, setEquipment]           = useState("");
+  const [repairCategory, setRepairCategory] = useState("");
   const [hasRepairTag, setHasRepairTag]     = useState<"yes" | "no" | "">("");
   const [errors, setErrors]                 = useState<Record<string, string>>({});
   const [isPending, setIsPending]           = useState(false);
@@ -84,8 +92,15 @@ export function PortalForm({
     if (!validate()) return;
     setIsPending(true);
     setServerError(null);
+    // If the typed equipment name exactly matches a known asset/vehicle,
+    // link the real record (asset_id) in addition to the free-text name —
+    // the field stays a plain text input so anything not in the list can
+    // still be typed freely.
+    const matchedEquipment = equipmentOptions.find(
+      (o) => o.name.trim().toLowerCase() === equipment.trim().toLowerCase()
+    );
     try {
-      const res = await fetch("/api/public/work-requests", {
+      const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -94,7 +109,9 @@ export function PortalForm({
           title:         title.trim(),
           description:   description.trim(),
           priority,
-          equipment:    equipment.trim() || undefined,
+          equipment:      equipment.trim() || undefined,
+          assetId:        matchedEquipment?.id,
+          repairCategory: repairCategory || undefined,
           hasRepairTag: hasRepairTag === "yes" ? true : hasRepairTag === "no" ? false : undefined,
         }),
       });
@@ -113,7 +130,7 @@ export function PortalForm({
 
   function resetForm() {
     setName(""); setTitle(""); setDescription("");
-    setPriority("medium"); setEquipment("");
+    setPriority("medium"); setEquipment(""); setRepairCategory("");
     setHasRepairTag(""); setErrors({});
     setSubmitted(null); setServerError(null);
   }
@@ -263,10 +280,18 @@ export function PortalForm({
                   </Label>
                   <Input
                     id="equipment"
+                    list={equipmentOptions.length > 0 ? "equipment-options" : undefined}
                     placeholder="e.g. Toro Z-Master #3, Truck #12"
                     value={equipment}
                     onChange={(e) => setEquipment(e.target.value)}
                   />
+                  {equipmentOptions.length > 0 && (
+                    <datalist id="equipment-options">
+                      {equipmentOptions.map((o) => (
+                        <option key={o.id} value={o.name} />
+                      ))}
+                    </datalist>
+                  )}
                 </div>
 
                 <div className="flex flex-col gap-1.5">
@@ -288,6 +313,26 @@ export function PortalForm({
                   </Select>
                 </div>
               </div>
+
+              {/* Repair category */}
+              {woCategories.length > 0 && (
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="repair-category" className="text-sm font-medium">
+                    Repair Category <span className="text-xs font-normal text-slate-400">(optional)</span>
+                  </Label>
+                  <Select value={repairCategory || "none"} onValueChange={(v) => setRepairCategory(v === "none" ? "" : v)}>
+                    <SelectTrigger id="repair-category">
+                      <SelectValue placeholder="Select a category" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">No category</SelectItem>
+                      {woCategories.map((c) => (
+                        <SelectItem key={c} value={c}>{c}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
 
               {/* Repair tag */}
               <div className="flex flex-col gap-1.5">

@@ -30,6 +30,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { CheckCircle2, PackageCheck } from "lucide-react";
+import { toast } from "sonner";
 import { useUsers } from "@/lib/hooks/use-users";
 import { useProducts, useReceiveProductCostLayer } from "@/lib/hooks/use-products";
 import { useParts } from "@/lib/hooks/use-parts";
@@ -37,6 +38,14 @@ import { useReceivePartCostLayer } from "@/lib/hooks/use-parts";
 import { useCreateGoodsReceipt, useGoodsReceipts } from "@/lib/hooks/use-goods-receipts";
 import { formatCurrency } from "@/lib/utils";
 import type { PurchaseOrder, LineItem } from "@/types";
+
+function errMsg(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  if (typeof err === "object" && err !== null && "message" in err) {
+    return String((err as { message: unknown }).message);
+  }
+  return String(err);
+}
 
 interface ReceiptDraftLine {
   lineItemId: string;
@@ -65,10 +74,11 @@ export function ReceiveGoodsDialog({
   const { data: users = [] } = useUsers();
   const { data: products = [] } = useProducts();
   const { data: parts = [] } = useParts();
-  const { mutate: receivePartLayer } = useReceivePartCostLayer();
-  const { mutate: receiveProductLayer } = useReceiveProductCostLayer();
+  const { mutateAsync: receivePartLayer } = useReceivePartCostLayer();
+  const { mutateAsync: receiveProductLayer } = useReceiveProductCostLayer();
   const { mutate: createReceipt, isPending: saving } = useCreateGoodsReceipt();
   const { data: allReceipts = [] } = useGoodsReceipts();
+  const [applyingInventory, setApplyingInventory] = useState(false);
 
   // Total already received per line item across all prior receipts for this PO
   const alreadyReceivedMap = allReceipts
@@ -148,69 +158,82 @@ export function ReceiveGoodsDialog({
   const someReceived = lines.some((l) => l.quantityReceived > 0);
   const isValid = someReceived && receivedById !== "";
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!isValid) return;
+    if (!isValid || applyingInventory || saving) return;
 
     const receivedAt = new Date().toISOString();
     const receiptNumber = `GR-${new Date().getFullYear()}-${Date.now().toString().slice(-6)}`;
     const receivedUser = users.find((u) => u.id === receivedById);
     const receivedByName = receivedUser?.name ?? "";
 
-    // Update cost layers for every received line item.
-    // This never modifies the line items on this or any other PO/WO —
-    // it only updates the catalog record's cost history for future pre-fills.
-    lines.forEach((line) => {
-      if (line.quantityReceived <= 0) return;
+    const linesToReceive = lines.filter((l) => l.quantityReceived > 0);
 
-      // Find the PO line item to look up the productItemId
-      const poLineItem = po.lineItems.find((li) => li.id === line.lineItemId);
-      if (!poLineItem) return;
+    // Update inventory + cost layers for every received line item BEFORE
+    // recording the receipt — awaited and error-surfacing (not fire-and-forget)
+    // so a failed increment (deleted catalog product, RLS mismatch, etc.)
+    // aborts the whole submission instead of silently recording a receipt
+    // that says items arrived while inventory never actually moved.
+    setApplyingInventory(true);
+    try {
+      for (const line of linesToReceive) {
+        // Find the PO line item to look up the productItemId
+        const poLineItem = po.lineItems.find((li) => li.id === line.lineItemId);
 
-      // Bare product ID (strip prefix if present)
-      const rawId = poLineItem.productItemId?.replace(/^product:/, "") ?? "";
+        // Bare product ID (strip prefix if present)
+        const rawId = poLineItem?.productItemId?.replace(/^product:/, "") ?? "";
 
-      // Match product with strict priority:
-      // 1. By UUID (most reliable — set when items are added via the app)
-      // 2. By part number (CSV-imported items that have a part #)
-      // 3. By exact name (last resort for items with no part # and no productItemId)
-      // Never fall back to empty-string part number matching — it would match the
-      // wrong product whenever two items both lack a part number.
-      const matchedProduct =
-        (rawId ? products.find((p) => p.id === rawId) : null) ??
-        (line.partNumber ? products.find((p) => p.partNumber === line.partNumber) : null) ??
-        (line.productItemName ? products.find((p) => p.name === line.productItemName) : null);
+        // Match product with strict priority:
+        // 1. By UUID (most reliable — set when items are added via the app)
+        // 2. By part number (CSV-imported items that have a part #)
+        // 3. By exact name (last resort for items with no part # and no productItemId)
+        // Never fall back to empty-string part number matching — it would match the
+        // wrong product whenever two items both lack a part number.
+        const matchedProduct =
+          (rawId ? products.find((p) => p.id === rawId) : null) ??
+          (line.partNumber ? products.find((p) => p.partNumber === line.partNumber) : null) ??
+          (line.productItemName ? products.find((p) => p.name === line.productItemName) : null);
 
-      if (matchedProduct?.category === "maintenance_part") {
-        // Also update the Parts inventory record if one is linked
-        const linkedPart = parts.find((pt) => pt.productItemId === matchedProduct.id) ??
-          (line.partNumber ? parts.find((pt) => pt.partNumber === line.partNumber) : null);
-        if (linkedPart) {
-          receivePartLayer({
-            partId: linkedPart.id,
+        if (!matchedProduct) {
+          throw new Error(`No catalog product found for "${line.productItemName}" — cannot update inventory for this line.`);
+        }
+
+        if (matchedProduct.category === "maintenance_part") {
+          // Also update the Parts inventory record if one is linked
+          const linkedPart = parts.find((pt) => pt.productItemId === matchedProduct.id) ??
+            (line.partNumber ? parts.find((pt) => pt.partNumber === line.partNumber) : null);
+          if (linkedPart) {
+            await receivePartLayer({
+              partId: linkedPart.id,
+              quantity: line.quantityReceived,
+              unitCost: line.unitCost,
+              receivedAt,
+              poNumber: po.poNumber,
+            });
+          }
+          await receiveProductLayer({
+            productId: matchedProduct.id,
+            quantity: line.quantityReceived,
+            unitCost: line.unitCost,
+            receivedAt,
+            poNumber: po.poNumber,
+          });
+        } else {
+          await receiveProductLayer({
+            productId: matchedProduct.id,
             quantity: line.quantityReceived,
             unitCost: line.unitCost,
             receivedAt,
             poNumber: po.poNumber,
           });
         }
-        receiveProductLayer({
-          productId: matchedProduct.id,
-          quantity: line.quantityReceived,
-          unitCost: line.unitCost,
-          receivedAt,
-          poNumber: po.poNumber,
-        });
-      } else if (matchedProduct) {
-        receiveProductLayer({
-          productId: matchedProduct.id,
-          quantity: line.quantityReceived,
-          unitCost: line.unitCost,
-          receivedAt,
-          poNumber: po.poNumber,
-        });
       }
-    });
+    } catch (err) {
+      setApplyingInventory(false);
+      toast.error(`Failed to update inventory: ${errMsg(err)} — receipt was not recorded.`);
+      return;
+    }
+    setApplyingInventory(false);
 
     // Persist the goods receipt record to the database
     createReceipt(
@@ -228,19 +251,17 @@ export function ReceiveGoodsDialog({
         shippingCost: po.shippingCost,
         grandTotal,
         notes: notes || null,
-        lines: lines
-          .filter((l) => l.quantityReceived > 0)
-          .map((l) => ({
-            id: "",           // generated by DB on insert
-            lineItemId: l.lineItemId,
-            productItemName: l.productItemName,
-            partNumber: l.partNumber,
-            quantityOrdered: l.quantityOrdered,
-            quantityReceived: l.quantityReceived,
-            quantityRemaining: l.quantityOrdered - l.quantityReceived,
-            unitCost: l.unitCost,
-            isMaintPart: l.isMaintPart,
-          })),
+        lines: linesToReceive.map((l) => ({
+          id: "",           // generated by DB on insert
+          lineItemId: l.lineItemId,
+          productItemName: l.productItemName,
+          partNumber: l.partNumber,
+          quantityOrdered: l.quantityOrdered,
+          quantityReceived: l.quantityReceived,
+          quantityRemaining: l.quantityOrdered - l.quantityReceived,
+          unitCost: l.unitCost,
+          isMaintPart: l.isMaintPart,
+        })),
       },
       {
         onSuccess: () => setSubmitted(true),
@@ -448,8 +469,8 @@ export function ReceiveGoodsDialog({
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button type="submit" disabled={!isValid || saving}>
-              {saving ? "Saving..." : "Record Receipt"}
+            <Button type="submit" disabled={!isValid || saving || applyingInventory}>
+              {applyingInventory ? "Updating inventory..." : saving ? "Saving..." : "Record Receipt"}
             </Button>
           </DialogFooter>
         </form>

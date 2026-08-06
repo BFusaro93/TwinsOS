@@ -131,21 +131,102 @@ export function useUpdateGoodsReceipt() {
       // Fetch current receipt header + line quantities for audit comparison
       const { data: currentReceipt } = await supabase
         .from("goods_receipts")
-        .select("org_id, receipt_number, notes, tax_rate_percent, shipping_cost")
+        .select("org_id, receipt_number, notes, tax_rate_percent, shipping_cost, po_number")
         .eq("id", input.id)
         .single();
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: currentLines } = await (supabase as any)
         .from("goods_receipt_lines")
-        .select("id, quantity_received")
+        .select("id, quantity_received, po_line_item_id, part_number, is_maint_part")
         .eq("receipt_id", input.id);
-      const oldByLineId = new Map<string, number>(
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (currentLines ?? []).map((l: any) => [l.id as string, l.quantity_received as number])
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      type CurrentLine = { id: string; quantity_received: number; po_line_item_id: string | null; part_number: string; is_maint_part: boolean };
+      const oldByLineId = new Map<string, CurrentLine>(
+        (currentLines ?? []).map((l: CurrentLine) => [l.id, l])
       );
 
-      // Update line items
+      // Collect quantity changes for audit entries + inventory adjustment
+      const qtyChanges: Array<{
+        name: string; oldQty: number; newQty: number; delta: number;
+        poLineItemId: string | null; partNumber: string; isMaintPart: boolean;
+      }> = [];
+      for (const line of input.lines) {
+        const old = oldByLineId.get(line.id);
+        if (old !== undefined && old.quantity_received !== line.quantityReceived) {
+          qtyChanges.push({
+            name: line.productItemName,
+            oldQty: old.quantity_received,
+            newQty: line.quantityReceived,
+            delta: line.quantityReceived - old.quantity_received,
+            poLineItemId: old.po_line_item_id,
+            partNumber: old.part_number,
+            isMaintPart: old.is_maint_part,
+          });
+        }
+      }
+
+      // ── Adjust inventory by the delta ────────────────────────────────────
+      // A receipt line's quantity_received is the only place parts/product
+      // quantity_on_hand is derived from — correcting it here (up or down)
+      // must move inventory by the same delta, or it silently drifts from
+      // what the receipt claims was received. Resolve the catalog product the
+      // same way the initial-receipt flow does: by the PO line item's
+      // product_item_id first, falling back to part number then exact name.
+      if (qtyChanges.length > 0 && currentReceipt) {
+        const poLineItemIds = qtyChanges.map((c) => c.poLineItemId).filter((v): v is string => !!v);
+        const { data: poLineItems } = poLineItemIds.length > 0
+          ? await supabase.from("po_line_items").select("id, product_item_id").in("id", poLineItemIds)
+          : { data: [] as { id: string; product_item_id: string | null }[] };
+
+        const { data: products } = await supabase
+          .from("product_items")
+          .select("id, name, part_number, quantity_on_hand")
+          .is("deleted_at", null);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: parts } = await (supabase as any)
+          .from("parts")
+          .select("id, part_number, product_item_id")
+          .is("deleted_at", null);
+
+        for (const chg of qtyChanges) {
+          const poLineItem = poLineItems?.find((pli) => pli.id === chg.poLineItemId);
+          const matchedProduct =
+            (poLineItem?.product_item_id ? products?.find((p) => p.id === poLineItem.product_item_id) : null) ??
+            (chg.partNumber ? products?.find((p) => p.part_number === chg.partNumber) : null) ??
+            (chg.name ? products?.find((p) => p.name === chg.name) : null);
+
+          if (!matchedProduct) {
+            throw new Error(`Could not find a catalog product for "${chg.name}" — inventory was not adjusted, receipt not saved.`);
+          }
+
+          if (chg.isMaintPart) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const linkedPart = parts?.find((pt: any) => pt.product_item_id === matchedProduct.id) ??
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              (chg.partNumber ? parts?.find((pt: any) => pt.part_number === chg.partNumber) : null);
+            if (linkedPart) {
+              const { error: adjustErr } = await supabase.rpc("adjust_part_quantity", {
+                p_org_id: currentReceipt.org_id,
+                p_part_id: linkedPart.id,
+                p_delta: chg.delta,
+                p_po_number: (currentReceipt.po_number as string | null) ?? "",
+              });
+              if (adjustErr) throw adjustErr;
+            }
+          }
+
+          const { error: prodErr } = await supabase
+            .from("product_items")
+            .update({ quantity_on_hand: matchedProduct.quantity_on_hand + chg.delta })
+            .eq("id", matchedProduct.id);
+          if (prodErr) throw prodErr;
+        }
+      }
+
+      // Update line items — only after inventory adjustment has succeeded,
+      // so a failure there (e.g. no matching catalog product) doesn't leave
+      // the receipt line showing a corrected quantity with inventory unmoved.
       for (const line of input.lines) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { error: lineError } = await (supabase as any)
@@ -156,17 +237,6 @@ export function useUpdateGoodsReceipt() {
           })
           .eq("id", line.id);
         if (lineError) throw lineError;
-      }
-
-      // Build a single header update with notes + recalculated totals
-      // (one DB write = one trigger fire with all changed fields)
-      // Collect quantity changes for audit entries after header update
-      const qtyChanges: Array<{ name: string; oldQty: number; newQty: number }> = [];
-      for (const line of input.lines) {
-        const oldQty = oldByLineId.get(line.id);
-        if (oldQty !== undefined && oldQty !== line.quantityReceived) {
-          qtyChanges.push({ name: line.productItemName, oldQty, newQty: line.quantityReceived });
-        }
       }
 
       if (currentReceipt) {

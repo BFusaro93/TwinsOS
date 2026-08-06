@@ -1,4 +1,4 @@
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 import type { BillablePlan } from "@/lib/stripe/plans";
 import type { BillingPlanInfo } from "@/app/api/billing/plans/route";
@@ -52,6 +52,7 @@ export function usePlans() {
 }
 
 export function useCreateCheckoutSession() {
+  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (plan: BillablePlan) => {
       const res = await fetch("/api/billing/checkout-session", {
@@ -61,7 +62,14 @@ export function useCreateCheckoutSession() {
       });
       const body = await res.json();
       if (!res.ok) throw new Error(body.error ?? "Failed to start checkout");
-      return body as { clientSecret: string };
+      // { updated: true } — org already had a live subscription; its price
+      // was changed in place instead of opening a new checkout session.
+      return body as { clientSecret: string } | { updated: true };
+    },
+    onSuccess: (result) => {
+      if ("updated" in result) {
+        queryClient.invalidateQueries({ queryKey: ["billing-info"] });
+      }
     },
   });
 }

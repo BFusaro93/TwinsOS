@@ -126,13 +126,13 @@ export function FillOutFormDialog({ form, open, onOpenChange }: Props) {
     setState("submitting");
 
     try {
-      const res = await fetch(`/api/public/forms/${form.slug}/submit`, {
+      // Uses the internal test-submit route (not the public one) so this
+      // works on a draft/unpublished form — the public route requires
+      // status='published' and would always 404 before the form is live.
+      const res = await fetch(`/api/crm/forms/${form.id}/test-submit`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          data: values,
-          referer: "Internal",
-        }),
+        body: JSON.stringify({ data: values }),
       });
 
       if (!res.ok) {

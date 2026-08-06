@@ -109,13 +109,33 @@ export function SplitToPOsDialog({
     const created: PurchaseOrder[] = [];
     const base = Date.now();
 
+    // The requisition's discount/shipping apply to the whole requisition, not
+    // any one vendor's share — allocate both proportionally by each group's
+    // share of the requisition's total subtotal, so the split POs' combined
+    // totals reconcile back to the source requisition instead of dropping
+    // the discount/shipping and overstating tax (computed pre-discount).
+    const requisitionSubtotal = requisition.lineItems.reduce((s, li) => s + li.quantity * li.unitCost, 0);
+    let discountRemaining = requisition.discountCost;
+    let shippingRemaining = requisition.shippingCost;
+
     try {
       for (let i = 0; i < groupList.length; i++) {
         const group = groupList[i];
+        const isLastGroup = i === groupList.length - 1;
         const lineItems = group.items.map((a) => a.lineItem);
         const subtotal = lineItems.reduce((s, li) => s + li.quantity * li.unitCost, 0);
-        const salesTax = Math.round((subtotal * requisition.taxRatePercent) / 100);
-        const grandTotal = subtotal + salesTax;
+        const share = requisitionSubtotal > 0 ? subtotal / requisitionSubtotal : 0;
+
+        // Last group absorbs whatever's left so the cents always sum exactly
+        // to the requisition's original discountCost/shippingCost.
+        const discountCost = isLastGroup ? discountRemaining : Math.round(requisition.discountCost * share);
+        const shippingCost = isLastGroup ? shippingRemaining : Math.round(requisition.shippingCost * share);
+        discountRemaining -= discountCost;
+        shippingRemaining -= shippingCost;
+
+        const taxableAfterDiscount = Math.max(0, subtotal - discountCost);
+        const salesTax = Math.round((taxableAfterDiscount * requisition.taxRatePercent) / 100);
+        const grandTotal = subtotal - discountCost + salesTax + shippingCost;
 
         const result = await createPO({
           poNumber: `PO-${new Date().getFullYear()}-${String(base).slice(-6)}-${i + 1}`,
@@ -128,8 +148,8 @@ export function SplitToPOsDialog({
           subtotal,
           taxRatePercent: requisition.taxRatePercent,
           salesTax,
-          shippingCost: 0,
-          discountCost: 0,
+          shippingCost,
+          discountCost,
           grandTotal,
           requisitionId: requisition.id,
           paymentSubmittedToAP: false,
