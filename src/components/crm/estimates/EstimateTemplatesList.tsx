@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useEstimateTemplates, useCreateEstimateTemplate, useDeleteEstimateTemplate, useUpsertTemplateItem, useDeleteTemplateItem } from "@/lib/hooks/use-estimate-templates";
 import { useCRMServices } from "@/lib/hooks/use-crm-jobs";
 import { Button } from "@/components/ui/button";
@@ -39,6 +39,10 @@ function TemplateItemRow({
   const [dirty, setDirty] = useState(false);
   const { mutateAsync: upsert } = useUpsertTemplateItem();
   const { mutateAsync: remove } = useDeleteTemplateItem();
+
+  useEffect(() => {
+    if (!dirty) setRow(item);
+  }, [item, dirty]);
 
   function update<K extends keyof EstimateTemplateItem>(k: K, v: EstimateTemplateItem[K]) {
     setRow((p) => ({ ...p, [k]: v }));
@@ -260,7 +264,8 @@ export function EstimateTemplatesList() {
   const { data: templates, isLoading } = useEstimateTemplates();
   const { mutateAsync: createTemplate, isPending: creating } = useCreateEstimateTemplate();
   const { mutateAsync: deleteTemplate } = useDeleteEstimateTemplate();
-  const [editTarget, setEditTarget] = useState<EstimateTemplate | null>(null);
+  const [editTargetId, setEditTargetId] = useState<string | null>(null);
+  const editTarget = (templates ?? []).find((t) => t.id === editTargetId) ?? null;
   const [newName, setNewName] = useState("");
   const [showNew, setShowNew] = useState(false);
 
@@ -345,7 +350,7 @@ export function EstimateTemplatesList() {
                 <tr key={t.id} className="group border-b hover:bg-slate-50">
                   <td className="px-4 py-3">
                     <button
-                      onClick={() => setEditTarget(t)}
+                      onClick={() => setEditTargetId(t.id)}
                       className="text-slate-400 hover:text-slate-700"
                     >
                       <Pencil className="h-3.5 w-3.5" />
@@ -353,7 +358,7 @@ export function EstimateTemplatesList() {
                   </td>
                   <td className="px-4 py-3">
                     <button
-                      onClick={() => setEditTarget(t)}
+                      onClick={() => setEditTargetId(t.id)}
                       className="font-medium text-brand-600 hover:underline"
                     >
                       {t.name}
@@ -396,7 +401,7 @@ export function EstimateTemplatesList() {
         <EditTemplateDialog
           template={editTarget}
           open={!!editTarget}
-          onOpenChange={(o) => !o && setEditTarget(null)}
+          onOpenChange={(o) => !o && setEditTargetId(null)}
         />
       )}
     </div>

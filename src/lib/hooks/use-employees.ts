@@ -159,6 +159,23 @@ export function useEmployees(activeOnly = true) {
   });
 }
 
+/**
+ * Same as useEmployees, filtered to employees with "Show in Selection Lists"
+ * on (the default) — for rep/assignee PICKER dropdowns specifically (new
+ * estimate/job/invoice/ticket forms, reassign dialogs). The employee
+ * management list itself, crew rosters, and dispatch board team assignment
+ * must keep using the unfiltered useEmployees — this flag only means "don't
+ * offer this person in a picker," not "hide them everywhere." Was a
+ * completely inert setting before this — nothing anywhere read it.
+ */
+export function useSelectableEmployees(activeOnly = true) {
+  const query = useEmployees(activeOnly);
+  return {
+    ...query,
+    data: query.data?.filter((e) => e.showInSelection !== false),
+  };
+}
+
 export function useEmployee(id: string) {
   return useQuery({
     queryKey: ["crm-employees", id],
@@ -280,6 +297,22 @@ export function useDeactivateEmployee() {
       const { error } = await (supabase as any)
         .from("crm_employees")
         .update({ is_active: false })
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["crm-employees"] }),
+  });
+}
+
+export function useActivateEmployee() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase as any)
+        .from("crm_employees")
+        .update({ is_active: true })
         .eq("id", id);
       if (error) throw error;
     },

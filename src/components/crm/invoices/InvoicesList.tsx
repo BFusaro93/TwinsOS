@@ -162,6 +162,7 @@ export function InvoicesList({ clientId }: Props) {
   const [activeFilterKey, setActiveFilterKey] = useState<ActiveFilterKey | null>(null);
   const [filterValue, setFilterValue] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [emailingSelected, setEmailingSelected] = useState(false);
   const [mergeOpen, setMergeOpen] = useState(false);
   const [sortKey, setSortKey] = useState<string>("date");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
@@ -257,6 +258,39 @@ export function InvoicesList({ clientId }: Props) {
       refetchInvoices();
     } catch {
       toast.error("Failed to update invoices");
+    }
+  }
+
+  // Actually sends an email per selected invoice (via the same endpoint the
+  // single-invoice "Email" button uses) — this used to just flip status to
+  // "sent" with a fake success toast and never email anyone.
+  async function bulkEmailSelected() {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    setEmailingSelected(true);
+    try {
+      const results = await Promise.allSettled(
+        ids.map((invoiceId) =>
+          fetch("/api/crm/invoices/email", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ invoiceId }),
+          }).then(async (res) => {
+            if (!res.ok) {
+              const data = await res.json().catch(() => ({}));
+              throw new Error(data.error ?? "Failed to email invoice");
+            }
+          })
+        )
+      );
+      const succeeded = results.filter((r) => r.status === "fulfilled").length;
+      const failed = results.length - succeeded;
+      if (succeeded > 0) toast.success(`Emailed ${succeeded} invoice${succeeded !== 1 ? "s" : ""}`);
+      if (failed > 0) toast.error(`Failed to email ${failed} invoice${failed !== 1 ? "s" : ""} — check they have a client email on file`);
+      setSelectedIds(new Set());
+      refetchInvoices();
+    } finally {
+      setEmailingSelected(false);
     }
   }
 
@@ -401,10 +435,10 @@ export function InvoicesList({ clientId }: Props) {
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start">
               <DropdownMenuItem
-                disabled={!someSelected}
-                onSelect={() => { toast.info(`Emailing ${selectedIds.size} invoice(s)…`); bulkUpdateStatus("sent"); }}
+                disabled={!someSelected || emailingSelected}
+                onSelect={() => void bulkEmailSelected()}
               >
-                Email Selected
+                {emailingSelected ? "Emailing…" : "Email Selected"}
               </DropdownMenuItem>
               <DropdownMenuItem
                 disabled={!someSelected}

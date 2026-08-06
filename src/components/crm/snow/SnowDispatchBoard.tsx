@@ -14,6 +14,7 @@ import {
   useAddJobsToStormEvent,
 } from "@/lib/hooks/use-snow-dispatch";
 import { useCRMCrews, useUpdateVisit, useUpdateVisitStatus } from "@/lib/hooks/use-crm-jobs";
+import { JobDetailSheet } from "@/components/crm/jobs/JobDetailSheet";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -359,6 +360,7 @@ function SnowCrewAssignDialog({
 }) {
   const { mutateAsync: updateVisit } = useUpdateVisit();
   const [dragVisitId, setDragVisitId] = useState<string | null>(null);
+  const [dispatching, setDispatching] = useState(false);
   const unassigned = visits.filter((v) => !v.crewId);
 
   async function reassign(visitId: string, crewId: string | null, jobId?: string) {
@@ -366,6 +368,32 @@ function SnowCrewAssignDialog({
       await updateVisit({ id: visitId, updates: { crew_id: crewId }, jobId });
     } catch {
       toast.error("Failed to reassign");
+    }
+  }
+
+  // Mirrors the main Dispatch Board's TeamAssignDialog "Dispatch Assigned"
+  // action — this dialog previously had no equivalent, so a crew assigned
+  // here via drag-and-drop had to be dispatched one row at a time from the
+  // board's per-row status icon instead.
+  async function dispatchAll() {
+    setDispatching(true);
+    try {
+      const scheduled = visits.filter((v) => v.status === "scheduled" && v.crewId);
+      await Promise.all(
+        scheduled.map((v) =>
+          updateVisit({
+            id: v.id,
+            updates: { status: "dispatched", dispatched_at: new Date().toISOString() },
+            jobId: v.jobId,
+          })
+        )
+      );
+      toast.success(`${scheduled.length} visit${scheduled.length !== 1 ? "s" : ""} dispatched`);
+      onOpenChange(false);
+    } catch {
+      toast.error("Dispatch failed");
+    } finally {
+      setDispatching(false);
     }
   }
 
@@ -440,8 +468,16 @@ function SnowCrewAssignDialog({
             </div>
           </div>
         </div>
-        <div className="shrink-0 flex items-center justify-end border-t bg-white px-5 py-3">
+        <div className="shrink-0 flex items-center justify-end gap-2 border-t bg-white px-5 py-3">
           <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => onOpenChange(false)}>Close</Button>
+          <Button
+            size="sm"
+            className="h-8 text-xs bg-brand-500 hover:bg-brand-600 text-white"
+            disabled={dispatching || visits.filter((v) => v.status === "scheduled" && v.crewId).length === 0}
+            onClick={() => void dispatchAll()}
+          >
+            {dispatching ? "Dispatching…" : "Dispatch Assigned"}
+          </Button>
         </div>
       </DialogContent>
     </Dialog>
@@ -554,6 +590,12 @@ function CloseOutDialog({
   const [assetType, setAssetType] = useState("");
   const [materialName, setMaterialName] = useState("");
   const [materialQty, setMaterialQty] = useState("");
+  const [actualHours, setActualHours] = useState("");
+  // Hourly-billed snow jobs invoice actualHours × rate — this close-out flow
+  // was the only path for these visits and never captured hours at all, so
+  // hourly snow jobs always invoiced for $0. Only shown when relevant since
+  // this dialog can close out a mixed batch of visits across job types.
+  const hasHourlyJob = visits.some((v) => v.job?.invoiceType === "hourly");
 
   async function handleCloseOut() {
     try {
@@ -570,6 +612,7 @@ function CloseOutDialog({
           materials_used: materialName
             ? [{ name: materialName, qty: materialQty ? parseFloat(materialQty) : 1, rate_cents: 0 }]
             : [],
+          ...(actualHours ? { actual_hours: parseFloat(actualHours) } : {}),
         },
       })));
       toast.success(`Closed out ${visits.length} visit${visits.length > 1 ? "s" : ""}`);
@@ -597,6 +640,12 @@ function CloseOutDialog({
               <Input type="number" value={temp} onChange={(e) => setTemp(e.target.value)} className="h-9 text-sm" />
             </div>
           </div>
+          {hasHourlyJob && (
+            <div className="space-y-1.5">
+              <Label>Actual Hours <span className="text-slate-400">(billed hourly)</span></Label>
+              <Input type="number" step="0.25" value={actualHours} onChange={(e) => setActualHours(e.target.value)} placeholder="e.g. 2.5" className="h-9 text-sm" />
+            </div>
+          )}
           <div className="space-y-1.5">
             <Label>Asset Type</Label>
             <Input value={assetType} onChange={(e) => setAssetType(e.target.value)} placeholder="e.g. Skid Steer" className="h-9 text-sm" />
@@ -642,6 +691,7 @@ export function SnowDispatchBoard() {
   const [printOpen, setPrintOpen] = useState(false);
   const [closeOutIds, setCloseOutIds] = useState<Set<string> | null>(null);
   const [selectedVisitIds, setSelectedVisitIds] = useState<Set<string>>(new Set());
+  const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
 
   const activeEvent = events.find((e) => e.id === selectedEventId) ?? events[0] ?? null;
   const effectiveEventId = activeEvent?.id ?? "";
@@ -777,12 +827,16 @@ export function SnowDispatchBoard() {
                     <td className="px-2 py-1.5 text-right">{totalAmt > 0 ? formatCurrency(totalAmt) : "—"}</td>
                   </tr>
                   {visits.map((v) => (
-                    <tr key={v.id} className="border-b border-slate-100 hover:bg-slate-50 cursor-default">
+                    <tr
+                      key={v.id}
+                      className="border-b border-slate-100 hover:bg-slate-50 cursor-pointer"
+                      onClick={() => setSelectedJobId(v.jobId)}
+                    >
                       <td className="px-2 py-2" onClick={(e) => e.stopPropagation()}>
                         <Checkbox checked={selectedVisitIds.has(v.id)} onCheckedChange={() => toggleSelect(v.id)} className="h-3.5 w-3.5" />
                       </td>
-                      <td className="px-2 py-2"><StatusCycleButton visit={v} /></td>
-                      <td className="px-2 py-2">
+                      <td className="px-2 py-2" onClick={(e) => e.stopPropagation()}><StatusCycleButton visit={v} /></td>
+                      <td className="px-2 py-2" onClick={(e) => e.stopPropagation()}>
                         <Link href={`/crm/clients/${v.clientId}`} className="font-medium text-brand-600 hover:underline">{v.clientName ?? "—"}</Link>
                       </td>
                       <td className="px-2 py-2 text-slate-500">{v.job?.serviceAddress ?? "—"}</td>
@@ -833,6 +887,11 @@ export function SnowDispatchBoard() {
           onDone={() => { setSelectedVisitIds(new Set()); setCloseOutIds(null); void refetchVisits(); }}
         />
       )}
+
+      <JobDetailSheet
+        jobId={selectedJobId}
+        onOpenChange={(open) => { if (!open) setSelectedJobId(null); }}
+      />
     </div>
   );
 }

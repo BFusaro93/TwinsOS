@@ -24,6 +24,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { useUpdateEvent } from "@/lib/hooks/use-crm-automations";
 import type { CRMSequenceEvent, ConditionField, ConditionOperator } from "@/types/crm-automations";
+import { toast } from "sonner";
 
 const CONDITION_FIELDS: { label: string; items: { value: ConditionField; label: string }[] }[] = [
   {
@@ -133,6 +134,8 @@ export function IfBranchEventDialog({ open, onOpenChange, event }: Props) {
         },
       });
       onOpenChange(false);
+    } catch {
+      toast.error("Failed to save IF branch");
     } finally {
       setSaving(false);
     }

@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/select";
 import { useUpdateEvent } from "@/lib/hooks/use-crm-automations";
 import type { CRMSequenceEvent } from "@/types/crm-automations";
+import { toast } from "sonner";
 
 const UPDATE_FIELDS = [
   { value: "sales_person", label: "Sales person" },
@@ -57,6 +58,8 @@ export function UpdateEventDialog({ open, onOpenChange, event }: Props) {
         config: { field, value },
       });
       onOpenChange(false);
+    } catch {
+      toast.error("Failed to save update event");
     } finally {
       setSaving(false);
     }

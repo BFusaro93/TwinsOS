@@ -26,7 +26,7 @@ import { ClientCombobox } from "@/components/shared/ClientCombobox";
 import { useCreateEstimate, useUpsertLineItem } from "@/lib/hooks/use-estimates";
 import { useEstimateTemplates } from "@/lib/hooks/use-estimate-templates";
 import { useClients } from "@/lib/hooks/use-clients";
-import { useEmployees } from "@/lib/hooks/use-employees";
+import { useSelectableEmployees } from "@/lib/hooks/use-employees";
 import { computeLineItem, getBreakevenRateCents } from "@/lib/estimate-calc";
 import { useOrgSettings } from "@/lib/hooks/use-org-settings";
 import { toast } from "sonner";
@@ -71,7 +71,7 @@ export function NewEstimateDialog({ open, onOpenChange, defaultClientId, onCreat
   const router = useRouter();
   const { data: clients }   = useClients();
   const { data: templates } = useEstimateTemplates();
-  const { data: employees } = useEmployees();
+  const { data: employees } = useSelectableEmployees();
   const salesReps = (employees ?? []).filter((e) => e.isSalesRep && e.userId);
   const { mutateAsync: createEstimate, isPending } = useCreateEstimate();
   const { mutateAsync: upsertLineItem }             = useUpsertLineItem();

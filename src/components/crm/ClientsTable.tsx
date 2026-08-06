@@ -251,7 +251,7 @@ export function ClientsTable({ onSelect }: Props) {
   const { data: clients, isLoading } = useClients();
   const orgTags = useOrgTags();
   const { mutateAsync: bulkCancel } = useBulkCancelClients();
-  const { mutateAsync: bulkActivate } = useBulkActivateClients();
+  const { mutateAsync: bulkActivate, isPending: bulkActivating } = useBulkActivateClients();
   const { mutateAsync: bulkUpdate } = useBulkUpdateClients();
 
   const { data: crmServices = [] } = useCRMServices();
@@ -669,7 +669,8 @@ export function ClientsTable({ onSelect }: Props) {
               </button>
               <DropdownMenuSeparator />
               <button
-                className="flex w-full items-center gap-2 px-2 py-1.5 text-sm hover:bg-slate-50 rounded text-green-700"
+                className="flex w-full items-center gap-2 px-2 py-1.5 text-sm hover:bg-slate-50 rounded text-green-700 disabled:opacity-50 disabled:pointer-events-none"
+                disabled={bulkActivating}
                 onClick={async () => {
                   try {
                     await bulkActivate(selectedClientIds);
@@ -679,7 +680,7 @@ export function ClientsTable({ onSelect }: Props) {
                 }}
               >
                 <CheckCircle className="h-3.5 w-3.5" />
-                Activate Clients
+                {bulkActivating ? "Activating…" : "Activate Clients"}
               </button>
               <button className="flex w-full items-center gap-2 px-2 py-1.5 text-sm hover:bg-slate-50 rounded text-red-600" onClick={() => setBulkCancelOpen(true)}>
                 <Ban className="h-3.5 w-3.5" />

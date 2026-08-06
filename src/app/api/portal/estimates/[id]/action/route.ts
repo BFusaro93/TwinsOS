@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getPortalContext } from "@/lib/portal/get-portal-context";
 import { createServiceClient } from "@/lib/supabase/server";
 import { submitEstimateChangeRequest } from "@/lib/estimate-change-requests";
+import { recalcEstimateTotals } from "@/lib/estimate-calc";
 
 export async function POST(
   req: Request,
@@ -29,6 +30,21 @@ export async function POST(
   }
 
   const supabase = createServiceClient();
+
+  // Estimates nav is hidden client-side when disabled (PortalShell), but that's
+  // not enforcement — a customer with a stale link could still POST here.
+  // Only block if explicitly disabled; missing row = allowed, same semantics
+  // as allow_tickets in src/app/api/portal/tickets/route.ts.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: settings } = await (supabase as any)
+    .from("client_portal_settings")
+    .select("allow_estimates")
+    .eq("org_id", ctx.orgId)
+    .single() as { data: { allow_estimates: boolean } | null };
+
+  if (settings !== null && settings?.allow_estimates === false) {
+    return NextResponse.json({ error: "Estimates are not enabled for this portal" }, { status: 403 });
+  }
 
   // Verify the estimate belongs to this client and is in an actionable state
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -122,6 +138,15 @@ export async function POST(
       .eq("estimate_id", id)
       .eq("status", "quote")
       .is("deleted_at", null);
+  }
+
+  if (action === "accept") {
+    // Line items are now split into won/lost — recompute the estimate's
+    // stored totals down to just the won subset (same as the token-based
+    // public proposal accept route), so downstream invoicing/job-conversion
+    // reflects what was actually accepted.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await recalcEstimateTotals(supabase as any, id);
   }
 
   return NextResponse.json({ success: true, status: patch.stage });

@@ -24,6 +24,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { useUpdateEvent } from "@/lib/hooks/use-crm-automations";
 import type { CRMSequenceEvent } from "@/types/crm-automations";
+import { toast } from "sonner";
 
 interface Props {
   open: boolean;
@@ -87,6 +88,8 @@ export function EmailEventDialog({ open, onOpenChange, event }: Props) {
         },
       });
       onOpenChange(false);
+    } catch {
+      toast.error("Failed to save email event");
     } finally {
       setSaving(false);
     }

@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useUpdateEvent } from "@/lib/hooks/use-crm-automations";
 import type { CRMSequenceEvent } from "@/types/crm-automations";
+import { toast } from "sonner";
 
 interface Props {
   open: boolean;
@@ -36,6 +37,8 @@ export function WaitEventDialog({ open, onOpenChange, event }: Props) {
         config: { days, hours, minutes },
       });
       onOpenChange(false);
+    } catch {
+      toast.error("Failed to save wait event");
     } finally {
       setSaving(false);
     }

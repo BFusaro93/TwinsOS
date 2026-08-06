@@ -14,6 +14,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useUpdateEvent } from "@/lib/hooks/use-crm-automations";
 import type { CRMSequenceEvent } from "@/types/crm-automations";
+import { toast } from "sonner";
 
 interface Props {
   open: boolean;
@@ -51,6 +52,8 @@ export function TextEventDialog({ open, onOpenChange, event }: Props) {
         config: { message, to },
       });
       onOpenChange(false);
+    } catch {
+      toast.error("Failed to save text message event");
     } finally {
       setSaving(false);
     }

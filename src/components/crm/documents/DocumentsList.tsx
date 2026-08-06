@@ -245,7 +245,9 @@ export function DocumentsList() {
                   doc={doc}
                   onEdit={() => router.push(`/crm/settings/documents/${doc.id}`)}
                   onDelete={() =>
-                    deleteDoc.mutateAsync(doc.id).then(() => toast.success("Deleted"))
+                    deleteDoc.mutateAsync(doc.id)
+                      .then(() => toast.success("Deleted"))
+                      .catch(() => toast.error("Failed to delete document template"))
                   }
                 />
               ))

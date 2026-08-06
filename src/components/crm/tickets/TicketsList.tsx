@@ -10,7 +10,7 @@ import {
 } from "@/lib/hooks/use-tickets";
 import { useClients } from "@/lib/hooks/use-clients";
 import { useRequiredFields } from "@/lib/hooks/use-required-fields";
-import { useEmployees } from "@/lib/hooks/use-employees";
+import { useSelectableEmployees } from "@/lib/hooks/use-employees";
 import { TicketDetailSheet } from "./TicketDetailSheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
@@ -130,7 +130,7 @@ interface NewTicketDialogProps {
 
 export function NewTicketDialog({ open, onOpenChange, defaultClientId, defaultType = "note" }: NewTicketDialogProps) {
   const { data: clients } = useClients();
-  const { data: employees } = useEmployees();
+  const { data: employees } = useSelectableEmployees();
   const createTicket = useCreateTicket();
   const rf = useRequiredFields("ticket");
   const { data: categoryOptions } = useOrgList("ticket_categories");
@@ -173,7 +173,12 @@ export function NewTicketDialog({ open, onOpenChange, defaultClientId, defaultTy
   async function handleSave() {
     const missing = missingRequiredField();
     if (missing) { toast.error(missing); return; }
-    await createTicket.mutateAsync(form);
+    try {
+      await createTicket.mutateAsync(form);
+    } catch {
+      toast.error("Failed to create ticket");
+      return;
+    }
     onOpenChange(false);
     setForm({
       type: defaultType,
@@ -442,7 +447,7 @@ export function TicketsList({ clientId, typeFilter, title = "Tickets", descripti
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [reassignOpen, setReassignOpen] = useState(false);
   const [reassignName, setReassignName] = useState("");
-  const { data: employees } = useEmployees();
+  const { data: employees } = useSelectableEmployees();
 
   const { data: tickets, isLoading, refetch } = useTickets({ clientId });
   const updateTicket = useUpdateTicket();
@@ -538,16 +543,28 @@ export function TicketsList({ clientId, typeFilter, title = "Tickets", descripti
 
   async function bulkSetStatus(status: TicketStatus) {
     const ids = Array.from(selectedIds);
-    await Promise.all(ids.map((id) => updateTicket.mutateAsync({ id, updates: { status } })));
-    toast.success(`${ids.length} ticket${ids.length > 1 ? "s" : ""} marked ${status}`);
+    if (ids.length === 0) return;
+    const results = await Promise.allSettled(
+      ids.map((id) => updateTicket.mutateAsync({ id, updates: { status } }))
+    );
+    const succeeded = results.filter((r) => r.status === "fulfilled").length;
+    const failed = results.length - succeeded;
+    if (succeeded > 0) toast.success(`${succeeded} ticket${succeeded !== 1 ? "s" : ""} marked ${status}`);
+    if (failed > 0) toast.error(`Failed to update ${failed} ticket${failed !== 1 ? "s" : ""}`);
     setSelectedIds(new Set());
   }
 
   async function bulkReassign() {
     if (!reassignName.trim()) return;
     const ids = Array.from(selectedIds);
-    await Promise.all(ids.map((id) => updateTicket.mutateAsync({ id, updates: { assignedTo: reassignName.trim() } })));
-    toast.success(`${ids.length} ticket${ids.length > 1 ? "s" : ""} reassigned to ${reassignName.trim()}`);
+    if (ids.length === 0) return;
+    const results = await Promise.allSettled(
+      ids.map((id) => updateTicket.mutateAsync({ id, updates: { assignedTo: reassignName.trim() } }))
+    );
+    const succeeded = results.filter((r) => r.status === "fulfilled").length;
+    const failed = results.length - succeeded;
+    if (succeeded > 0) toast.success(`${succeeded} ticket${succeeded !== 1 ? "s" : ""} reassigned to ${reassignName.trim()}`);
+    if (failed > 0) toast.error(`Failed to reassign ${failed} ticket${failed !== 1 ? "s" : ""}`);
     setSelectedIds(new Set());
     setReassignOpen(false);
     setReassignName("");
@@ -705,6 +722,12 @@ export function TicketsList({ clientId, typeFilter, title = "Tickets", descripti
                 onSelect={() => bulkSetStatus("closed")}
               >
                 Mark Closed
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={!someSelected}
+                onSelect={() => bulkSetStatus("on_hold")}
+              >
+                Mark On Hold
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem

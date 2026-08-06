@@ -16,7 +16,10 @@ import { toast } from "sonner";
 import { useEmailTemplates } from "@/lib/hooks/use-email-templates";
 import { EMAIL_MERGE_TAGS } from "@/types/crm-proposals";
 
-const DEFAULT_TEMPLATE_BODY = `<p>Hi [clientfirstname],</p>
+// Exported so bulk-send flows (EstimatesList's "Email Selected") send the
+// same default content a single manual send would, when no org default
+// template is configured.
+export const DEFAULT_TEMPLATE_BODY = `<p>Hi [clientfirstname],</p>
 
 <p>Please find your proposal from [companyname] attached below. Click the button to review the services included and accept online.</p>
 
@@ -26,7 +29,7 @@ const DEFAULT_TEMPLATE_BODY = `<p>Hi [clientfirstname],</p>
 
 <p>Thank you,<br>[salesrepname]<br>[companyphonenumber]</p>`;
 
-const DEFAULT_SUBJECT = "Your Estimate from [companyname] — Estimate #[quotenumber]";
+export const DEFAULT_SUBJECT = "Your Estimate from [companyname] — Estimate #[quotenumber]";
 
 interface Props {
   estimateId: string;

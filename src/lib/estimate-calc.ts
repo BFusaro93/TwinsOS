@@ -2,6 +2,40 @@ import type { EstimateLineItem, DirectCostType } from "@/types/crm-estimates";
 import type { CRMService } from "@/types/crm-jobs";
 import type { OverheadSettings } from "@/lib/hooks/use-overhead-settings";
 
+// Duplicated from use-overhead-settings.ts rather than imported — that module
+// is "use client" and pulls in @tanstack/react-query + the browser Supabase
+// client, neither of which belong in a server route's bundle. This is a
+// zero-value literal, not logic, so keeping it in sync is a non-issue.
+const OVERHEAD_SETTINGS_DEFAULTS: OverheadSettings = {
+  id: null,
+  laborOhBps: 0,
+  laborBurdenBps: 0,
+  contractOhBps: 0,
+  equipmentOhBps: 0,
+  materialsOhBps: 0,
+  otherOhBps: 0,
+};
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapOverheadSettingsRow(row: any): OverheadSettings {
+  return {
+    id: row.id,
+    laborOhBps: row.labor_oh_bps ?? 0,
+    laborBurdenBps: row.labor_burden_bps ?? 0,
+    contractOhBps: row.contract_oh_bps ?? 0,
+    equipmentOhBps: row.equipment_oh_bps ?? 0,
+    materialsOhBps: row.materials_oh_bps ?? 0,
+    otherOhBps: row.other_oh_bps ?? 0,
+  };
+}
+
+// Minimal structural type for a Supabase client — matches both the browser
+// client (@/lib/supabase/client) and a service-role client
+// (@supabase/supabase-js), so recalcEstimateTotals can run from either a
+// "use client" hook or a server-only API route.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnySupabaseClient = { from: (table: string) => any };
+
 /**
  * Reads the org's configured breakeven labor rate ($/hr, fully burdened —
  * wages + burden + non-billable uplift + fixed OH recovery) from org settings
@@ -247,4 +281,90 @@ export function computeInstallmentSchedule(
       dueDate: `${due.getFullYear()}-${String(due.getMonth() + 1).padStart(2, "0")}-${String(due.getDate()).padStart(2, "0")}`,
     };
   });
+}
+
+/**
+ * Recomputes the estimate's subtotal/tax/total/profit rollups from the
+ * currently-committed line items and direct costs (read fresh from the DB,
+ * not from a caller's in-memory/cached estimate, which can be a render
+ * behind the write that just happened) and persists them. Every mutation
+ * that adds/edits/removes a line item or direct cost — and every flow that
+ * marks line items won/lost (tiered proposal acceptance, portal accept) —
+ * must call this so the parent row never goes stale.
+ *
+ * Line items with status 'lost' are excluded from every sum: once a line
+ * item is marked lost (a rejected tier, an unchecked item on a partial
+ * acceptance, or a manual "lost" mark during quoting), it no longer
+ * represents money owed and shouldn't count toward the estimate's total.
+ *
+ * Takes an explicit Supabase client so it can run from a "use client" hook
+ * (browser client) or a server-only API route (service-role client) alike.
+ */
+export async function recalcEstimateTotals(supabase: AnySupabaseClient, estimateId: string) {
+  const { data: est, error: estError } = await supabase
+    .from("estimates")
+    .select("org_id, tax_rate_bps, overhead_rate_bps, discount_cents")
+    .eq("id", estimateId)
+    .single();
+  if (estError) throw estError;
+
+  const { data: lineItems, error: liError } = await supabase
+    .from("estimate_line_items")
+    .select("total_cents, discount_cents, total_cost_cents, total_budgeted_hours")
+    .eq("estimate_id", estimateId)
+    .neq("status", "lost")
+    .is("deleted_at", null);
+  if (liError) throw liError;
+
+  const { data: directCosts, error: dcError } = await supabase
+    .from("estimate_direct_costs")
+    .select("total_cents, cost_type")
+    .eq("estimate_id", estimateId);
+  if (dcError) throw dcError;
+
+  const { data: overheadRow } = await supabase
+    .from("crm_overhead_settings")
+    .select("*")
+    .eq("org_id", est.org_id)
+    .maybeSingle();
+  const overheadSettings = overheadRow ? mapOverheadSettingsRow(overheadRow) : OVERHEAD_SETTINGS_DEFAULTS;
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const subtotalCents = (lineItems ?? []).reduce((s: number, li: any) => s + (li.total_cents - (li.discount_cents ?? 0)), 0);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const totalCostCents = (lineItems ?? []).reduce((s: number, li: any) => s + li.total_cost_cents, 0);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const directTotal = (directCosts ?? []).reduce((s: number, dc: any) => s + dc.total_cents, 0);
+  const discountCents = est.discount_cents ?? 0;
+  const revenueCents = subtotalCents - discountCents;
+  const taxCents = Math.round((revenueCents * (est.tax_rate_bps ?? 0)) / 10000);
+  const totalCents = revenueCents + taxCents;
+
+  const overheadCostCents = hasPerTypeOverhead(overheadSettings)
+    ? (directCosts ?? []).reduce(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (sum: number, dc: any) => sum + computeDirectCostOverhead(dc.cost_type, dc.total_cents, overheadSettings),
+        0
+      )
+    : Math.round((totalCostCents * (est.overhead_rate_bps ?? 0)) / 10000);
+
+  const grossProfitCents = revenueCents - totalCostCents - directTotal;
+  const netProfitCents = grossProfitCents - overheadCostCents;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const totalBudgetedHours = (lineItems ?? []).reduce((s: number, li: any) => s + Number(li.total_budgeted_hours ?? 0), 0);
+
+  const { error: updError } = await supabase
+    .from("estimates")
+    .update({
+      subtotal_cents: subtotalCents,
+      tax_cents: taxCents,
+      total_cents: totalCents,
+      revenue_cents: revenueCents,
+      overhead_cost_cents: overheadCostCents,
+      gross_profit_cents: grossProfitCents,
+      net_profit_cents: netProfitCents,
+      total_budgeted_hours: totalBudgetedHours,
+    })
+    .eq("id", estimateId);
+  if (updError) throw updError;
 }

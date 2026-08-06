@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useUpdateEvent } from "@/lib/hooks/use-crm-automations";
 import type { CRMSequenceEvent } from "@/types/crm-automations";
+import { toast } from "sonner";
 
 interface Props {
   open: boolean;
@@ -63,6 +64,8 @@ export function TagsEventDialog({ open, onOpenChange, event }: Props) {
         config: { add_tags: addTags, remove_tags: removeTags },
       });
       onOpenChange(false);
+    } catch {
+      toast.error("Failed to save tags event");
     } finally {
       setSaving(false);
     }

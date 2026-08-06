@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/select";
 import { useUpdateEvent } from "@/lib/hooks/use-crm-automations";
 import type { CRMSequenceEvent } from "@/types/crm-automations";
+import { toast } from "sonner";
 
 interface Props {
   open: boolean;
@@ -43,6 +44,8 @@ export function AlertEventDialog({ open, onOpenChange, event }: Props) {
         config: { message, alert_type: alertType },
       });
       onOpenChange(false);
+    } catch {
+      toast.error("Failed to save alert event");
     } finally {
       setSaving(false);
     }

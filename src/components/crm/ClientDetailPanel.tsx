@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -447,7 +447,7 @@ function EditClientDialog({ client, open, onOpenChange }: { client: Client; open
   const { mutateAsync: update, isPending } = useUpdateClient();
   const rf = useRequiredFields("client");
   const { data: fieldDefs = [] } = useCustomFieldDefs();
-  const { data: fieldValues = [] } = useClientCustomFieldValues(client.id);
+  const { data: fieldValues = [], isLoading: fieldValuesLoading } = useClientCustomFieldValues(client.id);
   const { mutateAsync: upsertFieldValue } = useUpsertClientCustomFieldValue();
   const { data: allClients = [] } = useClients();
   const { data: sourcesOptions = [] } = useOrgList("client_sources");
@@ -526,13 +526,27 @@ function EditClientDialog({ client, open, onOpenChange }: { client: Client; open
     gateCode: client.gateCode ?? "",
   });
 
-  const [customValues, setCustomValues] = useState<Record<string, string>>(() => {
+  const [customValues, setCustomValues] = useState<Record<string, string>>({});
+  // Tracks which client's custom values we've already seeded, so a later
+  // background refetch of fieldValues (e.g. window refocus) while the user
+  // is mid-edit doesn't clobber their unsaved typing.
+  const customValuesSyncedForRef = useRef<string | null>(null);
+
+  // fieldValues loads asynchronously — seeding customValues from it via a
+  // plain useState initializer only runs once on mount and would capture it
+  // as still-empty if the dialog opens before the query resolves, silently
+  // treating every custom field as blank. Wait for the fetch to actually
+  // settle for this client before seeding, and only do it once per client.
+  useEffect(() => {
+    if (fieldValuesLoading) return;
+    if (customValuesSyncedForRef.current === client.id) return;
+    customValuesSyncedForRef.current = client.id;
     const map: Record<string, string> = {};
     fieldValues.forEach((v) => {
       map[v.fieldDefId] = v.valueNumber != null ? String(v.valueNumber) : (v.valueText ?? "");
     });
-    return map;
-  });
+    setCustomValues(map);
+  }, [client.id, fieldValuesLoading, fieldValues]);
 
   // Reset all form state when a different client is opened
   useEffect(() => {
@@ -635,7 +649,15 @@ function EditClientDialog({ client, open, onOpenChange }: { client: Client; open
           yardsOfMulch: form.yardsOfMulch !== "" ? parseFloat(form.yardsOfMulch) : null,
         },
       });
+    } catch {
+      toast.error("Failed to update client");
+      return;
+    }
 
+    // The main client fields already committed above — a failure here is a
+    // separate, secondary problem, not a full save failure. Report it as
+    // such instead of a generic "failed to update" that implies nothing saved.
+    try {
       await Promise.all(
         fieldDefs.map((def) => {
           const raw = customValues[def.id] ?? "";
@@ -647,11 +669,11 @@ function EditClientDialog({ client, open, onOpenChange }: { client: Client; open
           });
         })
       );
-
       toast.success("Client updated");
       onOpenChange(false);
     } catch {
-      toast.error("Failed to update client");
+      toast.error("Client details saved, but a custom field failed to save");
+      onOpenChange(false);
     }
   }
 
@@ -3344,35 +3366,45 @@ function PortalInviteDialog({
     setLoading(true);
     setError(null);
     setHasExisting(false);
-    const res = await fetch(`/api/crm/clients/${clientId}/portal-invite`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email }),
-    });
-    const data = await res.json();
-    setLoading(false);
-    if (res.status === 409) {
-      setHasExisting(true);
-      setError("This client already has a portal account.");
-    } else if (!res.ok) {
-      setError(data.error ?? "Failed to create invite");
-    } else {
-      setResult({ url: data.inviteUrl });
+    try {
+      const res = await fetch(`/api/crm/clients/${clientId}/portal-invite`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      const data = await res.json();
+      if (res.status === 409) {
+        setHasExisting(true);
+        setError("This client already has a portal account.");
+      } else if (!res.ok) {
+        setError(data.error ?? "Failed to create invite");
+      } else {
+        setResult({ url: data.inviteUrl });
+      }
+    } catch {
+      setError("Failed to create invite — check your connection and try again.");
+    } finally {
+      setLoading(false);
     }
   }
 
   async function resetAndInvite() {
     setResetting(true);
     setError(null);
-    const res = await fetch(`/api/crm/clients/${clientId}/portal-reset`, { method: "DELETE" });
-    if (!res.ok) {
-      const d = await res.json();
-      setError(d.error ?? "Failed to reset portal access");
-      setResetting(false);
+    try {
+      const res = await fetch(`/api/crm/clients/${clientId}/portal-reset`, { method: "DELETE" });
+      if (!res.ok) {
+        const d = await res.json();
+        setError(d.error ?? "Failed to reset portal access");
+        return;
+      }
+      setHasExisting(false);
+    } catch {
+      setError("Failed to reset portal access — check your connection and try again.");
       return;
+    } finally {
+      setResetting(false);
     }
-    setHasExisting(false);
-    setResetting(false);
     sendInvite();
   }
 

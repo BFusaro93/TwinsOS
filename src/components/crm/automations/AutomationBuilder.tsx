@@ -41,6 +41,7 @@ import { NoteEventDialog } from "./NoteEventDialog";
 import { UpdateEventDialog } from "./UpdateEventDialog";
 import { TagsEventDialog } from "./TagsEventDialog";
 import { IfBranchEventDialog } from "./IfBranchEventDialog";
+import { toast } from "sonner";
 
 interface Props {
   automationId: string;
@@ -91,27 +92,39 @@ export function AutomationBuilder({ automationId }: Props) {
       setEditingName(false);
       return;
     }
-    updateAutomation.mutate({ id: automationId, updates: { name: nameValue.trim() } });
+    updateAutomation.mutate(
+      { id: automationId, updates: { name: nameValue.trim() } },
+      { onError: () => toast.error("Failed to rename automation") }
+    );
     setEditingName(false);
   }
 
   async function handleAddSequence() {
-    const seq = await createSequence.mutateAsync({
-      automationId,
-      name: `Sequence ${(sequences?.length ?? 0) + 1}`,
-      position: sequences?.length ?? 0,
-    });
-    setFocusedSequenceId(seq.id);
+    if (createSequence.isPending) return;
+    try {
+      const seq = await createSequence.mutateAsync({
+        automationId,
+        name: `Sequence ${(sequences?.length ?? 0) + 1}`,
+        position: sequences?.length ?? 0,
+      });
+      setFocusedSequenceId(seq.id);
+    } catch {
+      toast.error("Failed to add sequence");
+    }
   }
 
   async function handleAddEvent(type: EventType) {
-    if (!focusedSequenceId) return;
-    await createEvent.mutateAsync({
-      sequenceId: focusedSequenceId,
-      eventType: type,
-      config: {},
-      position: 0,
-    });
+    if (!focusedSequenceId || createEvent.isPending) return;
+    try {
+      await createEvent.mutateAsync({
+        sequenceId: focusedSequenceId,
+        eventType: type,
+        config: {},
+        position: 0,
+      });
+    } catch {
+      toast.error("Failed to add event");
+    }
   }
 
   if (isLoading) {
@@ -171,7 +184,10 @@ export function AutomationBuilder({ automationId }: Props) {
               id="auto-active"
               checked={automation.isActive}
               onCheckedChange={(checked) =>
-                updateAutomation.mutate({ id: automationId, updates: { isActive: checked } })
+                updateAutomation.mutate(
+                  { id: automationId, updates: { isActive: checked } },
+                  { onError: () => toast.error("Failed to update automation") }
+                )
               }
             />
             <Label htmlFor="auto-active" className="text-sm cursor-pointer">
@@ -192,7 +208,7 @@ export function AutomationBuilder({ automationId }: Props) {
             <button
               key={type}
               onClick={() => handleAddEvent(type)}
-              disabled={!focusedSequenceId}
+              disabled={!focusedSequenceId || createEvent.isPending}
               className="flex cursor-grab items-center gap-2 rounded p-2 text-sm text-slate-700 transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-40"
               title={focusedSequenceId ? `Add ${label}` : "Select a sequence first"}
             >
@@ -223,7 +239,8 @@ export function AutomationBuilder({ automationId }: Props) {
           {/* Add sequence */}
           <button
             onClick={handleAddSequence}
-            className="flex h-fit w-72 shrink-0 flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-slate-300 p-8 text-sm text-slate-400 transition-colors hover:border-brand-400 hover:text-brand-500"
+            disabled={createSequence.isPending}
+            className="flex h-fit w-72 shrink-0 flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-slate-300 p-8 text-sm text-slate-400 transition-colors hover:border-brand-400 hover:text-brand-500 disabled:cursor-not-allowed disabled:opacity-40"
           >
             <Plus className="h-5 w-5" />
             Add Sequence

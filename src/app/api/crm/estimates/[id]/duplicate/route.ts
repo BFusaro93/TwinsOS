@@ -77,17 +77,48 @@ export async function POST(
     .order("sort_order", { ascending: true });
 
   if (lineItems?.length) {
-    const newLineItems = lineItems.map((li: Record<string, unknown>) => {
-      const { id: _lid, created_at: _lca, updated_at: _lua, deleted_at: _lda, org_id: _lorg, ...liRest } = li;
-      return {
-        ...liRest,
-        org_id: newEst.org_id,
-        estimate_id: newEst.id,
-        status: resetStatus ? "quote" : li.status,
-      };
-    });
-    const { error: liErr } = await supabase.from("estimate_line_items").insert(newLineItems);
-    if (liErr) return NextResponse.json({ error: liErr.message }, { status: 500 });
+    // Insert one at a time so each new id can be paired with its source id —
+    // a bulk insert's response order isn't guaranteed to match the input
+    // order, and sort_order isn't guaranteed unique within an estimate.
+    const newIdByOldId = new Map<string, string>();
+    for (const li of lineItems as Record<string, unknown>[]) {
+      const { id: oldLid, created_at: _lca, updated_at: _lua, deleted_at: _lda, org_id: _lorg, ...liRest } = li;
+      const { data: insertedLi, error: liErr } = await supabase
+        .from("estimate_line_items")
+        .insert({
+          ...liRest,
+          org_id: newEst.org_id,
+          estimate_id: newEst.id,
+          status: resetStatus ? "quote" : li.status,
+        })
+        .select("id")
+        .single();
+      if (liErr || !insertedLi) {
+        return NextResponse.json({ error: liErr?.message ?? "Line item insert failed" }, { status: 500 });
+      }
+      newIdByOldId.set(oldLid as string, insertedLi.id);
+    }
+
+    const { data: subitems } = await supabase
+      .from("estimate_line_item_subitems")
+      .select("*")
+      .in("line_item_id", lineItems.map((li: Record<string, unknown>) => li.id as string))
+      .is("deleted_at", null);
+
+    if (subitems?.length) {
+      const newSubitems = (subitems as Record<string, unknown>[])
+        .map((si) => {
+          const newLineItemId = newIdByOldId.get(si.line_item_id as string);
+          if (!newLineItemId) return null;
+          const { id: _sid, created_at: _sca, deleted_at: _sda, org_id: _sorg, line_item_id: _slid, ...siRest } = si;
+          return { ...siRest, org_id: newEst.org_id, line_item_id: newLineItemId };
+        })
+        .filter((si) => si !== null) as Record<string, unknown>[];
+      if (newSubitems.length) {
+        const { error: siErr } = await supabase.from("estimate_line_item_subitems").insert(newSubitems);
+        if (siErr) return NextResponse.json({ error: siErr.message }, { status: 500 });
+      }
+    }
   }
 
   // Fetch and copy direct costs

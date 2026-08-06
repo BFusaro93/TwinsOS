@@ -26,6 +26,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { useSequences, useUpdateSequence } from "@/lib/hooks/use-crm-automations";
 import { createClient } from "@/lib/supabase/client";
+import { toast } from "sonner";
 import type { TriggerType, ConditionField, ConditionOperator, TriggerConfig } from "@/types/crm-automations";
 
 // Trigger types that fire off a day-count gap rather than an event — the
@@ -380,10 +381,14 @@ export function SequenceRulesDialog({ open, onOpenChange, sequenceId, automation
         },
       });
 
-      // Replace triggers: delete existing, re-insert
-      await supabase.from("crm_sequence_triggers").delete().eq("sequence_id", sequenceId);
+      // Replace triggers: delete existing, re-insert. Each call's {error} is
+      // checked explicitly — Supabase doesn't throw on a failed query, so an
+      // insert failing after the delete already succeeded would otherwise
+      // close this dialog having silently wiped the sequence's triggers.
+      const { error: delTriggersErr } = await supabase.from("crm_sequence_triggers").delete().eq("sequence_id", sequenceId);
+      if (delTriggersErr) throw delTriggersErr;
       if (triggers.length > 0) {
-        await supabase.from("crm_sequence_triggers").insert(
+        const { error: insTriggersErr } = await supabase.from("crm_sequence_triggers").insert(
           triggers.map((t, i) => ({
             sequence_id: sequenceId,
             trigger_type: t.triggerType,
@@ -391,12 +396,14 @@ export function SequenceRulesDialog({ open, onOpenChange, sequenceId, automation
             config: t.config,
           }))
         );
+        if (insTriggersErr) throw insTriggersErr;
       }
 
       // Replace stop conditions: delete existing, re-insert
-      await supabase.from("crm_sequence_stop_conditions").delete().eq("sequence_id", sequenceId);
+      const { error: delStopErr } = await supabase.from("crm_sequence_stop_conditions").delete().eq("sequence_id", sequenceId);
+      if (delStopErr) throw delStopErr;
       if (stopConditions.length > 0) {
-        await supabase.from("crm_sequence_stop_conditions").insert(
+        const { error: insStopErr } = await supabase.from("crm_sequence_stop_conditions").insert(
           stopConditions.map((sc) => ({
             sequence_id: sequenceId,
             field: sc.field,
@@ -404,9 +411,12 @@ export function SequenceRulesDialog({ open, onOpenChange, sequenceId, automation
             value: sc.value || null,
           }))
         );
+        if (insStopErr) throw insStopErr;
       }
 
       onOpenChange(false);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to save sequence rules");
     } finally {
       setSaving(false);
     }

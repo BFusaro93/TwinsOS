@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/select";
 import { useUpdateEvent } from "@/lib/hooks/use-crm-automations";
 import type { CRMSequenceEvent } from "@/types/crm-automations";
+import { toast } from "sonner";
 
 interface Props {
   open: boolean;
@@ -46,6 +47,8 @@ export function TicketEventDialog({ open, onOpenChange, event }: Props) {
         config: { title, description, priority, assign_to: assignTo },
       });
       onOpenChange(false);
+    } catch {
+      toast.error("Failed to save ticket event");
     } finally {
       setSaving(false);
     }

@@ -93,7 +93,9 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
   }
 
   const selectedItems = lineItems.filter((li) => selected.has(li.id));
-  const totalCents = selectedItems.reduce((s, li) => s + li.totalCents, 0);
+  // Net of each line's own discount — this is what the client actually
+  // agreed to pay, and what feeds the new job's rate_cents snapshot below.
+  const totalCents = selectedItems.reduce((s, li) => s + (li.totalCents - li.discountCents), 0);
   const selectedMaterialItems = materialItems.filter((dc) => selectedMaterials.has(dc.id));
 
   async function handleCreate() {
@@ -115,7 +117,7 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
           serviceId:     li.serviceId ?? null,
           qty:           li.qty,
           rateCents:     li.rateCents,
-          totalCents:    li.totalCents,
+          totalCents:    li.totalCents - li.discountCents,
           budgetedHours: budgetedHoursFromLineItem(li),
           budgetMethod:  li.budgetMethod,
         })),

@@ -18,6 +18,8 @@ import { useUpdateEstimateStage } from "@/lib/hooks/use-estimates";
 import { useEstimateStages } from "@/lib/hooks/use-estimate-stages";
 import { EstimatesPipelineView } from "./EstimatesPipelineView";
 import { DuplicateEstimateDialog } from "./DuplicateEstimateDialog";
+import { DEFAULT_SUBJECT, DEFAULT_TEMPLATE_BODY } from "./SendEstimateDialog";
+import { useEmailTemplates } from "@/lib/hooks/use-email-templates";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { ColumnChooser } from "@/components/shared/ColumnChooser";
@@ -107,6 +109,8 @@ export function EstimatesList({ clientId }: Props) {
   const { data: estimates, isLoading, refetch } = useEstimates(clientId);
   const { mutateAsync: updateStage } = useUpdateEstimateStage();
   const { mutateAsync: bulkImportEstimates } = useBulkImportEstimates();
+  const { data: emailTemplates } = useEmailTemplates("estimate");
+  const [emailingSelected, setEmailingSelected] = useState(false);
   const [dialogOpen,      setDialogOpen]      = useState(false);
   const [stageFilter,     setStageFilter]     = useState<StageFilter>("all");
   const [search,          setSearch]          = useState("");
@@ -210,6 +214,44 @@ export function EstimatesList({ clientId }: Props) {
       setSelectedIds(new Set());
       refetch();
     } catch { toast.error("Failed to update estimates"); }
+  }
+
+  // Actually sends an email per selected estimate (via the same endpoint the
+  // single-estimate "Send" dialog uses) — this used to just flip the stage
+  // to "sent" with a fake success toast and never email anyone.
+  async function bulkEmailSelected() {
+    const targets = (estimates ?? []).filter((e) => selectedIds.has(e.id));
+    if (targets.length === 0) return;
+
+    const template = emailTemplates?.find((t) => t.isDefault) ?? emailTemplates?.[0];
+    const subject = template?.subject ?? DEFAULT_SUBJECT;
+    const bodyHtml = template?.bodyHtml ?? DEFAULT_TEMPLATE_BODY;
+
+    setEmailingSelected(true);
+    try {
+      const results = await Promise.allSettled(
+        targets.map((e) =>
+          fetch(`/api/crm/estimates/${e.id}/send-email`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ subject, bodyHtml, expiresInDays: 30 }),
+          }).then(async (res) => {
+            if (!res.ok) {
+              const data = await res.json().catch(() => ({}));
+              throw new Error(data.error ?? `Failed to email estimate #${e.estimateNumber}`);
+            }
+          })
+        )
+      );
+      const succeeded = results.filter((r) => r.status === "fulfilled").length;
+      const failed = results.length - succeeded;
+      if (succeeded > 0) toast.success(`Emailed ${succeeded} estimate${succeeded !== 1 ? "s" : ""}`);
+      if (failed > 0) toast.error(`Failed to email ${failed} estimate${failed !== 1 ? "s" : ""} — check they have a client email on file`);
+      setSelectedIds(new Set());
+      refetch();
+    } finally {
+      setEmailingSelected(false);
+    }
   }
 
   const visibleColumns = clientId
@@ -324,10 +366,10 @@ export function EstimatesList({ clientId }: Props) {
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start">
               <DropdownMenuItem
-                disabled={!someSelected}
-                onSelect={() => { toast.info(`Emailing ${selectedIds.size} estimate(s)…`); bulkSetStage("sent"); }}
+                disabled={!someSelected || emailingSelected}
+                onSelect={() => void bulkEmailSelected()}
               >
-                Email Selected
+                {emailingSelected ? "Emailing…" : "Email Selected"}
               </DropdownMenuItem>
               <DropdownMenuItem
                 disabled={!someSelected}

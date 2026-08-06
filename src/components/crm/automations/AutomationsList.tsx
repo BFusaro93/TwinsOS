@@ -33,6 +33,7 @@ import {
   useUpdateAutomation,
   useDeleteAutomation,
 } from "@/lib/hooks/use-crm-automations";
+import { toast } from "sonner";
 
 interface Props {
   newDialogOpen: boolean;
@@ -62,6 +63,8 @@ export function AutomationsList({ newDialogOpen, onNewDialogOpenChange }: Props)
       setNewName("");
       setNewDescription("");
       router.push(`/crm/communication/automations/${automation.id}`);
+    } catch {
+      toast.error("Failed to create automation");
     } finally {
       setCreating(false);
     }
@@ -69,7 +72,11 @@ export function AutomationsList({ newDialogOpen, onNewDialogOpenChange }: Props)
 
   async function handleDelete(id: string, name: string) {
     if (!confirm(`Delete automation "${name}"? This cannot be undone.`)) return;
-    await deleteAutomation.mutateAsync(id);
+    try {
+      await deleteAutomation.mutateAsync(id);
+    } catch {
+      toast.error("Failed to delete automation");
+    }
   }
 
   if (isLoading) {
@@ -131,7 +138,10 @@ export function AutomationsList({ newDialogOpen, onNewDialogOpenChange }: Props)
                       <Switch
                         checked={a.isActive}
                         onCheckedChange={(checked) =>
-                          updateAutomation.mutate({ id: a.id, updates: { isActive: checked } })
+                          updateAutomation.mutate(
+                            { id: a.id, updates: { isActive: checked } },
+                            { onError: () => toast.error("Failed to update automation") }
+                          )
                         }
                       />
                       {a.isActive ? (

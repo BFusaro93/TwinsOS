@@ -12,7 +12,7 @@ import {
 import { useEstimates } from "@/lib/hooks/use-estimates";
 import { useInvoices } from "@/lib/hooks/use-invoices";
 import { useJobsList } from "@/lib/hooks/use-crm-jobs";
-import { useEmployees } from "@/lib/hooks/use-employees";
+import { useSelectableEmployees } from "@/lib/hooks/use-employees";
 import { useClients } from "@/lib/hooks/use-clients";
 import { useOrgList } from "@/lib/hooks/use-org-lists";
 import {
@@ -135,7 +135,7 @@ interface EditFormProps {
 function EditForm({ ticket, onCancel, onSaved }: EditFormProps) {
   const updateTicket = useUpdateTicket();
   const { data: clients } = useClients();
-  const { data: employees } = useEmployees();
+  const { data: employees } = useSelectableEmployees();
   const { data: categoryOptions } = useOrgList("ticket_categories");
   const categories = categoryOptions && categoryOptions.length > 0
     ? categoryOptions.map((o) => o.value)
@@ -454,7 +454,7 @@ function ContributorsTab({ ticket }: { ticket: CRMTicket }) {
   const { data: contributors } = useTicketContributors(ticket.id);
   const addContributor = useAddTicketContributor();
   const removeContributor = useRemoveTicketContributor();
-  const { data: employees } = useEmployees();
+  const { data: employees } = useSelectableEmployees();
   const [selected, setSelected] = useState("");
 
   const existing = new Set((contributors ?? []).map((c) => c.userName));

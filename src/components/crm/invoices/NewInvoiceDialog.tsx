@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/select";
 import { useCreateInvoice } from "@/lib/hooks/use-invoices";
 import { useClients } from "@/lib/hooks/use-clients";
-import { useEmployees } from "@/lib/hooks/use-employees";
+import { useSelectableEmployees } from "@/lib/hooks/use-employees";
 import { ClientCombobox } from "@/components/shared/ClientCombobox";
 import { toast } from "sonner";
 
@@ -46,7 +46,7 @@ interface Props {
 export function NewInvoiceDialog({ open, onOpenChange, defaultClientId, onCreated }: Props) {
   const { data: clients } = useClients();
   const invoiceableClients = (clients ?? []).filter((c) => c.status !== "lead");
-  const { data: employees } = useEmployees();
+  const { data: employees } = useSelectableEmployees();
   const salesReps = (employees ?? []).filter((e) => e.isSalesRep && e.userId);
   const { mutateAsync: create, isPending } = useCreateInvoice();
   const { register, handleSubmit, setValue, watch, formState: { errors } } = useForm<FormValues>({

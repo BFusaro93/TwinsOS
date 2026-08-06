@@ -5,6 +5,7 @@ import {
   ChevronDown,
   ChevronUp,
   Plus,
+  Pencil,
   X,
   Eye,
   EyeOff,
@@ -24,6 +25,7 @@ import {
   useCreateCustomFieldDef,
   useUpdateCustomFieldDef,
   useDeleteCustomFieldDef,
+  type CustomFieldDef,
 } from "@/lib/hooks/use-client-custom-fields";
 import { useOrgList, useAddOrgListItem, useDeleteOrgListItem } from "@/lib/hooks/use-org-lists";
 import {
@@ -684,6 +686,11 @@ function CustomFieldDefsEditor() {
   const [newUnit, setNewUnit] = useState("");
   const [adding, setAdding] = useState(false);
 
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editUnit, setEditUnit] = useState("");
+  const [saving, setSaving] = useState(false);
+
   async function handleAdd() {
     if (!newName.trim()) { toast.error("Field name is required"); return; }
     try {
@@ -707,6 +714,27 @@ function CustomFieldDefsEditor() {
     }
   }
 
+  function startEdit(def: CustomFieldDef) {
+    setEditingId(def.id);
+    setEditName(def.name);
+    setEditUnit(def.unit ?? "");
+  }
+
+  async function handleSaveEdit() {
+    if (!editName.trim()) { toast.error("Field name is required"); return; }
+    if (!editingId) return;
+    setSaving(true);
+    try {
+      await update({ id: editingId, name: editName.trim(), unit: editUnit.trim() || undefined });
+      toast.success("Field updated");
+      setEditingId(null);
+    } catch {
+      toast.error("Failed to update field");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   if (isLoading) return <p className="text-sm text-slate-400 py-2">Loading…</p>;
 
   return (
@@ -724,24 +752,65 @@ function CustomFieldDefsEditor() {
       </div>
 
       {/* User-defined fields */}
-      {defs.map((def) => (
-        <div key={def.id} className="flex items-center gap-3 py-3">
-          <div className="flex-1">
-            <p className="text-sm font-medium text-slate-800">{def.name}</p>
-            <p className="text-xs text-slate-400">
-              {def.fieldType === "number" ? "Number" : "Text"}
-              {def.unit ? ` · ${def.unit}` : ""}
-            </p>
+      {defs.map((def) =>
+        editingId === def.id ? (
+          <div key={def.id} className="flex items-end gap-2 py-3 flex-wrap">
+            <div className="flex flex-col gap-1 flex-1 min-w-36">
+              <label className="text-xs text-slate-500">Field Name</label>
+              <input
+                autoFocus
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") void handleSaveEdit(); if (e.key === "Escape") setEditingId(null); }}
+                className="rounded-md border border-slate-300 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-brand-400"
+              />
+            </div>
+            <div className="flex flex-col gap-1 w-28">
+              <label className="text-xs text-slate-500">Unit (optional)</label>
+              <input
+                value={editUnit}
+                onChange={(e) => setEditUnit(e.target.value)}
+                placeholder="sq ft"
+                className="rounded-md border border-slate-300 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-brand-400"
+              />
+            </div>
+            <button
+              onClick={() => void handleSaveEdit()}
+              disabled={saving}
+              className="rounded-md bg-brand-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-600 disabled:opacity-50"
+            >
+              {saving ? "Saving…" : "Save"}
+            </button>
+            <button onClick={() => setEditingId(null)} className="text-xs text-slate-400 hover:text-slate-700 px-1">
+              Cancel
+            </button>
           </div>
-          <button
-            onClick={() => handleDelete(def.id, def.name)}
-            className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-500"
-            title="Delete"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-      ))}
+        ) : (
+          <div key={def.id} className="flex items-center gap-3 py-3">
+            <div className="flex-1">
+              <p className="text-sm font-medium text-slate-800">{def.name}</p>
+              <p className="text-xs text-slate-400">
+                {def.fieldType === "number" ? "Number" : "Text"}
+                {def.unit ? ` · ${def.unit}` : ""}
+              </p>
+            </div>
+            <button
+              onClick={() => startEdit(def)}
+              className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+              title="Edit"
+            >
+              <Pencil className="h-4 w-4" />
+            </button>
+            <button
+              onClick={() => handleDelete(def.id, def.name)}
+              className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-500"
+              title="Delete"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        )
+      )}
 
       {/* Add new */}
       {adding ? (

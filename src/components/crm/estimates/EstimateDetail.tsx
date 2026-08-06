@@ -23,7 +23,7 @@ import { useSubmitForApproval } from "@/lib/hooks/use-approval-requests";
 import { ApprovalChain } from "@/components/shared/ApprovalChain";
 import { useEstimateTemplates } from "@/lib/hooks/use-estimate-templates";
 import { useClients } from "@/lib/hooks/use-clients";
-import { useEmployees } from "@/lib/hooks/use-employees";
+import { useSelectableEmployees } from "@/lib/hooks/use-employees";
 import { useOrgList } from "@/lib/hooks/use-org-lists";
 import { computeLineItem, hasPerTypeOverhead, getBreakevenRateCents, computeInstallmentSchedule } from "@/lib/estimate-calc";
 import { useOverheadSettings } from "@/lib/hooks/use-overhead-settings";
@@ -332,7 +332,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
   const { data: estimate, isLoading } = useEstimate(estimateId);
   const { data: templates } = useEstimateTemplates();
   const { data: clients }   = useClients();
-  const { data: employees } = useEmployees();
+  const { data: employees } = useSelectableEmployees();
   const salesReps = (employees ?? []).filter((e) => e.isSalesRep && e.userId);
   const { mutateAsync: updateEstimate } = useUpdateEstimate();
   const { mutateAsync: updateStage } = useUpdateEstimateStage();
@@ -682,12 +682,15 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                   description: estimate.description ?? `Invoice for estimate #${estimate.estimateNumber}`,
                   invoiceDate: today,
                   lineItems: (estimate.lineItems ?? [])
-                    .filter((li) => !li.deletedAt)
+                    .filter((li) => !li.deletedAt && li.status !== "lost")
                     .map((li) => ({
                       description: li.serviceName ?? li.serviceId ?? "Service",
                       qty: li.qty,
                       rateCents: li.rateCents,
                       totalCents: li.totalCents,
+                      discountCents: li.discountCents,
+                      discountType: li.discountType,
+                      discountValue: li.discountValue,
                     })),
                   subtotalCents: estimate.subtotalCents ?? 0,
                   taxRateBps: estimate.taxRateBps ?? 0,

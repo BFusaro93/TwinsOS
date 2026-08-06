@@ -116,7 +116,7 @@ export function useCreateTicket() {
 }
 
 const TICKET_TYPES = ["note", "call", "event"];
-const TICKET_STATUSES = ["open", "closed", "pending"];
+const TICKET_STATUSES = ["open", "closed", "pending", "on_hold"];
 const TICKET_PRIORITIES = ["low", "normal", "high", "urgent"];
 
 export function useBulkImportTickets() {
@@ -146,7 +146,12 @@ export function useBulkImportTickets() {
           category: r.category?.trim() || null,
           subject,
           body: r.body?.trim() || null,
-          status: TICKET_STATUSES.includes(r.status?.trim().toLowerCase()) ? r.status.trim().toLowerCase() : "open",
+          status: (() => {
+            // "On Hold" (space-separated, as a person would type it in a CSV)
+            // needs to match the "on_hold" status value, not just "on hold".
+            const normalized = r.status?.trim().toLowerCase().replace(/\s+/g, "_");
+            return TICKET_STATUSES.includes(normalized) ? normalized : "open";
+          })(),
           priority: TICKET_PRIORITIES.includes(r.priority?.trim().toLowerCase()) ? r.priority.trim().toLowerCase() : "normal",
           due_date: r.dueDate?.trim() || null,
         });
@@ -174,9 +179,17 @@ export function useUpdateTicket() {
       if (updates.category !== undefined) payload.category = updates.category;
       if (updates.subject !== undefined) payload.subject = updates.subject;
       if (updates.body !== undefined) payload.body = updates.body;
-      if (updates.status !== undefined) payload.status = updates.status;
-      if (updates.assignedTo !== undefined) payload.assigned_to = updates.assignedTo;
-      if (updates.dueDate !== undefined) payload.due_date = updates.dueDate;
+      if (updates.status !== undefined) {
+        payload.status = updates.status;
+        // Keep closed_at in sync with status everywhere a status change can
+        // happen (bulk actions included) — not just the single-ticket path,
+        // which used a separate useCloseTicket call for this. Otherwise a
+        // bulk "Mark Closed" never sets it, and reopening a closed ticket
+        // leaves a stale closed_at behind.
+        payload.closed_at = updates.status === "closed" ? new Date().toISOString() : null;
+      }
+      if (updates.assignedTo !== undefined) payload.assigned_to = updates.assignedTo || null;
+      if (updates.dueDate !== undefined) payload.due_date = updates.dueDate || null;
       if (updates.priority !== undefined) payload.priority = updates.priority;
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any

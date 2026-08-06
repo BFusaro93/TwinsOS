@@ -77,6 +77,25 @@ export async function POST(request: Request) {
 
   if (liErr) return NextResponse.json({ error: liErr.message }, { status: 500 });
 
+  // Reassign payment records pointed at a child invoice to the parent too —
+  // otherwise a child's already-collected payment stays "on" a
+  // soft-deleted/voided invoice and is lost from the merged balance below.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error: allocErr } = await (supabase as any)
+    .from("crm_payment_allocations")
+    .update({ invoice_id: parentId })
+    .in("invoice_id", childIds);
+  if (allocErr) return NextResponse.json({ error: allocErr.message }, { status: 500 });
+
+  // Legacy payments predating crm_payment_allocations link directly via
+  // crm_payments.invoice_id — reassign those too.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error: legacyPmtErr } = await (supabase as any)
+    .from("crm_payments")
+    .update({ invoice_id: parentId })
+    .in("invoice_id", childIds);
+  if (legacyPmtErr) return NextResponse.json({ error: legacyPmtErr.message }, { status: 500 });
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const items = (allItems ?? []) as { total_cents: number; is_taxable: boolean }[];
   const subtotal = items.reduce((s, li) => s + li.total_cents, 0);
@@ -86,14 +105,17 @@ export async function POST(request: Request) {
   const taxCents = Math.round((taxableBase * taxRateBps) / 10000);
   const total = subtotal + taxCents;
 
-  const parentInvoice = inv.find((i) => i.id === parentId);
-  const alreadyPaid: number = parentInvoice?.amount_paid_cents ?? 0;
+  // Sum paid amounts across ALL merged invoices, not just the parent's own —
+  // a child invoice that was already paid off would otherwise have that
+  // payment vanish from the merged balance (the child's own row is about to
+  // be voided below).
+  const alreadyPaid: number = inv.reduce((s, i) => s + (i.amount_paid_cents ?? 0), 0);
   const newBalance = Math.max(0, total - alreadyPaid);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { error: parentErr } = await (supabase as any)
     .from("crm_invoices")
-    .update({ subtotal_cents: subtotal, tax_cents: taxCents, total_cents: total, balance_cents: newBalance })
+    .update({ subtotal_cents: subtotal, tax_cents: taxCents, total_cents: total, balance_cents: newBalance, amount_paid_cents: alreadyPaid })
     .eq("id", parentId);
 
   if (parentErr) return NextResponse.json({ error: parentErr.message }, { status: 500 });

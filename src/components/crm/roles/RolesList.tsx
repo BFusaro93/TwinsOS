@@ -16,7 +16,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Plus, ShieldCheck } from "lucide-react";
+import { Plus, ShieldCheck, Trash2 } from "lucide-react";
 import { PermissionGate } from "@/components/shared/PermissionGate";
 import { toast } from "sonner";
 
@@ -304,20 +304,21 @@ export function RolesList() {
               <th className="px-4 py-3">Description</th>
               <th className="px-4 py-3">Active</th>
               <th className="px-4 py-3">Modified</th>
+              <th className="w-10 px-4 py-3" />
             </tr>
           </thead>
           <tbody>
             {isLoading ? (
               Array.from({ length: 6 }).map((_, i) => (
                 <tr key={i} className="border-b">
-                  {Array.from({ length: 5 }).map((__, j) => (
+                  {Array.from({ length: 6 }).map((__, j) => (
                     <td key={j} className="px-4 py-3"><Skeleton className="h-4 w-full" /></td>
                   ))}
                 </tr>
               ))
             ) : filtered.length === 0 ? (
               <tr>
-                <td colSpan={5} className="py-20 text-center">
+                <td colSpan={6} className="py-20 text-center">
                   <div className="flex flex-col items-center gap-2">
                     <ShieldCheck className="h-8 w-8 text-slate-200" />
                     <p className="text-sm text-slate-400">No roles found</p>
@@ -353,6 +354,14 @@ export function RolesList() {
                     {new Date(role.updatedAt).toLocaleDateString("en-US", {
                       month: "numeric", day: "numeric", year: "numeric",
                     })}
+                  </td>
+                  <td className="px-4 py-2.5" onClick={(e) => e.stopPropagation()}>
+                    <button
+                      onClick={() => handleDelete(role)}
+                      className="text-slate-300 hover:text-red-500"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
                   </td>
                 </tr>
               ))

@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useUpdateEvent } from "@/lib/hooks/use-crm-automations";
 import type { CRMSequenceEvent } from "@/types/crm-automations";
+import { toast } from "sonner";
 
 interface Props {
   open: boolean;
@@ -40,6 +41,8 @@ export function NoteEventDialog({ open, onOpenChange, event }: Props) {
         config: { content },
       });
       onOpenChange(false);
+    } catch {
+      toast.error("Failed to save note event");
     } finally {
       setSaving(false);
     }

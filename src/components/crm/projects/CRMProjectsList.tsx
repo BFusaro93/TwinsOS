@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useProjects, useCreateProject, useUpdateProject } from "@/lib/hooks/use-projects";
 import { useClients } from "@/lib/hooks/use-clients";
 import { useInvoices } from "@/lib/hooks/use-invoices";
@@ -361,6 +361,8 @@ function ProjectDetailDialog({
           </div>
         </Tabs>
       </DialogContent>
+
+      <NewProjectDialog open={editMode} onOpenChange={setEditMode} project={project} />
     </Dialog>
   );
 }
@@ -370,19 +372,38 @@ function ProjectDetailDialog({
 function NewProjectDialog({
   open,
   onOpenChange,
+  project,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
+  /** When set, edits this project instead of creating a new one. */
+  project?: Project;
 }) {
   const { data: clients } = useClients();
-  const { mutateAsync: create, isPending } = useCreateProject();
+  const { mutateAsync: create, isPending: creating } = useCreateProject();
+  const { mutateAsync: update, isPending: updating } = useUpdateProject();
+  const isEditing = !!project;
+  const isPending = creating || updating;
 
-  const [name, setName] = useState("");
-  const [clientId, setClientId] = useState("");
-  const [address, setAddress] = useState("");
-  const [contractPrice, setContractPrice] = useState("");
-  const [startDate, setStartDate] = useState(new Date().toISOString().split("T")[0]);
-  const [status, setStatus] = useState<ProjectStatus>("sold");
+  const [name, setName] = useState(project?.name ?? "");
+  const [clientId, setClientId] = useState(project?.clientId ?? "");
+  const [address, setAddress] = useState(project?.address ?? "");
+  const [contractPrice, setContractPrice] = useState(project ? String((project.contractPrice ?? 0) / 100) : "");
+  const [startDate, setStartDate] = useState(project?.startDate ?? new Date().toISOString().split("T")[0]);
+  const [status, setStatus] = useState<ProjectStatus>(project?.status ?? "sold");
+
+  // Re-sync form state if a different project is opened for editing (dialog
+  // stays mounted, only `open`/`project` change) — otherwise stale values
+  // from whichever project was edited previously would linger.
+  useEffect(() => {
+    if (!open) return;
+    setName(project?.name ?? "");
+    setClientId(project?.clientId ?? "");
+    setAddress(project?.address ?? "");
+    setContractPrice(project ? String((project.contractPrice ?? 0) / 100) : "");
+    setStartDate(project?.startDate ?? new Date().toISOString().split("T")[0]);
+    setStatus(project?.status ?? "sold");
+  }, [open, project]);
 
   function reset() {
     setName(""); setClientId(""); setAddress("");
@@ -394,35 +415,49 @@ function NewProjectDialog({
     if (!name) { toast.error("Project name is required"); return; }
     const selectedClient = (clients ?? []).find((c) => c.id === clientId);
     try {
-      await create({
-        name,
-        customerName: selectedClient?.displayName ?? "",
-        address: address || selectedClient?.billingAddress || "",
-        city: selectedClient?.billingCity || "",
-        state: selectedClient?.billingState || "",
-        zip: selectedClient?.billingZip || "",
-        status,
-        startDate,
-        endDate: null,
-        laborHours: null,
-        notes: null,
-        contractPrice: Math.round(parseFloat(contractPrice || "0") * 100),
-        clientId: clientId || null,
-        budgetHours: null,
-        laborRateCents: null,
-        burdenedRateCents: null,
-      });
-      toast.success("Project created");
-      reset();
+      if (isEditing && project) {
+        await update({
+          id: project.id,
+          name,
+          customerName: selectedClient?.displayName ?? project.customerName,
+          address: address || selectedClient?.billingAddress || project.address,
+          status,
+          startDate,
+          contractPrice: Math.round(parseFloat(contractPrice || "0") * 100),
+          clientId: clientId || null,
+        });
+        toast.success("Project updated");
+      } else {
+        await create({
+          name,
+          customerName: selectedClient?.displayName ?? "",
+          address: address || selectedClient?.billingAddress || "",
+          city: selectedClient?.billingCity || "",
+          state: selectedClient?.billingState || "",
+          zip: selectedClient?.billingZip || "",
+          status,
+          startDate,
+          endDate: null,
+          laborHours: null,
+          notes: null,
+          contractPrice: Math.round(parseFloat(contractPrice || "0") * 100),
+          clientId: clientId || null,
+          budgetHours: null,
+          laborRateCents: null,
+          burdenedRateCents: null,
+        });
+        toast.success("Project created");
+        reset();
+      }
       onOpenChange(false);
-    } catch { toast.error("Failed to create project"); }
+    } catch { toast.error(isEditing ? "Failed to update project" : "Failed to create project"); }
   }
 
   return (
-    <Dialog open={open} onOpenChange={(o) => { if (!o) reset(); onOpenChange(o); }}>
+    <Dialog open={open} onOpenChange={(o) => { if (!o && !isEditing) reset(); onOpenChange(o); }}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>New Project</DialogTitle>
+          <DialogTitle>{isEditing ? "Edit Project" : "New Project"}</DialogTitle>
         </DialogHeader>
         <div className="space-y-4 py-2">
           <div className="flex flex-col gap-1.5">
@@ -468,9 +503,9 @@ function NewProjectDialog({
           </div>
         </div>
         <div className="flex justify-end gap-2">
-          <Button variant="outline" onClick={() => { reset(); onOpenChange(false); }}>Cancel</Button>
+          <Button variant="outline" onClick={() => { if (!isEditing) reset(); onOpenChange(false); }}>Cancel</Button>
           <Button onClick={submit} disabled={isPending}>
-            {isPending ? "Creating…" : "Create Project"}
+            {isEditing ? (isPending ? "Saving…" : "Save Changes") : (isPending ? "Creating…" : "Create Project")}
           </Button>
         </div>
       </DialogContent>

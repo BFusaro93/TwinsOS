@@ -15,7 +15,7 @@ import {
 } from "@/lib/hooks/use-contracts";
 import { useClients } from "@/lib/hooks/use-clients";
 import { useCRMServices } from "@/lib/hooks/use-crm-jobs";
-import { useEmployees } from "@/lib/hooks/use-employees";
+import { useSelectableEmployees } from "@/lib/hooks/use-employees";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -454,7 +454,7 @@ function OtherDetailsTab({
   salesRepName?: string | null;
   onChange: (patch: { source?: string; salesRepId?: string }) => void;
 }) {
-  const { data: employees } = useEmployees();
+  const { data: employees } = useSelectableEmployees();
   const salesReps = (employees ?? []).filter((e) => e.isSalesRep && e.userId);
 
   return (
@@ -646,12 +646,20 @@ export function ContractDialog({
     // monthlyAmountCents (same fallback the invoice-generation cron uses) —
     // pre-fill it here so the grid reflects what will actually be billed
     // instead of showing $0 for unset months.
+    // Every month key is explicitly set (defaulting to 0 for a brand-new
+    // contract) rather than left absent — an absent key and an explicit $0
+    // both render as "$0.00" in the grid, but invoice generation treats them
+    // very differently: absent falls back to the contract's averaged
+    // monthlyAmountCents, while explicit 0 means "don't bill this month."
+    // Without this, a seasonal contract whose off-months are never focused
+    // (so MoneyInput never commits them) could get billed the averaged
+    // amount in a month the user meant to leave at $0.
     monthlyAmounts: contract
       ? MONTHS.reduce((acc, { key }) => {
           acc[key] = contract.monthlyAmounts[key] ?? contract.monthlyAmountCents ?? 0;
           return acc;
         }, {} as MonthlyAmounts)
-      : {},
+      : MONTHS.reduce((acc, { key }) => { acc[key] = 0; return acc; }, {} as MonthlyAmounts),
     billingDayOfMonth: contract?.billingDayOfMonth ?? 1,
     billMonthInAdvance: contract?.billMonthInAdvance ?? false,
     paymentType: contract?.paymentType ?? "",
@@ -906,15 +914,20 @@ export function ContractsList({ clientId }: Props) {
   }
 
   async function bulkSetActive(active: boolean) {
-    const ids = selected.size > 0 ? [...selected] : filtered.map((c) => c.id);
+    // No fallback to "all filtered" here — unlike Export below, this mutates
+    // data, so an empty selection must mean "do nothing" (matching how the
+    // Invoices/Estimates bulk-action menus disable themselves with nothing
+    // selected), not "apply to everything visible."
+    if (selected.size === 0) return;
+    const ids = [...selected];
     await Promise.all(ids.map((id) => updateContract({ id, updates: { is_active: active } })));
     toast.success(`${ids.length} contract${ids.length !== 1 ? "s" : ""} updated`);
     clearSelection();
   }
 
   async function handleCreateInvoices() {
-    const ids = selected.size > 0 ? [...selected] : filtered.map((c) => c.id);
-    if (ids.length === 0) return;
+    if (selected.size === 0) return;
+    const ids = [...selected];
     try {
       const results = await generateInvoices(ids);
       const created = results.filter((r) => r.status === "created").length;
@@ -1019,11 +1032,11 @@ export function ContractsList({ clientId }: Props) {
             <DropdownMenuItem onSelect={() => { setSearch(""); clearSelection(); }}>Clear Filters</DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuLabel className="text-xs text-slate-500">Active/Inactive</DropdownMenuLabel>
-            <DropdownMenuItem onSelect={() => bulkSetActive(true)}>Make Active</DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => bulkSetActive(false)}>Make Inactive</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => bulkSetActive(true)} disabled={selected.size === 0}>Make Active</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => bulkSetActive(false)} disabled={selected.size === 0}>Make Inactive</DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuLabel className="text-xs text-slate-500">Invoice/Export</DropdownMenuLabel>
-            <DropdownMenuItem onSelect={handleCreateInvoices} disabled={generatingInvoices}>
+            <DropdownMenuItem onSelect={handleCreateInvoices} disabled={generatingInvoices || selected.size === 0}>
               {generatingInvoices ? "Creating…" : "Create Invoices"}
             </DropdownMenuItem>
             <DropdownMenuItem onSelect={handleExport}>Export</DropdownMenuItem>

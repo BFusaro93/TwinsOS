@@ -6,6 +6,7 @@ import {
   useCreateEmployee,
   useUpdateEmployee,
   useDeactivateEmployee,
+  useActivateEmployee,
 } from "@/lib/hooks/use-employees";
 import { useRoles } from "@/lib/hooks/use-roles";
 import { Button } from "@/components/ui/button";
@@ -816,6 +817,7 @@ function EmployeeTable({
   onSelect,
   onEdit,
   onDeactivate,
+  onActivate,
   colSpan,
 }: {
   employees: CRMEmployee[];
@@ -824,6 +826,7 @@ function EmployeeTable({
   onSelect: (e: CRMEmployee) => void;
   onEdit: (e: CRMEmployee) => void;
   onDeactivate: (id: string, name: string) => void;
+  onActivate: (id: string, name: string) => void;
   colSpan: number;
 }) {
   return (
@@ -904,13 +907,22 @@ function EmployeeTable({
                     <PermissionGate permission="emp_edit">
                       <DropdownMenuItem onClick={() => onEdit(e)}>Edit</DropdownMenuItem>
                     </PermissionGate>
-                    {e.isActive && (
+                    {e.isActive ? (
                       <PermissionGate permission="emp_manage">
                         <DropdownMenuItem
                           className="text-red-600"
                           onClick={() => onDeactivate(e.id, `${e.firstName} ${e.lastName}`)}
                         >
                           Deactivate
+                        </DropdownMenuItem>
+                      </PermissionGate>
+                    ) : (
+                      <PermissionGate permission="emp_manage">
+                        <DropdownMenuItem
+                          className="text-green-600"
+                          onClick={() => onActivate(e.id, `${e.firstName} ${e.lastName}`)}
+                        >
+                          Activate
                         </DropdownMenuItem>
                       </PermissionGate>
                     )}
@@ -1031,6 +1043,7 @@ export function EmployeesTable({
 }) {
   const { data: employees, isLoading } = useEmployees(false);
   const { mutateAsync: deactivate } = useDeactivateEmployee();
+  const { mutateAsync: activate } = useActivateEmployee();
   const [search, setSearch] = useState("");
   const [showInactive, setShowInactive] = useState(false);
 
@@ -1049,6 +1062,13 @@ export function EmployeesTable({
       await deactivate(id);
       toast.success(`${name} deactivated`);
     } catch { toast.error("Failed to deactivate"); }
+  }
+
+  async function handleActivate(id: string, name: string) {
+    try {
+      await activate(id);
+      toast.success(`${name} activated`);
+    } catch { toast.error("Failed to activate"); }
   }
 
   return (
@@ -1081,6 +1101,7 @@ export function EmployeesTable({
           onSelect={onSelect}
           onEdit={onSelect}
           onDeactivate={handleDeactivate}
+          onActivate={handleActivate}
           colSpan={9}
         />
       </div>

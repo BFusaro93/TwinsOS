@@ -221,11 +221,6 @@ export function useUpdateContractStatus() {
 
 const MONTH_KEYS: (keyof MonthlyAmounts)[] = ["jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec"];
 
-function todayStr() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
 export interface GenerateInvoicesResult {
   contractId: string;
   status: "created" | "skipped";
@@ -246,10 +241,7 @@ export function useGenerateContractInvoices() {
     mutationFn: async (contractIds: string[]): Promise<GenerateInvoicesResult[]> => {
       const supabase = createClient();
       const now = new Date();
-      const currentMonthKey = MONTH_KEYS[now.getMonth()];
-      const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
-      const monthEnd = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()).padStart(2, "0")}`;
-      const today = todayStr();
+      const todayDay = now.getDate();
 
       const results: GenerateInvoicesResult[] = [];
 
@@ -257,7 +249,7 @@ export function useGenerateContractInvoices() {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data: contract, error: fetchErr } = await (supabase as any)
           .from("crm_contracts")
-          .select("id, org_id, client_id, title, monthly_amount_cents, monthly_amounts, invoice_line_items, sales_rep_id")
+          .select("id, org_id, client_id, title, monthly_amount_cents, monthly_amounts, invoice_line_items, sales_rep_id, bill_month_in_advance")
           .eq("id", contractId)
           .is("deleted_at", null)
           .single();
@@ -265,6 +257,20 @@ export function useGenerateContractInvoices() {
           results.push({ contractId, status: "skipped", reason: "contract not found" });
           continue;
         }
+
+        // "Bill month in advance" labels/dates this invoice for next
+        // calendar month instead of the current one — same shift as the
+        // daily cron (src/app/api/cron/contract-invoices/route.ts) applies,
+        // so a manual "Create Invoices" click behaves consistently with it.
+        const billingMonthDate = contract.bill_month_in_advance
+          ? new Date(now.getFullYear(), now.getMonth() + 1, 1)
+          : new Date(now.getFullYear(), now.getMonth(), 1);
+        const billingMonthLastDay = new Date(billingMonthDate.getFullYear(), billingMonthDate.getMonth() + 1, 0).getDate();
+        const billingDay = Math.min(todayDay, billingMonthLastDay);
+        const billingMonthKey = MONTH_KEYS[billingMonthDate.getMonth()];
+        const invoiceDateStr = `${billingMonthDate.getFullYear()}-${String(billingMonthDate.getMonth() + 1).padStart(2, "0")}-${String(billingDay).padStart(2, "0")}`;
+        const monthStart = `${billingMonthDate.getFullYear()}-${String(billingMonthDate.getMonth() + 1).padStart(2, "0")}-01`;
+        const monthEnd = `${billingMonthDate.getFullYear()}-${String(billingMonthDate.getMonth() + 1).padStart(2, "0")}-${String(billingMonthLastDay).padStart(2, "0")}`;
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data: existing } = await (supabase as any)
@@ -278,14 +284,14 @@ export function useGenerateContractInvoices() {
           .limit(1)
           .maybeSingle();
         if (existing) {
-          results.push({ contractId, status: "skipped", reason: "already billed this month" });
+          results.push({ contractId, status: "skipped", reason: "already billed for this month" });
           continue;
         }
 
         const monthlyAmounts = (contract.monthly_amounts ?? {}) as Record<string, number>;
         const monthAmount: number =
-          monthlyAmounts[currentMonthKey] != null
-            ? monthlyAmounts[currentMonthKey]
+          monthlyAmounts[billingMonthKey] != null
+            ? monthlyAmounts[billingMonthKey]
             : contract.monthly_amount_cents;
         if (monthAmount <= 0) {
           results.push({ contractId, status: "skipped", reason: "zero amount for month" });
@@ -303,7 +309,7 @@ export function useGenerateContractInvoices() {
             contract_id: contract.id,
             sales_rep_id: contract.sales_rep_id ?? null,
             description,
-            invoice_date: today,
+            invoice_date: invoiceDateStr,
             status: "draft",
             subtotal_cents: monthAmount,
             total_cents: monthAmount,
@@ -335,7 +341,7 @@ export function useGenerateContractInvoices() {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         await (supabase as any)
           .from("crm_contracts")
-          .update({ last_billed_date: today })
+          .update({ last_billed_date: invoiceDateStr })
           .eq("id", contractId);
 
         const problems = [

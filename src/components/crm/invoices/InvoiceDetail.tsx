@@ -16,7 +16,7 @@ import {
   useVoidInvoice,
 } from "@/lib/hooks/use-invoices";
 import { useCRMServices } from "@/lib/hooks/use-crm-jobs";
-import { useEmployees } from "@/lib/hooks/use-employees";
+import { useSelectableEmployees } from "@/lib/hooks/use-employees";
 import { useOrgSettings } from "@/lib/hooks/use-org-settings";
 import { useDiscounts } from "@/lib/hooks/use-crm-discounts";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -512,7 +512,7 @@ export function InvoiceDetail({
   const { mutateAsync: voidInvoice } = useVoidInvoice();
   const { data: savedServices } = useCRMServices();
   const { data: orgSettings } = useOrgSettings();
-  const { data: employees } = useEmployees();
+  const { data: employees } = useSelectableEmployees();
   const salesReps = (employees ?? []).filter((e) => e.isSalesRep && e.userId);
   const { data: discounts = [] } = useDiscounts();
   const activeDiscounts = discounts.filter((d) => d.isActive);
@@ -731,7 +731,10 @@ export function InvoiceDetail({
     if (!invoice) { onDiscard?.(); return; }
     try {
       await deleteInvoice({ id: invoice.id, clientId: invoice.clientId });
-    } catch { /* best-effort */ }
+    } catch {
+      toast.error("Failed to discard draft — it was not deleted");
+      return;
+    }
     onDiscard?.();
   }
 

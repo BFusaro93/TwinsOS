@@ -23,7 +23,7 @@ import {
 import { useCreateClientJob, useCRMServices, useCRMSchedules, useCRMCrews } from "@/lib/hooks/use-crm-jobs";
 import { useClients } from "@/lib/hooks/use-clients";
 import { useContracts } from "@/lib/hooks/use-contracts";
-import { useEmployees } from "@/lib/hooks/use-employees";
+import { useSelectableEmployees } from "@/lib/hooks/use-employees";
 import { useOrgSettings } from "@/lib/hooks/use-org-settings";
 import { usePackages } from "@/lib/hooks/use-packages";
 import { computePackageVisitSchedule } from "@/lib/package-schedule";
@@ -85,7 +85,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
   const { data: crmSchedules } = useCRMSchedules();
   const { data: orgSettings } = useOrgSettings();
   const { data: crmPackages } = usePackages(false);
-  const { data: employees } = useEmployees();
+  const { data: employees } = useSelectableEmployees();
   const { data: crews } = useCRMCrews();
   const salesReps = (employees ?? []).filter((e) => e.isSalesRep && e.userId);
 

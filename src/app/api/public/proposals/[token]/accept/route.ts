@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { Resend } from "resend";
+import { recalcEstimateTotals } from "@/lib/estimate-calc";
 
 const serviceClient = () =>
   createClient(
@@ -46,6 +47,20 @@ export async function POST(
   }
   if (shareToken.expires_at && new Date(shareToken.expires_at) < new Date()) {
     return NextResponse.json({ error: "Proposal link has expired" }, { status: 410 });
+  }
+
+  // The token's own accepted_at only guards against replaying THIS token —
+  // it says nothing about whether staff moved the estimate on since the link
+  // was sent (e.g. marked it declined/lost, or it was invoiced under a
+  // different tier). Re-check the estimate's current stage too, same as the
+  // logged-in portal's own accept route (api/portal/estimates/[id]/action).
+  const { data: currentEstimate } = await supabase
+    .from("estimates")
+    .select("stage")
+    .eq("id", shareToken.estimate_id)
+    .single();
+  if (!currentEstimate || currentEstimate.stage !== "sent") {
+    return NextResponse.json({ error: "This proposal is no longer actionable" }, { status: 409 });
   }
 
   const now = new Date().toISOString();
@@ -124,6 +139,12 @@ export async function POST(
       .eq("status", "quote")
       .is("deleted_at", null);
   }
+
+  // 3b. Line items are now split into won/lost — recompute the estimate's
+  // stored totals down to just the won subset, so the confirmation email
+  // below and any later invoice/job-conversion reflect what was actually
+  // accepted, not the full pre-acceptance (e.g. all-tiers) total.
+  await recalcEstimateTotals(supabase, shareToken.estimate_id);
 
   // 4. Log to client_activity
   const { data: est } = await supabase

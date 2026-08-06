@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { toast } from "sonner";
 import { Plus, Search, Trash2, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -70,7 +71,14 @@ const W9_STATUS_CONFIG: Record<W9Status, { label: string; classes: string }> = {
 };
 
 function DetailsTab({ vendor, onUpdateNotes }: { vendor: Vendor; onUpdateNotes: (notes: string) => void }) {
-  const w9Config = W9_STATUS_CONFIG[vendor.w9Status];
+  // "Expired" has no way to be set from the New/Edit Vendor form's W9 Status
+  // select (it only offers not_requested/requested/received) and nothing
+  // ever flips it automatically either — derive it here instead of trusting
+  // the stored status, so a lapsed expiration date actually shows as expired.
+  const today = new Date().toISOString().slice(0, 10);
+  const isPastExpiration = !!vendor.w9ExpirationDate && vendor.w9ExpirationDate < today;
+  const effectiveW9Status: W9Status = vendor.w9Status === "received" && isPastExpiration ? "expired" : vendor.w9Status;
+  const w9Config = W9_STATUS_CONFIG[effectiveW9Status];
   const [notes, setNotes] = useState(vendor.notes ?? "");
   const [notesSaved, setNotesSaved] = useState(false);
 
@@ -157,7 +165,7 @@ function DetailsTab({ vendor, onUpdateNotes }: { vendor: Vendor; onUpdateNotes: 
               <DetailRow
                 label="Expires"
                 value={
-                  <span className={vendor.w9Status === "expired" ? "text-red-600" : undefined}>
+                  <span className={effectiveW9Status === "expired" ? "text-red-600" : undefined}>
                     {formatDate(vendor.w9ExpirationDate)}
                   </span>
                 }
@@ -223,14 +231,20 @@ function PartsProductsTab({ vendor }: { vendor: Vendor }) {
   function handleLinkPart(part: Part) {
     // If no primary vendor yet, set as primary; otherwise add as alternate
     if (!part.vendorId) {
-      updatePart({ id: part.id, vendorId: vendor.id, vendorName: vendor.name });
+      updatePart(
+        { id: part.id, vendorId: vendor.id, vendorName: vendor.name },
+        { onError: () => toast.error(`Failed to link ${part.name} to ${vendor.name}`) }
+      );
     } else {
       const already = part.alternateVendors.some((av) => av.vendorId === vendor.id);
       if (!already) {
-        updatePart({
-          id: part.id,
-          alternateVendors: [...part.alternateVendors, { vendorId: vendor.id, vendorName: vendor.name }],
-        });
+        updatePart(
+          {
+            id: part.id,
+            alternateVendors: [...part.alternateVendors, { vendorId: vendor.id, vendorName: vendor.name }],
+          },
+          { onError: () => toast.error(`Failed to link ${part.name} to ${vendor.name}`) }
+        );
       }
     }
     setLinkDialogOpen(false);
@@ -242,18 +256,24 @@ function PartsProductsTab({ vendor }: { vendor: Vendor }) {
       // Remove primary vendor; promote first alternate if available
       const firstAlt = part.alternateVendors[0] ?? null;
       const remaining = part.alternateVendors.slice(1);
-      updatePart({
-        id: part.id,
-        vendorId: firstAlt?.vendorId ?? null,
-        vendorName: firstAlt?.vendorName ?? null,
-        alternateVendors: remaining,
-      });
+      updatePart(
+        {
+          id: part.id,
+          vendorId: firstAlt?.vendorId ?? null,
+          vendorName: firstAlt?.vendorName ?? null,
+          alternateVendors: remaining,
+        },
+        { onError: () => toast.error(`Failed to unlink ${part.name} from ${vendor.name}`) }
+      );
     } else {
       // Remove from alternates
-      updatePart({
-        id: part.id,
-        alternateVendors: part.alternateVendors.filter((av) => av.vendorId !== vendor.id),
-      });
+      updatePart(
+        {
+          id: part.id,
+          alternateVendors: part.alternateVendors.filter((av) => av.vendorId !== vendor.id),
+        },
+        { onError: () => toast.error(`Failed to unlink ${part.name} from ${vendor.name}`) }
+      );
     }
   }
 

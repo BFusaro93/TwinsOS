@@ -38,6 +38,7 @@ import { useProducts } from "@/lib/hooks/use-products";
 import { useServiceChemicals, useSaveServiceChemicals } from "@/lib/hooks/use-chemical-tracking";
 import { AuditTrailTab } from "@/components/shared/AuditTrailTab";
 import type { CRMService, BudgetMethod } from "@/types/crm-jobs";
+import { toast } from "sonner";
 
 const UNITS = ["visit", "sqft", "lf", "cuyd", "acres", "hr", "each", "lb", "gal"];
 // Fallback shown only until the org has configured its own list under
@@ -678,14 +679,18 @@ export function ServiceDialog({ open, service, onClose }: Props) {
 
   async function handleSave() {
     const patch = buildPatch();
-    if (activeService) {
-      await updateService.mutateAsync({ id: activeService.id, patch });
-      onClose();
-    } else {
-      // Create — stay open and unlock Rate Matrix / Sub-services tabs
-      const created = await createService.mutateAsync(patch);
-      setActiveService(created as CRMService);
-      setForm(serviceToForm(created as CRMService));
+    try {
+      if (activeService) {
+        await updateService.mutateAsync({ id: activeService.id, patch });
+        onClose();
+      } else {
+        // Create — stay open and unlock Rate Matrix / Sub-services tabs
+        const created = await createService.mutateAsync(patch);
+        setActiveService(created as CRMService);
+        setForm(serviceToForm(created as CRMService));
+      }
+    } catch {
+      toast.error("Failed to save service");
     }
   }
 

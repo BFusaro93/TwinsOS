@@ -173,7 +173,10 @@ export function useCreateInvoiceFromEstimate() {
       invoiceDate: string;
       dueDate?: string;
       poNumber?: string | null;
-      lineItems: { description: string; qty: number; rateCents: number; totalCents: number }[];
+      lineItems: {
+        description: string; qty: number; rateCents: number; totalCents: number;
+        discountCents?: number; discountType?: "percent" | "flat" | null; discountValue?: number | null;
+      }[];
       subtotalCents: number;
       taxRateBps: number;
       taxCents: number;
@@ -220,6 +223,9 @@ export function useCreateInvoiceFromEstimate() {
             qty: li.qty,
             rate_cents: li.rateCents,
             total_cents: li.totalCents,
+            discount_cents: li.discountCents ?? 0,
+            discount_type: li.discountType ?? null,
+            discount_value: li.discountValue ?? null,
             sort_order: i,
           }))
         );
@@ -437,6 +443,29 @@ export function useUpdateInvoiceStatus() {
   return useMutation({
     mutationFn: async ({ id, status }: { id: string; status: string }) => {
       const supabase = createClient();
+      // A void here (used by the Invoices list's Void button and bulk
+      // actions) must do the same balance-zeroing + client-balance resync as
+      // useVoidInvoice — otherwise a voided invoice keeps its old
+      // balance_cents and keeps counting toward what the client owes.
+      if (status === "void") {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: inv } = await (supabase as any)
+          .from("crm_invoices")
+          .select("client_id")
+          .eq("id", id)
+          .single();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error } = await (supabase as any)
+          .from("crm_invoices")
+          .update({ status, balance_cents: 0 })
+          .eq("id", id);
+        if (error) throw error;
+        if (inv?.client_id) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          await (supabase.rpc as any)("sync_client_balance", { p_client_id: inv.client_id });
+        }
+        return;
+      }
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any)
         .from("crm_invoices")
@@ -444,7 +473,10 @@ export function useUpdateInvoiceStatus() {
         .eq("id", id);
       if (error) throw error;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["crm-invoices"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["crm-invoices"] });
+      qc.invalidateQueries({ queryKey: ["clients"] });
+    },
   });
 }
 
@@ -712,6 +744,12 @@ export function useUpdatePayment() {
       qc.invalidateQueries({ queryKey: ["crm-invoices"] });
       qc.invalidateQueries({ queryKey: ["clients", vars.clientId] });
       qc.invalidateQueries({ queryKey: ["clients"] });
+      // The edit dialog stays mounted and just toggles `open` rather than
+      // remounting, so it relies entirely on this invalidation to pick up
+      // the new split — without it, reopening the same payment within the
+      // 60s global staleTime shows the pre-edit allocations, and saving
+      // again reverses the wrong amounts against invoices.
+      qc.invalidateQueries({ queryKey: ["crm-payment-allocations", vars.id] });
     },
   });
 }
@@ -751,8 +789,34 @@ export function useRefundPayment() {
         .eq("id", id);
       if (error) throw error;
 
-      // reverse allocation on invoice if linked
-      if (invoiceId) {
+      // Reverse the refund across every invoice this payment was actually
+      // allocated to, proportionally — a payment split across multiple
+      // invoices has no single `invoiceId` (that field is only ever set for
+      // single-invoice payments), so reversing just `invoiceId` silently
+      // skipped every invoice for a split payment.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: allocations } = await (supabase as any)
+        .from("crm_payment_allocations")
+        .select("invoice_id, amount_cents")
+        .eq("payment_id", id);
+
+      if (allocations && allocations.length > 0) {
+        const totalAllocated = allocations.reduce((s: number, a: { amount_cents: number }) => s + a.amount_cents, 0);
+        let remaining = refundAmountCents;
+        for (let i = 0; i < allocations.length; i++) {
+          const a = allocations[i];
+          // Last row absorbs the rounding remainder so the sum always equals refundAmountCents exactly.
+          const share = i === allocations.length - 1
+            ? remaining
+            : Math.round((refundAmountCents * a.amount_cents) / totalAllocated);
+          remaining -= share;
+          if (share > 0) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            await applyPaymentToInvoice(supabase as any, a.invoice_id, -share);
+          }
+        }
+      } else if (invoiceId) {
+        // Legacy payment predating crm_payment_allocations.
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         await applyPaymentToInvoice(supabase as any, invoiceId, -refundAmountCents);
       }
@@ -775,6 +839,7 @@ export function useRefundPayment() {
       qc.invalidateQueries({ queryKey: ["crm-invoices"] });
       qc.invalidateQueries({ queryKey: ["clients", vars.clientId] });
       qc.invalidateQueries({ queryKey: ["clients"] });
+      qc.invalidateQueries({ queryKey: ["clients", vars.clientId, "activity"] });
     },
   });
 }
@@ -847,17 +912,21 @@ export function useDeleteInvoiceLineItem() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: items } = await (supabase as any)
         .from("crm_invoice_line_items")
-        .select("total_cents, is_taxable")
+        .select("total_cents, discount_cents, is_taxable")
         .eq("invoice_id", invoiceId);
 
+      // Net of each line's own discount — matches useUpdateInvoiceFinancials'
+      // netLineCents so a delete recomputes the same way an edit would.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const subtotalCents = (items ?? []).reduce((s: number, li: any) => s + li.total_cents, 0);
+      const netLineCents = (li: any) => li.total_cents - (li.discount_cents ?? 0);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const subtotalCents = (items ?? []).reduce((s: number, li: any) => s + netLineCents(li), 0);
       const discountCents = inv?.discount_cents ?? 0;
       const taxRateBps = inv?.tax_rate_bps ?? 0;
       const afterDiscount = subtotalCents - discountCents;
       // Tax only applies to taxable line items
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const taxableBase = (items ?? []).filter((li: any) => li.is_taxable).reduce((s: number, li: any) => s + li.total_cents, 0);
+      const taxableBase = (items ?? []).filter((li: any) => li.is_taxable).reduce((s: number, li: any) => s + netLineCents(li), 0);
       const taxCents = Math.round((taxableBase * taxRateBps) / 10000);
       const totalCents = afterDiscount + taxCents;
       const paid = inv?.amount_paid_cents ?? 0;
@@ -1175,6 +1244,7 @@ export function useCreateInvoiceFromJob() {
           tax_rate_bps: taxRateBps,
           tax_cents: taxCents,
           total_cents: totalCents,
+          balance_cents: totalCents,
         })
         .select()
         .single();

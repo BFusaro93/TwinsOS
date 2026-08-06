@@ -260,6 +260,14 @@ export function AddPaymentDialog({
       toast.error("A reason is required for an account credit");
       return;
     }
+    // "Pay in full" checkboxes and manually-typed per-row amounts don't cap
+    // themselves against the entered payment amount (only the separate
+    // auto-allocate button does) — block here rather than let the sum of
+    // allocations exceed what was actually received.
+    if (amountApplied > amountCents) {
+      toast.error(`Allocated amount (${formatCurrency(amountApplied)}) exceeds the payment amount (${formatCurrency(amountCents)})`);
+      return;
+    }
     const activeAllocations = allocations
       .filter((a) => a.amountCents > 0)
       .map((a) => ({ invoiceId: a.invoiceId, amountCents: a.amountCents }));

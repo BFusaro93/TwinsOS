@@ -23,10 +23,11 @@ import {
   useSaveChemicalApplication,
 } from "@/lib/hooks/use-chemical-tracking";
 import { useProducts } from "@/lib/hooks/use-products";
-import { useEmployees } from "@/lib/hooks/use-employees";
+import { useSelectableEmployees } from "@/lib/hooks/use-employees";
 import { usePropertyCustomFieldValues } from "@/lib/hooks/use-rate-matrix";
 import { SendApplicationNoticeDialog } from "./SendApplicationNoticeDialog";
 import type { ChemicalApplication } from "@/types/chemical-tracking";
+import { toast } from "sonner";
 
 interface Props {
   jobId: string;
@@ -134,7 +135,12 @@ function ApplicationRow({
           variant="ghost"
           size="icon"
           className="h-6 w-6 text-slate-400 hover:text-red-500"
-          onClick={() => del.mutate({ id: application.id, visitId })}
+          onClick={() => {
+            if (!confirm(`Remove ${productName} from this visit?`)) return;
+            del.mutate({ id: application.id, visitId }, {
+              onError: () => toast.error("Failed to remove chemical application"),
+            });
+          }}
         >
           <Trash2 className="h-3.5 w-3.5" />
         </Button>
@@ -245,7 +251,7 @@ export function ChemicalApplicationPanel({ jobId, visitId, propertyId }: Props) 
   const { data: units = [] } = useChemicalLookupItems("volume_unit");
   const { data: targets = [] } = useChemicalLookupItems("target");
   const { data: areasTreated = [] } = useChemicalLookupItems("areas_treated");
-  const { data: employeesRaw = [] } = useEmployees();
+  const { data: employeesRaw = [] } = useSelectableEmployees();
   const { data: settings } = useChemicalSettings();
   const saveApplication = useSaveChemicalApplication();
 

@@ -46,11 +46,6 @@ export async function GET(request: Request) {
 
   const now = new Date();
   const todayDay = now.getDate();
-  const currentMonthKey = MONTH_KEYS[now.getMonth()];
-  // ISO date string for the first day of the current month — used to check
-  // whether an invoice for this contract was already generated this month.
-  const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
-  const monthEnd   = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()).padStart(2, "0")}`;
   // Last day of current month — contracts with billing_day > month length
   // fire on the last day.
   const lastDayOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
@@ -85,15 +80,26 @@ export async function GET(request: Request) {
     return NextResponse.json({ generated: 0, message: "No contracts due today." });
   }
 
-  // ── determine billing month (advance billing shifts by one month) ──────────
-  // For "bill month in advance" contracts we still run on the billing day but
-  // label the invoice for the next calendar month.
-  const invoiceDateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(todayDay).padStart(2, "0")}`;
-
   const results: { contractId: string; status: "created" | "skipped"; reason?: string }[] = [];
 
   for (const contract of dueTodayContracts) {
-    // ── idempotency: skip if invoice already exists for this contract this month
+    // ── determine billing month for THIS contract (advance billing shifts by
+    // one month) — runs on the configured billing day regardless, but a
+    // "bill month in advance" contract labels/dates the invoice for next
+    // calendar month instead of the current one, and the day is clamped to
+    // that target month's length (e.g. billing_day 31 shifting into a
+    // 30-day month).
+    const billingMonthDate = contract.bill_month_in_advance
+      ? new Date(now.getFullYear(), now.getMonth() + 1, 1)
+      : new Date(now.getFullYear(), now.getMonth(), 1);
+    const billingMonthLastDay = new Date(billingMonthDate.getFullYear(), billingMonthDate.getMonth() + 1, 0).getDate();
+    const billingDay = Math.min(todayDay, billingMonthLastDay);
+    const billingMonthKey = MONTH_KEYS[billingMonthDate.getMonth()];
+    const invoiceDateStr = `${billingMonthDate.getFullYear()}-${String(billingMonthDate.getMonth() + 1).padStart(2, "0")}-${String(billingDay).padStart(2, "0")}`;
+    const monthStart = `${billingMonthDate.getFullYear()}-${String(billingMonthDate.getMonth() + 1).padStart(2, "0")}-01`;
+    const monthEnd   = `${billingMonthDate.getFullYear()}-${String(billingMonthDate.getMonth() + 1).padStart(2, "0")}-${String(billingMonthLastDay).padStart(2, "0")}`;
+
+    // ── idempotency: skip if invoice already exists for this contract for the billing month
     const { data: existing } = await sb
       .from("crm_invoices")
       .select("id")
@@ -106,16 +112,16 @@ export async function GET(request: Request) {
       .maybeSingle();
 
     if (existing) {
-      results.push({ contractId: contract.id, status: "skipped", reason: "already billed this month" });
+      results.push({ contractId: contract.id, status: "skipped", reason: "already billed for this month" });
       continue;
     }
 
-    // ── resolve amount for this month ─────────────────────────────────────
+    // ── resolve amount for the billing month ───────────────────────────────
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const monthlyAmounts = (contract.monthly_amounts ?? {}) as Record<string, number>;
     const monthAmount: number =
-      monthlyAmounts[currentMonthKey] != null
-        ? monthlyAmounts[currentMonthKey]
+      monthlyAmounts[billingMonthKey] != null
+        ? monthlyAmounts[billingMonthKey]
         : contract.monthly_amount_cents;
 
     if (monthAmount <= 0) {
