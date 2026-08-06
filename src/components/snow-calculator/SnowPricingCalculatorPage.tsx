@@ -78,6 +78,34 @@ function NumberField({
   );
 }
 
+function TextField({
+  label,
+  value,
+  onChange,
+  placeholder,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <label className="text-sm font-medium text-slate-600">{label}</label>
+      <div className="flex items-stretch overflow-hidden rounded-lg border border-slate-300 bg-white shadow-sm">
+        <input
+          type="text"
+          placeholder={placeholder}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className="w-full min-w-0 flex-1 bg-transparent px-3 py-2.5 text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none"
+          aria-label={label}
+        />
+      </div>
+    </div>
+  );
+}
+
 function SectionCard({
   title,
   subtotal,
@@ -106,6 +134,10 @@ function SectionCard({
 export function SnowPricingCalculatorPage() {
   const { orgName } = useSettingsStore();
   const [exportingPdf, setExportingPdf] = useState(false);
+
+  // Property
+  const [propertyName, setPropertyName] = useState("");
+  const [propertyAddress, setPropertyAddress] = useState("");
 
   // Salting
   const [saltSqFt, setSaltSqFt] = useState("50000");
@@ -276,9 +308,16 @@ export function SnowPricingCalculatorPage() {
     { label: "12+ inches", amount: rate12plus },
   ];
 
+  function exportFilename(ext: string) {
+    const slug = propertyName.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+    return slug ? `snow-pricing-${slug}.${ext}` : `snow-pricing-calculator.${ext}`;
+  }
+
   function handleExportExcel() {
     const headers = ["Section", "Line Item", "Detail", "Amount"];
     const rows: unknown[][] = [];
+    rows.push(["Property", "Name", propertyName || "—", ""]);
+    rows.push(["Property", "Address", propertyAddress || "—", ""]);
     exportSections.forEach((section) => {
       section.rows.forEach((row) => {
         rows.push([section.title, row.label, row.detail ?? "", row.amount.toFixed(2)]);
@@ -292,7 +331,7 @@ export function SnowPricingCalculatorPage() {
     exportPerStorm.forEach((r) => {
       rows.push(["Per-Storm Pricing", r.label, "", r.amount.toFixed(2)]);
     });
-    downloadCSV("snow-pricing-calculator.csv", headers, rows);
+    downloadCSV(exportFilename("csv"), headers, rows);
   }
 
   async function handleExportPdf() {
@@ -304,6 +343,8 @@ export function SnowPricingCalculatorPage() {
       ]);
       const data: SnowPricingPdfData = {
         orgName,
+        propertyName,
+        propertyAddress,
         generatedOn: new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }),
         sections: exportSections,
         subtotal,
@@ -316,7 +357,7 @@ export function SnowPricingCalculatorPage() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = "snow-pricing-calculator.pdf";
+      a.download = exportFilename("pdf");
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -351,6 +392,14 @@ export function SnowPricingCalculatorPage() {
       <div className="grid gap-6 lg:grid-cols-[1fr_380px]">
         {/* Inputs */}
         <div className="space-y-4">
+          <div className="rounded-xl border bg-white p-5 space-y-4">
+            <h3 className="text-sm font-bold uppercase tracking-wide text-slate-700">Property</h3>
+            <div className="grid grid-cols-2 gap-3">
+              <TextField label="Property Name" value={propertyName} onChange={setPropertyName} placeholder="e.g. Maple Ridge Office Park" />
+              <TextField label="Address" value={propertyAddress} onChange={setPropertyAddress} placeholder="123 Main St, Anytown, MN" />
+            </div>
+          </div>
+
           <SectionCard title="Salting — Roads, Drive Lanes & Driveways" subtotal={saltSeasonTotal}>
             <div className="grid grid-cols-2 gap-3">
               <NumberField label="Asphalt Area" value={saltSqFt} onChange={setSaltSqFt} suffix="sq. ft." />

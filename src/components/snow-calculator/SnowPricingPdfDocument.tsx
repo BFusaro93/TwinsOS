@@ -14,6 +14,8 @@ export interface SnowPricingPdfSection {
 
 export interface SnowPricingPdfData {
   orgName: string;
+  propertyName: string;
+  propertyAddress: string;
   generatedOn: string;
   sections: SnowPricingPdfSection[];
   subtotal: number;
@@ -50,6 +52,11 @@ const S = StyleSheet.create({
     marginBottom: 16,
   },
   titleText: { fontSize: 14, fontFamily: "Helvetica-Bold", color: "#ffffff", letterSpacing: 0.5 },
+
+  propertyBlock: { marginBottom: 16 },
+  propertyLabel: { fontSize: 7, color: "#94a3b8", letterSpacing: 0.5, textTransform: "uppercase", marginBottom: 3 },
+  propertyName: { fontSize: 11, fontFamily: "Helvetica-Bold", marginBottom: 2 },
+  propertyAddress: { fontSize: 8.5, color: "#475569" },
 
   sectionBlock: { marginBottom: 10 },
   sectionHeaderRow: {
@@ -97,6 +104,14 @@ export function SnowPricingPdfDocument({ data }: { data: SnowPricingPdfData }) {
         <View style={S.titleBand}>
           <Text style={S.titleText}>SNOW PRICING CALCULATOR</Text>
         </View>
+
+        {(data.propertyName || data.propertyAddress) && (
+          <View style={S.propertyBlock}>
+            <Text style={S.propertyLabel}>Property</Text>
+            {data.propertyName ? <Text style={S.propertyName}>{data.propertyName}</Text> : null}
+            {data.propertyAddress ? <Text style={S.propertyAddress}>{data.propertyAddress}</Text> : null}
+          </View>
+        )}
 
         {data.sections.map((section) => (
           <View key={section.title} style={S.sectionBlock} wrap={false}>
