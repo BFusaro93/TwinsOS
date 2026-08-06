@@ -88,6 +88,12 @@ export function useCreateRequest() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ type: "new_maintenance_request", entityId: mr.id, entityType: "maintenance_request" }),
       }).catch(() => {});
+      // Fire any request_submitted automations (best-effort, same pattern as above)
+      fetch("/api/automations/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ eventTrigger: "request_submitted", assetId: mr.assetId ?? null, assetName: mr.assetName ?? null }),
+      }).catch(() => {});
     },
   });
 }

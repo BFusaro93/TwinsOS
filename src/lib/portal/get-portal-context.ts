@@ -29,6 +29,7 @@ export async function getPortalContext(): Promise<PortalContext | null> {
     .from("client_portal_users")
     .select("client_id, org_id, email")
     .eq("user_id", user.id)
+    .is("deleted_at", null)
     .single() as { data: PortalUserRow | null };
 
   if (!data) return null;

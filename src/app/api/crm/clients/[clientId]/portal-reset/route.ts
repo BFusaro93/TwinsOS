@@ -34,11 +34,13 @@ export async function DELETE(
     return NextResponse.json({ error: "No portal account found for this client" }, { status: 404 });
   }
 
-  // Delete the portal_users row first
+  // Soft-delete the portal_users row — this project never hard-deletes
+  // records (see CLAUDE.md); the underlying auth user is still fully
+  // removed below, which is what actually revokes login access.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   await (supabase as any)
     .from("client_portal_users")
-    .delete()
+    .update({ deleted_at: new Date().toISOString() })
     .eq("id", portalUser.id);
 
   // Revoke any pending invites

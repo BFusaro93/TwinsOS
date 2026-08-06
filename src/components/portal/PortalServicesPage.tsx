@@ -42,7 +42,13 @@ export default function PortalServicesPage({ upcoming: initialUpcoming, complete
     initialUpcoming.find((v) => v.status === "in_progress")?.id ?? null
   );
 
-  // Supabase Realtime subscription for live visit status
+  // Supabase Realtime subscription for live visit status. Note:
+  // crm_job_visits isn't currently in the supabase_realtime publication
+  // (confirmed via pg_publication_tables), so this never actually fires yet
+  // — filtering by client_id rather than the broader org_id is still correct
+  // defensively, so that if the table is ever added to the publication, this
+  // subscription doesn't request every other client's visit updates in the
+  // same org.
   useEffect(() => {
     const supabase = createClient();
 
@@ -54,7 +60,7 @@ export default function PortalServicesPage({ upcoming: initialUpcoming, complete
           event: "UPDATE",
           schema: "public",
           table: "crm_job_visits",
-          filter: `org_id=eq.${orgId}`,
+          filter: `client_id=eq.${clientId}`,
         },
         (payload) => {
           const updated = payload.new as { id: string; status: string; client_id?: string };

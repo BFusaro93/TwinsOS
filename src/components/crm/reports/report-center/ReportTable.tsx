@@ -8,7 +8,7 @@ import type { ReportFieldType, ReportResult } from "@/types/crm-reports";
 
 const PAGE_SIZE = 100;
 
-const NUMERIC_TYPES: ReportFieldType[] = ["money", "number", "hours", "percent"];
+const NUMERIC_TYPES: ReportFieldType[] = ["money", "number", "hours", "percent", "bps"];
 
 /** Format a single cell for display (also used by CSV export). */
 export function formatCellValue(value: unknown, type: ReportFieldType): string {
@@ -20,6 +20,8 @@ export function formatCellValue(value: unknown, type: ReportFieldType): string {
       return Number(value).toFixed(2);
     case "percent":
       return `${Number(value).toFixed(1)}%`;
+    case "bps":
+      return `${(Number(value) / 100).toFixed(1)}%`;
     case "number":
       return Number(value).toLocaleString();
     case "date":

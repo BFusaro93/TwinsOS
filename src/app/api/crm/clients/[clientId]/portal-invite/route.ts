@@ -40,6 +40,7 @@ export async function POST(
     .from("client_portal_users")
     .select("id")
     .eq("client_id", clientId)
+    .is("deleted_at", null)
     .single() as { data: Pick<PortalUserRow, "id"> | null };
 
   if (existing) {

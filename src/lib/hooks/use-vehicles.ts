@@ -57,6 +57,7 @@ export function useCreateVehicle() {
         year: input.year,
         serial_number: input.serialNumber,
         engine_serial_number: input.engineSerialNumber,
+        samsara_vehicle_id: input.samsaraVehicleId,
         division: input.division,
         assigned_crew: input.assignedCrew,
         barcode: input.barcode,

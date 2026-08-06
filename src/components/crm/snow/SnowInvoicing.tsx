@@ -28,10 +28,37 @@ const INVOICE_TYPE_LABEL: Record<string, string> = {
   hourly: "Hourly",
 };
 
-function computeAmountCents(visit: CRMJobVisit): number {
+// "per_event"/"per_event_per_inch" bill the whole STORM, not each dispatch
+// within it — a job with 2 visits during one storm (e.g. morning + afternoon
+// push) is one event, not two. Unlike "per_push_per_inch" (deliberately
+// per-visit — that's the point of that option) and "hourly" (naturally
+// per-visit), these two must be billed once per (job, storm event), or a
+// multi-visit storm gets charged twice.
+function isPerEventBilling(invoiceType: string): boolean {
+  return invoiceType === "per_event" || invoiceType === "per_event_per_inch";
+}
+
+/** Group key for visits that must collapse to a single charge. Falls back to
+ *  the visit's own id (i.e. no grouping) for per-visit billing types. */
+function billingGroupKey(visit: CRMJobVisit): string {
+  const invoiceType = visit.job?.invoiceType ?? "per_event";
+  if (!isPerEventBilling(invoiceType)) return visit.id;
+  return `${visit.jobId}::${visit.stormEventId ?? "none"}`;
+}
+
+/** The group's total charge for one storm event — computed once per group,
+ *  not once per visit. per_event_per_inch uses the storm's total depth (the
+ *  MAX across the group's visits, since depth doesn't accumulate per push
+ *  within one storm), not each visit's own depth. */
+function computeGroupAmountCents(groupVisits: CRMJobVisit[]): number {
+  const visit = groupVisits[0];
   const job = visit.job;
   const invoiceType = job?.invoiceType ?? "per_event";
-  if (invoiceType === "per_event_per_inch" || invoiceType === "per_push_per_inch") {
+  if (invoiceType === "per_event_per_inch") {
+    const maxDepth = Math.max(...groupVisits.map((v) => v.snowDepthInches ?? 0));
+    return Math.round((job?.ratePerInchCents ?? 0) * maxDepth);
+  }
+  if (invoiceType === "per_push_per_inch") {
     return Math.round((job?.ratePerInchCents ?? 0) * (visit.snowDepthInches ?? 0));
   }
   if (invoiceType === "hourly") {
@@ -41,15 +68,19 @@ function computeAmountCents(visit: CRMJobVisit): number {
   return visit.rateCents ?? job?.rateCents ?? serviceTotal;
 }
 
-function describeAmount(visit: CRMJobVisit): string {
+function describeAmount(visit: CRMJobVisit, groupSize: number): string {
   const invoiceType = visit.job?.invoiceType ?? "per_event";
-  if (invoiceType === "per_event_per_inch" || invoiceType === "per_push_per_inch") {
+  const splitSuffix = groupSize > 1 ? ` (split ÷${groupSize})` : "";
+  if (invoiceType === "per_event_per_inch") {
+    return `event max depth × ${formatCurrency(visit.job?.ratePerInchCents ?? 0)}/in${splitSuffix}`;
+  }
+  if (invoiceType === "per_push_per_inch") {
     return `${visit.snowDepthInches ?? 0}" × ${formatCurrency(visit.job?.ratePerInchCents ?? 0)}/in`;
   }
   if (invoiceType === "hourly") {
     return `${visit.actualHours ?? 0} hrs × ${formatCurrency(visit.job?.rateCents ?? 0)}/hr`;
   }
-  return INVOICE_TYPE_LABEL[invoiceType] ?? "Per Event";
+  return `${INVOICE_TYPE_LABEL[invoiceType] ?? "Per Event"}${splitSuffix}`;
 }
 
 export function SnowInvoicing() {
@@ -62,10 +93,35 @@ export function SnowInvoicing() {
   const generateInvoices = useGenerateSnowInvoices();
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
-  const rows = useMemo(
-    () => visits.map((v) => ({ visit: v, amountCents: computeAmountCents(v) })),
-    [visits]
-  );
+  const rows = useMemo(() => {
+    const byGroup = new Map<string, CRMJobVisit[]>();
+    for (const v of visits) {
+      const key = billingGroupKey(v);
+      if (!byGroup.has(key)) byGroup.set(key, []);
+      byGroup.get(key)!.push(v);
+    }
+    // Split each group's total evenly across its visits (one invoice line
+    // item per visit either way, for idempotency-by-visit_id), assigning any
+    // leftover cent(s) to the first visits in the group so the sum always
+    // equals the group total exactly.
+    const amountByVisitId = new Map<string, number>();
+    for (const groupVisits of byGroup.values()) {
+      const total = computeGroupAmountCents(groupVisits);
+      const n = groupVisits.length;
+      const base = Math.floor(total / n);
+      let remainder = total - base * n;
+      for (const v of groupVisits) {
+        const extra = remainder > 0 ? 1 : 0;
+        if (remainder > 0) remainder--;
+        amountByVisitId.set(v.id, base + extra);
+      }
+    }
+    return visits.map((v) => ({
+      visit: v,
+      amountCents: amountByVisitId.get(v.id) ?? 0,
+      groupSize: byGroup.get(billingGroupKey(v))!.length,
+    }));
+  }, [visits]);
 
   const byClient = useMemo(() => {
     const groups = new Map<string, { clientName: string; rows: typeof rows }>();
@@ -187,7 +243,7 @@ export function SnowInvoicing() {
             <tbody>
               {byClient.map(([clientId, group]) => (
                 <Fragment key={clientId}>
-                  {group.rows.map(({ visit, amountCents }) => (
+                  {group.rows.map(({ visit, amountCents, groupSize }) => (
                     <tr
                       key={visit.id}
                       className={cn("border-b border-slate-100 cursor-pointer", selectedIds.has(visit.id) ? "bg-brand-50" : "hover:bg-slate-50")}
@@ -203,7 +259,7 @@ export function SnowInvoicing() {
                       </td>
                       <td className="px-2 py-2 text-slate-500">{visit.scheduledDate}</td>
                       <td className="px-2 py-2 text-slate-500">{visit.job?.services?.[0]?.serviceName ?? "Snow Service"}</td>
-                      <td className="px-2 py-2 text-slate-500">{describeAmount(visit)}</td>
+                      <td className="px-2 py-2 text-slate-500">{describeAmount(visit, groupSize)}</td>
                       <td className="px-2 py-2 text-right font-medium text-slate-700">{formatCurrency(amountCents)}</td>
                     </tr>
                   ))}

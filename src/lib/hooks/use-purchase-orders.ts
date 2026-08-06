@@ -605,6 +605,14 @@ export function useUpdatePurchaseOrderStatus() {
       queryClient.invalidateQueries({ queryKey: ["purchase-orders"] });
       queryClient.invalidateQueries({ queryKey: ["purchase-orders", id] });
     },
+    onSuccess: (_, { status }) => {
+      // Fire any po_status_change automations configured for this target status (best-effort)
+      fetch("/api/automations/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ eventTrigger: "po_status_change", toStatus: status }),
+      }).catch(() => {});
+    },
   });
 }
 

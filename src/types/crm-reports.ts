@@ -13,6 +13,7 @@ export type ReportFieldType =
   | "number"
   | "hours"
   | "percent"
+  | "bps" // basis points (10000 = 100%) — divided by 100 for display, unlike "percent" which is already scaled
   | "boolean";
 
 export interface DatasetField {

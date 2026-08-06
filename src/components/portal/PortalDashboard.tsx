@@ -64,14 +64,19 @@ export default function PortalDashboard({
 }: Props) {
   const [upcomingVisits, setUpcomingVisits] = useState(initialVisits);
 
-  // Subscribe to real-time visit status changes
+  // Subscribe to real-time visit status changes. Note: crm_job_visits isn't
+  // currently in the supabase_realtime publication (confirmed via
+  // pg_publication_tables), so this never actually fires yet — filtering by
+  // client_id rather than the broader org_id is still correct defensively,
+  // so that if the table is ever added to the publication, this subscription
+  // doesn't request every other client's visit updates in the same org.
   useEffect(() => {
     const supabase = createClient();
     const channel = supabase
       .channel(`portal-dashboard-visits-${clientId}`)
       .on(
         "postgres_changes",
-        { event: "UPDATE", schema: "public", table: "crm_job_visits", filter: `org_id=eq.${orgId}` },
+        { event: "UPDATE", schema: "public", table: "crm_job_visits", filter: `client_id=eq.${clientId}` },
         (payload) => {
           const updated = payload.new as { id: string; status: string };
           setUpcomingVisits((prev) =>

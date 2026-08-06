@@ -28,6 +28,16 @@ export default async function EstimatesPage() {
 
   const supabase = await createClient();
 
+  // PortalShell only hides the nav link when disabled — that's not
+  // enforcement, so a direct/bookmarked visit must also be blocked here.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: settings } = await (supabase as any)
+    .from("client_portal_settings")
+    .select("allow_estimates")
+    .eq("org_id", ctx.orgId)
+    .single() as { data: { allow_estimates: boolean } | null };
+  if (settings?.allow_estimates === false) redirect("/portal");
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: estimates } = await (supabase as any)
     .from("estimates")

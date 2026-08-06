@@ -170,7 +170,7 @@ export const REPORT_DATASETS: ReportDataset[] = [
       { key: "man_count", label: "# of Men", type: "number" },
       { key: "actual_man_hours", label: "Actual Man-Hours", type: "hours" },
       { key: "actual_production_rate", label: "Actual Rate (sqft/hr)", type: "number", totalable: false },
-      { key: "rate_variance_bps", label: "Rate Variance", type: "percent", totalable: false },
+      { key: "rate_variance_bps", label: "Rate Variance", type: "bps", totalable: false },
     ],
   },
   {

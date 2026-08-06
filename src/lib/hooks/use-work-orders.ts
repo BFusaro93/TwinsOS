@@ -174,6 +174,12 @@ export function useUpdateWorkOrderStatus() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ type: "wo_status_changed", entityId: id, entityType: "work_order", extra: { newStatus: status } }),
       }).catch(() => {});
+      // Fire any wo_status_change automations configured for this target status (best-effort)
+      fetch("/api/automations/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ eventTrigger: "wo_status_change", toStatus: status }),
+      }).catch(() => {});
     },
   });
 }
