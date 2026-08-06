@@ -1,28 +1,35 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { formatCurrency } from "@/components/calculators/shared";
+import { Switch } from "@/components/ui/switch";
 
 const LBS_PER_YARD_SALT = 2160;
 const SQFT_PER_ACRE = 43560;
 const SEASON_INCHES_ASSUMED = 60;
+const BASE_RATE_MULTIPLE_OF_PER_INCH = 3;
+
+function num(value: string) {
+  const n = parseFloat(value);
+  return Number.isFinite(n) ? n : 0;
+}
 
 type MachineRow = {
   key: string;
   label: string;
-  monthlyRate: number;
-  months: number;
-  qty: number;
+  monthlyRate: string;
+  months: string;
+  qty: string;
 };
 
 const DEFAULT_MACHINES: MachineRow[] = [
-  { key: "loader-184", label: "Loader - 184 size", monthlyRate: 2900, months: 4, qty: 0 },
-  { key: "loader-244", label: "Loader - 244 size", monthlyRate: 3600, months: 4, qty: 1 },
-  { key: "loader-344", label: "Loader - 344 size", monthlyRate: 4500, months: 4, qty: 0 },
-  { key: "skid-wheeled", label: "Skid Steer - wheeled", monthlyRate: 2700, months: 4, qty: 0 },
-  { key: "skid-tracked", label: "Skid Steer - tracked", monthlyRate: 3400, months: 4, qty: 0 },
-  { key: "truck", label: "Truck", monthlyRate: 2500, months: 4, qty: 0.5 },
-  { key: "ventrac", label: "Ventrac", monthlyRate: 1000, months: 4, qty: 0 },
+  { key: "loader-184", label: "Loader - 184 size", monthlyRate: "2900", months: "4", qty: "0" },
+  { key: "loader-244", label: "Loader - 244 size", monthlyRate: "3600", months: "4", qty: "0" },
+  { key: "loader-344", label: "Loader - 344 size", monthlyRate: "4500", months: "4", qty: "0" },
+  { key: "skid-wheeled", label: "Skid Steer - wheeled", monthlyRate: "2700", months: "4", qty: "0" },
+  { key: "skid-tracked", label: "Skid Steer - tracked", monthlyRate: "3400", months: "4", qty: "0" },
+  { key: "truck", label: "Truck", monthlyRate: "2500", months: "4", qty: "0" },
+  { key: "ventrac", label: "Ventrac", monthlyRate: "1000", months: "4", qty: "0" },
 ];
 
 function NumberField({
@@ -31,27 +38,33 @@ function NumberField({
   onChange,
   suffix,
   prefix,
-  step = "any",
+  disabled,
 }: {
   label: string;
-  value: number;
-  onChange: (v: number) => void;
+  value: string;
+  onChange: (v: string) => void;
   suffix?: string;
   prefix?: string;
-  step?: string;
+  disabled?: boolean;
 }) {
   return (
     <div className="space-y-1.5">
       <label className="text-sm font-medium text-slate-600">{label}</label>
-      <div className="flex items-stretch overflow-hidden rounded-lg border border-slate-300 bg-white shadow-sm">
+      <div
+        className={`flex items-stretch overflow-hidden rounded-lg border border-slate-300 bg-white shadow-sm ${
+          disabled ? "opacity-50" : ""
+        }`}
+      >
         {prefix && <span className="flex items-center pl-3 text-sm text-slate-400">{prefix}</span>}
         <input
           type="number"
           min="0"
-          step={step}
-          value={Number.isFinite(value) ? value : 0}
-          onChange={(e) => onChange(Number(e.target.value) || 0)}
-          className="w-full min-w-0 flex-1 bg-transparent px-3 py-2.5 text-sm text-slate-700 focus:outline-none"
+          step="any"
+          placeholder="0"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          disabled={disabled}
+          className="w-full min-w-0 flex-1 bg-transparent px-3 py-2.5 text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none disabled:cursor-not-allowed"
           aria-label={label}
         />
         {suffix && <span className="flex items-center pr-3 text-sm text-slate-400 whitespace-nowrap">{suffix}</span>}
@@ -64,15 +77,20 @@ function SectionCard({
   title,
   subtotal,
   children,
+  headerExtra,
 }: {
   title: string;
   subtotal: number;
   children: React.ReactNode;
+  headerExtra?: React.ReactNode;
 }) {
   return (
     <div className="rounded-xl border bg-white p-5 space-y-4">
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-bold uppercase tracking-wide text-slate-700">{title}</h3>
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <h3 className="text-sm font-bold uppercase tracking-wide text-slate-700">{title}</h3>
+          {headerExtra}
+        </div>
         <span className="text-sm font-semibold text-brand-600">{formatCurrency(subtotal)}</span>
       </div>
       {children}
@@ -82,81 +100,91 @@ function SectionCard({
 
 export function SnowPricingCalculatorPage() {
   // Salting
-  const [saltSqFt, setSaltSqFt] = useState(50000);
-  const [saltLbsPerAcre, setSaltLbsPerAcre] = useState(1000);
-  const [saltCostPerYard, setSaltCostPerYard] = useState(650);
-  const [saltApplications, setSaltApplications] = useState(30);
+  const [saltSqFt, setSaltSqFt] = useState("50000");
+  const [saltLbsPerAcre, setSaltLbsPerAcre] = useState("1000");
+  const [saltCostPerYard, setSaltCostPerYard] = useState("650");
+  const [saltApplications, setSaltApplications] = useState("30");
 
   // Ice melt
-  const [iceBagsPerStorm, setIceBagsPerStorm] = useState(5);
-  const [iceCostPerBag, setIceCostPerBag] = useState(20);
-  const [iceApplications, setIceApplications] = useState(30);
+  const [iceBagsPerStorm, setIceBagsPerStorm] = useState("1");
+  const [iceCostPerBag, setIceCostPerBag] = useState("22");
+  const [iceApplications, setIceApplications] = useState("30");
 
   // Machines
   const [machines, setMachines] = useState<MachineRow[]>(DEFAULT_MACHINES);
 
   // Plowing
-  const [plowOperators, setPlowOperators] = useState(1.5);
-  const [plowHoursPerWinter, setPlowHoursPerWinter] = useState(75);
-  const [plowRatePerHour, setPlowRatePerHour] = useState(100);
+  const [plowOperators, setPlowOperators] = useState("0");
+  const [plowHoursPerWinter, setPlowHoursPerWinter] = useState("75");
+  const [plowRatePerHour, setPlowRatePerHour] = useState("100");
 
   // Shoveling
-  const [shovelWorkers, setShovelWorkers] = useState(2);
-  const [shovelHoursPerWinter, setShovelHoursPerWinter] = useState(75);
-  const [shovelRatePerHour, setShovelRatePerHour] = useState(85);
+  const [shovelWorkers, setShovelWorkers] = useState("0");
+  const [shovelHoursPerWinter, setShovelHoursPerWinter] = useState("75");
+  const [shovelRatePerHour, setShovelRatePerHour] = useState("85");
 
   // Storage
-  const [storageMonthly, setStorageMonthly] = useState(200);
-  const [storageMonths, setStorageMonths] = useState(4);
+  const [storageEnabled, setStorageEnabled] = useState(false);
+  const [storageMonthly, setStorageMonthly] = useState("200");
+  const [storageMonths, setStorageMonths] = useState("4");
 
   // Markup + per-storm pricing
-  const [markupPct, setMarkupPct] = useState(5);
-  const [baseRate1to3, setBaseRate1to3] = useState(2500);
-  const [mult3to6, setMult3to6] = useState(1.7);
-  const [mult6to9, setMult6to9] = useState(1.5);
-  const [mult9to12, setMult9to12] = useState(1.3);
-  const [mult12plus, setMult12plus] = useState(0.5);
+  const [markupPct, setMarkupPct] = useState("5");
+  const [baseRate1to3, setBaseRate1to3] = useState("0");
+  const [baseRateManual, setBaseRateManual] = useState(false);
+  const [mult3to6, setMult3to6] = useState("1.7");
+  const [mult6to9, setMult6to9] = useState("1.5");
+  const [mult9to12, setMult9to12] = useState("1.3");
+  const [mult12plus, setMult12plus] = useState("0.5");
 
   function updateMachine(key: string, patch: Partial<MachineRow>) {
     setMachines((rows) => rows.map((r) => (r.key === key ? { ...r, ...patch } : r)));
   }
 
   // Salting
-  const saltAcres = saltSqFt / SQFT_PER_ACRE;
-  const saltLbsPerApp = saltLbsPerAcre * saltAcres;
+  const saltAcres = num(saltSqFt) / SQFT_PER_ACRE;
+  const saltLbsPerApp = num(saltLbsPerAcre) * saltAcres;
   const saltYardsPerApp = saltLbsPerApp / LBS_PER_YARD_SALT;
-  const saltCostPerApp = saltYardsPerApp * saltCostPerYard;
-  const saltSeasonTotal = saltCostPerApp * saltApplications;
+  const saltCostPerApp = saltYardsPerApp * num(saltCostPerYard);
+  const saltSeasonTotal = saltCostPerApp * num(saltApplications);
 
   // Ice melt
-  const iceCostPerStorm = iceBagsPerStorm * iceCostPerBag;
-  const iceSeasonTotal = iceCostPerStorm * iceApplications;
+  const iceCostPerStorm = num(iceBagsPerStorm) * num(iceCostPerBag);
+  const iceSeasonTotal = iceCostPerStorm * num(iceApplications);
 
   // Machines
-  const machineTotal = machines.reduce((sum, m) => sum + m.monthlyRate * m.months * m.qty, 0);
+  const machineTotal = machines.reduce((sum, m) => sum + num(m.monthlyRate) * num(m.months) * num(m.qty), 0);
 
   // Plowing
-  const plowHours = plowOperators * plowHoursPerWinter;
-  const plowTotal = plowHours * plowRatePerHour;
+  const plowHours = num(plowOperators) * num(plowHoursPerWinter);
+  const plowTotal = plowHours * num(plowRatePerHour);
 
   // Shoveling
-  const shovelHours = shovelWorkers * shovelHoursPerWinter;
-  const shovelTotal = shovelHours * shovelRatePerHour;
+  const shovelHours = num(shovelWorkers) * num(shovelHoursPerWinter);
+  const shovelTotal = shovelHours * num(shovelRatePerHour);
 
   // Storage
-  const storageTotal = storageMonthly * storageMonths;
+  const storageTotal = storageEnabled ? num(storageMonthly) * num(storageMonths) : 0;
 
   // Totals
   const subtotal = saltSeasonTotal + iceSeasonTotal + machineTotal + plowTotal + shovelTotal + storageTotal;
-  const totalWithMarkup = subtotal + subtotal * (markupPct / 100);
+  const totalWithMarkup = subtotal + subtotal * (num(markupPct) / 100);
   const perInchCost = (subtotal - saltSeasonTotal) / SEASON_INCHES_ASSUMED;
 
+  // Base rate for 1-3" defaults to 3x the per-inch cost, unless the user has typed their own value
+  useEffect(() => {
+    if (!baseRateManual) {
+      setBaseRate1to3((BASE_RATE_MULTIPLE_OF_PER_INCH * perInchCost).toFixed(2));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [perInchCost, baseRateManual]);
+
   // Per-storm-size pricing (chained off base rate, matching source spreadsheet)
-  const rate1to3 = baseRate1to3;
-  const rate3to6 = rate1to3 * mult3to6;
-  const rate6to9 = rate3to6 * mult6to9;
-  const rate9to12 = rate6to9 * mult9to12;
-  const rate12plus = rate1to3 * mult12plus;
+  const rate1to3 = num(baseRate1to3);
+  const rate3to6 = rate1to3 * num(mult3to6);
+  const rate6to9 = rate3to6 * num(mult6to9);
+  const rate9to12 = rate6to9 * num(mult9to12);
+  const rate12plus = rate1to3 * num(mult12plus);
 
   return (
     <div className="space-y-6">
@@ -211,7 +239,7 @@ export function SnowPricingCalculatorPage() {
                   />
                   <NumberField label="Qty" value={m.qty} onChange={(v) => updateMachine(m.key, { qty: v })} />
                   <span className="pb-2.5 text-right text-sm font-medium text-slate-600">
-                    {formatCurrency(m.monthlyRate * m.months * m.qty)}
+                    {formatCurrency(num(m.monthlyRate) * num(m.months) * num(m.qty))}
                   </span>
                 </div>
               ))}
@@ -238,17 +266,73 @@ export function SnowPricingCalculatorPage() {
             </SectionCard>
           </div>
 
-          <SectionCard title="Storage Unit" subtotal={storageTotal}>
+          <SectionCard
+            title="Storage Unit"
+            subtotal={storageTotal}
+            headerExtra={
+              <Switch
+                checked={storageEnabled}
+                onCheckedChange={setStorageEnabled}
+                aria-label="Include storage unit"
+              />
+            }
+          >
             <div className="grid grid-cols-2 gap-3">
-              <NumberField label="Monthly Rate" value={storageMonthly} onChange={setStorageMonthly} prefix="$" />
-              <NumberField label="Months" value={storageMonths} onChange={setStorageMonths} />
+              <NumberField
+                label="Monthly Rate"
+                value={storageMonthly}
+                onChange={setStorageMonthly}
+                prefix="$"
+                disabled={!storageEnabled}
+              />
+              <NumberField
+                label="Months"
+                value={storageMonths}
+                onChange={setStorageMonths}
+                disabled={!storageEnabled}
+              />
             </div>
+            {!storageEnabled && (
+              <p className="text-xs text-muted-foreground">Not included for this property — toggle on to add it.</p>
+            )}
           </SectionCard>
 
           <div className="rounded-xl border bg-white p-5 space-y-4">
             <h3 className="text-sm font-bold uppercase tracking-wide text-slate-700">Per-Storm Pricing</h3>
             <div className="grid grid-cols-2 gap-3">
-              <NumberField label="1-3 inches (base)" value={baseRate1to3} onChange={setBaseRate1to3} prefix="$" />
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-medium text-slate-600">1-3 inches (base)</label>
+                  {baseRateManual && (
+                    <button
+                      type="button"
+                      onClick={() => setBaseRateManual(false)}
+                      className="text-xs font-medium text-brand-600 hover:underline"
+                    >
+                      Reset to 3× per inch
+                    </button>
+                  )}
+                </div>
+                <div className="flex items-stretch overflow-hidden rounded-lg border border-slate-300 bg-white shadow-sm">
+                  <span className="flex items-center pl-3 text-sm text-slate-400">$</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="any"
+                    placeholder="0"
+                    value={baseRate1to3}
+                    onChange={(e) => {
+                      setBaseRateManual(true);
+                      setBaseRate1to3(e.target.value);
+                    }}
+                    className="w-full min-w-0 flex-1 bg-transparent px-3 py-2.5 text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none"
+                    aria-label="1-3 inches base rate"
+                  />
+                </div>
+                {!baseRateManual && (
+                  <p className="text-xs text-muted-foreground">Auto: 3 × per-inch cost</p>
+                )}
+              </div>
               <NumberField label="Markup %" value={markupPct} onChange={setMarkupPct} suffix="%" />
             </div>
             <div className="grid grid-cols-4 gap-3">
@@ -278,7 +362,7 @@ export function SnowPricingCalculatorPage() {
               </div>
               <div className="flex items-center justify-between rounded-xl bg-white/10 px-5 py-4 backdrop-blur-sm">
                 <span className="text-xs font-bold uppercase tracking-widest text-slate-100">
-                  Total ({markupPct}% markup)
+                  Total ({num(markupPct)}% markup)
                 </span>
                 <span className="text-2xl font-light text-white tabular-nums">{formatCurrency(totalWithMarkup)}</span>
               </div>
@@ -316,6 +400,7 @@ export function SnowPricingCalculatorPage() {
             <p className="text-xs text-muted-foreground">Machines: rate × months × qty, summed</p>
             <p className="text-xs text-muted-foreground">Labor: operators/workers × hours × rate</p>
             <p className="text-xs text-muted-foreground">Total = Sub-Total × (1 + Markup %)</p>
+            <p className="text-xs text-muted-foreground">1-3&quot; base rate = 3 × per-inch cost (editable)</p>
           </div>
         </div>
       </div>
