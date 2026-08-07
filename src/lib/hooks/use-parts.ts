@@ -248,7 +248,7 @@ export function useReceivePartCostLayer() {
       const { error: updateErr } = await supabase.rpc("receive_part_quantity", {
         p_org_id: current.org_id as string,
         p_part_id: receipt.partId,
-        p_quantity: receipt.quantity,
+        p_quantity: Math.round(receipt.quantity),
         p_new_unit_cost: newUnitCost,
         p_new_cost_layers: newLayers as unknown as import("@/types/supabase").Json,
         p_po_number: receipt.poNumber ?? "",

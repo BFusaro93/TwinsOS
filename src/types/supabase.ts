@@ -3742,6 +3742,13 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "crm_form_rules_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "crm_form_rules_form_id_fkey"
             columns: ["form_id"]
             isOneToOne: false
@@ -11345,10 +11352,24 @@ export type Database = {
       }
     }
     Functions: {
-      adjust_part_quantity: {
-        Args: { p_delta: number; p_part_id: string; p_work_order_id?: string }
-        Returns: undefined
-      }
+      adjust_part_quantity:
+        | {
+            Args: {
+              p_delta: number
+              p_org_id: string
+              p_part_id: string
+              p_po_number: string
+            }
+            Returns: undefined
+          }
+        | {
+            Args: {
+              p_delta: number
+              p_part_id: string
+              p_work_order_id?: string
+            }
+            Returns: undefined
+          }
       assign_invoice_number: { Args: { p_invoice_id: string }; Returns: number }
       crm_recompute_job_actual_hours: {
         Args: { p_job_id: string }

@@ -83,7 +83,7 @@ export function LineItemsTable({
   const [items, setItems] = useState<LineItem[]>(lineItems);
   useEffect(() => { setItems(lineItems); }, [lineItems]);
 
-  const { data: projects = [] } = useProjects(true);
+  const { data: projects = [] } = useProjects();
   const { data: products = [] } = useProducts();
   const { data: parts = [] } = useParts();
 
@@ -415,7 +415,7 @@ export function LineItemsTable({
       {/* Add Line Item dialog */}
       {editable && (
         <Dialog open={addOpen} onOpenChange={(o) => { if (!o) setAddOpen(false); }}>
-          <DialogContent className="sm:max-w-sm">
+          <DialogContent className="sm:max-w-lg">
             <DialogHeader>
               <DialogTitle>Add Line Item</DialogTitle>
               <DialogDescription>Select a product or part and enter quantity and unit cost.</DialogDescription>

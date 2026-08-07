@@ -132,7 +132,10 @@ export function ReceiveGoodsDialog({
         if (l.lineItemId !== lineItemId) return l;
         const alreadyReceived = alreadyReceivedMap.get(l.lineItemId) ?? 0;
         const remaining = Math.max(0, l.quantityOrdered - alreadyReceived);
-        return { ...l, quantityReceived: Math.max(0, Math.min(qty, remaining)) };
+        // Maintenance parts are discrete units (can't receive 3.5 oil filters);
+        // materials (mulch, chemicals, etc.) are legitimately fractional.
+        const normalized = l.isMaintPart ? Math.round(qty) : Math.round(qty * 100) / 100;
+        return { ...l, quantityReceived: Math.max(0, Math.min(normalized, remaining)) };
       })
     );
   }
@@ -362,7 +365,7 @@ export function ReceiveGoodsDialog({
                             <Input
                               type="number"
                               min={0}
-                              step={0.01}
+                              step={line.isMaintPart ? 1 : 0.01}
                               max={Math.max(0, line.quantityOrdered - (alreadyReceivedMap.get(line.lineItemId) ?? 0))}
                               className="h-8 w-20 text-right text-xs"
                               value={line.quantityReceived}

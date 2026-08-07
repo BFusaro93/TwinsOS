@@ -42,6 +42,7 @@ export function NewReceivingDialog({ open, onOpenChange, initialData, onReceiptE
       quantityOrdered: number;
       quantityReceived: number;
       unitCost: number;
+      isMaintPart: boolean;
     }>
   >([]);
   const updateGoodsReceipt = useUpdateGoodsReceipt();
@@ -57,6 +58,7 @@ export function NewReceivingDialog({ open, onOpenChange, initialData, onReceiptE
           quantityOrdered: l.quantityOrdered,
           quantityReceived: l.quantityReceived,
           unitCost: l.unitCost,
+          isMaintPart: l.isMaintPart,
         }))
       );
     }
@@ -64,11 +66,13 @@ export function NewReceivingDialog({ open, onOpenChange, initialData, onReceiptE
 
   function handleQtyChange(id: string, qty: number) {
     setLines((prev) =>
-      prev.map((l) =>
-        l.id === id
-          ? { ...l, quantityReceived: Math.max(0, Math.min(qty, l.quantityOrdered)) }
-          : l
-      )
+      prev.map((l) => {
+        if (l.id !== id) return l;
+        // Maintenance parts are discrete units (can't receive 3.5 oil filters);
+        // materials (mulch, chemicals, etc.) are legitimately fractional.
+        const normalized = l.isMaintPart ? Math.round(qty) : Math.round(qty * 100) / 100;
+        return { ...l, quantityReceived: Math.max(0, Math.min(normalized, l.quantityOrdered)) };
+      })
     );
   }
 
@@ -129,7 +133,7 @@ export function NewReceivingDialog({ open, onOpenChange, initialData, onReceiptE
                         <Input
                           type="number"
                           min={0}
-                          step={0.01}
+                          step={line.isMaintPart ? 1 : 0.01}
                           max={line.quantityOrdered}
                           className="h-8 w-20 text-right text-xs"
                           value={line.quantityReceived}

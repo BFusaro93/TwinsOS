@@ -209,7 +209,7 @@ export function useUpdateGoodsReceipt() {
               const { error: adjustErr } = await supabase.rpc("adjust_part_quantity", {
                 p_org_id: currentReceipt.org_id,
                 p_part_id: linkedPart.id,
-                p_delta: chg.delta,
+                p_delta: Math.round(chg.delta),
                 p_po_number: (currentReceipt.po_number as string | null) ?? "",
               });
               if (adjustErr) throw adjustErr;
