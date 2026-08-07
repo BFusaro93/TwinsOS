@@ -30,22 +30,24 @@ import { toast } from "sonner";
 import type { PhotoJobStatus } from "@/modules/photo-docs/types/photo.types";
 
 type StatusFilter = PhotoJobStatus | "all";
-type ArchiveFilter = "active" | "pending" | "archived";
+type ArchiveFilter = "current" | "archived";
 type ViewMode = "list" | "table";
 
+// Pending is a job Status (same axis as Active/Complete), not an archive
+// state — it used to live in the View row instead, which forced the Status
+// row to hide itself whenever Pending was selected there and needed a
+// special-cased query/filter path. Folding it in here removes both.
 const STATUS_FILTERS: { label: string; value: StatusFilter }[] = [
   { label: "All",      value: "all" },
   { label: "Active",   value: "active" },
   { label: "Complete", value: "complete" },
+  { label: "Pending",  value: "pending" },
 ];
 
-// Display labels for the archive-bucket filter (separate axis from job
-// Status above — "active" here means "not archived, not pending", not the
-// job's own status). Labeled "Current" instead of "Active" so the two rows
-// don't both show a pill reading "Active" with different meanings.
+// Display labels for the archive-bucket filter — a separate, orthogonal axis
+// (is this job archived or not) from job Status above.
 const ARCHIVE_FILTER_LABELS: Record<ArchiveFilter, string> = {
-  active: "Current",
-  pending: "Pending",
+  current: "Current",
   archived: "Archived",
 };
 
@@ -411,18 +413,14 @@ export default function PhotoJobsPage() {
   const router = useRouter();
   const { canUpload, canDelete } = usePhotoAccess();
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
-  const [archiveFilter, setArchiveFilter] = useState<ArchiveFilter>("active");
+  const [archiveFilter, setArchiveFilter] = useState<ArchiveFilter>("current");
   const [search, setSearch] = useState("");
   const [showNew, setShowNew] = useState(false);
   const [viewMode, setViewMode] = useStickyState<ViewMode>("photos-jobs-view", "table");
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
 
   const includeArchived = archiveFilter === "archived";
-  // When viewing the pending bucket, force statusFilter to "pending" regardless of pill selection.
-  // Otherwise pass the user's own Status pill selection — the query will still return pending jobs
-  // from the server in that case, so we filter them out client-side below.
-  const hookStatusFilter = archiveFilter === "pending" ? "pending" : statusFilter;
-  const { data: jobs = [], isLoading } = usePhotoJobs(hookStatusFilter, includeArchived);
+  const { data: jobs = [], isLoading } = usePhotoJobs(statusFilter, includeArchived);
   const { mutate: createJob, isPending: creating } = useCreatePhotoJob();
   const { mutate: deleteJob } = useDeletePhotoJob();
   const { data: projects = [] } = useProjects();
@@ -430,10 +428,9 @@ export default function PhotoJobsPage() {
   const [form, setForm] = useState(EMPTY_FORM);
 
   const filtered = useMemo(() => jobs.filter((j) => {
+    // "Archived" includes both archived and non-archived jobs from the server
+    // (includeArchived only widens the query) — narrow to archived-only here.
     if (archiveFilter === "archived" && !j.isArchived) return false;
-    if (archiveFilter === "pending" && (j.isArchived || j.status !== "pending")) return false;
-    // Active bucket: non-archived AND not pending (pending jobs live in their own bucket)
-    if (archiveFilter === "active" && (j.isArchived || j.status === "pending")) return false;
     if (!search) return true;
     const q = search.toLowerCase();
     const addr = formatAddress(j.address, j.city, j.state, j.zip).toLowerCase();
@@ -613,24 +610,22 @@ export default function PhotoJobsPage() {
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <Input placeholder="Search jobs…" value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
           </div>
-          {archiveFilter !== "pending" && (
-            <div className="flex flex-col gap-1">
-              <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Status</span>
-              <div className="flex flex-wrap gap-1.5">
-                {STATUS_FILTERS.map((f) => (
-                  <button key={f.value} onClick={() => setStatusFilter(f.value)}
-                    className={cn("rounded-full px-3 py-1 text-xs font-medium transition-colors", statusFilter === f.value ? "bg-brand-500 text-white" : "border border-slate-200 bg-white text-slate-600 hover:border-slate-300")}>
-                    {f.label}
-                  </button>
-                ))}
-              </div>
+          <div className="flex flex-col gap-1">
+            <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Status</span>
+            <div className="flex flex-wrap gap-1.5">
+              {STATUS_FILTERS.map((f) => (
+                <button key={f.value} onClick={() => setStatusFilter(f.value)}
+                  className={cn("rounded-full px-3 py-1 text-xs font-medium transition-colors", statusFilter === f.value ? "bg-brand-500 text-white" : "border border-slate-200 bg-white text-slate-600 hover:border-slate-300")}>
+                  {f.label}
+                </button>
+              ))}
             </div>
-          )}
+          </div>
           <div className="h-8 w-px bg-slate-200" />
           <div className="flex flex-col gap-1">
             <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">View</span>
             <div className="flex gap-1.5">
-              {(["active", "pending", "archived"] as ArchiveFilter[]).map((f) => (
+              {(["current", "archived"] as ArchiveFilter[]).map((f) => (
                 <button key={f} onClick={() => setArchiveFilter(f)}
                   className={cn("rounded-full px-3 py-1 text-xs font-medium transition-colors",
                     archiveFilter === f ? "bg-[#2a2a2a] text-white" : "border border-slate-200 bg-white text-slate-600 hover:border-slate-300")}>
