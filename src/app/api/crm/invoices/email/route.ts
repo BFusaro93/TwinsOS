@@ -120,7 +120,7 @@ export async function POST(req: NextRequest) {
 </html>`;
 
   const resend = new Resend(process.env.RESEND_API_KEY?.trim());
-  const { error: sendErr } = await resend.emails.send({
+  const { data: sendData, error: sendErr } = await resend.emails.send({
     from: FROM,
     to: clientEmail,
     subject: `Invoice #${inv.invoice_number} from ${orgName} — ${formatCents(inv.total_cents)} due ${fmtDate(inv.due_date)}`,
@@ -152,6 +152,7 @@ export async function POST(req: NextRequest) {
       sent_to: clientEmail,
       ref_id: invoiceId,
       ref_table: "crm_invoices",
+      resend_message_id: sendData?.id ?? null,
       occurred_at: new Date().toISOString(),
       created_by: user.id,
     });

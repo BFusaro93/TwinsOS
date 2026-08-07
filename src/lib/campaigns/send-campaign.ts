@@ -114,7 +114,7 @@ export async function sendCampaignEmails(
     const html = resolvedBody + buildCanSpamFooter(orgName, orgAddress, unsubscribeUrl);
 
     try {
-      await sendClientEmail({ to: recipient.primary_email, subject: resolvedSubject, html });
+      const sent = await sendClientEmail({ to: recipient.primary_email, subject: resolvedSubject, html });
       delivered += 1;
       await db.from("client_activity").insert({
         org_id: orgId,
@@ -125,6 +125,7 @@ export async function sendCampaignEmails(
         sent_to: recipient.primary_email,
         ref_id: campaign.id,
         ref_table: "crm_campaigns",
+        resend_message_id: sent.resendId,
         occurred_at: new Date().toISOString(),
         created_by: createdBy,
       });

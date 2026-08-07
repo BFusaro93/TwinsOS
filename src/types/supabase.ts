@@ -753,6 +753,7 @@ export type Database = {
           org_id: string
           ref_id: string | null
           ref_table: string | null
+          resend_message_id: string | null
           sent_to: string | null
           status: string | null
           subject: string | null
@@ -770,6 +771,7 @@ export type Database = {
           org_id?: string
           ref_id?: string | null
           ref_table?: string | null
+          resend_message_id?: string | null
           sent_to?: string | null
           status?: string | null
           subject?: string | null
@@ -787,6 +789,7 @@ export type Database = {
           org_id?: string
           ref_id?: string | null
           ref_table?: string | null
+          resend_message_id?: string | null
           sent_to?: string | null
           status?: string | null
           subject?: string | null

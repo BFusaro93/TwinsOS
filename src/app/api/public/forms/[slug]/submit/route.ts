@@ -26,9 +26,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
   }
 
   const body = await req.json();
-  const { data: formData = {}, referer } = body;
+  const { data: formData = {}, referer, ruleTags } = body;
 
-  const result = await submitFormResponse(db, form, formData, referer);
+  const result = await submitFormResponse(db, form, formData, referer, ruleTags);
   if (!result.ok) return NextResponse.json({ error: result.error }, { status: 500 });
 
   return NextResponse.json({ ok: true, result: result.result });

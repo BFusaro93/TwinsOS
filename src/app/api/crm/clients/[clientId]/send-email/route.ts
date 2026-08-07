@@ -75,6 +75,7 @@ export async function POST(
     subject: resolvedSubject,
     body: `Sent to ${client.primary_email}`,
     sent_to: client.primary_email,
+    resend_message_id: resendId,
     occurred_at: new Date().toISOString(),
     created_by: user.id,
   });

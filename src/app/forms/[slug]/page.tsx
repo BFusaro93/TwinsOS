@@ -18,6 +18,15 @@ interface FormField {
   config: Record<string, unknown>;
 }
 
+interface FormRule {
+  id: string;
+  sourceFieldId: string | null;
+  operator: string;
+  operand: string | null;
+  action: string;
+  actionValue: string | null;
+}
+
 interface PublicForm {
   id: string;
   name: string;
@@ -25,6 +34,7 @@ interface PublicForm {
   description: string | null;
   settings: Record<string, unknown>;
   fields: FormField[];
+  rules: FormRule[];
 }
 
 interface AttachmentValue {
@@ -47,6 +57,21 @@ const DISPLAY_TYPES = ["header", "paragraph", "divider", "hidden"];
 const MAX_ATTACHMENT_BYTES = 15 * 1024 * 1024;
 const ALLOWED_ATTACHMENT_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif", "application/pdf"]);
 
+function ruleConditionMatches(value: string, operator: string, operand: string | null): boolean {
+  const v = value ?? "";
+  const op = operand ?? "";
+  switch (operator) {
+    case "equals":       return v === op;
+    case "not_equals":   return v !== op;
+    case "greater_than": return parseFloat(v) > parseFloat(op);
+    case "less_than":    return parseFloat(v) < parseFloat(op);
+    case "contains":     return v.toLowerCase().includes(op.toLowerCase());
+    case "is_empty":     return v.trim() === "";
+    case "is_not_empty": return v.trim() !== "";
+    default:              return false;
+  }
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function PublicFormPage({ params }: { params: Promise<{ slug: string }> }) {
@@ -61,6 +86,7 @@ export default function PublicFormPage({ params }: { params: Promise<{ slug: str
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitError, setSubmitError] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
+  const [hiddenFieldIds, setHiddenFieldIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     fetch(`/api/public/forms/${slug}`)
@@ -78,8 +104,57 @@ export default function PublicFormPage({ params }: { params: Promise<{ slug: str
     : 1;
 
   const pageFields = form
-    ? form.fields.filter((f) => (f.pageNumber ?? 1) === currentPage)
+    ? form.fields.filter((f) => (f.pageNumber ?? 1) === currentPage && !hiddenFieldIds.has(f.id))
     : [];
+
+  /** "page"-type rule evaluation — this project's Rules tab only ever creates
+   *  page rules (fired at Next/Back/Submit, not on every keystroke). Recomputes
+   *  from the full current answer set every time, so going back and changing
+   *  an earlier answer is reflected correctly rather than accumulating stale state. */
+  function evaluateRules(defaultNextPage: number) {
+    let targetPage = defaultNextPage;
+    const hidden = new Set<string>();
+    const tagsToAdd = new Set<string>();
+    const tagsToRemove = new Set<string>();
+
+    for (const rule of form?.rules ?? []) {
+      if (!rule.sourceFieldId) continue;
+      const raw = (multiValues[rule.sourceFieldId] ?? []).length > 0
+        ? multiValues[rule.sourceFieldId].join(",")
+        : values[rule.sourceFieldId] ?? "";
+      if (!ruleConditionMatches(raw, rule.operator, rule.operand)) continue;
+
+      switch (rule.action) {
+        case "jump_to_page": {
+          const p = parseInt(rule.actionValue ?? "", 10);
+          if (p) targetPage = p;
+          break;
+        }
+        case "hide_field":
+          if (rule.actionValue) hidden.add(rule.actionValue);
+          break;
+        case "show_field":
+          if (rule.actionValue) hidden.delete(rule.actionValue);
+          break;
+        case "add_tag":
+          if (rule.actionValue) tagsToAdd.add(rule.actionValue);
+          break;
+        case "remove_tag":
+          if (rule.actionValue) tagsToRemove.add(rule.actionValue);
+          break;
+      }
+    }
+    return { targetPage: Math.min(Math.max(targetPage, 1), totalPages), hidden, tagsToAdd, tagsToRemove };
+  }
+
+  // Compute the initial hidden-field set as soon as the form loads, so page 1
+  // already reflects any rule whose condition is met by default field values
+  // (e.g. a checkbox defaulting to checked).
+  useEffect(() => {
+    if (!form) return;
+    setHiddenFieldIds(evaluateRules(currentPage).hidden);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form]);
 
   function setValue(id: string, value: string) {
     setValues((prev) => ({ ...prev, [id]: value }));
@@ -158,12 +233,16 @@ export default function PublicFormPage({ params }: { params: Promise<{ slug: str
   function handleNext() {
     if (!validatePage(pageFields)) return;
     setErrors({});
-    setCurrentPage((p) => Math.min(p + 1, totalPages));
+    const { targetPage, hidden } = evaluateRules(Math.min(currentPage + 1, totalPages));
+    setHiddenFieldIds(hidden);
+    setCurrentPage(targetPage);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   function handleBack() {
     setErrors({});
+    const { hidden } = evaluateRules(Math.max(currentPage - 1, 1));
+    setHiddenFieldIds(hidden);
     setCurrentPage((p) => Math.max(p - 1, 1));
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -175,8 +254,14 @@ export default function PublicFormPage({ params }: { params: Promise<{ slug: str
     setState("submitting");
     setSubmitError("");
 
+    // Re-evaluate against the final answers so a rule change made without
+    // another Next/Back click (e.g. editing the last page right before
+    // submitting) is still reflected in what gets excluded/tagged.
+    const { hidden: finalHidden, tagsToAdd, tagsToRemove } = evaluateRules(currentPage);
+
     const data: Record<string, unknown> = {};
     for (const field of form.fields) {
+      if (finalHidden.has(field.id)) continue; // rule-hidden fields don't submit a value
       if (field.fieldType === "hidden") {
         data[field.label || field.id] = (field.config?.defaultValue as string | undefined) ?? "";
         continue;
@@ -203,6 +288,7 @@ export default function PublicFormPage({ params }: { params: Promise<{ slug: str
         body: JSON.stringify({
           data,
           referer: typeof window !== "undefined" ? window.location.href : undefined,
+          ruleTags: { add: [...tagsToAdd], remove: [...tagsToRemove] },
         }),
       });
 

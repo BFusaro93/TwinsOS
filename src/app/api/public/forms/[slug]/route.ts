@@ -25,6 +25,13 @@ export async function GET(_req: Request, { params }: { params: Promise<{ slug: s
     .is("deleted_at", null)
     .order("sort_order", { ascending: true });
 
+  const { data: rules } = await db
+    .from("crm_form_rules")
+    .select("id, source_field_id, operator, operand, action, action_value, sort_order")
+    .eq("form_id", form.id)
+    .is("deleted_at", null)
+    .order("sort_order", { ascending: true });
+
   return NextResponse.json({
     id: form.id,
     name: form.name,
@@ -43,6 +50,15 @@ export async function GET(_req: Request, { params }: { params: Promise<{ slug: s
       pageNumber: f.page_number ?? 1,
       options: f.options,
       config: f.config ?? {},
+    })),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    rules: (rules ?? []).map((r: any) => ({
+      id: r.id,
+      sourceFieldId: r.source_field_id,
+      operator: r.operator,
+      operand: r.operand,
+      action: r.action,
+      actionValue: r.action_value,
     })),
   });
 }

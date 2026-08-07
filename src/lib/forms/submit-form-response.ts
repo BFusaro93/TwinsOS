@@ -22,7 +22,11 @@ export async function submitFormResponse(
   db: any,
   form: FormRow,
   formData: Record<string, unknown>,
-  referer: string | undefined
+  referer: string | undefined,
+  /** Tags computed by evaluating the form's Rules (add_tag/remove_tag actions)
+   *  against the submitted answers — merged with the form's own static
+   *  settings.tagsOnSubmit configuration below. */
+  ruleTags?: { add?: string[]; remove?: string[] }
 ): Promise<{ ok: true; result: string } | { ok: false; error: string }> {
   const { data: formFields } = await db
     .from("crm_form_fields")
@@ -246,18 +250,22 @@ export async function submitFormResponse(
   }
 
   // ── Apply Tags on Submit ──────────────────────────────────────────────────────
+  // Union the form's static settings.tagsOnSubmit config with whatever the
+  // Rules engine computed from this specific submission's answers.
   const tagsOnSubmit = form.settings?.tagsOnSubmit as { add?: string[]; remove?: string[] } | undefined;
-  if (relatedClientId && tagsOnSubmit) {
-    if (tagsOnSubmit.add?.length) {
-      const tagInserts = tagsOnSubmit.add.map((tag: string) => ({
+  const tagsToAdd = [...new Set([...(tagsOnSubmit?.add ?? []), ...(ruleTags?.add ?? [])])];
+  const tagsToRemove = [...new Set([...(tagsOnSubmit?.remove ?? []), ...(ruleTags?.remove ?? [])])];
+  if (relatedClientId && (tagsToAdd.length > 0 || tagsToRemove.length > 0)) {
+    if (tagsToAdd.length > 0) {
+      const tagInserts = tagsToAdd.map((tag: string) => ({
         org_id: form.org_id,
         client_id: relatedClientId,
         tag,
       }));
       await db.from("client_tags").upsert(tagInserts, { onConflict: "org_id,client_id,tag", ignoreDuplicates: true });
     }
-    if (tagsOnSubmit.remove?.length) {
-      for (const tag of tagsOnSubmit.remove) {
+    if (tagsToRemove.length > 0) {
+      for (const tag of tagsToRemove) {
         await db.from("client_tags").delete()
           .eq("org_id", form.org_id)
           .eq("client_id", relatedClientId)

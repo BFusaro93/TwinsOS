@@ -39,6 +39,16 @@ const STATUS_FILTERS: { label: string; value: StatusFilter }[] = [
   { label: "Complete", value: "complete" },
 ];
 
+// Display labels for the archive-bucket filter (separate axis from job
+// Status above — "active" here means "not archived, not pending", not the
+// job's own status). Labeled "Current" instead of "Active" so the two rows
+// don't both show a pill reading "Active" with different meanings.
+const ARCHIVE_FILTER_LABELS: Record<ArchiveFilter, string> = {
+  active: "Current",
+  pending: "Pending",
+  archived: "Archived",
+};
+
 const STATUS_COLORS: Record<PhotoJobStatus, string> = {
   active:   "bg-brand-100 text-brand-700",
   complete: "bg-slate-100 text-slate-600",
@@ -409,9 +419,9 @@ export default function PhotoJobsPage() {
 
   const includeArchived = archiveFilter === "archived";
   // When viewing the pending bucket, force statusFilter to "pending" regardless of pill selection.
-  // When viewing active, pass the user's pill selection but the query will still return pending jobs
-  // from the server — we filter them out client-side below.
-  const hookStatusFilter = archiveFilter === "pending" ? "pending" : (archiveFilter === "archived" ? statusFilter : statusFilter);
+  // Otherwise pass the user's own Status pill selection — the query will still return pending jobs
+  // from the server in that case, so we filter them out client-side below.
+  const hookStatusFilter = archiveFilter === "pending" ? "pending" : statusFilter;
   const { data: jobs = [], isLoading } = usePhotoJobs(hookStatusFilter, includeArchived);
   const { mutate: createJob, isPending: creating } = useCreatePhotoJob();
   const { mutate: deleteJob } = useDeletePhotoJob();
@@ -598,30 +608,36 @@ export default function PhotoJobsPage() {
         )}
 
         {/* Search + Filters — inline single row */}
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-end gap-3">
           <div className="relative w-full max-w-xs">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <Input placeholder="Search jobs…" value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
           </div>
           {archiveFilter !== "pending" && (
-            <div className="flex flex-wrap gap-1.5">
-              {STATUS_FILTERS.map((f) => (
-                <button key={f.value} onClick={() => setStatusFilter(f.value)}
-                  className={cn("rounded-full px-3 py-1 text-xs font-medium transition-colors", statusFilter === f.value ? "bg-brand-500 text-white" : "border border-slate-200 bg-white text-slate-600 hover:border-slate-300")}>
-                  {f.label}
+            <div className="flex flex-col gap-1">
+              <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Status</span>
+              <div className="flex flex-wrap gap-1.5">
+                {STATUS_FILTERS.map((f) => (
+                  <button key={f.value} onClick={() => setStatusFilter(f.value)}
+                    className={cn("rounded-full px-3 py-1 text-xs font-medium transition-colors", statusFilter === f.value ? "bg-brand-500 text-white" : "border border-slate-200 bg-white text-slate-600 hover:border-slate-300")}>
+                    {f.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          <div className="h-8 w-px bg-slate-200" />
+          <div className="flex flex-col gap-1">
+            <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">View</span>
+            <div className="flex gap-1.5">
+              {(["active", "pending", "archived"] as ArchiveFilter[]).map((f) => (
+                <button key={f} onClick={() => setArchiveFilter(f)}
+                  className={cn("rounded-full px-3 py-1 text-xs font-medium transition-colors",
+                    archiveFilter === f ? "bg-[#2a2a2a] text-white" : "border border-slate-200 bg-white text-slate-600 hover:border-slate-300")}>
+                  {ARCHIVE_FILTER_LABELS[f]}
                 </button>
               ))}
             </div>
-          )}
-          <div className="h-4 w-px bg-slate-200" />
-          <div className="flex gap-1.5">
-            {(["active", "pending", "archived"] as ArchiveFilter[]).map((f) => (
-              <button key={f} onClick={() => setArchiveFilter(f)}
-                className={cn("rounded-full px-3 py-1 text-xs font-medium capitalize transition-colors",
-                  archiveFilter === f ? "bg-[#2a2a2a] text-white" : "border border-slate-200 bg-white text-slate-600 hover:border-slate-300")}>
-                {f}
-              </button>
-            ))}
           </div>
         </div>
 
