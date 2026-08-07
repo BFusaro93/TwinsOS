@@ -1,6 +1,11 @@
-# PO + CMMS + CRM/FSM SaaS Platform
+# Twins OS: Equipt + Landscapt
 
-A combined **Purchase Order (PO)**, **Computerized Maintenance Management System (CMMS)**, and **Field Service Management / CRM** platform delivered as a multi-tenant SaaS. The primary industry context is **landscaping and snow operations** (modeled after Service Autopilot and Aspire Software), though the platform is designed to be industry-agnostic. Users include operations/maintenance teams, procurement/finance teams, field crews, and managers with approval authority.
+A multi-tenant SaaS platform made up of two branded products sharing one codebase:
+
+- **Equipt** — Computerized Maintenance Management System (CMMS), including the Purchase Order (PO) / procurement backbone
+- **Landscapt** — Field Service Management / CRM
+
+PO is not a standalone third module — it lives inside Equipt and is shared with Landscapt (same pattern as the shared Vendors table). The primary industry context is **landscaping and snow operations** (modeled after Service Autopilot and Aspire Software), though the platform is designed to be industry-agnostic. Users include operations/maintenance teams, procurement/finance teams, field crews, and managers with approval authority.
 
 ---
 
@@ -24,20 +29,20 @@ src/
   app/                    # Next.js App Router pages and layouts
     (auth)/               # Login, signup, password reset
     (dashboard)/          # Authenticated app shell
-      po/                 # Purchase Order module
+      po/                 # Purchase Order module (part of Equipt, shared with Landscapt)
         requisitions/     # Purchase Requisitions
         orders/           # Purchase Orders
-        vendors/          # Vendor management (shared with CMMS)
+        vendors/          # Vendor management (shared with Equipt CMMS)
         products/         # Stocked & project materials catalog
         projects/         # Landscaping jobs / project cost tracking
         receiving/        # Goods receipts
-      cmms/               # CMMS module
+      cmms/               # Equipt (CMMS) module
         assets/           # Asset registry
         work-orders/      # Work Orders
         pm-schedules/     # Preventive Maintenance schedules
         parts/            # Parts inventory (linked to assets and PO)
         vendors/          # Vendor management (shared with PO)
-      crm/                # CRM / FSM module
+      crm/                # Landscapt (CRM / FSM) module
         clients/          # Client accounts (residential & commercial)
         estimates/        # Estimates with budget-based job costing engine (Sprint 3)
         scheduling/       # Dispatch board, waiting list, routes (Sprint 2)
@@ -48,7 +53,7 @@ src/
     ui/                   # shadcn/ui primitives (DO NOT modify)
     shared/               # Shared business components (StatusBadge, ApprovalFlow, etc.)
     po/                   # PO-specific components
-    cmms/                 # CMMS-specific components
+    cmms/                 # Equipt (CMMS)-specific components
   lib/
     supabase/             # Supabase client (browser + server)
     hooks/                # Shared React hooks
@@ -57,18 +62,20 @@ src/
   stores/                 # Zustand stores
 ```
 
-### Three Core Modules — Keep Them Decoupled
+### Two Products, Keep Them Decoupled
 
-**Purchase Order (PO) Module** — handles the full procurement lifecycle:
+**Equipt** is the CMMS product and owns Purchase Orders/procurement as part of its scope — PO is not a third standalone module, it's Equipt's procurement backbone, shared with Landscapt the same way Vendors are shared.
+
+**Equipt — Purchase Order (PO)** — handles the full procurement lifecycle:
 - Purchase Requisitions → PO creation → Approval workflows → Vendor management → Receiving → Invoice matching
 - **Products section:** catalog of purchasable materials, split into three categories: `maintenance_part` (for CMMS), `stocked_material` (landscape supplies kept on hand), and `project_material` (job-specific materials). Every PO line item references a Products catalog entry.
 - **Projects/Jobs section:** landscaping jobs that PO line items and materials can be assigned to for per-job cost tracking and reporting.
 
-**CMMS Module** — handles asset and maintenance lifecycle:
+**Equipt — CMMS** — handles asset and maintenance lifecycle:
 - Asset registry → Preventive Maintenance (PM) schedules → Work Orders → Parts inventory → Labor tracking → Maintenance history
 - **Parts section:** spare parts and consumables inventory. Each Part can be assigned to one or more Assets (the parts that asset typically requires). Parts are replenished via PO → Goods Receipt → Parts inventory flow.
 
-**CRM / FSM Module** — handles the full customer and field service lifecycle:
+**Landscapt** — CRM / FSM, handles the full customer and field service lifecycle:
 - Clients (residential & commercial, with parent/child hierarchy) → Properties (with zone measurements/takeoffs) → Contacts → Unified activity timeline
 - Estimates (with Aspire-style budget engine: production rates, labor burden, overhead markup, margin sliders) → Jobs → Dispatch board → Invoices → Contracts
 - Job types: `recurring`, `one_time`, `waiting_list`, `package`, `snow`, `project`
@@ -82,16 +89,16 @@ src/
 
 **Existing "client" references in photos/damage-cases/projects:** The current codebase uses informal client name strings (not FK references) in photo jobs, damage cases, and projects. These will eventually be linked to `clients.id` but that migration is deferred to a later sprint. Do not add the FK until the CRM client table is fully established.
 
-**Integration points** between modules (the only sanctioned ones):
-1. A Work Order can spawn a Purchase Requisition when parts are needed
-2. PO line items (category `maintenance_part`) can be received into CMMS Parts inventory
-3. **Vendors are shared** — the `vendors` table is module-agnostic. A vendor may supply both landscape materials (PO) and maintenance parts/services (CMMS). Vendor UI is surfaced in both modules but writes to the same underlying table.
+**Integration points** between Equipt and Landscapt (the only sanctioned ones):
+1. A Work Order (Equipt/CMMS) can spawn a Purchase Requisition (Equipt/PO) when parts are needed
+2. PO line items (category `maintenance_part`) can be received into Equipt/CMMS Parts inventory
+3. **Vendors are shared** — the `vendors` table is product-agnostic. A vendor may supply both landscape materials (PO) and maintenance parts/services (CMMS). Vendor UI is surfaced in both PO and CMMS but writes to the same underlying table.
 4. A PO line item of category `project_material` can be assigned a `project_id` from the Projects/Jobs section
-5. A CRM Job can spawn a Purchase Requisition when materials are needed (same pattern as Work Order → Requisition)
-6. CRM Invoices link to PO Purchase Orders for job cost reconciliation
-7. **Vendors are also shared with CRM** — CRM service vendors (subcontractors, chemical suppliers) are the same `vendors` table
+5. A Landscapt Job can spawn a Purchase Requisition (Equipt/PO) when materials are needed (same pattern as Work Order → Requisition)
+6. Landscapt Invoices link to Equipt PO Purchase Orders for job cost reconciliation
+7. **Vendors are also shared with Landscapt** — Landscapt service vendors (subcontractors, chemical suppliers) are the same `vendors` table
 
-Do not create cross-module dependencies beyond these four points. Keep all other module logic in its own directory.
+Do not create cross-product dependencies beyond these points. Keep all other logic in its own directory.
 
 ---
 

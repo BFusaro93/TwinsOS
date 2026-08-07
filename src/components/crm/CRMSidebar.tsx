@@ -172,7 +172,7 @@ export function CRMSidebar() {
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={logoDataUrl} alt={orgName} className="h-7 w-7 shrink-0 rounded-md object-contain" />
               {!sidebarCollapsed && (
-                <span className="truncate text-lg font-bold text-brand-400">CRM</span>
+                <span className="truncate text-lg font-bold text-brand-400">Landscapt</span>
               )}
             </>
           ) : (
@@ -181,7 +181,7 @@ export function CRMSidebar() {
                 <Leaf className="h-4 w-4 text-white" />
               </div>
               {!sidebarCollapsed && (
-                <span className="truncate text-lg font-bold text-brand-400">CRM</span>
+                <span className="truncate text-lg font-bold text-brand-400">Landscapt</span>
               )}
             </>
           )}
