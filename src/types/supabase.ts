@@ -744,12 +744,16 @@ export type Database = {
           activity_type: string
           amount_cents: number | null
           body: string | null
+          bounced_at: string | null
+          clicked_at: string | null
           client_id: string
           created_at: string
           created_by: string | null
           delivered_at: string | null
+          failed_at: string | null
           id: string
           occurred_at: string
+          opened_at: string | null
           org_id: string
           ref_id: string | null
           ref_table: string | null
@@ -762,12 +766,16 @@ export type Database = {
           activity_type: string
           amount_cents?: number | null
           body?: string | null
+          bounced_at?: string | null
+          clicked_at?: string | null
           client_id: string
           created_at?: string
           created_by?: string | null
           delivered_at?: string | null
+          failed_at?: string | null
           id?: string
           occurred_at?: string
+          opened_at?: string | null
           org_id?: string
           ref_id?: string | null
           ref_table?: string | null
@@ -780,12 +788,16 @@ export type Database = {
           activity_type?: string
           amount_cents?: number | null
           body?: string | null
+          bounced_at?: string | null
+          clicked_at?: string | null
           client_id?: string
           created_at?: string
           created_by?: string | null
           delivered_at?: string | null
+          failed_at?: string | null
           id?: string
           occurred_at?: string
+          opened_at?: string | null
           org_id?: string
           ref_id?: string | null
           ref_table?: string | null

@@ -34,6 +34,10 @@ interface EmailActivity {
   subject: string | null;
   sentTo: string | null;
   deliveredAt: string | null;
+  openedAt: string | null;
+  clickedAt: string | null;
+  bouncedAt: string | null;
+  failedAt: string | null;
   occurredAt: string;
   createdByName: string | null;
   refTable: string | null;
@@ -56,6 +60,10 @@ function useEmailActivity() {
           subject,
           sent_to,
           delivered_at,
+          opened_at,
+          clicked_at,
+          bounced_at,
+          failed_at,
           occurred_at,
           ref_table,
           ref_id,
@@ -73,6 +81,10 @@ function useEmailActivity() {
         subject: row.subject,
         sentTo: row.sent_to,
         deliveredAt: row.delivered_at,
+        openedAt: row.opened_at,
+        clickedAt: row.clicked_at,
+        bouncedAt: row.bounced_at,
+        failedAt: row.failed_at,
         occurredAt: row.occurred_at,
         createdByName: row.profiles?.name ?? null,
         refTable: row.ref_table ?? null,
@@ -128,6 +140,9 @@ export function EmailActivityList() {
 
   const total = emails.length;
   const deliveredCount = emails.filter((e: EmailActivity) => e.deliveredAt !== null).length;
+  const openedCount = emails.filter((e: EmailActivity) => e.openedAt !== null).length;
+  const bouncedCount = emails.filter((e: EmailActivity) => e.bouncedAt !== null).length;
+  const failedCount = emails.filter((e: EmailActivity) => e.failedAt !== null).length;
 
   const counts: Record<QuickFilter, number> = useMemo(() => ({
     all:           total,
@@ -250,10 +265,13 @@ export function EmailActivityList() {
         {[
           { label: "Requests",  value: total.toLocaleString(),   color: "text-slate-900" },
           { label: "Delivered", value: fmtPct(deliveredCount, total), color: "text-green-600", sub: deliveredCount.toLocaleString() },
-          { label: "Opened",    value: "—",                      color: "text-sky-600" },
-          { label: "Bounced",   value: "—",                      color: "text-orange-500" },
+          { label: "Opened",    value: fmtPct(openedCount, total),    color: "text-sky-600",    sub: openedCount.toLocaleString() },
+          { label: "Bounced",   value: fmtPct(bouncedCount, total),   color: "text-orange-500", sub: bouncedCount.toLocaleString() },
+          // Resend has no "complained" (spam-report) event — confirmed against
+          // the dashboard's own webhook event picker — so there's no data
+          // source for a Spam stat. Left as an honest "—" rather than faked.
           { label: "Spam",      value: "—",                      color: "text-red-500" },
-          { label: "Rejected",  value: "—",                      color: "text-red-600" },
+          { label: "Failed",    value: fmtPct(failedCount, total),    color: "text-red-600",   sub: failedCount.toLocaleString() },
         ].map((s) => (
           <div key={s.label} className="rounded-lg border bg-white p-4 shadow-sm text-center">
             <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">{s.label}</p>
