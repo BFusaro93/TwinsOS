@@ -337,6 +337,19 @@ export function useUpdateEstimateStage() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const patch: Record<string, unknown> = { stage };
       if (reason !== undefined) patch.reason = reason;
+
+      // Probability defaults to whatever the target stage is configured for
+      // in Settings — keeps the estimate's probability in sync with its
+      // stage instead of drifting from whatever value was last typed in.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: stageRow } = await (supabase as any)
+        .from("crm_estimate_stages")
+        .select("probability_bps")
+        .eq("stage_key", stage)
+        .is("deleted_at", null)
+        .maybeSingle();
+      if (stageRow) patch.probability_bps = stageRow.probability_bps;
+
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any)
         .from("estimates")

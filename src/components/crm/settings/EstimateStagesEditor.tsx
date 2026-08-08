@@ -86,7 +86,7 @@ function StageRow({ stage }: { stage: EstimateStage }) {
   }
 
   return (
-    <div className="flex items-center gap-3 py-3">
+    <div className="flex items-center gap-4 py-3">
       <div className="flex-1 min-w-0">
         {editingName ? (
           <Input
@@ -143,16 +143,20 @@ function StageRow({ stage }: { stage: EstimateStage }) {
         )}
       </div>
 
-      <Badge variant="outline" className="font-mono text-xs shrink-0">
-        {stage.stageKey}
-      </Badge>
+      <div className="w-20 shrink-0">
+        <Badge variant="outline" className="font-mono text-xs">
+          {stage.stageKey}
+        </Badge>
+      </div>
 
-      <Checkbox
-        checked={stage.active}
-        onCheckedChange={(v) => void handleActiveToggle(!!v)}
-        disabled={saving}
-        title="Active"
-      />
+      <div className="flex w-16 shrink-0 justify-start">
+        <Checkbox
+          checked={stage.active}
+          onCheckedChange={(v) => void handleActiveToggle(!!v)}
+          disabled={saving}
+          title="Active"
+        />
+      </div>
 
       {stage.isSystem ? (
         <div className="w-7" title="System stages cannot be deleted">
@@ -269,7 +273,7 @@ export function EstimateStagesEditor() {
         <span className="flex-1 text-xs font-medium text-slate-500 uppercase tracking-wide">Name</span>
         <span className="w-24 text-xs font-medium text-slate-500 uppercase tracking-wide">Probability</span>
         <span className="w-20 text-xs font-medium text-slate-500 uppercase tracking-wide">Key</span>
-        <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">Active</span>
+        <span className="w-16 text-xs font-medium text-slate-500 uppercase tracking-wide">Active</span>
         <div className="w-7" />
       </div>
       <div className="divide-y">
