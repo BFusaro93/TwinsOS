@@ -3852,6 +3852,7 @@ export type Database = {
           men: number | null
           name: string | null
           org_id: string
+          product_id: string | null
           qty: number
           rate_cents: number
           service_date: string | null
@@ -3874,6 +3875,7 @@ export type Database = {
           men?: number | null
           name?: string | null
           org_id?: string
+          product_id?: string | null
           qty?: number
           rate_cents?: number
           service_date?: string | null
@@ -3896,6 +3898,7 @@ export type Database = {
           men?: number | null
           name?: string | null
           org_id?: string
+          product_id?: string | null
           qty?: number
           rate_cents?: number
           service_date?: string | null
@@ -3931,6 +3934,20 @@ export type Database = {
             columns: ["org_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_invoice_line_items_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "product_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_invoice_line_items_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_products"
             referencedColumns: ["id"]
           },
           {
@@ -4313,12 +4330,15 @@ export type Database = {
           created_by: string | null
           deleted_at: string | null
           id: string
+          inventory_adjusted_qty: number | null
+          invoice_line_item_id: string | null
           job_id: string
           notes: string | null
           org_id: string
           product_id: string | null
           product_name: string
           qty: number
+          status: string
           unit_cost_cents: number | null
           unit_price_cents: number
           updated_at: string
@@ -4328,12 +4348,15 @@ export type Database = {
           created_by?: string | null
           deleted_at?: string | null
           id?: string
+          inventory_adjusted_qty?: number | null
+          invoice_line_item_id?: string | null
           job_id: string
           notes?: string | null
           org_id?: string
           product_id?: string | null
           product_name: string
           qty?: number
+          status?: string
           unit_cost_cents?: number | null
           unit_price_cents?: number
           updated_at?: string
@@ -4343,17 +4366,34 @@ export type Database = {
           created_by?: string | null
           deleted_at?: string | null
           id?: string
+          inventory_adjusted_qty?: number | null
+          invoice_line_item_id?: string | null
           job_id?: string
           notes?: string | null
           org_id?: string
           product_id?: string | null
           product_name?: string
           qty?: number
+          status?: string
           unit_cost_cents?: number | null
           unit_price_cents?: number
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "crm_job_products_invoice_line_item_id_fkey"
+            columns: ["invoice_line_item_id"]
+            isOneToOne: false
+            referencedRelation: "crm_invoice_line_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_job_products_invoice_line_item_id_fkey"
+            columns: ["invoice_line_item_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_invoice_line_items"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "crm_job_products_job_id_fkey"
             columns: ["job_id"]
@@ -11370,6 +11410,15 @@ export type Database = {
             }
             Returns: undefined
           }
+      adjust_product_item_quantity: {
+        Args: {
+          p_delta: number
+          p_org_id: string
+          p_product_id: string
+          p_reason: string
+        }
+        Returns: undefined
+      }
       assign_invoice_number: { Args: { p_invoice_id: string }; Returns: number }
       crm_recompute_job_actual_hours: {
         Args: { p_job_id: string }
@@ -11416,6 +11465,10 @@ export type Database = {
           p_po_number: string
           p_quantity: number
         }
+        Returns: undefined
+      }
+      set_job_product_status: {
+        Args: { p_job_product_id: string; p_new_status: string }
         Returns: undefined
       }
       sync_client_balance: { Args: { p_client_id: string }; Returns: undefined }

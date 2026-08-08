@@ -2,6 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
+import { deleteInvoiceLineItemAndRecalc } from "./use-invoices";
 import type { CRMJob, CRMService, CRMCrew, CRMServiceRateMatrixRow, BudgetMethod } from "@/types/crm-jobs";
 
 // ── mappers ───────────────────────────────────────────────────────────────────
@@ -1920,6 +1921,8 @@ export function useDeleteJobService() {
 
 // ── CRM Job Products ──────────────────────────────────────────────────────────
 
+export type JobProductStatus = "pending" | "invoiced" | "used_no_invoice" | "not_used";
+
 export interface CRMJobProduct {
   id: string;
   jobId: string;
@@ -1929,6 +1932,8 @@ export interface CRMJobProduct {
   unitPriceCents: number;
   unitCostCents: number | null;
   notes: string | null;
+  status: JobProductStatus;
+  invoiceLineItemId: string | null;
 }
 
 function mapJobProduct(row: Record<string, unknown>): CRMJobProduct {
@@ -1941,6 +1946,8 @@ function mapJobProduct(row: Record<string, unknown>): CRMJobProduct {
     unitPriceCents: Number(row.unit_price_cents),
     unitCostCents: row.unit_cost_cents != null ? Number(row.unit_cost_cents) : null,
     notes: row.notes as string | null,
+    status: (row.status as JobProductStatus) ?? "pending",
+    invoiceLineItemId: row.invoice_line_item_id as string | null,
   };
 }
 
@@ -2034,6 +2041,59 @@ export function useDeleteCRMJobProduct() {
     onSuccess: (_, v) => {
       qc.invalidateQueries({ queryKey: ['crm-job-products', v.jobId] });
       qc.invalidateQueries({ queryKey: ['crm-job-detail'] });
+    },
+  });
+}
+
+// Flips a job product's usage/invoicing status via set_job_product_status(),
+// which applies (or reverses) the matching inventory delta server-side.
+// Leaving the 'invoiced' state also deletes the real invoice line item and
+// recalculates the invoice's totals — entering 'invoiced' is only ever done
+// by useCreateInvoiceFromJob/useAddInvoiceFromEstimate-style invoice creation,
+// which inserts the line item directly, never through this hook.
+export function useSetJobProductStatus() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (p: {
+      id: string;
+      jobId: string;
+      newStatus: JobProductStatus;
+      invoiceLineItemId?: string | null;
+    }) => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase.rpc as any)("set_job_product_status", {
+        p_job_product_id: p.id,
+        p_new_status: p.newStatus,
+      });
+      if (error) throw error;
+
+      let invoiceId: string | undefined;
+      if (p.newStatus !== "invoiced" && p.invoiceLineItemId) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: li } = await (supabase as any)
+          .from('crm_invoice_line_items')
+          .select('invoice_id')
+          .eq('id', p.invoiceLineItemId)
+          .single();
+        if (li?.invoice_id) {
+          invoiceId = li.invoice_id;
+          await deleteInvoiceLineItemAndRecalc(supabase, p.invoiceLineItemId, li.invoice_id);
+        }
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (supabase as any)
+          .from('crm_job_products')
+          .update({ invoice_line_item_id: null })
+          .eq('id', p.id);
+      }
+      return { invoiceId };
+    },
+    onSuccess: (data, v) => {
+      qc.invalidateQueries({ queryKey: ['crm-job-products', v.jobId] });
+      qc.invalidateQueries({ queryKey: ['crm-job-detail'] });
+      if (data?.invoiceId) qc.invalidateQueries({ queryKey: ["crm-invoices", "detail", data.invoiceId] });
+      qc.invalidateQueries({ queryKey: ["crm-invoices"] });
+      qc.invalidateQueries({ queryKey: ["products"] });
     },
   });
 }

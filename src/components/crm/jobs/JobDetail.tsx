@@ -23,6 +23,9 @@ import {
   useAddCRMJobProduct,
   useUpdateCRMJobProduct,
   useDeleteCRMJobProduct,
+  useSetJobProductStatus,
+  type JobProductStatus,
+  type CRMJobProduct,
 } from "@/lib/hooks/use-crm-jobs";
 import { useProducts } from "@/lib/hooks/use-products";
 import { useCreateInvoiceFromJob } from "@/lib/hooks/use-invoices";
@@ -40,6 +43,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { cn, formatCurrency } from "@/lib/utils";
 import { computeActualHours } from "@/lib/utils/visit-hours";
 import { stripHtml } from "@/lib/utils/strip-html";
@@ -67,6 +76,7 @@ import {
   ArrowLeft,
   MessageSquareText,
   Send,
+  ChevronDown,
 } from "lucide-react";
 import { ChemicalApplicationPanel } from "@/components/crm/chemical/ChemicalApplicationPanel";
 import { computeJobServiceBudgetedHours } from "@/lib/estimate-calc";
@@ -116,6 +126,77 @@ const VISIT_STATUS_COLOR: Record<string, string> = {
   skipped:     "bg-slate-50 text-slate-500",
 };
 
+const JOB_PRODUCT_STATUS_LABEL: Record<JobProductStatus, string> = {
+  pending:          "Pending",
+  invoiced:         "Invoiced",
+  used_no_invoice:  "Used",
+  not_used:         "Not Used",
+};
+
+const JOB_PRODUCT_STATUS_COLOR: Record<JobProductStatus, string> = {
+  pending:         "bg-slate-100 text-slate-600",
+  invoiced:        "bg-green-100 text-green-700",
+  used_no_invoice: "bg-blue-100 text-blue-700",
+  not_used:        "bg-red-100 text-red-600",
+};
+
+// Actions offered depend on the row's current status — mirrors Service
+// Autopilot's per-line Invoiced/Used/Not-Used control. Entering 'invoiced' is
+// never an action here (only the invoice-generation flow does that); this menu
+// only ever leaves 'invoiced' or reopens/cancels a row.
+function jobProductStatusActions(status: JobProductStatus): { label: string; next: JobProductStatus }[] {
+  switch (status) {
+    case "pending":
+      return [
+        { label: "Used, do not Invoice", next: "used_no_invoice" },
+        { label: "Not Used, Cancel", next: "not_used" },
+      ];
+    case "invoiced":
+      return [
+        { label: "Remove from Invoice", next: "pending" },
+        { label: "Used, do not Invoice", next: "used_no_invoice" },
+        { label: "Not Used, Cancel", next: "not_used" },
+      ];
+    case "used_no_invoice":
+      return [
+        { label: "Not Used, Cancel", next: "not_used" },
+        { label: "Reopen to Pending", next: "pending" },
+      ];
+    case "not_used":
+      return [
+        { label: "Reopen to Pending", next: "pending" },
+      ];
+  }
+}
+
+function JobProductStatusMenu({ product, onChange }: {
+  product: CRMJobProduct;
+  onChange: (next: JobProductStatus) => void;
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          className={cn(
+            "inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-semibold focus:outline-none",
+            JOB_PRODUCT_STATUS_COLOR[product.status]
+          )}
+        >
+          {JOB_PRODUCT_STATUS_LABEL[product.status]}
+          <ChevronDown className="h-3 w-3" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-44">
+        {jobProductStatusActions(product.status).map((a) => (
+          <DropdownMenuItem key={a.next} onSelect={() => onChange(a.next)}>
+            {a.label}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 export type Tab = "overview" | "services" | "visits" | "notes" | "invoice" | "costing" | "attachments" | "audit";
 
 interface Props {
@@ -144,6 +225,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
   const addJobProduct = useAddCRMJobProduct();
   const updateJobProduct = useUpdateCRMJobProduct();
   const deleteJobProduct = useDeleteCRMJobProduct();
+  const setJobProductStatus = useSetJobProductStatus();
   const { data: productCatalog = [] } = useProducts();
   const deleteVisit = useDeleteVisit();
   const deleteVisitsByDay = useDeleteVisitsByDayOfWeek();
@@ -254,6 +336,26 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
     }
   }
 
+  // Job products that haven't been resolved yet (used/cancelled/already
+  // invoiced) — these are the only ones swept into a newly-generated invoice.
+  // Each becomes a real invoice line item linked back via jobProductId, which
+  // set_job_product_status('invoiced') on the server flips to 'invoiced' and
+  // decrements product_items.quantity_on_hand if that product tracks inventory.
+  function buildPendingProductLineItems(serviceDate: string) {
+    return jobProducts
+      .filter((p) => p.status === "pending")
+      .map((p) => ({
+        name: p.productName,
+        description: p.productName,
+        qty: p.qty,
+        rateCents: p.unitPriceCents,
+        totalCents: p.unitPriceCents * p.qty,
+        serviceDate,
+        productId: p.productId,
+        jobProductId: p.id,
+      }));
+  }
+
   async function handleStatus(status: string) {
     if (!job) return;
     try {
@@ -265,15 +367,21 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
           const today = new Date().toISOString().slice(0, 10);
           const serviceDate = job.scheduledDate ?? today;
           const svcs = job.services ?? [];
-          const subtotal = svcs.reduce((s, sv) => s + (sv.rateCents ?? 0) * (sv.qty ?? 1), 0) || (job.rateCents ?? 0);
+          const productLineItems = buildPendingProductLineItems(serviceDate);
+          const productsSubtotal = productLineItems.reduce((s, li) => s + li.totalCents, 0);
+          const svcLineItems = svcs.length > 0
+            ? svcs.map((s) => ({ name: s.serviceName, description: job.invoiceDescription || stripHtml(s.serviceInvoiceDescription || "") || s.serviceName || "Service", qty: s.qty ?? 1, rateCents: s.rateCents ?? 0, totalCents: (s.rateCents ?? 0) * (s.qty ?? 1), serviceDate }))
+            : productLineItems.length > 0
+              ? []
+              : [{ name: "Service", description: job.invoiceDescription || "Service", qty: 1, rateCents: job.rateCents ?? 0, totalCents: job.rateCents ?? 0, serviceDate }];
+          const subtotal = svcLineItems.reduce((s, li) => s + li.totalCents, 0) + productsSubtotal
+            || (job.rateCents ?? 0);
           await createInvoice.mutateAsync({
             jobId: job.id,
             clientId: job.clientId,
             description: `Service: ${svcs.map((s) => s.serviceName).join(", ") || "Job"}`,
             invoiceDate: today,
-            lineItems: svcs.length > 0
-              ? svcs.map((s) => ({ name: s.serviceName, description: job.invoiceDescription || stripHtml(s.serviceInvoiceDescription || "") || s.serviceName || "Service", qty: s.qty ?? 1, rateCents: s.rateCents ?? 0, totalCents: (s.rateCents ?? 0) * (s.qty ?? 1), serviceDate }))
-              : [{ name: "Service", description: job.invoiceDescription || "Service", qty: 1, rateCents: job.rateCents ?? 0, totalCents: job.rateCents ?? 0, serviceDate }],
+            lineItems: [...svcLineItems, ...productLineItems],
             subtotalCents: subtotal,
             taxRateBps: 0,
             taxCents: 0,
@@ -402,21 +510,19 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
       const today = new Date().toISOString().slice(0, 10);
       const serviceDate = job.scheduledDate ?? today;
       const services = job.services ?? [];
-      const subtotal = services.reduce((s, sv) => s + (sv.rateCents ?? 0) * (sv.qty ?? 1), 0) || (job.rateCents ?? 0);
-      const invoice = await createInvoice.mutateAsync({
-        jobId: job.id,
-        clientId: job.clientId,
-        description: `Service: ${services.map((s) => s.serviceName).join(", ") || "Job"}`,
-        invoiceDate: today,
-        lineItems: services.length > 0
-          ? services.map((s) => ({
-              name: s.serviceName,
-              description: job.invoiceDescription || stripHtml(s.serviceInvoiceDescription || "") || s.serviceName || "Service",
-              qty: s.qty ?? 1,
-              rateCents: s.rateCents ?? 0,
-              totalCents: (s.rateCents ?? 0) * (s.qty ?? 1),
-              serviceDate,
-            }))
+      const productLineItems = buildPendingProductLineItems(serviceDate);
+      const productsSubtotal = productLineItems.reduce((s, li) => s + li.totalCents, 0);
+      const svcLineItems = services.length > 0
+        ? services.map((s) => ({
+            name: s.serviceName,
+            description: job.invoiceDescription || stripHtml(s.serviceInvoiceDescription || "") || s.serviceName || "Service",
+            qty: s.qty ?? 1,
+            rateCents: s.rateCents ?? 0,
+            totalCents: (s.rateCents ?? 0) * (s.qty ?? 1),
+            serviceDate,
+          }))
+        : productLineItems.length > 0
+          ? []
           : [{
               name: job.clientName ? `Service for ${job.clientName}` : "Service",
               description: job.clientName ? `Service for ${job.clientName}` : "Service",
@@ -424,7 +530,15 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
               rateCents: job.rateCents ?? 0,
               totalCents: job.rateCents ?? 0,
               serviceDate,
-            }],
+            }];
+      const subtotal = svcLineItems.reduce((s, li) => s + li.totalCents, 0) + productsSubtotal
+        || (job.rateCents ?? 0);
+      const invoice = await createInvoice.mutateAsync({
+        jobId: job.id,
+        clientId: job.clientId,
+        description: `Service: ${services.map((s) => s.serviceName).join(", ") || "Job"}`,
+        invoiceDate: today,
+        lineItems: [...svcLineItems, ...productLineItems],
         subtotalCents: subtotal,
         taxRateBps: 0,
         taxCents: 0,
@@ -1313,13 +1427,14 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                       <th className="px-4 py-3 text-right">QTY</th>
                       <th className="px-4 py-3 text-right">Unit Price</th>
                       <th className="px-4 py-3 text-right">Total</th>
+                      <th className="px-4 py-3 text-right">Status</th>
                       <th className="px-4 py-3 w-20" />
                     </tr>
                   </thead>
                   <tbody>
                     {jobProducts.length === 0 && !addingProduct && (
                       <tr>
-                        <td colSpan={5} className="px-4 py-6 text-center text-slate-400 text-sm">
+                        <td colSpan={6} className="px-4 py-6 text-center text-slate-400 text-sm">
                           No products on this job yet.
                         </td>
                       </tr>
@@ -1344,6 +1459,11 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                               {editProductPrice && editProductQty
                                 ? formatCurrency(Math.round(parseFloat(editProductPrice) * 100) * (parseFloat(editProductQty) || 1))
                                 : "—"}
+                            </td>
+                            <td className="px-2 py-2 text-right">
+                              <span className={cn("inline-flex rounded px-1.5 py-0.5 text-[10px] font-semibold", JOB_PRODUCT_STATUS_COLOR[p.status])}>
+                                {JOB_PRODUCT_STATUS_LABEL[p.status]}
+                              </span>
                             </td>
                             <td className="px-2 py-2">
                               <div className="flex justify-end gap-1">
@@ -1372,16 +1492,36 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                             <td className="px-4 py-3 text-right tabular-nums">{p.qty}</td>
                             <td className="px-4 py-3 text-right tabular-nums">{formatCurrency(p.unitPriceCents)}</td>
                             <td className="px-4 py-3 text-right tabular-nums font-semibold">{formatCurrency(p.unitPriceCents * p.qty)}</td>
+                            <td className="px-4 py-3 text-right">
+                              <JobProductStatusMenu
+                                product={p}
+                                onChange={(next) => {
+                                  if (!job) return;
+                                  setJobProductStatus.mutate(
+                                    {
+                                      id: p.id,
+                                      jobId: job.id,
+                                      newStatus: next,
+                                      invoiceLineItemId: p.invoiceLineItemId,
+                                    },
+                                    {
+                                      onSuccess: () => toast.success(`Marked ${JOB_PRODUCT_STATUS_LABEL[next]}`),
+                                      onError: () => toast.error("Failed to update product status"),
+                                    }
+                                  );
+                                }}
+                              />
+                            </td>
                             <td className="px-4 py-3">
-                              <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100">
-                                <button onClick={() => {
+                              <div className={cn("flex justify-end gap-1", p.status === "pending" ? "opacity-0 group-hover:opacity-100" : "opacity-0")}>
+                                <button disabled={p.status !== "pending"} onClick={() => {
                                   setEditingProductId(p.id);
                                   setEditProductQty(String(p.qty));
                                   setEditProductPrice(String(p.unitPriceCents / 100));
                                 }} className="rounded p-1 hover:bg-slate-100 text-slate-400 hover:text-slate-700">
                                   <Pencil className="h-3.5 w-3.5" />
                                 </button>
-                                <button onClick={async () => {
+                                <button disabled={p.status !== "pending"} onClick={async () => {
                                   if (!job) return;
                                   try {
                                     await deleteJobProduct.mutateAsync({ id: p.id, jobId: job.id });
@@ -1428,6 +1568,11 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                             ? formatCurrency(Math.round(parseFloat(newProductPrice) * 100) * (parseFloat(newProductQty) || 1))
                             : "—"}
                         </td>
+                        <td className="px-2 py-2 text-right">
+                          <span className={cn("inline-flex rounded px-1.5 py-0.5 text-[10px] font-semibold", JOB_PRODUCT_STATUS_COLOR.pending)}>
+                            {JOB_PRODUCT_STATUS_LABEL.pending}
+                          </span>
+                        </td>
                         <td className="px-2 py-2">
                           <div className="flex justify-end gap-1">
                             <button onClick={async () => {
@@ -1465,6 +1610,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                         <td className="px-4 py-2 text-right font-bold text-slate-800">
                           {formatCurrency(jobProducts.reduce((s, p) => s + p.unitPriceCents * p.qty, 0))}
                         </td>
+                        <td />
                         <td />
                       </tr>
                     </tfoot>

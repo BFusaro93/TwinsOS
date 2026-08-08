@@ -889,64 +889,66 @@ export function useUpsertInvoiceLineItem() {
   });
 }
 
+// Shared by useDeleteInvoiceLineItem and useSetJobProductStatus (removing a
+// job product from an invoice deletes its line item the same way).
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function deleteInvoiceLineItemAndRecalc(supabase: any, id: string, invoiceId: string) {
+  // Delete the line item
+  const { error } = await supabase
+    .from("crm_invoice_line_items")
+    .delete()
+    .eq("id", id);
+  if (error) throw error;
+
+  // Recalculate invoice totals from remaining line items
+  const { data: inv } = await supabase
+    .from("crm_invoices")
+    .select("amount_paid_cents, tax_rate_bps, discount_cents, client_id")
+    .eq("id", invoiceId)
+    .single();
+  const { data: items } = await supabase
+    .from("crm_invoice_line_items")
+    .select("total_cents, discount_cents, is_taxable")
+    .eq("invoice_id", invoiceId);
+
+  // Net of each line's own discount — matches useUpdateInvoiceFinancials'
+  // netLineCents so a delete recomputes the same way an edit would.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const netLineCents = (li: any) => li.total_cents - (li.discount_cents ?? 0);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const subtotalCents = (items ?? []).reduce((s: number, li: any) => s + netLineCents(li), 0);
+  const discountCents = inv?.discount_cents ?? 0;
+  const taxRateBps = inv?.tax_rate_bps ?? 0;
+  const afterDiscount = subtotalCents - discountCents;
+  // Tax only applies to taxable line items
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const taxableBase = (items ?? []).filter((li: any) => li.is_taxable).reduce((s: number, li: any) => s + netLineCents(li), 0);
+  const taxCents = Math.round((taxableBase * taxRateBps) / 10000);
+  const totalCents = afterDiscount + taxCents;
+  const paid = inv?.amount_paid_cents ?? 0;
+  const balanceCents = Math.max(0, totalCents - paid);
+
+  await supabase.from("crm_invoices").update({
+    subtotal_cents: subtotalCents,
+    tax_cents: taxCents,
+    total_cents: totalCents,
+    balance_cents: balanceCents,
+  }).eq("id", invoiceId);
+
+  // Sync client's outstanding balance
+  if (inv?.client_id) {
+    await supabase.rpc("sync_client_balance", { p_client_id: inv.client_id });
+  }
+
+  return { invoiceId, clientId: inv?.client_id as string | undefined };
+}
+
 export function useDeleteInvoiceLineItem() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ id, invoiceId }: { id: string; invoiceId: string }) => {
       const supabase = createClient();
-      // Delete the line item
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error } = await (supabase as any)
-        .from("crm_invoice_line_items")
-        .delete()
-        .eq("id", id);
-      if (error) throw error;
-
-      // Recalculate invoice totals from remaining line items
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: inv } = await (supabase as any)
-        .from("crm_invoices")
-        .select("amount_paid_cents, tax_rate_bps, discount_cents, client_id")
-        .eq("id", invoiceId)
-        .single();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: items } = await (supabase as any)
-        .from("crm_invoice_line_items")
-        .select("total_cents, discount_cents, is_taxable")
-        .eq("invoice_id", invoiceId);
-
-      // Net of each line's own discount — matches useUpdateInvoiceFinancials'
-      // netLineCents so a delete recomputes the same way an edit would.
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const netLineCents = (li: any) => li.total_cents - (li.discount_cents ?? 0);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const subtotalCents = (items ?? []).reduce((s: number, li: any) => s + netLineCents(li), 0);
-      const discountCents = inv?.discount_cents ?? 0;
-      const taxRateBps = inv?.tax_rate_bps ?? 0;
-      const afterDiscount = subtotalCents - discountCents;
-      // Tax only applies to taxable line items
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const taxableBase = (items ?? []).filter((li: any) => li.is_taxable).reduce((s: number, li: any) => s + netLineCents(li), 0);
-      const taxCents = Math.round((taxableBase * taxRateBps) / 10000);
-      const totalCents = afterDiscount + taxCents;
-      const paid = inv?.amount_paid_cents ?? 0;
-      const balanceCents = Math.max(0, totalCents - paid);
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (supabase as any).from("crm_invoices").update({
-        subtotal_cents: subtotalCents,
-        tax_cents: taxCents,
-        total_cents: totalCents,
-        balance_cents: balanceCents,
-      }).eq("id", invoiceId);
-
-      // Sync client's outstanding balance
-      if (inv?.client_id) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await (supabase.rpc as any)("sync_client_balance", { p_client_id: inv.client_id });
-      }
-
-      return { invoiceId, clientId: inv?.client_id };
+      return deleteInvoiceLineItemAndRecalc(supabase, id, invoiceId);
     },
     onSuccess: (_d, vars) => {
       qc.invalidateQueries({ queryKey: ["crm-invoices", "detail", vars.invoiceId] });
@@ -1211,7 +1213,20 @@ export function useCreateInvoiceFromJob() {
       invoiceDate: string;
       dueDate?: string;
       poNumber?: string | null;
-      lineItems: { name?: string; description: string; qty: number; rateCents: number; totalCents: number; serviceDate?: string | null }[];
+      lineItems: {
+        name?: string;
+        description: string;
+        qty: number;
+        rateCents: number;
+        totalCents: number;
+        serviceDate?: string | null;
+        // Present only for line items sourced from a job Product — links the
+        // invoice line back to the catalog product and flips the source
+        // crm_job_products row to 'invoiced' (decrementing inventory if the
+        // product tracks it) once the invoice is created.
+        productId?: string | null;
+        jobProductId?: string | null;
+      }[];
       subtotalCents: number;
       taxRateBps: number;
       taxCents: number;
@@ -1254,17 +1269,44 @@ export function useCreateInvoiceFromJob() {
 
       if (lineItems.length > 0) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await (supabase as any).from("crm_invoice_line_items").insert(
-          lineItems.map((li, i) => ({
-            invoice_id: invoiceId,
-            name: li.name ?? null,
-            description: li.description,
-            qty: li.qty,
-            rate_cents: li.rateCents,
-            total_cents: li.totalCents,
-            service_date: li.serviceDate ?? null,
-            sort_order: i,
-          }))
+        const { data: insertedLineItems, error: liError } = await (supabase as any)
+          .from("crm_invoice_line_items")
+          .insert(
+            lineItems.map((li, i) => ({
+              invoice_id: invoiceId,
+              name: li.name ?? null,
+              description: li.description,
+              qty: li.qty,
+              rate_cents: li.rateCents,
+              total_cents: li.totalCents,
+              service_date: li.serviceDate ?? null,
+              product_id: li.productId ?? null,
+              sort_order: i,
+            }))
+          )
+          .select("id");
+        if (liError) throw liError;
+
+        // Line items sourced from a job Product: link the invoice line back
+        // to the job product row and flip it to 'invoiced' via
+        // set_job_product_status(), which decrements product_items.quantity_on_hand
+        // server-side when that product tracks inventory.
+        const productLinks = lineItems
+          .map((li, i) => ({ li, insertedId: (insertedLineItems as { id: string }[] | null)?.[i]?.id }))
+          .filter((x) => x.li.jobProductId && x.insertedId);
+        await Promise.all(
+          productLinks.map(async ({ li, insertedId }) => {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            await (supabase as any)
+              .from("crm_job_products")
+              .update({ invoice_line_item_id: insertedId })
+              .eq("id", li.jobProductId);
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            await (supabase.rpc as any)("set_job_product_status", {
+              p_job_product_id: li.jobProductId,
+              p_new_status: "invoiced",
+            });
+          })
         );
       }
 
@@ -1293,6 +1335,9 @@ export function useCreateInvoiceFromJob() {
       qc.invalidateQueries({ queryKey: ["crm-invoices"] });
       qc.invalidateQueries({ queryKey: ["crm-jobs"] });
       qc.invalidateQueries({ queryKey: ["clients", vars.clientId, "activity"] });
+      qc.invalidateQueries({ queryKey: ["crm-job-products", vars.jobId] });
+      qc.invalidateQueries({ queryKey: ["crm-job-detail"] });
+      qc.invalidateQueries({ queryKey: ["products"] });
     },
   });
 }
