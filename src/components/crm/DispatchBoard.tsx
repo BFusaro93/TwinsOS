@@ -462,7 +462,7 @@ function JobDetailSheet({
       const masterDescription = visit.invoiceDescription || job?.invoiceDescription || null;
       const lineItems = services.map((s) => ({
         name: s.serviceName,
-        description: masterDescription || s.serviceInvoiceDescription || s.serviceName,
+        description: masterDescription || stripHtml(s.serviceInvoiceDescription || "") || s.serviceName,
         qty: s.qty ?? 1,
         rateCents: s.rateCents ?? 0,
         totalCents: (s.qty ?? 1) * (s.rateCents ?? 0),

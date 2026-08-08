@@ -51,6 +51,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn, formatCurrency } from "@/lib/utils";
+import { stripHtml } from "@/lib/utils/strip-html";
 import { BILLING_TERMS_OPTIONS } from "@/lib/constants";
 import { toast } from "sonner";
 import { AuditTrailTab } from "@/components/shared/AuditTrailTab";
@@ -294,7 +295,7 @@ function EstimateVersionCard({ version }: { version: EstimateVersion }) {
                     <td className="py-1.5 pr-3 text-slate-800">
                       <div>{li.serviceName ?? "—"}</div>
                       {li.estimateDesc && (
-                        <div className="text-[10px] text-slate-400">{li.estimateDesc}</div>
+                        <div className="text-[10px] text-slate-400">{stripHtml(li.estimateDesc)}</div>
                       )}
                     </td>
                     <td className="py-1.5 pr-3 text-right text-slate-600">{li.qty}</td>

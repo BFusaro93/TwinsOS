@@ -940,7 +940,7 @@ export function EstimateLineItemsGrid({ estimateId, items, selectedIds = [], onS
           <Heading2 className="mr-1 h-3.5 w-3.5" /> Add Section
         </Button>
       </div>
-      <div className="overflow-x-auto">
+      <div className="overflow-x-auto pb-3">
         <table className="w-full min-w-[1200px] text-xs">
           <thead className="sticky top-0 text-white" style={{ backgroundColor: orgSettings?.brandColor ?? "#60ab45" }}>
             <tr>

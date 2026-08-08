@@ -272,7 +272,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
             description: `Service: ${svcs.map((s) => s.serviceName).join(", ") || "Job"}`,
             invoiceDate: today,
             lineItems: svcs.length > 0
-              ? svcs.map((s) => ({ name: s.serviceName, description: job.invoiceDescription || s.serviceInvoiceDescription || s.serviceName || "Service", qty: s.qty ?? 1, rateCents: s.rateCents ?? 0, totalCents: (s.rateCents ?? 0) * (s.qty ?? 1), serviceDate }))
+              ? svcs.map((s) => ({ name: s.serviceName, description: job.invoiceDescription || stripHtml(s.serviceInvoiceDescription || "") || s.serviceName || "Service", qty: s.qty ?? 1, rateCents: s.rateCents ?? 0, totalCents: (s.rateCents ?? 0) * (s.qty ?? 1), serviceDate }))
               : [{ name: "Service", description: job.invoiceDescription || "Service", qty: 1, rateCents: job.rateCents ?? 0, totalCents: job.rateCents ?? 0, serviceDate }],
             subtotalCents: subtotal,
             taxRateBps: 0,
@@ -411,7 +411,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
         lineItems: services.length > 0
           ? services.map((s) => ({
               name: s.serviceName,
-              description: job.invoiceDescription || s.serviceInvoiceDescription || s.serviceName || "Service",
+              description: job.invoiceDescription || stripHtml(s.serviceInvoiceDescription || "") || s.serviceName || "Service",
               qty: s.qty ?? 1,
               rateCents: s.rateCents ?? 0,
               totalCents: (s.rateCents ?? 0) * (s.qty ?? 1),

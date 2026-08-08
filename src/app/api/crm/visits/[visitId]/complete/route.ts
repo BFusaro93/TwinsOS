@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { recalcNextPackageVisitDate } from "@/lib/package-visit-recalc";
+import { stripHtml } from "@/lib/utils/strip-html";
 
 // Billing-period boundaries (inclusive, "YYYY-MM-DD") for batching auto-invoices
 // under a client's weekly/monthly invoice_frequency. Computed in UTC to avoid
@@ -189,7 +190,7 @@ export async function POST(
       const visitDate: string | null = (visit as any).scheduled_date ?? null;
       const lineItems = services.length > 0
         ? services.map((s) => {
-            const description = visitInvoiceDescription || j.invoice_description || s.crm_services?.invoice_description || s.service_name;
+            const description = visitInvoiceDescription || j.invoice_description || stripHtml(s.crm_services?.invoice_description || "") || s.service_name;
             return {
               name: s.service_name,
               description,
