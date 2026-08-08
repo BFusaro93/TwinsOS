@@ -80,6 +80,7 @@ import { useCrews, useCrewDailyMembers, useSetCrewDailyMember, useClearCrewDaily
 import { useCRMServices, useCreateVisit } from "@/lib/hooks/use-crm-jobs";
 import { useNearbyWaitingListJobs } from "@/lib/hooks/use-nearby-waiting-list";
 import { groupVisitsIntoStops } from "@/lib/utils/visit-stops";
+import { stripHtml } from "@/lib/utils/strip-html";
 
 // ── status icon ───────────────────────────────────────────────────────────────
 
@@ -236,6 +237,14 @@ function JobDetailSheet({
     : services.length > 0
       ? services.map((s) => s.serviceName).join(", ")
       : "Service Visit";
+  // What invoices will actually show if the visit/job-level override below is left
+  // blank — each relevant service's own invoice description (set in Services
+  // settings), falling back to its plain name.
+  const servicesForDescPreview = linkedService ? [linkedService] : services;
+  const serviceInvoiceDescPreview = servicesForDescPreview
+    .map((s) => stripHtml(s.serviceInvoiceDescription || s.serviceName || ""))
+    .filter(Boolean)
+    .join(", ");
 
   // Service total as fallback when neither visit nor job has an explicit rate
   const serviceTotal = linkedService
@@ -450,9 +459,10 @@ function JobDetailSheet({
   async function handleInvoice() {
     try {
       const serviceDate = visit.scheduledDate ?? new Date().toISOString().slice(0, 10);
+      const masterDescription = visit.invoiceDescription || job?.invoiceDescription || null;
       const lineItems = services.map((s) => ({
         name: s.serviceName,
-        description: s.serviceName,
+        description: masterDescription || s.serviceInvoiceDescription || s.serviceName,
         qty: s.qty ?? 1,
         rateCents: s.rateCents ?? 0,
         totalCents: (s.qty ?? 1) * (s.rateCents ?? 0),
@@ -817,10 +827,15 @@ function JobDetailSheet({
                     Showing job-level description. Edit below to override for this visit only.
                   </p>
                 )}
+                {!invoiceDesc && serviceInvoiceDescPreview && (
+                  <p className="text-[10px] text-slate-400 italic">
+                    Blank — invoices will use each service&apos;s own description: &quot;{serviceInvoiceDescPreview}&quot;
+                  </p>
+                )}
                 <Textarea
                   value={invoiceDesc}
                   onChange={(e) => setInvoiceDesc(e.target.value)}
-                  placeholder="Description that will appear on the invoice…"
+                  placeholder={serviceInvoiceDescPreview || "Description that will appear on the invoice…"}
                   className="h-32 resize-none text-xs"
                 />
                 <p className="text-[10px] text-slate-400">Saved when you click Save below.</p>

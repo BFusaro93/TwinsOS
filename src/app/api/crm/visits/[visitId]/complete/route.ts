@@ -182,13 +182,14 @@ export async function POST(
       const visitInvoiceDescription: string | null = (visit as any).invoice_description ?? null;
 
       // Build line items from services; fall back to a single line from job rate_cents.
-      // Description precedence per line: the service's own invoice description (set in
-      // Services settings) falls back to its plain name.
+      // Description precedence per line: this visit's own override, then the job-level
+      // master override (Job > Invoice Desc tab), then the service's own invoice
+      // description (set in Services settings), then its plain name.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const visitDate: string | null = (visit as any).scheduled_date ?? null;
       const lineItems = services.length > 0
         ? services.map((s) => {
-            const description = visitInvoiceDescription || s.crm_services?.invoice_description || s.service_name;
+            const description = visitInvoiceDescription || j.invoice_description || s.crm_services?.invoice_description || s.service_name;
             return {
               name: s.service_name,
               description,

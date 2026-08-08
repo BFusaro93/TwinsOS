@@ -581,7 +581,7 @@ export function useVisitsForDate(fromDate: string, toDate?: string) {
           *,
           clients(display_name, primary_phone, billing_address, billing_city, billing_state, billing_zip),
           crm_crews(name),
-          crm_jobs(*, crm_crews(name), crm_job_services(*))
+          crm_jobs(*, crm_crews(name), crm_job_services(*, crm_services(invoice_description)))
         `)
         .is('deleted_at', null)
         .order('priority', { ascending: true })
