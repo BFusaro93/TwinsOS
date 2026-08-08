@@ -822,7 +822,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
       </div>
 
       {/* ── body ────────────────────────────────────────────────────── */}
-      <div className="flex min-h-0 flex-1 gap-4 overflow-auto p-6">
+      <div className="flex min-h-0 flex-1 items-start gap-4 overflow-auto p-6">
 
         {/* ── left ── */}
         <div className="flex flex-1 flex-col gap-4 min-w-0 pb-6">
