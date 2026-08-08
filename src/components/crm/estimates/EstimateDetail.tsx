@@ -36,6 +36,7 @@ import { AIDraftDialog } from "./AIDraftDialog";
 import { ConvertToJobDialog } from "./ConvertToJobDialog";
 import { WonLostReasonDialog } from "./WonLostReasonDialog";
 import { RateIncreaseDialog } from "./RateIncreaseDialog";
+import { BulkStatusDialog } from "./BulkStatusDialog";
 import { SendEstimateDialog } from "./SendEstimateDialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
@@ -375,6 +376,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
   const [convertDialogOpen, setConvertDialogOpen] = useState(false);
   const [wonLostDialog, setWonLostDialog] = useState<"accepted" | "lost" | null>(null);
   const [rateIncreaseOpen, setRateIncreaseOpen] = useState(false);
+  const [bulkStatusOpen, setBulkStatusOpen] = useState(false);
   const [sendDialogOpen, setSendDialogOpen] = useState(false);
   const [aiDraftOpen, setAiDraftOpen] = useState(false);
   const [selectedLineItemIds, setSelectedLineItemIds] = useState<string[]>([]);
@@ -498,6 +500,24 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
       setSelectedLineItemIds([]);
     } catch {
       toast.error("Rate increase failed");
+    }
+  }
+
+  async function handleBulkStatus(status: LineItemStatus) {
+    if (!estimate) return;
+    const affected = (estimate.lineItems ?? []).filter(
+      (li) => !li.deletedAt && selectedLineItemIds.includes(li.id)
+    );
+    setBulkStatusOpen(false);
+    try {
+      await Promise.all(
+        affected.map((li) => upsertLineItem({ estimateId: estimate.id, item: { id: li.id, status } }))
+      );
+      await refreshEstimateTotals();
+      toast.success(`Status updated on ${affected.length} line item${affected.length !== 1 ? "s" : ""}`);
+      setSelectedLineItemIds([]);
+    } catch {
+      toast.error("Status update failed");
     }
   }
 
@@ -1202,6 +1222,16 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                     Rate Increase ({selectedLineItemIds.length})
                   </Button>
                 )}
+                {selectedLineItemIds.length > 0 && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 text-xs"
+                    onClick={() => setBulkStatusOpen(true)}
+                  >
+                    Change Status ({selectedLineItemIds.length})
+                  </Button>
+                )}
               </div>
 
               {/* Line item filter tabs */}
@@ -1450,6 +1480,13 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
           handleRateIncrease(amount, isPercent);
         }}
         onCancel={() => setRateIncreaseOpen(false)}
+      />
+
+      <BulkStatusDialog
+        selectedCount={selectedLineItemIds.length}
+        open={bulkStatusOpen}
+        onApply={handleBulkStatus}
+        onCancel={() => setBulkStatusOpen(false)}
       />
 
       <SendEstimateDialog

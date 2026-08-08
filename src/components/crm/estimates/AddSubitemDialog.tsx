@@ -24,6 +24,8 @@ import {
   useUpsertSubitem,
   type LineItemSubitem,
 } from "@/lib/hooks/use-line-item-subitems";
+import { useProducts } from "@/lib/hooks/use-products";
+import { CatalogItemCombobox } from "@/components/shared/CatalogItemCombobox";
 
 interface Props {
   lineItemId: string;
@@ -35,6 +37,7 @@ interface Props {
 interface FormState {
   name: string;
   type: "product" | "subservice";
+  productId: string | null;
   qty: number;
   rateDollars: number;
   costDollars: number;
@@ -49,6 +52,7 @@ function getInitialState(subitem?: LineItemSubitem): FormState {
     return {
       name: subitem.name,
       type: subitem.type,
+      productId: subitem.productId,
       qty: subitem.qty,
       rateDollars: subitem.rateCents / 100,
       costDollars: subitem.costCents / 100,
@@ -61,6 +65,7 @@ function getInitialState(subitem?: LineItemSubitem): FormState {
   return {
     name: "",
     type: "product",
+    productId: null,
     qty: 1,
     rateDollars: 0,
     costDollars: 0,
@@ -74,6 +79,8 @@ function getInitialState(subitem?: LineItemSubitem): FormState {
 export function AddSubitemDialog({ lineItemId, subitem, open, onClose }: Props) {
   const [form, setForm] = useState<FormState>(() => getInitialState(subitem));
   const { mutateAsync: upsert, isPending } = useUpsertSubitem();
+  const { data: allProducts = [] } = useProducts();
+  const products = allProducts.filter((p) => p.category !== "maintenance_part");
 
   // Reset when dialog opens/closes or subitem changes
   useEffect(() => {
@@ -84,6 +91,18 @@ export function AddSubitemDialog({ lineItemId, subitem, open, onClose }: Props) 
 
   function setField<K extends keyof FormState>(key: K, val: FormState[K]) {
     setForm((prev) => ({ ...prev, [key]: val }));
+  }
+
+  function selectProduct(value: string) {
+    const productId = value.startsWith("product:") ? value.slice("product:".length) : null;
+    const product = productId ? products.find((p) => p.id === productId) ?? null : null;
+    setForm((prev) => ({
+      ...prev,
+      productId,
+      name: product ? product.name : prev.name,
+      rateDollars: product ? product.price / 100 : prev.rateDollars,
+      costDollars: product ? product.unitCost / 100 : prev.costDollars,
+    }));
   }
 
   const totalCents = Math.round(form.qty * form.rateDollars * 100);
@@ -99,6 +118,7 @@ export function AddSubitemDialog({ lineItemId, subitem, open, onClose }: Props) 
         item: {
           ...(subitem ? { id: subitem.id } : {}),
           type: form.type,
+          productId: form.productId,
           name: form.name.trim(),
           qty: form.qty,
           rateCents: Math.round(form.rateDollars * 100),
@@ -127,24 +147,15 @@ export function AddSubitemDialog({ lineItemId, subitem, open, onClose }: Props) 
         </DialogHeader>
 
         <div className="space-y-4 py-2">
-          {/* Name */}
-          <div className="space-y-1.5">
-            <Label htmlFor="subitem-name">Name <span className="text-red-500">*</span></Label>
-            <Input
-              id="subitem-name"
-              value={form.name}
-              onChange={(e) => setField("name", e.target.value)}
-              placeholder="e.g. Mulch, Fertilizer, Subcontractor"
-              autoFocus
-            />
-          </div>
-
           {/* Type */}
           <div className="space-y-1.5">
             <Label>Type</Label>
             <Select
               value={form.type}
-              onValueChange={(v) => setField("type", v as "product" | "subservice")}
+              onValueChange={(v) => {
+                setField("type", v as "product" | "subservice");
+                if (v !== "product") setField("productId", null);
+              }}
             >
               <SelectTrigger>
                 <SelectValue />
@@ -154,6 +165,32 @@ export function AddSubitemDialog({ lineItemId, subitem, open, onClose }: Props) 
                 <SelectItem value="subservice">Subservice</SelectItem>
               </SelectContent>
             </Select>
+          </div>
+
+          {/* Product catalog selection — pre-fills Name, Rate (sale price), and Cost (unit cost) */}
+          {form.type === "product" && (
+            <div className="space-y-1.5">
+              <Label>Product</Label>
+              <CatalogItemCombobox
+                products={products}
+                parts={[]}
+                value={form.productId ? `product:${form.productId}` : ""}
+                onValueChange={selectProduct}
+                placeholder="Select product…"
+              />
+            </div>
+          )}
+
+          {/* Name */}
+          <div className="space-y-1.5">
+            <Label htmlFor="subitem-name">Name <span className="text-red-500">*</span></Label>
+            <Input
+              id="subitem-name"
+              value={form.name}
+              onChange={(e) => setField("name", e.target.value)}
+              placeholder="e.g. Mulch, Fertilizer, Subcontractor"
+              autoFocus={form.type !== "product"}
+            />
           </div>
 
           {/* Qty + Rate + Cost in a row */}
@@ -170,7 +207,7 @@ export function AddSubitemDialog({ lineItemId, subitem, open, onClose }: Props) 
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="subitem-rate">Rate ($)</Label>
+              <Label htmlFor="subitem-rate" title="Sale price charged to the client — pre-fills from the product's price when selected, editable">Rate ($)</Label>
               <Input
                 id="subitem-rate"
                 type="number"
@@ -181,7 +218,7 @@ export function AddSubitemDialog({ lineItemId, subitem, open, onClose }: Props) 
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="subitem-cost">Cost ($)</Label>
+              <Label htmlFor="subitem-cost" title="Your cost for this item — pre-fills from the product's unit cost when selected, editable">Cost ($)</Label>
               <Input
                 id="subitem-cost"
                 type="number"

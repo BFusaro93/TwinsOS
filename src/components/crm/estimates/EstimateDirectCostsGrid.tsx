@@ -247,12 +247,12 @@ export function EstimateDirectCostsGrid({
       <table className="w-full min-w-[600px] text-xs">
         <thead className="bg-slate-200">
           <tr className="text-left font-semibold text-slate-600">
-            <th className="px-3 py-2">Direct Costs</th>
-            <th className="px-3 py-2">Type</th>
-            <th className="px-3 py-2">Qty</th>
-            <th className="px-3 py-2">Rate</th>
-            <th className="px-3 py-2 text-right">Total</th>
-            <th className="px-3 py-2 text-right">Overhead</th>
+            <th className="px-3 py-2" title="Non-catalog costs tracked against this job's profitability — labor, subcontractors, equipment rental, materials, or other one-off costs. Not billed to the client as their own line unless you add a matching line item above.">Direct Costs</th>
+            <th className="px-3 py-2" title="Labor, Sub Contract, Service, Product/Material, Asset/Equipment, or Other">Type</th>
+            <th className="px-3 py-2" title="Quantity">Qty</th>
+            <th className="px-3 py-2" title="Cost per unit">Rate</th>
+            <th className="px-3 py-2 text-right" title="Total = Qty × Rate">Total</th>
+            <th className="px-3 py-2 text-right" title="Overhead recovery applied to this cost, based on its type and your org's overhead settings">Overhead</th>
             <th className="px-3 py-2" />
           </tr>
         </thead>
