@@ -250,6 +250,7 @@ function LineItemRow({
   onToggleExpand,
   tiersEnabled,
   discounts,
+  onStatusChange,
 }: {
   item: EstimateLineItem;
   estimateId: string;
@@ -261,6 +262,7 @@ function LineItemRow({
   onToggleExpand: (id: string) => void;
   tiersEnabled?: boolean;
   discounts: CRMDiscount[];
+  onStatusChange?: (status: LineItemStatus) => void;
 }) {
   const [row, setRow] = useState<RowState>(() => item);
   const [dirty, setDirty] = useState(false);
@@ -406,7 +408,11 @@ function LineItemRow({
         <td className="px-2 py-1.5">
           <select
             value={row.status}
-            onChange={(e) => update("status", e.target.value as LineItemStatus)}
+            onChange={(e) => {
+              const next = e.target.value as LineItemStatus;
+              update("status", next);
+              onStatusChange?.(next);
+            }}
             onBlur={save}
             className={cn(
               "rounded px-1.5 py-0.5 text-[10px] font-medium focus:outline-none",
@@ -673,9 +679,10 @@ interface Props {
   selectedIds?: string[];
   onSelectionChange?: (ids: string[]) => void;
   tiersEnabled?: boolean;
+  onItemStatusChange?: (status: LineItemStatus) => void;
 }
 
-export function EstimateLineItemsGrid({ estimateId, items, selectedIds = [], onSelectionChange, tiersEnabled = false }: Props) {
+export function EstimateLineItemsGrid({ estimateId, items, selectedIds = [], onSelectionChange, tiersEnabled = false, onItemStatusChange }: Props) {
   const { data: services } = useCRMServices();
   const { data: orgSettings } = useOrgSettings();
   const breakevenRateCents = getBreakevenRateCents(orgSettings?.customizations);
@@ -1010,6 +1017,7 @@ export function EstimateLineItemsGrid({ estimateId, items, selectedIds = [], onS
                       onToggleExpand={toggleExpand}
                       tiersEnabled={tiersEnabled}
                       discounts={activeDiscounts}
+                      onStatusChange={onItemStatusChange}
                     />
                   )
                 )}

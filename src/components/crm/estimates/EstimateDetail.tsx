@@ -504,6 +504,22 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
     }
   }
 
+  // Manually marking a line item "won" doesn't automatically move the whole
+  // estimate to Accepted — other items on the same estimate may still be
+  // pending a decision. But leaving an estimate sitting in "sent"/"quote"
+  // with won items on it is ambiguous, so nudge staff to make the call
+  // explicitly rather than letting it happen silently.
+  function promptMarkAcceptedIfWon(status: LineItemStatus) {
+    if (!estimate || status !== "won" || estimate.stage === "accepted") return;
+    toast("Mark this estimate as Accepted too?", {
+      action: {
+        label: "Mark Accepted",
+        onClick: () => setWonLostDialog("accepted"),
+      },
+      duration: 8000,
+    });
+  }
+
   async function handleBulkStatus(status: LineItemStatus) {
     if (!estimate) return;
     const affected = (estimate.lineItems ?? []).filter(
@@ -517,6 +533,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
       await refreshEstimateTotals();
       toast.success(`Status updated on ${affected.length} line item${affected.length !== 1 ? "s" : ""}`);
       setSelectedLineItemIds([]);
+      promptMarkAcceptedIfWon(status);
     } catch {
       toast.error("Status update failed");
     }
@@ -1273,6 +1290,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                 selectedIds={selectedLineItemIds}
                 onSelectionChange={setSelectedLineItemIds}
                 tiersEnabled={estimate.tiersEnabled}
+                onItemStatusChange={promptMarkAcceptedIfWon}
               />
 
               {/* Direct costs */}
