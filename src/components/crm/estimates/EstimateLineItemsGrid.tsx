@@ -467,7 +467,7 @@ function LineItemRow({
         </td>
 
         {/* OCC (Visits) */}
-        <td className="w-16 px-2 py-1.5">
+        <td className="w-16 px-2 py-1.5" title="Occurrences — number of visits this line item covers">
           <InlineNum
             value={row.visits}
             onChange={(v) => update("visits", v)}
@@ -477,7 +477,7 @@ function LineItemRow({
         </td>
 
         {/* QTY */}
-        <td className="w-20 px-2 py-1.5">
+        <td className="w-20 px-2 py-1.5" title="Quantity of the unit below, per occurrence">
           <InlineNum
             value={row.qty}
             onChange={(v) => update("qty", v)}
@@ -486,7 +486,7 @@ function LineItemRow({
         </td>
 
         {/* Unit */}
-        <td className="w-20 px-2 py-1.5">
+        <td className="w-20 px-2 py-1.5" title="Unit of measure for Qty (e.g. sq ft, hr, each)">
           <select
             value={row.unitType ?? ""}
             onChange={(e) => update("unitType", e.target.value || null)}
@@ -501,7 +501,7 @@ function LineItemRow({
         </td>
 
         {/* B.Hr — budgeted hours per occurrence. Auto-calc shown in blue if production rate is active */}
-        <td className="w-14 px-2 py-1.5 text-right tabular-nums">
+        <td className="w-14 px-2 py-1.5 text-right tabular-nums" title="Budgeted hours per occurrence — auto-calculated in blue when a production rate is set, otherwise entered manually">
           {isAutoHrs ? (
             <span className="text-blue-600 font-medium">{row.budgetedHours.toFixed(2)}</span>
           ) : (
@@ -514,12 +514,12 @@ function LineItemRow({
         </td>
 
         {/* T.H. — total hours = B.Hr × OCC */}
-        <td className="w-14 px-2 py-1.5 text-right tabular-nums text-slate-500">
+        <td className="w-14 px-2 py-1.5 text-right tabular-nums text-slate-500" title="Total budgeted hours = B.Hr × OCC">
           {row.totalBudgetedHours.toFixed(2)}
         </td>
 
         {/* Calc type */}
-        <td className="w-12 px-2 py-1.5 text-center">
+        <td className="w-12 px-2 py-1.5 text-center" title="Calc type: × = qty×rate×visits, $ = fixed">
           <select
             value={row.calcType}
             onChange={(e) => update("calcType", Number(e.target.value) as 0 | 1)}
@@ -532,7 +532,7 @@ function LineItemRow({
         </td>
 
         {/* Rate (P/P — price per occurrence) */}
-        <td className="w-20 px-2 py-1.5">
+        <td className="w-20 px-2 py-1.5" title="Price per occurrence charged to the client">
           <InlineNum
             value={row.rateCents / 100}
             onChange={(v) => update("rateCents", Math.round(v * 100))}
@@ -541,7 +541,7 @@ function LineItemRow({
         </td>
 
         {/* Total (TP) */}
-        <td className="w-20 px-2 py-1.5 text-right tabular-nums">
+        <td className="w-20 px-2 py-1.5 text-right tabular-nums" title="Total price charged to the client for this line">
           {row.discountCents > 0 ? (
             <div className="flex flex-col items-end leading-tight">
               <span className="text-[10px] text-slate-300 line-through">{centsToDisplay(row.totalCents)}</span>
@@ -556,12 +556,12 @@ function LineItemRow({
         <td className={cn(
           "w-16 px-2 py-1.5 text-right tabular-nums",
           row.marginBps >= 3000 ? "text-green-600" : row.marginBps >= 1000 ? "text-slate-500" : "text-red-500"
-        )}>
+        )} title="Gross margin % = (Total Price − Total Cost) ÷ Total Price">
           {bpsToPercent(row.marginBps)}
         </td>
 
         {/* Cost */}
-        <td className="w-16 px-2 py-1.5">
+        <td className="w-16 px-2 py-1.5" title="Cost per occurrence — pre-fills from budgeted hours × your org's breakeven labor rate until you type a value manually">
           <InlineNum
             value={row.costCents / 100}
             onChange={(v) => update("costCents", Math.round(v * 100))}
@@ -570,12 +570,12 @@ function LineItemRow({
         </td>
 
         {/* T. Cost */}
-        <td className="w-16 px-2 py-1.5 text-right tabular-nums text-slate-500">
+        <td className="w-16 px-2 py-1.5 text-right tabular-nums text-slate-500" title="Total cost = Cost × Qty × Visits">
           {centsToDisplay(row.totalCostCents)}
         </td>
 
         {/* Adj Rate */}
-        <td className="w-20 px-2 py-1.5">
+        <td className="w-20 px-2 py-1.5" title="Manual override of Rate — used in calculations instead of Rate when set">
           <InlineNum
             value={(row.adjRateCents ?? 0) / 100}
             onChange={(v) => update("adjRateCents", v === 0 ? null : Math.round(v * 100))}
