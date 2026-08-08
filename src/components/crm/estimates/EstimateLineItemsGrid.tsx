@@ -939,7 +939,7 @@ export function EstimateLineItemsGrid({ estimateId, items, selectedIds = [], onS
   );
 
   return (
-    <div className="min-h-[420px] rounded-lg border bg-white shadow-sm">
+    <div className="min-h-[250px] rounded-lg border bg-white shadow-sm">
       {/* Add Item toolbar — always visible at the top */}
       <div className="flex items-center gap-2 border-b px-3 py-2 bg-slate-50">
         {addItemButton}
