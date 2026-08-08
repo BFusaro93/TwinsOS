@@ -479,12 +479,12 @@ function LineItemRow({
         </td>
 
         {/* Unit */}
-        <td className="w-16 px-2 py-1.5">
+        <td className="w-20 px-2 py-1.5">
           <select
             value={row.unitType ?? ""}
             onChange={(e) => update("unitType", e.target.value || null)}
             onBlur={save}
-            className="w-full rounded border border-slate-200 bg-white px-1 py-0.5 text-[10px] focus:outline-none"
+            className="w-full rounded border border-slate-200 bg-white px-1 py-0.5 text-xs focus:outline-none"
           >
             <option value="">—</option>
             {UNIT_TYPES.map((u) => (
