@@ -78,6 +78,7 @@ import {
   Send,
   Sparkles,
   MessageSquarePlus,
+  Pencil,
 } from "lucide-react";
 import {
   useAttachments,
@@ -664,20 +665,24 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
 
         <div className="flex items-center gap-1.5">
           <Button variant="outline" size="sm" className="h-8 text-xs"
+            title="Mark this estimate's stage as Accepted — updates the estimate only, not individual line items"
             onClick={() => setWonLostDialog("accepted")}>
             <CheckCircle2 className="mr-1 h-3.5 w-3.5 text-green-500" />Accepted
           </Button>
           <Button variant="outline" size="sm" className="h-8 text-xs"
+            title="Mark this estimate's stage as Closed - Lost — updates the estimate only, not individual line items"
             onClick={() => setWonLostDialog("lost")}>
             <XCircle className="mr-1 h-3.5 w-3.5 text-red-400" />Lost
           </Button>
           <Button variant="outline" size="sm" className="h-8 text-xs"
+            title="Mark this estimate's stage as Quote Ready — updates the estimate only, not individual line items"
             onClick={() => handleStage("quote")}>
             <FileText className="mr-1 h-3.5 w-3.5 text-blue-400" />Quote
           </Button>
           <Button variant="outline" size="sm" className="h-8 text-xs"
+            title="Mark this estimate's stage as Draft — updates the estimate only, not individual line items"
             onClick={() => handleStage("draft")}>
-            Draft
+            <Pencil className="mr-1 h-3.5 w-3.5 text-slate-400" />Draft
           </Button>
           <Button variant="outline" size="sm" className="h-8 text-xs"
             disabled={estimate.approvalStatus === "pending" || submittingForApproval}
@@ -935,7 +940,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                             </SelectContent>
                           </Select>
                         </FieldRow>
-                        <FieldRow label="Stage">
+                        <FieldRow label="Stage" title="Where this estimate is in the pipeline — sets the estimate's overall status, not each line item's individual status">
                           <Select
                             value={effectiveStage}
                             onValueChange={(v) => {
@@ -1244,6 +1249,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                     <button
                       key={t.value}
                       onClick={() => setLineItemFilter(t.value)}
+                      title={t.value === "all" ? "Show all line items" : `Filter to line items whose own status is "${t.label}" — separate from the estimate's overall stage above`}
                       className={cn(
                         "px-3 py-1.5 text-xs font-medium transition-colors border-b-2 -mb-px",
                         lineItemFilter === t.value
@@ -1280,7 +1286,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
           {activeTab === "payment" && (
             <div className="rounded-lg border bg-white p-4 shadow-sm">
               <div className="grid grid-cols-2 gap-x-10 gap-y-3 max-w-2xl">
-                <FieldRow label="Payment Plan">
+                <FieldRow label="Payment Plan" title="How the client will pay: a set number of monthly installments, or custom milestone payments">
                   <Select
                     value={(headerEdits.payment_plan_type as string) ?? estimate.paymentPlanType}
                     onValueChange={(v) => { patchHeader("payment_plan_type", v); saveHeader({ ...headerEdits, payment_plan_type: v }); }}
@@ -1296,7 +1302,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                 </FieldRow>
                 {((headerEdits.payment_plan_type as string) ?? estimate.paymentPlanType) === "installments" && (
                   <>
-                    <FieldRow label="# of Installments">
+                    <FieldRow label="# of Installments" title="How many equal monthly payments to split the total into, after the deposit">
                       <div className="flex flex-col gap-1">
                         <Input
                           type="number"
@@ -1320,7 +1326,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                         })()}
                       </div>
                     </FieldRow>
-                    <FieldRow label="Payment Day">
+                    <FieldRow label="Payment Day" title="Day of the month each installment is due. Leave blank to use the same day as the estimate date">
                       <div className="flex items-center gap-1.5">
                         <Input
                           type="number"
@@ -1343,7 +1349,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                     </FieldRow>
                   </>
                 )}
-                <FieldRow label="Deposit Required">
+                <FieldRow label="Deposit Required" title="Upfront amount due before work begins, subtracted from the total before splitting into installments">
                   <div className="flex flex-col gap-1">
                     <div className="flex items-center gap-1.5">
                       <span className="text-xs text-slate-400">$</span>
@@ -1507,10 +1513,10 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
 
 // ── helper ────────────────────────────────────────────────────────────────────
 
-function FieldRow({ label, children }: { label: string; children: React.ReactNode }) {
+function FieldRow({ label, title, children }: { label: string; title?: string; children: React.ReactNode }) {
   return (
     <div className="flex items-center gap-3">
-      <Label className="w-32 shrink-0 text-slate-500 text-xs">{label}</Label>
+      <Label className="w-32 shrink-0 text-slate-500 text-xs" title={title}>{label}</Label>
       {children}
     </div>
   );
