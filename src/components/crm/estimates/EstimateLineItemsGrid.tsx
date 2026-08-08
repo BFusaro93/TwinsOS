@@ -942,7 +942,7 @@ export function EstimateLineItemsGrid({ estimateId, items, selectedIds = [], onS
       </div>
       <div className="overflow-x-auto pb-3">
         <table className="w-full min-w-[1200px] text-xs">
-          <thead className="sticky top-0 text-white" style={{ backgroundColor: orgSettings?.brandColor ?? "#60ab45" }}>
+          <thead className="text-white" style={{ backgroundColor: orgSettings?.brandColor ?? "#60ab45" }}>
             <tr>
               <th className="w-12 px-1 py-2 text-center">
                 <input

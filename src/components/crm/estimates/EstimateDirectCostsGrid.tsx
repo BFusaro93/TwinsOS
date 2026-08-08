@@ -243,7 +243,7 @@ export function EstimateDirectCostsGrid({
   const totalOverhead = items.reduce((s, i) => s + i.overheadCents, 0);
 
   return (
-    <div className="overflow-x-auto rounded-lg border bg-white shadow-sm">
+    <div className="min-h-[220px] shrink-0 overflow-x-auto rounded-lg border bg-white shadow-sm">
       <table className="w-full min-w-[600px] text-xs">
         <thead className="bg-slate-200">
           <tr className="text-left font-semibold text-slate-600">

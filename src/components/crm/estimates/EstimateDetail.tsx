@@ -1249,7 +1249,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
 
           {activeTab === "payment" && (
             <div className="rounded-lg border bg-white p-4 shadow-sm">
-              <div className="grid grid-cols-2 gap-3 max-w-xl">
+              <div className="grid grid-cols-2 gap-x-10 gap-y-3 max-w-2xl">
                 <FieldRow label="Payment Plan">
                   <Select
                     value={(headerEdits.payment_plan_type as string) ?? estimate.paymentPlanType}
