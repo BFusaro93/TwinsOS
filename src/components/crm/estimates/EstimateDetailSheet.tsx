@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { X, GripVertical, Maximize2 } from "lucide-react";
 import { EstimateDetail } from "./EstimateDetail";
+import { useEstimate } from "@/lib/hooks/use-estimates";
 
 interface Props {
   estimateId: string | null;
@@ -15,6 +16,10 @@ const MIN_WIDTH = 600;
 
 export function EstimateDetailSheet({ estimateId, onOpenChange }: Props) {
   const router = useRouter();
+  // Used only so "Expand to full page" can carry the client along — the client
+  // list page shows this sheet over component state (no URL), so the full
+  // page's Back button otherwise has nowhere to return to.
+  const { data: estimate } = useEstimate(estimateId ?? "");
   // Lazy-initialized on mount (not at module scope) so it reflects the
   // actual viewport instead of whatever window.innerWidth was when this
   // chunk first happened to be evaluated.
@@ -92,7 +97,8 @@ export function EstimateDetailSheet({ estimateId, onOpenChange }: Props) {
             className="mt-2 rounded p-1 text-slate-400 hover:bg-slate-300 hover:text-slate-700 transition-colors cursor-pointer"
             onMouseDown={(e) => e.stopPropagation()}
             onClick={() => {
-              router.push(`/crm/estimates/${estimateId}`);
+              const qs = estimate?.clientId ? `?clientId=${estimate.clientId}` : "";
+              router.push(`/crm/estimates/${estimateId}${qs}`);
               onOpenChange(false);
             }}
             title="Expand to full page"

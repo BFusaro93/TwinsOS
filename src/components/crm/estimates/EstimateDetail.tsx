@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useEstimate,
@@ -331,6 +331,8 @@ interface Props {
 
 export function EstimateDetail({ estimateId, onClose, compact = false }: Props) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const backClientId = searchParams.get("clientId");
   const qc = useQueryClient();
   const { data: estimate, isLoading } = useEstimate(estimateId);
   const { data: templates } = useEstimateTemplates();
@@ -653,7 +655,11 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
       <div className="flex items-center justify-between border-b bg-white px-6 py-3 shadow-sm">
         <div className="flex items-center gap-3">
           <button
-            onClick={() => onClose ? onClose() : router.back()}
+            onClick={() => {
+              if (onClose) { onClose(); return; }
+              if (backClientId) { router.push(`/crm/clients/${backClientId}`); return; }
+              router.back();
+            }}
             className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-800"
           >
             <ArrowLeft className="h-3.5 w-3.5" />
