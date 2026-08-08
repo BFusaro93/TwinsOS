@@ -1739,7 +1739,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                 <Label className="text-xs font-medium text-slate-600 mb-1 block">Invoice Description</Label>
                 <p className="text-xs text-slate-500 mb-2">
                   {defaultPreview
-                    ? `Overrides the description shown on this job's invoices. Leave blank to keep using each service's own description: "${defaultPreview}".`
+                    ? `Overrides the description shown on this job's invoices. Leave blank to use each service's default invoice description: "${defaultPreview}".`
                     : "This master description appears on all invoices generated for this job. Leave blank to use the default service name(s)."}
                 </p>
                 <Textarea
