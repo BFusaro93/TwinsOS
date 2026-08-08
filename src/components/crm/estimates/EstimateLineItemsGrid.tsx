@@ -121,7 +121,14 @@ function SubitemRows({ lineItemId, onAddClick }: { lineItemId: string; onAddClic
           <td className="w-20 px-2 py-1 text-right tabular-nums font-medium text-slate-700">
             {centsToDisplay(s.totalCents)}
           </td>
-          <td colSpan={4} />
+          <td />
+          <td className="w-20 px-2 py-1 text-right tabular-nums text-slate-500" title="Unit cost">
+            ${(s.costCents / 100).toFixed(2)}
+          </td>
+          <td className="w-20 px-2 py-1 text-right tabular-nums text-slate-500" title="Total cost = unit cost × qty">
+            {centsToDisplay(s.costCents * s.qty)}
+          </td>
+          <td />
           <td className="px-2 py-1">
             <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
               <button onClick={() => setEditingSubitem(s)} title="Edit"
@@ -932,7 +939,7 @@ export function EstimateLineItemsGrid({ estimateId, items, selectedIds = [], onS
   );
 
   return (
-    <div className="rounded-lg border bg-white shadow-sm">
+    <div className="min-h-[420px] rounded-lg border bg-white shadow-sm">
       {/* Add Item toolbar — always visible at the top */}
       <div className="flex items-center gap-2 border-b px-3 py-2 bg-slate-50">
         {addItemButton}
