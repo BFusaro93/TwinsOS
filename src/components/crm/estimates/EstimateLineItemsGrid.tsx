@@ -946,15 +946,15 @@ export function EstimateLineItemsGrid({ estimateId, items, selectedIds = [], onS
   );
 
   return (
-    <div className="min-h-[250px] rounded-lg border bg-white shadow-sm">
+    <div className="flex min-h-[250px] flex-col rounded-lg border bg-white shadow-sm">
       {/* Add Item toolbar — always visible at the top */}
-      <div className="flex items-center gap-2 border-b px-3 py-2 bg-slate-50">
+      <div className="flex shrink-0 items-center gap-2 border-b px-3 py-2 bg-slate-50">
         {addItemButton}
         <Button variant="ghost" size="sm" className="h-8 text-xs text-slate-500" onClick={addSection}>
           <Heading2 className="mr-1 h-3.5 w-3.5" /> Add Section
         </Button>
       </div>
-      <div className="overflow-x-auto pb-3">
+      <div className="flex-1 overflow-x-auto pb-3">
         <table className="w-full min-w-[1200px] text-xs">
           <thead className="text-white" style={{ backgroundColor: orgSettings?.brandColor ?? "#60ab45" }}>
             <tr>
