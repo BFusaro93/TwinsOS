@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { X, GripVertical } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { X, GripVertical, Maximize2 } from "lucide-react";
 import { EstimateDetail } from "./EstimateDetail";
 
 interface Props {
@@ -13,6 +14,7 @@ interface Props {
 const MIN_WIDTH = 600;
 
 export function EstimateDetailSheet({ estimateId, onOpenChange }: Props) {
+  const router = useRouter();
   // Lazy-initialized on mount (not at module scope) so it reflects the
   // actual viewport instead of whatever window.innerWidth was when this
   // chunk first happened to be evaluated.
@@ -85,6 +87,17 @@ export function EstimateDetailSheet({ estimateId, onOpenChange }: Props) {
             title="Close"
           >
             <X className="h-4 w-4" />
+          </button>
+          <button
+            className="mt-2 rounded p-1 text-slate-400 hover:bg-slate-300 hover:text-slate-700 transition-colors cursor-pointer"
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={() => {
+              router.push(`/crm/estimates/${estimateId}`);
+              onOpenChange(false);
+            }}
+            title="Expand to full page"
+          >
+            <Maximize2 className="h-4 w-4" />
           </button>
           <div className="flex flex-1 items-center">
             <GripVertical className="h-4 w-4 text-slate-300" />
