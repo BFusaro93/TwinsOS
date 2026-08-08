@@ -1,5 +1,5 @@
 import { JobPhotosPage } from "@/components/photo-docs/JobPhotosPage";
 
-export default function PhotoJobsPage() {
+export default function CRMJobPhotosPage() {
   return <JobPhotosPage />;
 }

@@ -42,6 +42,8 @@ import {
   CalendarClock,
   FileEdit,
   Phone,
+  BookOpen,
+  FileImage,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -82,6 +84,7 @@ const CRM_NAV: NavSection[] = [
       { label: "Jobs",           href: "/crm/scheduling",              icon: Briefcase },
       { label: "Snow Jobs",      href: "/crm/scheduling/snow",         icon: Snowflake },
       { label: "Projects",       href: "/crm/scheduling/projects",     icon: FolderKanban },
+      { label: "Job Photos",     href: "/crm/scheduling/job-photos",   icon: FileImage },
     ],
   },
   {
@@ -116,6 +119,7 @@ const CRM_NAV: NavSection[] = [
     items: [
       { label: "Reports",         href: "/crm/admin/reports",             icon: BarChart3 },
       { label: "Services",  href: "/crm/settings/services",    icon: Layers },
+      { label: "Products",  href: "/crm/settings/products",    icon: BookOpen },
       { label: "Schedules", href: "/crm/settings/schedules",   icon: CalendarClock },
       { label: "Packages",  href: "/crm/settings/packages",    icon: Package },
       { label: "Documents", href: "/crm/settings/documents",   icon: FileEdit },
