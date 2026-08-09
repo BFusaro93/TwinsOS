@@ -1929,6 +1929,10 @@ export interface CRMJobProduct {
   productId: string | null;
   productName: string;
   qty: number;
+  // Qty actually billed to the client, when it differs from qty (the used
+  // qty that drives the inventory decrement) — e.g. 5 bags used on site but
+  // only 4 invoiced. Null means "same as qty" (the common case).
+  invoiceQty: number | null;
   unitPriceCents: number;
   unitCostCents: number | null;
   notes: string | null;
@@ -1943,6 +1947,7 @@ function mapJobProduct(row: Record<string, unknown>): CRMJobProduct {
     productId: row.product_id as string | null,
     productName: row.product_name as string,
     qty: Number(row.qty),
+    invoiceQty: row.invoice_qty != null ? Number(row.invoice_qty) : null,
     unitPriceCents: Number(row.unit_price_cents),
     unitCostCents: row.unit_cost_cents != null ? Number(row.unit_cost_cents) : null,
     notes: row.notes as string | null,
@@ -2007,6 +2012,8 @@ export function useUpdateCRMJobProduct() {
       id: string;
       jobId: string;
       qty?: number;
+      // undefined = leave unchanged; null = reset to "same as qty"
+      invoiceQty?: number | null;
       unitPriceCents?: number;
       notes?: string | null;
     }) => {
@@ -2014,6 +2021,7 @@ export function useUpdateCRMJobProduct() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any).from('crm_job_products').update({
         ...(p.qty !== undefined && { qty: p.qty }),
+        ...(p.invoiceQty !== undefined && { invoice_qty: p.invoiceQty }),
         ...(p.unitPriceCents !== undefined && { unit_price_cents: p.unitPriceCents }),
         ...(p.notes !== undefined && { notes: p.notes }),
       }).eq('id', p.id);

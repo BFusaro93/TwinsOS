@@ -4332,6 +4332,7 @@ export type Database = {
           id: string
           inventory_adjusted_qty: number | null
           invoice_line_item_id: string | null
+          invoice_qty: number | null
           job_id: string
           notes: string | null
           org_id: string
@@ -4350,6 +4351,7 @@ export type Database = {
           id?: string
           inventory_adjusted_qty?: number | null
           invoice_line_item_id?: string | null
+          invoice_qty?: number | null
           job_id: string
           notes?: string | null
           org_id?: string
@@ -4368,6 +4370,7 @@ export type Database = {
           id?: string
           inventory_adjusted_qty?: number | null
           invoice_line_item_id?: string | null
+          invoice_qty?: number | null
           job_id?: string
           notes?: string | null
           org_id?: string
