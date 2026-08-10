@@ -42,6 +42,7 @@ function MetaRow({ label, value }: { label: string; value: React.ReactNode }) {
 export function MeterDetailPanel({ meter }: MeterDetailPanelProps) {
   const [editOpen, setEditOpen] = useState(false);
   const [addReadingOpen, setAddReadingOpen] = useState(false);
+  const [showAllReadings, setShowAllReadings] = useState(false);
   const { data: readings, isLoading } = useMeterReadings(meter.id);
 
   const chartData = (readings ?? []).map((r) => ({
@@ -190,31 +191,46 @@ export function MeterDetailPanel({ meter }: MeterDetailPanelProps) {
             <MetaRow label="Asset / Vehicle" value={meter.assetName} />
           </dl>
 
-          {readings && readings.length > 0 && (
-            <div className="mt-4 overflow-hidden rounded-md border">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="bg-slate-50">
-                    <th className="px-3 py-2 text-left text-xs font-medium text-slate-500">Date</th>
-                    <th className="px-3 py-2 text-right text-xs font-medium text-slate-500">Reading</th>
-                    <th className="px-3 py-2 text-right text-xs font-medium text-slate-500">Source</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {[...readings].reverse().slice(0, 6).map((r) => (
-                    <tr key={r.id} className="border-t border-slate-100">
-                      <td className="px-3 py-2 text-slate-600">{formatDate(r.readingAt)}</td>
-                      <td className="px-3 py-2 text-right font-mono font-medium text-slate-900">
-                        {r.value.toLocaleString()}{" "}
-                        <span className="font-normal text-slate-400">{meter.unit}</span>
-                      </td>
-                      <td className="px-3 py-2 text-right text-slate-400 capitalize">{r.source}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+          {readings && readings.length > 0 && (() => {
+            const reversed = [...readings].reverse();
+            const visible = showAllReadings ? reversed : reversed.slice(0, 6);
+            return (
+              <div className="mt-4 overflow-hidden rounded-md border">
+                <div className={showAllReadings ? "max-h-96 overflow-y-auto" : undefined}>
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="bg-slate-50">
+                        <th className="px-3 py-2 text-left text-xs font-medium text-slate-500">Date</th>
+                        <th className="px-3 py-2 text-right text-xs font-medium text-slate-500">Reading</th>
+                        <th className="px-3 py-2 text-right text-xs font-medium text-slate-500">Source</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {visible.map((r) => (
+                        <tr key={r.id} className="border-t border-slate-100">
+                          <td className="px-3 py-2 text-slate-600">{formatDate(r.readingAt)}</td>
+                          <td className="px-3 py-2 text-right font-mono font-medium text-slate-900">
+                            {r.value.toLocaleString()}{" "}
+                            <span className="font-normal text-slate-400">{meter.unit}</span>
+                          </td>
+                          <td className="px-3 py-2 text-right text-slate-400 capitalize">{r.source}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {reversed.length > 6 && (
+                  <button
+                    type="button"
+                    onClick={() => setShowAllReadings((v) => !v)}
+                    className="w-full border-t border-slate-100 bg-slate-50 py-2 text-xs font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+                  >
+                    {showAllReadings ? "Show less" : `Show all ${reversed.length} readings`}
+                  </button>
+                )}
+              </div>
+            );
+          })()}
         </div>
       </div>
 
