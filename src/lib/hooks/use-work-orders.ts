@@ -14,11 +14,23 @@ export function useWorkOrders() {
     queryKey: ["work-orders"],
     queryFn: async () => {
       const supabase = createClient();
-      const { data, error } = await supabase
-        .from("work_orders").select("*").is("deleted_at", null)
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return (data.map(mapWorkOrder)) as WorkOrder[];
+      const pageSize = 1000;
+      const rows: Parameters<typeof mapWorkOrder>[0][] = [];
+      let from = 0;
+      // PostgREST caps unbounded selects at ~1000 rows — page through
+      // explicitly so orgs with >1000 work orders don't silently lose
+      // their oldest records from every list that uses this hook.
+      while (true) {
+        const { data, error } = await supabase
+          .from("work_orders").select("*").is("deleted_at", null)
+          .order("created_at", { ascending: false })
+          .range(from, from + pageSize - 1);
+        if (error) throw error;
+        rows.push(...data);
+        if (data.length < pageSize) break;
+        from += pageSize;
+      }
+      return (rows.map(mapWorkOrder)) as WorkOrder[];
     },
   });
 }
