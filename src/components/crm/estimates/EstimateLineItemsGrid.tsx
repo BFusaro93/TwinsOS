@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { bpsToPercent, centsToDisplay, computeLineItem, getBreakevenRateCents } from "@/lib/estimate-calc";
 import { useUpsertLineItem, useDeleteLineItem } from "@/lib/hooks/use-estimates";
@@ -266,6 +266,13 @@ function LineItemRow({
 }) {
   const [row, setRow] = useState<RowState>(() => item);
   const [dirty, setDirty] = useState(false);
+  // `row` only seeds from `item` on mount — writes that happen outside this row
+  // (bulk Rate Increase, status changes) update `item` via refetch but never touch
+  // this local draft, so the cell would keep showing pre-update values. Resync
+  // whenever the incoming item changes and we don't have an unsaved local edit.
+  useEffect(() => {
+    if (!dirty) setRow(item);
+  }, [item, dirty]);
   const { mutateAsync: upsert, isPending } = useUpsertLineItem();
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id });
   const dragStyle = { transform: CSS.Transform.toString(transform), transition };

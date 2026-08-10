@@ -122,10 +122,10 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
           budgetMethod:  li.budgetMethod,
         })),
         materials: selectedMaterialItems.map((dc) => ({
-          productItemId: dc.productItemId as string,
-          productName:   dc.description,
-          qty:           materialQty[dc.id] ?? dc.qty,
-          unitCostCents: dc.rateCents,
+          productItemId:  dc.productItemId as string,
+          productName:    dc.description,
+          qty:            materialQty[dc.id] ?? dc.qty,
+          unitPriceCents: dc.rateCents,
         })),
       });
 

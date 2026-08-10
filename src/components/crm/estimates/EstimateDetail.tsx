@@ -454,7 +454,12 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
   async function refreshEstimateTotals() {
     if (!estimate) return;
     await recalcEstimateTotals(estimate.id);
-    qc.invalidateQueries({ queryKey: ["estimates", "detail", estimate.id] });
+    // Concurrent per-item upserts each invalidate the detail query too, which can
+    // kick off overlapping refetches — a slow one of those can resolve after this
+    // point and clobber the cache with pre-recalc data. Cancel any in-flight fetch
+    // for this key and force a fresh, awaited one so the grid reflects this recalc.
+    await qc.cancelQueries({ queryKey: ["estimates", "detail", estimate.id] });
+    await qc.refetchQueries({ queryKey: ["estimates", "detail", estimate.id] });
     qc.invalidateQueries({ queryKey: ["estimates"] });
   }
 

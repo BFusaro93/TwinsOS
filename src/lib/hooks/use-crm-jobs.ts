@@ -1408,7 +1408,7 @@ export function useCreateJobsFromEstimate() {
       crewId: string | null;
       notesToCrew: string | null;
       services: { serviceName: string; serviceId: string | null; qty: number; rateCents: number | null; totalCents: number; budgetedHours?: number; budgetMethod?: string }[];
-      materials?: { productItemId: string; productName: string; qty: number; unitCostCents: number | null }[];
+      materials?: { productItemId: string; productName: string; qty: number; unitPriceCents: number | null }[];
     }) => {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
@@ -1472,8 +1472,8 @@ export function useCreateJobsFromEstimate() {
               product_id: m.productItemId,
               product_name: m.productName,
               qty: m.qty,
-              unit_price_cents: 0,
-              unit_cost_cents: m.unitCostCents,
+              unit_price_cents: m.unitPriceCents ?? 0,
+              unit_cost_cents: null,
             }))
           );
         if (matError) throw matError;
@@ -2039,11 +2039,12 @@ export function useDeleteCRMJobProduct() {
   return useMutation({
     mutationFn: async (p: { id: string; jobId: string }) => {
       const supabase = createClient();
+      // Routes through delete_job_product() so a used/invoiced product's inventory
+      // adjustment is restored before the row is soft-deleted, instead of orphaning it.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error } = await (supabase as any)
-        .from('crm_job_products')
-        .update({ deleted_at: new Date().toISOString() })
-        .eq('id', p.id);
+      const { error } = await (supabase.rpc as any)("delete_job_product", {
+        p_job_product_id: p.id,
+      });
       if (error) throw error;
     },
     onSuccess: (_, v) => {
