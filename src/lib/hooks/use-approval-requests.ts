@@ -232,18 +232,14 @@ export function useSubmitForApproval() {
 
       return { entityType, autoApproved: false };
     },
-    onMutate: async ({ entityId, entityType }) => {
+    onMutate: async () => {
       // Block Realtime invalidations for the entire mutation lifecycle
       suppressRealtime();
 
-      const cfg = ENTITY_CONFIG[entityType];
       await queryClient.cancelQueries({ queryKey: ["requisitions"] });
       await queryClient.cancelQueries({ queryKey: ["purchase-orders"] });
       const previousReqs = queryClient.getQueryData<Requisition[]>(["requisitions"]);
       const previousPOs = queryClient.getQueryData<PurchaseOrder[]>(["purchase-orders"]);
-
-      // Optimistically set the entity to its pending status
-      cfg.patchCache?.(queryClient, entityId, cfg.pendingValue);
 
       return { previousReqs, previousPOs };
     },

@@ -773,9 +773,9 @@ export const DOC_SECTIONS: DocSection[] = [
               "Any approver in the chain can reject. This moves the entity to 'Rejected' status immediately and notifies the original requester by email with the rejection comment.",
           },
           {
-            step: "Self-approval is blocked",
+            step: "Multiple eligible approvers on one step",
             detail:
-              "The system prevents the requester from approving their own submission, even if they have an approver role. A different user must always approve.",
+              "If a step is assigned to a role (e.g., any Manager), every user with that role — including the requester, if they hold the role — is listed as an eligible approver for that step. Whoever decides first resolves the step; the other eligible approvers' entries are marked 'Superseded' and no longer actionable.",
           },
         ],
       },
@@ -884,7 +884,7 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       },
       {
         q: "Why can't I approve my own requisition?",
-        a: "Approval workflows require a different user to approve. If you submitted the requisition, the system routes it to the next approver configured in Settings > Approval Flows.",
+        a: "There's no rule against it — if you hold the role assigned to that approval step, you're listed as an eligible approver even on your own submission. What usually happens is another eligible approver decided first: when a step allows any user with a role (e.g., any Manager) to approve, the first decision resolves the step and the other eligible approvers' entries are marked 'Superseded'.",
       },
       {
         q: "Why does a line item require a product from the catalog?",
