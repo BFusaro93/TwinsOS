@@ -43,7 +43,7 @@ const PROJECT_COLUMNS: ColumnDef[] = [
   { key: "status", label: "Status" },
   { key: "startDate", label: "Start Date" },
   { key: "endDate", label: "End Date" },
-  { key: "totalCost", label: "Total Cost" },
+  { key: "contractPrice", label: "Contract Price" },
 ];
 
 export function ProjectListPage() {
@@ -162,7 +162,7 @@ export function ProjectListPage() {
               {col("status") && <SortableTableHead label="Status" sortKey="status" activeSortKey={sortKey} sortDir={sortDir} onToggle={toggle} />}
               {col("startDate") && <SortableTableHead label="Start Date" sortKey="startDate" activeSortKey={sortKey} sortDir={sortDir} onToggle={toggle} />}
               {col("endDate") && <SortableTableHead label="End Date" sortKey="endDate" activeSortKey={sortKey} sortDir={sortDir} onToggle={toggle} />}
-              {col("totalCost") && <SortableTableHead label="Total Cost" sortKey="totalCost" activeSortKey={sortKey} sortDir={sortDir} onToggle={toggle} className="text-right" />}
+              {col("contractPrice") && <SortableTableHead label="Contract Price" sortKey="contractPrice" activeSortKey={sortKey} sortDir={sortDir} onToggle={toggle} className="text-right" />}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -212,9 +212,9 @@ export function ProjectListPage() {
                 {col("endDate") && (
                   <TableCell className="text-slate-500">{project.endDate ? formatDate(project.endDate) : "TBD"}</TableCell>
                 )}
-                {col("totalCost") && (
+                {col("contractPrice") && (
                   <TableCell className="text-right font-medium">
-                    {formatCurrency(project.totalCost)}
+                    {formatCurrency(project.contractPrice)}
                   </TableCell>
                 )}
               </TableRow>

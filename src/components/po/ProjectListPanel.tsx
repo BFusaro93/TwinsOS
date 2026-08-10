@@ -46,7 +46,7 @@ export function ProjectListPanel({ projects, selectedId, onSelect }: ProjectList
             <div className="flex items-center justify-between gap-2">
               <span className="truncate text-xs text-slate-500">{project.customerName}</span>
               <span className="shrink-0 text-xs font-medium text-slate-600">
-                {formatCurrency(project.totalCost)}
+                {formatCurrency(project.contractPrice)}
               </span>
             </div>
           </button>
