@@ -3,8 +3,8 @@
  * src/components/settings/NotificationsPage.tsx. Absent/null customization
  * means "all admins/managers" (the original, un-configurable behavior); an
  * explicit array (even empty) means "exactly these people". Shared by
- * estimate-client-notify.ts, ticket-notify.ts, and contract-notify.ts so all
- * three broadcast-style notifications behave identically.
+ * estimate-client-notify.ts and ticket-notify.ts so both broadcast-style
+ * notifications behave identically.
  */
 export async function resolveBroadcastRecipients(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

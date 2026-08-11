@@ -215,15 +215,8 @@ export function useUpdateContractStatus() {
         .eq("id", id);
       if (error) throw error;
     },
-    onSuccess: (_data, { id, status }) => {
+    onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["crm-contracts"] });
-      if (status === "signed") {
-        fetch(`/api/crm/contracts/${id}/notify`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ event: "signed" }),
-        }).catch(() => {});
-      }
     },
   });
 }

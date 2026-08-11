@@ -36,7 +36,7 @@ export async function GET(request: Request) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: expiring } = await (supabase as any)
     .from("crm_contracts")
-    .select("id, title, end_date, sales_rep_id, client_id, clients(display_name)")
+    .select("id, org_id, title, end_date, sales_rep_id, client_id, clients(display_name)")
     .gte("end_date", todayStr)
     .lte("end_date", windowEndStr)
     .eq("is_active", true)
@@ -57,17 +57,32 @@ export async function GET(request: Request) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: rep } = await (supabase as any)
       .from("profiles")
-      .select("email, name, notification_prefs")
+      .select("id, email, name, notification_prefs")
       .eq("id", repId)
       .single();
-    if (!rep?.email) continue;
+    if (!rep) continue;
     const prefs = (rep.notification_prefs ?? {}) as Record<string, unknown>;
-    if (prefs.emailContractExpiring === false) continue;
 
     const clientName = (contract.clients as Record<string, unknown> | null)?.display_name as string ?? "the client";
     const endDate = contract.end_date as string;
     const daysLeft = Math.ceil((new Date(endDate).getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
     const contractUrl = `${process.env.NEXT_PUBLIC_SITE_URL ?? "https://twins-os.vercel.app"}/crm/accounting/contracts`;
+
+    if (prefs.inAppContractExpiring !== false) {
+      await (supabase as any)
+        .from("notifications")
+        .insert({
+          org_id: contract.org_id,
+          user_id: rep.id,
+          type: "contract_expiring",
+          title: `Contract Expiring Soon — ${contract.title}`,
+          message: `${contract.title} for ${clientName} ends on ${new Date(endDate).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })} and isn't set to auto-renew.`,
+          entity_id: contract.id,
+          entity_type: "contract",
+        });
+    }
+
+    if (!rep.email || prefs.emailContractExpiring === false) continue;
 
     try {
       await resend.emails.send({

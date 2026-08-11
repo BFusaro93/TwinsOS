@@ -75,8 +75,8 @@ function NotifIcon({ type }: { type: AppNotification["type"] }) {
       return <MessageSquarePlus className={cn(cls, "text-brand-500")} />;
     case "ticket_comment":
       return <MessageSquare className={cn(cls, "text-slate-400")} />;
-    case "contract_signed":
-      return <ThumbsUp className={cn(cls, "text-emerald-500")} />;
+    case "contract_expiring":
+      return <CalendarClock className={cn(cls, "text-amber-500")} />;
     default:
       return <Bell className={cn(cls, "text-slate-400")} />;
   }
@@ -110,7 +110,7 @@ export function NotificationsBell() {
       .from("notifications")
       .select("id, type, title, message, entity_id, entity_type, created_at")
       .eq("user_id", currentUser.id)
-      .in("type", ["wo_comment", "wo_status_changed", "estimate_change_request", "estimate_client_accepted", "estimate_client_rejected", "ticket_created", "ticket_assigned", "ticket_comment", "contract_signed"])
+      .in("type", ["wo_comment", "wo_status_changed", "estimate_change_request", "estimate_client_accepted", "estimate_client_rejected", "ticket_created", "ticket_assigned", "ticket_comment", "contract_expiring"])
       .order("created_at", { ascending: false })
       .limit(50)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -303,7 +303,7 @@ export function NotificationsBell() {
       ticket_created:             { href: () => "/crm/tickets", title: "New Ticket" },
       ticket_assigned:            { href: () => "/crm/tickets", title: "Ticket Assigned" },
       ticket_comment:             { href: () => "/crm/tickets", title: "New Comment" },
-      contract_signed:            { href: () => "/crm/accounting/contracts", title: "Contract Signed" },
+      contract_expiring:          { href: () => "/crm/accounting/contracts", title: "Contract Expiring Soon" },
       wo_status_changed:          { href: () => "/cmms/work-orders", title: "Status Changed" },
     };
     dbNotifications.filter((n) => {

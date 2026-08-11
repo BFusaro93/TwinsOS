@@ -194,11 +194,6 @@ export function NotificationsPage({ hideHeader = false, scope = "cmms" }: Notifi
             title="New Ticket Recipients"
             description="Choose who is even eligible to be notified when a new ticket comes in. The ticket's assignee (if any) is always included in addition to whoever's picked here."
           />
-          <RecipientsPicker
-            customizationsKey="contractSignedRecipientIds"
-            title="Contract Signed Recipients"
-            description="Choose who is even eligible to be notified when a contract's status is set to Signed. The contract's sales rep is always included in addition to whoever's picked here."
-          />
         </>
       )}
 
@@ -304,9 +299,6 @@ export function NotificationsPage({ hideHeader = false, scope = "cmms" }: Notifi
               <div className="pb-1 pt-4">
                 <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Contracts</p>
               </div>
-              <SettingRow label="Contract Signed" description="When a contract you own (or your org) is signed">
-                <Switch checked={prefs.emailContractSigned} onCheckedChange={() => toggle("emailContractSigned")} />
-              </SettingRow>
               <SettingRow label="Contract Expiring Soon" description="When a contract you own is ending within 3 days and isn't set to auto-renew">
                 <Switch checked={prefs.emailContractExpiring} onCheckedChange={() => toggle("emailContractExpiring")} />
               </SettingRow>
@@ -392,8 +384,8 @@ export function NotificationsPage({ hideHeader = false, scope = "cmms" }: Notifi
               <div className="pb-1 pt-4">
                 <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Contracts</p>
               </div>
-              <SettingRow label="Contract Signed" description="When a contract you own (or your org) is signed">
-                <Switch checked={prefs.inAppContractSigned} onCheckedChange={() => toggle("inAppContractSigned")} />
+              <SettingRow label="Contract Expiring Soon" description="When a contract you own is ending within 3 days and isn't set to auto-renew">
+                <Switch checked={prefs.inAppContractExpiring} onCheckedChange={() => toggle("inAppContractExpiring")} />
               </SettingRow>
             </>
           )}

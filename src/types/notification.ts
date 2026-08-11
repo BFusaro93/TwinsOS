@@ -27,7 +27,7 @@ export interface AppNotification {
     | "ticket_created"
     | "ticket_assigned"
     | "ticket_comment"
-    | "contract_signed";
+    | "contract_expiring";
   title: string;
   body: string;
   href: string;
