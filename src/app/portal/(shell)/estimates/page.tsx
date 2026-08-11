@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getPortalContext } from "@/lib/portal/get-portal-context";
 import { createClient } from "@/lib/supabase/server";
 import PortalEstimatesPage from "@/components/portal/PortalEstimatesPage";
+import { toDisplaySettings } from "@/lib/estimate-display-settings";
 
 interface LineItemRow {
   id: string;
@@ -9,6 +10,8 @@ interface LineItemRow {
   quantity: number;
   unit_price_cents: number;
   status: string;
+  row_type: "item" | "section" | null;
+  section_name: string | null;
 }
 
 interface EstimateRow {
@@ -19,6 +22,7 @@ interface EstimateRow {
   status: string;
   expires_at: string | null;
   created_at: string;
+  display_settings: unknown;
   line_items: LineItemRow[];
 }
 
@@ -42,8 +46,8 @@ export default async function EstimatesPage() {
   const { data: estimates } = await (supabase as any)
     .from("estimates")
     .select(
-      "id, estimate_number, title:description, total_price_cents:total_cents, status:stage, expires_at:valid_until_date, created_at, " +
-        "line_items:estimate_line_items(id, description:estimate_desc, quantity:qty, unit_price_cents:rate_cents, status, sort_order)"
+      "id, estimate_number, title:description, total_price_cents:total_cents, status:stage, expires_at:valid_until_date, created_at, display_settings, " +
+        "line_items:estimate_line_items(id, description:estimate_desc, quantity:qty, unit_price_cents:rate_cents, status, sort_order, row_type, section_name)"
     )
     .eq("client_id", ctx.clientId)
     .eq("org_id", ctx.orgId)
@@ -55,6 +59,7 @@ export default async function EstimatesPage() {
 
   const normalized = (estimates ?? []).map((e) => ({
     ...e,
+    display_settings: toDisplaySettings(e.display_settings),
     line_items: e.line_items.map((li) => ({ ...li, description: li.description ?? "" })),
   }));
 

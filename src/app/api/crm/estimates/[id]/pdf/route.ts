@@ -5,6 +5,7 @@ import { renderToBuffer } from "@react-pdf/renderer";
 import { createElement } from "react";
 import { EstimateDocument } from "@/components/crm/estimates/pdf/EstimateDocument";
 import type { EstimatePDFData, EstimatePDFLineItem, EstimatePDFMilestone, EstimatePDFPhoto, OrgPDFData } from "@/components/crm/estimates/pdf/EstimateDocument";
+import { toDisplaySettings } from "@/lib/estimate-display-settings";
 
 export async function GET(
   _req: NextRequest,
@@ -135,6 +136,7 @@ export async function GET(
     milestones,
     tiersEnabled: (est.tiers_enabled as boolean) ?? false,
     tierLabels: (est.tier_labels as { basic: string; standard: string; premium: string }) ?? { basic: "Basic", standard: "Standard", premium: "Premium" },
+    displaySettings: toDisplaySettings(est.display_settings),
     lineItems,
     photos,
   };

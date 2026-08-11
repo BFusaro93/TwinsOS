@@ -58,6 +58,8 @@ import { BILLING_TERMS_OPTIONS } from "@/lib/constants";
 import { toast } from "sonner";
 import { AuditTrailTab } from "@/components/shared/AuditTrailTab";
 import { EstimatePhotosTab } from "./EstimatePhotosTab";
+import { DEFAULT_DISPLAY_SETTINGS, type DisplaySettings } from "@/lib/estimate-display-settings";
+import { EstimateDisplaySettingsPanel } from "./EstimateDisplaySettingsPanel";
 import {
   ArrowLeft,
   Save,
@@ -122,7 +124,7 @@ const LINE_ITEM_TABS: { value: LineItemStatus | "all"; label: string }[] = [
   { value: "lost",  label: "Lost" },
 ];
 
-type Tab = "details" | "payment" | "notes" | "photos" | "attachments" | "comments" | "audit" | "versions";
+type Tab = "details" | "payment" | "display" | "notes" | "photos" | "attachments" | "comments" | "audit" | "versions";
 
 // ── Attachments tab ────────────────────────────────────────────────────────────
 
@@ -814,7 +816,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
 
       {/* ── tabs ────────────────────────────────────────────────────── */}
       <div className="flex gap-0 border-b bg-white px-6">
-        {(["details", "payment", "notes", "photos", "attachments", "comments", "audit", "versions"] as Tab[]).map((t) => (
+        {(["details", "payment", "display", "notes", "photos", "attachments", "comments", "audit", "versions"] as Tab[]).map((t) => (
           <button
             key={t}
             onClick={() => setActiveTab(t)}
@@ -828,6 +830,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
             {t === "audit" ? "Audit Trail"
               : t === "versions" ? `Versions${versions.length > 0 ? ` (${versions.length})` : ""}`
               : t === "payment" ? "Payment Plan"
+              : t === "display" ? "Client View"
               : t.charAt(0).toUpperCase() + t.slice(1)}
           </button>
         ))}
@@ -1188,12 +1191,13 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                   onValueChange={async (templateId) => {
                     if (!estimate || !templateId) return;
                     const tpl = (templates ?? []).find((t) => t.id === templateId);
-                    if (!tpl?.items?.length) { toast.info("Template has no items"); return; }
+                    if (!tpl) return;
+                    if (!tpl.items?.length && !tpl.displaySettings) { toast.info("Template has no items"); return; }
                     setSaving(true);
                     try {
                       const existingCount = (estimate.lineItems ?? []).filter((li) => !li.deletedAt).length;
-                      await Promise.all(
-                        tpl.items.map((item, idx) => {
+                      await Promise.all([
+                        ...(tpl.items ?? []).map((item, idx) => {
                           const computed = computeLineItem({
                             calcType: item.calcType,
                             qty: item.qty,
@@ -1226,8 +1230,11 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                               markup_bps: computed.markupBps,
                             },
                           });
-                        })
-                      );
+                        }),
+                        ...(tpl.displaySettings
+                          ? [updateEstimate({ id: estimate.id, patch: { display_settings: tpl.displaySettings } })]
+                          : []),
+                      ]);
                       toast.success(`Applied template "${tpl.name}"`);
                     } catch {
                       toast.error("Failed to apply template");
@@ -1424,6 +1431,20 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                 </div>
               )}
             </div>
+          )}
+
+          {activeTab === "display" && (
+            <EstimateDisplaySettingsPanel
+              settings={
+                (headerEdits.display_settings as unknown as DisplaySettings | undefined) ??
+                estimate.displaySettings ??
+                DEFAULT_DISPLAY_SETTINGS
+              }
+              onChange={(next) => {
+                patchHeader("display_settings", { ...next } as unknown as boolean);
+                saveHeader({ ...headerEdits, display_settings: next as unknown as boolean });
+              }}
+            />
           )}
 
           {activeTab === "notes" && (

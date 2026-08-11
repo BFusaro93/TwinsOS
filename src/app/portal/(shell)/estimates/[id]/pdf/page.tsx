@@ -2,6 +2,7 @@ import { redirect, notFound } from "next/navigation";
 import { getPortalContext } from "@/lib/portal/get-portal-context";
 import { createServiceClient } from "@/lib/supabase/server";
 import PrintButton from "@/components/portal/PrintButton";
+import { groupIntoSections, toDisplaySettings } from "@/lib/estimate-display-settings";
 
 interface LineItem {
   id: string;
@@ -11,6 +12,8 @@ interface LineItem {
   unit_price_cents: number;
   discount_cents: number;
   sort_order: number;
+  row_type: "item" | "section" | null;
+  section_name: string | null;
 }
 
 interface EstimateRow {
@@ -25,6 +28,7 @@ interface EstimateRow {
   portal_signature_name: string | null;
   notes: string | null;
   show_discounts: boolean;
+  display_settings: unknown;
 }
 
 function fmt(cents: number) {
@@ -46,7 +50,7 @@ export default async function EstimatePdfPage({ params }: { params: Promise<{ id
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (supabase as any)
       .from("estimates")
-      .select("id, estimate_number, title:description, total_price_cents:total_cents, status:stage, expires_at:valid_until_date, created_at, portal_accepted_at, portal_signature_name, notes, show_discounts")
+      .select("id, estimate_number, title:description, total_price_cents:total_cents, status:stage, expires_at:valid_until_date, created_at, portal_accepted_at, portal_signature_name, notes, show_discounts, display_settings")
       .eq("id", id)
       .eq("client_id", ctx.clientId)
       .eq("org_id", ctx.orgId)
@@ -72,15 +76,26 @@ export default async function EstimatePdfPage({ params }: { params: Promise<{ id
   if (!estimate) notFound();
 
   const client = clientRes.data;
-  const settings = settingsRes.data;
+  const portalSettings = settingsRes.data;
 
   // Fetch line items separately (may not exist in all orgs)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: lineItems } = await (supabase as any)
     .from("estimate_line_items")
-    .select("id, estimate_desc, service_name, quantity:qty, unit_price_cents:rate_cents, discount_cents, sort_order")
+    .select("id, estimate_desc, service_name, quantity:qty, unit_price_cents:rate_cents, discount_cents, sort_order, row_type, section_name")
     .eq("estimate_id", id)
     .order("sort_order", { ascending: true }) as { data: LineItem[] | null };
+
+  const settings = toDisplaySettings(estimate.display_settings);
+  const sections = groupIntoSections(
+    (lineItems ?? []).map((li) => ({
+      ...li,
+      totalCents: li.unit_price_cents * li.quantity - (li.discount_cents ?? 0),
+      rowType: li.row_type ?? "item",
+      sectionName: li.section_name ?? null,
+    })),
+    settings
+  );
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: photoRows } = await (supabase as any)
@@ -101,8 +116,8 @@ export default async function EstimatePdfPage({ params }: { params: Promise<{ id
     })
   );
 
-  const accent = settings?.accent_color ?? "#60ab45";
-  const companyName = settings?.company_name ?? "Your Service Provider";
+  const accent = portalSettings?.accent_color ?? "#60ab45";
+  const companyName = portalSettings?.company_name ?? "Your Service Provider";
 
   return (
     <>
@@ -128,8 +143,8 @@ export default async function EstimatePdfPage({ params }: { params: Promise<{ id
               {companyName.charAt(0)}
             </div>
             <h1 className="text-xl font-bold text-slate-900">{companyName}</h1>
-            {settings?.support_email && <p className="text-xs text-slate-500">{settings.support_email}</p>}
-            {settings?.support_phone && <p className="text-xs text-slate-500">{settings.support_phone}</p>}
+            {portalSettings?.support_email && <p className="text-xs text-slate-500">{portalSettings.support_email}</p>}
+            {portalSettings?.support_phone && <p className="text-xs text-slate-500">{portalSettings.support_phone}</p>}
           </div>
           <div className="text-right">
             <p className="text-2xl font-bold text-slate-900">ESTIMATE</p>
@@ -167,26 +182,48 @@ export default async function EstimatePdfPage({ params }: { params: Promise<{ id
             <thead>
               <tr className="border-b border-slate-200">
                 <th className="text-left py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">Description</th>
-                <th className="text-center py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider w-16">Qty</th>
-                <th className="text-right py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider w-24">Unit</th>
-                <th className="text-right py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider w-24">Total</th>
+                {settings.showQuantities && <th className="text-center py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider w-16">Qty</th>}
+                {settings.showLinePrices && <th className="text-right py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider w-24">Unit</th>}
+                {settings.showLineTotals && <th className="text-right py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider w-24">Total</th>}
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
-              {lineItems.map((li) => (
-                <tr key={li.id}>
-                  <td className="py-2.5 text-slate-700">{li.estimate_desc ?? li.service_name}</td>
-                  <td className="py-2.5 text-center text-slate-600">{li.quantity}</td>
-                  <td className="py-2.5 text-right text-slate-600">{fmt(li.unit_price_cents)}</td>
-                  <td className="py-2.5 text-right font-medium text-slate-900">
-                    {fmt(li.unit_price_cents * li.quantity - (li.discount_cents ?? 0))}
-                    {estimate.show_discounts && li.discount_cents > 0 && (
-                      <div className="text-[10px] font-normal text-green-600">−{fmt(li.discount_cents)} disc.</div>
+            {sections.map((section, si) => (
+              <tbody key={si} className="divide-y divide-slate-100">
+                {section.sectionName && (
+                  <tr>
+                    <td colSpan={4} className="bg-slate-50 py-1.5 px-1 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                      {section.sectionName}
+                    </td>
+                  </tr>
+                )}
+                {section.items.map((li) => (
+                  <tr key={li.id}>
+                    <td className="py-2.5 text-slate-700">{li.estimate_desc ?? li.service_name}</td>
+                    {settings.showQuantities && <td className="py-2.5 text-center text-slate-600">{li.quantity}</td>}
+                    {settings.showLinePrices && (
+                      <td className="py-2.5 text-right text-slate-600">
+                        {!(settings.hideZeroPrices && li.unit_price_cents === 0) ? fmt(li.unit_price_cents) : ""}
+                      </td>
                     )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
+                    {settings.showLineTotals && (
+                      <td className="py-2.5 text-right font-medium text-slate-900">
+                        {fmt(li.unit_price_cents * li.quantity - (li.discount_cents ?? 0))}
+                        {estimate.show_discounts && li.discount_cents > 0 && (
+                          <div className="text-[10px] font-normal text-green-600">−{fmt(li.discount_cents)} disc.</div>
+                        )}
+                      </td>
+                    )}
+                  </tr>
+                ))}
+                {section.sectionName && settings.showSectionSubtotals && (
+                  <tr>
+                    <td colSpan={4} className="bg-slate-50/60 py-1.5 text-right text-xs font-medium text-slate-600">
+                      Subtotal: {fmt(section.subtotalCents)}
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            ))}
             <tfoot>
               <tr className="border-t-2 border-slate-300">
                 <td colSpan={3} className="pt-3 text-right text-sm font-bold text-slate-900">Total</td>
@@ -250,7 +287,7 @@ export default async function EstimatePdfPage({ params }: { params: Promise<{ id
 
         {/* Footer */}
         <div className="mt-8 pt-6 border-t border-slate-200 text-center text-xs text-slate-400">
-          <p>{companyName}{settings?.support_email ? ` · ${settings.support_email}` : ""}{settings?.support_phone ? ` · ${settings.support_phone}` : ""}</p>
+          <p>{companyName}{portalSettings?.support_email ? ` · ${portalSettings.support_email}` : ""}{portalSettings?.support_phone ? ` · ${portalSettings.support_phone}` : ""}</p>
         </div>
       </div>
     </>

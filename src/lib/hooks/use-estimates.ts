@@ -10,6 +10,7 @@ import type {
 } from "@/types/crm-estimates";
 import type { OverheadSettings } from "@/lib/hooks/use-overhead-settings";
 import { recalcEstimateTotals as recalcEstimateTotalsShared } from "@/lib/estimate-calc";
+import { toDisplaySettings } from "@/lib/estimate-display-settings";
 
 // ── mappers ───────────────────────────────────────────────────────────────────
 
@@ -122,6 +123,7 @@ function mapEstimate(row: any): Estimate {
     depositCollectedAt: (row.deposit_collected_at as string | null) ?? null,
     tiersEnabled: row.tiers_enabled ?? false,
     tierLabels: (row.tier_labels as { basic: string; standard: string; premium: string }) ?? { basic: 'Basic', standard: 'Standard', premium: 'Premium' },
+    displaySettings: toDisplaySettings(row.display_settings),
     deletedAt: row.deleted_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,

@@ -6449,6 +6449,7 @@ export type Database = {
       crm_tickets: {
         Row: {
           assigned_to: string | null
+          assigned_to_id: string | null
           body: string | null
           category: string | null
           client_id: string | null
@@ -6468,6 +6469,7 @@ export type Database = {
         }
         Insert: {
           assigned_to?: string | null
+          assigned_to_id?: string | null
           body?: string | null
           category?: string | null
           client_id?: string | null
@@ -6487,6 +6489,7 @@ export type Database = {
         }
         Update: {
           assigned_to?: string | null
+          assigned_to_id?: string | null
           body?: string | null
           category?: string | null
           client_id?: string | null
@@ -6505,6 +6508,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "crm_tickets_assigned_to_id_fkey"
+            columns: ["assigned_to_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "crm_tickets_client_id_fkey"
             columns: ["client_id"]
@@ -7018,7 +7028,7 @@ export type Database = {
           invoice?: boolean
           line_item_id: string
           name: string
-          org_id: string
+          org_id?: string
           print_on_invoice?: boolean
           product_id?: string | null
           qty?: number
@@ -7323,6 +7333,7 @@ export type Database = {
         Row: {
           caption: string | null
           created_at: string
+          customer_facing: boolean
           deleted_at: string | null
           estimate_id: string
           file_name: string
@@ -7336,6 +7347,7 @@ export type Database = {
         Insert: {
           caption?: string | null
           created_at?: string
+          customer_facing?: boolean
           deleted_at?: string | null
           estimate_id: string
           file_name?: string
@@ -7349,6 +7361,7 @@ export type Database = {
         Update: {
           caption?: string | null
           created_at?: string
+          customer_facing?: boolean
           deleted_at?: string | null
           estimate_id?: string
           file_name?: string
@@ -7544,6 +7557,7 @@ export type Database = {
           created_at: string
           created_by: string | null
           deleted_at: string | null
+          display_settings: Json
           est_document: string
           id: string
           name: string
@@ -7556,6 +7570,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           deleted_at?: string | null
+          display_settings?: Json
           est_document?: string
           id?: string
           name: string
@@ -7568,6 +7583,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           deleted_at?: string | null
+          display_settings?: Json
           est_document?: string
           id?: string
           name?: string
@@ -7659,6 +7675,7 @@ export type Database = {
           discount_cents: number
           discount_type: string | null
           discount_value: number | null
+          display_settings: Json
           est_document: string
           estimate_date: string
           estimate_number: number
@@ -7715,6 +7732,7 @@ export type Database = {
           discount_cents?: number
           discount_type?: string | null
           discount_value?: number | null
+          display_settings?: Json
           est_document?: string
           estimate_date: string
           estimate_number?: number
@@ -7771,6 +7789,7 @@ export type Database = {
           discount_cents?: number
           discount_type?: string | null
           discount_value?: number | null
+          display_settings?: Json
           est_document?: string
           estimate_date?: string
           estimate_number?: number
@@ -11443,6 +11462,10 @@ export type Database = {
           p_sort_dir?: string
         }
         Returns: Json
+      }
+      delete_job_product: {
+        Args: { p_job_product_id: string }
+        Returns: undefined
       }
       insert_audit_entry: {
         Args: {

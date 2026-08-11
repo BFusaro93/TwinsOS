@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { FileText, Clock, CheckCircle2, XCircle, Loader2, Download, MessageSquarePlus } from "lucide-react";
+import { groupIntoSections, DEFAULT_DISPLAY_SETTINGS, type DisplaySettings } from "@/lib/estimate-display-settings";
 
 function fmt(cents: number) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
@@ -27,6 +28,7 @@ interface Estimate {
   status: string;
   expires_at: string | null;
   created_at: string;
+  display_settings?: DisplaySettings;
   line_items?: LineItem[];
 }
 
@@ -36,6 +38,8 @@ interface LineItem {
   quantity: number;
   unit_price_cents: number;
   status: string;
+  row_type?: "item" | "section" | null;
+  section_name?: string | null;
 }
 
 interface SignDialogProps {
@@ -48,10 +52,10 @@ function SignDialog({ estimate, onClose, onAccepted }: SignDialogProps) {
   const [name, setName] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const hasLineItems = !!estimate.line_items && estimate.line_items.length > 0;
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(
-    () => new Set((estimate.line_items ?? []).filter((li) => li.status !== "lost").map((li) => li.id))
-  );
+  const settings = estimate.display_settings ?? DEFAULT_DISPLAY_SETTINGS;
+  const itemRows = (estimate.line_items ?? []).filter((li) => li.row_type !== "section" && li.status !== "lost");
+  const hasLineItems = itemRows.length > 0;
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set(itemRows.map((li) => li.id)));
 
   function toggleItem(id: string) {
     setSelectedIds((prev) => {
@@ -62,10 +66,17 @@ function SignDialog({ estimate, onClose, onAccepted }: SignDialogProps) {
   }
 
   const selectedTotal = hasLineItems
-    ? (estimate.line_items ?? [])
+    ? itemRows
         .filter((li) => selectedIds.has(li.id))
         .reduce((sum, li) => sum + li.unit_price_cents * li.quantity, 0)
     : estimate.total_price_cents;
+
+  const sections = groupIntoSections(
+    (estimate.line_items ?? [])
+      .filter((li) => li.status !== "lost")
+      .map((li) => ({ ...li, totalCents: li.unit_price_cents * li.quantity, rowType: li.row_type ?? "item", sectionName: li.section_name ?? null })),
+    settings
+  );
 
   async function handleAccept() {
     if (!name.trim()) { setError("Please type your full name to sign."); return; }
@@ -107,26 +118,44 @@ function SignDialog({ estimate, onClose, onAccepted }: SignDialogProps) {
 
         {/* Per-item selection — uncheck anything you don't want to accept */}
         {hasLineItems && (
-          <div className="bg-slate-50 rounded-xl border border-slate-200 divide-y divide-slate-100 text-sm max-h-64 overflow-y-auto">
-            {estimate.line_items!.map((li) => (
-              <label
-                key={li.id}
-                className={`flex cursor-pointer items-start gap-2.5 px-3 py-2 transition-colors ${selectedIds.has(li.id) ? "bg-green-50/60" : ""}`}
-              >
-                <input
-                  type="checkbox"
-                  checked={selectedIds.has(li.id)}
-                  onChange={() => toggleItem(li.id)}
-                  className="mt-0.5 h-4 w-4 rounded border-slate-300 cursor-pointer accent-brand-500"
-                />
-                <span className="text-slate-700 flex-1 min-w-0">
-                  {li.description}
-                  {li.quantity > 1 && <span className="text-slate-400 text-xs ml-1">×{li.quantity}</span>}
-                </span>
-                <span className="text-slate-800 font-medium shrink-0">{fmt(li.unit_price_cents * li.quantity)}</span>
-              </label>
+          <div className="bg-slate-50 rounded-xl border border-slate-200 text-sm max-h-64 overflow-y-auto">
+            {sections.map((section, si) => (
+              <div key={si}>
+                {section.sectionName && (
+                  <div className="bg-slate-100 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                    {section.sectionName}
+                  </div>
+                )}
+                <div className="divide-y divide-slate-100">
+                  {section.items.map((li) => (
+                    <label
+                      key={li.id}
+                      className={`flex cursor-pointer items-start gap-2.5 px-3 py-2 transition-colors ${selectedIds.has(li.id) ? "bg-green-50/60" : ""}`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(li.id)}
+                        onChange={() => toggleItem(li.id)}
+                        className="mt-0.5 h-4 w-4 rounded border-slate-300 cursor-pointer accent-brand-500"
+                      />
+                      <span className="text-slate-700 flex-1 min-w-0">
+                        {li.description}
+                        {settings.showQuantities && li.quantity > 1 && <span className="text-slate-400 text-xs ml-1">×{li.quantity}</span>}
+                      </span>
+                      {settings.showLineTotals && !(settings.hideZeroPrices && li.unit_price_cents === 0) && (
+                        <span className="text-slate-800 font-medium shrink-0">{fmt(li.unit_price_cents * li.quantity)}</span>
+                      )}
+                    </label>
+                  ))}
+                </div>
+                {section.sectionName && settings.showSectionSubtotals && (
+                  <div className="flex justify-end bg-slate-100/60 px-3 py-1.5 text-xs font-medium text-slate-600">
+                    Subtotal: {fmt(section.subtotalCents)}
+                  </div>
+                )}
+              </div>
             ))}
-            <div className="flex items-center justify-between px-3 py-2 font-semibold">
+            <div className="flex items-center justify-between border-t border-slate-200 px-3 py-2 font-semibold">
               <span className="text-slate-900">Selected Total</span>
               <span className="text-slate-900">{fmt(selectedTotal)}</span>
             </div>

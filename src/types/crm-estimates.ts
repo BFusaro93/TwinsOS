@@ -1,5 +1,6 @@
 import type { DiscountType } from "./crm-discounts";
 import type { BudgetMethod } from "./crm-jobs";
+import type { DisplaySettings } from "@/lib/estimate-display-settings";
 
 export type EstimateStage =
   | 'draft'
@@ -149,6 +150,7 @@ export interface Estimate {
   depositCollectedAt: string | null;
   tiersEnabled: boolean;
   tierLabels: { basic: string; standard: string; premium: string };
+  displaySettings: DisplaySettings;
   deletedAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -192,6 +194,7 @@ export interface EstimateTemplate {
   estDocument: string;
   showDiscounts: boolean;
   showWhen: 'estimates' | 'jobs' | 'both';
+  displaySettings: DisplaySettings;
   deletedAt: string | null;
   createdAt: string;
   updatedAt: string;

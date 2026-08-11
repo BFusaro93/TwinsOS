@@ -8,9 +8,25 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { CheckCircle2, Loader2, MessageSquarePlus } from "lucide-react";
 import type { ProposalData, ProposalLineItem } from "@/types/crm-proposals";
+import { groupIntoSections, type DisplaySettings } from "@/lib/estimate-display-settings";
 
 function cents(n: number) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n / 100);
+}
+
+// Meta line combining visit count / qty (gated by showQuantities) and the
+// per-visit rate (gated by showLinePrices, with hideZeroPrices suppressing
+// just the rate when it's $0 rather than dropping the whole row).
+function lineMeta(li: ProposalLineItem, settings: DisplaySettings): string | null {
+  const parts: string[] = [];
+  if (settings.showQuantities) {
+    if (li.visits > 1) parts.push(`${li.visits} visits`);
+    if (li.qty > 1) parts.push(`${li.qty.toLocaleString()} ${li.unitType ?? ""}`.trim());
+  }
+  if (settings.showLinePrices && !(settings.hideZeroPrices && li.rateCents === 0)) {
+    parts.push(`${cents(li.rateCents)}/visit`);
+  }
+  return parts.length ? parts.join(" × ") : null;
 }
 
 // ── Signature pad ─────────────────────────────────────────────────────────────
@@ -252,7 +268,7 @@ export default function ProposalPage() {
         if (data.error) { setError(data.error); return; }
         setProposal(data);
         // Pre-select all quote line items
-        setSelectedIds(new Set(data.lineItems.map((li) => li.id)));
+        setSelectedIds(new Set(data.lineItems.filter((li) => li.rowType !== "section").map((li) => li.id)));
         if (data.alreadyAccepted) setAccepted(true);
       })
       .catch(() => setError("Failed to load proposal."))
@@ -270,15 +286,17 @@ export default function ProposalPage() {
   // When tiers enabled, filter items by selected tier (null = all tiers, or matching tier)
   const visibleLineItems = proposal
     ? proposal.tiersEnabled
-      ? proposal.lineItems.filter((li) => li.tier === null || li.tier === selectedTier)
+      ? proposal.lineItems.filter((li) => li.rowType === "section" || li.tier === null || li.tier === selectedTier)
       : proposal.lineItems
     : [];
 
+  const sections = proposal ? groupIntoSections(visibleLineItems, proposal.displaySettings) : [];
+
   // Live subtotal from visible items (tier-filtered) or selected items (checkbox mode)
   const selectedTotal = proposal?.tiersEnabled
-    ? visibleLineItems.reduce((sum, li) => sum + li.totalCents, 0)
+    ? visibleLineItems.filter((li) => li.rowType !== "section").reduce((sum, li) => sum + li.totalCents, 0)
     : (proposal?.lineItems
-        .filter((li) => selectedIds.has(li.id))
+        .filter((li) => li.rowType !== "section" && selectedIds.has(li.id))
         .reduce((sum, li) => sum + li.totalCents, 0) ?? 0);
 
   const taxAmount = proposal
@@ -446,7 +464,7 @@ export default function ProposalPage() {
           <div className="grid grid-cols-3 gap-3">
             {(["basic", "standard", "premium"] as const).map((tier) => {
               const label = proposal.tierLabels[tier];
-              const tierItems = proposal.lineItems.filter((li) => li.tier === null || li.tier === tier);
+              const tierItems = proposal.lineItems.filter((li) => li.rowType !== "section" && (li.tier === null || li.tier === tier));
               const tierTotal = tierItems.reduce((s, li) => s + li.totalCents, 0);
               const isSelected = selectedTier === tier;
               return (
@@ -478,62 +496,73 @@ export default function ProposalPage() {
             <p className="text-xs text-white/70">Check the services you&apos;d like to include</p>
           )}
         </div>
-        <div className="divide-y">
-          {visibleLineItems.map((li: ProposalLineItem) =>
-            proposal.tiersEnabled ? (
-              <div key={li.id} className="flex items-start gap-3 px-4 py-3">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <p className="font-medium text-slate-800">{li.serviceName ?? "Service"}</p>
-                    {li.tier === null && (
-                      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-500">Included in all</span>
+        {sections.map((section, si) => (
+          <div key={si}>
+            {section.sectionName && (
+              <div className="bg-slate-50 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500 border-b">
+                {section.sectionName}
+              </div>
+            )}
+            <div className="divide-y">
+              {section.items.map((li: ProposalLineItem) => {
+                const meta = lineMeta(li, proposal.displaySettings);
+                return proposal.tiersEnabled ? (
+                  <div key={li.id} className="flex items-start gap-3 px-4 py-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="font-medium text-slate-800">{li.serviceName ?? "Service"}</p>
+                        {li.tier === null && (
+                          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-500">Included in all</span>
+                        )}
+                      </div>
+                      {li.estimateDesc && (
+                        <p
+                          className="mt-0.5 text-sm text-slate-500"
+                          dangerouslySetInnerHTML={{ __html: li.estimateDesc }}
+                        />
+                      )}
+                      {meta && <p className="mt-1 text-xs text-slate-400">{meta}</p>}
+                    </div>
+                    {proposal.displaySettings.showLineTotals && (
+                      <p className="shrink-0 font-semibold text-slate-700">{cents(li.totalCents)}</p>
                     )}
                   </div>
-                  {li.estimateDesc && (
-                    <p
-                      className="mt-0.5 text-sm text-slate-500"
-                      dangerouslySetInnerHTML={{ __html: li.estimateDesc }}
+                ) : (
+                  <label
+                    key={li.id}
+                    className={`flex cursor-pointer items-start gap-3 px-4 py-3 transition-colors hover:bg-slate-50 ${selectedIds.has(li.id) ? "bg-green-50/50" : ""}`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(li.id)}
+                      onChange={() => toggleItem(li.id)}
+                      className="mt-0.5 h-4 w-4 rounded border-slate-300 cursor-pointer"
+                      style={{ accentColor: brand }}
                     />
-                  )}
-                  <p className="mt-1 text-xs text-slate-400">
-                    {li.visits > 1 ? `${li.visits} visits × ` : ""}
-                    {li.qty > 1 ? `${li.qty.toLocaleString()} ${li.unitType ?? ""} × ` : ""}
-                    {cents(li.rateCents)}/visit
-                  </p>
-                </div>
-                <p className="shrink-0 font-semibold text-slate-700">{cents(li.totalCents)}</p>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-slate-800">{li.serviceName ?? "Service"}</p>
+                      {li.estimateDesc && (
+                        <p
+                          className="mt-0.5 text-sm text-slate-500"
+                          dangerouslySetInnerHTML={{ __html: li.estimateDesc }}
+                        />
+                      )}
+                      {meta && <p className="mt-1 text-xs text-slate-400">{meta}</p>}
+                    </div>
+                    {proposal.displaySettings.showLineTotals && (
+                      <p className="shrink-0 font-semibold text-slate-700">{cents(li.totalCents)}</p>
+                    )}
+                  </label>
+                );
+              })}
+            </div>
+            {section.sectionName && proposal.displaySettings.showSectionSubtotals && (
+              <div className="flex justify-end bg-slate-50/60 px-4 py-2 text-sm font-medium text-slate-600 border-b">
+                Subtotal: {cents(section.subtotalCents)}
               </div>
-            ) : (
-              <label
-                key={li.id}
-                className={`flex cursor-pointer items-start gap-3 px-4 py-3 transition-colors hover:bg-slate-50 ${selectedIds.has(li.id) ? "bg-green-50/50" : ""}`}
-              >
-                <input
-                  type="checkbox"
-                  checked={selectedIds.has(li.id)}
-                  onChange={() => toggleItem(li.id)}
-                  className="mt-0.5 h-4 w-4 rounded border-slate-300 cursor-pointer"
-                  style={{ accentColor: brand }}
-                />
-                <div className="flex-1 min-w-0">
-                  <p className="font-medium text-slate-800">{li.serviceName ?? "Service"}</p>
-                  {li.estimateDesc && (
-                    <p
-                      className="mt-0.5 text-sm text-slate-500"
-                      dangerouslySetInnerHTML={{ __html: li.estimateDesc }}
-                    />
-                  )}
-                  <p className="mt-1 text-xs text-slate-400">
-                    {li.visits > 1 ? `${li.visits} visits × ` : ""}
-                    {li.qty > 1 ? `${li.qty.toLocaleString()} ${li.unitType ?? ""} × ` : ""}
-                    {cents(li.rateCents)}/visit
-                  </p>
-                </div>
-                <p className="shrink-0 font-semibold text-slate-700">{cents(li.totalCents)}</p>
-              </label>
-            )
-          )}
-        </div>
+            )}
+          </div>
+        ))}
       </div>
 
       {/* Totals */}

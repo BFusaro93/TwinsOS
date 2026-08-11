@@ -3,6 +3,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 import type { EstimateTemplate, EstimateTemplateItem } from "@/types/crm-estimates";
+import { toDisplaySettings, type DisplaySettings } from "@/lib/estimate-display-settings";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapTemplateItem(row: any): EstimateTemplateItem {
@@ -32,6 +33,7 @@ function mapTemplate(row: any): EstimateTemplate {
     estDocument: row.est_document,
     showDiscounts: row.show_discounts,
     showWhen: row.show_when,
+    displaySettings: toDisplaySettings(row.display_settings),
     deletedAt: row.deleted_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -65,6 +67,7 @@ export function useCreateEstimateTemplate() {
       estDocument?: string;
       showDiscounts?: boolean;
       showWhen?: string;
+      displaySettings?: DisplaySettings;
     }) => {
       const supabase = createClient();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -75,6 +78,7 @@ export function useCreateEstimateTemplate() {
           est_document: values.estDocument ?? "Estimate - General",
           show_discounts: values.showDiscounts ?? false,
           show_when: values.showWhen ?? "estimates",
+          ...(values.displaySettings ? { display_settings: values.displaySettings } : {}),
         })
         .select()
         .single();

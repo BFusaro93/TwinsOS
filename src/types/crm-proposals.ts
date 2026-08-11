@@ -70,6 +70,8 @@ export const CHEMICAL_EMAIL_MERGE_TAGS = [
 
 export type ChemicalMergeTag = typeof CHEMICAL_EMAIL_MERGE_TAGS[number]["tag"];
 
+import type { DisplaySettings } from "@/lib/estimate-display-settings";
+
 // Public proposal data shape (returned by the proposal API, no auth required)
 export interface ProposalData {
   estimateNumber: number;
@@ -98,6 +100,7 @@ export interface ProposalData {
 
   tiersEnabled: boolean;
   tierLabels: { basic: string; standard: string; premium: string };
+  displaySettings: DisplaySettings;
   depositRequiredCents: number;
   depositCollectedCents: number;
   lineItems: ProposalLineItem[];
@@ -112,6 +115,8 @@ export interface ProposalPhoto {
 
 export interface ProposalLineItem {
   id: string;
+  rowType: "item" | "section";
+  sectionName: string | null;
   serviceName: string | null;
   estimateDesc: string | null;
   qty: number;

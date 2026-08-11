@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { toDisplaySettings } from "@/lib/estimate-display-settings";
 
 // Public route — no auth. Uses service role to read across RLS.
 const serviceClient = () =>
@@ -91,6 +92,8 @@ export async function GET(
     .sort((a, b) => ((a.sort_order as number) ?? 0) - ((b.sort_order as number) ?? 0))
     .map((li) => ({
       id: li.id as string,
+      rowType: ((li.row_type as string) ?? "item") as "item" | "section",
+      sectionName: li.section_name as string | null,
       serviceName: li.service_name as string | null,
       estimateDesc: li.estimate_desc as string | null,
       qty: (li.qty as number) ?? 1,
@@ -129,6 +132,7 @@ export async function GET(
 
     tiersEnabled: est.tiers_enabled ?? false,
     tierLabels: (est.tier_labels as { basic: string; standard: string; premium: string }) ?? { basic: 'Basic', standard: 'Standard', premium: 'Premium' },
+    displaySettings: toDisplaySettings(est.display_settings),
 
     depositRequiredCents: (est.deposit_required_cents as number) ?? 0,
     depositCollectedCents: (est.deposit_collected_cents as number) ?? 0,

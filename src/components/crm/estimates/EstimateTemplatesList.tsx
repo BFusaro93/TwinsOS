@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useEstimateTemplates, useCreateEstimateTemplate, useDeleteEstimateTemplate, useUpsertTemplateItem, useDeleteTemplateItem } from "@/lib/hooks/use-estimate-templates";
+import { useEstimateTemplates, useCreateEstimateTemplate, useUpdateEstimateTemplate, useDeleteEstimateTemplate, useUpsertTemplateItem, useDeleteTemplateItem } from "@/lib/hooks/use-estimate-templates";
+import { EstimateDisplaySettingsPanel } from "./EstimateDisplaySettingsPanel";
 import { useCRMServices } from "@/lib/hooks/use-crm-jobs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -150,6 +151,7 @@ function EditTemplateDialog({
 }) {
   const { data: services } = useCRMServices();
   const { mutateAsync: upsert } = useUpsertTemplateItem();
+  const { mutateAsync: updateTemplate } = useUpdateEstimateTemplate();
   const [showPicker, setShowPicker] = useState(false);
 
   async function addService(name: string, id?: string) {
@@ -191,6 +193,17 @@ function EditTemplateDialog({
               <span className="text-slate-800">{template.estDocument}</span>
             </div>
           </div>
+
+          <EstimateDisplaySettingsPanel
+            title="Client view defaults"
+            description="Applied to an estimate's display settings when this template is selected."
+            settings={template.displaySettings}
+            onChange={(next) => {
+              updateTemplate({ id: template.id, patch: { display_settings: next } }).catch(() =>
+                toast.error("Failed to save")
+              );
+            }}
+          />
 
           {/* Line items grid */}
           <div className="overflow-x-auto rounded-lg border">

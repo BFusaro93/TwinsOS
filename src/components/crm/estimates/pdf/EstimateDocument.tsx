@@ -9,6 +9,7 @@ import {
 } from "@react-pdf/renderer";
 import { BILLING_TERMS_OPTIONS } from "@/lib/constants";
 import { computeInstallmentSchedule } from "@/lib/estimate-calc";
+import { groupIntoSections, type DisplaySettings, type DisplaySection } from "@/lib/estimate-display-settings";
 
 // ── types ────────────────────────────────────────────────────────────────────
 
@@ -65,6 +66,7 @@ export interface EstimatePDFData {
   milestones: EstimatePDFMilestone[];
   tiersEnabled: boolean;
   tierLabels: { basic: string; standard: string; premium: string };
+  displaySettings: DisplaySettings;
 
   lineItems: EstimatePDFLineItem[];
   photos: EstimatePDFPhoto[];
@@ -286,6 +288,8 @@ const S = StyleSheet.create({
   cellText: { fontSize: 9, color: "#334155" },
   sectionRow: { flexDirection: "row", paddingVertical: 5, paddingHorizontal: 8, backgroundColor: "#e2e8f0", borderBottom: "1 solid #cbd5e1" },
   sectionRowText: { fontSize: 8.5, fontFamily: "Helvetica-Bold", color: "#334155", textTransform: "uppercase", letterSpacing: 0.3 },
+  sectionSubtotalRow: { flexDirection: "row", justifyContent: "flex-end", paddingVertical: 4, paddingHorizontal: 8, backgroundColor: "#f8fafc", borderBottom: "1 solid #f1f5f9" },
+  sectionSubtotalText: { fontSize: 8, fontFamily: "Helvetica-Bold", color: "#475569" },
 
   // totals
   totalsBlock: { marginTop: 16, alignItems: "flex-end" },
@@ -324,6 +328,80 @@ const S = StyleSheet.create({
   photoImage: { width: "100%", height: 160, objectFit: "cover", borderRadius: 4 },
   photoCaption: { marginTop: 4, fontSize: 8, color: "#64748b", textAlign: "center" },
 });
+
+// ── line item table (settings-aware) ────────────────────────────────────────
+
+function LineItemTableHeader({ settings, backgroundColor }: { settings: DisplaySettings; backgroundColor: string }) {
+  return (
+    <View style={[S.tableHeader, { backgroundColor }]}>
+      <View style={S.cellService}><Text style={S.tableHeaderText}>Service</Text></View>
+      {settings.showQuantities && (
+        <>
+          <View style={S.cellNum}><Text style={[S.tableHeaderText, { textAlign: "right" }]}>OCC</Text></View>
+          <View style={S.cellNum}><Text style={[S.tableHeaderText, { textAlign: "right" }]}>Qty</Text></View>
+          <View style={S.cellNum}><Text style={[S.tableHeaderText, { textAlign: "right" }]}>Unit</Text></View>
+        </>
+      )}
+      {settings.showLinePrices && (
+        <View style={S.cellNum}><Text style={[S.tableHeaderText, { textAlign: "right" }]}>Rate</Text></View>
+      )}
+      {settings.showLineTotals && (
+        <View style={S.cellTotal}><Text style={[S.tableHeaderText, { textAlign: "right" }]}>Total</Text></View>
+      )}
+    </View>
+  );
+}
+
+function LineItemSections({
+  sections,
+  settings,
+}: {
+  sections: DisplaySection<EstimatePDFLineItem>[];
+  settings: DisplaySettings;
+}) {
+  return (
+    <>
+      {sections.map((section, si) => (
+        <View key={si}>
+          {section.sectionName && (
+            <View style={S.sectionRow}>
+              <Text style={S.sectionRowText}>{section.sectionName}</Text>
+            </View>
+          )}
+          {section.items.map((li, i) => (
+            <View key={i} style={[S.tableRow, i % 2 === 1 ? S.tableRowAlt : {}]}>
+              <View style={S.cellService}>
+                {li.estimateDesc ? <RichText html={li.estimateDesc} style={S.serviceDescText} /> : null}
+              </View>
+              {settings.showQuantities && (
+                <>
+                  <View style={S.cellNum}><Text style={S.cellText}>{li.visits}</Text></View>
+                  <View style={S.cellNum}><Text style={S.cellText}>{li.qty.toLocaleString()}</Text></View>
+                  <View style={S.cellNum}><Text style={S.cellText}>{li.unitType ?? "—"}</Text></View>
+                </>
+              )}
+              {settings.showLinePrices && (
+                <View style={S.cellNum}>
+                  <Text style={S.cellText}>{settings.hideZeroPrices && li.rateCents === 0 ? "" : cents(li.rateCents)}</Text>
+                </View>
+              )}
+              {settings.showLineTotals && (
+                <View style={S.cellTotal}>
+                  <Text style={[S.cellText, { textAlign: "right", fontFamily: "Helvetica-Bold" }]}>{cents(li.totalCents)}</Text>
+                </View>
+              )}
+            </View>
+          ))}
+          {section.sectionName && settings.showSectionSubtotals && (
+            <View style={S.sectionSubtotalRow}>
+              <Text style={S.sectionSubtotalText}>Subtotal: {cents(section.subtotalCents)}</Text>
+            </View>
+          )}
+        </View>
+      ))}
+    </>
+  );
+}
 
 // ── component ─────────────────────────────────────────────────────────────────
 
@@ -427,40 +505,15 @@ export function EstimateDocument({ estimate, org }: { estimate: EstimatePDFData;
           TIER_ORDER.map((tierKey) => {
             const items = estimate.lineItems.filter((li) => li.tier === tierKey);
             if (items.length === 0) return null;
-            const tierTotalCents = items.reduce((sum, li) => sum + li.totalCents, 0);
+            const tierTotalCents = items.filter((li) => li.rowType !== "section").reduce((sum, li) => sum + li.totalCents, 0);
+            const sections = groupIntoSections(items, estimate.displaySettings);
             return (
               <View key={tierKey} style={S.tierGroup}>
                 <View style={[S.tierBanner, { backgroundColor: accentColor }]}>
                   <Text style={S.tierBannerText}>{estimate.tierLabels[tierKey]}</Text>
                 </View>
-                <View style={[S.tableHeader, { backgroundColor: "#1F1F1F" }]}>
-                  <View style={S.cellService}><Text style={S.tableHeaderText}>Service</Text></View>
-                  <View style={S.cellNum}><Text style={[S.tableHeaderText, { textAlign: "right" }]}>OCC</Text></View>
-                  <View style={S.cellNum}><Text style={[S.tableHeaderText, { textAlign: "right" }]}>Qty</Text></View>
-                  <View style={S.cellNum}><Text style={[S.tableHeaderText, { textAlign: "right" }]}>Unit</Text></View>
-                  <View style={S.cellNum}><Text style={[S.tableHeaderText, { textAlign: "right" }]}>Rate</Text></View>
-                  <View style={S.cellTotal}><Text style={[S.tableHeaderText, { textAlign: "right" }]}>Total</Text></View>
-                </View>
-                {items.map((li, i) =>
-                  li.rowType === "section" ? (
-                    <View key={i} style={S.sectionRow}>
-                      <Text style={S.sectionRowText}>{li.sectionName}</Text>
-                    </View>
-                  ) : (
-                    <View key={i} style={[S.tableRow, i % 2 === 1 ? S.tableRowAlt : {}]}>
-                      <View style={S.cellService}>
-                        {li.estimateDesc ? (
-                          <RichText html={li.estimateDesc} style={S.serviceDescText} />
-                        ) : null}
-                      </View>
-                      <View style={S.cellNum}><Text style={S.cellText}>{li.visits}</Text></View>
-                      <View style={S.cellNum}><Text style={S.cellText}>{li.qty.toLocaleString()}</Text></View>
-                      <View style={S.cellNum}><Text style={S.cellText}>{li.unitType ?? "—"}</Text></View>
-                      <View style={S.cellNum}><Text style={S.cellText}>{cents(li.rateCents)}</Text></View>
-                      <View style={S.cellTotal}><Text style={[S.cellText, { textAlign: "right", fontFamily: "Helvetica-Bold" }]}>{cents(li.totalCents)}</Text></View>
-                    </View>
-                  )
-                )}
+                <LineItemTableHeader settings={estimate.displaySettings} backgroundColor="#1F1F1F" />
+                <LineItemSections sections={sections} settings={estimate.displaySettings} />
                 <View style={S.tierSubtotalRow}>
                   <Text style={S.tierSubtotalLabel}>{estimate.tierLabels[tierKey]} Total</Text>
                   <Text style={[S.tierSubtotalValue, { color: accentColor }]}>{cents(tierTotalCents)}</Text>
@@ -470,35 +523,8 @@ export function EstimateDocument({ estimate, org }: { estimate: EstimatePDFData;
           })
         ) : (
           <>
-            <View style={[S.tableHeader, { backgroundColor: accentColor }]}>
-              <View style={S.cellService}><Text style={S.tableHeaderText}>Service</Text></View>
-              <View style={S.cellNum}><Text style={[S.tableHeaderText, { textAlign: "right" }]}>OCC</Text></View>
-              <View style={S.cellNum}><Text style={[S.tableHeaderText, { textAlign: "right" }]}>Qty</Text></View>
-              <View style={S.cellNum}><Text style={[S.tableHeaderText, { textAlign: "right" }]}>Unit</Text></View>
-              <View style={S.cellNum}><Text style={[S.tableHeaderText, { textAlign: "right" }]}>Rate</Text></View>
-              <View style={S.cellTotal}><Text style={[S.tableHeaderText, { textAlign: "right" }]}>Total</Text></View>
-            </View>
-
-            {estimate.lineItems.map((li, i) =>
-              li.rowType === "section" ? (
-                <View key={i} style={S.sectionRow}>
-                  <Text style={S.sectionRowText}>{li.sectionName}</Text>
-                </View>
-              ) : (
-                <View key={i} style={[S.tableRow, i % 2 === 1 ? S.tableRowAlt : {}]}>
-                  <View style={S.cellService}>
-                    {li.estimateDesc ? (
-                      <RichText html={li.estimateDesc} style={S.serviceDescText} />
-                    ) : null}
-                  </View>
-                  <View style={S.cellNum}><Text style={S.cellText}>{li.visits}</Text></View>
-                  <View style={S.cellNum}><Text style={S.cellText}>{li.qty.toLocaleString()}</Text></View>
-                  <View style={S.cellNum}><Text style={S.cellText}>{li.unitType ?? "—"}</Text></View>
-                  <View style={S.cellNum}><Text style={S.cellText}>{cents(li.rateCents)}</Text></View>
-                  <View style={S.cellTotal}><Text style={[S.cellText, { textAlign: "right", fontFamily: "Helvetica-Bold" }]}>{cents(li.totalCents)}</Text></View>
-                </View>
-              )
-            )}
+            <LineItemTableHeader settings={estimate.displaySettings} backgroundColor={accentColor} />
+            <LineItemSections sections={groupIntoSections(estimate.lineItems, estimate.displaySettings)} settings={estimate.displaySettings} />
           </>
         )}
 
