@@ -183,7 +183,7 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
                 <tr className="bg-slate-50 border-b text-xs text-slate-500 font-semibold uppercase tracking-wide">
                   <th className="w-10 px-3 py-2" />
                   <th className="px-3 py-2 text-left">Service</th>
-                  <th className="px-3 py-2 text-right">OCC</th>
+                  <th className="px-3 py-2 text-right">Visits</th>
                   <th className="px-3 py-2 text-right">QTY</th>
                   <th className="px-3 py-2 text-right">Total</th>
                 </tr>

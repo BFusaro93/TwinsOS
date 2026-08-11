@@ -1201,6 +1201,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                           const computed = computeLineItem({
                             calcType: item.calcType,
                             qty: item.qty,
+                            unitType: item.unitType,
                             rateCents: item.rateCents,
                             visits: item.visits,
                             budgetedHours: item.budgetedHours,
@@ -1216,6 +1217,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                               status: "draft",
                               calc_type: item.calcType,
                               qty: item.qty,
+                              unit_type: item.unitType,
                               rate_cents: item.rateCents,
                               visits: item.visits,
                               cost_cents: computed.costCents,
@@ -1228,6 +1230,10 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                               total_cost_cents: computed.totalCostCents,
                               margin_bps: computed.marginBps,
                               markup_bps: computed.markupBps,
+                              discount_cents: item.discountCents,
+                              discount_type: item.discountType,
+                              discount_value: item.discountValue,
+                              applied_discount_id: item.appliedDiscountId,
                             },
                           });
                         }),

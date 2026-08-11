@@ -10,7 +10,7 @@ import type {
 } from "@/types/crm-estimates";
 import type { OverheadSettings } from "@/lib/hooks/use-overhead-settings";
 import { recalcEstimateTotals as recalcEstimateTotalsShared } from "@/lib/estimate-calc";
-import { toDisplaySettings } from "@/lib/estimate-display-settings";
+import { toDisplaySettings, type DisplaySettings } from "@/lib/estimate-display-settings";
 
 // ── mappers ───────────────────────────────────────────────────────────────────
 
@@ -217,6 +217,7 @@ export function useCreateEstimate() {
       estimateDate: string;
       validUntilDate?: string;
       stage?: string;
+      displaySettings?: DisplaySettings;
     }) => {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
@@ -231,6 +232,7 @@ export function useCreateEstimate() {
           estimate_date: values.estimateDate,
           valid_until_date: values.validUntilDate ?? null,
           stage: values.stage ?? "draft",
+          ...(values.displaySettings ? { display_settings: values.displaySettings } : {}),
         })
         .select()
         .single();

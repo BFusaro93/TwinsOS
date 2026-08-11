@@ -7477,9 +7477,13 @@ export type Database = {
       }
       estimate_template_items: {
         Row: {
+          applied_discount_id: string | null
           budgeted_hours: number
           calc_type: number
           created_at: string
+          discount_cents: number
+          discount_type: string | null
+          discount_value: number | null
           id: string
           org_id: string
           qty: number
@@ -7488,13 +7492,18 @@ export type Database = {
           service_name: string
           sort_order: number
           template_id: string
+          unit_type: string | null
           updated_at: string
           visits: number
         }
         Insert: {
+          applied_discount_id?: string | null
           budgeted_hours?: number
           calc_type?: number
           created_at?: string
+          discount_cents?: number
+          discount_type?: string | null
+          discount_value?: number | null
           id?: string
           org_id?: string
           qty?: number
@@ -7503,13 +7512,18 @@ export type Database = {
           service_name: string
           sort_order?: number
           template_id: string
+          unit_type?: string | null
           updated_at?: string
           visits?: number
         }
         Update: {
+          applied_discount_id?: string | null
           budgeted_hours?: number
           calc_type?: number
           created_at?: string
+          discount_cents?: number
+          discount_type?: string | null
+          discount_value?: number | null
           id?: string
           org_id?: string
           qty?: number
@@ -7518,10 +7532,18 @@ export type Database = {
           service_name?: string
           sort_order?: number
           template_id?: string
+          unit_type?: string | null
           updated_at?: string
           visits?: number
         }
         Relationships: [
+          {
+            foreignKeyName: "estimate_template_items_applied_discount_id_fkey"
+            columns: ["applied_discount_id"]
+            isOneToOne: false
+            referencedRelation: "crm_discounts"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "estimate_template_items_org_id_fkey"
             columns: ["org_id"]

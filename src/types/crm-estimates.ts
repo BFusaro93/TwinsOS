@@ -210,10 +210,15 @@ export interface EstimateTemplateItem {
   serviceName: string;
   calcType: 0 | 1;
   qty: number;
+  unitType: string | null;
   rateCents: number;
   visits: number;
   budgetedHours: number;
   sortOrder: number;
+  discountCents: number;
+  discountType: DiscountType | null;
+  discountValue: number | null;
+  appliedDiscountId: string | null;
   createdAt: string;
   updatedAt: string;
 }

@@ -4,6 +4,9 @@ import { useEffect, useState } from "react";
 import { useEstimateTemplates, useCreateEstimateTemplate, useUpdateEstimateTemplate, useDeleteEstimateTemplate, useUpsertTemplateItem, useDeleteTemplateItem } from "@/lib/hooks/use-estimate-templates";
 import { EstimateDisplaySettingsPanel } from "./EstimateDisplaySettingsPanel";
 import { useCRMServices } from "@/lib/hooks/use-crm-jobs";
+import { useProducts } from "@/lib/hooks/use-products";
+import { useDiscounts } from "@/lib/hooks/use-crm-discounts";
+import { LineItemDiscountPopover, type LineItemDiscountPatch } from "@/components/shared/LineItemDiscountPopover";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,17 +17,12 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Plus, Pencil, Trash2 } from "lucide-react";
+import { Plus, Pencil, Trash2, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
 import { centsToDisplay } from "@/lib/estimate-calc";
+import type { CRMDiscount } from "@/types/crm-discounts";
 import type { EstimateTemplate, EstimateTemplateItem } from "@/types/crm-estimates";
 
 // ── template item row (inside edit dialog) ────────────────────────────────────
@@ -32,9 +30,11 @@ import type { EstimateTemplate, EstimateTemplateItem } from "@/types/crm-estimat
 function TemplateItemRow({
   item,
   templateId,
+  discounts,
 }: {
   item: EstimateTemplateItem;
   templateId: string;
+  discounts: CRMDiscount[];
 }) {
   const [row, setRow] = useState(item);
   const [dirty, setDirty] = useState(false);
@@ -61,10 +61,15 @@ function TemplateItemRow({
           service_name: row.serviceName,
           calc_type: row.calcType,
           qty: row.qty,
+          unit_type: row.unitType,
           rate_cents: row.rateCents,
           visits: row.visits,
           budgeted_hours: row.budgetedHours,
           sort_order: row.sortOrder,
+          discount_cents: row.discountCents,
+          discount_type: row.discountType,
+          discount_value: row.discountValue,
+          applied_discount_id: row.appliedDiscountId,
         },
       });
       setDirty(false);
@@ -73,9 +78,63 @@ function TemplateItemRow({
     }
   }
 
+  async function saveDiscount(patch: LineItemDiscountPatch) {
+    setRow((p) => ({
+      ...p,
+      discountCents: patch.discountCents,
+      discountType: patch.discountType,
+      discountValue: patch.discountValue,
+      appliedDiscountId: patch.appliedDiscountId,
+    }));
+    try {
+      await upsert({
+        templateId,
+        item: {
+          id: row.id,
+          discount_cents: patch.discountCents,
+          discount_type: patch.discountType,
+          discount_value: patch.discountValue,
+          applied_discount_id: patch.appliedDiscountId,
+        },
+      });
+    } catch {
+      toast.error("Failed to save discount");
+    }
+  }
+
+  const grossCents = Math.round(row.qty * row.rateCents * row.visits);
+
   return (
     <tr className="group border-b border-slate-100 text-xs hover:bg-slate-50">
       <td className="px-3 py-1.5 font-medium text-slate-800">{row.serviceName}</td>
+      <td className="px-3 py-1.5">
+        <input
+          type="number"
+          value={row.visits}
+          onChange={(e) => update("visits", Number(e.target.value))}
+          onBlur={save}
+          className="w-14 rounded border border-slate-200 bg-white px-1.5 py-0.5 text-right text-xs focus:outline-none"
+        />
+      </td>
+      <td className="px-3 py-1.5">
+        <input
+          type="number"
+          value={row.qty}
+          onChange={(e) => update("qty", Number(e.target.value))}
+          onBlur={save}
+          className="w-14 rounded border border-slate-200 bg-white px-1.5 py-0.5 text-right text-xs focus:outline-none"
+        />
+      </td>
+      <td className="px-3 py-1.5">
+        <input
+          type="text"
+          value={row.unitType ?? ""}
+          onChange={(e) => update("unitType", e.target.value || null)}
+          onBlur={save}
+          placeholder="—"
+          className="w-14 rounded border border-slate-200 bg-white px-1.5 py-0.5 text-center text-xs focus:outline-none"
+        />
+      </td>
       <td className="px-3 py-1.5">
         <select
           value={row.calcType}
@@ -90,32 +149,14 @@ function TemplateItemRow({
       <td className="px-3 py-1.5">
         <input
           type="number"
-          value={row.qty}
-          onChange={(e) => update("qty", Number(e.target.value))}
-          onBlur={save}
-          className="w-14 rounded border border-slate-200 bg-white px-1.5 py-0.5 text-right text-xs focus:outline-none"
-        />
-      </td>
-      <td className="px-3 py-1.5">
-        <input
-          type="number"
           value={row.rateCents / 100}
           onChange={(e) => update("rateCents", Math.round((Number(e.target.value) || 0) * 100))}
           onBlur={save}
           className="w-20 rounded border border-slate-200 bg-white px-1.5 py-0.5 text-right text-xs focus:outline-none"
         />
       </td>
-      <td className="px-3 py-1.5">
-        <input
-          type="number"
-          value={row.visits}
-          onChange={(e) => update("visits", Number(e.target.value))}
-          onBlur={save}
-          className="w-14 rounded border border-slate-200 bg-white px-1.5 py-0.5 text-right text-xs focus:outline-none"
-        />
-      </td>
       <td className="px-3 py-1.5 text-right tabular-nums text-slate-500">
-        {centsToDisplay(Math.round(row.qty * row.rateCents * row.visits))}
+        {centsToDisplay(grossCents - row.discountCents)}
       </td>
       <td className="px-3 py-1.5">
         <input
@@ -124,6 +165,17 @@ function TemplateItemRow({
           onChange={(e) => update("budgetedHours", Number(e.target.value))}
           onBlur={save}
           className="w-16 rounded border border-slate-200 bg-white px-1.5 py-0.5 text-right text-xs focus:outline-none"
+        />
+      </td>
+      <td className="px-3 py-1.5">
+        <LineItemDiscountPopover
+          discountCents={row.discountCents}
+          discountType={row.discountType}
+          discountValue={row.discountValue}
+          appliedDiscountId={row.appliedDiscountId}
+          lineTotalCents={grossCents}
+          discounts={discounts}
+          onSave={saveDiscount}
         />
       </td>
       <td className="px-3 py-1.5">
@@ -150,30 +202,48 @@ function EditTemplateDialog({
   onOpenChange: (o: boolean) => void;
 }) {
   const { data: services } = useCRMServices();
+  const { data: productCatalog = [] } = useProducts();
+  const materialProducts = productCatalog.filter(
+    (p) => p.category === "stocked_material" || p.category === "project_material"
+  );
+  const { data: discounts = [] } = useDiscounts();
+  const activeDiscounts = discounts.filter((d) => d.isActive);
   const { mutateAsync: upsert } = useUpsertTemplateItem();
   const { mutateAsync: updateTemplate } = useUpdateEstimateTemplate();
-  const [showPicker, setShowPicker] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
+  const [search, setSearch] = useState("");
 
-  async function addService(name: string, id?: string) {
+  async function addItem(input: { name: string; id?: string; unit?: string; rateCents?: number | null }) {
     try {
       await upsert({
         templateId: template.id,
         item: {
-          service_id: id ?? null,
-          service_name: name,
+          service_id: input.id ?? null,
+          service_name: input.name,
           calc_type: 1,
           qty: 1,
-          rate_cents: 0,
+          unit_type: input.unit ?? null,
+          rate_cents: input.rateCents ?? 0,
           visits: 1,
           budgeted_hours: 0,
           sort_order: (template.items ?? []).length,
         },
       });
-      setShowPicker(false);
+      setAddOpen(false);
+      setSearch("");
     } catch {
       toast.error("Failed to add item");
     }
   }
+
+  const activeServices = (services ?? []).filter((s) => s.isActive);
+  const lc = search.toLowerCase();
+  const filteredServices = lc
+    ? activeServices.filter((s) => s.name.toLowerCase().includes(lc))
+    : activeServices;
+  const filteredProducts = lc
+    ? materialProducts.filter((p) => p.name.toLowerCase().includes(lc))
+    : materialProducts;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -207,60 +277,100 @@ function EditTemplateDialog({
 
           {/* Line items grid */}
           <div className="overflow-x-auto rounded-lg border">
-            <table className="w-full min-w-[560px] text-xs">
-              <thead className="bg-slate-700 text-white">
+            <table className="w-full min-w-[680px] text-xs">
+              <thead className="bg-primary text-primary-foreground">
                 <tr>
                   <th className="px-3 py-2 text-left font-medium">Service/Package</th>
-                  <th className="px-3 py-2 text-center font-medium">Calc</th>
-                  <th className="px-3 py-2 text-center font-medium">Qty</th>
-                  <th className="px-3 py-2 text-center font-medium">Rate</th>
                   <th className="px-3 py-2 text-center font-medium">Visits</th>
+                  <th className="px-3 py-2 text-center font-medium">Qty</th>
+                  <th className="px-3 py-2 text-center font-medium">Unit</th>
+                  <th className="px-3 py-2 text-center font-medium">Calc</th>
+                  <th className="px-3 py-2 text-center font-medium">Rate</th>
                   <th className="px-3 py-2 text-right font-medium">Total</th>
                   <th className="px-3 py-2 text-right font-medium">B. Hrs</th>
+                  <th className="px-3 py-2" />
                   <th className="px-3 py-2" />
                 </tr>
               </thead>
               <tbody>
                 {(template.items ?? []).map((item) => (
-                  <TemplateItemRow key={item.id} item={item} templateId={template.id} />
+                  <TemplateItemRow key={item.id} item={item} templateId={template.id} discounts={activeDiscounts} />
                 ))}
               </tbody>
             </table>
           </div>
 
           {/* Add item */}
-          {showPicker ? (
-            <div className="flex flex-wrap gap-2">
-              {(services ?? []).map((s) => (
-                <button
-                  key={s.id}
-                  onClick={() => addService(s.name, s.id)}
-                  className="rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs hover:bg-brand-50 hover:border-brand-300 hover:text-brand-700"
-                >
-                  {s.name}
-                </button>
-              ))}
-              <button
-                onClick={() => addService("Custom Item")}
-                className="rounded-md border border-dashed border-slate-300 px-2.5 py-1 text-xs text-slate-500"
-              >
-                + Custom
-              </button>
-              <button onClick={() => setShowPicker(false)} className="px-2 text-xs text-slate-400">
-                Cancel
-              </button>
-            </div>
-          ) : (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 w-fit text-xs"
-              onClick={() => setShowPicker(true)}
-            >
-              <Plus className="mr-1 h-3.5 w-3.5" />
-              Add Item
-            </Button>
-          )}
+          <Popover open={addOpen} onOpenChange={(o) => { setAddOpen(o); if (!o) setSearch(""); }}>
+            <PopoverTrigger asChild>
+              <Button variant="outline" size="sm" className="h-8 w-fit text-xs">
+                <Plus className="mr-1 h-3.5 w-3.5" /> Add Item
+                <ChevronDown className="ml-1 h-3 w-3 text-slate-400" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent align="start" className="w-80 p-0">
+              <div className="border-b px-2 py-1.5">
+                <Input
+                  autoFocus
+                  placeholder="Search services & products…"
+                  className="h-7 text-xs"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                />
+              </div>
+              <div className="max-h-72 overflow-y-auto py-1">
+                {filteredServices.length > 0 && (
+                  <>
+                    <div className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Services</div>
+                    {filteredServices.map((s) => (
+                      <button
+                        key={s.id}
+                        className="flex w-full items-center justify-between px-3 py-1.5 text-xs hover:bg-slate-50"
+                        onClick={() => addItem({ id: s.id, name: s.name, unit: s.unit ?? undefined, rateCents: s.defaultRateCents })}
+                      >
+                        <span className="font-medium text-slate-900">{s.name}</span>
+                        {s.productionRateSqftPerHr && (
+                          <span className="ml-2 shrink-0 text-[10px] text-slate-400">
+                            {s.productionRateSqftPerHr.toLocaleString()} {s.unit}/hr
+                          </span>
+                        )}
+                      </button>
+                    ))}
+                  </>
+                )}
+                {filteredProducts.length > 0 && (
+                  <>
+                    <div className="mt-1 border-t px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Products / Materials</div>
+                    {filteredProducts.map((p) => (
+                      <button
+                        key={p.id}
+                        className="flex w-full items-center justify-between px-3 py-1.5 text-xs hover:bg-slate-50"
+                        onClick={() => addItem({ name: p.name, unit: "each", rateCents: p.price })}
+                      >
+                        <span className="font-medium text-slate-900">{p.name}</span>
+                        {p.price > 0 && (
+                          <span className="ml-2 shrink-0 text-[10px] text-slate-400">
+                            ${(p.price / 100).toFixed(2)}
+                          </span>
+                        )}
+                      </button>
+                    ))}
+                  </>
+                )}
+                {filteredServices.length === 0 && filteredProducts.length === 0 && lc && (
+                  <div className="px-3 py-3 text-xs text-slate-400">No results for &ldquo;{search}&rdquo;</div>
+                )}
+                <div className="mt-1 border-t">
+                  <button
+                    className="flex w-full items-center px-3 py-1.5 text-xs text-slate-500 hover:bg-slate-50"
+                    onClick={() => addItem({ name: "Custom Item" })}
+                  >
+                    <Plus className="mr-1.5 h-3 w-3" /> Blank line item
+                  </button>
+                </div>
+              </div>
+            </PopoverContent>
+          </Popover>
         </div>
 
         <DialogFooter>

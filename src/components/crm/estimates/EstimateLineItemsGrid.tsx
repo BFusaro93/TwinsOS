@@ -479,7 +479,7 @@ function LineItemRow({
           </div>
         </td>
 
-        {/* OCC (Visits) */}
+        {/* Visits */}
         <td className="w-16 px-2 py-1.5">
           <InlineNum
             value={row.visits}
@@ -513,7 +513,7 @@ function LineItemRow({
           </select>
         </td>
 
-        {/* B.Hr — budgeted hours per occurrence. Auto-calc shown in blue if production rate is active */}
+        {/* B.Hr — budgeted hours per visit. Auto-calc shown in blue if production rate is active */}
         <td className="w-14 px-2 py-1.5 text-right tabular-nums">
           {isAutoHrs ? (
             <span className="text-blue-600 font-medium">{row.budgetedHours.toFixed(2)}</span>
@@ -526,7 +526,7 @@ function LineItemRow({
           )}
         </td>
 
-        {/* T.H. — total hours = B.Hr × OCC */}
+        {/* T.H. — total hours = B.Hr × Visits */}
         <td className="w-14 px-2 py-1.5 text-right tabular-nums text-slate-500">
           {row.totalBudgetedHours.toFixed(2)}
         </td>
@@ -544,7 +544,7 @@ function LineItemRow({
           </select>
         </td>
 
-        {/* Rate (P/P — price per occurrence) */}
+        {/* Rate (price per visit) */}
         <td className="w-20 px-2 py-1.5">
           <InlineNum
             value={row.rateCents / 100}
@@ -976,16 +976,16 @@ export function EstimateLineItemsGrid({ estimateId, items, selectedIds = [], onS
               <th className="px-2 py-2 text-left font-medium">Status</th>
               {tiersEnabled && <th className="px-2 py-2 text-left font-medium">Tier</th>}
               <th className="px-2 py-2 text-left font-medium" title="The service or package being sold on this line">Service / Package</th>
-              <th className="px-2 py-2 text-center font-medium" title="Occurrences — number of visits this line item covers">OCC</th>
-              <th className="px-2 py-2 text-right font-medium" title="Quantity of the unit below, per occurrence">QTY</th>
+              <th className="px-2 py-2 text-center font-medium" title="Number of visits this line item covers">Visits</th>
+              <th className="px-2 py-2 text-right font-medium" title="Quantity of the unit below, per visit">QTY</th>
               <th className="px-2 py-2 text-left font-medium" title="Unit of measure for Qty (e.g. sq ft, hr, each)">Unit</th>
-              <th className="px-2 py-2 text-right font-medium" title="Budgeted hours per occurrence — auto-calculated in blue when a production rate is set, otherwise entered manually">B.Hr</th>
-              <th className="px-2 py-2 text-right font-medium" title="Total budgeted hours = B.Hr × OCC">T.H.</th>
+              <th className="px-2 py-2 text-right font-medium" title="Budgeted hours per visit — auto-calculated in blue when a production rate is set, otherwise entered manually">B.Hr</th>
+              <th className="px-2 py-2 text-right font-medium" title="Total budgeted hours = B.Hr × Visits">T.H.</th>
               <th className="px-2 py-2 text-center font-medium" title="Calc type: × = qty×rate×visits, $ = fixed">Calc</th>
-              <th className="px-2 py-2 text-right font-medium" title="Price per occurrence charged to the client">Rate</th>
+              <th className="px-2 py-2 text-right font-medium" title="Price per visit charged to the client">Rate</th>
               <th className="px-2 py-2 text-right font-medium" title="Total price charged to the client for this line">TP</th>
               <th className="px-2 py-2 text-right font-medium" title="Gross margin % = (Total Price − Total Cost) ÷ Total Price">GM%</th>
-              <th className="px-2 py-2 text-right font-medium" title="Cost per occurrence — pre-fills from budgeted hours × your org's breakeven labor rate until you type a value manually">Cost</th>
+              <th className="px-2 py-2 text-right font-medium" title="Cost per visit — pre-fills from budgeted hours × your org's breakeven labor rate until you type a value manually">Cost</th>
               <th className="px-2 py-2 text-right font-medium" title="Total cost = Cost × Qty × Visits">T.Cost</th>
               <th className="px-2 py-2 text-right font-medium" title="Manual override of Rate — used in calculations instead of Rate when set">Adj Rate</th>
               <th className="px-2 py-2" />

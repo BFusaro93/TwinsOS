@@ -401,7 +401,7 @@ function WonServiceProductsReport({ lineItems }: { lineItems: RawLineItem[] }) {
           <thead className="border-b bg-slate-50">
             <tr>
               <TH>Service</TH>
-              <TH right>OCC</TH>
+              <TH right>Visits</TH>
               <TH right>Qty</TH>
               <TH right>Rate</TH>
               <TH right>Total</TH>

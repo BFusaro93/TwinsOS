@@ -337,7 +337,7 @@ function LineItemTableHeader({ settings, backgroundColor }: { settings: DisplayS
       <View style={S.cellService}><Text style={S.tableHeaderText}>Service</Text></View>
       {settings.showQuantities && (
         <>
-          <View style={S.cellNum}><Text style={[S.tableHeaderText, { textAlign: "right" }]}>OCC</Text></View>
+          <View style={S.cellNum}><Text style={[S.tableHeaderText, { textAlign: "right" }]}>Visits</Text></View>
           <View style={S.cellNum}><Text style={[S.tableHeaderText, { textAlign: "right" }]}>Qty</Text></View>
           <View style={S.cellNum}><Text style={[S.tableHeaderText, { textAlign: "right" }]}>Unit</Text></View>
         </>

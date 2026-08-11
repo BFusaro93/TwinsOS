@@ -3,6 +3,9 @@
 import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { EstimateTemplatesList } from "@/components/crm/estimates/EstimateTemplatesList";
+import { EstimateDisplaySettingsPanel } from "@/components/crm/estimates/EstimateDisplaySettingsPanel";
+import { useOrgSettings, useUpdateOrgSettings } from "@/lib/hooks/use-org-settings";
+import { getOrgDefaultDisplaySettings } from "@/lib/estimate-display-settings";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -307,6 +310,38 @@ function EmailTemplatesEditor() {
   );
 }
 
+// ─── Client View defaults ───────────────────────────────────────────────────
+
+function ClientViewDefaultsPanel() {
+  const { data: orgSettings, isLoading } = useOrgSettings();
+  const { mutateAsync: updateOrgSettings } = useUpdateOrgSettings();
+
+  if (isLoading || !orgSettings) {
+    return <p className="text-sm text-slate-400">Loading…</p>;
+  }
+
+  const settings = getOrgDefaultDisplaySettings(orgSettings.customizations);
+
+  return (
+    <div className="space-y-2">
+      <p className="text-xs text-slate-400">
+        Default display settings for brand-new estimates that don&apos;t use a template. A template&apos;s own
+        Client View settings always take priority over these when one is selected.
+      </p>
+      <EstimateDisplaySettingsPanel
+        title="Company-wide client view defaults"
+        description="Applied to every new estimate created without a template."
+        settings={settings}
+        onChange={(next) => {
+          updateOrgSettings({ customizations: { defaultDisplaySettings: next } }).catch(() =>
+            toast.error("Failed to save")
+          );
+        }}
+      />
+    </div>
+  );
+}
+
 // ─── Page ────────────────────────────────────────────────────────────────────
 
 export default function EstimateSettingsPage() {
@@ -323,6 +358,7 @@ export default function EstimateSettingsPage() {
         <TabsList className="mb-4">
           <TabsTrigger value="document-templates">Document Templates</TabsTrigger>
           <TabsTrigger value="email-templates">Email Templates</TabsTrigger>
+          <TabsTrigger value="client-view">Client View</TabsTrigger>
         </TabsList>
 
         <TabsContent value="document-templates">
@@ -337,6 +373,10 @@ export default function EstimateSettingsPage() {
 
         <TabsContent value="email-templates">
           <EmailTemplatesEditor />
+        </TabsContent>
+
+        <TabsContent value="client-view">
+          <ClientViewDefaultsPanel />
         </TabsContent>
       </Tabs>
     </div>

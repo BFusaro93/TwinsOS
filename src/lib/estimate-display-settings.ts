@@ -25,6 +25,15 @@ export function toDisplaySettings(raw: unknown): DisplaySettings {
   return { ...DEFAULT_DISPLAY_SETTINGS, ...r };
 }
 
+/**
+ * Org-wide fallback for a brand-new estimate with no template selected — set
+ * on the Settings > Estimates > Client View tab, stored the same way as
+ * other soft settings (organizations.customizations jsonb, no migration).
+ */
+export function getOrgDefaultDisplaySettings(customizations: Record<string, unknown> | null | undefined): DisplaySettings {
+  return toDisplaySettings(customizations?.defaultDisplaySettings);
+}
+
 interface GroupableItem {
   rowType?: "item" | "section" | null;
   sectionName?: string | null;

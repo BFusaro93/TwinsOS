@@ -29,6 +29,7 @@ import { useClients } from "@/lib/hooks/use-clients";
 import { useSelectableEmployees } from "@/lib/hooks/use-employees";
 import { computeLineItem, getBreakevenRateCents } from "@/lib/estimate-calc";
 import { useOrgSettings } from "@/lib/hooks/use-org-settings";
+import { getOrgDefaultDisplaySettings } from "@/lib/estimate-display-settings";
 import { toast } from "sonner";
 import type { Estimate } from "@/types/crm-estimates";
 
@@ -120,6 +121,11 @@ export function NewEstimateDialog({ open, onOpenChange, defaultClientId, onCreat
 
   async function onSubmit(values: FormValues) {
     try {
+      const tpl = values.templateId && values.templateId !== "none"
+        ? (templates ?? []).find((t) => t.id === values.templateId)
+        : undefined;
+      const displaySettings = tpl?.displaySettings ?? getOrgDefaultDisplaySettings(orgSettings?.customizations);
+
       const estimate = await createEstimate({
         clientId:       values.clientId,
         description:    values.description,
@@ -127,49 +133,53 @@ export function NewEstimateDialog({ open, onOpenChange, defaultClientId, onCreat
         validUntilDate: values.validUntilDate || undefined,
         stage:          values.stage,
         salesRepId:     values.salesRepId !== "none" ? values.salesRepId : undefined,
+        displaySettings,
       });
 
       // Apply template line items if one was selected
-      if (values.templateId && values.templateId !== "none") {
-        const tpl = (templates ?? []).find((t) => t.id === values.templateId);
-        if (tpl?.items?.length) {
-          await Promise.all(
-            tpl.items.map((item, idx) => {
-              const computed = computeLineItem({
-                calcType:      item.calcType,
-                qty:           item.qty,
-                rateCents:     item.rateCents,
-                visits:        item.visits,
-                budgetedHours: item.budgetedHours,
-                costCents:     0,
-                adjRateCents:  null,
-                budgetMethod:  "manual",
-              }, breakevenRateCents);
-              return upsertLineItem({
-                estimateId: estimate.id,
-                item: {
-                  service_id:           item.serviceId,
-                  service_name:         item.serviceName,
-                  status:               "quote",
-                  calc_type:            item.calcType,
-                  qty:                  item.qty,
-                  rate_cents:           item.rateCents,
-                  visits:               item.visits,
-                  cost_cents:           computed.costCents,
-                  adj_rate_cents:       null,
-                  sort_order:           idx,
-                  budget_method:        "manual",
-                  total_cents:          computed.totalCents,
-                  budgeted_hours:       computed.budgetedHours,
-                  total_budgeted_hours: computed.totalBudgetedHours,
-                  total_cost_cents:     computed.totalCostCents,
-                  margin_bps:           computed.marginBps,
-                  markup_bps:           computed.markupBps,
-                },
-              });
-            })
-          );
-        }
+      if (tpl?.items?.length) {
+        await Promise.all(
+          tpl.items.map((item, idx) => {
+            const computed = computeLineItem({
+              calcType:      item.calcType,
+              qty:           item.qty,
+              unitType:      item.unitType,
+              rateCents:     item.rateCents,
+              visits:        item.visits,
+              budgetedHours: item.budgetedHours,
+              costCents:     0,
+              adjRateCents:  null,
+              budgetMethod:  "manual",
+            }, breakevenRateCents);
+            return upsertLineItem({
+              estimateId: estimate.id,
+              item: {
+                service_id:           item.serviceId,
+                service_name:         item.serviceName,
+                status:               "quote",
+                calc_type:            item.calcType,
+                qty:                  item.qty,
+                unit_type:            item.unitType,
+                rate_cents:           item.rateCents,
+                visits:               item.visits,
+                cost_cents:           computed.costCents,
+                adj_rate_cents:       null,
+                sort_order:           idx,
+                budget_method:        "manual",
+                total_cents:          computed.totalCents,
+                budgeted_hours:       computed.budgetedHours,
+                total_budgeted_hours: computed.totalBudgetedHours,
+                total_cost_cents:     computed.totalCostCents,
+                margin_bps:           computed.marginBps,
+                markup_bps:           computed.markupBps,
+                discount_cents:       item.discountCents,
+                discount_type:        item.discountType,
+                discount_value:       item.discountValue,
+                applied_discount_id:  item.appliedDiscountId,
+              },
+            });
+          })
+        );
       }
 
       toast.success("Estimate created");
