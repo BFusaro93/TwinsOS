@@ -42,6 +42,7 @@ import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { ProjectDetailSheet } from "./ProjectDetailSheet";
 import { VendorDetailSheet } from "@/components/shared/VendorDetailSheet";
 import { printPO } from "@/lib/print";
+import { useComments } from "@/lib/hooks/use-comments";
 import { Download } from "lucide-react";
 import type { PurchaseOrder, LineItem, POStatus } from "@/types";
 
@@ -391,6 +392,7 @@ export function PODetailPanel({ po, onEditClick }: PODetailPanelProps) {
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const { data: projects = [] } = useProjects(true);
   const selectedProject = projects.find((p) => p.id === selectedProjectId) ?? null;
+  const { data: comments = [] } = useComments("po", po.id);
   const { mutate: syncStatus } = useUpdatePurchaseOrderStatus();
   const { mutate: deletePO, isPending: deleting } = useDeletePurchaseOrder();
   const { setSelectedPOId } = usePOStore();
@@ -412,7 +414,7 @@ export function PODetailPanel({ po, onEditClick }: PODetailPanelProps) {
           <StatusBadge variant={status} label={PO_STATUS_LABELS[status]} />
           <Button variant="outline" size="sm" className="gap-1.5" onClick={() => {
             const projMap = new Map(projects.map((p) => [p.id, p.name]));
-            printPO(po, projMap);
+            printPO(po, projMap, comments);
           }}>
             <Download className="h-3.5 w-3.5" />
             PDF

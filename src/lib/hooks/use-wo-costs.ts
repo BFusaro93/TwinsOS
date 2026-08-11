@@ -120,6 +120,19 @@ export function useAddWOPart() {
             .select()
             .single();
           if (restoreErr) throw restoreErr;
+
+          // Deduct from inventory when a linked part is restored onto a WO —
+          // mirrors the insert path below, which the restore branch otherwise
+          // bypasses entirely (was silently skipping the inventory deduction
+          // and its audit_log entry).
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          await (supabase.rpc as any)("adjust_part_quantity", {
+            p_part_id: input.partId,
+            p_delta: -input.quantity,
+            p_work_order_id: input.workOrderId,
+          });
+          await syncPartQtyToProduct(supabase, input.partId);
+
           return mapWOPart(restored);
         }
       }

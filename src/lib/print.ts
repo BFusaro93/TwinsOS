@@ -26,6 +26,18 @@ function formatDateStr(iso: string | null | undefined): string {
   });
 }
 
+function formatDateTimeStr(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleString("en-US", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
+}
+
 function escapeHtml(text: string): string {
   return text
     .replace(/&/g, "&amp;")
@@ -299,6 +311,36 @@ function buildStyles(brandColor: string): string {
       margin-bottom: 24px;
     }
 
+    /* ── Comments ───────────────────────────────────────── */
+    .comment-item {
+      border: 1px solid #e2e8f0;
+      border-radius: 6px;
+      padding: 10px 14px;
+      margin-bottom: 8px;
+    }
+
+    .comment-header {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 4px;
+      font-size: 12px;
+    }
+
+    .comment-author {
+      font-weight: 600;
+      color: #1e293b;
+    }
+
+    .comment-date {
+      color: #94a3b8;
+    }
+
+    .comment-body {
+      font-size: 13px;
+      color: #334155;
+      white-space: pre-wrap;
+    }
+
     /* ── Sub-WO list ────────────────────────────────────── */
     .sub-wo-list {
       list-style: none;
@@ -374,7 +416,29 @@ function buildFooterHtml(): string {
   return "";
 }
 
-export function printPO(po: PurchaseOrder, projectMap?: Map<string, string>): void {
+function buildCommentsHtml(comments?: Array<{ authorName: string; body: string; createdAt: string }>): string {
+  if (!comments || comments.length === 0) return "";
+  const items = comments
+    .map(
+      (c) => `
+    <div class="comment-item">
+      <div class="comment-header">
+        <span class="comment-author">${escapeHtml(c.authorName)}</span>
+        <span class="comment-date">${formatDateTimeStr(c.createdAt)}</span>
+      </div>
+      <div class="comment-body">${escapeHtml(c.body)}</div>
+    </div>
+  `
+    )
+    .join("");
+  return `<div class="section-title">Comments</div>${items}`;
+}
+
+export function printPO(
+  po: PurchaseOrder,
+  projectMap?: Map<string, string>,
+  comments?: Array<{ authorName: string; body: string; createdAt: string }>
+): void {
   const { orgName, logoDataUrl, companyAddress, brandColor } = useSettingsStore.getState();
 
   const subtotal = po.lineItems.reduce((s, li) => s + li.quantity * li.unitCost, 0);
@@ -458,6 +522,8 @@ export function printPO(po: PurchaseOrder, projectMap?: Map<string, string>): vo
     ? `<div class="section-title">Notes</div><div class="notes-block">${escapeHtml(po.notes)}</div>`
     : "";
 
+  const commentsHtml = buildCommentsHtml(comments);
+
   const html = `<!DOCTYPE html>
 <html>
 <head>
@@ -497,6 +563,8 @@ export function printPO(po: PurchaseOrder, projectMap?: Map<string, string>): vo
   </div>
 
   ${notesHtml}
+
+  ${commentsHtml}
 
   ${buildFooterHtml()}
 </body>
