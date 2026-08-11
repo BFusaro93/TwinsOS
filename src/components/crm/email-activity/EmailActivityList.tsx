@@ -141,6 +141,7 @@ export function EmailActivityList() {
   const total = emails.length;
   const deliveredCount = emails.filter((e: EmailActivity) => e.deliveredAt !== null).length;
   const openedCount = emails.filter((e: EmailActivity) => e.openedAt !== null).length;
+  const clickedCount = emails.filter((e: EmailActivity) => e.clickedAt !== null).length;
   const bouncedCount = emails.filter((e: EmailActivity) => e.bouncedAt !== null).length;
   const failedCount = emails.filter((e: EmailActivity) => e.failedAt !== null).length;
 
@@ -269,8 +270,9 @@ export function EmailActivityList() {
           { label: "Bounced",   value: fmtPct(bouncedCount, total),   color: "text-orange-500", sub: bouncedCount.toLocaleString() },
           // Resend has no "complained" (spam-report) event — confirmed against
           // the dashboard's own webhook event picker — so there's no data
-          // source for a Spam stat. Left as an honest "—" rather than faked.
-          { label: "Spam",      value: "—",                      color: "text-red-500" },
+          // source for a Spam stat. Show Clicked instead, which the webhook
+          // does track, rather than leaving the card permanently blank.
+          { label: "Clicked",   value: fmtPct(clickedCount, total),   color: "text-violet-600", sub: clickedCount.toLocaleString() },
           { label: "Failed",    value: fmtPct(failedCount, total),    color: "text-red-600",   sub: failedCount.toLocaleString() },
         ].map((s) => (
           <div key={s.label} className="rounded-lg border bg-white p-4 shadow-sm text-center">
