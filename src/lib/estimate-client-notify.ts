@@ -1,4 +1,5 @@
 import { Resend } from "resend";
+import { resolveBroadcastRecipients } from "@/lib/notify-shared";
 
 // Notifies staff when a CLIENT accepts or declines an estimate — via either
 // the public proposal link or the logged-in client portal. Separate from the
@@ -21,14 +22,7 @@ export async function notifyStaffOfEstimateDecision(
 ) {
   const { orgId, estimateId, estimateNumber, salesRepId, clientName, decision } = params;
 
-  const { data: admins } = await supabase
-    .from("profiles")
-    .select("id, email, name, notification_prefs")
-    .eq("org_id", orgId)
-    .in("role", ["admin", "manager"]);
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let recipients: any[] = admins ?? [];
+  let recipients = await resolveBroadcastRecipients(supabase, orgId, "estimateDecisionRecipientIds");
   if (salesRepId && !recipients.some((p) => p.id === salesRepId)) {
     const { data: rep } = await supabase
       .from("profiles")

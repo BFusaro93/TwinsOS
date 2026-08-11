@@ -10,7 +10,7 @@ import {
 } from "@/lib/hooks/use-tickets";
 import { useClients } from "@/lib/hooks/use-clients";
 import { useRequiredFields } from "@/lib/hooks/use-required-fields";
-import { useSelectableEmployees } from "@/lib/hooks/use-employees";
+import { useUsers } from "@/lib/hooks/use-users";
 import { TicketDetailSheet } from "./TicketDetailSheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
@@ -130,7 +130,7 @@ interface NewTicketDialogProps {
 
 export function NewTicketDialog({ open, onOpenChange, defaultClientId, defaultType = "note" }: NewTicketDialogProps) {
   const { data: clients } = useClients();
-  const { data: employees } = useSelectableEmployees();
+  const { data: users } = useUsers();
   const createTicket = useCreateTicket();
   const rf = useRequiredFields("ticket");
   const { data: categoryOptions } = useOrgList("ticket_categories");
@@ -155,6 +155,7 @@ export function NewTicketDialog({ open, onOpenChange, defaultClientId, defaultTy
     body: "",
     status: "open",
     assignedTo: "",
+    assignedToId: null,
     dueDate: "",
     priority: "normal",
   });
@@ -188,6 +189,7 @@ export function NewTicketDialog({ open, onOpenChange, defaultClientId, defaultTy
       body: "",
       status: "open",
       assignedTo: "",
+      assignedToId: null,
       dueDate: "",
       priority: "normal",
     });
@@ -363,20 +365,24 @@ export function NewTicketDialog({ open, onOpenChange, defaultClientId, defaultTy
             <div className="space-y-1.5">
               <Label>Assigned To{rf.req("assigned_to")}</Label>
               <Select
-                value={form.assignedTo || "unassigned"}
-                onValueChange={(v) => set("assignedTo", v === "unassigned" ? "" : v)}
+                value={form.assignedToId || "unassigned"}
+                onValueChange={(v) => {
+                  if (v === "unassigned") {
+                    setForm((prev) => ({ ...prev, assignedTo: "", assignedToId: null }));
+                    return;
+                  }
+                  const user = (users ?? []).find((u) => u.id === v);
+                  setForm((prev) => ({ ...prev, assignedTo: user?.name ?? "", assignedToId: v }));
+                }}
               >
                 <SelectTrigger className="h-9 text-sm">
-                  <SelectValue placeholder="Select employee…" />
+                  <SelectValue placeholder="Select user…" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="unassigned">Unassigned</SelectItem>
-                  {(employees ?? []).map((e) => {
-                    const name = `${e.firstName} ${e.lastName}`;
-                    return (
-                      <SelectItem key={e.id} value={name}>{name}</SelectItem>
-                    );
-                  })}
+                  {(users ?? []).map((u) => (
+                    <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -446,8 +452,8 @@ export function TicketsList({ clientId, typeFilter, title = "Tickets", descripti
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [reassignOpen, setReassignOpen] = useState(false);
-  const [reassignName, setReassignName] = useState("");
-  const { data: employees } = useSelectableEmployees();
+  const [reassignId, setReassignId] = useState("");
+  const { data: users } = useUsers();
 
   const { data: tickets, isLoading, refetch } = useTickets({ clientId });
   const updateTicket = useUpdateTicket();
@@ -555,19 +561,24 @@ export function TicketsList({ clientId, typeFilter, title = "Tickets", descripti
   }
 
   async function bulkReassign() {
-    if (!reassignName.trim()) return;
+    if (!reassignId) return;
     const ids = Array.from(selectedIds);
     if (ids.length === 0) return;
+    const user = (users ?? []).find((u) => u.id === reassignId);
+    if (!user) return;
     const results = await Promise.allSettled(
-      ids.map((id) => updateTicket.mutateAsync({ id, updates: { assignedTo: reassignName.trim() } }))
+      ids.map((id) => updateTicket.mutateAsync({
+        id,
+        updates: { assignedTo: user.name, assignedToId: user.id },
+      }))
     );
     const succeeded = results.filter((r) => r.status === "fulfilled").length;
     const failed = results.length - succeeded;
-    if (succeeded > 0) toast.success(`${succeeded} ticket${succeeded !== 1 ? "s" : ""} reassigned to ${reassignName.trim()}`);
+    if (succeeded > 0) toast.success(`${succeeded} ticket${succeeded !== 1 ? "s" : ""} reassigned to ${user.name}`);
     if (failed > 0) toast.error(`Failed to reassign ${failed} ticket${failed !== 1 ? "s" : ""}`);
     setSelectedIds(new Set());
     setReassignOpen(false);
-    setReassignName("");
+    setReassignId("");
   }
 
   return (
@@ -899,23 +910,20 @@ export function TicketsList({ clientId, typeFilter, title = "Tickets", descripti
             </DialogHeader>
             <div className="space-y-1.5 py-2">
               <Label>Assign To</Label>
-              <Select value={reassignName} onValueChange={setReassignName}>
+              <Select value={reassignId} onValueChange={setReassignId}>
                 <SelectTrigger className="h-9 text-sm">
-                  <SelectValue placeholder="Select employee…" />
+                  <SelectValue placeholder="Select user…" />
                 </SelectTrigger>
                 <SelectContent>
-                  {(employees ?? []).map((e) => {
-                    const name = `${e.firstName} ${e.lastName}`;
-                    return (
-                      <SelectItem key={e.id} value={name}>{name}</SelectItem>
-                    );
-                  })}
+                  {(users ?? []).map((u) => (
+                    <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
             <DialogFooter>
-              <Button variant="outline" size="sm" onClick={() => { setReassignOpen(false); setReassignName(""); }}>Cancel</Button>
-              <Button size="sm" onClick={bulkReassign} disabled={!reassignName || updateTicket.isPending}>
+              <Button variant="outline" size="sm" onClick={() => { setReassignOpen(false); setReassignId(""); }}>Cancel</Button>
+              <Button size="sm" onClick={bulkReassign} disabled={!reassignId || updateTicket.isPending}>
                 {updateTicket.isPending ? "Saving…" : "Reassign"}
               </Button>
             </DialogFooter>

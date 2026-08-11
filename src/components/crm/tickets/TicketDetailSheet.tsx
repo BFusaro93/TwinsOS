@@ -13,6 +13,7 @@ import { useEstimates } from "@/lib/hooks/use-estimates";
 import { useInvoices } from "@/lib/hooks/use-invoices";
 import { useJobsList } from "@/lib/hooks/use-crm-jobs";
 import { useSelectableEmployees } from "@/lib/hooks/use-employees";
+import { useUsers } from "@/lib/hooks/use-users";
 import { useClients } from "@/lib/hooks/use-clients";
 import { useOrgList } from "@/lib/hooks/use-org-lists";
 import {
@@ -135,7 +136,7 @@ interface EditFormProps {
 function EditForm({ ticket, onCancel, onSaved }: EditFormProps) {
   const updateTicket = useUpdateTicket();
   const { data: clients } = useClients();
-  const { data: employees } = useSelectableEmployees();
+  const { data: users } = useUsers();
   const { data: categoryOptions } = useOrgList("ticket_categories");
   const categories = categoryOptions && categoryOptions.length > 0
     ? categoryOptions.map((o) => o.value)
@@ -154,7 +155,8 @@ function EditForm({ ticket, onCancel, onSaved }: EditFormProps) {
     subject:    ticket.subject ?? "",
     body:       ticket.body ?? "",
     status:     ticket.status,
-    assignedTo: ticket.assignedTo ?? "",
+    assignedTo:   ticket.assignedTo ?? "",
+    assignedToId: ticket.assignedToId ?? null,
     dueDate:    ticket.dueDate ?? "",
     priority:   ticket.priority,
   });
@@ -259,14 +261,23 @@ function EditForm({ ticket, onCancel, onSaved }: EditFormProps) {
         </div>
         <div className="space-y-1.5">
           <Label className="text-xs">Assigned To</Label>
-          <Select value={form.assignedTo || "unassigned"} onValueChange={(v) => set("assignedTo", v === "unassigned" ? "" : v)}>
-            <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Select employee…" /></SelectTrigger>
+          <Select
+            value={form.assignedToId || "unassigned"}
+            onValueChange={(v) => {
+              if (v === "unassigned") {
+                setForm((prev) => ({ ...prev, assignedTo: "", assignedToId: null }));
+                return;
+              }
+              const user = (users ?? []).find((u) => u.id === v);
+              setForm((prev) => ({ ...prev, assignedTo: user?.name ?? "", assignedToId: v }));
+            }}
+          >
+            <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Select user…" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="unassigned">Unassigned</SelectItem>
-              {(employees ?? []).map((e) => {
-                const name = `${e.firstName} ${e.lastName}`;
-                return <SelectItem key={e.id} value={name}>{name}</SelectItem>;
-              })}
+              {(users ?? []).map((u) => (
+                <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>

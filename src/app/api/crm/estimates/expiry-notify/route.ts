@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { Resend } from "resend";
 
-// Called by a cron job (e.g. Vercel Cron or external scheduler) daily.
+// Called daily by Vercel Cron (see vercel.json) — Vercel Cron always sends a
+// GET request, so this must be GET, not POST, or it silently never fires.
 // Finds estimates expiring in the next 3 days (not yet won/lost/expired) and
 // emails the created_by user as an in-app notification proxy.
 
@@ -12,9 +13,9 @@ const serviceClient = () =>
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
   );
 
-export async function POST(req: NextRequest) {
+export async function GET(req: NextRequest) {
   const authHeader = req.headers.get("authorization");
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (!process.env.CRON_SECRET || authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

@@ -76,6 +76,12 @@ export function useAddComment() {
             extra: { commentBody: comment.body },
           }),
         }).catch(() => {});
+      } else if (recordType === "ticket") {
+        fetch(`/api/crm/tickets/${recordId}/notify`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ event: "comment", commentBody: comment.body }),
+        }).catch(() => {});
       }
     },
   });

@@ -5,6 +5,8 @@ export type NotificationEntityType =
   | "pm_schedule"
   | "part"
   | "estimate"
+  | "ticket"
+  | "contract"
   | null;
 
 export interface AppNotification {
@@ -21,7 +23,11 @@ export interface AppNotification {
     | "wo_comment"
     | "estimate_change_request"
     | "estimate_client_accepted"
-    | "estimate_client_rejected";
+    | "estimate_client_rejected"
+    | "ticket_created"
+    | "ticket_assigned"
+    | "ticket_comment"
+    | "contract_signed";
   title: string;
   body: string;
   href: string;

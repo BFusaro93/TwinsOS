@@ -17,6 +17,11 @@ export interface NotificationPrefs {
   emailEstimateClientAccepted: boolean;
   emailEstimateClientRejected: boolean;
   emailEstimateExpiring: boolean;
+  emailNewTicket: boolean;
+  emailTicketAssigned: boolean;
+  emailTicketComment: boolean;
+  emailContractSigned: boolean;
+  emailContractExpiring: boolean;
   emailLowStockAlert: boolean;
   emailPmScheduleDue: boolean;
   emailNewMaintenanceRequest: boolean;
@@ -37,6 +42,10 @@ export interface NotificationPrefs {
   inAppEstimateClientAccepted: boolean;
   inAppEstimateClientRejected: boolean;
   inAppEstimateChangeRequest: boolean;
+  inAppNewTicket: boolean;
+  inAppTicketAssigned: boolean;
+  inAppTicketComment: boolean;
+  inAppContractSigned: boolean;
   inAppLowStockAlert: boolean;
   inAppPmScheduleDue: boolean;
   inAppNewMaintenanceRequest: boolean;
@@ -57,6 +66,11 @@ export const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = {
   emailEstimateClientAccepted: true,
   emailEstimateClientRejected: true,
   emailEstimateExpiring: true,
+  emailNewTicket: true,
+  emailTicketAssigned: true,
+  emailTicketComment: true,
+  emailContractSigned: true,
+  emailContractExpiring: true,
   emailLowStockAlert: true,
   emailPmScheduleDue: false,
   emailNewMaintenanceRequest: false,
@@ -75,6 +89,10 @@ export const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = {
   inAppEstimateClientAccepted: true,
   inAppEstimateClientRejected: true,
   inAppEstimateChangeRequest: true,
+  inAppNewTicket: true,
+  inAppTicketAssigned: true,
+  inAppTicketComment: true,
+  inAppContractSigned: true,
   inAppLowStockAlert: true,
   inAppPmScheduleDue: false,
   inAppNewMaintenanceRequest: false,

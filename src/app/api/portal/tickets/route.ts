@@ -3,6 +3,7 @@ import { Resend } from "resend";
 import { getPortalContext } from "@/lib/portal/get-portal-context";
 import { createServiceClient } from "@/lib/supabase/server";
 import { getEffectiveTicketCategories } from "@/lib/portal/ticket-categories";
+import { notifyStaffOfNewTicket } from "@/lib/ticket-notify";
 import type { PortalSettingsRow } from "@/lib/portal/portal-db";
 
 const FROM = "Twins Lawn Service <noreply@twinslawnservice.com>";
@@ -108,6 +109,18 @@ export async function POST(req: Request) {
     status: "open",
     ref_id: ticket.id,
     ref_table: "crm_tickets",
+  });
+
+  // Staff-facing bell + gated email — separate from the rep/support-email
+  // notice sent below, which is a fixed, unconditional "someone should look
+  // at this" notice rather than a personal, opt-out-able preference.
+  await notifyStaffOfNewTicket(supabase, {
+    orgId: ctx.orgId,
+    ticketId: ticket.id,
+    ticketNumber: ticket.ticket_number,
+    subject: subject.trim(),
+    assignedToName: null,
+    createdByUserId: null,
   });
 
   // ── Send notification email ─────────────────────────────────────────────────

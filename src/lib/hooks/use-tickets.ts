@@ -19,6 +19,7 @@ function mapTicket(row: any): CRMTicket {
     clientId: row.client_id,
     clientName: row.clients?.display_name ?? null,
     assignedTo: row.assigned_to,
+    assignedToId: row.assigned_to_id ?? null,
     dueDate: row.due_date,
     closedAt: row.closed_at,
     createdAt: row.created_at,
@@ -85,6 +86,7 @@ export function useCreateTicket() {
           body: values.body || null,
           status: values.status,
           assigned_to: values.assignedTo || null,
+          assigned_to_id: values.assignedToId ?? null,
           due_date: values.dueDate || null,
           priority: values.priority,
         })
@@ -106,11 +108,16 @@ export function useCreateTicket() {
       }
       return ticket;
     },
-    onSuccess: (_data, values) => {
+    onSuccess: (ticket, values) => {
       qc.invalidateQueries({ queryKey: ["crm-tickets"] });
       if (values.clientId) {
         qc.invalidateQueries({ queryKey: ["clients", values.clientId, "activity"] });
       }
+      fetch(`/api/crm/tickets/${ticket.id}/notify`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ event: "created" }),
+      }).catch(() => {});
     },
   });
 }
@@ -189,6 +196,7 @@ export function useUpdateTicket() {
         payload.closed_at = updates.status === "closed" ? new Date().toISOString() : null;
       }
       if (updates.assignedTo !== undefined) payload.assigned_to = updates.assignedTo || null;
+      if (updates.assignedToId !== undefined) payload.assigned_to_id = updates.assignedToId ?? null;
       if (updates.dueDate !== undefined) payload.due_date = updates.dueDate || null;
       if (updates.priority !== undefined) payload.priority = updates.priority;
 
@@ -196,8 +204,15 @@ export function useUpdateTicket() {
       const { error } = await (supabase as any).from("crm_tickets").update(payload).eq("id", id);
       if (error) throw error;
     },
-    onSuccess: () => {
+    onSuccess: (_data, { id, updates }) => {
       qc.invalidateQueries({ queryKey: ["crm-tickets"] });
+      if (updates.assignedTo) {
+        fetch(`/api/crm/tickets/${id}/notify`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ event: "assigned" }),
+        }).catch(() => {});
+      }
     },
   });
 }

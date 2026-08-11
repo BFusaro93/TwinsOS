@@ -70,6 +70,13 @@ function NotifIcon({ type }: { type: AppNotification["type"] }) {
       return <ThumbsUp className={cn(cls, "text-emerald-500")} />;
     case "estimate_client_rejected":
       return <ThumbsDown className={cn(cls, "text-red-500")} />;
+    case "ticket_created":
+    case "ticket_assigned":
+      return <MessageSquarePlus className={cn(cls, "text-brand-500")} />;
+    case "ticket_comment":
+      return <MessageSquare className={cn(cls, "text-slate-400")} />;
+    case "contract_signed":
+      return <ThumbsUp className={cn(cls, "text-emerald-500")} />;
     default:
       return <Bell className={cn(cls, "text-slate-400")} />;
   }
@@ -103,7 +110,7 @@ export function NotificationsBell() {
       .from("notifications")
       .select("id, type, title, message, entity_id, entity_type, created_at")
       .eq("user_id", currentUser.id)
-      .in("type", ["wo_comment", "wo_status_changed", "estimate_change_request", "estimate_client_accepted", "estimate_client_rejected"])
+      .in("type", ["wo_comment", "wo_status_changed", "estimate_change_request", "estimate_client_accepted", "estimate_client_rejected", "ticket_created", "ticket_assigned", "ticket_comment", "contract_signed"])
       .order("created_at", { ascending: false })
       .limit(50)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -285,27 +292,30 @@ export function NotificationsBell() {
         });
       });
 
-    // Persisted DB notifications (wo_comment, wo_status_changed, estimate_change_request,
-    // estimate_client_accepted, estimate_client_rejected)
-    const ESTIMATE_DB_TYPES = new Set(["estimate_change_request", "estimate_client_accepted", "estimate_client_rejected"]);
+    // Persisted DB notifications — each of these is inserted directly into the
+    // `notifications` table by server-side code (estimate-client-notify.ts,
+    // ticket-notify.ts, estimate-change-requests.ts) rather than synthesized
+    // client-side like the sections above.
+    const DB_NOTIF_META: Record<string, { href: (entityId: string | null) => string; title: string }> = {
+      estimate_change_request:    { href: (id) => `/crm/estimates/${id}`, title: "Change Requested" },
+      estimate_client_accepted:   { href: (id) => `/crm/estimates/${id}`, title: "Estimate Accepted" },
+      estimate_client_rejected:   { href: (id) => `/crm/estimates/${id}`, title: "Estimate Declined" },
+      ticket_created:             { href: () => "/crm/tickets", title: "New Ticket" },
+      ticket_assigned:            { href: () => "/crm/tickets", title: "Ticket Assigned" },
+      ticket_comment:             { href: () => "/crm/tickets", title: "New Comment" },
+      contract_signed:            { href: () => "/crm/accounting/contracts", title: "Contract Signed" },
+      wo_status_changed:          { href: () => "/cmms/work-orders", title: "Status Changed" },
+    };
     dbNotifications.filter((n) => {
       if (n.type === "wo_comment" && notifPrefs?.inAppWorkOrderComment === false) return false;
       if (n.type === "wo_status_changed" && notifPrefs?.inAppWorkOrderStatusChanged === false) return false;
       return true;
     }).forEach((n) => {
       const id = `db-notif-${n.id}`;
-      const notifType = (
-        n.type === "wo_status_changed" ? "wo_status_changed"
-        : n.type && ESTIMATE_DB_TYPES.has(n.type) ? n.type
-        : "wo_comment"
-      ) as AppNotification["type"];
-      const href = notifType && ESTIMATE_DB_TYPES.has(notifType) ? `/crm/estimates/${n.entity_id}` : "/cmms/work-orders";
-      const defaultTitle =
-        notifType === "wo_status_changed" ? "Status Changed"
-        : notifType === "estimate_change_request" ? "Change Requested"
-        : notifType === "estimate_client_accepted" ? "Estimate Accepted"
-        : notifType === "estimate_client_rejected" ? "Estimate Declined"
-        : "New Comment";
+      const meta = n.type ? DB_NOTIF_META[n.type] : undefined;
+      const notifType = (meta ? n.type : "wo_comment") as AppNotification["type"];
+      const href = meta ? meta.href(n.entity_id) : "/cmms/work-orders";
+      const defaultTitle = meta ? meta.title : "New Comment";
       items.push({
         id,
         type: notifType,

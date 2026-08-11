@@ -26,6 +26,10 @@
       "schedule": "0 8 * * *"
     },
     {
+      "path": "/api/cron/contract-expiry-notify",
+      "schedule": "0 8 * * *"
+    },
+    {
       "path": "/api/crm/estimates/automation-date-triggers",
       "schedule": "0 9 * * *"
     },

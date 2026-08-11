@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Check } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Switch } from "@/components/ui/switch";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useCurrentUserStore } from "@/stores";
 import {
   useNotificationPrefs,
@@ -11,6 +12,76 @@ import {
   DEFAULT_NOTIFICATION_PREFS,
   type NotificationPrefs,
 } from "@/lib/hooks/use-notification-prefs";
+import { useUsers } from "@/lib/hooks/use-users";
+import { useOrgSettings, useUpdateOrgSettings } from "@/lib/hooks/use-org-settings";
+
+// ---------------------------------------------------------------------------
+// RecipientsPicker — org-level (admin-only) config for WHICH staff are even
+// eligible to receive a given broadcast-style notification. Separate from
+// the personal opt-out toggles below: this restricts the candidate audience
+// itself (default is every admin/manager), those toggles let each person on
+// that list still turn it off for themselves. Stored in
+// organizations.customizations[customizationsKey] — absent/null means "all
+// admins/managers" (the original, un-configurable behavior); an explicit
+// array (even empty) means "exactly these people".
+// ---------------------------------------------------------------------------
+
+function RecipientsPicker({
+  customizationsKey,
+  title,
+  description,
+}: {
+  customizationsKey: string;
+  title: string;
+  description: string;
+}) {
+  const { data: users = [] } = useUsers();
+  const { data: orgSettings } = useOrgSettings();
+  const { mutate: updateOrgSettings } = useUpdateOrgSettings();
+
+  const staff = users.filter((u) => u.role === "admin" || u.role === "manager");
+  const configured = orgSettings?.customizations?.[customizationsKey] as string[] | null | undefined;
+  const usingDefault = !Array.isArray(configured);
+  const selectedIds = new Set(usingDefault ? staff.map((u) => u.id) : configured);
+
+  function setUsingDefault(useDefault: boolean) {
+    updateOrgSettings({ customizations: { [customizationsKey]: useDefault ? null : staff.map((u) => u.id) } });
+  }
+
+  function toggleUser(id: string) {
+    const next = new Set(selectedIds);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    updateOrgSettings({ customizations: { [customizationsKey]: Array.from(next) } });
+  }
+
+  return (
+    <div className="rounded-lg border bg-white shadow-sm">
+      <div className="border-b px-5 py-4">
+        <h2 className="text-sm font-semibold text-slate-900">{title}</h2>
+        <p className="mt-0.5 text-xs text-slate-500">{description}</p>
+      </div>
+      <div className="px-5 py-4">
+        <label className="mb-3 flex items-center gap-2 text-sm">
+          <Checkbox checked={usingDefault} onCheckedChange={(v) => setUsingDefault(!!v)} />
+          All admins &amp; managers (default)
+        </label>
+        {!usingDefault && (
+          <div className="ml-6 flex flex-col gap-2 border-l pl-4">
+            {staff.length === 0 && (
+              <p className="text-xs text-slate-400">No admins or managers found.</p>
+            )}
+            {staff.map((u) => (
+              <label key={u.id} className="flex items-center gap-2 text-sm text-slate-700">
+                <Checkbox checked={selectedIds.has(u.id)} onCheckedChange={() => toggleUser(u.id)} />
+                {u.name} <span className="text-xs text-slate-400">({u.role})</span>
+              </label>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 // ---------------------------------------------------------------------------
 // SettingRow
@@ -111,6 +182,26 @@ export function NotificationsPage({ hideHeader = false, scope = "cmms" }: Notifi
         />
       )}
 
+      {scope === "crm" && isAdmin && (
+        <>
+          <RecipientsPicker
+            customizationsKey="estimateDecisionRecipientIds"
+            title="Estimate Decision Recipients"
+            description="Choose who is even eligible to be notified when a client accepts or declines an estimate. The estimate's sales rep is always included in addition to whoever's picked here."
+          />
+          <RecipientsPicker
+            customizationsKey="newTicketRecipientIds"
+            title="New Ticket Recipients"
+            description="Choose who is even eligible to be notified when a new ticket comes in. The ticket's assignee (if any) is always included in addition to whoever's picked here."
+          />
+          <RecipientsPicker
+            customizationsKey="contractSignedRecipientIds"
+            title="Contract Signed Recipients"
+            description="Choose who is even eligible to be notified when a contract's status is set to Signed. The contract's sales rep is always included in addition to whoever's picked here."
+          />
+        </>
+      )}
+
       {/* Email Notifications */}
       <div className="rounded-lg border bg-white shadow-sm">
         <div className="border-b px-5 py-4">
@@ -198,6 +289,27 @@ export function NotificationsPage({ hideHeader = false, scope = "cmms" }: Notifi
               <SettingRow label="Estimate Expiring Soon" description="When an estimate you created is expiring within 3 days and hasn't been accepted">
                 <Switch checked={prefs.emailEstimateExpiring} onCheckedChange={() => toggle("emailEstimateExpiring")} />
               </SettingRow>
+              <div className="pb-1 pt-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Tickets</p>
+              </div>
+              <SettingRow label="New Ticket" description="When a new ticket is created">
+                <Switch checked={prefs.emailNewTicket} onCheckedChange={() => toggle("emailNewTicket")} />
+              </SettingRow>
+              <SettingRow label="Ticket Assigned" description="When a ticket is assigned to you">
+                <Switch checked={prefs.emailTicketAssigned} onCheckedChange={() => toggle("emailTicketAssigned")} />
+              </SettingRow>
+              <SettingRow label="Ticket Comment" description="When someone comments on a ticket assigned to you">
+                <Switch checked={prefs.emailTicketComment} onCheckedChange={() => toggle("emailTicketComment")} />
+              </SettingRow>
+              <div className="pb-1 pt-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Contracts</p>
+              </div>
+              <SettingRow label="Contract Signed" description="When a contract you own (or your org) is signed">
+                <Switch checked={prefs.emailContractSigned} onCheckedChange={() => toggle("emailContractSigned")} />
+              </SettingRow>
+              <SettingRow label="Contract Expiring Soon" description="When a contract you own is ending within 3 days and isn't set to auto-renew">
+                <Switch checked={prefs.emailContractExpiring} onCheckedChange={() => toggle("emailContractExpiring")} />
+              </SettingRow>
             </>
           )}
         </div>
@@ -264,6 +376,24 @@ export function NotificationsPage({ hideHeader = false, scope = "cmms" }: Notifi
               </SettingRow>
               <SettingRow label="Estimate Change Requested" description="When a client leaves a change request on an estimate">
                 <Switch checked={prefs.inAppEstimateChangeRequest} onCheckedChange={() => toggle("inAppEstimateChangeRequest")} />
+              </SettingRow>
+              <div className="pb-1 pt-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Tickets</p>
+              </div>
+              <SettingRow label="New Ticket" description="When a new ticket is created">
+                <Switch checked={prefs.inAppNewTicket} onCheckedChange={() => toggle("inAppNewTicket")} />
+              </SettingRow>
+              <SettingRow label="Ticket Assigned" description="When a ticket is assigned to you">
+                <Switch checked={prefs.inAppTicketAssigned} onCheckedChange={() => toggle("inAppTicketAssigned")} />
+              </SettingRow>
+              <SettingRow label="Ticket Comment" description="When someone comments on a ticket assigned to you">
+                <Switch checked={prefs.inAppTicketComment} onCheckedChange={() => toggle("inAppTicketComment")} />
+              </SettingRow>
+              <div className="pb-1 pt-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Contracts</p>
+              </div>
+              <SettingRow label="Contract Signed" description="When a contract you own (or your org) is signed">
+                <Switch checked={prefs.inAppContractSigned} onCheckedChange={() => toggle("inAppContractSigned")} />
               </SettingRow>
             </>
           )}

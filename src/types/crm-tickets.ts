@@ -15,6 +15,10 @@ export interface CRMTicket {
   clientId: string | null;
   clientName: string | null;
   assignedTo: string | null;
+  /** profiles.id of the assignee, resolved from crm_employees.user_id at
+   *  assignment time — null if unassigned, or if the assigned employee has
+   *  no linked login (assignedTo the display name still works either way). */
+  assignedToId: string | null;
   dueDate: string | null;
   closedAt: string | null;
   createdAt: string;
@@ -30,6 +34,7 @@ export interface NewTicketFormValues {
   body: string;
   status: TicketStatus;
   assignedTo: string;
+  assignedToId?: string | null;
   dueDate: string;
   priority: TicketPriority;
 }

@@ -1,3 +1,16 @@
+import { Resend } from "resend";
+import { resolveMergeTags, EMAIL_FROM } from "@/lib/email/send";
+import { notifyStaffOfNewTicket } from "@/lib/ticket-notify";
+
+interface FormEmailNotification {
+  recipients: string; // comma-separated emails, or "account" for the submitter
+  fromName?: string;
+  fromEmail?: string;
+  subject: string;
+  body: string;
+  sendCopy?: boolean; // append the full raw submission (all fields) below the body
+}
+
 interface FormRow {
   id: string;
   org_id: string;
@@ -311,10 +324,21 @@ export async function submitFormResponse(
         type: "note",
         source: "form",
       })
-      .select("id")
+      .select("id, ticket_number")
       .single();
 
     relatedTicketId = ticket?.id ?? null;
+
+    if (ticket) {
+      await notifyStaffOfNewTicket(db, {
+        orgId: form.org_id,
+        ticketId: ticket.id,
+        ticketNumber: ticket.ticket_number,
+        subject: ticketSubject,
+        assignedToName: null,
+        createdByUserId: null,
+      });
+    }
   }
 
   // ── Log form response ─────────────────────────────────────────────────────────
@@ -338,9 +362,57 @@ export async function submitFormResponse(
     return { ok: false, error: insertError.message };
   }
 
-  // ── TODO: Fire email notifications ────────────────────────────────────────────
-  // form.settings.emailNotifications contains notification config.
-  // Actual email sending requires Resend/SMTP integration (future sprint).
+  // ── Fire configured email notifications ───────────────────────────────────────
+  // Admin-typed fixed recipients for a specific business purpose (not resolved
+  // to profiles), so — like automations' send_email action — this sends
+  // unconditionally with no notification_prefs gating.
+  const emailNotifications = (form.settings?.emailNotifications ?? []) as FormEmailNotification[];
+  if (emailNotifications.length > 0 && process.env.RESEND_API_KEY) {
+    const { data: org } = await db.from("organizations").select("name, address").eq("id", form.org_id).single();
+    const orgName = (org?.name as string | undefined) ?? "Your Service Provider";
+    const orgPhone = ((org?.address as Record<string, string> | null)?.phone as string | undefined) ?? "";
+
+    const vars: Record<string, string> = {
+      "[formname]": form.name,
+      "[submittedname]": submittedName ?? "",
+      "[submittedemail]": submittedEmail ?? "",
+      "[submittedphone]": submittedPhone ?? "",
+      "[submittedmessage]": submittedMessage ?? "",
+      "[companyname]": orgName,
+      "[companyphone]": orgPhone,
+    };
+    // Every submitted field is also available by its label, e.g. "How can we
+    // help?" → [howcanwehelp] — lets a notification body reference any field
+    // on this specific form without the sender needing to know it in advance.
+    for (const [label, value] of Object.entries(formData)) {
+      vars[`[${label.toLowerCase().replace(/[^a-z0-9]/g, "")}]`] = String(value);
+    }
+
+    const resend = new Resend(process.env.RESEND_API_KEY);
+    for (const notif of emailNotifications) {
+      const recipients = (notif.recipients ?? "")
+        .split(",")
+        .map((r) => r.trim())
+        .filter(Boolean)
+        .map((r) => (r.toLowerCase() === "account" ? submittedEmail : r))
+        .filter((r): r is string => !!r);
+      if (!recipients.length) continue;
+
+      const subject = resolveMergeTags(notif.subject || `New submission: ${form.name}`, vars);
+      const copyBlock = notif.sendCopy
+        ? `<hr style="margin:16px 0;border:none;border-top:1px solid #e2e8f0"><p style="font-size:12px;color:#64748b">${Object.entries(formData).map(([k, v]) => `<strong>${k}:</strong> ${v}`).join("<br>")}</p>`
+        : "";
+      const html = resolveMergeTags(notif.body || "", vars).replace(/\n/g, "<br>") + copyBlock;
+      const from = notif.fromEmail ? `${notif.fromName || orgName} <${notif.fromEmail}>` : EMAIL_FROM;
+
+      for (const to of recipients) {
+        await resend.emails.send({ from, to, subject, html }).catch(() => {
+          // Non-fatal — one bad recipient/from-domain shouldn't block the others
+          // or fail the submission itself.
+        });
+      }
+    }
+  }
 
   return { ok: true, result };
 }

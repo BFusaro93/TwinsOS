@@ -277,8 +277,8 @@ export function FormConfigure({ form }: Props) {
               <Label className="text-xs text-slate-600">Include a copy of the form response</Label>
             </div>
 
-            <p className="text-[10px] text-amber-600 bg-amber-50 rounded px-2 py-1">
-              Email sending requires SMTP/Resend configuration — notification settings are saved now and will fire once email is wired up.
+            <p className="text-[10px] text-slate-400">
+              Merge fields available: [formname], [submittedname], [submittedemail], [submittedphone], [submittedmessage], [companyname], [companyphone], or any field label on this form (e.g. a "How can we help?" field → [howcanwehelp]).
             </p>
           </div>
         ))}
