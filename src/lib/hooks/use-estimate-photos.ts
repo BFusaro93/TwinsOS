@@ -10,6 +10,7 @@ export interface EstimatePhoto {
   fileSize: number | null;
   mimeType: string | null;
   caption: string | null;
+  customerFacing: boolean;
   createdAt: string;
   signedUrl: string | null;
 }
@@ -25,6 +26,7 @@ function mapPhoto(row: Record<string, any>): EstimatePhoto {
     fileSize: row.file_size ?? null,
     mimeType: row.mime_type ?? null,
     caption: row.caption ?? null,
+    customerFacing: row.customer_facing ?? false,
     createdAt: row.created_at,
     signedUrl: row.signedUrl ?? null,
   };
@@ -74,6 +76,21 @@ export function useUpdateEstimatePhotoCaption(estimateId: string) {
         body: JSON.stringify({ caption }),
       });
       if (!res.ok) throw new Error((await res.json()).error ?? "Failed to update caption");
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: ["estimate-photos", estimateId] }),
+  });
+}
+
+export function useUpdateEstimatePhotoVisibility(estimateId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ photoId, customerFacing }: { photoId: string; customerFacing: boolean }) => {
+      const res = await fetch(`/api/crm/estimates/${estimateId}/photos/${photoId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ customerFacing }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error ?? "Failed to update photo visibility");
     },
     onSettled: () => qc.invalidateQueries({ queryKey: ["estimate-photos", estimateId] }),
   });

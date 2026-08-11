@@ -21,6 +21,7 @@ import { useCreateInvoiceFromEstimate } from "@/lib/hooks/use-invoices";
 import { useApprovalFlow } from "@/lib/hooks/use-approval-flows";
 import { useSubmitForApproval } from "@/lib/hooks/use-approval-requests";
 import { ApprovalChain } from "@/components/shared/ApprovalChain";
+import { CommentsSection } from "@/components/shared/CommentsSection";
 import { useEstimateTemplates } from "@/lib/hooks/use-estimate-templates";
 import { useClients } from "@/lib/hooks/use-clients";
 import { useSelectableEmployees } from "@/lib/hooks/use-employees";
@@ -115,13 +116,13 @@ const DEFAULT_STAGE_LIST: { stageKey: string; name: string }[] = [
 
 const LINE_ITEM_TABS: { value: LineItemStatus | "all"; label: string }[] = [
   { value: "all",   label: "All" },
-  { value: "quote", label: "Quote" },
   { value: "draft", label: "Draft" },
+  { value: "quote", label: "Quote" },
   { value: "won",   label: "Won" },
   { value: "lost",  label: "Lost" },
 ];
 
-type Tab = "details" | "payment" | "notes" | "photos" | "attachments" | "audit" | "versions";
+type Tab = "details" | "payment" | "notes" | "photos" | "attachments" | "comments" | "audit" | "versions";
 
 // ── Attachments tab ────────────────────────────────────────────────────────────
 
@@ -570,7 +571,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
               service_id: item.serviceId ?? null,
               service_name: item.serviceName,
               estimate_desc: item.estimateDesc || null,
-              status: "quote",
+              status: "draft",
               calc_type: 1,
               qty: item.qty,
               rate_cents: item.rateCents,
@@ -813,7 +814,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
 
       {/* ── tabs ────────────────────────────────────────────────────── */}
       <div className="flex gap-0 border-b bg-white px-6">
-        {(["details", "payment", "notes", "photos", "attachments", "audit", "versions"] as Tab[]).map((t) => (
+        {(["details", "payment", "notes", "photos", "attachments", "comments", "audit", "versions"] as Tab[]).map((t) => (
           <button
             key={t}
             onClick={() => setActiveTab(t)}
@@ -1208,7 +1209,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                             item: {
                               service_id: item.serviceId,
                               service_name: item.serviceName,
-                              status: "quote",
+                              status: "draft",
                               calc_type: item.calcType,
                               qty: item.qty,
                               rate_cents: item.rateCents,
@@ -1385,11 +1386,11 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                       <Input
                         type="number"
                         min={0}
-                        step={1}
+                        step={0.01}
                         value={
                           headerEdits.deposit_required_cents !== undefined
-                            ? String(Math.round((headerEdits.deposit_required_cents as number) / 100))
-                            : String(Math.round(estimate.depositRequiredCents / 100))
+                            ? ((headerEdits.deposit_required_cents as number) / 100).toFixed(2)
+                            : (estimate.depositRequiredCents / 100).toFixed(2)
                         }
                         onChange={(e) =>
                           patchHeader("deposit_required_cents", Math.round(Number(e.target.value) * 100))
@@ -1444,6 +1445,12 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
 
           {activeTab === "attachments" && (
             <EstimateAttachmentsTab estimateId={estimate.id} />
+          )}
+
+          {activeTab === "comments" && (
+            <div className="rounded-lg border bg-white p-4 shadow-sm">
+              <CommentsSection recordType="crm_estimate" recordId={estimate.id} />
+            </div>
           )}
 
           {activeTab === "audit" && (

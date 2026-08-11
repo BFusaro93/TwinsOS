@@ -42,15 +42,18 @@ export async function submitEstimateChangeRequest(
   // Notify admins/managers in-app (same audience pattern used for new maintenance requests)
   const { data: staff } = await supabase
     .from("profiles")
-    .select("id")
+    .select("id, notification_prefs")
     .eq("org_id", orgId)
     .in("role", ["admin", "manager"]);
 
-  if (staff?.length) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const eligible = (staff ?? []).filter((p: any) => (p.notification_prefs ?? {}).inAppEstimateChangeRequest !== false);
+
+  if (eligible.length) {
     const title = `Change requested — Estimate #${estimateNumber}`;
     await supabase.from("notifications").insert(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      staff.map((p: { id: string }) => ({
+      eligible.map((p: { id: string }) => ({
         org_id: orgId,
         user_id: p.id,
         type: "estimate_change_request",

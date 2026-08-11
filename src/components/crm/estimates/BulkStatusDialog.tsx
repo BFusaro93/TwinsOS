@@ -15,8 +15,8 @@ import { cn } from "@/lib/utils";
 import type { LineItemStatus } from "@/types/crm-estimates";
 
 const STATUS_OPTIONS: { value: LineItemStatus; label: string; color: string }[] = [
-  { value: "quote", label: "Quote", color: "bg-blue-100 text-blue-700" },
   { value: "draft", label: "Draft", color: "bg-slate-100 text-slate-600" },
+  { value: "quote", label: "Quote", color: "bg-blue-100 text-blue-700" },
   { value: "won",   label: "Won",   color: "bg-green-100 text-green-700" },
   { value: "lost",  label: "Lost",  color: "bg-red-100 text-red-600" },
 ];

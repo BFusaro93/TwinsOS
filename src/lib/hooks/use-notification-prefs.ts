@@ -11,6 +11,12 @@ export interface NotificationPrefs {
   emailRequisitionRejected: boolean;
   emailApprovalRequired: boolean;
   emailPoApprovalRequired: boolean;
+  emailEstimateApproved: boolean;
+  emailEstimateRejected: boolean;
+  emailEstimateApprovalRequired: boolean;
+  emailEstimateClientAccepted: boolean;
+  emailEstimateClientRejected: boolean;
+  emailEstimateExpiring: boolean;
   emailLowStockAlert: boolean;
   emailPmScheduleDue: boolean;
   emailNewMaintenanceRequest: boolean;
@@ -27,6 +33,10 @@ export interface NotificationPrefs {
   inAppRequisitionRejected: boolean;
   inAppApprovalRequired: boolean;
   inAppPoApprovalRequired: boolean;
+  inAppEstimateApprovalRequired: boolean;
+  inAppEstimateClientAccepted: boolean;
+  inAppEstimateClientRejected: boolean;
+  inAppEstimateChangeRequest: boolean;
   inAppLowStockAlert: boolean;
   inAppPmScheduleDue: boolean;
   inAppNewMaintenanceRequest: boolean;
@@ -41,6 +51,12 @@ export const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = {
   emailRequisitionRejected: true,
   emailApprovalRequired: true,
   emailPoApprovalRequired: true,
+  emailEstimateApproved: true,
+  emailEstimateRejected: true,
+  emailEstimateApprovalRequired: true,
+  emailEstimateClientAccepted: true,
+  emailEstimateClientRejected: true,
+  emailEstimateExpiring: true,
   emailLowStockAlert: true,
   emailPmScheduleDue: false,
   emailNewMaintenanceRequest: false,
@@ -55,6 +71,10 @@ export const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = {
   inAppRequisitionRejected: true,
   inAppApprovalRequired: true,
   inAppPoApprovalRequired: true,
+  inAppEstimateApprovalRequired: true,
+  inAppEstimateClientAccepted: true,
+  inAppEstimateClientRejected: true,
+  inAppEstimateChangeRequest: true,
   inAppLowStockAlert: true,
   inAppPmScheduleDue: false,
   inAppNewMaintenanceRequest: false,

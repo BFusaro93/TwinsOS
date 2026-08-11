@@ -377,6 +377,32 @@ export function useDecideApproval(entityId: string) {
           .select("id")
           .single();
         if (entityErr) throw entityErr;
+
+        // Estimates have a Comments tab (same pattern as POs/WOs) — auto-post
+        // the rejection reason there so it's visible in context, not just in
+        // the (easy to miss) rejection email.
+        if (newEntityStatus === "rejected" && entityType === "crm_estimate" && comment) {
+          const { data: { user: rejectingUser } } = await supabase.auth.getUser();
+          if (rejectingUser) {
+            const { data: rejectorProfile } = await supabase
+              .from("profiles")
+              .select("org_id, name")
+              .eq("id", rejectingUser.id)
+              .single();
+            if (rejectorProfile) {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              await (supabase as any).from("comments").insert({
+                org_id: rejectorProfile.org_id,
+                created_by: rejectingUser.id,
+                author_id: rejectingUser.id,
+                record_type: "crm_estimate",
+                record_id: entityId,
+                author_name: rejectorProfile.name ?? "Approver",
+                body: `Rejected: ${comment}`,
+              });
+            }
+          }
+        }
       }
 
       return { freshMapped, allResolved, entityType: decided.entity_type, newEntityStatus };
@@ -391,7 +417,7 @@ export function useDecideApproval(entityId: string) {
       const previousPOs = queryClient.getQueryData<PurchaseOrder[]>(["purchase-orders"]);
       return { previousReqs, previousPOs };
     },
-    onSuccess: ({ freshMapped, allResolved, entityType, newEntityStatus }) => {
+    onSuccess: ({ freshMapped, allResolved, entityType, newEntityStatus }, variables) => {
       // Patch approval-requests cache with fresh server data
       if (freshMapped) {
         queryClient.setQueryData(["approval-requests", entityId], freshMapped);
@@ -400,12 +426,17 @@ export function useDecideApproval(entityId: string) {
       if (allResolved && newEntityStatus) {
         const cfg = ENTITY_CONFIG[entityType as EntityType];
         cfg.patchCache?.(queryClient, entityId, newEntityStatus);
-        // Fire approved/rejected email to the submitter (best-effort)
+        // Fire approved/rejected email to the submitter (best-effort) — the
+        // comment is the rejection reason the approver just typed, so the
+        // submitter sees it in the email instead of only in the app.
         const emailType = newEntityStatus === "approved" ? "approved" : "rejected";
         fetch("/api/notifications/email", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ type: emailType, entityId, entityType }),
+          body: JSON.stringify({
+            type: emailType, entityId, entityType,
+            extra: emailType === "rejected" && variables.comment ? { comment: variables.comment } : {},
+          }),
         }).catch(() => {});
       }
     },
@@ -423,6 +454,7 @@ export function useDecideApproval(entityId: string) {
       queryClient.invalidateQueries({ queryKey: ["requisitions"] });
       queryClient.invalidateQueries({ queryKey: ["purchase-orders"] });
       queryClient.invalidateQueries({ queryKey: ["estimates"] });
+      queryClient.invalidateQueries({ queryKey: ["comments", "crm_estimate", entityId] });
     },
   });
 }

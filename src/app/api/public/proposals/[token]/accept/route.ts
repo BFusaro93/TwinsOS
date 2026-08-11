@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { Resend } from "resend";
 import { recalcEstimateTotals } from "@/lib/estimate-calc";
+import { notifyStaffOfEstimateDecision } from "@/lib/estimate-client-notify";
 
 const serviceClient = () =>
   createClient(
@@ -149,9 +150,21 @@ export async function POST(
   // 4. Log to client_activity
   const { data: est } = await supabase
     .from("estimates")
-    .select("client_id, estimate_number, org_id, total_cents, clients(primary_email, display_name)")
+    .select("client_id, estimate_number, org_id, total_cents, sales_rep_id, clients(primary_email, display_name)")
     .eq("id", shareToken.estimate_id)
     .single();
+
+  if (est) {
+    await notifyStaffOfEstimateDecision(supabase, {
+      orgId: est.org_id,
+      estimateId: shareToken.estimate_id,
+      estimateNumber: est.estimate_number as number,
+      salesRepId: (est.sales_rep_id as string | null) ?? null,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      clientName: ((est.clients as any)?.display_name as string | undefined) ?? body.acceptedByName.trim(),
+      decision: "accepted",
+    });
+  }
 
   if (est?.client_id) {
     const tierNote = body.selectedTier ? ` Accepted tier: ${body.selectedTier}.` : "";

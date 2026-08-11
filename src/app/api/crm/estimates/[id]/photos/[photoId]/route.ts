@@ -22,10 +22,14 @@ export async function PATCH(
   const { id: estimateId, photoId } = await params;
   const body = await request.json();
 
+  const patch: Record<string, unknown> = {};
+  if ("caption" in body) patch.caption = (body.caption as string | null) || null;
+  if ("customerFacing" in body) patch.customer_facing = !!body.customerFacing;
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data, error } = await (supabase as any)
     .from("estimate_photos")
-    .update({ caption: (body.caption as string | null) || null })
+    .update(patch)
     .eq("id", photoId)
     .eq("estimate_id", estimateId)
     .select()

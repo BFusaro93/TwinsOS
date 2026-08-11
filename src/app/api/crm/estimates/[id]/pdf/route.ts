@@ -4,7 +4,7 @@ import { cookies } from "next/headers";
 import { renderToBuffer } from "@react-pdf/renderer";
 import { createElement } from "react";
 import { EstimateDocument } from "@/components/crm/estimates/pdf/EstimateDocument";
-import type { EstimatePDFData, EstimatePDFLineItem, EstimatePDFMilestone, OrgPDFData } from "@/components/crm/estimates/pdf/EstimateDocument";
+import type { EstimatePDFData, EstimatePDFLineItem, EstimatePDFMilestone, EstimatePDFPhoto, OrgPDFData } from "@/components/crm/estimates/pdf/EstimateDocument";
 
 export async function GET(
   _req: NextRequest,
@@ -49,6 +49,37 @@ export async function GET(
       amountCents: (m.amount_cents as number) ?? 0,
     }));
 
+  // ── fetch customer-facing photos ────────────────────────────────────────────
+  // Storage signed URLs expire in an hour — download and base64-embed each one
+  // now (same approach already used for the org logo) so the PDF stays valid
+  // however long the buffer sits around before it's actually rendered/opened.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: photoRows } = await (supabase as any)
+    .from("estimate_photos")
+    .select("storage_path, caption, created_at")
+    .eq("estimate_id", id)
+    .eq("customer_facing", true)
+    .is("deleted_at", null)
+    .order("created_at", { ascending: true });
+
+  const photos: EstimatePDFPhoto[] = [];
+  for (const p of (photoRows ?? []) as Record<string, unknown>[]) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: signed } = await (supabase as any).storage
+      .from("attachments")
+      .createSignedUrl(p.storage_path as string, 3600);
+    if (!signed?.signedUrl) continue;
+    try {
+      const imgRes = await fetch(signed.signedUrl);
+      if (!imgRes.ok) continue;
+      const buf = Buffer.from(await imgRes.arrayBuffer());
+      const mime = imgRes.headers.get("content-type") ?? "image/jpeg";
+      photos.push({ caption: (p.caption as string | null) ?? null, dataUri: `data:${mime};base64,${buf.toString("base64")}` });
+    } catch {
+      // Skip a photo that failed to download rather than failing the whole PDF
+    }
+  }
+
   // ── fetch org settings ──────────────────────────────────────────────────────
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: org } = await (supabase as any)
@@ -64,6 +95,8 @@ export async function GET(
       ((a.sort_order as number) ?? 0) - ((b.sort_order as number) ?? 0)
     )
     .map((li: Record<string, unknown>) => ({
+      rowType: (li.row_type as "item" | "section") ?? "item",
+      sectionName: li.section_name as string | null,
       serviceName: li.service_name as string | null,
       estimateDesc: li.estimate_desc as string | null,
       qty: (li.qty as number) ?? 1,
@@ -103,6 +136,7 @@ export async function GET(
     tiersEnabled: (est.tiers_enabled as boolean) ?? false,
     tierLabels: (est.tier_labels as { basic: string; standard: string; premium: string }) ?? { basic: "Basic", standard: "Standard", premium: "Premium" },
     lineItems,
+    photos,
   };
 
   const orgData: OrgPDFData = {

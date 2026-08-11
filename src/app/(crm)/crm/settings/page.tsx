@@ -90,6 +90,7 @@ import { useApprovalFlows } from "@/lib/hooks/use-approval-flows";
 import { useInvoices, usePayments, useBulkImportInvoices, useBulkImportPayments } from "@/lib/hooks/use-invoices";
 import { useTickets, useBulkImportTickets } from "@/lib/hooks/use-tickets";
 import { useEmployees, useBulkImportEmployees } from "@/lib/hooks/use-employees";
+import { NotificationsPage } from "@/components/settings/NotificationsPage";
 
 // ── AccordionSection ──────────────────────────────────────────────────────────
 
@@ -1889,6 +1890,7 @@ const TAB_KEYS = [
   "users",
   "crm",
   "estimates",
+  "notifications",
   "services",
   "accounting",
   "chemical_tracking",
@@ -1906,6 +1908,7 @@ function tabLabel(tab: TabKey): string {
     case "users":             return "Users & Roles";
     case "crm":               return "CRM";
     case "estimates":         return "Estimates";
+    case "notifications":     return "Notifications";
     case "services":          return "Services";
     case "accounting":        return "Accounting";
     case "chemical_tracking": return "Chemical Tracking";
@@ -1949,6 +1952,9 @@ export default function CRMSettingsPage() {
           </TabsContent>
           <TabsContent value="estimates" className="mt-0">
             <EstimatesTab />
+          </TabsContent>
+          <TabsContent value="notifications" className="mt-0">
+            <NotificationsPage hideHeader scope="crm" />
           </TabsContent>
           <TabsContent value="services" className="mt-0">
             <ServicesTab />

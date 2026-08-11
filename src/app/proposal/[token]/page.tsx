@@ -568,6 +568,30 @@ export default function ProposalPage() {
         </div>
       )}
 
+      {/* Photos */}
+      {proposal.photos.length > 0 && (
+        <div className="mb-8 rounded-lg border bg-white p-4 shadow-sm">
+          <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">Photos</p>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            {proposal.photos.map((photo) => (
+              <div key={photo.id} className="overflow-hidden rounded-lg border bg-slate-50">
+                {photo.signedUrl && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={photo.signedUrl}
+                    alt={photo.caption ?? ""}
+                    className="aspect-square w-full object-cover"
+                  />
+                )}
+                {photo.caption && (
+                  <p className="px-2 py-1.5 text-center text-xs text-slate-500">{photo.caption}</p>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Deposit step — shown instead of accept section when deposit is required */}
       {depositStep === 'deposit' && proposal && (
         <div className="rounded-lg border bg-white p-6 shadow-sm space-y-5">

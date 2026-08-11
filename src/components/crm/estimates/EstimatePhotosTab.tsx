@@ -5,13 +5,14 @@ import {
   useEstimatePhotos,
   useUploadEstimatePhoto,
   useUpdateEstimatePhotoCaption,
+  useUpdateEstimatePhotoVisibility,
   useDeleteEstimatePhoto,
   type EstimatePhoto,
 } from "@/lib/hooks/use-estimate-photos";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { Camera, ImagePlus, Trash2 } from "lucide-react";
+import { Camera, ImagePlus, Trash2, Eye, EyeOff } from "lucide-react";
 
 interface Props {
   estimateId: string;
@@ -21,6 +22,7 @@ export function EstimatePhotosTab({ estimateId }: Props) {
   const { data: photos = [], isLoading } = useEstimatePhotos(estimateId);
   const upload = useUploadEstimatePhoto(estimateId);
   const updateCaption = useUpdateEstimatePhotoCaption(estimateId);
+  const updateVisibility = useUpdateEstimatePhotoVisibility(estimateId);
   const remove = useDeleteEstimatePhoto(estimateId);
   const [dragging, setDragging] = useState(false);
   const [viewPhoto, setViewPhoto] = useState<EstimatePhoto | null>(null);
@@ -86,10 +88,15 @@ export function EstimatePhotosTab({ estimateId }: Props) {
           {photos.map((photo) => (
             <div key={photo.id} className="group overflow-hidden rounded-lg border bg-white shadow-sm">
               <button
-                className="block aspect-square w-full overflow-hidden bg-slate-100"
+                className="relative block aspect-square w-full overflow-hidden bg-slate-100"
                 onClick={() => setViewPhoto(photo)}
                 title="View full size"
               >
+                {photo.customerFacing && (
+                  <span className="absolute left-1.5 top-1.5 z-10 rounded-full bg-brand-500 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-white shadow">
+                    Customer facing
+                  </span>
+                )}
                 {photo.signedUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
@@ -116,6 +123,18 @@ export function EstimatePhotosTab({ estimateId }: Props) {
                   }}
                   onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
                 />
+                <button
+                  onClick={() => updateVisibility.mutate({ photoId: photo.id, customerFacing: !photo.customerFacing })}
+                  className={cn(
+                    "rounded p-1 transition-colors",
+                    photo.customerFacing
+                      ? "text-brand-500 hover:bg-brand-50"
+                      : "text-slate-300 hover:bg-slate-100 hover:text-slate-500"
+                  )}
+                  title={photo.customerFacing ? "Customer facing — shown on estimate document" : "Internal only — click to show on estimate document"}
+                >
+                  {photo.customerFacing ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
+                </button>
                 <button
                   onClick={async () => {
                     if (!confirm("Remove this photo?")) return;

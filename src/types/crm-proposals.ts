@@ -101,6 +101,13 @@ export interface ProposalData {
   depositRequiredCents: number;
   depositCollectedCents: number;
   lineItems: ProposalLineItem[];
+  photos: ProposalPhoto[];
+}
+
+export interface ProposalPhoto {
+  id: string;
+  caption: string | null;
+  signedUrl: string | null;
 }
 
 export interface ProposalLineItem {

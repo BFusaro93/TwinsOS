@@ -13,6 +13,8 @@ import { computeInstallmentSchedule } from "@/lib/estimate-calc";
 // ── types ────────────────────────────────────────────────────────────────────
 
 export interface EstimatePDFLineItem {
+  rowType: "item" | "section";
+  sectionName: string | null;
   serviceName: string | null;
   estimateDesc: string | null;
   qty: number;
@@ -26,6 +28,14 @@ export interface EstimatePDFLineItem {
 export interface EstimatePDFMilestone {
   name: string;
   amountCents: number;
+}
+
+export interface EstimatePDFPhoto {
+  caption: string | null;
+  /** Pre-fetched and base64-encoded server-side (same pattern as the org
+   *  logo) — Storage signed URLs expire and react-pdf shouldn't depend on
+   *  them still being valid whenever the buffer actually renders. */
+  dataUri: string;
 }
 
 export interface EstimatePDFData {
@@ -57,6 +67,7 @@ export interface EstimatePDFData {
   tierLabels: { basic: string; standard: string; premium: string };
 
   lineItems: EstimatePDFLineItem[];
+  photos: EstimatePDFPhoto[];
 }
 
 export interface OrgPDFData {
@@ -134,11 +145,15 @@ function parseInline(html: string): InlineSpan[] {
 
 type RichBlock =
   | { type: "p"; spans: InlineSpan[] }
-  | { type: "li"; ordered: boolean; index: number; spans: InlineSpan[] };
+  | { type: "li"; ordered: boolean; index: number; spans: InlineSpan[] }
+  | { type: "img"; src: string };
 
+// Tiptap's Image extension inserts <img> as its own block-level node (a
+// sibling of <p>, not nested inside one) — matched as a 4th alternative here
+// rather than something parseInline needs to handle inline.
 function parseRichBlocks(html: string): RichBlock[] {
   const blocks: RichBlock[] = [];
-  const blockRe = /<p[^>]*>([\s\S]*?)<\/p>|<ul[^>]*>([\s\S]*?)<\/ul>|<ol[^>]*>([\s\S]*?)<\/ol>/gi;
+  const blockRe = /<p[^>]*>([\s\S]*?)<\/p>|<ul[^>]*>([\s\S]*?)<\/ul>|<ol[^>]*>([\s\S]*?)<\/ol>|<img\b[^>]*>/gi;
   let m: RegExpExecArray | null;
   let matchedAny = false;
   while ((m = blockRe.exec(html))) {
@@ -146,7 +161,7 @@ function parseRichBlocks(html: string): RichBlock[] {
     if (m[1] !== undefined) {
       const spans = parseInline(m[1]);
       if (spans.length) blocks.push({ type: "p", spans });
-    } else {
+    } else if (m[2] !== undefined || m[3] !== undefined) {
       const listInner = m[2] ?? m[3] ?? "";
       const ordered = m[2] === undefined;
       const liRe = /<li[^>]*>([\s\S]*?)<\/li>/gi;
@@ -156,6 +171,9 @@ function parseRichBlocks(html: string): RichBlock[] {
         const inner = lm[1].replace(/<\/?p[^>]*>/gi, "");
         blocks.push({ type: "li", ordered, index: index++, spans: parseInline(inner) });
       }
+    } else {
+      const srcMatch = /\bsrc="([^"]*)"/i.exec(m[0]);
+      if (srcMatch) blocks.push({ type: "img", src: decodeEntities(srcMatch[1]) });
     }
   }
   if (!matchedAny) {
@@ -180,6 +198,12 @@ function RichText({ html, style }: { html: string | null; style: any }) {
   return (
     <>
       {blocks.map((b, i) => {
+        if (b.type === "img") {
+          return (
+            // eslint-disable-next-line jsx-a11y/alt-text
+            <Image key={i} src={b.src} style={{ maxWidth: 120, maxHeight: 80, objectFit: "contain", marginTop: i > 0 ? 2 : 0 }} />
+          );
+        }
         const spans = b.spans.map((s, j) => (
           <Text key={j} style={{ fontFamily: spanFontFamily(s), textDecoration: s.underline ? "underline" : undefined }}>
             {s.text}
@@ -260,6 +284,8 @@ const S = StyleSheet.create({
   cellTotal: { flex: 1.2, textAlign: "right" },
   serviceDescText: { fontSize: 7.5, color: "#64748b", lineHeight: 1.4 },
   cellText: { fontSize: 9, color: "#334155" },
+  sectionRow: { flexDirection: "row", paddingVertical: 5, paddingHorizontal: 8, backgroundColor: "#e2e8f0", borderBottom: "1 solid #cbd5e1" },
+  sectionRowText: { fontSize: 8.5, fontFamily: "Helvetica-Bold", color: "#334155", textTransform: "uppercase", letterSpacing: 0.3 },
 
   // totals
   totalsBlock: { marginTop: 16, alignItems: "flex-end" },
@@ -290,6 +316,13 @@ const S = StyleSheet.create({
   // footer
   footer: { position: "absolute", bottom: 24, left: 40, right: 40, flexDirection: "row", justifyContent: "space-between", borderTop: "1 solid #e2e8f0", paddingTop: 8 },
   footerText: { fontSize: 7, color: "#94a3b8" },
+
+  // photos page
+  photosHeading: { fontSize: 14, fontFamily: "Helvetica-Bold", color: "#0f172a", marginBottom: 16 },
+  photoGrid: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
+  photoCell: { width: "48%" },
+  photoImage: { width: "100%", height: 160, objectFit: "cover", borderRadius: 4 },
+  photoCaption: { marginTop: 4, fontSize: 8, color: "#64748b", textAlign: "center" },
 });
 
 // ── component ─────────────────────────────────────────────────────────────────
@@ -400,7 +433,7 @@ export function EstimateDocument({ estimate, org }: { estimate: EstimatePDFData;
                 <View style={[S.tierBanner, { backgroundColor: accentColor }]}>
                   <Text style={S.tierBannerText}>{estimate.tierLabels[tierKey]}</Text>
                 </View>
-                <View style={[S.tableHeader, { backgroundColor: "#334155" }]}>
+                <View style={[S.tableHeader, { backgroundColor: "#1F1F1F" }]}>
                   <View style={S.cellService}><Text style={S.tableHeaderText}>Service</Text></View>
                   <View style={S.cellNum}><Text style={[S.tableHeaderText, { textAlign: "right" }]}>OCC</Text></View>
                   <View style={S.cellNum}><Text style={[S.tableHeaderText, { textAlign: "right" }]}>Qty</Text></View>
@@ -408,20 +441,26 @@ export function EstimateDocument({ estimate, org }: { estimate: EstimatePDFData;
                   <View style={S.cellNum}><Text style={[S.tableHeaderText, { textAlign: "right" }]}>Rate</Text></View>
                   <View style={S.cellTotal}><Text style={[S.tableHeaderText, { textAlign: "right" }]}>Total</Text></View>
                 </View>
-                {items.map((li, i) => (
-                  <View key={i} style={[S.tableRow, i % 2 === 1 ? S.tableRowAlt : {}]}>
-                    <View style={S.cellService}>
-                      {li.estimateDesc ? (
-                        <RichText html={li.estimateDesc} style={S.serviceDescText} />
-                      ) : null}
+                {items.map((li, i) =>
+                  li.rowType === "section" ? (
+                    <View key={i} style={S.sectionRow}>
+                      <Text style={S.sectionRowText}>{li.sectionName}</Text>
                     </View>
-                    <View style={S.cellNum}><Text style={S.cellText}>{li.visits}</Text></View>
-                    <View style={S.cellNum}><Text style={S.cellText}>{li.qty.toLocaleString()}</Text></View>
-                    <View style={S.cellNum}><Text style={S.cellText}>{li.unitType ?? "—"}</Text></View>
-                    <View style={S.cellNum}><Text style={S.cellText}>{cents(li.rateCents)}</Text></View>
-                    <View style={S.cellTotal}><Text style={[S.cellText, { textAlign: "right", fontFamily: "Helvetica-Bold" }]}>{cents(li.totalCents)}</Text></View>
-                  </View>
-                ))}
+                  ) : (
+                    <View key={i} style={[S.tableRow, i % 2 === 1 ? S.tableRowAlt : {}]}>
+                      <View style={S.cellService}>
+                        {li.estimateDesc ? (
+                          <RichText html={li.estimateDesc} style={S.serviceDescText} />
+                        ) : null}
+                      </View>
+                      <View style={S.cellNum}><Text style={S.cellText}>{li.visits}</Text></View>
+                      <View style={S.cellNum}><Text style={S.cellText}>{li.qty.toLocaleString()}</Text></View>
+                      <View style={S.cellNum}><Text style={S.cellText}>{li.unitType ?? "—"}</Text></View>
+                      <View style={S.cellNum}><Text style={S.cellText}>{cents(li.rateCents)}</Text></View>
+                      <View style={S.cellTotal}><Text style={[S.cellText, { textAlign: "right", fontFamily: "Helvetica-Bold" }]}>{cents(li.totalCents)}</Text></View>
+                    </View>
+                  )
+                )}
                 <View style={S.tierSubtotalRow}>
                   <Text style={S.tierSubtotalLabel}>{estimate.tierLabels[tierKey]} Total</Text>
                   <Text style={[S.tierSubtotalValue, { color: accentColor }]}>{cents(tierTotalCents)}</Text>
@@ -440,31 +479,45 @@ export function EstimateDocument({ estimate, org }: { estimate: EstimatePDFData;
               <View style={S.cellTotal}><Text style={[S.tableHeaderText, { textAlign: "right" }]}>Total</Text></View>
             </View>
 
-            {estimate.lineItems.map((li, i) => (
-              <View key={i} style={[S.tableRow, i % 2 === 1 ? S.tableRowAlt : {}]}>
-                <View style={S.cellService}>
-                  {li.estimateDesc ? (
-                    <RichText html={li.estimateDesc} style={S.serviceDescText} />
-                  ) : null}
+            {estimate.lineItems.map((li, i) =>
+              li.rowType === "section" ? (
+                <View key={i} style={S.sectionRow}>
+                  <Text style={S.sectionRowText}>{li.sectionName}</Text>
                 </View>
-                <View style={S.cellNum}><Text style={S.cellText}>{li.visits}</Text></View>
-                <View style={S.cellNum}><Text style={S.cellText}>{li.qty.toLocaleString()}</Text></View>
-                <View style={S.cellNum}><Text style={S.cellText}>{li.unitType ?? "—"}</Text></View>
-                <View style={S.cellNum}><Text style={S.cellText}>{cents(li.rateCents)}</Text></View>
-                <View style={S.cellTotal}><Text style={[S.cellText, { textAlign: "right", fontFamily: "Helvetica-Bold" }]}>{cents(li.totalCents)}</Text></View>
-              </View>
-            ))}
+              ) : (
+                <View key={i} style={[S.tableRow, i % 2 === 1 ? S.tableRowAlt : {}]}>
+                  <View style={S.cellService}>
+                    {li.estimateDesc ? (
+                      <RichText html={li.estimateDesc} style={S.serviceDescText} />
+                    ) : null}
+                  </View>
+                  <View style={S.cellNum}><Text style={S.cellText}>{li.visits}</Text></View>
+                  <View style={S.cellNum}><Text style={S.cellText}>{li.qty.toLocaleString()}</Text></View>
+                  <View style={S.cellNum}><Text style={S.cellText}>{li.unitType ?? "—"}</Text></View>
+                  <View style={S.cellNum}><Text style={S.cellText}>{cents(li.rateCents)}</Text></View>
+                  <View style={S.cellTotal}><Text style={[S.cellText, { textAlign: "right", fontFamily: "Helvetica-Bold" }]}>{cents(li.totalCents)}</Text></View>
+                </View>
+              )
+            )}
           </>
         )}
 
         {/* ── totals ─────────────────────────────────────────────────── */}
         {estimate.tiersEnabled ? (
-          estimate.depositRequiredCents > 0 && (
+          (estimate.depositRequiredCents > 0 || (estimate.showDiscounts && estimate.discountCents > 0)) && (
             <View style={S.totalsBlock}>
-              <View style={S.totalsRow}>
-                <Text style={[S.totalsLabel, { fontFamily: "Helvetica-Bold" }]}>Deposit Required</Text>
-                <Text style={S.totalsValue}>{cents(estimate.depositRequiredCents)}</Text>
-              </View>
+              {estimate.showDiscounts && estimate.discountCents > 0 && (
+                <View style={S.totalsRow}>
+                  <Text style={[S.totalsLabel, { color: "#16a34a" }]}>Discount</Text>
+                  <Text style={[S.totalsValue, { color: "#16a34a" }]}>-{cents(estimate.discountCents)}</Text>
+                </View>
+              )}
+              {estimate.depositRequiredCents > 0 && (
+                <View style={S.totalsRow}>
+                  <Text style={[S.totalsLabel, { fontFamily: "Helvetica-Bold" }]}>Deposit Required</Text>
+                  <Text style={S.totalsValue}>{cents(estimate.depositRequiredCents)}</Text>
+                </View>
+              )}
             </View>
           )
         ) : (
@@ -556,6 +609,25 @@ export function EstimateDocument({ estimate, org }: { estimate: EstimatePDFData;
         </View>
 
       </Page>
+
+      {estimate.photos.length > 0 && (
+        <Page size="LETTER" style={S.page}>
+          <Text style={S.photosHeading}>Photos</Text>
+          <View style={S.photoGrid}>
+            {estimate.photos.map((photo, i) => (
+              <View key={i} style={S.photoCell}>
+                {/* eslint-disable-next-line jsx-a11y/alt-text */}
+                <Image src={photo.dataUri} style={S.photoImage} />
+                {photo.caption ? <Text style={S.photoCaption}>{photo.caption}</Text> : null}
+              </View>
+            ))}
+          </View>
+          <View style={S.footer} fixed>
+            <Text style={S.footerText}>{org.name} · {org.phone}</Text>
+            <Text style={S.footerText} render={({ pageNumber, totalPages }) => `Page ${pageNumber} of ${totalPages}`} />
+          </View>
+        </Page>
+      )}
     </Document>
   );
 }

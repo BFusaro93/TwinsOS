@@ -25,6 +25,7 @@ import { useWorkOrders } from "@/lib/hooks/use-work-orders";
 import { usePMSchedules } from "@/lib/hooks/use-pm-schedules";
 import { useRequisitions } from "@/lib/hooks/use-requisitions";
 import { usePurchaseOrders } from "@/lib/hooks/use-purchase-orders";
+import { useEstimates } from "@/lib/hooks/use-estimates";
 import { useRequests } from "@/lib/hooks/use-requests";
 import { useNotificationReads } from "@/lib/hooks/use-notification-reads";
 import { useNotificationPrefs } from "@/lib/hooks/use-notification-prefs";
@@ -65,6 +66,10 @@ function NotifIcon({ type }: { type: AppNotification["type"] }) {
       return <MessageSquare className={cn(cls, "text-slate-400")} />;
     case "estimate_change_request":
       return <MessageSquarePlus className={cn(cls, "text-amber-500")} />;
+    case "estimate_client_accepted":
+      return <ThumbsUp className={cn(cls, "text-emerald-500")} />;
+    case "estimate_client_rejected":
+      return <ThumbsDown className={cn(cls, "text-red-500")} />;
     default:
       return <Bell className={cn(cls, "text-slate-400")} />;
   }
@@ -81,6 +86,7 @@ export function NotificationsBell() {
   const { data: pmSchedules = [] } = usePMSchedules();
   const { data: requisitions = [] } = useRequisitions();
   const { data: purchaseOrders = [] } = usePurchaseOrders();
+  const { data: estimates = [] } = useEstimates();
   const { data: maintenanceRequests = [] } = useRequests();
   const { data: notifPrefs } = useNotificationPrefs();
 
@@ -97,7 +103,7 @@ export function NotificationsBell() {
       .from("notifications")
       .select("id, type, title, message, entity_id, entity_type, created_at")
       .eq("user_id", currentUser.id)
-      .in("type", ["wo_comment", "wo_status_changed", "estimate_change_request"])
+      .in("type", ["wo_comment", "wo_status_changed", "estimate_change_request", "estimate_client_accepted", "estimate_client_rejected"])
       .order("created_at", { ascending: false })
       .limit(50)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -118,6 +124,7 @@ export function NotificationsBell() {
       return [
         ...(notifPrefs?.inAppApprovalRequired !== false ? requisitions.filter((r) => r.status === "pending_approval").map((r) => `req-approval-${r.id}`) : []),
         ...(notifPrefs?.inAppPoApprovalRequired !== false ? purchaseOrders.filter((po) => po.status === "pending").map((po) => `po-approval-${po.id}`) : []),
+        ...(notifPrefs?.inAppEstimateApprovalRequired !== false ? estimates.filter((e) => e.approvalStatus === "pending").map((e) => `estimate-approval-${e.id}`) : []),
         ...(notifPrefs?.inAppWorkOrderOverdue !== false ? workOrders.filter((wo) => wo.status !== "done" && wo.dueDate !== null && wo.dueDate.slice(0, 10) < todayIso).map((wo) => `wo-overdue-${wo.id}`) : []),
         ...(notifPrefs?.inAppWorkOrderAssigned !== false ? workOrders.filter((wo) => wo.status !== "done" && (wo.assignedToIds ?? []).includes(currentUser.id)).map((wo) => `wo-assigned-${wo.id}`) : []),
         ...(notifPrefs?.inAppLowStockAlert !== false ? parts.filter((p) => p.deletedAt === null && p.minimumStock !== null && p.quantityOnHand <= p.minimumStock).map((p) => `low-stock-${p.id}`) : []),
@@ -125,7 +132,7 @@ export function NotificationsBell() {
         ...(notifPrefs?.inAppNewMaintenanceRequest !== false ? maintenanceRequests.filter((mr) => mr.status === "open").map((mr) => `maint-req-${mr.id}`) : []),
         ...dbNotifications.map((n) => `db-notif-${n.id}`),
       ];
-    }, [requisitions, purchaseOrders, workOrders, parts, pmSchedules, maintenanceRequests, dbNotifications, currentUser.id, notifPrefs])
+    }, [requisitions, purchaseOrders, estimates, workOrders, parts, pmSchedules, maintenanceRequests, dbNotifications, currentUser.id, notifPrefs])
   );
 
   // Derive notifications from live data
@@ -169,6 +176,24 @@ export function NotificationsBell() {
           entityId: po.id,
           entityType: "purchase_order",
           createdAt: po.updatedAt,
+          readAt: readIds.has(id) ? new Date().toISOString() : null,
+        });
+      });
+
+    // Pending-approval estimates
+    if (notifPrefs?.inAppEstimateApprovalRequired !== false) estimates
+      .filter((e) => e.approvalStatus === "pending")
+      .forEach((e) => {
+        const id = `estimate-approval-${e.id}`;
+        items.push({
+          id,
+          type: "approval_required",
+          title: "Estimate Approval Required",
+          body: `Estimate #${e.estimateNumber} needs your approval${e.description ? ` — ${e.description}` : ""}.`,
+          href: `/crm/estimates/${e.id}`,
+          entityId: e.id,
+          entityType: "estimate",
+          createdAt: e.updatedAt,
           readAt: readIds.has(id) ? new Date().toISOString() : null,
         });
       });
@@ -260,7 +285,9 @@ export function NotificationsBell() {
         });
       });
 
-    // Persisted DB notifications (wo_comment, wo_status_changed, estimate_change_request)
+    // Persisted DB notifications (wo_comment, wo_status_changed, estimate_change_request,
+    // estimate_client_accepted, estimate_client_rejected)
+    const ESTIMATE_DB_TYPES = new Set(["estimate_change_request", "estimate_client_accepted", "estimate_client_rejected"]);
     dbNotifications.filter((n) => {
       if (n.type === "wo_comment" && notifPrefs?.inAppWorkOrderComment === false) return false;
       if (n.type === "wo_status_changed" && notifPrefs?.inAppWorkOrderStatusChanged === false) return false;
@@ -269,14 +296,20 @@ export function NotificationsBell() {
       const id = `db-notif-${n.id}`;
       const notifType = (
         n.type === "wo_status_changed" ? "wo_status_changed"
-        : n.type === "estimate_change_request" ? "estimate_change_request"
+        : n.type && ESTIMATE_DB_TYPES.has(n.type) ? n.type
         : "wo_comment"
       ) as AppNotification["type"];
-      const href = notifType === "estimate_change_request" ? `/crm/estimates/${n.entity_id}` : "/cmms/work-orders";
+      const href = notifType && ESTIMATE_DB_TYPES.has(notifType) ? `/crm/estimates/${n.entity_id}` : "/cmms/work-orders";
+      const defaultTitle =
+        notifType === "wo_status_changed" ? "Status Changed"
+        : notifType === "estimate_change_request" ? "Change Requested"
+        : notifType === "estimate_client_accepted" ? "Estimate Accepted"
+        : notifType === "estimate_client_rejected" ? "Estimate Declined"
+        : "New Comment";
       items.push({
         id,
         type: notifType,
-        title: n.title ?? (notifType === "wo_status_changed" ? "Status Changed" : notifType === "estimate_change_request" ? "Change Requested" : "New Comment"),
+        title: n.title ?? defaultTitle,
         body: n.message,
         href,
         entityId: n.entity_id,
@@ -313,7 +346,7 @@ export function NotificationsBell() {
       }
       return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
     });
-  }, [parts, workOrders, pmSchedules, requisitions, purchaseOrders, maintenanceRequests, dbNotifications, currentUser, readIds, notifPrefs]);
+  }, [parts, workOrders, pmSchedules, requisitions, purchaseOrders, estimates, maintenanceRequests, dbNotifications, currentUser, readIds, notifPrefs]);
 
   const unreadCount = notifications.filter((n) => n.readAt === null).length;
 

@@ -367,4 +367,29 @@ export async function recalcEstimateTotals(supabase: AnySupabaseClient, estimate
     })
     .eq("id", estimateId);
   if (updError) throw updError;
+
+  // estimate_milestones.amount_cents is a snapshot (the PDF and invoice
+  // creation read it directly, without recomputing), so a percent-type
+  // milestone's dollar amount goes stale the moment the estimate total
+  // changes elsewhere — until that specific row happens to get re-saved.
+  // Re-sync every still-pending percent milestone here so the snapshot
+  // never drifts from the Payment Plan tab's live "% of total" display.
+  // Invoiced milestones are left alone — their amount is a locked billing
+  // record once actually billed.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: milestones } = await supabase
+    .from("estimate_milestones")
+    .select("id, milestone_type, milestone_value, amount_cents")
+    .eq("estimate_id", estimateId)
+    .eq("status", "pending")
+    .is("deleted_at", null);
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  for (const m of (milestones ?? []) as any[]) {
+    if (m.milestone_type !== "percent") continue;
+    const newAmountCents = Math.round((totalCents * m.milestone_value) / 10000);
+    if (newAmountCents !== m.amount_cents) {
+      await supabase.from("estimate_milestones").update({ amount_cents: newAmountCents }).eq("id", m.id);
+    }
+  }
 }

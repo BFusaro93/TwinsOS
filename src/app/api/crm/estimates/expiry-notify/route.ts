@@ -55,11 +55,13 @@ export async function POST(req: NextRequest) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: profile } = await (supabase as any)
       .from("profiles")
-      .select("email, full_name")
+      .select("email, full_name, notification_prefs")
       .eq("id", createdBy)
       .single();
 
     if (!profile?.email) continue;
+    const prefs = (profile.notification_prefs ?? {}) as Record<string, unknown>;
+    if (prefs.emailEstimateExpiring === false) continue;
 
     const org = est.organizations as Record<string, unknown> | null;
     const client = est.clients as Record<string, unknown> | null;

@@ -19,7 +19,9 @@ export interface AppNotification {
     | "pm_due"
     | "wo_status_changed"
     | "wo_comment"
-    | "estimate_change_request";
+    | "estimate_change_request"
+    | "estimate_client_accepted"
+    | "estimate_client_rejected";
   title: string;
   body: string;
   href: string;

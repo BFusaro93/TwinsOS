@@ -57,6 +57,25 @@ export async function GET(
     return NextResponse.json({ error: "Estimate not found" }, { status: 404 });
   }
 
+  // Fetch customer-facing photos — signed URLs are fine here (unlike the PDF,
+  // this route is hit live on every page load, not rendered once and stored).
+  const { data: photoRows } = await supabase
+    .from("estimate_photos")
+    .select("id, storage_path, caption")
+    .eq("estimate_id", shareToken.estimate_id)
+    .eq("customer_facing", true)
+    .is("deleted_at", null)
+    .order("created_at", { ascending: true });
+
+  const photos = await Promise.all(
+    ((photoRows ?? []) as Record<string, unknown>[]).map(async (p) => {
+      const { data: signed } = await supabase.storage
+        .from("attachments")
+        .createSignedUrl(p.storage_path as string, 3600);
+      return { id: p.id as string, caption: (p.caption as string | null) ?? null, signedUrl: signed?.signedUrl ?? null };
+    })
+  );
+
   // Fetch org
   const { data: org } = await supabase
     .from("organizations")
@@ -115,5 +134,6 @@ export async function GET(
     depositCollectedCents: (est.deposit_collected_cents as number) ?? 0,
 
     lineItems,
+    photos,
   });
 }

@@ -82,6 +82,25 @@ export default async function EstimatePdfPage({ params }: { params: Promise<{ id
     .eq("estimate_id", id)
     .order("sort_order", { ascending: true }) as { data: LineItem[] | null };
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: photoRows } = await (supabase as any)
+    .from("estimate_photos")
+    .select("id, storage_path, caption")
+    .eq("estimate_id", id)
+    .eq("customer_facing", true)
+    .is("deleted_at", null)
+    .order("created_at", { ascending: true }) as { data: { id: string; storage_path: string; caption: string | null }[] | null };
+
+  const photos = await Promise.all(
+    (photoRows ?? []).map(async (p) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: signed } = await (supabase as any).storage
+        .from("attachments")
+        .createSignedUrl(p.storage_path, 3600);
+      return { id: p.id, caption: p.caption, signedUrl: signed?.signedUrl ?? null };
+    })
+  );
+
   const accent = settings?.accent_color ?? "#60ab45";
   const companyName = settings?.company_name ?? "Your Service Provider";
 
@@ -179,6 +198,26 @@ export default async function EstimatePdfPage({ params }: { params: Promise<{ id
           <div className="flex items-center justify-between py-4 border-b border-slate-200 mb-6">
             <span className="text-sm text-slate-700">Services as described</span>
             <span className="text-lg font-bold text-slate-900">{fmt(estimate.total_price_cents)}</span>
+          </div>
+        )}
+
+        {/* Photos */}
+        {photos.length > 0 && (
+          <div className="mb-6">
+            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Photos</p>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              {photos.map((photo) => (
+                <div key={photo.id} className="overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
+                  {photo.signedUrl && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={photo.signedUrl} alt={photo.caption ?? ""} className="aspect-square w-full object-cover" />
+                  )}
+                  {photo.caption && (
+                    <p className="px-2 py-1.5 text-center text-xs text-slate-500">{photo.caption}</p>
+                  )}
+                </div>
+              ))}
+            </div>
           </div>
         )}
 

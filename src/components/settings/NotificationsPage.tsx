@@ -44,9 +44,15 @@ function SettingRow({
 
 interface NotificationsPageProps {
   hideHeader?: boolean;
+  /** "cmms" (default) shows Equipt/CMMS + Purchasing prefs, used on the main
+   *  Settings page. "crm" shows only Landscapt/Estimates prefs, used on the
+   *  CRM Settings page's Notifications tab. Mutually exclusive on purpose —
+   *  estimate prefs used to live commingled with CMMS ones on the main
+   *  Settings page, which is exactly what this split fixes. */
+  scope?: "cmms" | "crm";
 }
 
-export function NotificationsPage({ hideHeader = false }: NotificationsPageProps) {
+export function NotificationsPage({ hideHeader = false, scope = "cmms" }: NotificationsPageProps) {
   const { currentUser } = useCurrentUserStore();
   const isAdmin = currentUser.role === "admin";
   const { data: remotePrefs, isLoading } = useNotificationPrefs();
@@ -94,7 +100,7 @@ export function NotificationsPage({ hideHeader = false }: NotificationsPageProps
       {!hideHeader && (
         <PageHeader
           title="Notifications"
-          description="Configure your notification preferences"
+          description={scope === "crm" ? "Configure your estimate notification preferences" : "Configure your notification preferences"}
           action={
             saved ? (
               <span className="flex items-center gap-1.5 text-xs text-green-600">
@@ -119,52 +125,78 @@ export function NotificationsPage({ hideHeader = false }: NotificationsPageProps
           </p>
         </div>
         <div className="divide-y px-5">
-          <SettingRow label="Work Order Assigned" description="When a work order is assigned to you">
-            <Switch checked={prefs.emailWorkOrderAssigned} onCheckedChange={() => toggle("emailWorkOrderAssigned")} />
-          </SettingRow>
-          <SettingRow label="Work Order Status Changed" description="When the status of your work order changes">
-            <Switch checked={prefs.emailWorkOrderStatusChanged} onCheckedChange={() => toggle("emailWorkOrderStatusChanged")} />
-          </SettingRow>
-          <SettingRow label="Work Order Overdue" description="When a work order passes its due date">
-            <Switch checked={prefs.emailWorkOrderOverdue} onCheckedChange={() => toggle("emailWorkOrderOverdue")} />
-          </SettingRow>
-          <SettingRow label="Work Order Comment" description="When someone comments on a work order you're assigned to">
-            <Switch checked={prefs.emailWorkOrderComment} onCheckedChange={() => toggle("emailWorkOrderComment")} />
-          </SettingRow>
-          <SettingRow label="Requisition Approved" description="When your purchase requisition is approved">
-            <Switch checked={prefs.emailRequisitionApproved} onCheckedChange={() => toggle("emailRequisitionApproved")} />
-          </SettingRow>
-          <SettingRow label="Requisition Rejected" description="When your purchase requisition is rejected">
-            <Switch checked={prefs.emailRequisitionRejected} onCheckedChange={() => toggle("emailRequisitionRejected")} />
-          </SettingRow>
-          <SettingRow label="Approval Required" description="When any record requires your approval">
-            <Switch checked={prefs.emailApprovalRequired} onCheckedChange={() => toggle("emailApprovalRequired")} />
-          </SettingRow>
-          <SettingRow label="PO Approval Required" description="When a purchase order requires your approval">
-            <Switch checked={prefs.emailPoApprovalRequired} onCheckedChange={() => toggle("emailPoApprovalRequired")} />
-          </SettingRow>
-          <SettingRow label="Low Stock Alert" description="When a part drops below its minimum stock level">
-            <Switch checked={prefs.emailLowStockAlert} onCheckedChange={() => toggle("emailLowStockAlert")} />
-          </SettingRow>
-          <SettingRow label="PM Schedule Due" description="When a preventive maintenance schedule is due within 7 days">
-            <Switch checked={prefs.emailPmScheduleDue} onCheckedChange={() => toggle("emailPmScheduleDue")} />
-          </SettingRow>
-          <SettingRow label="New Maintenance Request" description="When a new maintenance request is submitted">
-            <Switch checked={prefs.emailNewMaintenanceRequest} onCheckedChange={() => toggle("emailNewMaintenanceRequest")} />
-          </SettingRow>
-          {isAdmin && (
+          {scope === "cmms" && (
             <>
-              <div className="pb-1 pt-4">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Admin — All Work Orders</p>
-              </div>
-              <SettingRow label="Any WO Created" description="When any work order is created in the org">
-                <Switch checked={prefs.emailAdminWoCreated} onCheckedChange={() => toggle("emailAdminWoCreated")} />
+              <SettingRow label="Work Order Assigned" description="When a work order is assigned to you">
+                <Switch checked={prefs.emailWorkOrderAssigned} onCheckedChange={() => toggle("emailWorkOrderAssigned")} />
               </SettingRow>
-              <SettingRow label="Any WO Status Changed" description="When any work order's status changes">
-                <Switch checked={prefs.emailAdminWoStatusChanged} onCheckedChange={() => toggle("emailAdminWoStatusChanged")} />
+              <SettingRow label="Work Order Status Changed" description="When the status of your work order changes">
+                <Switch checked={prefs.emailWorkOrderStatusChanged} onCheckedChange={() => toggle("emailWorkOrderStatusChanged")} />
               </SettingRow>
-              <SettingRow label="Any WO Comment Added" description="When anyone comments on any work order">
-                <Switch checked={prefs.emailAdminWoComment} onCheckedChange={() => toggle("emailAdminWoComment")} />
+              <SettingRow label="Work Order Overdue" description="When a work order passes its due date">
+                <Switch checked={prefs.emailWorkOrderOverdue} onCheckedChange={() => toggle("emailWorkOrderOverdue")} />
+              </SettingRow>
+              <SettingRow label="Work Order Comment" description="When someone comments on a work order you're assigned to">
+                <Switch checked={prefs.emailWorkOrderComment} onCheckedChange={() => toggle("emailWorkOrderComment")} />
+              </SettingRow>
+              <SettingRow label="Requisition Approved" description="When your purchase requisition is approved">
+                <Switch checked={prefs.emailRequisitionApproved} onCheckedChange={() => toggle("emailRequisitionApproved")} />
+              </SettingRow>
+              <SettingRow label="Requisition Rejected" description="When your purchase requisition is rejected">
+                <Switch checked={prefs.emailRequisitionRejected} onCheckedChange={() => toggle("emailRequisitionRejected")} />
+              </SettingRow>
+              <SettingRow label="Approval Required" description="When any record requires your approval">
+                <Switch checked={prefs.emailApprovalRequired} onCheckedChange={() => toggle("emailApprovalRequired")} />
+              </SettingRow>
+              <SettingRow label="PO Approval Required" description="When a purchase order requires your approval">
+                <Switch checked={prefs.emailPoApprovalRequired} onCheckedChange={() => toggle("emailPoApprovalRequired")} />
+              </SettingRow>
+              <SettingRow label="Low Stock Alert" description="When a part drops below its minimum stock level">
+                <Switch checked={prefs.emailLowStockAlert} onCheckedChange={() => toggle("emailLowStockAlert")} />
+              </SettingRow>
+              <SettingRow label="PM Schedule Due" description="When a preventive maintenance schedule is due within 7 days">
+                <Switch checked={prefs.emailPmScheduleDue} onCheckedChange={() => toggle("emailPmScheduleDue")} />
+              </SettingRow>
+              <SettingRow label="New Maintenance Request" description="When a new maintenance request is submitted">
+                <Switch checked={prefs.emailNewMaintenanceRequest} onCheckedChange={() => toggle("emailNewMaintenanceRequest")} />
+              </SettingRow>
+              {isAdmin && (
+                <>
+                  <div className="pb-1 pt-4">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Admin — All Work Orders</p>
+                  </div>
+                  <SettingRow label="Any WO Created" description="When any work order is created in the org">
+                    <Switch checked={prefs.emailAdminWoCreated} onCheckedChange={() => toggle("emailAdminWoCreated")} />
+                  </SettingRow>
+                  <SettingRow label="Any WO Status Changed" description="When any work order's status changes">
+                    <Switch checked={prefs.emailAdminWoStatusChanged} onCheckedChange={() => toggle("emailAdminWoStatusChanged")} />
+                  </SettingRow>
+                  <SettingRow label="Any WO Comment Added" description="When anyone comments on any work order">
+                    <Switch checked={prefs.emailAdminWoComment} onCheckedChange={() => toggle("emailAdminWoComment")} />
+                  </SettingRow>
+                </>
+              )}
+            </>
+          )}
+          {scope === "crm" && (
+            <>
+              <SettingRow label="Estimate Approved" description="When your estimate is approved">
+                <Switch checked={prefs.emailEstimateApproved} onCheckedChange={() => toggle("emailEstimateApproved")} />
+              </SettingRow>
+              <SettingRow label="Estimate Rejected" description="When your estimate is rejected">
+                <Switch checked={prefs.emailEstimateRejected} onCheckedChange={() => toggle("emailEstimateRejected")} />
+              </SettingRow>
+              <SettingRow label="Estimate Approval Required" description="When an estimate requires your approval">
+                <Switch checked={prefs.emailEstimateApprovalRequired} onCheckedChange={() => toggle("emailEstimateApprovalRequired")} />
+              </SettingRow>
+              <SettingRow label="Estimate Accepted by Client" description="When a client accepts your estimate via the proposal link or client portal">
+                <Switch checked={prefs.emailEstimateClientAccepted} onCheckedChange={() => toggle("emailEstimateClientAccepted")} />
+              </SettingRow>
+              <SettingRow label="Estimate Declined by Client" description="When a client declines your estimate via the proposal link or client portal">
+                <Switch checked={prefs.emailEstimateClientRejected} onCheckedChange={() => toggle("emailEstimateClientRejected")} />
+              </SettingRow>
+              <SettingRow label="Estimate Expiring Soon" description="When an estimate you created is expiring within 3 days and hasn't been accepted">
+                <Switch checked={prefs.emailEstimateExpiring} onCheckedChange={() => toggle("emailEstimateExpiring")} />
               </SettingRow>
             </>
           )}
@@ -182,39 +214,59 @@ export function NotificationsPage({ hideHeader = false }: NotificationsPageProps
           </p>
         </div>
         <div className="divide-y px-5">
-          <SettingRow label="Work Order Assigned" description="When a work order is assigned to you">
-            <Switch checked={prefs.inAppWorkOrderAssigned} onCheckedChange={() => toggle("inAppWorkOrderAssigned")} />
-          </SettingRow>
-          <SettingRow label="Work Order Status Changed" description="When the status of your work order changes">
-            <Switch checked={prefs.inAppWorkOrderStatusChanged} onCheckedChange={() => toggle("inAppWorkOrderStatusChanged")} />
-          </SettingRow>
-          <SettingRow label="Work Order Overdue" description="When a work order passes its due date">
-            <Switch checked={prefs.inAppWorkOrderOverdue} onCheckedChange={() => toggle("inAppWorkOrderOverdue")} />
-          </SettingRow>
-          <SettingRow label="Work Order Comment" description="When someone comments on a work order you're assigned to">
-            <Switch checked={prefs.inAppWorkOrderComment} onCheckedChange={() => toggle("inAppWorkOrderComment")} />
-          </SettingRow>
-          <SettingRow label="Requisition Approved" description="When your purchase requisition is approved">
-            <Switch checked={prefs.inAppRequisitionApproved} onCheckedChange={() => toggle("inAppRequisitionApproved")} />
-          </SettingRow>
-          <SettingRow label="Requisition Rejected" description="When your purchase requisition is rejected">
-            <Switch checked={prefs.inAppRequisitionRejected} onCheckedChange={() => toggle("inAppRequisitionRejected")} />
-          </SettingRow>
-          <SettingRow label="Approval Required" description="When any record requires your approval">
-            <Switch checked={prefs.inAppApprovalRequired} onCheckedChange={() => toggle("inAppApprovalRequired")} />
-          </SettingRow>
-          <SettingRow label="PO Approval Required" description="When a purchase order requires your approval">
-            <Switch checked={prefs.inAppPoApprovalRequired} onCheckedChange={() => toggle("inAppPoApprovalRequired")} />
-          </SettingRow>
-          <SettingRow label="Low Stock Alert" description="When a part drops below its minimum stock level">
-            <Switch checked={prefs.inAppLowStockAlert} onCheckedChange={() => toggle("inAppLowStockAlert")} />
-          </SettingRow>
-          <SettingRow label="PM Schedule Due" description="When a preventive maintenance schedule is due within 7 days">
-            <Switch checked={prefs.inAppPmScheduleDue} onCheckedChange={() => toggle("inAppPmScheduleDue")} />
-          </SettingRow>
-          <SettingRow label="New Maintenance Request" description="When a new maintenance request is submitted">
-            <Switch checked={prefs.inAppNewMaintenanceRequest} onCheckedChange={() => toggle("inAppNewMaintenanceRequest")} />
-          </SettingRow>
+          {scope === "cmms" && (
+            <>
+              <SettingRow label="Work Order Assigned" description="When a work order is assigned to you">
+                <Switch checked={prefs.inAppWorkOrderAssigned} onCheckedChange={() => toggle("inAppWorkOrderAssigned")} />
+              </SettingRow>
+              <SettingRow label="Work Order Status Changed" description="When the status of your work order changes">
+                <Switch checked={prefs.inAppWorkOrderStatusChanged} onCheckedChange={() => toggle("inAppWorkOrderStatusChanged")} />
+              </SettingRow>
+              <SettingRow label="Work Order Overdue" description="When a work order passes its due date">
+                <Switch checked={prefs.inAppWorkOrderOverdue} onCheckedChange={() => toggle("inAppWorkOrderOverdue")} />
+              </SettingRow>
+              <SettingRow label="Work Order Comment" description="When someone comments on a work order you're assigned to">
+                <Switch checked={prefs.inAppWorkOrderComment} onCheckedChange={() => toggle("inAppWorkOrderComment")} />
+              </SettingRow>
+              <SettingRow label="Requisition Approved" description="When your purchase requisition is approved">
+                <Switch checked={prefs.inAppRequisitionApproved} onCheckedChange={() => toggle("inAppRequisitionApproved")} />
+              </SettingRow>
+              <SettingRow label="Requisition Rejected" description="When your purchase requisition is rejected">
+                <Switch checked={prefs.inAppRequisitionRejected} onCheckedChange={() => toggle("inAppRequisitionRejected")} />
+              </SettingRow>
+              <SettingRow label="Approval Required" description="When any record requires your approval">
+                <Switch checked={prefs.inAppApprovalRequired} onCheckedChange={() => toggle("inAppApprovalRequired")} />
+              </SettingRow>
+              <SettingRow label="PO Approval Required" description="When a purchase order requires your approval">
+                <Switch checked={prefs.inAppPoApprovalRequired} onCheckedChange={() => toggle("inAppPoApprovalRequired")} />
+              </SettingRow>
+              <SettingRow label="Low Stock Alert" description="When a part drops below its minimum stock level">
+                <Switch checked={prefs.inAppLowStockAlert} onCheckedChange={() => toggle("inAppLowStockAlert")} />
+              </SettingRow>
+              <SettingRow label="PM Schedule Due" description="When a preventive maintenance schedule is due within 7 days">
+                <Switch checked={prefs.inAppPmScheduleDue} onCheckedChange={() => toggle("inAppPmScheduleDue")} />
+              </SettingRow>
+              <SettingRow label="New Maintenance Request" description="When a new maintenance request is submitted">
+                <Switch checked={prefs.inAppNewMaintenanceRequest} onCheckedChange={() => toggle("inAppNewMaintenanceRequest")} />
+              </SettingRow>
+            </>
+          )}
+          {scope === "crm" && (
+            <>
+              <SettingRow label="Estimate Approval Required" description="When an estimate requires your approval">
+                <Switch checked={prefs.inAppEstimateApprovalRequired} onCheckedChange={() => toggle("inAppEstimateApprovalRequired")} />
+              </SettingRow>
+              <SettingRow label="Estimate Accepted by Client" description="When a client accepts your estimate via the proposal link or client portal">
+                <Switch checked={prefs.inAppEstimateClientAccepted} onCheckedChange={() => toggle("inAppEstimateClientAccepted")} />
+              </SettingRow>
+              <SettingRow label="Estimate Declined by Client" description="When a client declines your estimate via the proposal link or client portal">
+                <Switch checked={prefs.inAppEstimateClientRejected} onCheckedChange={() => toggle("inAppEstimateClientRejected")} />
+              </SettingRow>
+              <SettingRow label="Estimate Change Requested" description="When a client leaves a change request on an estimate">
+                <Switch checked={prefs.inAppEstimateChangeRequest} onCheckedChange={() => toggle("inAppEstimateChangeRequest")} />
+              </SettingRow>
+            </>
+          )}
         </div>
       </div>
     </div>

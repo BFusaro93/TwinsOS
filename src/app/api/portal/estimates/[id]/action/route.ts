@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getPortalContext } from "@/lib/portal/get-portal-context";
 import { createServiceClient } from "@/lib/supabase/server";
 import { submitEstimateChangeRequest } from "@/lib/estimate-change-requests";
+import { notifyStaffOfEstimateDecision } from "@/lib/estimate-client-notify";
 import { recalcEstimateTotals } from "@/lib/estimate-calc";
 
 export async function POST(
@@ -50,12 +51,12 @@ export async function POST(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: estimate } = await (supabase as any)
     .from("estimates")
-    .select("id, stage, org_id, client_id, estimate_number")
+    .select("id, stage, org_id, client_id, estimate_number, sales_rep_id")
     .eq("id", id)
     .eq("client_id", ctx.clientId)
     .eq("org_id", ctx.orgId)
     .is("deleted_at", null)
-    .single() as { data: { id: string; stage: string; org_id: string; client_id: string; estimate_number: number } | null };
+    .single() as { data: { id: string; stage: string; org_id: string; client_id: string; estimate_number: number; sales_rep_id: string | null } | null };
 
   if (!estimate) {
     return NextResponse.json({ error: "Estimate not found" }, { status: 404 });
@@ -110,6 +111,22 @@ export async function POST(
     console.error("[portal/estimates/action] Failed to update estimate:", error);
     return NextResponse.json({ error: "Failed to update estimate" }, { status: 500 });
   }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: client } = await (supabase as any)
+    .from("clients")
+    .select("display_name")
+    .eq("id", estimate.client_id)
+    .single() as { data: { display_name: string } | null };
+
+  await notifyStaffOfEstimateDecision(supabase, {
+    orgId: estimate.org_id,
+    estimateId: estimate.id,
+    estimateNumber: estimate.estimate_number,
+    salesRepId: estimate.sales_rep_id,
+    clientName: client?.display_name ?? ctx.email,
+    decision: action === "accept" ? "accepted" : "rejected",
+  });
 
   // Per-line-item accept/reject — anything the client left unchecked is marked lost,
   // matching the token-based public proposal flow's behavior.

@@ -14,12 +14,15 @@ import { createClient } from "@supabase/supabase-js";
 import { Resend } from "resend";
 import { formatCurrency } from "@/lib/utils";
 
+// `linkPath` has an `{id}` slot the deep link is built from — list pages that
+// only support auto-opening a record via `?id=` (po/requisitions, po/orders)
+// use that; the estimate detail page is a real route segment instead.
 const ENTITY_META: Record<string, {
-  table: string; numberField: string; fallbackLabel: string; label: string; path: string; totalField: string;
+  table: string; numberField: string; fallbackLabel: string; label: string; linkPath: string; totalField: string;
 }> = {
-  requisition:    { table: "requisitions",   numberField: "requisition_number", fallbackLabel: "Requisition",     label: "Purchase Requisition", path: "po/requisitions", totalField: "grand_total" },
-  purchase_order: { table: "purchase_orders", numberField: "po_number",          fallbackLabel: "Purchase Order",  label: "Purchase Order",       path: "po/orders",       totalField: "grand_total" },
-  crm_estimate:   { table: "estimates",       numberField: "estimate_number",    fallbackLabel: "Estimate",        label: "Estimate",             path: "crm/estimates",   totalField: "total_cents" },
+  requisition:    { table: "requisitions",   numberField: "requisition_number", fallbackLabel: "Requisition",     label: "Purchase Requisition", linkPath: "po/requisitions?id={id}", totalField: "grand_total" },
+  purchase_order: { table: "purchase_orders", numberField: "po_number",          fallbackLabel: "Purchase Order",  label: "Purchase Order",       linkPath: "po/orders?id={id}",       totalField: "grand_total" },
+  crm_estimate:   { table: "estimates",       numberField: "estimate_number",    fallbackLabel: "Estimate",        label: "Estimate",             linkPath: "crm/estimates/{id}",      totalField: "total_cents" },
 };
 
 export async function POST(request: Request) {
@@ -93,11 +96,17 @@ export async function POST(request: Request) {
   const approverIds = [...new Set(activeRequests.map((r) => r.approver_id))];
   const { data: profiles } = await adminClient
     .from("profiles")
-    .select("id, email, name")
+    .select("id, email, name, notification_prefs")
     .in("id", approverIds);
 
   const emailMap = new Map<string, string>();
   for (const p of profiles ?? []) {
+    // crm_estimate has its own "Estimate Approval Required" toggle, separate
+    // from requisition/PO — don't email an approver who's opted out.
+    if (entityType === "crm_estimate") {
+      const prefs = (p.notification_prefs ?? {}) as Record<string, unknown>;
+      if (prefs.emailEstimateApprovalRequired === false) continue;
+    }
     if (p.email) emailMap.set(p.id, p.email);
   }
 
@@ -110,7 +119,7 @@ export async function POST(request: Request) {
   const submitterName = submitterProfile?.name ?? "A team member";
 
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://twins-os.vercel.app";
-  const deepLink = `${siteUrl}/${meta.path}`;
+  const deepLink = `${siteUrl}/${meta.linkPath.replace("{id}", entityId)}`;
 
   const resend = new Resend(process.env.RESEND_API_KEY!);
   const entityLabel = meta.label;

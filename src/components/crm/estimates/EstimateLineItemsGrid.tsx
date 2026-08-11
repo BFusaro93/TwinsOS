@@ -426,8 +426,8 @@ function LineItemRow({
               STATUS_COLOR[row.status]
             )}
           >
-            <option value="quote">Quote</option>
             <option value="draft">Draft</option>
+            <option value="quote">Quote</option>
             <option value="won">Won</option>
             <option value="lost">Lost</option>
           </select>
@@ -791,7 +791,7 @@ export function EstimateLineItemsGrid({ estimateId, items, selectedIds = [], onS
         item: {
           service_id: svc.id ?? null,
           service_name: svc.name,
-          status: "quote",
+          status: "draft",
           calc_type: 1,
           qty: 1,
           unit_type: unit,

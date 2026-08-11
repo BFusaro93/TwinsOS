@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { X } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import { bpsToPercent } from "@/lib/estimate-calc";
 import { useDiscounts } from "@/lib/hooks/use-crm-discounts";
@@ -139,6 +140,14 @@ export function EstimateSummaryPanel({ estimate, onRecalculate, recalcPending }:
     setAppliedDiscountId(null);
   }
 
+  function clearDiscount() {
+    setDiscountStr("0.00");
+    setDiscountType(null);
+    setDiscountValue(null);
+    setAppliedDiscountId(null);
+    void handleRecalc("0.00", { type: null, value: null, appliedId: null });
+  }
+
   function applyNamedDiscount(discountId: string) {
     if (!discountId || discountId === "custom") return;
     const d = activeDiscounts.find((item) => item.id === discountId);
@@ -167,6 +176,12 @@ export function EstimateSummaryPanel({ estimate, onRecalculate, recalcPending }:
   const totalDirectCents  = directCosts.reduce((s, dc) => s + dc.totalCents, 0);
   const totalCostCents    = lineItems.reduce((s, li) => s + li.totalCostCents, 0) + totalDirectCents;
   const rev               = estimate.revenueCents;
+  // Revenue is already net of BOTH discount sources (recalcEstimateTotals
+  // subtracts each line item's discount_cents before summing to subtotal,
+  // then subtracts the estimate-level discount on top) — so this line's
+  // total must include line-item discounts too, or it undercounts what was
+  // actually subtracted to produce `rev`.
+  const totalDiscountCents = estimate.discountCents + lineItems.reduce((s, li) => s + li.discountCents, 0);
 
   function pct(cents: number) {
     return rev > 0 ? Math.round((cents / rev) * 10000) : 0;
@@ -211,20 +226,40 @@ export function EstimateSummaryPanel({ estimate, onRecalculate, recalcPending }:
             Per-cost-type overhead is configured in Settings — this flat rate is ignored while that's active.
           </p>
         )}
-        <RateRow
-          label="Discount"
-          value={discountStr}
-          onChange={handleDiscountStrChange}
-          onBlur={() => handleRecalc()}
-          suffix="$"
-        />
+        <div className="flex items-center gap-1">
+          <div className="flex-1">
+            <RateRow
+              label="Discount"
+              value={discountStr}
+              onChange={handleDiscountStrChange}
+              onBlur={() => handleRecalc()}
+              suffix="$"
+            />
+          </div>
+          {(estimate.discountCents > 0 || appliedDiscountId) && (
+            <button
+              type="button"
+              onClick={clearDiscount}
+              title="Remove discount"
+              className="rounded p-0.5 text-slate-400 hover:text-red-500"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
         {activeDiscounts.length > 0 && (
           <div className="mt-1.5">
-            <Select onValueChange={applyNamedDiscount}>
+            <Select
+              value={appliedDiscountId ?? "__none__"}
+              onValueChange={(v) => (v === "__none__" ? clearDiscount() : applyNamedDiscount(v))}
+            >
               <SelectTrigger className="h-7 text-xs">
                 <SelectValue placeholder="Apply a saved discount…" />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="__none__" className="text-xs text-slate-400">
+                  — None —
+                </SelectItem>
                 {activeDiscounts.map((d) => (
                   <SelectItem key={d.id} value={d.id} className="text-xs">
                     {d.name} — {d.discountType === "percent"
@@ -244,7 +279,7 @@ export function EstimateSummaryPanel({ estimate, onRecalculate, recalcPending }:
       {/* P&L block */}
       <div className="rounded-lg border bg-white p-4 text-xs shadow-sm">
         <PnlRow label="Revenue:" cents={rev} bold />
-        <PnlRow label="Discounts:" cents={estimate.discountCents} bps={pct(estimate.discountCents)} negative />
+        <PnlRow label="Discounts:" cents={totalDiscountCents} bps={pct(totalDiscountCents)} negative />
         <Divider />
         <p className="mb-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
           Costs

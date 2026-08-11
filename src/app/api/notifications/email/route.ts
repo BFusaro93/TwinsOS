@@ -27,7 +27,11 @@ type NotifType =
   | "rejected"
   | "new_maintenance_request";
 
-// Maps event type → pref key that gates email to the directly-affected user
+// Maps event type → pref key that gates email to the directly-affected user.
+// approved/rejected are further keyed by entityType below — crm_estimate
+// must NOT share the requisition-labeled keys (a different module, with its
+// own CRM — Estimates settings section), so this map only covers the
+// requisition/PO default; see `resolveApprovalPrefKey`.
 const USER_PREF_KEY: Record<NotifType, string | null> = {
   wo_created:              null,                          // no personal pref — admin-only
   wo_assigned:             "emailWorkOrderAssigned",
@@ -37,6 +41,12 @@ const USER_PREF_KEY: Record<NotifType, string | null> = {
   rejected:                "emailRequisitionRejected",
   new_maintenance_request: "emailNewMaintenanceRequest",
 };
+
+function resolveApprovalPrefKey(notifType: NotifType, entityType: string): string | null {
+  if (notifType === "approved") return entityType === "crm_estimate" ? "emailEstimateApproved" : "emailRequisitionApproved";
+  if (notifType === "rejected") return entityType === "crm_estimate" ? "emailEstimateRejected" : "emailRequisitionRejected";
+  return USER_PREF_KEY[notifType];
+}
 
 // Maps event type → pref key that gates email to admins who want ALL WO events
 const ADMIN_PREF_KEY: Record<NotifType, string | null> = {
@@ -230,7 +240,7 @@ export async function POST(request: Request) {
     .select("id, email, name, notification_prefs, role")
     .in("id", allEmailIds);
 
-  const userPrefKey = USER_PREF_KEY[notifType];
+  const userPrefKey = resolveApprovalPrefKey(notifType, entityType);
 
   const eligible = (profiles ?? []).filter((p: {
     id: string; email: string | null;
@@ -320,16 +330,18 @@ export async function POST(request: Request) {
       const num = ((entity.requisition_number ?? entity.po_number ?? entity.estimate_number ?? "Request")) as string;
       const entityLabel = entityType === "requisition" ? "Purchase Requisition" : entityType === "crm_estimate" ? "Estimate" : "Purchase Order";
       const link = entityType === "requisition" ? `${SITE_URL}/po/requisitions?id=${entity.id as string}`
-        : entityType === "crm_estimate" ? `${SITE_URL}/crm/estimates?id=${entity.id as string}`
+        : entityType === "crm_estimate" ? `${SITE_URL}/crm/estimates/${entity.id as string}`
         : `${SITE_URL}/po/orders?id=${entity.id as string}`;
       const color = isApproved ? "#60ab45" : "#dc2626";
       const verb  = isApproved ? "approved" : "rejected";
+      const reason = extra.comment ?? "";
       return {
         subject: `${entityLabel} ${verb}: ${num}`,
         html: `<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px 24px">
           <h2 style="margin:0 0 8px;font-size:20px;color:#0f172a">${entityLabel} ${isApproved ? "Approved" : "Rejected"}</h2>
           <p style="margin:0 0 4px;color:#475569">${hi}</p>
-          <p style="margin:0 0 24px;color:#475569">Your ${entityLabel} <strong>${num}</strong> has been <strong style="color:${color}">${verb}</strong> by ${callerName}.</p>
+          <p style="margin:0 0 ${reason ? "8px" : "24px"};color:#475569">Your ${entityLabel} <strong>${num}</strong> has been <strong style="color:${color}">${verb}</strong> by ${callerName}.</p>
+          ${!isApproved && reason ? `<blockquote style="margin:0 0 24px;padding:12px 16px;background:#f8fafc;border-left:4px solid #e2e8f0;border-radius:4px;color:#374151;font-style:italic">${reason}</blockquote>` : ""}
           <a href="${link}" style="display:inline-block;padding:12px 24px;background:${color};color:#fff;text-decoration:none;border-radius:6px;font-weight:600">View ${entityLabel}</a>
         </div>`,
       };
