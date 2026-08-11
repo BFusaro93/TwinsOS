@@ -58,6 +58,27 @@ export function usePhotoJob(id: string | null) {
   });
 }
 
+export function usePhotoJobByProjectId(projectId: string | null) {
+  return useQuery({
+    queryKey: ["photo-jobs", "by-project", projectId],
+    queryFn: async () => {
+      if (!projectId) return null;
+      const db = createClient() as any;
+      const { data, error } = await db
+        .from("photo_jobs")
+        .select("*")
+        .eq("project_id", projectId)
+        .is("deleted_at", null)
+        .order("created_at", { ascending: true })
+        .limit(1)
+        .maybeSingle();
+      if (error) throw error;
+      return data ? mapPhotoJob(data) : null;
+    },
+    enabled: !!projectId,
+  });
+}
+
 export function useCreatePhotoJob() {
   const qc = useQueryClient();
   const { currentUser } = useCurrentUserStore();

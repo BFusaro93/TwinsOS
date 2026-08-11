@@ -1,9 +1,10 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { useSettingsStore } from "@/stores/settings-store";
 import { toast } from "sonner";
-import { Pencil, Trash2, Plus, ExternalLink, Download, Building2 } from "lucide-react";
+import { Pencil, Trash2, Plus, ExternalLink, Download, Building2, Camera } from "lucide-react";
 import { printProject } from "@/lib/print";
 import { formatCurrency, formatDate, formatAddress } from "@/lib/utils";
 import { StatusBadge } from "@/components/shared/StatusBadge";
@@ -74,6 +75,7 @@ import { PartDetailSheet } from "@/components/cmms/PartDetailSheet";
 import { RequisitionDetailPanel } from "./RequisitionDetailPanel";
 import { useProducts } from "@/lib/hooks/use-products";
 import { useParts } from "@/lib/hooks/use-parts";
+import { usePhotoJobByProjectId } from "@/modules/photo-docs/hooks/usePhotoJobs";
 import {
   Sheet,
   SheetContent,
@@ -1042,6 +1044,8 @@ function DetailsTab({
   onUpdateHours: (laborHours: number | null, budgetHours: number | null) => void;
   onUpdateRates: (laborRateCents: number, burdenedRateCents: number) => void;
 }) {
+  const router = useRouter();
+  const { data: linkedPhotoJob } = usePhotoJobByProjectId(project.id);
   const { breakevenLaborRateCents, burdenedLaborRateCents } = useSettingsStore();
   // Use project-level snapshot if set; fall back to org settings for old projects
   const effectiveFullRate = project.laborRateCents ?? breakevenLaborRateCents;
@@ -1118,6 +1122,21 @@ function DetailsTab({
         <MetaRow label="Address" value={formatAddress(project.address, project.city, project.state, project.zip)} />
         <MetaRow label="Start Date" value={formatDate(project.startDate)} />
         <MetaRow label="End Date" value={project.endDate ? formatDate(project.endDate) : "TBD"} />
+        {linkedPhotoJob && (
+          <MetaRow
+            label="Job Photos"
+            value={
+              <button
+                type="button"
+                onClick={() => router.push(`/photos/jobs/${linkedPhotoJob.id}`)}
+                className="inline-flex items-center gap-1 text-brand-600 hover:underline"
+              >
+                <Camera className="h-3.5 w-3.5" />
+                {linkedPhotoJob.name}
+              </button>
+            }
+          />
+        )}
         {project.notes && <MetaRow label="Notes" value={project.notes} />}
       </dl>
 
