@@ -26,6 +26,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Checkbox } from "@/components/ui/checkbox";
 import { ChevronDown } from "lucide-react";
 import { printWO } from "@/lib/print";
+import { useComments } from "@/lib/hooks/use-comments";
 import { useWOParts } from "@/lib/hooks/use-wo-costs";
 import { OverlayLevelContext, overlayZ, useOverlayLevel } from "@/lib/overlay-level";
 import { Download, GitBranch, CheckCircle2, Trash2, X } from "lucide-react";
@@ -646,6 +647,7 @@ export function WorkOrderDetailPanel({ workOrder }: WorkOrderDetailPanelProps) {
   const { mutate: deleteWO, isPending: deleting } = useDeleteWorkOrder();
   const { data: users = [] } = useUsers();
   const { data: woParts = [] } = useWOParts(workOrder.id);
+  const { data: comments = [] } = useComments("work_order", workOrder.id);
   const { woCategories } = useSettingsStore();
   const { mutate: updateWO } = useUpdateWorkOrder();
   const { mutate: updateWOStatus } = useUpdateWorkOrderStatus();
@@ -683,7 +685,7 @@ export function WorkOrderDetailPanel({ workOrder }: WorkOrderDetailPanelProps) {
             variant={status}
             label={WO_STATUS_LABELS[status]}
           />
-          <Button variant="outline" size="sm" className="gap-1.5" onClick={() => printWO(workOrder, woParts)}>
+          <Button variant="outline" size="sm" className="gap-1.5" onClick={() => printWO(workOrder, woParts, comments)}>
             <Download className="h-3.5 w-3.5" />
             PDF
           </Button>

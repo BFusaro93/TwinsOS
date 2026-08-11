@@ -573,7 +573,11 @@ export function printPO(
   openPrintWindow(html);
 }
 
-export function printWO(workOrder: WorkOrder, woParts?: Array<{ partName: string; partNumber: string; quantity: number; unitCost: number }>): void {
+export function printWO(
+  workOrder: WorkOrder,
+  woParts?: Array<{ partName: string; partNumber: string; quantity: number; unitCost: number }>,
+  comments?: Array<{ authorName: string; body: string; createdAt: string }>
+): void {
   const { orgName, logoDataUrl, companyAddress, brandColor } = useSettingsStore.getState();
 
   const addressLines = [
@@ -638,6 +642,8 @@ export function printWO(workOrder: WorkOrder, woParts?: Array<{ partName: string
     ? `<div class="section-title">Description</div><div class="description-block">${escapeHtml(workOrder.description)}</div>`
     : "";
 
+  const commentsHtml = buildCommentsHtml(comments);
+
   const html = `<!DOCTYPE html>
 <html>
 <head>
@@ -692,6 +698,8 @@ export function printWO(workOrder: WorkOrder, woParts?: Array<{ partName: string
     </div>
   </div>
   ` : ""}
+
+  ${commentsHtml}
 
   ${buildFooterHtml()}
 </body>
