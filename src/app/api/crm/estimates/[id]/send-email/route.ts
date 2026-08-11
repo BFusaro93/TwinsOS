@@ -46,10 +46,15 @@ export async function POST(
     bodyHtml: string;
     expiresInDays?: number;
     ccEmails?: string[];
+    to?: string;
   };
 
   if (!body.subject?.trim() || !body.bodyHtml?.trim()) {
     return NextResponse.json({ error: "subject and bodyHtml are required" }, { status: 400 });
+  }
+
+  if (body.to && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(body.to.trim())) {
+    return NextResponse.json({ error: "Invalid recipient email address" }, { status: 400 });
   }
 
   // Fetch estimate + client
@@ -64,7 +69,7 @@ export async function POST(
     return NextResponse.json({ error: "Estimate not found" }, { status: 404 });
   }
 
-  const clientEmail = est.clients?.primary_email as string | null;
+  const clientEmail = (body.to?.trim() || est.clients?.primary_email) as string | null;
   if (!clientEmail) {
     return NextResponse.json({ error: "Client has no email address on file" }, { status: 422 });
   }
@@ -101,7 +106,7 @@ export async function POST(
     return NextResponse.json({ error: "Failed to create share token" }, { status: 500 });
   }
 
-  const proposalUrl = `${process.env.NEXT_PUBLIC_APP_URL}/proposal/${shareToken.token}`;
+  const proposalUrl = `${process.env.NEXT_PUBLIC_APP_URL ?? "https://twins-os.vercel.app"}/proposal/${shareToken.token}`;
 
   const clientDisplayName = (est.clients?.display_name as string) ?? "";
   const firstName = clientDisplayName.split(" ")[0] ?? clientDisplayName;
@@ -217,12 +222,15 @@ export async function POST(
     await (supabase as any).from("client_activity").insert({
       org_id: profile?.org_id,
       client_id: est.client_id,
-      activity_type: "estimate",
+      activity_type: "email",
       subject: `Estimate #${est.estimate_number} sent via email`,
       body: `Sent to ${clientEmail}. Subject: ${resolvedSubject}`,
+      sent_to: clientEmail,
       ref_id: estimateId,
       ref_table: "estimates",
+      resend_message_id: sent?.id ?? null,
       occurred_at: new Date().toISOString(),
+      created_by: user.id,
     });
   }
 

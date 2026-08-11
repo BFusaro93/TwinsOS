@@ -51,9 +51,17 @@ export function SendEstimateDialog({
   const [bodyHtml, setBodyHtml] = useState(DEFAULT_TEMPLATE_BODY);
   const [sending, setSending]   = useState(false);
   const [tab, setTab]           = useState<"compose" | "preview">("compose");
+  const [toEmail, setToEmail]   = useState(clientEmail ?? "");
   const [ccEmails, setCcEmails] = useState<string[]>([]);
   const [ccInput, setCcInput]   = useState("");
   const ccInputRef = useRef<HTMLInputElement>(null);
+
+  // Reset the editable "To" field whenever a different estimate's dialog
+  // opens — otherwise a manually-edited address from a prior send would
+  // linger since this dialog stays mounted between opens.
+  useEffect(() => {
+    if (open) setToEmail(clientEmail ?? "");
+  }, [open, clientEmail]);
 
   // Load template when selected
   useEffect(() => {
@@ -116,8 +124,13 @@ export function SendEstimateDialog({
   }
 
   async function handleSend() {
-    if (!clientEmail) {
-      toast.error("Client has no email address on file");
+    const to = toEmail.trim();
+    if (!to) {
+      toast.error("Enter a recipient email address");
+      return;
+    }
+    if (!isValidEmail(to)) {
+      toast.error(`"${to}" is not a valid email address`);
       return;
     }
     setSending(true);
@@ -125,13 +138,13 @@ export function SendEstimateDialog({
       const res = await fetch(`/api/crm/estimates/${estimateId}/send-email`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ subject, bodyHtml, expiresInDays: 30, ccEmails }),
+        body: JSON.stringify({ subject, bodyHtml, expiresInDays: 30, ccEmails, to }),
       });
       if (!res.ok) {
         const data = await res.json();
         throw new Error(data.error ?? "Failed to send");
       }
-      toast.success(`Estimate sent to ${clientEmail}`);
+      toast.success(`Estimate sent to ${to}`);
       onSent();
       onClose();
     } catch (err) {
@@ -150,13 +163,19 @@ export function SendEstimateDialog({
 
         <div className="space-y-4 py-1">
           {/* To */}
-          <div className="flex items-center gap-3 rounded-md border bg-slate-50 px-3 py-2 text-sm">
-            <span className="text-slate-400 text-xs font-medium w-8">To</span>
-            <span className="font-medium text-slate-700">{clientName}</span>
-            {clientEmail
-              ? <span className="text-slate-400">&lt;{clientEmail}&gt;</span>
-              : <Badge variant="destructive" className="text-[10px]">No email on file</Badge>
-            }
+          <div className="flex items-center gap-3 rounded-md border bg-white px-3 py-2 text-sm">
+            <span className="text-slate-400 text-xs font-medium w-8 shrink-0">To</span>
+            <span className="shrink-0 font-medium text-slate-700">{clientName}</span>
+            <input
+              type="email"
+              value={toEmail}
+              onChange={(e) => setToEmail(e.target.value)}
+              placeholder="recipient@example.com"
+              className="flex-1 min-w-0 text-sm outline-none bg-transparent placeholder:text-slate-400"
+            />
+            {!clientEmail && !toEmail && (
+              <Badge variant="destructive" className="shrink-0 text-[10px]">No email on file</Badge>
+            )}
           </div>
 
           {/* CC */}
@@ -264,9 +283,9 @@ export function SendEstimateDialog({
           <Button variant="outline" onClick={onClose}>Cancel</Button>
           <Button
             onClick={handleSend}
-            disabled={sending || !clientEmail || !subject.trim() || !bodyHtml.trim()}
+            disabled={sending || !toEmail.trim() || !subject.trim() || !bodyHtml.trim()}
           >
-            {sending ? "Sending…" : `Send to ${clientEmail ?? "client"}`}
+            {sending ? "Sending…" : `Send to ${toEmail.trim() || "client"}`}
           </Button>
         </DialogFooter>
       </DialogContent>
