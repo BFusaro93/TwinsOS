@@ -140,7 +140,7 @@ export function useSubmitForApproval() {
 
       const newRequests: Array<{
         org_id: string; entity_type: string; entity_id: string;
-        flow_step_id: string; order: number; approver_id: string;
+        flow_step_id: string; order: number; approver_id: string | null;
         approver_name: string; approver_role: string; status: string;
       }> = [];
 
@@ -176,14 +176,27 @@ export function useSubmitForApproval() {
             name: `${e.first_name} ${e.last_name}`,
           }));
 
-          for (const approver of targets) {
+          if (targets.length === 0) {
+            // No one on the team holds this role — there's nobody who could ever
+            // act on this step, so it can't sit "pending" forever. Auto-skip it,
+            // same as a threshold-not-met step.
             newRequests.push({
               org_id: orgId, entity_type: entityType, entity_id: entityId,
               flow_step_id: step.id, order: step.order,
-              approver_id: approver.id, approver_name: approver.name,
+              approver_id: null, approver_name: "No eligible approver",
               approver_role: step.required_role,
-              status: effectiveStatus,
+              status: "skipped",
             });
+          } else {
+            for (const approver of targets) {
+              newRequests.push({
+                org_id: orgId, entity_type: entityType, entity_id: entityId,
+                flow_step_id: step.id, order: step.order,
+                approver_id: approver.id, approver_name: approver.name,
+                approver_role: step.required_role,
+                status: effectiveStatus,
+              });
+            }
           }
         } else {
           const approvers = orgUsers?.filter((u) => u.role === step.required_role) ?? [];
@@ -191,14 +204,26 @@ export function useSubmitForApproval() {
             ? approvers
             : (orgUsers?.filter((u) => u.role === "admin").slice(0, 1) ?? []);
 
-          for (const approver of targets) {
+          if (targets.length === 0) {
+            // No one holds the required role and there's no admin to fall back
+            // to either — nobody could ever act on this step. Auto-skip it.
             newRequests.push({
               org_id: orgId, entity_type: entityType, entity_id: entityId,
               flow_step_id: step.id, order: step.order,
-              approver_id: approver.id, approver_name: approver.name,
+              approver_id: null, approver_name: "No eligible approver",
               approver_role: step.required_role,
-              status: effectiveStatus,
+              status: "skipped",
             });
+          } else {
+            for (const approver of targets) {
+              newRequests.push({
+                org_id: orgId, entity_type: entityType, entity_id: entityId,
+                flow_step_id: step.id, order: step.order,
+                approver_id: approver.id, approver_name: approver.name,
+                approver_role: step.required_role,
+                status: effectiveStatus,
+              });
+            }
           }
         }
       }
@@ -207,9 +232,17 @@ export function useSubmitForApproval() {
         const { error } = await supabase.from("approval_requests").insert(newRequests);
         if (error) throw error;
 
-        // If every step was skipped (threshold not met, admin bypass, or both),
-        // there is nobody left to approve — auto-advance the entity to "approved"
-        // right now rather than leaving it stuck in pending forever.
+        // If every step was skipped (threshold not met, admin bypass, or no
+        // eligible approver for the step's role), there is nobody left to
+        // approve — auto-advance the entity to "approved" now rather than
+        // leaving it stuck in pending forever.
+        // NB: this branch requires newRequests.length > 0 — the DB trigger
+        // guard_estimate_approval_status() (and its procurement counterpart)
+        // treats a fully-empty approval_requests set as UNRESOLVED, not
+        // resolved, and rejects the "approved" write for non-admin/manager
+        // actors. A real flow step now always yields at least one row (see
+        // above), so this only skips for the edge case of a flow with zero
+        // steps, which is unrelated to that guard.
         const allSkipped = newRequests.every((r) => r.status === "skipped");
         if (allSkipped) {
           const { error: autoErr } = await supabase
