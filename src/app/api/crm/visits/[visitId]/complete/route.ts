@@ -3,6 +3,7 @@ import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { recalcNextPackageVisitDate } from "@/lib/package-visit-recalc";
 import { stripHtml } from "@/lib/utils/strip-html";
+import { fireServiceVisitCompletedTriggers } from "@/lib/automations/sequence-enrollment";
 
 // Billing-period boundaries (inclusive, "YYYY-MM-DD") for batching auto-invoices
 // under a client's weekly/monthly invoice_frequency. Computed in UTC to avoid
@@ -384,6 +385,39 @@ export async function POST(
       ref_table: "crm_jobs",
       created_by: user.id,
     });
+  }
+
+  // Fire any 'service_visit_completed' sequence triggers configured for the
+  // service(s) this visit covered. Best-effort — an automation-enrollment
+  // failure must never block the visit-completion response.
+  try {
+    if (orgId && v.client_id) {
+      let serviceIds: string[] = [];
+      if (visitJobServiceId) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: js } = await (supabase as any)
+          .from("crm_job_services")
+          .select("service_id")
+          .eq("id", visitJobServiceId)
+          .maybeSingle();
+        if (js?.service_id) serviceIds = [js.service_id];
+      } else {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: jobServices } = await (supabase as any)
+          .from("crm_job_services")
+          .select("service_id")
+          .eq("job_id", v.job_id);
+        serviceIds = ((jobServices ?? []) as { service_id: string | null }[])
+          .map((s) => s.service_id)
+          .filter((id): id is string => !!id);
+      }
+
+      if (serviceIds.length > 0) {
+        await fireServiceVisitCompletedTriggers(supabase, { orgId, clientId: v.client_id, serviceIds });
+      }
+    }
+  } catch (err) {
+    console.error("[visits/complete] automation trigger enrollment failed:", err);
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

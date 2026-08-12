@@ -20,6 +20,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useUpdateEvent } from "@/lib/hooks/use-crm-automations";
+import { useUsers } from "@/lib/hooks/use-users";
 import type { CRMSequenceEvent } from "@/types/crm-automations";
 import { toast } from "sonner";
 
@@ -31,6 +32,7 @@ interface Props {
 
 export function TicketEventDialog({ open, onOpenChange, event }: Props) {
   const updateEvent = useUpdateEvent();
+  const { data: users } = useUsers();
   const c = event.config;
   const [title, setTitle] = useState<string>(c.title ?? "");
   const [description, setDescription] = useState<string>(c.description ?? "");
@@ -94,11 +96,18 @@ export function TicketEventDialog({ open, onOpenChange, event }: Props) {
           </div>
           <div className="flex flex-col gap-1.5">
             <Label>Assign To</Label>
-            <Input
-              placeholder="User name or role"
-              value={assignTo}
-              onChange={(e) => setAssignTo(e.target.value)}
-            />
+            <Select value={assignTo} onValueChange={setAssignTo}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select a user" />
+              </SelectTrigger>
+              <SelectContent>
+                {(users ?? []).map((u) => (
+                  <SelectItem key={u.id} value={u.id}>
+                    {u.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         </div>
         <DialogFooter>

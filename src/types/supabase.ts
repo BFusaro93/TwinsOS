@@ -3200,7 +3200,7 @@ export type Database = {
           id?: string
           is_default?: boolean
           name: string
-          org_id: string
+          org_id?: string
           subject: string
           template_type?: string
           updated_at?: string
@@ -5651,6 +5651,7 @@ export type Database = {
       }
       crm_sequence_enrollments: {
         Row: {
+          awaiting_approval: boolean
           client_id: string
           completed_at: string | null
           created_at: string
@@ -5668,6 +5669,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          awaiting_approval?: boolean
           client_id: string
           completed_at?: string | null
           created_at?: string
@@ -5685,6 +5687,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          awaiting_approval?: boolean
           client_id?: string
           completed_at?: string | null
           created_at?: string
@@ -5793,6 +5796,209 @@ export type Database = {
           },
           {
             foreignKeyName: "crm_sequence_events_sequence_id_fkey"
+            columns: ["sequence_id"]
+            isOneToOne: false
+            referencedRelation: "crm_automation_sequences"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      crm_sequence_execution_log: {
+        Row: {
+          action: string
+          client_id: string | null
+          created_at: string
+          detail: string | null
+          enrollment_id: string | null
+          event_id: string | null
+          event_type: string | null
+          id: string
+          org_id: string
+          sequence_id: string | null
+        }
+        Insert: {
+          action: string
+          client_id?: string | null
+          created_at?: string
+          detail?: string | null
+          enrollment_id?: string | null
+          event_id?: string | null
+          event_type?: string | null
+          id?: string
+          org_id?: string
+          sequence_id?: string | null
+        }
+        Update: {
+          action?: string
+          client_id?: string | null
+          created_at?: string
+          detail?: string | null
+          enrollment_id?: string | null
+          event_id?: string | null
+          event_type?: string | null
+          id?: string
+          org_id?: string
+          sequence_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_sequence_execution_log_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_sequence_execution_log_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_sequence_execution_log_enrollment_id_fkey"
+            columns: ["enrollment_id"]
+            isOneToOne: false
+            referencedRelation: "crm_sequence_enrollments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_sequence_execution_log_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "crm_sequence_events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_sequence_execution_log_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_sequence_execution_log_sequence_id_fkey"
+            columns: ["sequence_id"]
+            isOneToOne: false
+            referencedRelation: "crm_automation_sequences"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      crm_sequence_step_approvals: {
+        Row: {
+          body_html: string
+          client_id: string | null
+          created_at: string
+          decided_at: string | null
+          decided_by: string | null
+          enrollment_id: string
+          estimate_id: string | null
+          event_id: string
+          id: string
+          org_id: string
+          sequence_id: string
+          status: string
+          subject: string
+          to_email: string
+          to_name: string | null
+          updated_at: string
+        }
+        Insert: {
+          body_html?: string
+          client_id?: string | null
+          created_at?: string
+          decided_at?: string | null
+          decided_by?: string | null
+          enrollment_id: string
+          estimate_id?: string | null
+          event_id: string
+          id?: string
+          org_id?: string
+          sequence_id: string
+          status?: string
+          subject: string
+          to_email: string
+          to_name?: string | null
+          updated_at?: string
+        }
+        Update: {
+          body_html?: string
+          client_id?: string | null
+          created_at?: string
+          decided_at?: string | null
+          decided_by?: string | null
+          enrollment_id?: string
+          estimate_id?: string | null
+          event_id?: string
+          id?: string
+          org_id?: string
+          sequence_id?: string
+          status?: string
+          subject?: string
+          to_email?: string
+          to_name?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_sequence_step_approvals_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_sequence_step_approvals_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_sequence_step_approvals_decided_by_fkey"
+            columns: ["decided_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_sequence_step_approvals_enrollment_id_fkey"
+            columns: ["enrollment_id"]
+            isOneToOne: false
+            referencedRelation: "crm_sequence_enrollments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_sequence_step_approvals_estimate_id_fkey"
+            columns: ["estimate_id"]
+            isOneToOne: false
+            referencedRelation: "estimates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_sequence_step_approvals_estimate_id_fkey"
+            columns: ["estimate_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_estimates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_sequence_step_approvals_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "crm_sequence_events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_sequence_step_approvals_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_sequence_step_approvals_sequence_id_fkey"
             columns: ["sequence_id"]
             isOneToOne: false
             referencedRelation: "crm_automation_sequences"

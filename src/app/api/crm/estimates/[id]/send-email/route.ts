@@ -7,6 +7,7 @@ import { createElement } from "react";
 import { EstimateDocument } from "@/components/crm/estimates/pdf/EstimateDocument";
 import type { EstimatePDFData, EstimatePDFLineItem, EstimatePDFMilestone, EstimatePDFPhoto, OrgPDFData } from "@/components/crm/estimates/pdf/EstimateDocument";
 import { toDisplaySettings } from "@/lib/estimate-display-settings";
+import { isEligibleForEnrollment, enrollClientInSequence, triggerConditionsMet } from "@/lib/automations/sequence-enrollment";
 
 const FROM = "Twins Lawn Service <noreply@twinslawnservice.com>";
 
@@ -372,7 +373,7 @@ export async function POST(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: triggers } = await (supabase as any)
       .from("crm_sequence_triggers")
-      .select("sequence_id, crm_automation_sequences(is_active, automation_id, crm_automations(is_active, org_id))")
+      .select("id, sequence_id, crm_automation_sequences(is_active, automation_id, allow_reentry, reentry_after_minutes, crm_automations(is_active, org_id))")
       .eq("trigger_type", "estimate_sent");
 
     for (const trigger of triggers ?? []) {
@@ -383,49 +384,22 @@ export async function POST(
       if (!seq?.is_active || !auto?.is_active) continue;
       if (auto?.org_id !== est.org_id) continue;
 
-      // Don't re-enroll if already enrolled and not completed/stopped
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: existing } = await (supabase as any)
-        .from("crm_sequence_enrollments")
-        .select("id")
-        .eq("sequence_id", trigger.sequence_id)
-        .eq("estimate_id", estimateId)
-        .is("completed_at", null)
-        .is("stopped_at", null)
-        .is("deleted_at", null)
-        .maybeSingle();
-      if (existing) continue;
+      if (!(await triggerConditionsMet(supabase, trigger.id, est.client_id, estimateId))) continue;
 
-      // Find first event to compute next_fire_at
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: firstEvent } = await (supabase as any)
-        .from("crm_sequence_events")
-        .select("id, event_type, config, position")
-        .eq("sequence_id", trigger.sequence_id)
-        .eq("is_active", true)
-        .is("deleted_at", null)
-        .order("position", { ascending: true })
-        .limit(1)
-        .maybeSingle();
+      const eligible = await isEligibleForEnrollment(supabase, {
+        sequenceId: trigger.sequence_id,
+        clientId: est.client_id,
+        estimateId,
+        allowReentry: seq.allow_reentry ?? false,
+        reentryAfterMinutes: seq.reentry_after_minutes ?? 1440,
+      });
+      if (!eligible) continue;
 
-      let nextFireAt = new Date().toISOString();
-      if (firstEvent?.event_type === "wait") {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const days = (firstEvent.config as any)?.days ?? 0;
-        const d = new Date();
-        d.setDate(d.getDate() + days);
-        nextFireAt = d.toISOString();
-      }
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (supabase as any).from("crm_sequence_enrollments").insert({
-        org_id: est.org_id,
-        sequence_id: trigger.sequence_id,
-        client_id: est.client_id,
-        estimate_id: estimateId,
-        enrolled_at: new Date().toISOString(),
-        next_event_position: firstEvent?.event_type === "wait" ? 1 : 0,
-        next_fire_at: nextFireAt,
+      await enrollClientInSequence(supabase, {
+        sequenceId: trigger.sequence_id,
+        orgId: est.org_id,
+        clientId: est.client_id,
+        estimateId,
       });
     }
   } catch (enrollErr) {

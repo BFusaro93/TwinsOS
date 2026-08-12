@@ -50,9 +50,9 @@ export function SequenceColumn({ sequence, isFocused, onFocus, onRulesClick, onE
           }
         />
         <Button
-          variant="ghost"
-          size="icon"
-          className="h-7 w-7 shrink-0"
+          variant="outline"
+          size="sm"
+          className="h-7 shrink-0 gap-1 px-2 text-xs"
           onClick={(e) => {
             e.stopPropagation();
             onRulesClick();
@@ -60,6 +60,7 @@ export function SequenceColumn({ sequence, isFocused, onFocus, onRulesClick, onE
           title="Sequence rules"
         >
           <Settings2 className="h-3.5 w-3.5" />
+          Rules
         </Button>
       </CardHeader>
 

@@ -10,9 +10,16 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useUpdateEvent } from "@/lib/hooks/use-crm-automations";
+import { useOrgTags } from "@/lib/hooks/use-clients";
 import type { CRMSequenceEvent } from "@/types/crm-automations";
 import { toast } from "sonner";
 
@@ -24,6 +31,7 @@ interface Props {
 
 export function TagsEventDialog({ open, onOpenChange, event }: Props) {
   const updateEvent = useUpdateEvent();
+  const orgTags = useOrgTags();
   const [addTags, setAddTags] = useState<string[]>([]);
   const [removeTags, setRemoveTags] = useState<string[]>([]);
   const [addInput, setAddInput] = useState("");
@@ -83,20 +91,20 @@ export function TagsEventDialog({ open, onOpenChange, event }: Props) {
           <div className="flex flex-col gap-2">
             <p className="text-sm font-medium text-slate-700">Add tags</p>
             <div className="flex gap-2">
-              <Input
-                placeholder="Tag name…"
-                value={addInput}
-                onChange={(e) => setAddInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    pushTag(addInput, addTags, setAddTags, setAddInput);
-                  }
-                }}
-              />
+              <Select value={addInput} onValueChange={setAddInput}>
+                <SelectTrigger className="flex-1">
+                  <SelectValue placeholder="Select a tag…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {orgTags.filter((t) => !addTags.includes(t)).map((t) => (
+                    <SelectItem key={t} value={t}>{t}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               <Button
                 variant="outline"
                 size="icon"
+                disabled={!addInput}
                 onClick={() => pushTag(addInput, addTags, setAddTags, setAddInput)}
               >
                 <Plus className="h-4 w-4" />
@@ -120,20 +128,20 @@ export function TagsEventDialog({ open, onOpenChange, event }: Props) {
           <div className="flex flex-col gap-2">
             <p className="text-sm font-medium text-slate-700">Remove tags</p>
             <div className="flex gap-2">
-              <Input
-                placeholder="Tag name…"
-                value={removeInput}
-                onChange={(e) => setRemoveInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    pushTag(removeInput, removeTags, setRemoveTags, setRemoveInput);
-                  }
-                }}
-              />
+              <Select value={removeInput} onValueChange={setRemoveInput}>
+                <SelectTrigger className="flex-1">
+                  <SelectValue placeholder="Select a tag…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {orgTags.filter((t) => !removeTags.includes(t)).map((t) => (
+                    <SelectItem key={t} value={t}>{t}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               <Button
                 variant="outline"
                 size="icon"
+                disabled={!removeInput}
                 onClick={() => pushTag(removeInput, removeTags, setRemoveTags, setRemoveInput)}
               >
                 <Plus className="h-4 w-4" />

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Ticket, ClipboardSignature, Receipt, UserRound, Plus } from "lucide-react";
+import { Ticket, ClipboardSignature, Receipt, UserRound, Plus, Inbox } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn, formatCurrency, formatDate } from "@/lib/utils";
 import { useCurrentUserStore } from "@/stores";
@@ -9,6 +9,7 @@ import { useTickets } from "@/lib/hooks/use-tickets";
 import { useEstimates } from "@/lib/hooks/use-estimates";
 import { useInvoices } from "@/lib/hooks/use-invoices";
 import { useClients } from "@/lib/hooks/use-clients";
+import { usePendingSequenceApprovals } from "@/lib/hooks/use-sequence-approvals";
 import type { EstimateStage } from "@/types/crm-estimates";
 import type { InvoiceStatus } from "@/types/crm-invoices";
 import { PermissionGate } from "@/components/shared/PermissionGate";
@@ -69,6 +70,7 @@ export function MyDay() {
   const { data: allEstimates, isLoading: estimatesLoading } = useEstimates();
   const { data: allInvoices, isLoading: invoicesLoading } = useInvoices();
   const { data: allClients, isLoading: clientsLoading } = useClients();
+  const { data: pendingApprovals, isLoading: approvalsLoading } = usePendingSequenceApprovals();
 
   const today = new Date().toISOString().split("T")[0];
   const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
@@ -305,6 +307,45 @@ export function MyDay() {
 
         {/* Right column */}
         <div className="flex flex-col gap-4">
+          {/* Automations Pending Approval */}
+          <div className="rounded-lg border bg-white p-4 shadow-sm">
+            <SectionHeader title="Automations Pending Approval" href="/crm/communication/automations" />
+            <div className="mt-3">
+              {approvalsLoading ? (
+                Array.from({ length: 2 }).map((_, i) => (
+                  <div key={i} className="flex items-center gap-3 border-b py-2.5 last:border-0">
+                    <Skeleton className="h-4 w-full" />
+                  </div>
+                ))
+              ) : (pendingApprovals ?? []).length === 0 ? (
+                <p className="py-6 text-center text-sm text-slate-400">
+                  Nothing waiting on approval.
+                </p>
+              ) : (
+                pendingApprovals!.slice(0, 5).map((a) => (
+                  <Link
+                    key={a.id}
+                    href="/crm/communication/automations"
+                    className="flex items-center gap-3 border-b py-2.5 last:border-0 hover:bg-slate-50 -mx-4 px-4 transition-colors"
+                  >
+                    <Inbox className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+                    <span className="flex-1 truncate text-sm text-slate-700">
+                      {a.subject}
+                    </span>
+                    {a.clientName && (
+                      <span className="text-xs text-blue-600 shrink-0 max-w-[120px] truncate">
+                        {a.clientName}
+                      </span>
+                    )}
+                    <span className="text-[11px] text-slate-400 shrink-0">
+                      {formatDate(a.createdAt)}
+                    </span>
+                  </Link>
+                ))
+              )}
+            </div>
+          </div>
+
           {/* Outstanding Invoices */}
           <div className="rounded-lg border bg-white p-4 shadow-sm">
             <SectionHeader title="Outstanding Invoices" href="/crm/accounting/invoices" />

@@ -46,6 +46,8 @@ export type TriggerType =
   // Tag
   | 'tag_added'
   | 'tag_removed'
+  // Job (service-specific)
+  | 'service_visit_completed'
   // Ticket
   | 'calendar_event_completed'
   | 'calendar_event_created'
@@ -71,7 +73,6 @@ export type ConditionField =
   | 'client_lead_status'
   | 'client_since_date'
   | 'client_source'
-  | 'csr'
   | 'custom_field'
   | 'does_not_have_ach'
   | 'does_not_have_credit_card'
@@ -110,6 +111,8 @@ export type ConditionField =
   | 'client_has_not_ever_had_recurring_job'
   | 'last_visit_date'
   | 'visit_requires_call_ahead'
+  | 'scheduled_service'
+  | 'completed_service'
   // Tag
   | 'does_not_have_tag'
   | 'has_tag'
@@ -177,6 +180,7 @@ export interface EmailConfig {
 export interface AlertConfig {
   message: string;
   alert_type: 'info' | 'warning' | 'urgent';
+  recipient_user_ids: string[];
 }
 
 export interface TicketConfig {
@@ -198,6 +202,8 @@ export interface NoteConfig {
 export interface UpdateConfig {
   field: string;
   value: string;
+  /** Only set when field === 'custom_field' — which crm_custom_field_defs row to write. */
+  customFieldId?: string;
 }
 
 export interface TagsConfig {
@@ -256,9 +262,12 @@ export interface CRMSequence {
   deletedAt: string | null;
 }
 
-/** Config for date-gap trigger types (estimate_expiring, estimate_no_response). */
+/** Config for trigger types that need extra parameters beyond their type. */
 export interface TriggerConfig {
+  /** date-gap trigger types (estimate_expiring, estimate_no_response). */
   days?: number;
+  /** service_visit_completed — a crm_services.id to match, or unset for "any service". */
+  service_id?: string;
 }
 
 export interface CRMSequenceTrigger {

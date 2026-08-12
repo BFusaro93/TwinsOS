@@ -25,13 +25,19 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { useSequences, useUpdateSequence } from "@/lib/hooks/use-crm-automations";
+import { useCRMServices } from "@/lib/hooks/use-crm-jobs";
 import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
-import type { TriggerType, ConditionField, ConditionOperator, TriggerConfig } from "@/types/crm-automations";
+import { ConditionListEditor, type ConditionRow } from "./ConditionListEditor";
+import type { TriggerType, TriggerConfig } from "@/types/crm-automations";
 
 // Trigger types that fire off a day-count gap rather than an event — the
 // builder shows a "days" input for these instead of just the type selector.
 const DATE_GAP_TRIGGER_TYPES = new Set<TriggerType>(["estimate_expiring", "estimate_no_response"]);
+
+// Trigger types that fire for one specific service rather than the whole
+// job/visit — the builder shows a service picker (or "Any service") for these.
+const SERVICE_TRIGGER_TYPES = new Set<TriggerType>(["service_visit_completed"]);
 
 // ── Trigger groups ─────────────────────────────────────────────────────────────
 
@@ -93,6 +99,7 @@ const TRIGGER_GROUPS: { label: string; items: { value: TriggerType; label: strin
       { value: "job_cancelled", label: "Job was cancelled" },
       { value: "package_created", label: "Package was created" },
       { value: "visit_completed", label: "Visit was completed" },
+      { value: "service_visit_completed", label: "Visit completed for service" },
       { value: "visit_cancelled", label: "Visit was cancelled" },
       { value: "visit_dispatched", label: "Visit was dispatched" },
       { value: "visit_skipped", label: "Visit was skipped" },
@@ -122,109 +129,6 @@ const TRIGGER_GROUPS: { label: string; items: { value: TriggerType; label: strin
   },
 ];
 
-// ── Condition groups ───────────────────────────────────────────────────────────
-
-const CONDITION_GROUPS: { label: string; items: { value: ConditionField; label: string }[] }[] = [
-  {
-    label: "Client / Lead",
-    items: [
-      { value: "account_balance", label: "Account balance" },
-      { value: "account_type", label: "Account type" },
-      { value: "billing_term", label: "Billing term" },
-      { value: "cancellation_reason", label: "Cancellation reason" },
-      { value: "client_lead_status", label: "Client/Lead status" },
-      { value: "client_since_date", label: "Client since date" },
-      { value: "client_source", label: "Client source" },
-      { value: "csr", label: "CSR" },
-      { value: "custom_field", label: "Custom field" },
-      { value: "does_not_have_ach", label: "Does not have ACH on file" },
-      { value: "does_not_have_credit_card", label: "Does not have credit card on file" },
-      { value: "has_ach", label: "Has ACH on file" },
-      { value: "has_credit_card", label: "Has credit card on file" },
-      { value: "is_opted_in_emails", label: "Is opted in for emails" },
-      { value: "map_code", label: "Map code" },
-      { value: "opt_in_texts", label: "Opt-in texts" },
-      { value: "payment_method_type", label: "Payment method type" },
-      { value: "sales_person", label: "Sales person" },
-      { value: "service_zip_code", label: "Service zip code" },
-    ],
-  },
-  {
-    label: "Date",
-    items: [{ value: "date_of_year_between", label: "Date of year between" }],
-  },
-  {
-    label: "Estimate",
-    items: [
-      { value: "estimate_has_product", label: "Estimate has product" },
-      { value: "estimate_has_service", label: "Estimate has service" },
-      { value: "estimate_sales_rep", label: "Estimate sales rep" },
-      { value: "estimate_stage", label: "Estimate stage" },
-      { value: "estimate_status", label: "Estimate status" },
-      { value: "estimate_total", label: "Estimate total" },
-    ],
-  },
-  {
-    label: "Form",
-    items: [{ value: "has_completed_form", label: "Has completed form" }],
-  },
-  {
-    label: "Invoice",
-    items: [
-      { value: "invoice_has_product", label: "Invoice has product" },
-      { value: "invoice_has_service", label: "Invoice has service" },
-      { value: "invoice_past_due_days", label: "Invoice past due (days)" },
-      { value: "invoice_was_paid_days", label: "Invoice was paid (days)" },
-    ],
-  },
-  {
-    label: "Job",
-    items: [
-      { value: "client_currently_has_package", label: "Client currently has package scheduled" },
-      { value: "client_currently_has_recurring_job", label: "Client currently has recurring job" },
-      { value: "client_does_not_have_package", label: "Client does not have package scheduled" },
-      { value: "client_does_not_have_recurring_job", label: "Client does not have recurring job" },
-      { value: "client_has_ever_had_package", label: "Client has ever had package" },
-      { value: "client_has_ever_had_recurring_job", label: "Client has ever had recurring job" },
-      { value: "client_has_not_ever_had_package", label: "Client has not ever had package" },
-      { value: "client_has_not_ever_had_recurring_job", label: "Client has not ever had recurring job" },
-      { value: "last_visit_date", label: "Last visit date" },
-      { value: "visit_requires_call_ahead", label: "Visit requires call ahead" },
-    ],
-  },
-  {
-    label: "Tag",
-    items: [
-      { value: "does_not_have_tag", label: "Does not have tag" },
-      { value: "has_tag", label: "Has tag" },
-    ],
-  },
-  {
-    label: "Ticket",
-    items: [
-      { value: "calendar_event_category", label: "Calendar event category" },
-      { value: "ticket_category", label: "Ticket category" },
-      { value: "ticket_past_due_days", label: "Ticket past due (days)" },
-    ],
-  },
-];
-
-const CONDITION_OPERATORS: { value: ConditionOperator; label: string }[] = [
-  { value: "equals", label: "equals" },
-  { value: "not_equals", label: "not equals" },
-  { value: "contains", label: "contains" },
-  { value: "not_contains", label: "does not contain" },
-  { value: "greater_than", label: "greater than" },
-  { value: "less_than", label: "less than" },
-  { value: "greater_than_or_equal", label: "greater than or equal to" },
-  { value: "less_than_or_equal", label: "less than or equal to" },
-  { value: "before", label: "before" },
-  { value: "after", label: "after" },
-  { value: "within_days", label: "within (days)" },
-  { value: "is_set", label: "is set" },
-  { value: "is_not_set", label: "is not set" },
-];
-
 const RESTRICT_ENTRY_OPTIONS = [
   { value: "all", label: "All clients and open leads" },
   { value: "active_clients", label: "Active clients only" },
@@ -240,13 +144,8 @@ interface LocalTrigger {
   _key: string;
   triggerType: TriggerType;
   config: TriggerConfig;
-}
-
-interface LocalStopCondition {
-  _key: string;
-  field: ConditionField;
-  operator: ConditionOperator;
-  value: string;
+  /** Extra AND-conditions gating this specific trigger (crm_sequence_trigger_conditions). */
+  conditions: ConditionRow[];
 }
 
 let _keyCounter = 0;
@@ -268,6 +167,7 @@ export function SequenceRulesDialog({ open, onOpenChange, sequenceId, automation
   const { data: sequences } = useSequences(automationId);
   const sequence = sequences?.find((s) => s.id === sequenceId);
   const updateSequence = useUpdateSequence();
+  const { data: services } = useCRMServices();
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -277,7 +177,7 @@ export function SequenceRulesDialog({ open, onOpenChange, sequenceId, automation
   const [saving, setSaving] = useState(false);
 
   const [triggers, setTriggers] = useState<LocalTrigger[]>([]);
-  const [stopConditions, setStopConditions] = useState<LocalStopCondition[]>([]);
+  const [stopConditions, setStopConditions] = useState<ConditionRow[]>([]);
 
   // Load sequence settings
   useEffect(() => {
@@ -290,24 +190,44 @@ export function SequenceRulesDialog({ open, onOpenChange, sequenceId, automation
     }
   }, [sequence]);
 
-  // Load triggers and stop conditions from DB on open
+  // Load triggers (+ their per-trigger conditions) and stop conditions from DB on open
   useEffect(() => {
     if (!open || !sequenceId) return;
     const supabase = db();
-    supabase
-      .from("crm_sequence_triggers")
-      .select("*")
-      .eq("sequence_id", sequenceId)
-      .order("position")
-      .then(({ data }: { data: { trigger_type: string; config: TriggerConfig | null }[] | null }) => {
-        setTriggers(
-          (data ?? []).map((row) => ({
-            _key: nextKey(),
-            triggerType: row.trigger_type as TriggerType,
-            config: row.config ?? {},
-          }))
-        );
-      });
+
+    (async () => {
+      const { data: triggerRows } = await supabase
+        .from("crm_sequence_triggers")
+        .select("id, trigger_type, config")
+        .eq("sequence_id", sequenceId)
+        .order("position");
+
+      const rows = (triggerRows ?? []) as { id: string; trigger_type: string; config: TriggerConfig | null }[];
+      const triggerIds = rows.map((r) => r.id);
+
+      const conditionsByTrigger = new Map<string, ConditionRow[]>();
+      if (triggerIds.length > 0) {
+        const { data: condRows } = await supabase
+          .from("crm_sequence_trigger_conditions")
+          .select("trigger_id, field, operator, value")
+          .in("trigger_id", triggerIds);
+        (condRows ?? []).forEach((c: { trigger_id: string; field: string; operator: string; value: string | null }) => {
+          const list = conditionsByTrigger.get(c.trigger_id) ?? [];
+          list.push({ field: c.field as ConditionRow["field"], operator: c.operator as ConditionRow["operator"], value: c.value ?? "" });
+          conditionsByTrigger.set(c.trigger_id, list);
+        });
+      }
+
+      setTriggers(
+        rows.map((row) => ({
+          _key: nextKey(),
+          triggerType: row.trigger_type as TriggerType,
+          config: row.config ?? {},
+          conditions: conditionsByTrigger.get(row.id) ?? [],
+        }))
+      );
+    })();
+
     supabase
       .from("crm_sequence_stop_conditions")
       .select("*")
@@ -316,9 +236,8 @@ export function SequenceRulesDialog({ open, onOpenChange, sequenceId, automation
       .then(({ data }: { data: { field: string; operator: string; value: string | null }[] | null }) => {
         setStopConditions(
           (data ?? []).map((row) => ({
-            _key: nextKey(),
-            field: row.field as ConditionField,
-            operator: row.operator as ConditionOperator,
+            field: row.field as ConditionRow["field"],
+            operator: row.operator as ConditionRow["operator"],
             value: row.value ?? "",
           }))
         );
@@ -328,7 +247,7 @@ export function SequenceRulesDialog({ open, onOpenChange, sequenceId, automation
   // ── Trigger handlers ─────────────────────────────────────────────────────────
 
   function addTrigger() {
-    setTriggers((prev) => [...prev, { _key: nextKey(), triggerType: "visit_completed", config: {} }]);
+    setTriggers((prev) => [...prev, { _key: nextKey(), triggerType: "visit_completed", config: {}, conditions: [] }]);
   }
 
   function removeTrigger(key: string) {
@@ -343,21 +262,8 @@ export function SequenceRulesDialog({ open, onOpenChange, sequenceId, automation
     setTriggers((prev) => prev.map((t) => t._key === key ? { ...t, config: { ...t.config, ...patch } } : t));
   }
 
-  // ── Stop condition handlers ───────────────────────────────────────────────────
-
-  function addStopCondition() {
-    setStopConditions((prev) => [
-      ...prev,
-      { _key: nextKey(), field: "client_lead_status", operator: "equals", value: "" },
-    ]);
-  }
-
-  function removeStopCondition(key: string) {
-    setStopConditions((prev) => prev.filter((sc) => sc._key !== key));
-  }
-
-  function updateStopCondition(key: string, patch: Partial<Omit<LocalStopCondition, "_key">>) {
-    setStopConditions((prev) => prev.map((sc) => sc._key === key ? { ...sc, ...patch } : sc));
+  function updateTriggerConditions(key: string, rows: ConditionRow[]) {
+    setTriggers((prev) => prev.map((t) => t._key === key ? { ...t, conditions: rows } : t));
   }
 
   // ── Save ─────────────────────────────────────────────────────────────────────
@@ -381,22 +287,42 @@ export function SequenceRulesDialog({ open, onOpenChange, sequenceId, automation
         },
       });
 
-      // Replace triggers: delete existing, re-insert. Each call's {error} is
-      // checked explicitly — Supabase doesn't throw on a failed query, so an
-      // insert failing after the delete already succeeded would otherwise
-      // close this dialog having silently wiped the sequence's triggers.
+      // Replace triggers: delete existing (cascades their conditions too),
+      // re-insert, then re-insert each new trigger's conditions against its
+      // freshly-generated id. Each call's {error} is checked explicitly —
+      // Supabase doesn't throw on a failed query, so an insert failing after
+      // the delete already succeeded would otherwise close this dialog having
+      // silently wiped the sequence's triggers.
       const { error: delTriggersErr } = await supabase.from("crm_sequence_triggers").delete().eq("sequence_id", sequenceId);
       if (delTriggersErr) throw delTriggersErr;
       if (triggers.length > 0) {
-        const { error: insTriggersErr } = await supabase.from("crm_sequence_triggers").insert(
-          triggers.map((t, i) => ({
-            sequence_id: sequenceId,
-            trigger_type: t.triggerType,
-            position: i,
-            config: t.config,
-          }))
-        );
+        const { data: insertedTriggers, error: insTriggersErr } = await supabase
+          .from("crm_sequence_triggers")
+          .insert(
+            triggers.map((t, i) => ({
+              sequence_id: sequenceId,
+              trigger_type: t.triggerType,
+              position: i,
+              config: t.config,
+            }))
+          )
+          .select("id, position");
         if (insTriggersErr) throw insTriggersErr;
+
+        const conditionRows = ((insertedTriggers ?? []) as { id: string; position: number }[]).flatMap((row) => {
+          const t = triggers[row.position];
+          return (t?.conditions ?? []).map((c) => ({
+            trigger_id: row.id,
+            condition_group: 0,
+            field: c.field,
+            operator: c.operator,
+            value: c.value || null,
+          }));
+        });
+        if (conditionRows.length > 0) {
+          const { error: insCondErr } = await supabase.from("crm_sequence_trigger_conditions").insert(conditionRows);
+          if (insCondErr) throw insCondErr;
+        }
       }
 
       // Replace stop conditions: delete existing, re-insert
@@ -499,7 +425,7 @@ export function SequenceRulesDialog({ open, onOpenChange, sequenceId, automation
                 Start Triggers
               </p>
               <p className="text-[11px] text-slate-400 mt-0.5">
-                Sequence starts when ANY trigger fires.
+                Sequence starts when ANY trigger fires (and its own conditions, if any, all match).
               </p>
             </div>
             <Button variant="outline" size="sm" onClick={addTrigger}>
@@ -513,47 +439,75 @@ export function SequenceRulesDialog({ open, onOpenChange, sequenceId, automation
           )}
 
           {triggers.map((t) => (
-            <div key={t._key} className="flex items-center gap-2">
-              <Select value={t.triggerType} onValueChange={(v) => updateTriggerType(t._key, v as TriggerType)}>
-                <SelectTrigger className="flex-1">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="max-h-72">
-                  {TRIGGER_GROUPS.map((group) => (
-                    <SelectGroup key={group.label}>
-                      <SelectLabel>{group.label}</SelectLabel>
-                      {group.items.map((item) => (
-                        <SelectItem key={item.value} value={item.value}>
-                          {item.label}
-                        </SelectItem>
+            <div key={t._key} className="rounded-md border border-slate-200 p-3 flex flex-col gap-2">
+              <div className="flex items-center gap-2">
+                <Select value={t.triggerType} onValueChange={(v) => updateTriggerType(t._key, v as TriggerType)}>
+                  <SelectTrigger className="flex-1">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-72">
+                    {TRIGGER_GROUPS.map((group) => (
+                      <SelectGroup key={group.label}>
+                        <SelectLabel>{group.label}</SelectLabel>
+                        {group.items.map((item) => (
+                          <SelectItem key={item.value} value={item.value}>
+                            {item.label}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {DATE_GAP_TRIGGER_TYPES.has(t.triggerType) && (
+                  <div className="flex shrink-0 items-center gap-1.5">
+                    <Input
+                      type="number"
+                      min={1}
+                      value={t.config.days ?? ""}
+                      onChange={(e) => updateTriggerConfig(t._key, { days: Number(e.target.value) || undefined })}
+                      placeholder="7"
+                      className="h-9 w-16 text-sm"
+                    />
+                    <span className="text-xs text-slate-400 whitespace-nowrap">
+                      {t.triggerType === "estimate_expiring" ? "days before expiry" : "days since sent"}
+                    </span>
+                  </div>
+                )}
+                {SERVICE_TRIGGER_TYPES.has(t.triggerType) && (
+                  <Select
+                    value={t.config.service_id ?? "any"}
+                    onValueChange={(v) => updateTriggerConfig(t._key, { service_id: v === "any" ? undefined : v })}
+                  >
+                    <SelectTrigger className="h-9 w-44 shrink-0 text-sm">
+                      <SelectValue placeholder="Any service" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="any">Any service</SelectItem>
+                      {(services ?? []).map((s) => (
+                        <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
                       ))}
-                    </SelectGroup>
-                  ))}
-                </SelectContent>
-              </Select>
-              {DATE_GAP_TRIGGER_TYPES.has(t.triggerType) && (
-                <div className="flex shrink-0 items-center gap-1.5">
-                  <Input
-                    type="number"
-                    min={1}
-                    value={t.config.days ?? ""}
-                    onChange={(e) => updateTriggerConfig(t._key, { days: Number(e.target.value) || undefined })}
-                    placeholder="7"
-                    className="h-9 w-16 text-sm"
-                  />
-                  <span className="text-xs text-slate-400 whitespace-nowrap">
-                    {t.triggerType === "estimate_expiring" ? "days before expiry" : "days since sent"}
-                  </span>
-                </div>
-              )}
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 shrink-0 text-red-400 hover:text-red-600"
-                onClick={() => removeTrigger(t._key)}
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </Button>
+                    </SelectContent>
+                  </Select>
+                )}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 shrink-0 text-red-400 hover:text-red-600"
+                  onClick={() => removeTrigger(t._key)}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+
+              <div className="pl-2 border-l-2 border-slate-100 ml-1">
+                <ConditionListEditor
+                  conditions={t.conditions}
+                  onChange={(rows) => updateTriggerConditions(t._key, rows)}
+                  joinLabel="AND"
+                  emptyLabel="No extra conditions — fires whenever this trigger occurs."
+                  addLabel="Add Condition"
+                />
+              </div>
             </div>
           ))}
         </div>
@@ -561,78 +515,23 @@ export function SequenceRulesDialog({ open, onOpenChange, sequenceId, automation
         <Separator className="my-2" />
 
         {/* Stop conditions */}
-        <div className="flex flex-col gap-3">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">
-                Stop Conditions
-              </p>
-              <p className="text-[11px] text-slate-400 mt-0.5">
-                Sequence stops before the next event when any condition is met.
-              </p>
-            </div>
-            <Button variant="outline" size="sm" onClick={addStopCondition}>
-              <Plus className="mr-1 h-3.5 w-3.5" />
-              Add Condition
-            </Button>
+        <div className="flex flex-col gap-2">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">
+              Stop Conditions
+            </p>
+            <p className="text-[11px] text-slate-400 mt-0.5">
+              Sequence stops before the next event when any condition is met.
+            </p>
           </div>
 
-          {stopConditions.length === 0 && (
-            <p className="text-sm text-slate-400 italic">No stop conditions — sequence runs to completion.</p>
-          )}
-
-          {stopConditions.map((sc) => (
-            <div key={sc._key} className="flex items-start gap-2">
-              <Select value={sc.field} onValueChange={(v) => updateStopCondition(sc._key, { field: v as ConditionField })}>
-                <SelectTrigger className="w-48 shrink-0">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="max-h-72">
-                  {CONDITION_GROUPS.map((group) => (
-                    <SelectGroup key={group.label}>
-                      <SelectLabel>{group.label}</SelectLabel>
-                      {group.items.map((item) => (
-                        <SelectItem key={item.value} value={item.value}>
-                          {item.label}
-                        </SelectItem>
-                      ))}
-                    </SelectGroup>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              <Select value={sc.operator} onValueChange={(v) => updateStopCondition(sc._key, { operator: v as ConditionOperator })}>
-                <SelectTrigger className="w-40 shrink-0">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {CONDITION_OPERATORS.map((o) => (
-                    <SelectItem key={o.value} value={o.value}>
-                      {o.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              {sc.operator !== "is_set" && sc.operator !== "is_not_set" && (
-                <Input
-                  placeholder="Value"
-                  className="flex-1 min-w-0"
-                  value={sc.value}
-                  onChange={(e) => updateStopCondition(sc._key, { value: e.target.value })}
-                />
-              )}
-
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 shrink-0 text-red-400 hover:text-red-600"
-                onClick={() => removeStopCondition(sc._key)}
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </Button>
-            </div>
-          ))}
+          <ConditionListEditor
+            conditions={stopConditions}
+            onChange={setStopConditions}
+            joinLabel="OR"
+            emptyLabel="No stop conditions — sequence runs to completion."
+            addLabel="Add Condition"
+          />
         </div>
 
         <DialogFooter>

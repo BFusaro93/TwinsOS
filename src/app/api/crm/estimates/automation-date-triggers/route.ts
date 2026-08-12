@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/supabase";
+import { isEligibleForEnrollment, enrollClientInSequence, triggerConditionsMet } from "@/lib/automations/sequence-enrollment";
 
 /**
  * GET  /api/crm/estimates/automation-date-triggers — called by Vercel Cron
@@ -39,7 +40,7 @@ async function handleRun(request: Request) {
 
   const { data: triggers } = await supabase
     .from("crm_sequence_triggers")
-    .select("sequence_id, trigger_type, config, crm_automation_sequences(is_active, crm_automations(is_active, org_id))")
+    .select("id, sequence_id, trigger_type, config, crm_automation_sequences(is_active, allow_reentry, reentry_after_minutes, crm_automations(is_active, org_id))")
     .in("trigger_type", ["estimate_expiring", "estimate_no_response"]);
 
   let enrolled = 0;
@@ -87,46 +88,28 @@ async function handleRun(request: Request) {
     }
 
     for (const est of matches) {
+      if (!(await triggerConditionsMet(supabase, trigger.id, est.client_id, est.id))) continue;
+
       // A date-gap trigger fires off a fixed anchor (valid_until_date / sent_at)
-      // that never changes, so a single enrollment row — regardless of its
-      // status — permanently blocks re-enrollment for this estimate+sequence.
-      const { data: existing } = await supabase
-        .from("crm_sequence_enrollments")
-        .select("id")
-        .eq("sequence_id", trigger.sequence_id)
-        .eq("estimate_id", est.id)
-        .maybeSingle();
-      if (existing) continue;
-
-      const { data: firstEvent } = await supabase
-        .from("crm_sequence_events")
-        .select("event_type, config")
-        .eq("sequence_id", trigger.sequence_id)
-        .eq("is_active", true)
-        .is("deleted_at", null)
-        .order("position", { ascending: true })
-        .limit(1)
-        .maybeSingle();
-
-      let nextFireAt = new Date().toISOString();
-      if (firstEvent?.event_type === "wait") {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const waitDays = (firstEvent.config as any)?.days ?? 0;
-        const d = new Date();
-        d.setDate(d.getDate() + waitDays);
-        nextFireAt = d.toISOString();
-      }
-
-      const { error: insertErr } = await supabase.from("crm_sequence_enrollments").insert({
-        org_id: orgId,
-        sequence_id: trigger.sequence_id,
-        client_id: est.client_id,
-        estimate_id: est.id,
-        enrolled_at: new Date().toISOString(),
-        next_event_position: firstEvent?.event_type === "wait" ? 1 : 0,
-        next_fire_at: nextFireAt,
+      // that never changes, so without allow_reentry a prior enrollment row —
+      // regardless of its status — permanently blocks re-enrollment for this
+      // estimate+sequence.
+      const eligible = await isEligibleForEnrollment(supabase, {
+        sequenceId: trigger.sequence_id,
+        clientId: est.client_id,
+        estimateId: est.id,
+        allowReentry: seq.allow_reentry ?? false,
+        reentryAfterMinutes: seq.reentry_after_minutes ?? 1440,
       });
-      if (!insertErr) enrolled++;
+      if (!eligible) continue;
+
+      const ok = await enrollClientInSequence(supabase, {
+        sequenceId: trigger.sequence_id,
+        orgId,
+        clientId: est.client_id,
+        estimateId: est.id,
+      });
+      if (ok) enrolled++;
     }
   }
 

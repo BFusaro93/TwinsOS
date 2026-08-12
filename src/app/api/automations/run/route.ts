@@ -3,6 +3,8 @@ import { createClient } from "@supabase/supabase-js";
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { Resend } from "resend";
 import type { Database } from "@/types/supabase";
+import { shouldStopSequence, logSequenceExecution } from "@/lib/automations/sequence-enrollment";
+import { resolveEmailStepContent, sendResolvedSequenceEmail, advanceEnrollmentPastStep } from "@/lib/automations/sequence-email";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AdminClient = ReturnType<typeof createClient<any>>;
@@ -493,6 +495,7 @@ async function handleRun(request: Request) {
       .is("completed_at", null)
       .is("stopped_at", null)
       .is("deleted_at", null)
+      .eq("awaiting_approval", false)
       .limit(50);
 
     if (callerOrgId) {
@@ -522,7 +525,23 @@ async function handleRun(request: Request) {
           .from("crm_sequence_enrollments")
           .update({ completed_at: nowIso, updated_at: nowIso })
           .eq("id", enrollId);
+        await logSequenceExecution(adminClient, {
+          orgId, enrollmentId: enrollId, sequenceId: sequence_id, clientId: client_id, action: "completed",
+        });
         crmFired.push({ enrollmentId: enrollId, action: "completed" });
+        continue;
+      }
+
+      const stopped = await shouldStopSequence(adminClient, sequence_id, client_id ?? null, estimate_id ?? null);
+      if (stopped) {
+        await (adminClient as AdminClient)
+          .from("crm_sequence_enrollments")
+          .update({ stopped_at: nowIso, updated_at: nowIso })
+          .eq("id", enrollId);
+        await logSequenceExecution(adminClient, {
+          orgId, enrollmentId: enrollId, sequenceId: sequence_id, clientId: client_id, action: "stopped_by_condition",
+        });
+        crmFired.push({ enrollmentId: enrollId, action: "stopped by condition" });
         continue;
       }
 
@@ -543,118 +562,156 @@ async function handleRun(request: Request) {
           .from("crm_sequence_enrollments")
           .update({ next_event_position: nextPos, next_fire_at: newFireAt, updated_at: nowIso })
           .eq("id", enrollId);
+        await logSequenceExecution(adminClient, {
+          orgId, enrollmentId: enrollId, sequenceId: sequence_id, clientId: client_id,
+          eventId: currentEvent.id, eventType: "wait", action: "wait_advanced",
+          detail: `advanced to position ${nextPos}`,
+        });
         crmFired.push({ enrollmentId: enrollId, action: `wait advanced to position ${nextPos}` });
         continue;
       }
 
       if (currentEvent.event_type === "email") {
-        const resendKey = process.env.RESEND_API_KEY;
-        if (!resendKey) {
-          crmSkipped.push({ enrollmentId: enrollId, reason: "RESEND_API_KEY not configured" });
-          continue;
-        }
-
-        const { data: client } = await (adminClient as AdminClient)
-          .from("clients")
-          .select("display_name, primary_email")
-          .eq("id", client_id)
-          .single();
-
-        if (!client?.primary_email) {
-          crmSkipped.push({ enrollmentId: enrollId, reason: "client has no primary_email" });
-          continue;
-        }
-
-        const { data: orgRow } = await (adminClient as AdminClient)
-          .from("organizations")
-          .select("name, brand_color")
-          .eq("id", orgId)
-          .single();
-
-        let estimateNumber: string | null = null;
-        if (estimate_id) {
-          const { data: estRow } = await (adminClient as AdminClient)
-            .from("estimates")
-            .select("estimate_number")
-            .eq("id", estimate_id)
-            .single();
-          if (estRow?.estimate_number != null) {
-            estimateNumber = String(estRow.estimate_number).padStart(5, "0");
+        // "Send Mon-Fri only" — defer to the next weekday rather than skipping
+        // the step outright; the enrollment just gets re-checked then.
+        if (eventConfig.send_weekdays_only) {
+          const day = new Date().getDay(); // 0 = Sun, 6 = Sat
+          if (day === 0 || day === 6) {
+            const d = new Date();
+            d.setDate(d.getDate() + (day === 0 ? 1 : 2));
+            await (adminClient as AdminClient)
+              .from("crm_sequence_enrollments")
+              .update({ next_fire_at: d.toISOString(), updated_at: nowIso })
+              .eq("id", enrollId);
+            crmSkipped.push({ enrollmentId: enrollId, reason: "deferred to next weekday (send_weekdays_only)" });
+            continue;
           }
         }
 
-        const clientDisplayName = (client.display_name as string) ?? "";
-        const clientFirstName = clientDisplayName.split(" ")[0] ?? clientDisplayName;
-        const orgName = (orgRow?.name as string) ?? "Your Service Provider";
-
-        const mergeTags: Record<string, string> = {
-          "[clientfirstname]": clientFirstName,
-          "[clientfullname]":  clientDisplayName,
-          "[companyname]":     orgName,
-          "[quotenumber]":     estimateNumber ?? "",
-        };
-
-        const resolveBody = (template: string) =>
-          template.replace(/\[(\w+)\]/gi, (match) => mergeTags[match.toLowerCase()] ?? match);
-
-        const subject  = resolveBody(eventConfig.subject  ?? "(no subject)");
-        const bodyHtml = resolveBody(eventConfig.bodyHtml ?? "");
-
-        const resend = new Resend(resendKey);
-        const { data: sent, error: sendErr } = await resend.emails.send({
-          from: "Twins Lawn Service <noreply@twinslawnservice.com>",
-          to: client.primary_email as string,
-          subject,
-          html: bodyHtml,
+        const built = await resolveEmailStepContent(adminClient, {
+          orgId,
+          clientId: client_id,
+          estimateId: estimate_id ?? null,
+          subjectTemplate: eventConfig.subject ?? "",
+          bodyTemplate: eventConfig.bodyHtml ?? eventConfig.body ?? "",
         });
-
-        if (sendErr) {
-          console.error("[crm-processor] Resend error:", sendErr);
-          crmSkipped.push({ enrollmentId: enrollId, reason: `email send failed: ${String(sendErr)}` });
+        if ("error" in built) {
+          await logSequenceExecution(adminClient, {
+            orgId, enrollmentId: enrollId, sequenceId: sequence_id, clientId: client_id,
+            eventId: currentEvent.id, eventType: "email", action: "email_skipped", detail: built.error,
+          });
+          crmSkipped.push({ enrollmentId: enrollId, reason: built.error });
           continue;
         }
 
-        if (estimate_id) {
-          await (adminClient as AdminClient).from("estimate_emails").insert({
-            org_id:     orgId,
-            estimate_id,
-            to_email:   client.primary_email,
-            to_name:    clientDisplayName || null,
-            subject,
-            body_html:  bodyHtml,
-            resend_id:  sent?.id ?? null,
-            email_type: "automation",
+        // "Requires approval" — park the step in the approval queue instead
+        // of sending. The processor won't re-visit this enrollment (query
+        // filters on awaiting_approval = false) until a human decides.
+        if (eventConfig.require_approval) {
+          const { error: approvalErr } = await (adminClient as AdminClient)
+            .from("crm_sequence_step_approvals")
+            .insert({
+              org_id: orgId,
+              enrollment_id: enrollId,
+              event_id: currentEvent.id,
+              sequence_id,
+              client_id,
+              estimate_id: estimate_id ?? null,
+              to_email: built.toEmail,
+              to_name: built.toName || null,
+              subject: built.subject,
+              body_html: built.bodyHtml,
+            });
+          // 23505 = unique_violation on the one-pending-per-enrollment+event
+          // index — a concurrent/prior run already queued this approval,
+          // which is fine; anything else is a real failure.
+          if (approvalErr && approvalErr.code !== "23505") {
+            crmSkipped.push({ enrollmentId: enrollId, reason: `failed to create approval: ${approvalErr.message}` });
+            continue;
+          }
+          await (adminClient as AdminClient)
+            .from("crm_sequence_enrollments")
+            .update({ awaiting_approval: true, updated_at: nowIso })
+            .eq("id", enrollId);
+          await logSequenceExecution(adminClient, {
+            orgId, enrollmentId: enrollId, sequenceId: sequence_id, clientId: client_id,
+            eventId: currentEvent.id, eventType: "email", action: "awaiting_approval",
+            detail: built.subject,
           });
+          crmFired.push({ enrollmentId: enrollId, action: "awaiting approval" });
+          continue;
         }
 
-        const nextPos = next_event_position + 1;
-        const nextEvent = (events ?? []).find((e: { position: number }) => e.position === nextPos);
-
-        if (!nextEvent) {
-          await (adminClient as AdminClient)
-            .from("crm_sequence_enrollments")
-            .update({ completed_at: nowIso, updated_at: nowIso })
-            .eq("id", enrollId);
-          crmFired.push({ enrollmentId: enrollId, action: `email sent → completed` });
-        } else if (nextEvent.event_type === "wait") {
-          const days = (nextEvent.config as Record<string, number>)?.days ?? 0;
-          const d = new Date();
-          d.setDate(d.getDate() + days);
-          await (adminClient as AdminClient)
-            .from("crm_sequence_enrollments")
-            .update({ next_event_position: nextPos + 1, next_fire_at: d.toISOString(), updated_at: nowIso })
-            .eq("id", enrollId);
-          crmFired.push({ enrollmentId: enrollId, action: `email sent → wait ${days}d` });
-        } else {
-          await (adminClient as AdminClient)
-            .from("crm_sequence_enrollments")
-            .update({ next_event_position: nextPos, next_fire_at: nowIso, updated_at: nowIso })
-            .eq("id", enrollId);
-          crmFired.push({ enrollmentId: enrollId, action: `email sent → position ${nextPos}` });
+        const sendResult = await sendResolvedSequenceEmail(adminClient, {
+          orgId,
+          clientId: client_id ?? null,
+          estimateId: estimate_id ?? null,
+          toEmail: built.toEmail,
+          toName: built.toName,
+          subject: built.subject,
+          bodyHtml: built.bodyHtml,
+        });
+        if (!sendResult.ok) {
+          await logSequenceExecution(adminClient, {
+            orgId, enrollmentId: enrollId, sequenceId: sequence_id, clientId: client_id,
+            eventId: currentEvent.id, eventType: "email", action: "email_skipped", detail: sendResult.reason,
+          });
+          crmSkipped.push({ enrollmentId: enrollId, reason: sendResult.reason });
+          continue;
         }
+
+        const action = await advanceEnrollmentPastStep(adminClient, {
+          enrollmentId: enrollId,
+          events: events ?? [],
+          completedPosition: next_event_position,
+          nowIso,
+        });
+        await logSequenceExecution(adminClient, {
+          orgId, enrollmentId: enrollId, sequenceId: sequence_id, clientId: client_id,
+          eventId: currentEvent.id, eventType: "email", action: "email_sent",
+          detail: `${built.subject} → ${built.toEmail}`,
+        });
+        crmFired.push({ enrollmentId: enrollId, action: `email sent → ${action}` });
         continue;
       }
 
+      if (currentEvent.event_type === "alert") {
+        const recipientIds: string[] = Array.isArray(eventConfig.recipient_user_ids)
+          ? eventConfig.recipient_user_ids
+          : [];
+        if (recipientIds.length === 0) {
+          crmSkipped.push({ enrollmentId: enrollId, reason: "no recipient_user_ids configured" });
+          continue;
+        }
+
+        const message = (eventConfig.message as string) || "Automation alert";
+        const { error: notifErr } = await (adminClient as AdminClient)
+          .from("notifications")
+          .insert(recipientIds.map((userId) => ({ org_id: orgId, user_id: userId, message })));
+        if (notifErr) {
+          crmSkipped.push({ enrollmentId: enrollId, reason: `failed to insert notifications: ${notifErr.message}` });
+          continue;
+        }
+
+        const action = await advanceEnrollmentPastStep(adminClient, {
+          enrollmentId: enrollId,
+          events: events ?? [],
+          completedPosition: next_event_position,
+          nowIso,
+        });
+        await logSequenceExecution(adminClient, {
+          orgId, enrollmentId: enrollId, sequenceId: sequence_id, clientId: client_id,
+          eventId: currentEvent.id, eventType: "alert", action: "alert_sent",
+          detail: `${message} → ${recipientIds.length} user(s)`,
+        });
+        crmFired.push({ enrollmentId: enrollId, action: `alert sent to ${recipientIds.length} user(s) → ${action}` });
+        continue;
+      }
+
+      await logSequenceExecution(adminClient, {
+        orgId, enrollmentId: enrollId, sequenceId: sequence_id, clientId: client_id,
+        eventId: currentEvent.id, eventType: currentEvent.event_type, action: "unsupported_event_type",
+      });
       crmSkipped.push({ enrollmentId: enrollId, reason: `unsupported event_type: ${currentEvent.event_type}` });
     }
   } catch (crmErr) {
