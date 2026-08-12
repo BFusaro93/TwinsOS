@@ -47,25 +47,41 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     .eq("form_id", formId)
     .eq("org_id", profile.org_id);
 
-  if (fields.length > 0) {
-    const rows = fields.map((f, i) => ({
-      form_id: formId,
-      org_id: profile.org_id,
-      field_type: f.fieldType,
-      label: f.label,
-      placeholder: f.placeholder ?? null,
-      description: f.description ?? null,
-      required: f.required,
-      sort_order: f.sortOrder ?? i,
-      page_number: f.pageNumber ?? 1,
-      mapped_field: f.mappedField ?? null,
-      options: f.options ?? null,
-      config: f.config ?? {},
-    }));
+  if (fields.length === 0) return NextResponse.json({ ok: true, fields: [] });
 
-    const { error } = await db.from("crm_form_fields").insert(rows);
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  }
+  const rows = fields.map((f, i) => ({
+    form_id: formId,
+    org_id: profile.org_id,
+    field_type: f.fieldType,
+    label: f.label,
+    placeholder: f.placeholder ?? null,
+    description: f.description ?? null,
+    required: f.required,
+    sort_order: f.sortOrder ?? i,
+    page_number: f.pageNumber ?? 1,
+    mapped_field: f.mappedField ?? null,
+    options: f.options ?? null,
+    config: f.config ?? {},
+  }));
 
-  return NextResponse.json({ ok: true });
+  const { data: inserted, error } = await db.from("crm_form_fields").insert(rows).select().order("sort_order", { ascending: true });
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const mappedFields = (inserted ?? []).map((f: any) => ({
+    id: f.id,
+    formId: f.form_id,
+    fieldType: f.field_type,
+    label: f.label,
+    placeholder: f.placeholder,
+    description: f.description ?? null,
+    required: f.required,
+    sortOrder: f.sort_order,
+    pageNumber: f.page_number ?? 1,
+    mappedField: f.mapped_field ?? null,
+    options: f.options ?? null,
+    config: f.config ?? {},
+  }));
+
+  return NextResponse.json({ ok: true, fields: mappedFields });
 }

@@ -193,11 +193,27 @@ export function FormBuilder({ form, publicBaseUrl }: Props) {
   const [rules, setRules] = useState<DraftRule[]>([]);
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [invalidFieldKey, setInvalidFieldKey] = useState<string | null>(null);
 
+  // Don't let a background refetch (e.g. refetchOnWindowFocus) silently
+  // overwrite in-progress unsaved edits with stale server data.
   useEffect(() => {
+    if (dirty) return;
     setFields(form.fields.map((f) => ({ ...f, _key: f.id, _savedId: f.id })));
-    setDirty(false);
-  }, [form.fields]);
+  }, [form.fields, dirty]);
+
+  // Warn before a refresh/close discards unsaved field edits — this is
+  // exactly how a user can lose newly-added fields without realizing the
+  // save never went through.
+  useEffect(() => {
+    if (!dirty) return;
+    function handleBeforeUnload(e: BeforeUnloadEvent) {
+      e.preventDefault();
+      e.returnValue = "";
+    }
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [dirty]);
 
   // Seed rules from DB once loaded
   useEffect(() => {
@@ -223,6 +239,9 @@ export function FormBuilder({ form, publicBaseUrl }: Props) {
 
   function update(key: string, patch: Partial<DraftField>) {
     setFields((prev) => prev.map((f) => f._key === key ? { ...f, ...patch } : f));
+    if (key === invalidFieldKey && typeof patch.label === "string" && patch.label.trim()) {
+      setInvalidFieldKey(null);
+    }
     setDirty(true);
   }
 
@@ -324,7 +343,20 @@ export function FormBuilder({ form, publicBaseUrl }: Props) {
 
   async function handleSave() {
     const invalid = fields.find((f) => !DISPLAY_TYPES.includes(f.fieldType) && !f.label.trim());
-    if (invalid) { toast.error("All fields must have a label"); return; }
+    if (invalid) {
+      // Jump to the offending field's page and highlight it — a save that
+      // silently no-ops here (previously just a small toast) is exactly how
+      // a user loses newly-added fields: they see no error, refresh, and the
+      // unsaved draft is gone.
+      setActivePage(invalid.pageNumber ?? 1);
+      setInvalidFieldKey(invalid._key);
+      toast.error("Every field needs a label before you can save — the field is highlighted below.", { duration: 6000 });
+      requestAnimationFrame(() => {
+        document.getElementById(`field-${invalid._key}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+      });
+      return;
+    }
+    setInvalidFieldKey(null);
     setSaving(true);
     try {
       const savedFieldData = await saveFields.mutateAsync(
@@ -344,12 +376,11 @@ export function FormBuilder({ form, publicBaseUrl }: Props) {
 
       // Re-map _keys to new DB ids for rule references
       const newFieldMap = new Map<string, string>(); // _key → new id
-      if (Array.isArray(savedFieldData)) {
-        savedFieldData.forEach((saved: CRMFormField, i: number) => {
-          const draft = fields[i];
-          if (draft) newFieldMap.set(draft._key, saved.id);
-        });
-      }
+      const savedFields = (savedFieldData?.fields ?? []) as CRMFormField[];
+      savedFields.forEach((saved, i) => {
+        const draft = fields[i];
+        if (draft) newFieldMap.set(draft._key, saved.id);
+      });
 
       // Save rules, resolving field keys to real ids. Kept in its own
       // try/catch — Fields already saved successfully above, so a Rules-only
@@ -514,6 +545,7 @@ export function FormBuilder({ form, publicBaseUrl }: Props) {
                 field={field}
                 idx={idx}
                 totalFields={pageFields.length}
+                hasError={field._key === invalidFieldKey}
                 onUpdate={(patch) => update(field._key, patch)}
                 onUpdateConfig={(patch) => updateConfig(field._key, patch)}
                 onChangeType={(type) => changeType(field._key, type)}
@@ -557,6 +589,7 @@ interface FieldCardProps {
   field: DraftField;
   idx: number;
   totalFields: number;
+  hasError?: boolean;
   onUpdate: (patch: Partial<DraftField>) => void;
   onUpdateConfig: (patch: Record<string, unknown>) => void;
   onChangeType: (type: FormFieldType) => void;
@@ -566,13 +599,19 @@ interface FieldCardProps {
 }
 
 function FieldCard({
-  field, idx, totalFields,
+  field, idx, totalFields, hasError,
   onUpdate, onUpdateConfig, onChangeType, onMoveUp, onMoveDown, onRemove,
 }: FieldCardProps) {
   const isDisplay = DISPLAY_TYPES.includes(field.fieldType);
 
   return (
-    <div className="rounded-lg border bg-white shadow-sm">
+    <div
+      id={`field-${field._key}`}
+      className={cn(
+        "rounded-lg border bg-white shadow-sm",
+        hasError && "border-red-400 ring-1 ring-red-200"
+      )}
+    >
       {/* Card header row */}
       <div className="grid grid-cols-[180px_1fr_auto_auto_auto] gap-3 items-start p-4">
         {/* Type selector */}
@@ -602,10 +641,11 @@ function FieldCard({
 
         {/* Label / heading text */}
         <div className="space-y-1">
-          <Label className="text-[10px] uppercase tracking-widest text-slate-400">
+          <Label className={cn("text-[10px] uppercase tracking-widest", hasError ? "text-red-500" : "text-slate-400")}>
             {field.fieldType === "header" ? "Heading Text" :
              field.fieldType === "paragraph" ? "Label (optional)" :
              field.fieldType === "divider" ? "—" : "Label"}
+            {hasError && " — required"}
           </Label>
           {field.fieldType === "divider" ? (
             <div className="h-8 flex items-center">
@@ -613,6 +653,7 @@ function FieldCard({
             </div>
           ) : (
             <Input
+              autoFocus={hasError}
               value={field.label}
               onChange={(e) => onUpdate({ label: e.target.value })}
               placeholder={
@@ -620,7 +661,7 @@ function FieldCard({
                 field.fieldType === "paragraph" ? "Optional label…" :
                 "Field label…"
               }
-              className="h-8 text-xs"
+              className={cn("h-8 text-xs", hasError && "border-red-400 focus-visible:ring-red-400")}
             />
           )}
         </div>
