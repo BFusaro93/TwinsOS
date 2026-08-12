@@ -11,10 +11,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { useEmailTemplates } from "@/lib/hooks/use-email-templates";
+import { useRecipientSearch } from "@/lib/hooks/use-clients";
 import { EMAIL_MERGE_TAGS } from "@/types/crm-proposals";
+import { RichTextEditor, type RichTextEditorHandle } from "@/components/crm/services/RichTextEditor";
 
 // Exported so bulk-send flows (EstimatesList's "Email Selected") send the
 // same default content a single manual send would, when no org default
@@ -30,6 +31,126 @@ export const DEFAULT_TEMPLATE_BODY = `<p>Hi [clientfirstname],</p>
 <p>Thank you,<br>[salesrepname]<br>[companyphonenumber]</p>`;
 
 export const DEFAULT_SUBJECT = "Your Estimate from [companyname] — Estimate #[quotenumber]";
+
+function isValidEmail(email: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+// ── Recipient chip input with client/contact autocomplete ──────────────────────
+
+interface RecipientChipInputProps {
+  label: string;
+  emails: string[];
+  onChange: (emails: string[]) => void;
+  placeholder: string;
+}
+
+function RecipientChipInput({ label, emails, onChange, placeholder }: RecipientChipInputProps) {
+  const [inputValue, setInputValue] = useState("");
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const { data: suggestions = [] } = useRecipientSearch(inputValue);
+
+  // Close the dropdown on outside click.
+  useEffect(() => {
+    function onDocClick(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setShowSuggestions(false);
+      }
+    }
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, []);
+
+  function addEmail(email: string) {
+    const trimmed = email.trim().replace(/,+$/, "");
+    if (!trimmed) return;
+    if (!isValidEmail(trimmed)) {
+      toast.error(`"${trimmed}" is not a valid email address`);
+      return;
+    }
+    if (!emails.includes(trimmed)) onChange([...emails, trimmed]);
+    setInputValue("");
+    setShowSuggestions(false);
+  }
+
+  function removeEmail(email: string) {
+    onChange(emails.filter((e) => e !== email));
+  }
+
+  function handleKeyDown(e: KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Enter" || e.key === "," || e.key === "Tab") {
+      if (inputValue.trim()) {
+        e.preventDefault();
+        addEmail(inputValue);
+      }
+    } else if (e.key === "Backspace" && inputValue === "" && emails.length > 0) {
+      onChange(emails.slice(0, -1));
+    } else if (e.key === "Escape") {
+      setShowSuggestions(false);
+    }
+  }
+
+  // Suggestions already added (by email) are hidden from the dropdown.
+  const filteredSuggestions = suggestions.filter((s) => !emails.includes(s.email));
+
+  return (
+    <div ref={containerRef} className="relative">
+      <div
+        className="flex flex-wrap items-center gap-1.5 rounded-md border bg-white px-3 py-2 text-sm cursor-text min-h-[38px]"
+        onClick={() => inputRef.current?.focus()}
+      >
+        <span className="text-slate-400 text-xs font-medium w-8 shrink-0">{label}</span>
+        {emails.map((email) => (
+          <span
+            key={email}
+            className="flex items-center gap-1 bg-slate-100 text-slate-700 rounded px-1.5 py-0.5 text-xs"
+          >
+            {email}
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); removeEmail(email); }}
+              className="text-slate-400 hover:text-slate-700 leading-none"
+              aria-label={`Remove ${email}`}
+            >
+              ×
+            </button>
+          </span>
+        ))}
+        <input
+          ref={inputRef}
+          type="text"
+          value={inputValue}
+          onChange={(e) => { setInputValue(e.target.value); setShowSuggestions(true); }}
+          onFocus={() => setShowSuggestions(true)}
+          onKeyDown={handleKeyDown}
+          onBlur={() => { if (inputValue.trim()) addEmail(inputValue); }}
+          placeholder={emails.length === 0 ? placeholder : ""}
+          className="flex-1 min-w-[160px] text-xs outline-none bg-transparent placeholder:text-slate-400"
+        />
+      </div>
+
+      {showSuggestions && filteredSuggestions.length > 0 && (
+        <div className="absolute z-10 mt-1 w-full rounded-md border bg-white py-1 shadow-lg max-h-56 overflow-auto">
+          {filteredSuggestions.map((s) => (
+            <button
+              key={s.key}
+              type="button"
+              onMouseDown={(e) => { e.preventDefault(); addEmail(s.email); }}
+              className="flex w-full flex-col items-start px-3 py-1.5 text-left hover:bg-slate-50"
+            >
+              <span className="text-xs font-medium text-slate-700">{s.name || s.email}</span>
+              <span className="text-[11px] text-slate-400">{s.email} · {s.sublabel}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Main dialog ──────────────────────────────────────────────────────────────
 
 interface Props {
   estimateId: string;
@@ -51,16 +172,15 @@ export function SendEstimateDialog({
   const [bodyHtml, setBodyHtml] = useState(DEFAULT_TEMPLATE_BODY);
   const [sending, setSending]   = useState(false);
   const [tab, setTab]           = useState<"compose" | "preview">("compose");
-  const [toEmail, setToEmail]   = useState(clientEmail ?? "");
+  const [toEmails, setToEmails] = useState<string[]>(clientEmail ? [clientEmail] : []);
   const [ccEmails, setCcEmails] = useState<string[]>([]);
-  const [ccInput, setCcInput]   = useState("");
-  const ccInputRef = useRef<HTMLInputElement>(null);
+  const richTextRef = useRef<RichTextEditorHandle>(null);
 
   // Reset the editable "To" field whenever a different estimate's dialog
   // opens — otherwise a manually-edited address from a prior send would
   // linger since this dialog stays mounted between opens.
   useEffect(() => {
-    if (open) setToEmail(clientEmail ?? "");
+    if (open) setToEmails(clientEmail ? [clientEmail] : []);
   }, [open, clientEmail]);
 
   // Load template when selected
@@ -93,44 +213,9 @@ export function SendEstimateDialog({
       .replace(/\[companyphonenumber\]/gi, "(555) 000-0000");
   }
 
-  function isValidEmail(email: string) {
-    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-  }
-
-  function commitCcInput() {
-    const trimmed = ccInput.trim().replace(/,+$/, "");
-    if (!trimmed) return;
-    if (!isValidEmail(trimmed)) {
-      toast.error(`"${trimmed}" is not a valid email address`);
-      return;
-    }
-    if (!ccEmails.includes(trimmed)) {
-      setCcEmails((prev) => [...prev, trimmed]);
-    }
-    setCcInput("");
-  }
-
-  function handleCcKeyDown(e: KeyboardEvent<HTMLInputElement>) {
-    if (e.key === "Enter" || e.key === "," || e.key === "Tab") {
-      e.preventDefault();
-      commitCcInput();
-    } else if (e.key === "Backspace" && ccInput === "" && ccEmails.length > 0) {
-      setCcEmails((prev) => prev.slice(0, -1));
-    }
-  }
-
-  function removeCcEmail(email: string) {
-    setCcEmails((prev) => prev.filter((e) => e !== email));
-  }
-
   async function handleSend() {
-    const to = toEmail.trim();
-    if (!to) {
-      toast.error("Enter a recipient email address");
-      return;
-    }
-    if (!isValidEmail(to)) {
-      toast.error(`"${to}" is not a valid email address`);
+    if (toEmails.length === 0) {
+      toast.error("Enter at least one recipient email address");
       return;
     }
     setSending(true);
@@ -138,13 +223,13 @@ export function SendEstimateDialog({
       const res = await fetch(`/api/crm/estimates/${estimateId}/send-email`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ subject, bodyHtml, expiresInDays: 30, ccEmails, to }),
+        body: JSON.stringify({ subject, bodyHtml, expiresInDays: 30, ccEmails, to: toEmails }),
       });
       if (!res.ok) {
         const data = await res.json();
         throw new Error(data.error ?? "Failed to send");
       }
-      toast.success(`Estimate sent to ${to}`);
+      toast.success(`Estimate sent to ${toEmails.join(", ")}`);
       onSent();
       onClose();
     } catch (err) {
@@ -162,55 +247,19 @@ export function SendEstimateDialog({
         </DialogHeader>
 
         <div className="space-y-4 py-1">
-          {/* To */}
-          <div className="flex items-center gap-3 rounded-md border bg-white px-3 py-2 text-sm">
-            <span className="text-slate-400 text-xs font-medium w-8 shrink-0">To</span>
-            <span className="shrink-0 font-medium text-slate-700">{clientName}</span>
-            <input
-              type="email"
-              value={toEmail}
-              onChange={(e) => setToEmail(e.target.value)}
-              placeholder="recipient@example.com"
-              className="flex-1 min-w-0 text-sm outline-none bg-transparent placeholder:text-slate-400"
-            />
-            {!clientEmail && !toEmail && (
-              <Badge variant="destructive" className="shrink-0 text-[10px]">No email on file</Badge>
-            )}
-          </div>
+          <RecipientChipInput
+            label="To"
+            emails={toEmails}
+            onChange={setToEmails}
+            placeholder={clientName ? `Add recipients for ${clientName}…` : "Add recipients…"}
+          />
 
-          {/* CC */}
-          <div
-            className="flex flex-wrap items-center gap-1.5 rounded-md border bg-white px-3 py-2 text-sm cursor-text min-h-[38px]"
-            onClick={() => ccInputRef.current?.focus()}
-          >
-            <span className="text-slate-400 text-xs font-medium w-8 shrink-0">CC</span>
-            {ccEmails.map((email) => (
-              <span
-                key={email}
-                className="flex items-center gap-1 bg-slate-100 text-slate-700 rounded px-1.5 py-0.5 text-xs"
-              >
-                {email}
-                <button
-                  type="button"
-                  onClick={(e) => { e.stopPropagation(); removeCcEmail(email); }}
-                  className="text-slate-400 hover:text-slate-700 leading-none"
-                  aria-label={`Remove ${email}`}
-                >
-                  ×
-                </button>
-              </span>
-            ))}
-            <input
-              ref={ccInputRef}
-              type="text"
-              value={ccInput}
-              onChange={(e) => setCcInput(e.target.value)}
-              onKeyDown={handleCcKeyDown}
-              onBlur={commitCcInput}
-              placeholder={ccEmails.length === 0 ? "Add CC recipients…" : ""}
-              className="flex-1 min-w-[160px] text-xs outline-none bg-transparent placeholder:text-slate-400"
-            />
-          </div>
+          <RecipientChipInput
+            label="CC"
+            emails={ccEmails}
+            onChange={setCcEmails}
+            placeholder="Add CC recipients…"
+          />
 
           {/* Template picker */}
           {templates.length > 0 && (
@@ -247,12 +296,12 @@ export function SendEstimateDialog({
             </TabsList>
 
             <TabsContent value="compose" className="mt-2">
-              <textarea
+              <RichTextEditor
+                ref={richTextRef}
                 value={bodyHtml}
-                onChange={(e) => setBodyHtml(e.target.value)}
-                rows={12}
-                className="w-full rounded border border-slate-200 p-2 text-xs font-mono focus:border-brand-400 focus:outline-none resize-y"
-                placeholder="Email body (HTML supported)…"
+                onChange={setBodyHtml}
+                placeholder="Email body…"
+                minHeight={200}
               />
               {/* Merge tag reference */}
               <div className="mt-2 flex flex-wrap gap-1.5">
@@ -261,7 +310,7 @@ export function SendEstimateDialog({
                     key={mt.tag}
                     type="button"
                     title={mt.label}
-                    onClick={() => setBodyHtml((b) => b + mt.tag)}
+                    onClick={() => richTextRef.current?.insertContent(mt.tag)}
                     className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-mono text-slate-600 hover:bg-brand-100 hover:text-brand-700"
                   >
                     {mt.tag}
@@ -283,9 +332,9 @@ export function SendEstimateDialog({
           <Button variant="outline" onClick={onClose}>Cancel</Button>
           <Button
             onClick={handleSend}
-            disabled={sending || !toEmail.trim() || !subject.trim() || !bodyHtml.trim()}
+            disabled={sending || toEmails.length === 0 || !subject.trim() || !bodyHtml.trim()}
           >
-            {sending ? "Sending…" : `Send to ${toEmail.trim() || "client"}`}
+            {sending ? "Sending…" : `Send to ${toEmails.length > 0 ? toEmails.join(", ") : "client"}`}
           </Button>
         </DialogFooter>
       </DialogContent>

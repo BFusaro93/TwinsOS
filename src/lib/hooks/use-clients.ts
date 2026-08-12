@@ -670,6 +670,66 @@ export function useDeleteClientContact() {
   });
 }
 
+// ── recipient search (email dialogs: To/CC autocomplete) ───────────────────────
+
+export interface RecipientSuggestion {
+  key: string;
+  name: string;
+  email: string;
+  sublabel: string;
+}
+
+// Searches both clients (incl. leads — leads are just clients with
+// status="lead", no separate table) and their individual contacts, so an
+// email dialog's To/CC autocomplete can surface a client's billing address
+// as well as a specific named contact at that client.
+export function useRecipientSearch(query: string) {
+  const q = query.trim();
+  return useQuery({
+    queryKey: ["recipient-search", q],
+    queryFn: async (): Promise<RecipientSuggestion[]> => {
+      const supabase = createClient();
+      const like = `%${q}%`;
+      const [clientsRes, contactsRes] = await Promise.all([
+        supabase
+          .from("clients")
+          .select("id, display_name, primary_email")
+          .is("deleted_at", null)
+          .not("primary_email", "is", null)
+          .or(`display_name.ilike.${like},primary_email.ilike.${like}`)
+          .limit(6),
+        supabase
+          .from("client_contacts")
+          .select("id, first_name, last_name, email, clients(display_name)")
+          .is("deleted_at", null)
+          .not("email", "is", null)
+          .or(`first_name.ilike.${like},last_name.ilike.${like},email.ilike.${like}`)
+          .limit(6),
+      ]);
+      const clientSuggestions: RecipientSuggestion[] = (clientsRes.data ?? [])
+        .filter((c) => !!c.primary_email)
+        .map((c) => ({
+          key: `client-${c.id}`,
+          name: c.display_name,
+          email: c.primary_email as string,
+          sublabel: "Client",
+        }));
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const contactSuggestions: RecipientSuggestion[] = ((contactsRes.data ?? []) as any[])
+        .filter((c) => !!c.email)
+        .map((c) => ({
+          key: `contact-${c.id}`,
+          name: `${c.first_name ?? ""} ${c.last_name ?? ""}`.trim(),
+          email: c.email as string,
+          sublabel: c.clients?.display_name ? `Contact — ${c.clients.display_name}` : "Contact",
+        }));
+      return [...clientSuggestions, ...contactSuggestions];
+    },
+    enabled: q.length >= 2,
+    staleTime: 30_000,
+  });
+}
+
 // ── leads ─────────────────────────────────────────────────────────────────────
 
 export function useLeads() {

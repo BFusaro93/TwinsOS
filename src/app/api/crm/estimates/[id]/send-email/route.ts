@@ -46,14 +46,15 @@ export async function POST(
     bodyHtml: string;
     expiresInDays?: number;
     ccEmails?: string[];
-    to?: string;
+    to?: string[];
   };
 
   if (!body.subject?.trim() || !body.bodyHtml?.trim()) {
     return NextResponse.json({ error: "subject and bodyHtml are required" }, { status: 400 });
   }
 
-  if (body.to && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(body.to.trim())) {
+  const isValidEmail = (e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e.trim());
+  if (body.to?.some((e) => !isValidEmail(e))) {
     return NextResponse.json({ error: "Invalid recipient email address" }, { status: 400 });
   }
 
@@ -69,10 +70,13 @@ export async function POST(
     return NextResponse.json({ error: "Estimate not found" }, { status: 404 });
   }
 
-  const clientEmail = (body.to?.trim() || est.clients?.primary_email) as string | null;
-  if (!clientEmail) {
+  const toEmails = (body.to && body.to.length > 0)
+    ? body.to.map((e) => e.trim())
+    : (est.clients?.primary_email ? [est.clients.primary_email as string] : []);
+  if (toEmails.length === 0) {
     return NextResponse.json({ error: "Client has no email address on file" }, { status: 422 });
   }
+  const toEmailsJoined = toEmails.join(", ");
 
   // Fetch org
   const { data: profile } = await supabase.from("profiles").select("org_id").eq("id", user.id).single();
@@ -148,7 +152,7 @@ export async function POST(
     org_id: est.org_id,
     estimate_id: estimateId,
     version_number: versionNumber,
-    sent_to_email: clientEmail,
+    sent_to_email: toEmailsJoined,
     created_by: user.id,
     snapshot: {
       estimateNumber: est.estimate_number,
@@ -181,7 +185,7 @@ export async function POST(
   const resend = new Resend(process.env.RESEND_API_KEY!);
   const { data: sent, error: sendErr } = await resend.emails.send({
     from: FROM,
-    to: clientEmail,
+    to: toEmails,
     subject: resolvedSubject,
     html: resolvedBody,
     ...(body.ccEmails && body.ccEmails.length > 0 ? { cc: body.ccEmails } : {}),
@@ -197,7 +201,7 @@ export async function POST(
   await (supabase as any).from("estimate_emails").insert({
     org_id: profile?.org_id,
     estimate_id: estimateId,
-    to_email: clientEmail,
+    to_email: toEmailsJoined,
     to_name: clientDisplayName || null,
     subject: resolvedSubject,
     body_html: resolvedBody,
@@ -224,8 +228,8 @@ export async function POST(
       client_id: est.client_id,
       activity_type: "email",
       subject: `Estimate #${est.estimate_number} sent via email`,
-      body: `Sent to ${clientEmail}. Subject: ${resolvedSubject}`,
-      sent_to: clientEmail,
+      body: `Sent to ${toEmailsJoined}. Subject: ${resolvedSubject}`,
+      sent_to: toEmailsJoined,
       ref_id: estimateId,
       ref_table: "estimates",
       resend_message_id: sent?.id ?? null,
