@@ -78,6 +78,8 @@ import { ClientPortalTab } from "@/components/crm/settings/ClientPortalSettings"
 import { SnowRoutesEditor } from "@/components/crm/settings/SnowRoutesEditor";
 import { ChemicalTrackingTab } from "@/components/crm/settings/ChemicalTrackingSettings";
 import { InvoiceTemplatesEditor } from "@/components/crm/settings/InvoiceTemplatesEditor";
+import { EmailTemplatesEditor } from "@/components/crm/settings/EmailTemplatesEditor";
+import { INVOICE_EMAIL_MERGE_TAGS } from "@/types/crm-proposals";
 import { useInvoicePDFTemplates } from "@/lib/hooks/use-invoice-pdf-templates";
 import { ApprovalFlowsPage } from "@/components/settings/ApprovalFlowsPage";
 import { BILLING_TERMS_OPTIONS } from "@/lib/constants";
@@ -1288,6 +1290,17 @@ function AccountingTab() {
         description="PDF layouts used when generating or printing an invoice. The starred template is the org default."
       >
         <InvoiceTemplatesEditor />
+      </AccordionSection>
+      <AccordionSection
+        title="Invoice Email Templates"
+        description="Email templates used when sending an invoice. The starred template is the default, but any template can be picked from the dropdown when sending."
+      >
+        <EmailTemplatesEditor
+          templateType="invoice"
+          description="Email templates sent when emailing an invoice."
+          mergeTags={INVOICE_EMAIL_MERGE_TAGS}
+          emptyMessage="No email templates yet. Create one to use when sending invoices."
+        />
       </AccordionSection>
     </div>
   );

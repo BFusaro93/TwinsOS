@@ -93,6 +93,7 @@ export function mapInvoice(row: any): CRMInvoice {
     updatedAt: row.updated_at,
     createdBy: row.created_by,
     clientName: row.clients?.display_name ?? null,
+    clientEmail: row.clients?.primary_email ?? null,
     clientAddress: row.clients
       ? [row.clients.billing_address, row.clients.billing_city, row.clients.billing_state, row.clients.billing_zip]
           .filter(Boolean).join(", ")
@@ -136,7 +137,7 @@ export function useInvoice(id: string) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
         .from("crm_invoices")
-        .select("*, clients(display_name, billing_address, billing_city, billing_state, billing_zip, default_tax_rate_bps, default_terms, default_payment_method), profiles!crm_invoices_sales_rep_id_fkey(name), crm_invoice_line_items(*), crm_payments(*)")
+        .select("*, clients(display_name, primary_email, billing_address, billing_city, billing_state, billing_zip, default_tax_rate_bps, default_terms, default_payment_method), profiles!crm_invoices_sales_rep_id_fkey(name), crm_invoice_line_items(*), crm_payments(*)")
         .eq("id", id)
         .is("deleted_at", null)
         .single();

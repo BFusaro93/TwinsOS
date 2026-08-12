@@ -110,6 +110,7 @@ export interface CRMInvoice {
   createdBy: string | null;
   // joined
   clientName?: string;
+  clientEmail?: string | null;
   clientAddress?: string | null;
   clientDefaultTaxRateBps?: number;
   clientDefaultTerms?: string;

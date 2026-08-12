@@ -11,32 +11,38 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Paperclip } from "lucide-react";
 import { toast } from "sonner";
+import { formatCurrency } from "@/lib/utils";
 import { useEmailTemplates } from "@/lib/hooks/use-email-templates";
-import { EMAIL_MERGE_TAGS } from "@/types/crm-proposals";
+import { INVOICE_EMAIL_MERGE_TAGS } from "@/types/crm-proposals";
 import { RichTextEditor, type RichTextEditorHandle } from "@/components/crm/services/RichTextEditor";
 import { RecipientChipInput } from "@/components/shared/RecipientChipInput";
 
-// Exported so bulk-send flows (EstimatesList's "Email Selected") send the
+// Exported so bulk-send flows (InvoicesList's "Email Selected") send the
 // same default content a single manual send would, when no org default
 // template is configured.
-export const DEFAULT_TEMPLATE_BODY = `<p>Hi [clientfirstname],</p>
+export const DEFAULT_INVOICE_TEMPLATE_BODY = `<p>Hi [clientfirstname],</p>
 
-<p>Please find your proposal from [companyname] attached below. Click the button to review the services included and accept online.</p>
+<p>Please find attached Invoice #[invoicenumber] from [companyname] for [invoicetotal], due [duedate].</p>
 
-<p style="margin:20px 0">[quotelink]</p>
-
-<p>This proposal is valid for 30 days. If you have any questions, please don't hesitate to reach out.</p>
+<p>If you have any questions, please don't hesitate to reach out.</p>
 
 <p>Thank you,<br>[salesrepname]<br>[companyphonenumber]</p>`;
 
-export const DEFAULT_SUBJECT = "Your Estimate from [companyname] — Estimate #[quotenumber]";
+export const DEFAULT_INVOICE_SUBJECT = "Invoice #[invoicenumber] from [companyname] — [invoicetotal] due [duedate]";
 
-// ── Main dialog ──────────────────────────────────────────────────────────────
+function fmtDate(iso: string | null) {
+  if (!iso) return "—";
+  return new Date(iso + "T12:00:00").toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+}
 
 interface Props {
-  estimateId: string;
-  estimateNumber: number;
+  invoiceId: string;
+  invoiceNumber: number | null;
+  totalCents: number;
+  balanceCents: number;
+  dueDate: string | null;
   clientName: string | null;
   clientEmail: string | null;
   open: boolean;
@@ -44,21 +50,21 @@ interface Props {
   onSent: () => void;
 }
 
-export function SendEstimateDialog({
-  estimateId, estimateNumber, clientName, clientEmail, open, onClose, onSent,
+export function InvoiceEmailDialog({
+  invoiceId, invoiceNumber, totalCents, balanceCents, dueDate, clientName, clientEmail, open, onClose, onSent,
 }: Props) {
-  const { data: templates = [] } = useEmailTemplates("estimate");
+  const { data: templates = [] } = useEmailTemplates("invoice");
 
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
-  const [subject, setSubject]   = useState(DEFAULT_SUBJECT);
-  const [bodyHtml, setBodyHtml] = useState(DEFAULT_TEMPLATE_BODY);
+  const [subject, setSubject]   = useState(DEFAULT_INVOICE_SUBJECT);
+  const [bodyHtml, setBodyHtml] = useState(DEFAULT_INVOICE_TEMPLATE_BODY);
   const [sending, setSending]   = useState(false);
   const [tab, setTab]           = useState<"compose" | "preview">("compose");
   const [toEmails, setToEmails] = useState<string[]>(clientEmail ? [clientEmail] : []);
   const [ccEmails, setCcEmails] = useState<string[]>([]);
   const richTextRef = useRef<RichTextEditorHandle>(null);
 
-  // Reset the editable "To" field whenever a different estimate's dialog
+  // Reset the editable "To" field whenever a different invoice's dialog
   // opens — otherwise a manually-edited address from a prior send would
   // linger since this dialog stays mounted between opens.
   useEffect(() => {
@@ -83,15 +89,16 @@ export function SendEstimateDialog({
   // Simple preview: replace merge tags with placeholder values for display
   function previewResolve(text: string) {
     return text
-      .replace(/\[clientfirstname\]/gi,    clientName?.split(" ")[0] ?? "Client")
-      .replace(/\[clientlastname\]/gi,     clientName?.split(" ").slice(1).join(" ") ?? "")
-      .replace(/\[clientfullname\]/gi,     clientName ?? "Client")
-      .replace(/\[companyname\]/gi,        "Your Company")
-      .replace(/\[quotelink\]/gi,          `<a href="#" style="color:#fff;background:#60ab45;padding:10px 20px;border-radius:4px;text-decoration:none;font-weight:600;display:inline-block">View Your Proposal →</a>`)
-      .replace(/\[quotenumber\]/gi,        String(estimateNumber).padStart(5, "0"))
-      .replace(/\[quotedate\]/gi,          new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }))
-      .replace(/\[quotetotal\]/gi,         "$0.00")
-      .replace(/\[salesrepname\]/gi,       "Your Rep")
+      .replace(/\[clientfirstname\]/gi, clientName?.split(" ")[0] ?? "Client")
+      .replace(/\[clientlastname\]/gi,  clientName?.split(" ").slice(1).join(" ") ?? "")
+      .replace(/\[clientfullname\]/gi,  clientName ?? "Client")
+      .replace(/\[companyname\]/gi,     "Your Company")
+      .replace(/\[invoicenumber\]/gi,   invoiceNumber != null ? String(invoiceNumber) : "—")
+      .replace(/\[invoicedate\]/gi,     new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }))
+      .replace(/\[duedate\]/gi,         fmtDate(dueDate))
+      .replace(/\[invoicetotal\]/gi,    formatCurrency(totalCents))
+      .replace(/\[balancedue\]/gi,      formatCurrency(balanceCents))
+      .replace(/\[salesrepname\]/gi,    "Your Rep")
       .replace(/\[companyphonenumber\]/gi, "(555) 000-0000");
   }
 
@@ -102,20 +109,20 @@ export function SendEstimateDialog({
     }
     setSending(true);
     try {
-      const res = await fetch(`/api/crm/estimates/${estimateId}/send-email`, {
+      const res = await fetch("/api/crm/invoices/email", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ subject, bodyHtml, expiresInDays: 30, ccEmails, to: toEmails }),
+        body: JSON.stringify({ invoiceId, subject, bodyHtml, ccEmails, to: toEmails }),
       });
       if (!res.ok) {
         const data = await res.json();
         throw new Error(data.error ?? "Failed to send");
       }
-      toast.success(`Estimate sent to ${toEmails.join(", ")}`);
+      toast.success(`Invoice emailed to ${toEmails.join(", ")}`);
       onSent();
       onClose();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to send estimate");
+      toast.error(err instanceof Error ? err.message : "Failed to send invoice");
     } finally {
       setSending(false);
     }
@@ -125,7 +132,7 @@ export function SendEstimateDialog({
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Send Estimate #{String(estimateNumber).padStart(5, "0")}</DialogTitle>
+          <DialogTitle>Send Invoice #{invoiceNumber ?? "—"}</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4 py-1">
@@ -187,7 +194,7 @@ export function SendEstimateDialog({
               />
               {/* Merge tag reference */}
               <div className="mt-2 flex flex-wrap gap-1.5">
-                {EMAIL_MERGE_TAGS.map((mt) => (
+                {INVOICE_EMAIL_MERGE_TAGS.map((mt) => (
                   <button
                     key={mt.tag}
                     type="button"
@@ -208,6 +215,11 @@ export function SendEstimateDialog({
               />
             </TabsContent>
           </Tabs>
+
+          <p className="flex items-center gap-1.5 text-xs text-slate-400">
+            <Paperclip className="h-3.5 w-3.5" />
+            The invoice PDF will be attached automatically.
+          </p>
         </div>
 
         <DialogFooter>

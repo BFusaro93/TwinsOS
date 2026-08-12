@@ -55,6 +55,7 @@ import type { DiscountType, CRMDiscount } from "@/types/crm-discounts";
 import { AuditTrailTab } from "@/components/shared/AuditTrailTab";
 import { LineItemDiscountPopover, type LineItemDiscountPatch } from "@/components/shared/LineItemDiscountPopover";
 import { ChargeCardDialog } from "@/components/crm/invoices/ChargeCardDialog";
+import { InvoiceEmailDialog } from "@/components/crm/invoices/InvoiceEmailDialog";
 
 // ── constants ─────────────────────────────────────────────────────────────────
 
@@ -523,6 +524,7 @@ export function InvoiceDetail({
   const lineItemSearchRef = useRef<HTMLInputElement>(null);
   const [paymentOpen, setPaymentOpen] = useState(false);
   const [chargeCardOpen, setChargeCardOpen] = useState(false);
+  const [emailDialogOpen, setEmailDialogOpen] = useState(false);
   const [selectedPayment, setSelectedPayment] = useState<CRMPayment | null>(null);
   const queryClient = useQueryClient();
   const [saving, setSaving] = useState(false);
@@ -645,20 +647,9 @@ export function InvoiceDetail({
     } catch { toast.error("Failed to add item"); }
   }
 
-  async function handleEmail() {
-    try {
-      const res = await fetch("/api/crm/invoices/email", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ invoiceId: invoice!.id }),
-      });
-      const json = await res.json() as { error?: string };
-      if (!res.ok) throw new Error(json.error ?? "Send failed");
-      toast.success("Invoice emailed — invoice locked");
-      await setLock({ id: invoice!.id, locked: true });
-    } catch (err) {
-      toast.error((err as Error).message ?? "Failed to send email");
-    }
+  async function handleEmailSent() {
+    // The dialog already toasts the send result — just lock the invoice.
+    await setLock({ id: invoice!.id, locked: true });
   }
 
   function handlePrint() {
@@ -816,7 +807,7 @@ export function InvoiceDetail({
             <Printer className="mr-1 h-3.5 w-3.5 text-slate-500" /> Print
           </Button>
           <Button variant="outline" size="sm" className="h-8 text-xs"
-            onClick={handleEmail}
+            onClick={() => setEmailDialogOpen(true)}
             disabled={invoice.status === "void"}>
             <Mail className="mr-1 h-3.5 w-3.5 text-blue-500" /> Email
           </Button>
@@ -1352,6 +1343,18 @@ export function InvoiceDetail({
         payment={selectedPayment}
         open={!!selectedPayment}
         onOpenChange={(o) => { if (!o) setSelectedPayment(null); }}
+      />
+      <InvoiceEmailDialog
+        invoiceId={invoice.id}
+        invoiceNumber={invoice.invoiceNumber}
+        totalCents={invoice.totalCents}
+        balanceCents={invoice.balanceCents}
+        dueDate={invoice.dueDate}
+        clientName={invoice.clientName ?? null}
+        clientEmail={invoice.clientEmail ?? null}
+        open={emailDialogOpen}
+        onClose={() => setEmailDialogOpen(false)}
+        onSent={handleEmailSent}
       />
     </div>
   );

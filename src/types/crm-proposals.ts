@@ -70,6 +70,23 @@ export const CHEMICAL_EMAIL_MERGE_TAGS = [
 
 export type ChemicalMergeTag = typeof CHEMICAL_EMAIL_MERGE_TAGS[number]["tag"];
 
+// Merge tags supported in the Send Invoice email template
+export const INVOICE_EMAIL_MERGE_TAGS = [
+  { tag: "[clientfirstname]",    label: "Client First Name" },
+  { tag: "[clientlastname]",     label: "Client Last Name" },
+  { tag: "[clientfullname]",     label: "Client Full Name" },
+  { tag: "[companyname]",        label: "Company Name" },
+  { tag: "[invoicenumber]",      label: "Invoice Number" },
+  { tag: "[invoicedate]",        label: "Invoice Date" },
+  { tag: "[duedate]",            label: "Due Date" },
+  { tag: "[invoicetotal]",       label: "Invoice Total" },
+  { tag: "[balancedue]",         label: "Balance Due" },
+  { tag: "[salesrepname]",       label: "Sales Rep Name" },
+  { tag: "[companyphonenumber]", label: "Company Phone" },
+] as const;
+
+export type InvoiceMergeTag = typeof INVOICE_EMAIL_MERGE_TAGS[number]["tag"];
+
 import type { DisplaySettings } from "@/lib/estimate-display-settings";
 
 // Public proposal data shape (returned by the proposal API, no auth required)
