@@ -91,8 +91,16 @@ export function LineItemsTable({
   // RequisitionDetailPanel's own add flow. Parts are always maintenance_part
   // (CLAUDE.md: only project_material/stocked_material may carry a project_id),
   // so they never get a project assignment here.
+  //
+  // Every Part has a shadow product_items row (created by useCreatePart), so
+  // without filtering, the same physical item shows up twice — once as a
+  // "product" and once as a "part". Exclude products that already have a
+  // linked Part; the Part entry is the canonical pick, and saveAdd() below
+  // resolves productItemId from it so nothing that reads product_item_id
+  // breaks.
+  const linkedProductIds = new Set(parts.map((p) => p.productItemId).filter(Boolean));
   const catalog = [
-    ...products.map((p) => ({ key: `product:${p.id}`, name: p.name, partNumber: p.partNumber, unitCost: p.unitCost, isMaintPart: p.category === "maintenance_part" })),
+    ...products.filter((p) => !linkedProductIds.has(p.id)).map((p) => ({ key: `product:${p.id}`, name: p.name, partNumber: p.partNumber, unitCost: p.unitCost, isMaintPart: p.category === "maintenance_part" })),
     ...parts.map((p) => ({ key: `part:${p.id}`, name: p.name, partNumber: p.partNumber, unitCost: p.unitCost, isMaintPart: true })),
   ];
 
@@ -128,12 +136,16 @@ export function LineItemsTable({
     const unitCost = Math.round(addForm.unitCost * 10000) / 100 || 0;
     const isPart = selected.key.startsWith("part:");
     const bareId = selected.key.replace(/^(product:|part:)/, "");
+    const selectedPart = isPart ? parts.find((p) => p.id === bareId) : null;
     // Never let a maintenance_part item carry a project_id, regardless of
     // what the (hidden, for these items) project dropdown holds.
     const projectId = selected.isMaintPart ? null : (addForm.projectId === "none" ? null : addForm.projectId);
     const newItem: LineItem = {
       id: crypto.randomUUID(),
-      productItemId: isPart ? "" : bareId,
+      // Resolve the linked product_items row even when adding "as a part" —
+      // otherwise any code that only checks productItemId (image lookups,
+      // reports, etc.) silently breaks for part-sourced line items.
+      productItemId: isPart ? (selectedPart?.productItemId ?? "") : bareId,
       partId: isPart ? bareId : null,
       productItemName: selected.name,
       partNumber: selected.partNumber ?? "",
@@ -219,7 +231,15 @@ export function LineItemsTable({
           <TableBody>
             {items.map((li) => {
               const product = products.find((p) => p.id === li.productItemId);
-              const thumbUrl = product?.pictureUrl;
+              // Resolve the linked Part from either direction — li.partId
+              // directly, or (for older/product-added rows) by matching a
+              // Part whose product_item_id points back to this line's
+              // productItemId — so image + asset-link both work regardless
+              // of which side the line item was originally added from.
+              const linkedPart = li.partId
+                ? parts.find((p) => p.id === li.partId)
+                : (li.productItemId ? parts.find((p) => p.productItemId === li.productItemId) : undefined);
+              const thumbUrl = product?.pictureUrl ?? linkedPart?.pictureUrl;
               return (
               <TableRow key={li.id} className="group text-sm">
                 <TableCell>
@@ -232,11 +252,13 @@ export function LineItemsTable({
                       </div>
                     )}
                     <div className="flex flex-col gap-0.5">
-                    {/* Parts (maintenance_part) always open the Part detail — partId takes priority */}
-                    {onPartClick && li.partId ? (
+                    {/* Parts (maintenance_part) always open the Part detail —
+                        via li.partId directly, or the reverse-resolved
+                        linkedPart for rows added "as a product" */}
+                    {onPartClick && (li.partId ?? linkedPart?.id) ? (
                       <button
                         type="button"
-                        onClick={() => onPartClick(li.partId!)}
+                        onClick={() => onPartClick((li.partId ?? linkedPart!.id)!)}
                         className="text-left font-medium text-brand-600 hover:underline"
                       >
                         {product?.name ?? li.productItemName}

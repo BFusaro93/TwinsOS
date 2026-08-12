@@ -141,9 +141,15 @@ export function NewPODialog({ open, onOpenChange, initialData, prefillData, onCr
   const isEditing = !!initialData;
   const rf = useRequiredFields("purchase_order");
 
-  // Build unified catalog (includes inline-created items)
+  // Build unified catalog (includes inline-created items).
+  // Every Part has a shadow product_items row (created by useCreatePart), so
+  // without filtering, the same physical item shows up twice — once as a
+  // "product" and once as a "part". Exclude products that already have a
+  // linked Part; the Part entry is the canonical pick, and the productItemId
+  // resolution below (via parts.product_item_id) keeps it working.
+  const linkedProductIds = new Set(allParts.map((p) => p.productItemId).filter(Boolean));
   const catalog: CatalogOption[] = [
-    ...allProducts.map((p) => ({
+    ...allProducts.filter((p) => !linkedProductIds.has(p.id)).map((p) => ({
       id: `product:${p.id}`,
       name: p.name,
       partNumber: p.partNumber,

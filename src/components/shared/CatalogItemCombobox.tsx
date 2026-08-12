@@ -64,6 +64,19 @@ export function CatalogItemCombobox({
 
   const isSmall = size === "sm";
 
+  // Every Part has a shadow product_items row (created by useCreatePart), so
+  // without filtering, the same physical item shows up twice — once as a
+  // "product" and once as a "part". Exclude products that already have a
+  // linked Part; the Part entry is the canonical pick.
+  const linkedProductIds = React.useMemo(
+    () => new Set(parts.map((p) => p.productItemId).filter(Boolean)),
+    [parts]
+  );
+  const dedupedProducts = React.useMemo(
+    () => products.filter((p) => !linkedProductIds.has(p.id)),
+    [products, linkedProductIds]
+  );
+
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
@@ -96,9 +109,9 @@ export function CatalogItemCombobox({
           <CommandInput placeholder="Search by name or part #..." />
           <CommandList className="!max-h-[240px]">
             <CommandEmpty>No items found.</CommandEmpty>
-            {products.length > 0 && (
+            {dedupedProducts.length > 0 && (
               <CommandGroup heading="Products">
-                {products.map((p) => {
+                {dedupedProducts.map((p) => {
                   const key = `product:${p.id}`;
                   const searchStr = [p.name, p.partNumber, p.category].filter(Boolean).join(" ");
                   return (
