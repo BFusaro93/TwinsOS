@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Paperclip } from "lucide-react";
 import { toast } from "sonner";
 import { useEmailTemplates } from "@/lib/hooks/use-email-templates";
 import { EMAIL_MERGE_TAGS } from "@/types/crm-proposals";
@@ -208,6 +209,11 @@ export function SendEstimateDialog({
               />
             </TabsContent>
           </Tabs>
+
+          <p className="flex items-center gap-1.5 text-xs text-slate-400">
+            <Paperclip className="h-3.5 w-3.5" />
+            The estimate PDF will be attached automatically.
+          </p>
         </div>
 
         <DialogFooter>

@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { Resend } from "resend";
+import { renderToBuffer } from "@react-pdf/renderer";
+import { createElement } from "react";
+import { EstimateDocument } from "@/components/crm/estimates/pdf/EstimateDocument";
+import type { EstimatePDFData, EstimatePDFLineItem, EstimatePDFMilestone, EstimatePDFPhoto, OrgPDFData } from "@/components/crm/estimates/pdf/EstimateDocument";
+import { toDisplaySettings } from "@/lib/estimate-display-settings";
 
 const FROM = "Twins Lawn Service <noreply@twinslawnservice.com>";
 
@@ -62,7 +67,13 @@ export async function POST(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: est, error: estErr } = await (supabase as any)
     .from("estimates")
-    .select("*, clients(display_name, primary_email, billing_address), profiles!estimates_sales_rep_id_fkey(name)")
+    .select(`
+      *,
+      clients(display_name, primary_email, billing_address, billing_city, billing_state, billing_zip),
+      profiles!estimates_sales_rep_id_fkey(name),
+      estimate_line_items(*),
+      estimate_milestones(name, amount_cents, sort_order, deleted_at)
+    `)
     .eq("id", estimateId)
     .single();
 
@@ -181,6 +192,123 @@ export async function POST(
     },
   });
 
+  // Render the estimate PDF for attachment — same pipeline as the "Preview"/
+  // "Print" buttons (src/app/api/crm/estimates/[id]/pdf/route.ts).
+  const milestones: EstimatePDFMilestone[] = (est.estimate_milestones ?? [])
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    .filter((m: any) => !m.deleted_at)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    .sort((a: any, b: any) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    .map((m: any) => ({ name: m.name as string, amountCents: (m.amount_cents as number) ?? 0 }));
+
+  const pdfLineItems: EstimatePDFLineItem[] = lineItems
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    .filter((li: any) => li.status === "quote")
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    .map((li: any) => ({
+      rowType: (li.row_type as "item" | "section") ?? "item",
+      sectionName: li.section_name ?? null,
+      serviceName: li.service_name ?? null,
+      estimateDesc: li.estimate_desc ?? null,
+      qty: li.qty ?? 1,
+      unitType: li.unit_type ?? null,
+      rateCents: li.rate_cents ?? 0,
+      visits: li.visits ?? 1,
+      totalCents: li.total_cents ?? 0,
+      tier: li.tier ?? null,
+    }));
+
+  // Customer-facing photos — download and base64-embed since storage signed
+  // URLs expire before the attachment would ever be opened.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: photoRows } = await (supabase as any)
+    .from("estimate_photos")
+    .select("storage_path, caption, created_at")
+    .eq("estimate_id", estimateId)
+    .eq("customer_facing", true)
+    .is("deleted_at", null)
+    .order("created_at", { ascending: true });
+
+  const photos: EstimatePDFPhoto[] = [];
+  for (const p of (photoRows ?? []) as Record<string, unknown>[]) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: signed } = await (supabase as any).storage
+      .from("attachments")
+      .createSignedUrl(p.storage_path as string, 3600);
+    if (!signed?.signedUrl) continue;
+    try {
+      const imgRes = await fetch(signed.signedUrl);
+      if (!imgRes.ok) continue;
+      const buf = Buffer.from(await imgRes.arrayBuffer());
+      const mime = imgRes.headers.get("content-type") ?? "image/jpeg";
+      photos.push({ caption: (p.caption as string | null) ?? null, dataUri: `data:${mime};base64,${buf.toString("base64")}` });
+    } catch {
+      // Skip a photo that failed to download rather than failing the whole send
+    }
+  }
+
+  const addr = (org?.address as Record<string, string>) ?? {};
+  const customizations = (org?.customizations as Record<string, unknown>) ?? {};
+
+  const estimatePdfData: EstimatePDFData = {
+    estimateNumber: est.estimate_number as number,
+    description: est.description as string | null,
+    createdAt: est.created_at as string,
+    validUntil: est.valid_until as string | null,
+    notes: est.notes as string | null,
+    clientName: est.clients?.display_name ?? null,
+    clientAddress: est.clients?.billing_address ?? null,
+    clientCity: est.clients?.billing_city ?? null,
+    clientState: est.clients?.billing_state ?? null,
+    clientZip: est.clients?.billing_zip ?? null,
+    subtotalCents: (est.subtotal_cents as number) ?? 0,
+    taxRateBps: (est.tax_rate_bps as number) ?? 0,
+    taxCents: (est.tax_cents as number) ?? 0,
+    discountCents: (est.discount_cents as number) ?? 0,
+    showDiscounts: (est.show_discounts as boolean) ?? false,
+    totalCents: (est.total_cents as number) ?? 0,
+    paymentTerms: (est.payment_terms as string) ?? null,
+    depositRequiredCents: (est.deposit_required_cents as number) ?? 0,
+    numInstallments: (est.num_installments as number) ?? 1,
+    installmentDayOfMonth: (est.installment_day_of_month as number | null) ?? null,
+    paymentPlanType: (est.payment_plan_type as "installments" | "milestones") ?? "installments",
+    milestones,
+    tiersEnabled: (est.tiers_enabled as boolean) ?? false,
+    tierLabels: (est.tier_labels as { basic: string; standard: string; premium: string }) ?? { basic: "Basic", standard: "Standard", premium: "Premium" },
+    displaySettings: toDisplaySettings(est.display_settings),
+    lineItems: pdfLineItems,
+    photos,
+  };
+
+  const orgPdfData: OrgPDFData = {
+    name: orgName,
+    street: addr.street ?? "",
+    city: addr.city ?? "",
+    state: addr.state ?? "",
+    zip: addr.zip ?? "",
+    phone: orgPhone,
+    brandColor: (org?.brand_color as string) ?? "#60ab45",
+    logoUrl: (customizations.logoDataUrl as string) ?? null,
+  };
+
+  let pdfAttachment: { filename: string; content: string } | null = null;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const buffer = await renderToBuffer(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      createElement(EstimateDocument as any, { estimate: estimatePdfData, org: orgPdfData }) as any
+    );
+    pdfAttachment = {
+      filename: `estimate-${est.estimate_number}.pdf`,
+      content: Buffer.from(buffer).toString("base64"),
+    };
+  } catch (err) {
+    // Non-fatal — send the email without the attachment rather than blocking
+    // the whole send over a PDF rendering issue.
+    console.error("[send-estimate] PDF render error:", err);
+  }
+
   // Send via Resend
   const resend = new Resend(process.env.RESEND_API_KEY!);
   const { data: sent, error: sendErr } = await resend.emails.send({
@@ -189,6 +317,7 @@ export async function POST(
     subject: resolvedSubject,
     html: resolvedBody,
     ...(body.ccEmails && body.ccEmails.length > 0 ? { cc: body.ccEmails } : {}),
+    ...(pdfAttachment ? { attachments: [pdfAttachment] } : {}),
   });
 
   if (sendErr) {
