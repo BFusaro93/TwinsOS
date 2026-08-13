@@ -5,6 +5,7 @@ import { Resend } from "resend";
 import type { Database } from "@/types/supabase";
 import { shouldStopSequence, logSequenceExecution } from "@/lib/automations/sequence-enrollment";
 import { resolveEmailStepContent, sendResolvedSequenceEmail, advanceEnrollmentPastStep } from "@/lib/automations/sequence-email";
+import { notifyStaffOfNewTicket, notifyTicketAssigned } from "@/lib/ticket-notify";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AdminClient = ReturnType<typeof createClient<any>>;
@@ -705,6 +706,117 @@ async function handleRun(request: Request) {
           detail: `${message} → ${recipientIds.length} user(s)`,
         });
         crmFired.push({ enrollmentId: enrollId, action: `alert sent to ${recipientIds.length} user(s) → ${action}` });
+        continue;
+      }
+
+      if (currentEvent.event_type === "ticket") {
+        const title = (eventConfig.title as string) || "Automation ticket";
+        const assignToId = (eventConfig.assign_to as string) || null;
+
+        let assignedToName: string | null = null;
+        if (assignToId) {
+          const { data: assignee } = await (adminClient as AdminClient)
+            .from("profiles")
+            .select("name")
+            .eq("id", assignToId)
+            .single();
+          assignedToName = assignee?.name ?? null;
+        }
+
+        const { data: ticket, error: ticketErr } = await (adminClient as AdminClient)
+          .from("crm_tickets")
+          .insert({
+            org_id: orgId,
+            type: "note",
+            client_id,
+            subject: title,
+            body: (eventConfig.description as string) || null,
+            priority: (eventConfig.priority as string) || "normal",
+            assigned_to_id: assignToId,
+            assigned_to: assignedToName,
+          })
+          .select("id, ticket_number")
+          .single();
+
+        if (ticketErr || !ticket) {
+          crmSkipped.push({ enrollmentId: enrollId, reason: `failed to create ticket: ${ticketErr?.message ?? "unknown"}` });
+          continue;
+        }
+
+        const notifyBase = { orgId, ticketId: ticket.id, ticketNumber: ticket.ticket_number, subject: title };
+        if (assignToId) {
+          await notifyTicketAssigned(adminClient, { ...notifyBase, assignedToId: assignToId, assignedToName });
+        } else {
+          await notifyStaffOfNewTicket(adminClient, { ...notifyBase, assignedToId: null, assignedToName: null, createdByUserId: null });
+        }
+
+        const action = await advanceEnrollmentPastStep(adminClient, {
+          enrollmentId: enrollId,
+          events: events ?? [],
+          completedPosition: next_event_position,
+          nowIso,
+        });
+        await logSequenceExecution(adminClient, {
+          orgId, enrollmentId: enrollId, sequenceId: sequence_id, clientId: client_id,
+          eventId: currentEvent.id, eventType: "ticket", action: "ticket_created",
+          detail: `#${ticket.ticket_number} — ${title}${assignedToName ? ` → ${assignedToName}` : ""}`,
+        });
+        crmFired.push({ enrollmentId: enrollId, action: `ticket created → ${action}` });
+        continue;
+      }
+
+      if (currentEvent.event_type === "update") {
+        const field = (eventConfig.field as string) || "";
+        const value = (eventConfig.value as string) ?? "";
+        const customFieldId = eventConfig.customFieldId as string | undefined;
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        let updateErr: any = null;
+        let detail = `${field} → ${value}`;
+
+        if (field === "sales_person") {
+          ({ error: updateErr } = await (adminClient as AdminClient)
+            .from("clients").update({ sales_rep_id: value || null }).eq("id", client_id));
+        } else if (field === "client_source") {
+          ({ error: updateErr } = await (adminClient as AdminClient)
+            .from("clients").update({ source: value || null }).eq("id", client_id));
+        } else if (field === "billing_term") {
+          ({ error: updateErr } = await (adminClient as AdminClient)
+            .from("clients").update({ billing_terms: value || null }).eq("id", client_id));
+        } else if (field === "custom_field" && customFieldId) {
+          const { data: def } = await (adminClient as AdminClient)
+            .from("crm_custom_field_defs").select("name, field_type").eq("id", customFieldId).single();
+          const isNumber = def?.field_type === "number";
+          ({ error: updateErr } = await (adminClient as AdminClient)
+            .from("crm_client_custom_field_values")
+            .upsert({
+              org_id: orgId,
+              client_id,
+              field_def_id: customFieldId,
+              value_text: isNumber ? null : value,
+              value_number: isNumber ? (Number(value) || null) : null,
+            }, { onConflict: "client_id,field_def_id" }));
+          detail = `${def?.name ?? "custom field"} → ${value}`;
+        } else {
+          updateErr = { message: `unsupported update field: ${field}` };
+        }
+
+        if (updateErr) {
+          crmSkipped.push({ enrollmentId: enrollId, reason: `failed to apply update: ${updateErr.message}` });
+          continue;
+        }
+
+        const action = await advanceEnrollmentPastStep(adminClient, {
+          enrollmentId: enrollId,
+          events: events ?? [],
+          completedPosition: next_event_position,
+          nowIso,
+        });
+        await logSequenceExecution(adminClient, {
+          orgId, enrollmentId: enrollId, sequenceId: sequence_id, clientId: client_id,
+          eventId: currentEvent.id, eventType: "update", action: "field_updated", detail,
+        });
+        crmFired.push({ enrollmentId: enrollId, action: `field updated → ${action}` });
         continue;
       }
 

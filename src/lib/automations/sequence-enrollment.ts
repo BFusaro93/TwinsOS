@@ -1,4 +1,4 @@
-import type { ConditionField, ConditionOperator } from "@/types/crm-automations";
+import type { ConditionField, ConditionOperator, TriggerType } from "@/types/crm-automations";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = any;
@@ -367,6 +367,55 @@ export async function fireServiceVisitCompletedTriggers(
       sequenceId: trigger.sequence_id,
       orgId: params.orgId,
       clientId: params.clientId,
+    });
+  }
+}
+
+/**
+ * Fires a trigger type that has no per-trigger config filtering of its own
+ * (unlike service_visit_completed's service_id filter) — evaluates each
+ * configured trigger's AND conditions and enrolls the client if eligible.
+ * This is the generic path for the simple event triggers (tag added/removed,
+ * client status changes, ticket/estimate/invoice events, etc.) — anything
+ * that just needs "did this org configure a sequence for this event type."
+ */
+export async function fireSimpleTrigger(
+  supabase: AnyClient,
+  params: { orgId: string; clientId: string; estimateId?: string | null; triggerType: TriggerType }
+): Promise<void> {
+  const { data: triggers } = await supabase
+    .from("crm_sequence_triggers")
+    .select("id, sequence_id, crm_automation_sequences(is_active, allow_reentry, reentry_after_minutes, crm_automations(is_active, org_id))")
+    .eq("trigger_type", params.triggerType);
+
+  for (const trigger of (triggers ?? []) as {
+    id: string;
+    sequence_id: string;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    crm_automation_sequences: any;
+  }[]) {
+    const seq = trigger.crm_automation_sequences;
+    const auto = seq?.crm_automations;
+    if (!seq?.is_active || !auto?.is_active) continue;
+    if (auto.org_id !== params.orgId) continue;
+
+    const conditionsMet = await triggerConditionsMet(supabase, trigger.id, params.clientId, params.estimateId ?? null);
+    if (!conditionsMet) continue;
+
+    const eligible = await isEligibleForEnrollment(supabase, {
+      sequenceId: trigger.sequence_id,
+      clientId: params.clientId,
+      estimateId: params.estimateId ?? null,
+      allowReentry: seq.allow_reentry ?? false,
+      reentryAfterMinutes: seq.reentry_after_minutes ?? 1440,
+    });
+    if (!eligible) continue;
+
+    await enrollClientInSequence(supabase, {
+      sequenceId: trigger.sequence_id,
+      orgId: params.orgId,
+      clientId: params.clientId,
+      estimateId: params.estimateId ?? null,
     });
   }
 }

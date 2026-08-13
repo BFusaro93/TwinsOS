@@ -3,6 +3,8 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 import { deleteInvoiceLineItemAndRecalc } from "./use-invoices";
+import { fireAutomationTrigger } from "@/lib/automations/fire-trigger-client";
+import type { TriggerType } from "@/types/crm-automations";
 import type { CRMJob, CRMService, CRMCrew, CRMServiceRateMatrixRow, BudgetMethod } from "@/types/crm-jobs";
 
 // ── mappers ───────────────────────────────────────────────────────────────────
@@ -345,11 +347,14 @@ export function useUpdateJobStatus() {
         });
       }
 
-      return { scheduledDate };
+      return { scheduledDate, resolvedClientId, status };
     },
-    onSuccess: (_data, vars) => {
+    onSuccess: (data, vars) => {
       qc.invalidateQueries({ queryKey: ["crm-jobs", "date", vars.scheduledDate] });
       if (vars.clientId) qc.invalidateQueries({ queryKey: ["clients", vars.clientId, "activity"] });
+      if (data.status === "cancelled" && data.resolvedClientId) {
+        fireAutomationTrigger({ triggerType: "job_cancelled", clientId: data.resolvedClientId });
+      }
     },
   });
 }
@@ -711,6 +716,28 @@ export function useDeleteVisit() {
   });
 }
 
+/** For a waiting-list job's visit that was dispatched but never performed — soft-deletes the visit and clears the job's stale schedule/crew so it reappears on the Waiting List. */
+export function useReturnVisitToWaitingList() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (visitId: string) => {
+      const res = await fetch(`/api/crm/visits/${visitId}/return-to-waiting-list`, { method: 'POST' });
+      if (!res.ok) {
+        const body = await res.json() as { error?: string };
+        throw new Error(body.error ?? 'Failed to return visit to waiting list');
+      }
+      return res.json() as Promise<{ clientId?: string }>;
+    },
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ['crm-job-visits'] });
+      qc.invalidateQueries({ queryKey: ['crm-jobs'] });
+      if (data.clientId) {
+        qc.invalidateQueries({ queryKey: ['clients', data.clientId, 'activity'] });
+      }
+    },
+  });
+}
+
 export function useDeleteVisitsByDayOfWeek() {
   const qc = useQueryClient();
   return useMutation({
@@ -764,23 +791,37 @@ export function useUpdateVisitStatus() {
           throw new Error(body.error ?? 'Failed to complete visit');
         }
         const body = await res.json() as { clientId?: string };
-        return body;
+        return { ...body, status };
       }
 
       const patch: Record<string, unknown> = { status };
       if (status === 'dispatched') patch.dispatched_at = new Date().toISOString();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error } = await (supabase as any).from('crm_job_visits').update(patch).eq('id', id);
+      const { data, error } = await (supabase as any)
+        .from('crm_job_visits').update(patch).eq('id', id).select('client_id').single();
       if (error) throw error;
+      return { clientId: data?.client_id as string | undefined, status };
     },
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ['crm-job-visits'] });
       qc.invalidateQueries({ queryKey: ['crm-jobs'] });
       const clientId = (data as { clientId?: string } | undefined)?.clientId;
+      const status = (data as { status?: VisitStatus } | undefined)?.status;
       if (clientId) {
         qc.invalidateQueries({ queryKey: ['clients', clientId, 'activity'] });
         qc.invalidateQueries({ queryKey: ['clients', clientId] });
         qc.invalidateQueries({ queryKey: ['crm-invoices'] });
+
+        // completed fires via the server route's own service-scoped +
+        // generic visit_completed calls, not from here.
+        const VISIT_STATUS_TRIGGERS: Partial<Record<VisitStatus, TriggerType[]>> = {
+          cancelled: ['visit_cancelled'],
+          dispatched: ['visit_dispatched', 'calendar_event_dispatched'],
+          skipped: ['visit_skipped', 'calendar_event_skipped'],
+        };
+        for (const triggerType of (status && VISIT_STATUS_TRIGGERS[status]) || []) {
+          fireAutomationTrigger({ triggerType, clientId });
+        }
       }
       qc.invalidateQueries({ queryKey: ['clients'] });
     },
@@ -830,6 +871,17 @@ export function useUpdateVisit() {
       jobType?: string;
     }) => {
       const supabase = createClient();
+
+      let dateChanged = false;
+      let dateChangeClientId: string | null = null;
+      if (updates.scheduled_date !== undefined) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: before } = await (supabase as any)
+          .from('crm_job_visits').select('client_id, scheduled_date').eq('id', id).single();
+        dateChanged = !!before && before.scheduled_date !== updates.scheduled_date;
+        dateChangeClientId = before?.client_id ?? null;
+      }
+
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any)
         .from('crm_job_visits')
@@ -856,18 +908,21 @@ export function useUpdateVisit() {
         await (supabase as any).from('crm_jobs').update({ crew_id: updates.crew_id }).eq('id', jobId);
       }
 
-      return { clientId };
+      return { clientId, dateChanged, dateChangeClientId };
     },
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ['crm-job-visits'] });
       qc.invalidateQueries({ queryKey: ['crm-jobs'] });
-      const clientId = (data as { clientId?: string } | undefined)?.clientId;
+      const clientId = data?.clientId;
       if (clientId) {
         qc.invalidateQueries({ queryKey: ['clients', clientId, 'activity'] });
         qc.invalidateQueries({ queryKey: ['clients', clientId] });
         qc.invalidateQueries({ queryKey: ['crm-invoices'] });
       }
       qc.invalidateQueries({ queryKey: ['clients'] });
+      if (data?.dateChanged && data.dateChangeClientId) {
+        fireAutomationTrigger({ triggerType: 'visit_date_changed', clientId: data.dateChangeClientId });
+      }
     },
   });
 }
@@ -1095,6 +1150,11 @@ export function useCreateClientJob() {
       qc.invalidateQueries({ queryKey: ['crm-jobs'] });
       qc.invalidateQueries({ queryKey: ['crm-jobs', 'client', values.clientId] });
       qc.invalidateQueries({ queryKey: ['clients', values.clientId, 'activity'] });
+      fireAutomationTrigger({ triggerType: 'job_created', clientId: values.clientId });
+      fireAutomationTrigger({ triggerType: 'calendar_event_created', clientId: values.clientId });
+      if (values.jobType === 'package') {
+        fireAutomationTrigger({ triggerType: 'package_created', clientId: values.clientId });
+      }
     },
   });
 }
@@ -1539,11 +1599,16 @@ export function useCreateJobsFromEstimate() {
         .update({ stage: "accepted" } as any)
         .eq("id", estimateId);
 
-      return { jobId };
+      return { jobId, clientId, jobType };
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ["crm-jobs"] });
       qc.invalidateQueries({ queryKey: ["estimates"] });
+      fireAutomationTrigger({ triggerType: "job_created", clientId: data.clientId });
+      fireAutomationTrigger({ triggerType: "calendar_event_created", clientId: data.clientId });
+      if (data.jobType === "package") {
+        fireAutomationTrigger({ triggerType: "package_created", clientId: data.clientId });
+      }
     },
   });
 }

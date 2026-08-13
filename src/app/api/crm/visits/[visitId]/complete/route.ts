@@ -3,7 +3,7 @@ import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { recalcNextPackageVisitDate } from "@/lib/package-visit-recalc";
 import { stripHtml } from "@/lib/utils/strip-html";
-import { fireServiceVisitCompletedTriggers } from "@/lib/automations/sequence-enrollment";
+import { fireServiceVisitCompletedTriggers, fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
 
 // Billing-period boundaries (inclusive, "YYYY-MM-DD") for batching auto-invoices
 // under a client's weekly/monthly invoice_frequency. Computed in UTC to avoid
@@ -415,6 +415,8 @@ export async function POST(
       if (serviceIds.length > 0) {
         await fireServiceVisitCompletedTriggers(supabase, { orgId, clientId: v.client_id, serviceIds });
       }
+      await fireSimpleTrigger(supabase, { orgId, clientId: v.client_id, triggerType: "visit_completed" });
+      await fireSimpleTrigger(supabase, { orgId, clientId: v.client_id, triggerType: "calendar_event_completed" });
     }
   } catch (err) {
     console.error("[visits/complete] automation trigger enrollment failed:", err);

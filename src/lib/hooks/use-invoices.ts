@@ -2,6 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
+import { fireAutomationTrigger } from "@/lib/automations/fire-trigger-client";
 import type { CRMInvoice, InvoiceLineItem, CRMPayment } from "@/types/crm-invoices";
 
 // ── mappers ───────────────────────────────────────────────────────────────────
@@ -235,8 +236,9 @@ export function useCreateInvoiceFromEstimate() {
 
       return mapInvoice(inv);
     },
-    onSuccess: () => {
+    onSuccess: (invoice) => {
       qc.invalidateQueries({ queryKey: ["crm-invoices"] });
+      fireAutomationTrigger({ triggerType: "invoice_created", clientId: invoice.clientId });
     },
   });
 }
@@ -283,6 +285,7 @@ export function useCreateInvoice() {
     onSuccess: (_d, vars) => {
       qc.invalidateQueries({ queryKey: ["crm-invoices"] });
       qc.invalidateQueries({ queryKey: ["clients", vars.clientId, "activity"] });
+      fireAutomationTrigger({ triggerType: "invoice_created", clientId: vars.clientId });
     },
   });
 }
@@ -519,7 +522,7 @@ export function useUpdateInvoiceHeader() {
 // ── shared invoice balance helper ─────────────────────────────────────────────
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function applyPaymentToInvoice(supabase: any, invoiceId: string, deltaCents: number) {
+async function applyPaymentToInvoice(supabase: any, invoiceId: string, deltaCents: number): Promise<{ newStatus: string; wasNewlyPaid: boolean }> {
   const { data: inv, error: invErr } = await supabase
     .from("crm_invoices")
     .select("total_cents, amount_paid_cents, status")
@@ -537,6 +540,8 @@ async function applyPaymentToInvoice(supabase: any, invoiceId: string, deltaCent
     .update({ amount_paid_cents: newPaid, balance_cents: newBalance, status: newStatus })
     .eq("id", invoiceId);
   if (updErr) throw updErr;
+
+  return { newStatus, wasNewlyPaid: newStatus === "paid" && inv.status !== "paid" };
 }
 
 export function useRecordPayment() {
@@ -588,9 +593,11 @@ export function useRecordPayment() {
 
       // apply to each allocated invoice, and record the exact split so it can
       // be reconstructed (not guessed) if this payment is edited later
+      const newlyPaidInvoiceIds: string[] = [];
       for (const alloc of activeAllocations) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await applyPaymentToInvoice(supabase as any, alloc.invoiceId, alloc.amountCents);
+        const result = await applyPaymentToInvoice(supabase as any, alloc.invoiceId, alloc.amountCents);
+        if (result.wasNewlyPaid) newlyPaidInvoiceIds.push(alloc.invoiceId);
       }
       if (activeAllocations.length > 0) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -629,13 +636,18 @@ export function useRecordPayment() {
         ref_id: inserted.id,
         ref_table: "crm_payments",
       });
+
+      return { newlyPaidInvoiceIds };
     },
-    onSuccess: (_d, vars) => {
+    onSuccess: (data, vars) => {
       qc.invalidateQueries({ queryKey: ["crm-invoices"] });
       qc.invalidateQueries({ queryKey: ["clients", vars.clientId] });
       qc.invalidateQueries({ queryKey: ["clients"] });
       qc.invalidateQueries({ queryKey: ["crm-payments"] });
       qc.invalidateQueries({ queryKey: ["clients", vars.clientId, "activity"] });
+      for (const _invoiceId of data?.newlyPaidInvoiceIds ?? []) {
+        fireAutomationTrigger({ triggerType: "invoice_paid", clientId: vars.clientId });
+      }
     },
   });
 }
@@ -1339,6 +1351,7 @@ export function useCreateInvoiceFromJob() {
       qc.invalidateQueries({ queryKey: ["crm-job-products", vars.jobId] });
       qc.invalidateQueries({ queryKey: ["crm-job-detail"] });
       qc.invalidateQueries({ queryKey: ["products"] });
+      fireAutomationTrigger({ triggerType: "invoice_created", clientId: vars.clientId });
     },
   });
 }

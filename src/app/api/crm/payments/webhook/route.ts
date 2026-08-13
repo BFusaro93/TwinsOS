@@ -3,6 +3,7 @@ import type Stripe from "stripe";
 import { createServiceClient } from "@/lib/supabase/server";
 import { getStripe, isStripeConfigured } from "@/lib/stripe/server";
 import { methodForCardBrand } from "@/lib/stripe/crm-payments";
+import { fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
 
 export async function POST(request: Request) {
   if (!isStripeConfigured() || !process.env.STRIPE_CRM_PAYMENTS_WEBHOOK_SECRET) {
@@ -23,6 +24,20 @@ export async function POST(request: Request) {
   } catch (err) {
     console.error("[crm payments webhook] signature verification failed:", err);
     return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
+  }
+
+  if (event.type === "payment_intent.payment_failed") {
+    const failedIntent = event.data.object as Stripe.PaymentIntent;
+    const { org_id: failedOrgId, client_id: failedClientId } = failedIntent.metadata ?? {};
+    if (failedIntent.metadata?.source === "crm_invoice" && failedOrgId && failedClientId) {
+      const supabase = createServiceClient();
+      await fireSimpleTrigger(supabase, {
+        orgId: failedOrgId,
+        clientId: failedClientId,
+        triggerType: "credit_card_charge_failed",
+      });
+    }
+    return NextResponse.json({ received: true });
   }
 
   if (event.type !== "payment_intent.succeeded") {
@@ -92,12 +107,17 @@ export async function POST(request: Request) {
     const newBalance = Math.max(0, invoice.total_cents - newPaid);
     const openStatus = invoice.status === "printed" ? "printed" : "sent";
     const newStatus = newBalance <= 0 ? "paid" : newPaid > 0 ? "partial" : openStatus;
+    const wasNewlyPaid = newStatus === "paid" && invoice.status !== "paid";
 
     const { error: updateErr } = await supabase
       .from("crm_invoices")
       .update({ amount_paid_cents: newPaid, balance_cents: newBalance, status: newStatus })
       .eq("id", invoiceId);
     if (updateErr) throw updateErr;
+
+    if (wasNewlyPaid) {
+      await fireSimpleTrigger(supabase, { orgId, clientId, triggerType: "invoice_paid" });
+    }
 
     const { error: allocErr } = await supabase
       .from("crm_payment_allocations")

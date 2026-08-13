@@ -2,6 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
+import { fireAutomationTrigger } from "@/lib/automations/fire-trigger-client";
 import type {
   Estimate,
   EstimateLineItem,
@@ -250,9 +251,10 @@ export function useCreateEstimate() {
 
       return mapEstimate(data);
     },
-    onSuccess: (_d, vars) => {
+    onSuccess: (estimate, vars) => {
       qc.invalidateQueries({ queryKey: ["estimates"] });
       qc.invalidateQueries({ queryKey: ["clients", vars.clientId, "activity"] });
+      fireAutomationTrigger({ triggerType: "estimate_created", clientId: vars.clientId, estimateId: estimate.id });
     },
   });
 }
@@ -383,7 +385,14 @@ export function useUpdateEstimateStage() {
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: ["estimates", "detail", vars.id] });
       qc.invalidateQueries({ queryKey: ["estimates"] });
-      if (vars.clientId) qc.invalidateQueries({ queryKey: ["clients", vars.clientId, "activity"] });
+      if (vars.clientId) {
+        qc.invalidateQueries({ queryKey: ["clients", vars.clientId, "activity"] });
+        if (vars.stage === "accepted") {
+          fireAutomationTrigger({ triggerType: "estimate_won", clientId: vars.clientId, estimateId: vars.id });
+        } else if (vars.stage === "lost") {
+          fireAutomationTrigger({ triggerType: "estimate_lost", clientId: vars.clientId, estimateId: vars.id });
+        }
+      }
     },
   });
 }

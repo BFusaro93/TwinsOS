@@ -60,16 +60,6 @@ const TRIGGER_GROUPS: { label: string; items: { value: TriggerType; label: strin
     ],
   },
   {
-    label: "Date",
-    items: [
-      { value: "run_on_client_since_date", label: "Run on client since date" },
-      { value: "run_on_custom_field_date", label: "Run on custom field date" },
-      { value: "run_on_date", label: "Run on date" },
-      { value: "run_on_day_of_week", label: "Run on day of week" },
-      { value: "run_on_time_range", label: "Run on time range" },
-    ],
-  },
-  {
     label: "Estimate",
     items: [
       { value: "estimate_created", label: "Estimate was created" },
@@ -90,6 +80,7 @@ const TRIGGER_GROUPS: { label: string; items: { value: TriggerType; label: strin
       { value: "invoice_past_due", label: "Invoice past due" },
       { value: "invoice_created", label: "Invoice was created" },
       { value: "invoice_paid", label: "Invoice was paid" },
+      { value: "invoice_sent", label: "Invoice was sent" },
     ],
   },
   {

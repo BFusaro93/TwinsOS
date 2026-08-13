@@ -2,6 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
+import { fireAutomationTrigger } from "@/lib/automations/fire-trigger-client";
 import type { CRMTicket, NewTicketFormValues, TicketStatus } from "@/types/crm-tickets";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -118,6 +119,9 @@ export function useCreateTicket() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ event: "created" }),
       }).catch(() => {});
+      if (values.clientId) {
+        fireAutomationTrigger({ triggerType: "ticket_created", clientId: values.clientId });
+      }
     },
   });
 }
@@ -179,6 +183,16 @@ export function useUpdateTicket() {
   return useMutation({
     mutationFn: async ({ id, updates }: { id: string; updates: Partial<NewTicketFormValues> }) => {
       const supabase = createClient();
+
+      let wasReopened = false;
+      let clientId: string | null = null;
+      if (updates.status !== undefined && updates.status !== "closed") {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: before } = await (supabase as any).from("crm_tickets").select("status, client_id").eq("id", id).single();
+        wasReopened = before?.status === "closed";
+        clientId = before?.client_id ?? null;
+      }
+
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const payload: Record<string, any> = {};
       if (updates.type !== undefined) payload.type = updates.type;
@@ -203,8 +217,9 @@ export function useUpdateTicket() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any).from("crm_tickets").update(payload).eq("id", id);
       if (error) throw error;
+      return { wasReopened, clientId };
     },
-    onSuccess: (_data, { id, updates }) => {
+    onSuccess: (result, { id, updates }) => {
       qc.invalidateQueries({ queryKey: ["crm-tickets"] });
       if (updates.assignedTo) {
         fetch(`/api/crm/tickets/${id}/notify`, {
@@ -212,6 +227,9 @@ export function useUpdateTicket() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ event: "assigned" }),
         }).catch(() => {});
+      }
+      if (result?.wasReopened && result.clientId) {
+        fireAutomationTrigger({ triggerType: "ticket_reopened", clientId: result.clientId });
       }
     },
   });
@@ -320,14 +338,20 @@ export function useCloseTicket() {
     mutationFn: async (id: string) => {
       const supabase = createClient();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error } = await (supabase as any)
+      const { data, error } = await (supabase as any)
         .from("crm_tickets")
         .update({ status: "closed", closed_at: new Date().toISOString() })
-        .eq("id", id);
+        .eq("id", id)
+        .select("client_id")
+        .single();
       if (error) throw error;
+      return { clientId: data?.client_id as string | null };
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ["crm-tickets"] });
+      if (data?.clientId) {
+        fireAutomationTrigger({ triggerType: "ticket_closed", clientId: data.clientId });
+      }
     },
   });
 }

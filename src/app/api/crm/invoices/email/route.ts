@@ -6,6 +6,7 @@ import { createElement } from "react";
 import { InvoiceDocument } from "@/components/crm/invoices/pdf/InvoiceDocument";
 import type { InvoicePDFData, InvoicePDFLineItem, OrgPDFData } from "@/components/crm/invoices/pdf/InvoiceDocument";
 import type { InvoicePDFLayoutKey } from "@/types/crm-invoices";
+import { fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
 
 const FROM = "Twins Lawn Service <noreply@twinslawnservice.com>";
 
@@ -236,6 +237,11 @@ export async function POST(req: NextRequest) {
   if (inv.status === "draft" || inv.status === "printed") {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await (supabase as any).from("crm_invoices").update({ status: "sent" }).eq("id", invoiceId);
+  }
+
+  if (inv.client_id && profile?.org_id) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await fireSimpleTrigger(supabase as any, { orgId: profile.org_id, clientId: inv.client_id, triggerType: "invoice_sent" });
   }
 
   // Log activity

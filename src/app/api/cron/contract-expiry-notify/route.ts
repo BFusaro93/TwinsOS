@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { Resend } from "resend";
+import { fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
 
 /**
  * GET /api/cron/contract-expiry-notify — called daily by Vercel Cron.
@@ -51,6 +52,15 @@ export async function GET(request: Request) {
   let notified = 0;
 
   for (const contract of expiring as Record<string, unknown>[]) {
+    const contractClientId = contract.client_id as string | null;
+    if (contractClientId) {
+      await fireSimpleTrigger(supabase, {
+        orgId: contract.org_id as string,
+        clientId: contractClientId,
+        triggerType: "contract_about_to_expire",
+      });
+    }
+
     const repId = contract.sales_rep_id as string | null;
     if (!repId) continue;
 

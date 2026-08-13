@@ -14,12 +14,6 @@ export type TriggerType =
   | 'lead_cancelled'
   | 'lead_converted_to_client'
   | 'lead_created'
-  // Date
-  | 'run_on_client_since_date'
-  | 'run_on_custom_field_date'
-  | 'run_on_date'
-  | 'run_on_day_of_week'
-  | 'run_on_time_range'
   // Estimate
   | 'estimate_created'
   | 'estimate_lost'
@@ -33,6 +27,7 @@ export type TriggerType =
   | 'invoice_past_due'
   | 'invoice_created'
   | 'invoice_paid'
+  | 'invoice_sent'
   // Job
   | 'job_cancelled'
   | 'job_created'
@@ -60,7 +55,6 @@ export type TriggerType =
   // Legacy / keep for compatibility
   | 'client_status_changed'
   | 'contract_signed'
-  | 'invoice_sent'
   | 'date_based'
   | 'manual';
 

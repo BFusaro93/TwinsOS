@@ -1,6 +1,7 @@
 import { Resend } from "resend";
 import { resolveMergeTags, EMAIL_FROM } from "@/lib/email/send";
 import { notifyStaffOfNewTicket } from "@/lib/ticket-notify";
+import { fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
 
 interface FormEmailNotification {
   recipients: string; // comma-separated emails, or "account" for the submitter
@@ -360,6 +361,10 @@ export async function submitFormResponse(
 
   if (insertError) {
     return { ok: false, error: insertError.message };
+  }
+
+  if (relatedClientId) {
+    await fireSimpleTrigger(db, { orgId: form.org_id, clientId: relatedClientId, triggerType: "form_submitted" });
   }
 
   // ── Fire configured email notifications ───────────────────────────────────────

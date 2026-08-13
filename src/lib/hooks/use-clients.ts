@@ -3,6 +3,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 import { useOrgList } from "@/lib/hooks/use-org-lists";
+import { fireAutomationTrigger } from "@/lib/automations/fire-trigger-client";
 import type {
   Client,
   ClientContact,
@@ -402,8 +403,9 @@ export function useCreateClient() {
       if (error) throw error;
       return mapClient(data);
     },
-    onSuccess: () => {
+    onSuccess: (client) => {
       qc.invalidateQueries({ queryKey: ["clients"] });
+      fireAutomationTrigger({ triggerType: "client_created", clientId: client.id });
     },
   });
 }
@@ -488,6 +490,15 @@ export function useUpdateClient() {
   return useMutation({
     mutationFn: async ({ id, updates }: { id: string; updates: Partial<Client> }) => {
       const supabase = createClient();
+
+      // Fetch the "before" values for fields whose automation trigger only
+      // fires on an actual change, not on every generic profile-edit save.
+      let before: { source: string | null; ok_to_email: boolean | null } | null = null;
+      if (updates.source !== undefined || updates.okToEmail !== undefined) {
+        const { data } = await supabase.from("clients").select("source, ok_to_email").eq("id", id).single();
+        before = data;
+      }
+
       const { error } = await supabase
         .from("clients")
         .update({
@@ -538,10 +549,20 @@ export function useUpdateClient() {
         })
         .eq("id", id);
       if (error) throw error;
+
+      const sourceChanged = updates.source !== undefined && before && updates.source !== before.source;
+      const emailsOptedIn = updates.okToEmail === true && before && before.ok_to_email !== true;
+      return { sourceChanged, emailsOptedIn };
     },
-    onSuccess: (_data, { id }) => {
+    onSuccess: (result, { id }) => {
       qc.invalidateQueries({ queryKey: ["clients"] });
       qc.invalidateQueries({ queryKey: ["clients", id] });
+      if (result?.sourceChanged) {
+        fireAutomationTrigger({ triggerType: "client_source_updated", clientId: id });
+      }
+      if (result?.emailsOptedIn) {
+        fireAutomationTrigger({ triggerType: "has_opted_in_emails", clientId: id });
+      }
     },
   });
 }
@@ -787,8 +808,9 @@ export function useCreateLead() {
       if (error) throw error;
       return mapClient(data);
     },
-    onSuccess: () => {
+    onSuccess: (lead) => {
       qc.invalidateQueries({ queryKey: ["clients"] });
+      fireAutomationTrigger({ triggerType: "lead_created", clientId: lead.id });
     },
   });
 }
@@ -869,8 +891,9 @@ export function useConvertLeadToClient() {
         .eq("id", id);
       if (error) throw error;
     },
-    onSuccess: () => {
+    onSuccess: (_d, id) => {
       qc.invalidateQueries({ queryKey: ["clients"] });
+      fireAutomationTrigger({ triggerType: "lead_converted_to_client", clientId: id });
     },
   });
 }
@@ -896,6 +919,7 @@ export function useAddClientTag() {
     onSuccess: (_d, { clientId }) => {
       qc.invalidateQueries({ queryKey: ["clients"] });
       qc.invalidateQueries({ queryKey: ["clients", clientId] });
+      fireAutomationTrigger({ triggerType: "tag_added", clientId });
     },
   });
 }
@@ -915,6 +939,7 @@ export function useRemoveClientTag() {
     onSuccess: (_d, { clientId }) => {
       qc.invalidateQueries({ queryKey: ["clients"] });
       qc.invalidateQueries({ queryKey: ["clients", clientId] });
+      fireAutomationTrigger({ triggerType: "tag_removed", clientId });
     },
   });
 }
@@ -962,15 +987,18 @@ export function useCancelClient() {
   return useMutation({
     mutationFn: async ({ clientId, reason }: { clientId: string; reason: string }) => {
       const supabase = createClient();
+      const { data: before } = await supabase.from("clients").select("status").eq("id", clientId).single();
       const { error } = await supabase
         .from("clients")
         .update({ status: "cancelled", cancellation_reason: reason, closed_at: new Date().toISOString() })
         .eq("id", clientId);
       if (error) throw error;
+      return { wasLead: before?.status === "lead" };
     },
-    onSuccess: (_d, { clientId }) => {
+    onSuccess: (result, { clientId }) => {
       qc.invalidateQueries({ queryKey: ["clients"] });
       qc.invalidateQueries({ queryKey: ["clients", clientId] });
+      fireAutomationTrigger({ triggerType: result?.wasLead ? "lead_cancelled" : "client_cancelled", clientId });
     },
   });
 }
@@ -990,6 +1018,7 @@ export function useActivateClient() {
     onSuccess: (_d, clientId) => {
       qc.invalidateQueries({ queryKey: ["clients"] });
       qc.invalidateQueries({ queryKey: ["clients", clientId] });
+      fireAutomationTrigger({ triggerType: "client_reactivated", clientId });
     },
   });
 }

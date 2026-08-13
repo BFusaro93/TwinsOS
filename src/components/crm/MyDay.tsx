@@ -303,10 +303,7 @@ export function MyDay() {
               )}
             </div>
           </div>
-        </div>
 
-        {/* Right column */}
-        <div className="flex flex-col gap-4">
           {/* Automations Pending Approval */}
           <div className="rounded-lg border bg-white p-4 shadow-sm">
             <SectionHeader title="Automations Pending Approval" href="/crm/communication/automations" />
@@ -345,7 +342,10 @@ export function MyDay() {
               )}
             </div>
           </div>
+        </div>
 
+        {/* Right column */}
+        <div className="flex flex-col gap-4">
           {/* Outstanding Invoices */}
           <div className="rounded-lg border bg-white p-4 shadow-sm">
             <SectionHeader title="Outstanding Invoices" href="/crm/accounting/invoices" />

@@ -11,6 +11,7 @@ import {
   useUpdateVisit,
   useCRMCrews,
   useCRMJobProducts,
+  useReturnVisitToWaitingList,
 } from "@/lib/hooks/use-crm-jobs";
 import { useCreateInvoiceFromJob } from "@/lib/hooks/use-invoices";
 import { WeekStrip } from "./WeekStrip";
@@ -61,6 +62,7 @@ import {
   FlaskConical,
   MessageSquareText,
   Clock,
+  Undo2,
 } from "lucide-react";
 import { ChemicalTrackingWizard } from "@/components/crm/chemical/ChemicalTrackingWizard";
 import {
@@ -2459,6 +2461,7 @@ export function DispatchBoard() {
   }, [allVisits, anchorVisitIdByVisitId, memberTimesByAnchorId]);
   const qc = useQueryClient();
   const createVisit = useCreateVisit();
+  const { mutateAsync: returnToWaitingList } = useReturnVisitToWaitingList();
   const { matches: nearbyMatches, loading: nearbyLoading, error: nearbyError, findNearby } = useNearbyWaitingListJobs(3);
 
   // Derived fresh from the live query every render (not stored as its own
@@ -3183,6 +3186,27 @@ export function DispatchBoard() {
               </DropdownMenuSub>
 
               <DropdownMenuSeparator />
+
+              {/* Return to Waiting List — only when every selected visit
+                  belongs to a waiting-list job that never got done. */}
+              {displayVisits.filter((v) => selectedIds.has(v.id)).every((v) => v.job?.jobType === "waiting_list") && (
+                <DropdownMenuItem
+                  className="text-xs"
+                  onSelect={async () => {
+                    const ids = [...selectedIds];
+                    try {
+                      await Promise.all(ids.map((id) => returnToWaitingList(id)));
+                      setSelectedIds(new Set());
+                      toast.success(`Returned ${ids.length} visit${ids.length > 1 ? "s" : ""} to the waiting list`);
+                    } catch (err) {
+                      toast.error(err instanceof Error ? err.message : "Failed to return to waiting list");
+                    }
+                  }}
+                >
+                  <Undo2 className="mr-2 h-3.5 w-3.5 text-slate-400" />
+                  Return to Waiting List
+                </DropdownMenuItem>
+              )}
 
               {/* Move to Day */}
               <DropdownMenuItem
