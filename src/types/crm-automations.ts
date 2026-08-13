@@ -14,6 +14,7 @@ export type TriggerType =
   | 'lead_cancelled'
   | 'lead_converted_to_client'
   | 'lead_created'
+  | 'payment_method_updated'
   // Contract
   | 'contract_about_to_expire'
   | 'contract_created'
@@ -50,10 +51,6 @@ export type TriggerType =
   // Job (service-specific)
   | 'service_visit_completed'
   // Ticket
-  | 'calendar_event_completed'
-  | 'calendar_event_created'
-  | 'calendar_event_dispatched'
-  | 'calendar_event_skipped'
   | 'ticket_past_due'
   | 'ticket_closed'
   | 'ticket_created'
@@ -116,7 +113,6 @@ export type ConditionField =
   | 'does_not_have_tag'
   | 'has_tag'
   // Ticket
-  | 'calendar_event_category'
   | 'ticket_category'
   | 'ticket_past_due_days'
   // Legacy
@@ -267,6 +263,14 @@ export interface TriggerConfig {
   days?: number;
   /** service_visit_completed — a crm_services.id to match, or unset for "any service". */
   service_id?: string;
+  /**
+   * Multi-value filter for trigger types with an enumerable "which of these"
+   * dimension shown inline next to the trigger picker — service ids for
+   * visit_completed, client_sources values for client_source_updated,
+   * ticket_categories values for ticket_created/ticket_closed/ticket_reopened.
+   * Empty/unset means "any" (no filtering), matching every other trigger.
+   */
+  filter_values?: string[];
 }
 
 export interface CRMSequenceTrigger {

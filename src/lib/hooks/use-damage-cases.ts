@@ -115,7 +115,11 @@ export function useCreateDamageCase() {
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ["damage-cases"] });
       if (result.matchedClientId) {
-        fireAutomationTrigger({ triggerType: "damage_case_created", clientId: result.matchedClientId });
+        fireAutomationTrigger({
+          triggerType: "damage_case_created",
+          clientId: result.matchedClientId,
+          matchValues: [result.caseType],
+        });
       }
     },
   });

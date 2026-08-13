@@ -491,7 +491,7 @@ async function handleRun(request: Request) {
 
     let enrollQuery = (adminClient as AdminClient)
       .from("crm_sequence_enrollments")
-      .select("id, org_id, sequence_id, client_id, estimate_id, next_event_position")
+      .select("id, org_id, sequence_id, client_id, estimate_id, ticket_id, invoice_id, next_event_position")
       .lte("next_fire_at", nowIso)
       .is("completed_at", null)
       .is("stopped_at", null)
@@ -509,7 +509,7 @@ async function handleRun(request: Request) {
     }
 
     for (const enrollment of enrollments ?? []) {
-      const { id: enrollId, org_id: orgId, sequence_id, client_id, estimate_id, next_event_position } = enrollment;
+      const { id: enrollId, org_id: orgId, sequence_id, client_id, estimate_id, ticket_id, invoice_id, next_event_position } = enrollment;
 
       const { data: events } = await (adminClient as AdminClient)
         .from("crm_sequence_events")
@@ -533,7 +533,7 @@ async function handleRun(request: Request) {
         continue;
       }
 
-      const stopped = await shouldStopSequence(adminClient, sequence_id, client_id ?? null, estimate_id ?? null);
+      const stopped = await shouldStopSequence(adminClient, sequence_id, client_id ?? null, estimate_id ?? null, ticket_id ?? null, invoice_id ?? null);
       if (stopped) {
         await (adminClient as AdminClient)
           .from("crm_sequence_enrollments")

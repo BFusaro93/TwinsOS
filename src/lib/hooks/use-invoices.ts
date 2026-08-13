@@ -238,7 +238,7 @@ export function useCreateInvoiceFromEstimate() {
     },
     onSuccess: (invoice) => {
       qc.invalidateQueries({ queryKey: ["crm-invoices"] });
-      fireAutomationTrigger({ triggerType: "invoice_created", clientId: invoice.clientId });
+      fireAutomationTrigger({ triggerType: "invoice_created", clientId: invoice.clientId, invoiceId: invoice.id });
     },
   });
 }
@@ -282,10 +282,10 @@ export function useCreateInvoice() {
       if (error) throw error;
       return mapInvoice(data);
     },
-    onSuccess: (_d, vars) => {
+    onSuccess: (invoice, vars) => {
       qc.invalidateQueries({ queryKey: ["crm-invoices"] });
       qc.invalidateQueries({ queryKey: ["clients", vars.clientId, "activity"] });
-      fireAutomationTrigger({ triggerType: "invoice_created", clientId: vars.clientId });
+      fireAutomationTrigger({ triggerType: "invoice_created", clientId: vars.clientId, invoiceId: invoice.id });
     },
   });
 }
@@ -645,8 +645,8 @@ export function useRecordPayment() {
       qc.invalidateQueries({ queryKey: ["clients"] });
       qc.invalidateQueries({ queryKey: ["crm-payments"] });
       qc.invalidateQueries({ queryKey: ["clients", vars.clientId, "activity"] });
-      for (const _invoiceId of data?.newlyPaidInvoiceIds ?? []) {
-        fireAutomationTrigger({ triggerType: "invoice_paid", clientId: vars.clientId });
+      for (const invoiceId of data?.newlyPaidInvoiceIds ?? []) {
+        fireAutomationTrigger({ triggerType: "invoice_paid", clientId: vars.clientId, invoiceId });
       }
     },
   });
@@ -1344,14 +1344,14 @@ export function useCreateInvoiceFromJob() {
 
       return mapInvoice(data);
     },
-    onSuccess: (_d, vars) => {
+    onSuccess: (invoice, vars) => {
       qc.invalidateQueries({ queryKey: ["crm-invoices"] });
       qc.invalidateQueries({ queryKey: ["crm-jobs"] });
       qc.invalidateQueries({ queryKey: ["clients", vars.clientId, "activity"] });
       qc.invalidateQueries({ queryKey: ["crm-job-products", vars.jobId] });
       qc.invalidateQueries({ queryKey: ["crm-job-detail"] });
       qc.invalidateQueries({ queryKey: ["products"] });
-      fireAutomationTrigger({ triggerType: "invoice_created", clientId: vars.clientId });
+      fireAutomationTrigger({ triggerType: "invoice_created", clientId: vars.clientId, invoiceId: invoice.id });
     },
   });
 }

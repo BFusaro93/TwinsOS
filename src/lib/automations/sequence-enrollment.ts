@@ -1,4 +1,4 @@
-import type { ConditionField, ConditionOperator, TriggerType } from "@/types/crm-automations";
+import type { ConditionField, ConditionOperator, TriggerConfig, TriggerType } from "@/types/crm-automations";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = any;
@@ -22,6 +22,8 @@ export async function isEligibleForEnrollment(
     sequenceId: string;
     clientId: string;
     estimateId: string | null;
+    ticketId?: string | null;
+    invoiceId?: string | null;
     allowReentry: boolean;
     reentryAfterMinutes: number;
   }
@@ -34,9 +36,19 @@ export async function isEligibleForEnrollment(
     .order("enrolled_at", { ascending: false })
     .limit(1);
 
-  query = params.estimateId
-    ? query.eq("estimate_id", params.estimateId)
-    : query.eq("client_id", params.clientId).is("estimate_id", null);
+  // Dedup against the most specific record this trigger is scoped to — an
+  // estimate/ticket/invoice-scoped trigger re-checks against that same
+  // record's own enrollment history, not the client's enrollments in general
+  // (mirrors the pre-existing estimate_id behavior).
+  if (params.estimateId) {
+    query = query.eq("estimate_id", params.estimateId);
+  } else if (params.ticketId) {
+    query = query.eq("ticket_id", params.ticketId);
+  } else if (params.invoiceId) {
+    query = query.eq("invoice_id", params.invoiceId);
+  } else {
+    query = query.eq("client_id", params.clientId).is("estimate_id", null).is("ticket_id", null).is("invoice_id", null);
+  }
 
   const { data: existing } = await query.maybeSingle();
 
@@ -94,6 +106,8 @@ export async function enrollClientInSequence(
     orgId: string;
     clientId: string;
     estimateId?: string | null;
+    ticketId?: string | null;
+    invoiceId?: string | null;
   }
 ): Promise<boolean> {
   const { data: firstEvent } = await supabase
@@ -121,6 +135,8 @@ export async function enrollClientInSequence(
       sequence_id: params.sequenceId,
       client_id: params.clientId,
       estimate_id: params.estimateId ?? null,
+      ticket_id: params.ticketId ?? null,
+      invoice_id: params.invoiceId ?? null,
       enrolled_at: new Date().toISOString(),
       next_event_position: firstEvent?.event_type === "wait" ? 1 : 0,
       next_fire_at: nextFireAt,
@@ -147,9 +163,8 @@ interface ConditionRow {
 }
 
 // Fields with a direct, unambiguous DB column to check against today. Fields
-// left out (sales_person — relational, custom_field — schemaless, date
-// comparisons, invoice/ticket conditions) have no backing lookup wired up
-// yet; conditions on those fields are evaluated as "not met" rather than
+// left out (custom_field — schemaless) have no backing lookup wired up yet;
+// conditions on those fields are evaluated as "not met" rather than
 // throwing, so an unsupported condition just never matches.
 const CLIENT_FIELD_GETTERS: Partial<Record<ConditionField, (client: Record<string, unknown>) => unknown>> = {
   client_lead_status: (c) => c.status,
@@ -157,14 +172,96 @@ const CLIENT_FIELD_GETTERS: Partial<Record<ConditionField, (client: Record<strin
   account_type: (c) => c.account_type,
   billing_term: (c) => c.billing_terms,
   map_code: (c) => c.map_code,
+  account_balance: (c) => (typeof c.balance_outstanding_cents === "number" ? c.balance_outstanding_cents / 100 : null),
+  cancellation_reason: (c) => c.cancellation_reason,
+  service_zip_code: (c) => c.service_zip,
+  client_since_date: (c) => c.client_since,
 };
+
+// Fields evaluated with custom logic (multi-select "any of" or boolean
+// assertion) rather than the generic getter + compare() path — these still
+// need the same `clients` row fetched, so they count toward needsClient.
+const SPECIAL_CLIENT_CONDITION_FIELDS = new Set<ConditionField>([
+  "payment_method_type",
+  "sales_person",
+  "has_ach",
+  "does_not_have_ach",
+  "has_credit_card",
+  "does_not_have_credit_card",
+  "is_opted_in_emails",
+]);
+
+// Fields resolved from a client's crm_jobs/crm_job_visits history rather
+// than a column on `clients` itself — see getClientJobFacts().
+const JOB_FACT_CONDITION_FIELDS = new Set<ConditionField>([
+  "client_currently_has_package",
+  "client_does_not_have_package",
+  "client_currently_has_recurring_job",
+  "client_does_not_have_recurring_job",
+  "client_has_ever_had_package",
+  "client_has_not_ever_had_package",
+  "client_has_ever_had_recurring_job",
+  "client_has_not_ever_had_recurring_job",
+  "visit_requires_call_ahead",
+  "last_visit_date",
+]);
 
 const ESTIMATE_FIELD_GETTERS: Partial<Record<ConditionField, (estimate: Record<string, unknown>) => unknown>> = {
   estimate_stage: (e) => e.stage,
   estimate_total: (e) => (typeof e.total_cents === "number" ? e.total_cents / 100 : null),
 };
 
+// Multi-select "any of" fields needing the same `estimates` row fetched.
+const SPECIAL_ESTIMATE_CONDITION_FIELDS = new Set<ConditionField>(["estimate_sales_rep", "estimate_status"]);
+
+const TICKET_FIELD_GETTERS: Partial<Record<ConditionField, (ticket: Record<string, unknown>) => unknown>> = {
+  ticket_past_due_days: (t) => (t.due_date ? (Date.now() - new Date(String(t.due_date)).getTime()) / 86400000 : null),
+};
+const SPECIAL_TICKET_CONDITION_FIELDS = new Set<ConditionField>(["ticket_category"]);
+
+const INVOICE_FIELD_GETTERS: Partial<Record<ConditionField, (invoice: Record<string, unknown>) => unknown>> = {
+  invoice_past_due_days: (i) => (i.due_date ? (Date.now() - new Date(String(i.due_date)).getTime()) / 86400000 : null),
+  // last_payment_date isn't a real crm_invoices column — it's merged onto
+  // this object from a separate crm_payments query below.
+  invoice_was_paid_days: (i) => (i.last_payment_date ? (Date.now() - new Date(String(i.last_payment_date)).getTime()) / 86400000 : null),
+};
+
 const TERMINAL_VISIT_STATUSES = new Set(["completed", "cancelled", "skipped"]);
+const CURRENT_JOB_STATUSES = new Set(["scheduled", "in_progress", "hold"]);
+
+/**
+ * A client's package/recurring-job standing and call-ahead requirement,
+ * derived from their non-deleted crm_jobs, plus the date of their last
+ * completed visit — backs the Job-group condition fields that ask "is this
+ * client currently on / have they ever been on a package or recurring job."
+ */
+async function getClientJobFacts(supabase: AnyClient, clientId: string) {
+  const { data: jobs } = await supabase
+    .from("crm_jobs")
+    .select("job_type, status, call_ahead")
+    .eq("client_id", clientId)
+    .is("deleted_at", null);
+  const rows = (jobs ?? []) as { job_type: string; status: string; call_ahead: boolean | null }[];
+
+  const { data: lastVisit } = await supabase
+    .from("crm_job_visits")
+    .select("scheduled_date")
+    .eq("client_id", clientId)
+    .eq("status", "completed")
+    .is("deleted_at", null)
+    .order("scheduled_date", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  return {
+    currentPackage: rows.some((j) => j.job_type === "package" && CURRENT_JOB_STATUSES.has(j.status)),
+    currentRecurring: rows.some((j) => j.job_type === "recurring" && CURRENT_JOB_STATUSES.has(j.status)),
+    everPackage: rows.some((j) => j.job_type === "package"),
+    everRecurring: rows.some((j) => j.job_type === "recurring"),
+    requiresCallAhead: rows.some((j) => CURRENT_JOB_STATUSES.has(j.status) && j.call_ahead === true),
+    lastVisitDate: (lastVisit as { scheduled_date: string } | null)?.scheduled_date ?? null,
+  };
+}
 
 /** Service names (lowercased) a client currently has scheduled / has ever completed, mirroring useClientServiceHistory()'s per-visit → per-service-line resolution. */
 async function getClientServiceSets(
@@ -211,6 +308,18 @@ function compare(fieldValue: unknown, operator: ConditionOperator, condValue: st
   if (operator === "is_not_set") return fieldValue === null || fieldValue === undefined || fieldValue === "";
   if (fieldValue === null || fieldValue === undefined) return false;
 
+  if (operator === "before" || operator === "after" || operator === "within_days") {
+    const fieldDate = new Date(String(fieldValue));
+    if (Number.isNaN(fieldDate.getTime())) return false;
+    if (operator === "within_days") {
+      const days = Number(condValue);
+      return Number.isFinite(days) && Math.abs(Date.now() - fieldDate.getTime()) <= days * 86400000;
+    }
+    const condDate = new Date(condValue);
+    if (Number.isNaN(condDate.getTime())) return false;
+    return operator === "before" ? fieldDate.getTime() < condDate.getTime() : fieldDate.getTime() > condDate.getTime();
+  }
+
   const fv = String(fieldValue).toLowerCase();
   const cv = condValue.toLowerCase();
 
@@ -223,7 +332,7 @@ function compare(fieldValue: unknown, operator: ConditionOperator, condValue: st
     case "less_than": return Number(fieldValue) < Number(condValue);
     case "greater_than_or_equal": return Number(fieldValue) >= Number(condValue);
     case "less_than_or_equal": return Number(fieldValue) <= Number(condValue);
-    default: return false; // before/after/within_days need date-aware fields — none wired up yet
+    default: return false;
   }
 }
 
@@ -239,21 +348,37 @@ export async function evaluateConditionSet(
   conditions: ConditionRow[],
   join: "AND" | "OR",
   clientId: string | null,
-  estimateId: string | null
+  estimateId: string | null,
+  ticketId: string | null = null,
+  invoiceId: string | null = null
 ): Promise<boolean> {
   if (conditions.length === 0) return join === "AND";
 
-  const needsClient = conditions.some((c) => c.field in CLIENT_FIELD_GETTERS);
-  const needsEstimate = conditions.some((c) => c.field in ESTIMATE_FIELD_GETTERS);
+  const needsClient = conditions.some((c) => c.field in CLIENT_FIELD_GETTERS || SPECIAL_CLIENT_CONDITION_FIELDS.has(c.field));
+  const needsEstimate = conditions.some((c) => c.field in ESTIMATE_FIELD_GETTERS || SPECIAL_ESTIMATE_CONDITION_FIELDS.has(c.field));
+  const needsEstimateServices = conditions.some((c) => c.field === "estimate_has_service");
+  const needsEstimateProducts = conditions.some((c) => c.field === "estimate_has_product");
+  const needsTicket = conditions.some((c) => c.field in TICKET_FIELD_GETTERS || SPECIAL_TICKET_CONDITION_FIELDS.has(c.field));
+  const needsInvoice = conditions.some((c) => c.field in INVOICE_FIELD_GETTERS || c.field === "invoice_has_product" || c.field === "invoice_has_service");
+  const needsInvoicePayments = conditions.some((c) => c.field === "invoice_was_paid_days");
+  const needsInvoiceLines = conditions.some((c) => c.field === "invoice_has_product" || c.field === "invoice_has_service");
   const needsTags = conditions.some((c) => c.field === "has_tag" || c.field === "does_not_have_tag");
   const needsServices = conditions.some((c) => c.field === "scheduled_service" || c.field === "completed_service");
+  const needsJobFacts = conditions.some((c) => JOB_FACT_CONDITION_FIELDS.has(c.field));
+  const needsForms = conditions.some((c) => c.field === "has_completed_form");
 
-  const [client, estimate, tags, serviceSets] = await Promise.all([
+  const [
+    client, estimate, tags, serviceSets, ticket, invoice,
+    estimateServiceNames, estimateProductIds, invoiceServiceNames, invoiceProductIds,
+    lastPaymentDate, jobFacts, completedFormIds,
+  ] = await Promise.all([
     needsClient && clientId
-      ? supabase.from("clients").select("status, source, account_type, billing_terms, map_code").eq("id", clientId).maybeSingle().then((r: { data: Record<string, unknown> | null }) => r.data)
+      ? supabase.from("clients")
+          .select("status, source, account_type, billing_terms, map_code, cancellation_reason, service_zip, client_since, balance_outstanding_cents, ok_to_email, payment_method, sales_rep_id")
+          .eq("id", clientId).maybeSingle().then((r: { data: Record<string, unknown> | null }) => r.data)
       : Promise.resolve(null),
     needsEstimate && estimateId
-      ? supabase.from("estimates").select("stage, total_cents").eq("id", estimateId).maybeSingle().then((r: { data: Record<string, unknown> | null }) => r.data)
+      ? supabase.from("estimates").select("stage, total_cents, sales_rep_id, approval_status").eq("id", estimateId).maybeSingle().then((r: { data: Record<string, unknown> | null }) => r.data)
       : Promise.resolve(null),
     needsTags && clientId
       ? supabase.from("client_tags").select("tag").eq("client_id", clientId).then((r: { data: { tag: string }[] | null }) => (r.data ?? []).map((t) => t.tag.toLowerCase()))
@@ -261,19 +386,131 @@ export async function evaluateConditionSet(
     needsServices && clientId
       ? getClientServiceSets(supabase, clientId)
       : Promise.resolve({ scheduled: new Set<string>(), completed: new Set<string>() }),
+    needsTicket && ticketId
+      ? supabase.from("crm_tickets").select("category, due_date").eq("id", ticketId).maybeSingle().then((r: { data: Record<string, unknown> | null }) => r.data)
+      : Promise.resolve(null),
+    needsInvoice && invoiceId
+      ? supabase.from("crm_invoices").select("due_date").eq("id", invoiceId).maybeSingle().then((r: { data: Record<string, unknown> | null }) => r.data)
+      : Promise.resolve(null),
+    needsEstimateServices && estimateId
+      ? supabase.from("estimate_line_items").select("service_name").eq("estimate_id", estimateId).is("deleted_at", null)
+          .then((r: { data: { service_name: string | null }[] | null }) => new Set((r.data ?? []).map((l) => l.service_name?.toLowerCase()).filter((v): v is string => !!v)))
+      : Promise.resolve(new Set<string>()),
+    needsEstimateProducts && estimateId
+      ? supabase.from("estimate_direct_costs").select("product_item_id").eq("estimate_id", estimateId)
+          .then((r: { data: { product_item_id: string | null }[] | null }) => new Set((r.data ?? []).map((l) => l.product_item_id?.toLowerCase()).filter((v): v is string => !!v)))
+      : Promise.resolve(new Set<string>()),
+    needsInvoiceLines && invoiceId
+      ? supabase.from("crm_invoice_line_items").select("name").eq("invoice_id", invoiceId)
+          .then((r: { data: { name: string | null }[] | null }) => new Set((r.data ?? []).map((l) => l.name?.toLowerCase()).filter((v): v is string => !!v)))
+      : Promise.resolve(new Set<string>()),
+    needsInvoiceLines && invoiceId
+      ? supabase.from("crm_invoice_line_items").select("product_id").eq("invoice_id", invoiceId)
+          .then((r: { data: { product_id: string | null }[] | null }) => new Set((r.data ?? []).map((l) => l.product_id?.toLowerCase()).filter((v): v is string => !!v)))
+      : Promise.resolve(new Set<string>()),
+    needsInvoicePayments && invoiceId
+      ? supabase.from("crm_payments").select("payment_date").eq("invoice_id", invoiceId).order("payment_date", { ascending: false }).limit(1).maybeSingle()
+          .then((r: { data: { payment_date: string } | null }) => r.data?.payment_date ?? null)
+      : Promise.resolve(null),
+    needsJobFacts && clientId
+      ? getClientJobFacts(supabase, clientId)
+      : Promise.resolve(null),
+    needsForms && clientId
+      ? supabase.from("crm_form_responses").select("form_id").eq("related_client_id", clientId).is("deleted_at", null)
+          .then((r: { data: { form_id: string }[] | null }) => new Set((r.data ?? []).map((f) => f.form_id.toLowerCase())))
+      : Promise.resolve(new Set<string>()),
   ]);
 
+  const invoiceWithPayment = invoice ? { ...invoice, last_payment_date: lastPaymentDate } : null;
+
+  // These fields are rendered with the multi-select checkbox picker (see
+  // TAG_CONDITION_FIELDS / SERVICE_CONDITION_FIELDS / etc. in
+  // condition-fields.ts), so their value is a comma-separated list — "any
+  // of" semantics.
+  const csvValues = (v: string | null) => (v ?? "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
+
   const results = conditions.map((c) => {
-    if (c.field === "has_tag") return !!c.value && tags.includes(c.value.toLowerCase());
-    if (c.field === "does_not_have_tag") return !!c.value && !tags.includes(c.value.toLowerCase());
-    if (c.field === "scheduled_service") return !!c.value && serviceSets.scheduled.has(c.value.toLowerCase());
-    if (c.field === "completed_service") return !!c.value && serviceSets.completed.has(c.value.toLowerCase());
+    if (c.field === "has_tag") { const vs = csvValues(c.value); return vs.length > 0 && vs.some((v) => tags.includes(v)); }
+    if (c.field === "does_not_have_tag") { const vs = csvValues(c.value); return vs.length > 0 && vs.every((v) => !tags.includes(v)); }
+    if (c.field === "scheduled_service") { const vs = csvValues(c.value); return vs.length > 0 && vs.some((v) => serviceSets.scheduled.has(v)); }
+    if (c.field === "completed_service") { const vs = csvValues(c.value); return vs.length > 0 && vs.some((v) => serviceSets.completed.has(v)); }
+    if (c.field === "account_type") {
+      const vs = csvValues(c.value);
+      const clientAccountType = client?.account_type ? String(client.account_type).toLowerCase() : null;
+      return vs.length > 0 && !!clientAccountType && vs.includes(clientAccountType);
+    }
+    if (c.field === "payment_method_type") {
+      const vs = csvValues(c.value);
+      const clientPaymentMethod = client?.payment_method ? String(client.payment_method).toLowerCase() : null;
+      return vs.length > 0 && !!clientPaymentMethod && vs.includes(clientPaymentMethod);
+    }
+    if (c.field === "sales_person") {
+      const vs = csvValues(c.value);
+      const salesRepId = client?.sales_rep_id ? String(client.sales_rep_id).toLowerCase() : null;
+      return vs.length > 0 && !!salesRepId && vs.includes(salesRepId);
+    }
+    if (c.field === "is_opted_in_emails") return client?.ok_to_email === true;
+    if (c.field === "has_ach" || c.field === "does_not_have_ach" || c.field === "has_credit_card" || c.field === "does_not_have_credit_card") {
+      // clients.payment_method is free text from PAYMENT_METHOD_OPTIONS (see
+      // ClientDetailPanel.tsx) — there's no real "on file" verification (e.g.
+      // via Stripe), so these are a proxy off the client's configured method.
+      const paymentMethod = client?.payment_method ? String(client.payment_method).toLowerCase() : "";
+      const isAch = paymentMethod === "ach/e-check";
+      const isCreditCard = paymentMethod.startsWith("credit card");
+      if (c.field === "has_ach") return isAch;
+      if (c.field === "does_not_have_ach") return !isAch;
+      if (c.field === "has_credit_card") return isCreditCard;
+      return !isCreditCard; // does_not_have_credit_card
+    }
+
+    if (c.field === "client_currently_has_package") return !!jobFacts?.currentPackage;
+    if (c.field === "client_does_not_have_package") return !jobFacts?.currentPackage;
+    if (c.field === "client_currently_has_recurring_job") return !!jobFacts?.currentRecurring;
+    if (c.field === "client_does_not_have_recurring_job") return !jobFacts?.currentRecurring;
+    if (c.field === "client_has_ever_had_package") return !!jobFacts?.everPackage;
+    if (c.field === "client_has_not_ever_had_package") return !jobFacts?.everPackage;
+    if (c.field === "client_has_ever_had_recurring_job") return !!jobFacts?.everRecurring;
+    if (c.field === "client_has_not_ever_had_recurring_job") return !jobFacts?.everRecurring;
+    if (c.field === "visit_requires_call_ahead") return !!jobFacts?.requiresCallAhead;
+    if (c.field === "last_visit_date") return compare(jobFacts?.lastVisitDate ?? null, c.operator, c.value ?? "");
+
+    if (c.field === "has_completed_form") {
+      const vs = csvValues(c.value);
+      return vs.length > 0 && vs.some((v) => completedFormIds.has(v));
+    }
+
+    if (c.field === "estimate_sales_rep") {
+      const vs = csvValues(c.value);
+      const repId = estimate?.sales_rep_id ? String(estimate.sales_rep_id).toLowerCase() : null;
+      return vs.length > 0 && !!repId && vs.includes(repId);
+    }
+    if (c.field === "estimate_status") {
+      const vs = csvValues(c.value);
+      const status = estimate?.approval_status ? String(estimate.approval_status).toLowerCase() : null;
+      return vs.length > 0 && !!status && vs.includes(status);
+    }
+    if (c.field === "estimate_has_service") { const vs = csvValues(c.value); return vs.length > 0 && vs.some((v) => estimateServiceNames.has(v)); }
+    if (c.field === "estimate_has_product") { const vs = csvValues(c.value); return vs.length > 0 && vs.some((v) => estimateProductIds.has(v)); }
+
+    if (c.field === "ticket_category") {
+      const vs = csvValues(c.value);
+      const category = ticket?.category ? String(ticket.category).toLowerCase() : null;
+      return vs.length > 0 && !!category && vs.includes(category);
+    }
+    if (c.field === "invoice_has_service") { const vs = csvValues(c.value); return vs.length > 0 && vs.some((v) => invoiceServiceNames.has(v)); }
+    if (c.field === "invoice_has_product") { const vs = csvValues(c.value); return vs.length > 0 && vs.some((v) => invoiceProductIds.has(v)); }
 
     const clientGetter = CLIENT_FIELD_GETTERS[c.field];
     if (clientGetter) return !!client && compare(clientGetter(client), c.operator, c.value ?? "");
 
     const estimateGetter = ESTIMATE_FIELD_GETTERS[c.field];
     if (estimateGetter) return !!estimate && compare(estimateGetter(estimate), c.operator, c.value ?? "");
+
+    const ticketGetter = TICKET_FIELD_GETTERS[c.field];
+    if (ticketGetter) return !!ticket && compare(ticketGetter(ticket), c.operator, c.value ?? "");
+
+    const invoiceGetter = INVOICE_FIELD_GETTERS[c.field];
+    if (invoiceGetter) return !!invoiceWithPayment && compare(invoiceGetter(invoiceWithPayment), c.operator, c.value ?? "");
 
     return false; // unsupported field
   });
@@ -289,14 +526,16 @@ export async function shouldStopSequence(
   supabase: AnyClient,
   sequenceId: string,
   clientId: string | null,
-  estimateId: string | null
+  estimateId: string | null,
+  ticketId: string | null = null,
+  invoiceId: string | null = null
 ): Promise<boolean> {
   const { data: conditions } = await supabase
     .from("crm_sequence_stop_conditions")
     .select("field, operator, value")
     .eq("sequence_id", sequenceId);
 
-  return evaluateConditionSet(supabase, (conditions ?? []) as ConditionRow[], "OR", clientId, estimateId);
+  return evaluateConditionSet(supabase, (conditions ?? []) as ConditionRow[], "OR", clientId, estimateId, ticketId, invoiceId);
 }
 
 /**
@@ -309,14 +548,16 @@ export async function triggerConditionsMet(
   supabase: AnyClient,
   triggerId: string,
   clientId: string | null,
-  estimateId: string | null
+  estimateId: string | null,
+  ticketId: string | null = null,
+  invoiceId: string | null = null
 ): Promise<boolean> {
   const { data: conditions } = await supabase
     .from("crm_sequence_trigger_conditions")
     .select("field, operator, value")
     .eq("trigger_id", triggerId);
 
-  return evaluateConditionSet(supabase, (conditions ?? []) as ConditionRow[], "AND", clientId, estimateId);
+  return evaluateConditionSet(supabase, (conditions ?? []) as ConditionRow[], "AND", clientId, estimateId, ticketId, invoiceId);
 }
 
 /**
@@ -381,16 +622,34 @@ export async function fireServiceVisitCompletedTriggers(
  */
 export async function fireSimpleTrigger(
   supabase: AnyClient,
-  params: { orgId: string; clientId: string; estimateId?: string | null; triggerType: TriggerType }
+  params: {
+    orgId: string;
+    clientId: string;
+    estimateId?: string | null;
+    /** The ticket/invoice this event pertains to — threaded through so ticket_category/ticket_past_due_days/invoice_* conditions can check the right record, and so the enrollment (and its later stop-condition checks) stay scoped to it. */
+    ticketId?: string | null;
+    invoiceId?: string | null;
+    triggerType: TriggerType;
+    /**
+     * The value(s) this specific event pertains to (a visit's service ids, a
+     * client's new source, a ticket's category) — checked against the
+     * trigger's config.filter_values, if the builder configured one. Only
+     * needed for trigger types that expose the inline multi-select picker;
+     * triggers with no filter_values configured always match regardless of
+     * whether this is passed.
+     */
+    matchValues?: string[];
+  }
 ): Promise<void> {
   const { data: triggers } = await supabase
     .from("crm_sequence_triggers")
-    .select("id, sequence_id, crm_automation_sequences(is_active, allow_reentry, reentry_after_minutes, crm_automations(is_active, org_id))")
+    .select("id, sequence_id, config, crm_automation_sequences(is_active, allow_reentry, reentry_after_minutes, crm_automations(is_active, org_id))")
     .eq("trigger_type", params.triggerType);
 
   for (const trigger of (triggers ?? []) as {
     id: string;
     sequence_id: string;
+    config: TriggerConfig | null;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     crm_automation_sequences: any;
   }[]) {
@@ -399,13 +658,24 @@ export async function fireSimpleTrigger(
     if (!seq?.is_active || !auto?.is_active) continue;
     if (auto.org_id !== params.orgId) continue;
 
-    const conditionsMet = await triggerConditionsMet(supabase, trigger.id, params.clientId, params.estimateId ?? null);
+    const filterValues = trigger.config?.filter_values;
+    if (filterValues && filterValues.length > 0) {
+      const allowed = new Set(filterValues.map((v) => v.toLowerCase()));
+      const eventValues = (params.matchValues ?? []).map((v) => v.toLowerCase());
+      if (!eventValues.some((v) => allowed.has(v))) continue;
+    }
+
+    const conditionsMet = await triggerConditionsMet(
+      supabase, trigger.id, params.clientId, params.estimateId ?? null, params.ticketId ?? null, params.invoiceId ?? null
+    );
     if (!conditionsMet) continue;
 
     const eligible = await isEligibleForEnrollment(supabase, {
       sequenceId: trigger.sequence_id,
       clientId: params.clientId,
       estimateId: params.estimateId ?? null,
+      ticketId: params.ticketId ?? null,
+      invoiceId: params.invoiceId ?? null,
       allowReentry: seq.allow_reentry ?? false,
       reentryAfterMinutes: seq.reentry_after_minutes ?? 1440,
     });
@@ -416,6 +686,8 @@ export async function fireSimpleTrigger(
       orgId: params.orgId,
       clientId: params.clientId,
       estimateId: params.estimateId ?? null,
+      ticketId: params.ticketId ?? null,
+      invoiceId: params.invoiceId ?? null,
     });
   }
 }

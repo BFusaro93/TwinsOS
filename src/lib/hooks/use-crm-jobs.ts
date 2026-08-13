@@ -768,6 +768,26 @@ export function useDeleteVisitsByDayOfWeek() {
   });
 }
 
+/**
+ * Service ids a visit covers — a specific job_service_id if the visit is
+ * scoped to one, otherwise every service on the parent job. Mirrors the
+ * lookup in /api/crm/visits/[visitId]/complete/route.ts, duplicated here
+ * because that route is server-only and this runs client-side.
+ */
+async function fetchVisitServiceIds(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  jobId: string,
+  jobServiceId: string | null
+): Promise<string[]> {
+  if (jobServiceId) {
+    const { data } = await supabase.from('crm_job_services').select('service_id').eq('id', jobServiceId).maybeSingle();
+    return data?.service_id ? [data.service_id] : [];
+  }
+  const { data } = await supabase.from('crm_job_services').select('service_id').eq('job_id', jobId);
+  return ((data ?? []) as { service_id: string | null }[]).map((s) => s.service_id).filter((v): v is string => !!v);
+}
+
 export function useUpdateVisitStatus() {
   const qc = useQueryClient();
   return useMutation({
@@ -798,15 +818,21 @@ export function useUpdateVisitStatus() {
       if (status === 'dispatched') patch.dispatched_at = new Date().toISOString();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
-        .from('crm_job_visits').update(patch).eq('id', id).select('client_id').single();
+        .from('crm_job_visits').update(patch).eq('id', id)
+        .select('client_id, job_id, job_service_id').single();
       if (error) throw error;
-      return { clientId: data?.client_id as string | undefined, status };
+      return {
+        clientId: data?.client_id as string | undefined,
+        jobId: data?.job_id as string | undefined,
+        jobServiceId: data?.job_service_id as string | null | undefined,
+        status,
+      };
     },
-    onSuccess: (data) => {
+    onSuccess: async (data) => {
       qc.invalidateQueries({ queryKey: ['crm-job-visits'] });
       qc.invalidateQueries({ queryKey: ['crm-jobs'] });
-      const clientId = (data as { clientId?: string } | undefined)?.clientId;
-      const status = (data as { status?: VisitStatus } | undefined)?.status;
+      const clientId = data?.clientId;
+      const status = data?.status;
       if (clientId) {
         qc.invalidateQueries({ queryKey: ['clients', clientId, 'activity'] });
         qc.invalidateQueries({ queryKey: ['clients', clientId] });
@@ -816,11 +842,17 @@ export function useUpdateVisitStatus() {
         // generic visit_completed calls, not from here.
         const VISIT_STATUS_TRIGGERS: Partial<Record<VisitStatus, TriggerType[]>> = {
           cancelled: ['visit_cancelled'],
-          dispatched: ['visit_dispatched', 'calendar_event_dispatched'],
-          skipped: ['visit_skipped', 'calendar_event_skipped'],
+          dispatched: ['visit_dispatched'],
+          skipped: ['visit_skipped'],
         };
-        for (const triggerType of (status && VISIT_STATUS_TRIGGERS[status]) || []) {
-          fireAutomationTrigger({ triggerType, clientId });
+        const triggerTypes = (status && VISIT_STATUS_TRIGGERS[status]) || [];
+        if (triggerTypes.length > 0) {
+          const matchValues = data?.jobId
+            ? await fetchVisitServiceIds(createClient(), data.jobId, data.jobServiceId ?? null)
+            : undefined;
+          for (const triggerType of triggerTypes) {
+            fireAutomationTrigger({ triggerType, clientId, matchValues });
+          }
         }
       }
       qc.invalidateQueries({ queryKey: ['clients'] });
@@ -874,12 +906,16 @@ export function useUpdateVisit() {
 
       let dateChanged = false;
       let dateChangeClientId: string | null = null;
+      let dateChangeServiceIds: string[] | undefined;
       if (updates.scheduled_date !== undefined) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data: before } = await (supabase as any)
-          .from('crm_job_visits').select('client_id, scheduled_date').eq('id', id).single();
+          .from('crm_job_visits').select('client_id, scheduled_date, job_id, job_service_id').eq('id', id).single();
         dateChanged = !!before && before.scheduled_date !== updates.scheduled_date;
         dateChangeClientId = before?.client_id ?? null;
+        if (dateChanged && before?.job_id) {
+          dateChangeServiceIds = await fetchVisitServiceIds(supabase, before.job_id, before.job_service_id ?? null);
+        }
       }
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -908,7 +944,7 @@ export function useUpdateVisit() {
         await (supabase as any).from('crm_jobs').update({ crew_id: updates.crew_id }).eq('id', jobId);
       }
 
-      return { clientId, dateChanged, dateChangeClientId };
+      return { clientId, dateChanged, dateChangeClientId, dateChangeServiceIds };
     },
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ['crm-job-visits'] });
@@ -921,7 +957,11 @@ export function useUpdateVisit() {
       }
       qc.invalidateQueries({ queryKey: ['clients'] });
       if (data?.dateChanged && data.dateChangeClientId) {
-        fireAutomationTrigger({ triggerType: 'visit_date_changed', clientId: data.dateChangeClientId });
+        fireAutomationTrigger({
+          triggerType: 'visit_date_changed',
+          clientId: data.dateChangeClientId,
+          matchValues: data.dateChangeServiceIds,
+        });
       }
     },
   });
@@ -1151,10 +1191,13 @@ export function useCreateClientJob() {
       qc.invalidateQueries({ queryKey: ['crm-jobs'] });
       qc.invalidateQueries({ queryKey: ['crm-jobs', 'client', values.clientId] });
       qc.invalidateQueries({ queryKey: ['clients', values.clientId, 'activity'] });
-      fireAutomationTrigger({ triggerType: 'job_created', clientId: values.clientId });
-      fireAutomationTrigger({ triggerType: 'calendar_event_created', clientId: values.clientId });
+      fireAutomationTrigger({ triggerType: 'job_created', clientId: values.clientId, matchValues: [values.jobType] });
       if (values.jobType === 'package') {
-        fireAutomationTrigger({ triggerType: 'package_created', clientId: values.clientId });
+        fireAutomationTrigger({
+          triggerType: 'package_created',
+          clientId: values.clientId,
+          matchValues: values.packageId ? [values.packageId] : undefined,
+        });
       }
     },
   });
@@ -1605,9 +1648,10 @@ export function useCreateJobsFromEstimate() {
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ["crm-jobs"] });
       qc.invalidateQueries({ queryKey: ["estimates"] });
-      fireAutomationTrigger({ triggerType: "job_created", clientId: data.clientId });
-      fireAutomationTrigger({ triggerType: "calendar_event_created", clientId: data.clientId });
+      fireAutomationTrigger({ triggerType: "job_created", clientId: data.clientId, matchValues: [data.jobType] });
       if (data.jobType === "package") {
+        // No packageId available in this convert-from-estimate flow — fires
+        // as "any package" (unfiltered), same as before this change.
         fireAutomationTrigger({ triggerType: "package_created", clientId: data.clientId });
       }
     },

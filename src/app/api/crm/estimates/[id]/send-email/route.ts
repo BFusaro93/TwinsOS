@@ -7,7 +7,7 @@ import { createElement } from "react";
 import { EstimateDocument } from "@/components/crm/estimates/pdf/EstimateDocument";
 import type { EstimatePDFData, EstimatePDFLineItem, EstimatePDFMilestone, EstimatePDFPhoto, OrgPDFData } from "@/components/crm/estimates/pdf/EstimateDocument";
 import { toDisplaySettings } from "@/lib/estimate-display-settings";
-import { isEligibleForEnrollment, enrollClientInSequence, triggerConditionsMet } from "@/lib/automations/sequence-enrollment";
+import { fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
 
 const FROM = "Twins Lawn Service <noreply@twinslawnservice.com>";
 
@@ -370,38 +370,13 @@ export async function POST(
 
   // ── Enroll client in estimate_sent automation sequences ───────────────────
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: triggers } = await (supabase as any)
-      .from("crm_sequence_triggers")
-      .select("id, sequence_id, crm_automation_sequences(is_active, automation_id, allow_reentry, reentry_after_minutes, crm_automations(is_active, org_id))")
-      .eq("trigger_type", "estimate_sent");
-
-    for (const trigger of triggers ?? []) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const seq = trigger.crm_automation_sequences as any;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const auto = seq?.crm_automations as any;
-      if (!seq?.is_active || !auto?.is_active) continue;
-      if (auto?.org_id !== est.org_id) continue;
-
-      if (!(await triggerConditionsMet(supabase, trigger.id, est.client_id, estimateId))) continue;
-
-      const eligible = await isEligibleForEnrollment(supabase, {
-        sequenceId: trigger.sequence_id,
-        clientId: est.client_id,
-        estimateId,
-        allowReentry: seq.allow_reentry ?? false,
-        reentryAfterMinutes: seq.reentry_after_minutes ?? 1440,
-      });
-      if (!eligible) continue;
-
-      await enrollClientInSequence(supabase, {
-        sequenceId: trigger.sequence_id,
-        orgId: est.org_id,
-        clientId: est.client_id,
-        estimateId,
-      });
-    }
+    await fireSimpleTrigger(supabase, {
+      orgId: est.org_id,
+      clientId: est.client_id,
+      estimateId,
+      triggerType: "estimate_sent",
+      matchValues: est.sales_rep_id ? [est.sales_rep_id] : undefined,
+    });
   } catch (enrollErr) {
     // best-effort — don't fail the send if enrollment errors
     console.error("[send-estimate] Enrollment error:", enrollErr);

@@ -493,9 +493,9 @@ export function useUpdateClient() {
 
       // Fetch the "before" values for fields whose automation trigger only
       // fires on an actual change, not on every generic profile-edit save.
-      let before: { source: string | null; ok_to_email: boolean | null; referred_by_client_id: string | null } | null = null;
-      if (updates.source !== undefined || updates.okToEmail !== undefined || updates.referredByClientId !== undefined) {
-        const { data } = await supabase.from("clients").select("source, ok_to_email, referred_by_client_id").eq("id", id).single();
+      let before: { source: string | null; ok_to_email: boolean | null; referred_by_client_id: string | null; payment_method: string | null } | null = null;
+      if (updates.source !== undefined || updates.okToEmail !== undefined || updates.referredByClientId !== undefined || updates.paymentMethod !== undefined) {
+        const { data } = await supabase.from("clients").select("source, ok_to_email, referred_by_client_id, payment_method").eq("id", id).single();
         before = data;
       }
 
@@ -555,13 +555,32 @@ export function useUpdateClient() {
       const newReferrerId = updates.referredByClientId && before && updates.referredByClientId !== before.referred_by_client_id
         ? updates.referredByClientId
         : null;
-      return { sourceChanged, emailsOptedIn, newReferrerId };
+      const paymentMethodChanged = updates.paymentMethod !== undefined && before && updates.paymentMethod !== before.payment_method;
+      return {
+        sourceChanged,
+        newSource: updates.source ?? null,
+        emailsOptedIn,
+        newReferrerId,
+        paymentMethodChanged,
+        newPaymentMethod: updates.paymentMethod ?? null,
+      };
     },
     onSuccess: (result, { id }) => {
       qc.invalidateQueries({ queryKey: ["clients"] });
       qc.invalidateQueries({ queryKey: ["clients", id] });
       if (result?.sourceChanged) {
-        fireAutomationTrigger({ triggerType: "client_source_updated", clientId: id });
+        fireAutomationTrigger({
+          triggerType: "client_source_updated",
+          clientId: id,
+          matchValues: result.newSource ? [result.newSource] : undefined,
+        });
+      }
+      if (result?.paymentMethodChanged) {
+        fireAutomationTrigger({
+          triggerType: "payment_method_updated",
+          clientId: id,
+          matchValues: result.newPaymentMethod ? [result.newPaymentMethod] : undefined,
+        });
       }
       if (result?.emailsOptedIn) {
         fireAutomationTrigger({ triggerType: "has_opted_in_emails", clientId: id });
@@ -925,10 +944,10 @@ export function useAddClientTag() {
         .upsert({ client_id: clientId, tag }, { onConflict: "org_id,client_id,tag", ignoreDuplicates: true });
       if (error) throw error;
     },
-    onSuccess: (_d, { clientId }) => {
+    onSuccess: (_d, { clientId, tag }) => {
       qc.invalidateQueries({ queryKey: ["clients"] });
       qc.invalidateQueries({ queryKey: ["clients", clientId] });
-      fireAutomationTrigger({ triggerType: "tag_added", clientId });
+      fireAutomationTrigger({ triggerType: "tag_added", clientId, matchValues: [tag] });
     },
   });
 }
@@ -945,10 +964,10 @@ export function useRemoveClientTag() {
         .eq("tag", tag);
       if (error) throw error;
     },
-    onSuccess: (_d, { clientId }) => {
+    onSuccess: (_d, { clientId, tag }) => {
       qc.invalidateQueries({ queryKey: ["clients"] });
       qc.invalidateQueries({ queryKey: ["clients", clientId] });
-      fireAutomationTrigger({ triggerType: "tag_removed", clientId });
+      fireAutomationTrigger({ triggerType: "tag_removed", clientId, matchValues: [tag] });
     },
   });
 }

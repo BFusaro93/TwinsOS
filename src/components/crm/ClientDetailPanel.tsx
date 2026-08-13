@@ -369,7 +369,7 @@ function CancelClientDialog({ clientId, clientName, open, onOpenChange }: {
 
 // ── EditClientDialog ──────────────────────────────────────────────────────────
 
-const PAYMENT_METHOD_OPTIONS = [
+export const PAYMENT_METHOD_OPTIONS = [
   { value: "ACH/E-Check",           label: "ACH / E-Check" },
   { value: "AutoPay",               label: "AutoPay" },
   { value: "Cash",                  label: "Cash" },

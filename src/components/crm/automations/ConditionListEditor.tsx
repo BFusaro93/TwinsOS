@@ -13,13 +13,24 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { MultiSelectDropdown } from "@/components/shared/MultiSelectDropdown";
 import { useOrgTags } from "@/lib/hooks/use-clients";
 import { useCRMServices } from "@/lib/hooks/use-crm-jobs";
+import { useSelectableEmployees } from "@/lib/hooks/use-employees";
+import { useProducts } from "@/lib/hooks/use-products";
+import { useOrgList } from "@/lib/hooks/use-org-lists";
+import { useForms } from "@/lib/hooks/use-crm-forms";
 import {
   CONDITION_GROUPS,
   CONDITION_OPERATORS,
   TAG_CONDITION_FIELDS,
   SERVICE_CONDITION_FIELDS,
+  PRODUCT_CONDITION_FIELDS,
+  TICKET_CATEGORY_CONDITION_FIELDS,
+  FORM_CONDITION_FIELDS,
+  FIXED_MULTI_CONDITION_FIELDS,
+  EMPLOYEE_CONDITION_FIELDS,
+  BOOLEAN_CONDITION_FIELDS,
 } from "@/lib/automations/condition-fields";
 import type { ConditionField, ConditionOperator } from "@/types/crm-automations";
 
@@ -55,6 +66,11 @@ export function ConditionListEditor({
 }: Props) {
   const orgTags = useOrgTags();
   const { data: services } = useCRMServices();
+  const { data: employees } = useSelectableEmployees();
+  const salesReps = (employees ?? []).filter((e) => e.isSalesRep && e.userId);
+  const { data: products } = useProducts();
+  const { data: ticketCategories } = useOrgList("ticket_categories");
+  const { data: forms } = useForms();
 
   function addCondition() {
     onChange([...conditions, { field: defaultField, operator: "equals", value: "" }]);
@@ -122,29 +138,65 @@ export function ConditionListEditor({
             </SelectContent>
           </Select>
 
-          {c.operator !== "is_set" && c.operator !== "is_not_set" && (
+          {BOOLEAN_CONDITION_FIELDS.has(c.field) ? (
+            <p className="flex-1 min-w-0 self-center text-xs text-slate-400 italic">No value needed — selecting this field is the whole condition.</p>
+          ) : c.operator !== "is_set" && c.operator !== "is_not_set" && (
             TAG_CONDITION_FIELDS.has(c.field) ? (
-              <Select value={c.value} onValueChange={(v) => updateCondition(i, { value: v })}>
-                <SelectTrigger className="flex-1 min-w-0">
-                  <SelectValue placeholder="Select a tag" />
-                </SelectTrigger>
-                <SelectContent>
-                  {orgTags.map((t) => (
-                    <SelectItem key={t} value={t}>{t}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <MultiSelectDropdown
+                className="h-9 flex-1 min-w-0 justify-between text-sm font-normal"
+                options={orgTags.map((t) => ({ value: t, label: t }))}
+                selected={c.value ? c.value.split(",").map((v) => v.trim()).filter(Boolean) : []}
+                onChange={(values) => updateCondition(i, { value: values.join(",") })}
+                placeholder="Select tag(s)"
+              />
             ) : SERVICE_CONDITION_FIELDS.has(c.field) ? (
-              <Select value={c.value} onValueChange={(v) => updateCondition(i, { value: v })}>
-                <SelectTrigger className="flex-1 min-w-0">
-                  <SelectValue placeholder="Select a service" />
-                </SelectTrigger>
-                <SelectContent>
-                  {(services ?? []).map((s) => (
-                    <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <MultiSelectDropdown
+                className="h-9 flex-1 min-w-0 justify-between text-sm font-normal"
+                options={(services ?? []).map((s) => ({ value: s.name, label: s.name }))}
+                selected={c.value ? c.value.split(",").map((v) => v.trim()).filter(Boolean) : []}
+                onChange={(values) => updateCondition(i, { value: values.join(",") })}
+                placeholder="Select service(s)"
+              />
+            ) : FIXED_MULTI_CONDITION_FIELDS[c.field] ? (
+              <MultiSelectDropdown
+                className="h-9 flex-1 min-w-0 justify-between text-sm font-normal"
+                options={FIXED_MULTI_CONDITION_FIELDS[c.field]!}
+                selected={c.value ? c.value.split(",").map((v) => v.trim()).filter(Boolean) : []}
+                onChange={(values) => updateCondition(i, { value: values.join(",") })}
+                placeholder="Select value(s)"
+              />
+            ) : EMPLOYEE_CONDITION_FIELDS.has(c.field) ? (
+              <MultiSelectDropdown
+                className="h-9 flex-1 min-w-0 justify-between text-sm font-normal"
+                options={salesReps.map((e) => ({ value: e.userId as string, label: `${e.firstName} ${e.lastName}` }))}
+                selected={c.value ? c.value.split(",").map((v) => v.trim()).filter(Boolean) : []}
+                onChange={(values) => updateCondition(i, { value: values.join(",") })}
+                placeholder="Select rep(s)"
+              />
+            ) : PRODUCT_CONDITION_FIELDS.has(c.field) ? (
+              <MultiSelectDropdown
+                className="h-9 flex-1 min-w-0 justify-between text-sm font-normal"
+                options={(products ?? []).map((p) => ({ value: p.id, label: p.name }))}
+                selected={c.value ? c.value.split(",").map((v) => v.trim()).filter(Boolean) : []}
+                onChange={(values) => updateCondition(i, { value: values.join(",") })}
+                placeholder="Select product(s)"
+              />
+            ) : TICKET_CATEGORY_CONDITION_FIELDS.has(c.field) ? (
+              <MultiSelectDropdown
+                className="h-9 flex-1 min-w-0 justify-between text-sm font-normal"
+                options={(ticketCategories ?? []).map((o) => ({ value: o.value, label: o.value }))}
+                selected={c.value ? c.value.split(",").map((v) => v.trim()).filter(Boolean) : []}
+                onChange={(values) => updateCondition(i, { value: values.join(",") })}
+                placeholder="Select categor(ies)"
+              />
+            ) : FORM_CONDITION_FIELDS.has(c.field) ? (
+              <MultiSelectDropdown
+                className="h-9 flex-1 min-w-0 justify-between text-sm font-normal"
+                options={(forms ?? []).map((f) => ({ value: f.id, label: f.name }))}
+                selected={c.value ? c.value.split(",").map((v) => v.trim()).filter(Boolean) : []}
+                onChange={(values) => updateCondition(i, { value: values.join(",") })}
+                placeholder="Select form(s)"
+              />
             ) : (
               <Input
                 placeholder="Value"

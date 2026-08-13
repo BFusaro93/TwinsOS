@@ -120,7 +120,12 @@ export function useCreateTicket() {
         body: JSON.stringify({ event: "created" }),
       }).catch(() => {});
       if (values.clientId) {
-        fireAutomationTrigger({ triggerType: "ticket_created", clientId: values.clientId });
+        fireAutomationTrigger({
+          triggerType: "ticket_created",
+          clientId: values.clientId,
+          ticketId: ticket.id,
+          matchValues: values.category ? [values.category] : undefined,
+        });
       }
     },
   });
@@ -186,11 +191,13 @@ export function useUpdateTicket() {
 
       let wasReopened = false;
       let clientId: string | null = null;
+      let effectiveCategory: string | null = null;
       if (updates.status !== undefined && updates.status !== "closed") {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data: before } = await (supabase as any).from("crm_tickets").select("status, client_id").eq("id", id).single();
+        const { data: before } = await (supabase as any).from("crm_tickets").select("status, client_id, category").eq("id", id).single();
         wasReopened = before?.status === "closed";
         clientId = before?.client_id ?? null;
+        effectiveCategory = updates.category !== undefined ? updates.category : before?.category ?? null;
       }
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -217,7 +224,7 @@ export function useUpdateTicket() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any).from("crm_tickets").update(payload).eq("id", id);
       if (error) throw error;
-      return { wasReopened, clientId };
+      return { wasReopened, clientId, effectiveCategory };
     },
     onSuccess: (result, { id, updates }) => {
       qc.invalidateQueries({ queryKey: ["crm-tickets"] });
@@ -229,7 +236,12 @@ export function useUpdateTicket() {
         }).catch(() => {});
       }
       if (result?.wasReopened && result.clientId) {
-        fireAutomationTrigger({ triggerType: "ticket_reopened", clientId: result.clientId });
+        fireAutomationTrigger({
+          triggerType: "ticket_reopened",
+          clientId: result.clientId,
+          ticketId: id,
+          matchValues: result.effectiveCategory ? [result.effectiveCategory] : undefined,
+        });
       }
     },
   });
@@ -342,15 +354,20 @@ export function useCloseTicket() {
         .from("crm_tickets")
         .update({ status: "closed", closed_at: new Date().toISOString() })
         .eq("id", id)
-        .select("client_id")
+        .select("client_id, category")
         .single();
       if (error) throw error;
-      return { clientId: data?.client_id as string | null };
+      return { clientId: data?.client_id as string | null, category: data?.category as string | null };
     },
-    onSuccess: (data) => {
+    onSuccess: (data, id) => {
       qc.invalidateQueries({ queryKey: ["crm-tickets"] });
       if (data?.clientId) {
-        fireAutomationTrigger({ triggerType: "ticket_closed", clientId: data.clientId });
+        fireAutomationTrigger({
+          triggerType: "ticket_closed",
+          clientId: data.clientId,
+          ticketId: id,
+          matchValues: data.category ? [data.category] : undefined,
+        });
       }
     },
   });

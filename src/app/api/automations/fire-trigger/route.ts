@@ -26,9 +26,6 @@ const ALLOWED_TRIGGER_TYPES: ReadonlySet<TriggerType> = new Set([
   "visit_cancelled",
   "visit_dispatched",
   "visit_skipped",
-  "calendar_event_dispatched",
-  "calendar_event_skipped",
-  "calendar_event_created",
   "invoice_paid",
   "job_created",
   "client_source_updated",
@@ -45,6 +42,7 @@ const ALLOWED_TRIGGER_TYPES: ReadonlySet<TriggerType> = new Set([
   "contract_signed",
   "client_referred",
   "damage_case_created",
+  "payment_method_updated",
 ]);
 
 export async function POST(req: NextRequest) {
@@ -58,6 +56,9 @@ export async function POST(req: NextRequest) {
     triggerType?: string;
     clientId?: string;
     estimateId?: string;
+    ticketId?: string;
+    invoiceId?: string;
+    matchValues?: string[];
   };
   if (!body.triggerType || !ALLOWED_TRIGGER_TYPES.has(body.triggerType as TriggerType)) {
     return NextResponse.json({ error: "unsupported triggerType" }, { status: 400 });
@@ -80,11 +81,28 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Client not found" }, { status: 404 });
   }
 
+  // Same cross-org guard for the ticket/invoice this event pertains to, if any.
+  if (body.ticketId) {
+    const { data: ticket } = await db.from("crm_tickets").select("org_id").eq("id", body.ticketId).maybeSingle();
+    if (!ticket || ticket.org_id !== profile.org_id) {
+      return NextResponse.json({ error: "Ticket not found" }, { status: 404 });
+    }
+  }
+  if (body.invoiceId) {
+    const { data: invoice } = await db.from("crm_invoices").select("org_id").eq("id", body.invoiceId).maybeSingle();
+    if (!invoice || invoice.org_id !== profile.org_id) {
+      return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
+    }
+  }
+
   await fireSimpleTrigger(db, {
     orgId: profile.org_id,
     clientId: body.clientId,
     estimateId: body.estimateId ?? null,
+    ticketId: body.ticketId ?? null,
+    invoiceId: body.invoiceId ?? null,
     triggerType: body.triggerType as TriggerType,
+    matchValues: Array.isArray(body.matchValues) ? body.matchValues.filter((v) => typeof v === "string") : undefined,
   });
 
   return NextResponse.json({ ok: true });

@@ -254,7 +254,12 @@ export function useCreateEstimate() {
     onSuccess: (estimate, vars) => {
       qc.invalidateQueries({ queryKey: ["estimates"] });
       qc.invalidateQueries({ queryKey: ["clients", vars.clientId, "activity"] });
-      fireAutomationTrigger({ triggerType: "estimate_created", clientId: vars.clientId, estimateId: estimate.id });
+      fireAutomationTrigger({
+        triggerType: "estimate_created",
+        clientId: vars.clientId,
+        estimateId: estimate.id,
+        matchValues: vars.salesRepId ? [vars.salesRepId] : undefined,
+      });
     },
   });
 }
@@ -337,7 +342,7 @@ export function useUpdateEstimateStage() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: existing } = await (supabase as any)
         .from("estimates")
-        .select("client_id, description")
+        .select("client_id, description, sales_rep_id")
         .eq("id", id)
         .single();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -381,16 +386,19 @@ export function useUpdateEstimateStage() {
           ref_table: "estimates",
         });
       }
+
+      return { salesRepId: existing?.sales_rep_id as string | null | undefined };
     },
-    onSuccess: (_data, vars) => {
+    onSuccess: (data, vars) => {
       qc.invalidateQueries({ queryKey: ["estimates", "detail", vars.id] });
       qc.invalidateQueries({ queryKey: ["estimates"] });
+      const matchValues = data?.salesRepId ? [data.salesRepId] : undefined;
       if (vars.clientId) {
         qc.invalidateQueries({ queryKey: ["clients", vars.clientId, "activity"] });
         if (vars.stage === "accepted") {
-          fireAutomationTrigger({ triggerType: "estimate_won", clientId: vars.clientId, estimateId: vars.id });
+          fireAutomationTrigger({ triggerType: "estimate_won", clientId: vars.clientId, estimateId: vars.id, matchValues });
         } else if (vars.stage === "lost") {
-          fireAutomationTrigger({ triggerType: "estimate_lost", clientId: vars.clientId, estimateId: vars.id });
+          fireAutomationTrigger({ triggerType: "estimate_lost", clientId: vars.clientId, estimateId: vars.id, matchValues });
         }
       }
     },

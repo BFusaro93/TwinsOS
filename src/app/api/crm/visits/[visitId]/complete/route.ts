@@ -415,8 +415,7 @@ export async function POST(
       if (serviceIds.length > 0) {
         await fireServiceVisitCompletedTriggers(supabase, { orgId, clientId: v.client_id, serviceIds });
       }
-      await fireSimpleTrigger(supabase, { orgId, clientId: v.client_id, triggerType: "visit_completed" });
-      await fireSimpleTrigger(supabase, { orgId, clientId: v.client_id, triggerType: "calendar_event_completed" });
+      await fireSimpleTrigger(supabase, { orgId, clientId: v.client_id, triggerType: "visit_completed", matchValues: serviceIds });
     }
   } catch (err) {
     console.error("[visits/complete] automation trigger enrollment failed:", err);

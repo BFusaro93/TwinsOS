@@ -29,6 +29,12 @@ import { useCRMServices } from "@/lib/hooks/use-crm-jobs";
 import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
 import { ConditionListEditor, type ConditionRow } from "./ConditionListEditor";
+import { MultiSelectDropdown } from "@/components/shared/MultiSelectDropdown";
+import { useOrgList } from "@/lib/hooks/use-org-lists";
+import { useOrgTags } from "@/lib/hooks/use-clients";
+import { usePackages } from "@/lib/hooks/use-packages";
+import { useSelectableEmployees } from "@/lib/hooks/use-employees";
+import { PAYMENT_METHOD_OPTIONS } from "@/components/crm/ClientDetailPanel";
 import type { TriggerType, TriggerConfig } from "@/types/crm-automations";
 
 // Trigger types that fire off a day-count gap rather than an event — the
@@ -38,6 +44,59 @@ const DATE_GAP_TRIGGER_TYPES = new Set<TriggerType>(["estimate_expiring", "estim
 // Trigger types that fire for one specific service rather than the whole
 // job/visit — the builder shows a service picker (or "Any service") for these.
 const SERVICE_TRIGGER_TYPES = new Set<TriggerType>(["service_visit_completed"]);
+
+// Trigger types with an enumerable "which of these" dimension shown as an
+// inline multi-select checkbox picker next to the trigger type — mirrors the
+// reference app's "N selected" pickers for Visit Completed / Source Updated /
+// Ticket Closed. Stored in trigger.config.filter_values (empty = "any").
+type FilterKind = "service" | "source" | "category" | "job_type" | "package" | "tag" | "sales_rep" | "case_type" | "payment_method";
+const MULTI_FILTER_TRIGGER_TYPES: Partial<Record<TriggerType, FilterKind>> = {
+  visit_completed: "service",
+  visit_cancelled: "service",
+  visit_dispatched: "service",
+  visit_skipped: "service",
+  visit_date_changed: "service",
+  client_source_updated: "source",
+  ticket_created: "category",
+  ticket_closed: "category",
+  ticket_reopened: "category",
+  job_created: "job_type",
+  package_created: "package",
+  tag_added: "tag",
+  tag_removed: "tag",
+  estimate_created: "sales_rep",
+  estimate_sent: "sales_rep",
+  estimate_won: "sales_rep",
+  estimate_lost: "sales_rep",
+  damage_case_created: "case_type",
+  payment_method_updated: "payment_method",
+};
+
+const JOB_TYPE_OPTIONS = [
+  { value: "one_time", label: "One Time" },
+  { value: "recurring", label: "Recurring" },
+  { value: "waiting_list", label: "Waiting List" },
+  { value: "package", label: "Package" },
+  { value: "snow", label: "Snow" },
+  { value: "project", label: "Project" },
+];
+
+const CASE_TYPE_OPTIONS = [
+  { value: "damage", label: "Damage" },
+  { value: "warranty", label: "Warranty" },
+];
+
+const FILTER_PLACEHOLDER: Record<FilterKind, string> = {
+  service: "All services",
+  source: "All sources",
+  category: "All categories",
+  job_type: "All job types",
+  package: "All packages",
+  tag: "Any tag",
+  sales_rep: "All reps",
+  case_type: "All types",
+  payment_method: "All payment types",
+};
 
 // ── Trigger groups ─────────────────────────────────────────────────────────────
 
@@ -57,6 +116,7 @@ const TRIGGER_GROUPS: { label: string; items: { value: TriggerType; label: strin
       { value: "credit_card_about_to_expire", label: "Credit card is about to expire" },
       { value: "credit_card_updated", label: "Credit card was updated" },
       { value: "has_opted_in_emails", label: "Has opted in for emails" },
+      { value: "payment_method_updated", label: "Payment method updated" },
     ],
   },
   {
@@ -124,10 +184,6 @@ const TRIGGER_GROUPS: { label: string; items: { value: TriggerType; label: strin
       { value: "ticket_closed", label: "Ticket was closed" },
       { value: "ticket_past_due", label: "Ticket past due" },
       { value: "ticket_reopened", label: "Ticket was reopened" },
-      { value: "calendar_event_completed", label: "Calendar event completed" },
-      { value: "calendar_event_created", label: "Calendar event created" },
-      { value: "calendar_event_dispatched", label: "Calendar event dispatched" },
-      { value: "calendar_event_skipped", label: "Calendar event skipped" },
     ],
   },
 ];
@@ -171,6 +227,24 @@ export function SequenceRulesDialog({ open, onOpenChange, sequenceId, automation
   const sequence = sequences?.find((s) => s.id === sequenceId);
   const updateSequence = useUpdateSequence();
   const { data: services } = useCRMServices();
+  const { data: clientSources } = useOrgList("client_sources");
+  const { data: ticketCategories } = useOrgList("ticket_categories");
+  const orgTags = useOrgTags();
+  const { data: packages } = usePackages();
+  const { data: employees } = useSelectableEmployees();
+  const salesReps = (employees ?? []).filter((e) => e.isSalesRep && e.userId);
+
+  const FILTER_OPTIONS: Record<FilterKind, { value: string; label: string }[]> = {
+    service: (services ?? []).map((s) => ({ value: s.id, label: s.name })),
+    source: (clientSources ?? []).map((o) => ({ value: o.value, label: o.value })),
+    category: (ticketCategories ?? []).map((o) => ({ value: o.value, label: o.value })),
+    job_type: JOB_TYPE_OPTIONS,
+    package: (packages ?? []).map((p) => ({ value: p.id, label: p.name })),
+    tag: orgTags.map((t) => ({ value: t, label: t })),
+    sales_rep: salesReps.map((e) => ({ value: e.userId as string, label: `${e.firstName} ${e.lastName}` })),
+    case_type: CASE_TYPE_OPTIONS,
+    payment_method: PAYMENT_METHOD_OPTIONS,
+  };
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -491,6 +565,14 @@ export function SequenceRulesDialog({ open, onOpenChange, sequenceId, automation
                       ))}
                     </SelectContent>
                   </Select>
+                )}
+                {MULTI_FILTER_TRIGGER_TYPES[t.triggerType] && (
+                  <MultiSelectDropdown
+                    options={FILTER_OPTIONS[MULTI_FILTER_TRIGGER_TYPES[t.triggerType]!]}
+                    selected={t.config.filter_values ?? []}
+                    onChange={(values) => updateTriggerConfig(t._key, { filter_values: values.length > 0 ? values : undefined })}
+                    placeholder={FILTER_PLACEHOLDER[MULTI_FILTER_TRIGGER_TYPES[t.triggerType]!]}
+                  />
                 )}
                 <Button
                   variant="ghost"

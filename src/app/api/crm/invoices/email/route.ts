@@ -241,7 +241,7 @@ export async function POST(req: NextRequest) {
 
   if (inv.client_id && profile?.org_id) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await fireSimpleTrigger(supabase as any, { orgId: profile.org_id, clientId: inv.client_id, triggerType: "invoice_sent" });
+    await fireSimpleTrigger(supabase as any, { orgId: profile.org_id, clientId: inv.client_id, invoiceId, triggerType: "invoice_sent" });
   }
 
   // Log activity

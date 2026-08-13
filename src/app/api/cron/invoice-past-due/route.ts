@@ -33,10 +33,11 @@ export async function GET(request: Request) {
     .is("deleted_at", null);
 
   let fired = 0;
-  for (const invoice of (overdue ?? []) as { org_id: string; client_id: string }[]) {
+  for (const invoice of (overdue ?? []) as { id: string; org_id: string; client_id: string }[]) {
     await fireSimpleTrigger(supabase, {
       orgId: invoice.org_id,
       clientId: invoice.client_id,
+      invoiceId: invoice.id,
       triggerType: "invoice_past_due",
     });
     fired++;

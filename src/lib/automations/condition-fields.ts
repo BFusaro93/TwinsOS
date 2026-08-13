@@ -1,4 +1,5 @@
 import type { ConditionField, ConditionOperator } from "@/types/crm-automations";
+import { PAYMENT_METHOD_OPTIONS } from "@/components/crm/ClientDetailPanel";
 
 /**
  * Shared condition-field catalog used everywhere a sequence lets the user
@@ -86,7 +87,6 @@ export const CONDITION_GROUPS: { label: string; items: { value: ConditionField; 
   {
     label: "Ticket",
     items: [
-      { value: "calendar_event_category", label: "Calendar event category" },
       { value: "ticket_category", label: "Ticket category" },
       { value: "ticket_past_due_days", label: "Ticket past due (days)" },
     ],
@@ -113,4 +113,59 @@ export const CONDITION_OPERATORS: { value: ConditionOperator; label: string }[] 
 export const TAG_CONDITION_FIELDS = new Set<ConditionField>(["has_tag", "does_not_have_tag"]);
 
 /** Fields whose value is a service name — rendered as a Select of active crm_services instead of free text. */
-export const SERVICE_CONDITION_FIELDS = new Set<ConditionField>(["scheduled_service", "completed_service"]);
+export const SERVICE_CONDITION_FIELDS = new Set<ConditionField>([
+  "scheduled_service",
+  "completed_service",
+  "estimate_has_service",
+  "invoice_has_service",
+]);
+
+/** Fields whose value is a product — rendered as a multi-select of product_items instead of free text. */
+export const PRODUCT_CONDITION_FIELDS = new Set<ConditionField>(["estimate_has_product", "invoice_has_product"]);
+
+/** Fields whose value is an org-configured ticket category — rendered as a multi-select of crm_list_options("ticket_categories"). */
+export const TICKET_CATEGORY_CONDITION_FIELDS = new Set<ConditionField>(["ticket_category"]);
+
+/** Fields whose value is a form — rendered as a multi-select of crm_forms instead of free text. */
+export const FORM_CONDITION_FIELDS = new Set<ConditionField>(["has_completed_form"]);
+
+/** Fields with a fixed, small value set — rendered as a multi-select of the options below instead of free text or an org list. */
+export const FIXED_MULTI_CONDITION_FIELDS: Partial<Record<ConditionField, { value: string; label: string }[]>> = {
+  account_type: [
+    { value: "residential", label: "Residential" },
+    { value: "commercial", label: "Commercial" },
+  ],
+  payment_method_type: PAYMENT_METHOD_OPTIONS,
+  estimate_status: [
+    { value: "not_required", label: "Not Required" },
+    { value: "pending", label: "Pending" },
+    { value: "approved", label: "Approved" },
+    { value: "rejected", label: "Rejected" },
+  ],
+};
+
+/** Fields whose value is a sales rep — rendered as a multi-select of selectable sales-rep employees instead of free text. */
+export const EMPLOYEE_CONDITION_FIELDS = new Set<ConditionField>(["sales_person", "estimate_sales_rep"]);
+
+/**
+ * Fields that are a plain boolean assertion — no value input needed,
+ * selecting the field is the whole condition (operator is ignored). "On
+ * file" here means the client's configured payment method looks like an ACH
+ * or credit-card option, not a verified Stripe check.
+ */
+export const BOOLEAN_CONDITION_FIELDS = new Set<ConditionField>([
+  "has_ach",
+  "does_not_have_ach",
+  "has_credit_card",
+  "does_not_have_credit_card",
+  "is_opted_in_emails",
+  "client_currently_has_package",
+  "client_does_not_have_package",
+  "client_currently_has_recurring_job",
+  "client_does_not_have_recurring_job",
+  "client_has_ever_had_package",
+  "client_has_not_ever_had_package",
+  "client_has_ever_had_recurring_job",
+  "client_has_not_ever_had_recurring_job",
+  "visit_requires_call_ahead",
+]);

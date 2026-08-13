@@ -116,7 +116,7 @@ export async function POST(request: Request) {
     if (updateErr) throw updateErr;
 
     if (wasNewlyPaid) {
-      await fireSimpleTrigger(supabase, { orgId, clientId, triggerType: "invoice_paid" });
+      await fireSimpleTrigger(supabase, { orgId, clientId, invoiceId, triggerType: "invoice_paid" });
     }
 
     const { error: allocErr } = await supabase
