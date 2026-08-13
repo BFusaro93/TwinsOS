@@ -102,7 +102,10 @@ export function useCreatePhotoJob() {
       if (error) throw error;
       return mapPhotoJob(data);
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["photo-jobs"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["photo-jobs"] });
+      qc.invalidateQueries({ queryKey: ["client-photo-jobs"] });
+    },
   });
 }
 

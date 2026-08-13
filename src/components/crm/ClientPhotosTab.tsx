@@ -1,9 +1,12 @@
 "use client";
 
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useClientPhotoJobs } from "@/lib/hooks/use-client-cmms";
+import { NewPhotoJobDialog } from "@/components/photo-docs/NewPhotoJobDialog";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Camera, MapPin } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Camera, MapPin, Plus } from "lucide-react";
 
 interface Props {
   clientId: string;
@@ -19,6 +22,13 @@ const PHOTO_STATUS_COLOR: Record<string, string> = {
 export function ClientPhotosTab({ clientId, clientName }: Props) {
   const { data: jobs, isLoading } = useClientPhotoJobs(clientId, clientName);
   const router = useRouter();
+  const [newOpen, setNewOpen] = useState(false);
+
+  const newJobButton = (
+    <Button size="sm" onClick={() => setNewOpen(true)}>
+      <Plus className="mr-1.5 h-4 w-4" /> New Photo Job
+    </Button>
+  );
 
   if (isLoading) {
     return (
@@ -32,17 +42,23 @@ export function ClientPhotosTab({ clientId, clientName }: Props) {
 
   if (!jobs?.length) {
     return (
-      <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed bg-white py-12 text-center">
-        <Camera className="h-8 w-8 text-slate-300" />
-        <p className="text-sm font-medium text-slate-600">No photo jobs yet</p>
-        <p className="text-xs text-slate-400">
-          Photo jobs matching this client&apos;s name will appear here.
-        </p>
-      </div>
+      <>
+        <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed bg-white py-12 text-center">
+          <Camera className="h-8 w-8 text-slate-300" />
+          <p className="text-sm font-medium text-slate-600">No photo jobs yet</p>
+          <p className="text-xs text-slate-400">
+            Photo jobs matching this client&apos;s name will appear here.
+          </p>
+          <div className="mt-2">{newJobButton}</div>
+        </div>
+        <NewPhotoJobDialog open={newOpen} onOpenChange={setNewOpen} defaultClientId={clientId} />
+      </>
     );
   }
 
   return (
+    <>
+    <div className="flex justify-end">{newJobButton}</div>
     <div className="overflow-hidden rounded-lg border bg-white shadow-sm divide-y">
       {jobs.map((job) => {
         const address = [job.address, job.city, job.state].filter(Boolean).join(", ");
@@ -82,5 +98,7 @@ export function ClientPhotosTab({ clientId, clientName }: Props) {
         {jobs.length} photo job{jobs.length !== 1 ? "s" : ""}
       </div>
     </div>
+    <NewPhotoJobDialog open={newOpen} onOpenChange={setNewOpen} defaultClientId={clientId} />
+    </>
   );
 }

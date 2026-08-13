@@ -7,9 +7,6 @@ Blocked until you branch into a true dev/prod scenario (currently using Job Phot
 - [ ] Decide whether to add a manual "Link to Client" picker on Damage Cases (currently 100% automatic exact-match via [use-damage-cases.ts:94-111](src/lib/hooks/use-damage-cases.ts:94), no manual override UI)
 - [ ] Consider adding a `job_photo_created` (or similar) automation trigger type once Job Photos client-linking is real — no such trigger exists yet in [crm-automations.ts](src/types/crm-automations.ts)
 
-## Open bug
-- [ ] No "Add new Job Photo" option from a Client's detail panel Photos tab (Projects tab fixed — now has a "New Project" button pre-scoped to the client)
-
 ## Deferred — automation condition fields with no backing data model
 - [ ] `custom_field` condition — schemaless by design (any org-defined custom field on a client). Needs its own field-picker (which custom field?) + per-type value input (text/number/date/boolean), plus wiring in [condition-fields.ts](src/lib/automations/condition-fields.ts) and the evaluator in [sequence-enrollment.ts](src/lib/automations/sequence-enrollment.ts). Currently silently never matches.
 - [ ] `opt_in_texts` condition — there's no SMS/text opt-in column anywhere in the schema (checked `clients` table columns exhaustively). Needs the actual texting-opt-in feature built first; the condition field is purely decorative until then. Currently silently never matches.
