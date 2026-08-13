@@ -968,6 +968,7 @@ export function useCreateClientJob() {
           created_by: user?.id ?? null,
           client_id: values.clientId,
           job_type: values.jobType,
+          project_id: values.projectId || null,
           // Never insert as already-completed, even when the "already done"
           // checkbox is checked — completion has to go through the real
           // /complete route below (auto-invoice, activity-timeline log) or

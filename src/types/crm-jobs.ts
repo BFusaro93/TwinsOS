@@ -192,6 +192,7 @@ export interface NewJobFormValues {
 export interface NewClientJobFormValues {
   clientId: string;
   jobType: JobType;
+  projectId: string | null;
   contractId: string | null;
   crewId: string | null;
   schedule: string | null;

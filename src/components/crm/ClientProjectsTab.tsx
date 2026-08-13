@@ -3,11 +3,13 @@
 import { useState } from "react";
 import { useClientProjects } from "@/lib/hooks/use-client-cmms";
 import { ProjectDetailSheet } from "@/components/po/ProjectDetailSheet";
+import { NewProjectDialog } from "@/components/po/NewProjectDialog";
 import { StatusBadge } from "@/components/shared/StatusBadge";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PROJECT_STATUS_LABELS } from "@/lib/constants";
 import { formatCurrency, formatDate } from "@/lib/utils";
-import { FolderKanban } from "lucide-react";
+import { FolderKanban, Plus } from "lucide-react";
 import type { Project } from "@/types";
 
 interface Props {
@@ -18,6 +20,13 @@ interface Props {
 export function ClientProjectsTab({ clientId, clientName }: Props) {
   const { data: projects, isLoading } = useClientProjects(clientId, clientName);
   const [openProject, setOpenProject] = useState<Project | null>(null);
+  const [newOpen, setNewOpen] = useState(false);
+
+  const newProjectButton = (
+    <Button size="sm" onClick={() => setNewOpen(true)}>
+      <Plus className="mr-1.5 h-4 w-4" /> New Project
+    </Button>
+  );
 
   if (isLoading) {
     return (
@@ -31,18 +40,23 @@ export function ClientProjectsTab({ clientId, clientName }: Props) {
 
   if (!projects?.length) {
     return (
-      <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed bg-white py-12 text-center">
-        <FolderKanban className="h-8 w-8 text-slate-300" />
-        <p className="text-sm font-medium text-slate-600">No projects yet</p>
-        <p className="text-xs text-slate-400">
-          Projects matching this client&apos;s name will appear here.
-        </p>
-      </div>
+      <>
+        <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed bg-white py-12 text-center">
+          <FolderKanban className="h-8 w-8 text-slate-300" />
+          <p className="text-sm font-medium text-slate-600">No projects yet</p>
+          <p className="text-xs text-slate-400">
+            Projects matching this client&apos;s name will appear here.
+          </p>
+          <div className="mt-2">{newProjectButton}</div>
+        </div>
+        <NewProjectDialog open={newOpen} onOpenChange={setNewOpen} defaultClientId={clientId} />
+      </>
     );
   }
 
   return (
     <>
+      <div className="flex justify-end">{newProjectButton}</div>
       <div className="overflow-hidden rounded-lg border bg-white shadow-sm">
         <table className="w-full text-sm">
           <thead>
@@ -89,6 +103,7 @@ export function ClientProjectsTab({ clientId, clientName }: Props) {
         open={!!openProject}
         onOpenChange={(open) => { if (!open) setOpenProject(null); }}
       />
+      <NewProjectDialog open={newOpen} onOpenChange={setNewOpen} defaultClientId={clientId} />
     </>
   );
 }

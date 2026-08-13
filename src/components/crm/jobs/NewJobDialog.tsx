@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/select";
 import { useCreateClientJob, useCRMServices, useCRMSchedules, useCRMCrews } from "@/lib/hooks/use-crm-jobs";
 import { useClients } from "@/lib/hooks/use-clients";
+import { useClientProjects } from "@/lib/hooks/use-client-cmms";
 import { useContracts } from "@/lib/hooks/use-contracts";
 import { useSelectableEmployees } from "@/lib/hooks/use-employees";
 import { useOrgSettings } from "@/lib/hooks/use-org-settings";
@@ -29,6 +30,7 @@ import { usePackages } from "@/lib/hooks/use-packages";
 import { computePackageVisitSchedule } from "@/lib/package-schedule";
 import { computeJobServiceBudgetedHours } from "@/lib/estimate-calc";
 import { formatCurrency } from "@/lib/utils";
+import { NewProjectDialog } from "@/components/po/NewProjectDialog";
 import { Plus, X } from "lucide-react";
 import { toast } from "sonner";
 import type { JobType, BudgetMethod } from "@/types/crm-jobs";
@@ -104,6 +106,8 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
   const [packageId, setPackageId] = useState("");
   const [isComplete, setIsComplete] = useState(false);
   const [services, setServices] = useState<ServiceRow[]>([blankServiceRow(todayStr())]);
+  const [projectId, setProjectId] = useState<string | null>(null);
+  const [newProjectOpen, setNewProjectOpen] = useState(false);
 
   // Snow-specific billing fields
   const [invoiceType, setInvoiceType] = useState<string | null>(null);
@@ -125,6 +129,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
       setPackageId("");
       setIsComplete(false);
       setServices([blankServiceRow(today)]);
+      setProjectId(null);
       setInvoiceType(null);
       setInchTrigger(null);
       setRatePerInchCents(null);
@@ -221,6 +226,8 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
   }
 
   const effectiveClientId = defaultClientId ?? selectedClientId;
+  const effectiveClientName = (clients ?? []).find((c) => c.id === effectiveClientId)?.displayName ?? "";
+  const { data: clientProjects } = useClientProjects(effectiveClientId, effectiveClientName);
   const brandColor = orgSettings?.brandColor ?? "#1e1e1e";
 
   // ── job costing calculations ──
@@ -245,6 +252,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
       const result = await createJob.mutateAsync({
         clientId: effectiveClientId,
         jobType,
+        projectId: jobType === "project" ? projectId : null,
         contractId: contractId ?? null,
         crewId: crewId ?? null,
         schedule: schedule || null,
@@ -310,6 +318,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
   const showServiceDate = jobType !== "recurring" && jobType !== "one_time";
 
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
@@ -457,6 +466,25 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
                     <div className="flex items-center gap-4 text-sm mt-1">
                       <label className="flex items-center gap-1.5 cursor-pointer"><input type="radio" name="complete" checked={isComplete} onChange={() => setIsComplete(true)} /> Yes</label>
                       <label className="flex items-center gap-1.5 cursor-pointer"><input type="radio" name="complete" checked={!isComplete} onChange={() => setIsComplete(false)} /> No</label>
+                    </div>
+                  </div>
+                )}
+                {jobType === "project" && (
+                  <div className="flex flex-col gap-1.5">
+                    <Label>Project</Label>
+                    <div className="flex gap-2">
+                      <Select value={projectId ?? "none"} onValueChange={(v) => setProjectId(v === "none" ? null : v)}>
+                        <SelectTrigger><SelectValue placeholder="Link a project…" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">No project linked</SelectItem>
+                          {(clientProjects ?? []).map((p) => (
+                            <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Button type="button" variant="outline" size="sm" disabled={!effectiveClientId} onClick={() => setNewProjectOpen(true)}>
+                        <Plus className="h-3.5 w-3.5" />
+                      </Button>
                     </div>
                   </div>
                 )}
@@ -656,5 +684,14 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
         </DialogFooter>
       </DialogContent>
     </Dialog>
+    {jobType === "project" && effectiveClientId && (
+      <NewProjectDialog
+        open={newProjectOpen}
+        onOpenChange={setNewProjectOpen}
+        defaultClientId={effectiveClientId}
+        onCreated={(project) => setProjectId(project.id)}
+      />
+    )}
+    </>
   );
 }

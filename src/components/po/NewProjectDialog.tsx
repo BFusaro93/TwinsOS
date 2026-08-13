@@ -30,9 +30,13 @@ interface NewProjectDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   initialData?: Project | null;
+  /** Pre-selects and locks the client link — used when creating a project scoped to a known client (e.g. from a client's detail page or a project-type Job). */
+  defaultClientId?: string;
+  /** Called with the created project after a successful create (not fired on edit). */
+  onCreated?: (project: Project) => void;
 }
 
-export function NewProjectDialog({ open, onOpenChange, initialData }: NewProjectDialogProps) {
+export function NewProjectDialog({ open, onOpenChange, initialData, defaultClientId, onCreated }: NewProjectDialogProps) {
   const isEditing = !!initialData;
   const [name, setName] = useState("");
   const [customerName, setCustomerName] = useState("");
@@ -69,8 +73,16 @@ export function NewProjectDialog({ open, onOpenChange, initialData }: NewProject
       setBudgetHours(initialData.budgetHours != null ? String(initialData.budgetHours) : "");
       setNotes(initialData.notes ?? "");
       setClientId(initialData.clientId ?? "");
+    } else if (open && !initialData && defaultClientId) {
+      const client = clients.find((c) => c.id === defaultClientId);
+      setClientId(defaultClientId);
+      setCustomerName(client?.displayName ?? "");
+      setAddress(client?.billingAddress ?? "");
+      setCity(client?.billingCity ?? "");
+      setState(client?.billingState ?? "");
+      setZip(client?.billingZip ?? "");
     }
-  }, [open, initialData]);
+  }, [open, initialData, defaultClientId, clients]);
 
   const isValid = name.trim() !== "" && customerName.trim() !== "";
 
@@ -119,7 +131,7 @@ export function NewProjectDialog({ open, onOpenChange, initialData }: NewProject
         ...payload,
         laborRateCents: breakevenLaborRateCents,
         burdenedRateCents: burdenedLaborRateCents,
-      }, { onSuccess: () => handleClose() });
+      }, { onSuccess: (project) => { onCreated?.(project); handleClose(); } });
     }
   }
   const saving = createProject.isPending || updateProject.isPending;
@@ -162,17 +174,20 @@ export function NewProjectDialog({ open, onOpenChange, initialData }: NewProject
               />
             </div>
 
-            {/* Link to CRM Client — optional, full width */}
-            <div className="sm:col-span-2 grid gap-1.5">
-              <Label htmlFor="project-client-link">Link to Client (optional)</Label>
-              <ClientCombobox
-                id="project-client-link"
-                clients={clients}
-                value={clientId}
-                onValueChange={setClientId}
-                noneLabel="No client linked — matched by name only"
-              />
-            </div>
+            {/* Link to CRM Client — optional, full width. Hidden when opened from a
+                known client's context (defaultClientId) since the link is already set. */}
+            {!defaultClientId && (
+              <div className="sm:col-span-2 grid gap-1.5">
+                <Label htmlFor="project-client-link">Link to Client (optional)</Label>
+                <ClientCombobox
+                  id="project-client-link"
+                  clients={clients}
+                  value={clientId}
+                  onValueChange={setClientId}
+                  noneLabel="No client linked — matched by name only"
+                />
+              </div>
+            )}
 
             {/* Address — split into street / city / state / zip */}
             <div className="sm:col-span-2 grid gap-1.5">
