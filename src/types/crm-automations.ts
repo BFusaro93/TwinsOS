@@ -80,8 +80,6 @@ export type ConditionField =
   | 'payment_method_type'
   | 'sales_person'
   | 'service_zip_code'
-  // Date
-  | 'date_of_year_between'
   // Estimate
   | 'estimate_has_product'
   | 'estimate_has_service'

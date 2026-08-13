@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { ScrollArea } from "@/components/ui/scroll-area";
 
 export interface MultiSelectOption {
   value: string;
@@ -82,22 +81,24 @@ export function MultiSelectDropdown({ options, selected, onChange, placeholder =
               Uncheck all
             </button>
           </div>
-          <ScrollArea className="h-48">
-            <div className="flex flex-col gap-1 pr-2">
-              {filtered.length === 0 && (
-                <p className="py-2 text-center text-xs text-slate-400 italic">No matches</p>
-              )}
-              {filtered.map((o) => (
-                <label
-                  key={o.value}
-                  className="flex cursor-pointer items-center gap-2 rounded px-1.5 py-1 text-sm hover:bg-slate-100"
-                >
-                  <Checkbox checked={selected.includes(o.value)} onCheckedChange={() => toggle(o.value)} />
-                  <span className="truncate">{o.label}</span>
-                </label>
-              ))}
-            </div>
-          </ScrollArea>
+          {/* Plain overflow-y-auto instead of Radix ScrollArea — ScrollArea's
+              viewport didn't reliably pick up wheel/trackpad scroll inside a
+              Popover, leaving only the drag-the-thumb scrollbar as a way to
+              scroll. */}
+          <div className="flex h-48 flex-col gap-1 overflow-y-auto pr-2">
+            {filtered.length === 0 && (
+              <p className="py-2 text-center text-xs text-slate-400 italic">No matches</p>
+            )}
+            {filtered.map((o) => (
+              <label
+                key={o.value}
+                className="flex cursor-pointer items-center gap-2 rounded px-1.5 py-1 text-sm hover:bg-slate-100"
+              >
+                <Checkbox checked={selected.includes(o.value)} onCheckedChange={() => toggle(o.value)} />
+                <span className="truncate">{o.label}</span>
+              </label>
+            ))}
+          </div>
         </div>
       </PopoverContent>
     </Popover>

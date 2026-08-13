@@ -167,13 +167,9 @@ interface ConditionRow {
 // conditions on those fields are evaluated as "not met" rather than
 // throwing, so an unsupported condition just never matches.
 const CLIENT_FIELD_GETTERS: Partial<Record<ConditionField, (client: Record<string, unknown>) => unknown>> = {
-  client_lead_status: (c) => c.status,
-  client_source: (c) => c.source,
   account_type: (c) => c.account_type,
-  billing_term: (c) => c.billing_terms,
   map_code: (c) => c.map_code,
   account_balance: (c) => (typeof c.balance_outstanding_cents === "number" ? c.balance_outstanding_cents / 100 : null),
-  cancellation_reason: (c) => c.cancellation_reason,
   service_zip_code: (c) => c.service_zip,
   client_since_date: (c) => c.client_since,
 };
@@ -189,6 +185,10 @@ const SPECIAL_CLIENT_CONDITION_FIELDS = new Set<ConditionField>([
   "has_credit_card",
   "does_not_have_credit_card",
   "is_opted_in_emails",
+  "client_lead_status",
+  "client_source",
+  "billing_term",
+  "cancellation_reason",
 ]);
 
 // Fields resolved from a client's crm_jobs/crm_job_visits history rather
@@ -207,12 +207,11 @@ const JOB_FACT_CONDITION_FIELDS = new Set<ConditionField>([
 ]);
 
 const ESTIMATE_FIELD_GETTERS: Partial<Record<ConditionField, (estimate: Record<string, unknown>) => unknown>> = {
-  estimate_stage: (e) => e.stage,
   estimate_total: (e) => (typeof e.total_cents === "number" ? e.total_cents / 100 : null),
 };
 
 // Multi-select "any of" fields needing the same `estimates` row fetched.
-const SPECIAL_ESTIMATE_CONDITION_FIELDS = new Set<ConditionField>(["estimate_sales_rep", "estimate_status"]);
+const SPECIAL_ESTIMATE_CONDITION_FIELDS = new Set<ConditionField>(["estimate_sales_rep", "estimate_status", "estimate_stage"]);
 
 const TICKET_FIELD_GETTERS: Partial<Record<ConditionField, (ticket: Record<string, unknown>) => unknown>> = {
   ticket_past_due_days: (t) => (t.due_date ? (Date.now() - new Date(String(t.due_date)).getTime()) / 86400000 : null),
@@ -238,10 +237,10 @@ const CURRENT_JOB_STATUSES = new Set(["scheduled", "in_progress", "hold"]);
 async function getClientJobFacts(supabase: AnyClient, clientId: string) {
   const { data: jobs } = await supabase
     .from("crm_jobs")
-    .select("job_type, status, call_ahead")
+    .select("job_type, status, call_ahead, package_id")
     .eq("client_id", clientId)
     .is("deleted_at", null);
-  const rows = (jobs ?? []) as { job_type: string; status: string; call_ahead: boolean | null }[];
+  const rows = (jobs ?? []) as { job_type: string; status: string; call_ahead: boolean | null; package_id: string | null }[];
 
   const { data: lastVisit } = await supabase
     .from("crm_job_visits")
@@ -253,10 +252,13 @@ async function getClientJobFacts(supabase: AnyClient, clientId: string) {
     .limit(1)
     .maybeSingle();
 
+  const packageRows = rows.filter((j) => j.job_type === "package" && j.package_id);
   return {
-    currentPackage: rows.some((j) => j.job_type === "package" && CURRENT_JOB_STATUSES.has(j.status)),
+    // "which specific package(s)" — client_currently/ever_had_package pick
+    // from the org's crm_packages catalog rather than asserting "any package".
+    currentPackageIds: new Set(packageRows.filter((j) => CURRENT_JOB_STATUSES.has(j.status)).map((j) => j.package_id!.toLowerCase())),
+    everPackageIds: new Set(packageRows.map((j) => j.package_id!.toLowerCase())),
     currentRecurring: rows.some((j) => j.job_type === "recurring" && CURRENT_JOB_STATUSES.has(j.status)),
-    everPackage: rows.some((j) => j.job_type === "package"),
     everRecurring: rows.some((j) => j.job_type === "recurring"),
     requiresCallAhead: rows.some((j) => CURRENT_JOB_STATUSES.has(j.status) && j.call_ahead === true),
     lastVisitDate: (lastVisit as { scheduled_date: string } | null)?.scheduled_date ?? null,
@@ -450,6 +452,26 @@ export async function evaluateConditionSet(
       return vs.length > 0 && !!salesRepId && vs.includes(salesRepId);
     }
     if (c.field === "is_opted_in_emails") return client?.ok_to_email === true;
+    if (c.field === "client_lead_status") {
+      const vs = csvValues(c.value);
+      const status = client?.status ? String(client.status).toLowerCase() : null;
+      return vs.length > 0 && !!status && vs.includes(status);
+    }
+    if (c.field === "client_source") {
+      const vs = csvValues(c.value);
+      const source = client?.source ? String(client.source).toLowerCase() : null;
+      return vs.length > 0 && !!source && vs.includes(source);
+    }
+    if (c.field === "billing_term") {
+      const vs = csvValues(c.value);
+      const term = client?.billing_terms ? String(client.billing_terms).toLowerCase() : null;
+      return vs.length > 0 && !!term && vs.includes(term);
+    }
+    if (c.field === "cancellation_reason") {
+      const vs = csvValues(c.value);
+      const reason = client?.cancellation_reason ? String(client.cancellation_reason).toLowerCase() : null;
+      return vs.length > 0 && !!reason && vs.includes(reason);
+    }
     if (c.field === "has_ach" || c.field === "does_not_have_ach" || c.field === "has_credit_card" || c.field === "does_not_have_credit_card") {
       // clients.payment_method is free text from PAYMENT_METHOD_OPTIONS (see
       // ClientDetailPanel.tsx) — there's no real "on file" verification (e.g.
@@ -463,12 +485,24 @@ export async function evaluateConditionSet(
       return !isCreditCard; // does_not_have_credit_card
     }
 
-    if (c.field === "client_currently_has_package") return !!jobFacts?.currentPackage;
-    if (c.field === "client_does_not_have_package") return !jobFacts?.currentPackage;
+    if (c.field === "client_currently_has_package") {
+      const vs = csvValues(c.value);
+      return vs.length > 0 && !!jobFacts && vs.some((v) => jobFacts.currentPackageIds.has(v));
+    }
+    if (c.field === "client_does_not_have_package") {
+      const vs = csvValues(c.value);
+      return vs.length > 0 && !!jobFacts && vs.every((v) => !jobFacts.currentPackageIds.has(v));
+    }
+    if (c.field === "client_has_ever_had_package") {
+      const vs = csvValues(c.value);
+      return vs.length > 0 && !!jobFacts && vs.some((v) => jobFacts.everPackageIds.has(v));
+    }
+    if (c.field === "client_has_not_ever_had_package") {
+      const vs = csvValues(c.value);
+      return vs.length > 0 && !!jobFacts && vs.every((v) => !jobFacts.everPackageIds.has(v));
+    }
     if (c.field === "client_currently_has_recurring_job") return !!jobFacts?.currentRecurring;
     if (c.field === "client_does_not_have_recurring_job") return !jobFacts?.currentRecurring;
-    if (c.field === "client_has_ever_had_package") return !!jobFacts?.everPackage;
-    if (c.field === "client_has_not_ever_had_package") return !jobFacts?.everPackage;
     if (c.field === "client_has_ever_had_recurring_job") return !!jobFacts?.everRecurring;
     if (c.field === "client_has_not_ever_had_recurring_job") return !jobFacts?.everRecurring;
     if (c.field === "visit_requires_call_ahead") return !!jobFacts?.requiresCallAhead;
@@ -488,6 +522,11 @@ export async function evaluateConditionSet(
       const vs = csvValues(c.value);
       const status = estimate?.approval_status ? String(estimate.approval_status).toLowerCase() : null;
       return vs.length > 0 && !!status && vs.includes(status);
+    }
+    if (c.field === "estimate_stage") {
+      const vs = csvValues(c.value);
+      const stage = estimate?.stage ? String(estimate.stage).toLowerCase() : null;
+      return vs.length > 0 && !!stage && vs.includes(stage);
     }
     if (c.field === "estimate_has_service") { const vs = csvValues(c.value); return vs.length > 0 && vs.some((v) => estimateServiceNames.has(v)); }
     if (c.field === "estimate_has_product") { const vs = csvValues(c.value); return vs.length > 0 && vs.some((v) => estimateProductIds.has(v)); }

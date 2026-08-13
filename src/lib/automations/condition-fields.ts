@@ -1,5 +1,6 @@
 import type { ConditionField, ConditionOperator } from "@/types/crm-automations";
 import { PAYMENT_METHOD_OPTIONS } from "@/components/crm/ClientDetailPanel";
+import { BILLING_TERMS_OPTIONS } from "@/lib/constants";
 
 /**
  * Shared condition-field catalog used everywhere a sequence lets the user
@@ -31,10 +32,6 @@ export const CONDITION_GROUPS: { label: string; items: { value: ConditionField; 
       { value: "sales_person", label: "Sales person" },
       { value: "service_zip_code", label: "Service zip code" },
     ],
-  },
-  {
-    label: "Date",
-    items: [{ value: "date_of_year_between", label: "Date of year between" }],
   },
   {
     label: "Estimate",
@@ -129,6 +126,23 @@ export const TICKET_CATEGORY_CONDITION_FIELDS = new Set<ConditionField>(["ticket
 /** Fields whose value is a form — rendered as a multi-select of crm_forms instead of free text. */
 export const FORM_CONDITION_FIELDS = new Set<ConditionField>(["has_completed_form"]);
 
+/** Fields whose value is a specific package — rendered as a multi-select of crm_packages instead of a boolean "has any package" assertion. */
+export const PACKAGE_CONDITION_FIELDS = new Set<ConditionField>([
+  "client_currently_has_package",
+  "client_does_not_have_package",
+  "client_has_ever_had_package",
+  "client_has_not_ever_had_package",
+]);
+
+/** Fields whose value is an org-configured client source — rendered as a multi-select of crm_list_options("client_sources"). */
+export const CLIENT_SOURCE_CONDITION_FIELDS = new Set<ConditionField>(["client_source"]);
+
+/** Fields whose value is an org-configured cancellation reason — rendered as a multi-select of crm_list_options("cancellation_reasons"). */
+export const CANCELLATION_REASON_CONDITION_FIELDS = new Set<ConditionField>(["cancellation_reason"]);
+
+/** Fields whose value is an org-configured estimate stage — rendered as a multi-select of crm_estimate_stages. */
+export const ESTIMATE_STAGE_CONDITION_FIELDS = new Set<ConditionField>(["estimate_stage"]);
+
 /** Fields with a fixed, small value set — rendered as a multi-select of the options below instead of free text or an org list. */
 export const FIXED_MULTI_CONDITION_FIELDS: Partial<Record<ConditionField, { value: string; label: string }[]>> = {
   account_type: [
@@ -141,6 +155,14 @@ export const FIXED_MULTI_CONDITION_FIELDS: Partial<Record<ConditionField, { valu
     { value: "pending", label: "Pending" },
     { value: "approved", label: "Approved" },
     { value: "rejected", label: "Rejected" },
+  ],
+  billing_term: BILLING_TERMS_OPTIONS,
+  client_lead_status: [
+    { value: "lead", label: "Lead" },
+    { value: "active", label: "Active" },
+    { value: "inactive", label: "Inactive" },
+    { value: "cancelled", label: "Cancelled" },
+    { value: "lost", label: "Lost" },
   ],
 };
 
@@ -159,12 +181,8 @@ export const BOOLEAN_CONDITION_FIELDS = new Set<ConditionField>([
   "has_credit_card",
   "does_not_have_credit_card",
   "is_opted_in_emails",
-  "client_currently_has_package",
-  "client_does_not_have_package",
   "client_currently_has_recurring_job",
   "client_does_not_have_recurring_job",
-  "client_has_ever_had_package",
-  "client_has_not_ever_had_package",
   "client_has_ever_had_recurring_job",
   "client_has_not_ever_had_recurring_job",
   "visit_requires_call_ahead",

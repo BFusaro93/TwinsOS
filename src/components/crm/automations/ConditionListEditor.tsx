@@ -20,6 +20,8 @@ import { useSelectableEmployees } from "@/lib/hooks/use-employees";
 import { useProducts } from "@/lib/hooks/use-products";
 import { useOrgList } from "@/lib/hooks/use-org-lists";
 import { useForms } from "@/lib/hooks/use-crm-forms";
+import { usePackages } from "@/lib/hooks/use-packages";
+import { useEstimateStages } from "@/lib/hooks/use-estimate-stages";
 import {
   CONDITION_GROUPS,
   CONDITION_OPERATORS,
@@ -28,11 +30,16 @@ import {
   PRODUCT_CONDITION_FIELDS,
   TICKET_CATEGORY_CONDITION_FIELDS,
   FORM_CONDITION_FIELDS,
+  PACKAGE_CONDITION_FIELDS,
+  CLIENT_SOURCE_CONDITION_FIELDS,
+  CANCELLATION_REASON_CONDITION_FIELDS,
+  ESTIMATE_STAGE_CONDITION_FIELDS,
   FIXED_MULTI_CONDITION_FIELDS,
   EMPLOYEE_CONDITION_FIELDS,
   BOOLEAN_CONDITION_FIELDS,
 } from "@/lib/automations/condition-fields";
 import type { ConditionField, ConditionOperator } from "@/types/crm-automations";
+import type { MultiSelectOption } from "@/components/shared/MultiSelectDropdown";
 
 export interface ConditionRow {
   field: ConditionField;
@@ -71,6 +78,26 @@ export function ConditionListEditor({
   const { data: products } = useProducts();
   const { data: ticketCategories } = useOrgList("ticket_categories");
   const { data: forms } = useForms();
+  const { data: packages } = usePackages();
+  const { data: clientSources } = useOrgList("client_sources");
+  const { data: cancellationReasons } = useOrgList("cancellation_reasons");
+  const { data: estimateStages } = useEstimateStages();
+
+  /** Resolves the multi-select options + placeholder for a field, or null if it should render as a plain text Input. */
+  function multiSelectConfigFor(field: ConditionField): { options: MultiSelectOption[]; placeholder: string } | null {
+    if (TAG_CONDITION_FIELDS.has(field)) return { options: orgTags.map((t) => ({ value: t, label: t })), placeholder: "Select tag(s)" };
+    if (SERVICE_CONDITION_FIELDS.has(field)) return { options: (services ?? []).map((s) => ({ value: s.name, label: s.name })), placeholder: "Select service(s)" };
+    if (FIXED_MULTI_CONDITION_FIELDS[field]) return { options: FIXED_MULTI_CONDITION_FIELDS[field]!, placeholder: "Select value(s)" };
+    if (EMPLOYEE_CONDITION_FIELDS.has(field)) return { options: salesReps.map((e) => ({ value: e.userId as string, label: `${e.firstName} ${e.lastName}` })), placeholder: "Select rep(s)" };
+    if (PRODUCT_CONDITION_FIELDS.has(field)) return { options: (products ?? []).map((p) => ({ value: p.id, label: p.name })), placeholder: "Select product(s)" };
+    if (TICKET_CATEGORY_CONDITION_FIELDS.has(field)) return { options: (ticketCategories ?? []).map((o) => ({ value: o.value, label: o.value })), placeholder: "Select categor(ies)" };
+    if (FORM_CONDITION_FIELDS.has(field)) return { options: (forms ?? []).map((f) => ({ value: f.id, label: f.name })), placeholder: "Select form(s)" };
+    if (PACKAGE_CONDITION_FIELDS.has(field)) return { options: (packages ?? []).map((p) => ({ value: p.id, label: p.name })), placeholder: "Select package(s)" };
+    if (CLIENT_SOURCE_CONDITION_FIELDS.has(field)) return { options: (clientSources ?? []).map((o) => ({ value: o.value, label: o.value })), placeholder: "Select source(s)" };
+    if (CANCELLATION_REASON_CONDITION_FIELDS.has(field)) return { options: (cancellationReasons ?? []).map((o) => ({ value: o.value, label: o.value })), placeholder: "Select reason(s)" };
+    if (ESTIMATE_STAGE_CONDITION_FIELDS.has(field)) return { options: (estimateStages ?? []).map((s) => ({ value: s.stageKey, label: s.name })), placeholder: "Select stage(s)" };
+    return null;
+  }
 
   function addCondition() {
     onChange([...conditions, { field: defaultField, operator: "equals", value: "" }]);
@@ -141,70 +168,25 @@ export function ConditionListEditor({
           {BOOLEAN_CONDITION_FIELDS.has(c.field) ? (
             <p className="flex-1 min-w-0 self-center text-xs text-slate-400 italic">No value needed — selecting this field is the whole condition.</p>
           ) : c.operator !== "is_set" && c.operator !== "is_not_set" && (
-            TAG_CONDITION_FIELDS.has(c.field) ? (
-              <MultiSelectDropdown
-                className="h-9 flex-1 min-w-0 justify-between text-sm font-normal"
-                options={orgTags.map((t) => ({ value: t, label: t }))}
-                selected={c.value ? c.value.split(",").map((v) => v.trim()).filter(Boolean) : []}
-                onChange={(values) => updateCondition(i, { value: values.join(",") })}
-                placeholder="Select tag(s)"
-              />
-            ) : SERVICE_CONDITION_FIELDS.has(c.field) ? (
-              <MultiSelectDropdown
-                className="h-9 flex-1 min-w-0 justify-between text-sm font-normal"
-                options={(services ?? []).map((s) => ({ value: s.name, label: s.name }))}
-                selected={c.value ? c.value.split(",").map((v) => v.trim()).filter(Boolean) : []}
-                onChange={(values) => updateCondition(i, { value: values.join(",") })}
-                placeholder="Select service(s)"
-              />
-            ) : FIXED_MULTI_CONDITION_FIELDS[c.field] ? (
-              <MultiSelectDropdown
-                className="h-9 flex-1 min-w-0 justify-between text-sm font-normal"
-                options={FIXED_MULTI_CONDITION_FIELDS[c.field]!}
-                selected={c.value ? c.value.split(",").map((v) => v.trim()).filter(Boolean) : []}
-                onChange={(values) => updateCondition(i, { value: values.join(",") })}
-                placeholder="Select value(s)"
-              />
-            ) : EMPLOYEE_CONDITION_FIELDS.has(c.field) ? (
-              <MultiSelectDropdown
-                className="h-9 flex-1 min-w-0 justify-between text-sm font-normal"
-                options={salesReps.map((e) => ({ value: e.userId as string, label: `${e.firstName} ${e.lastName}` }))}
-                selected={c.value ? c.value.split(",").map((v) => v.trim()).filter(Boolean) : []}
-                onChange={(values) => updateCondition(i, { value: values.join(",") })}
-                placeholder="Select rep(s)"
-              />
-            ) : PRODUCT_CONDITION_FIELDS.has(c.field) ? (
-              <MultiSelectDropdown
-                className="h-9 flex-1 min-w-0 justify-between text-sm font-normal"
-                options={(products ?? []).map((p) => ({ value: p.id, label: p.name }))}
-                selected={c.value ? c.value.split(",").map((v) => v.trim()).filter(Boolean) : []}
-                onChange={(values) => updateCondition(i, { value: values.join(",") })}
-                placeholder="Select product(s)"
-              />
-            ) : TICKET_CATEGORY_CONDITION_FIELDS.has(c.field) ? (
-              <MultiSelectDropdown
-                className="h-9 flex-1 min-w-0 justify-between text-sm font-normal"
-                options={(ticketCategories ?? []).map((o) => ({ value: o.value, label: o.value }))}
-                selected={c.value ? c.value.split(",").map((v) => v.trim()).filter(Boolean) : []}
-                onChange={(values) => updateCondition(i, { value: values.join(",") })}
-                placeholder="Select categor(ies)"
-              />
-            ) : FORM_CONDITION_FIELDS.has(c.field) ? (
-              <MultiSelectDropdown
-                className="h-9 flex-1 min-w-0 justify-between text-sm font-normal"
-                options={(forms ?? []).map((f) => ({ value: f.id, label: f.name }))}
-                selected={c.value ? c.value.split(",").map((v) => v.trim()).filter(Boolean) : []}
-                onChange={(values) => updateCondition(i, { value: values.join(",") })}
-                placeholder="Select form(s)"
-              />
-            ) : (
-              <Input
-                placeholder="Value"
-                className="flex-1 min-w-0"
-                value={c.value}
-                onChange={(e) => updateCondition(i, { value: e.target.value })}
-              />
-            )
+            (() => {
+              const cfg = multiSelectConfigFor(c.field);
+              return cfg ? (
+                <MultiSelectDropdown
+                  className="h-9 flex-1 min-w-0 justify-between text-sm font-normal"
+                  options={cfg.options}
+                  selected={c.value ? c.value.split(",").map((v) => v.trim()).filter(Boolean) : []}
+                  onChange={(values) => updateCondition(i, { value: values.join(",") })}
+                  placeholder={cfg.placeholder}
+                />
+              ) : (
+                <Input
+                  placeholder="Value"
+                  className="flex-1 min-w-0"
+                  value={c.value}
+                  onChange={(e) => updateCondition(i, { value: e.target.value })}
+                />
+              );
+            })()
           )}
 
           <Button

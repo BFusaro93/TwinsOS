@@ -10,3 +10,6 @@ Blocked until you branch into a true dev/prod scenario (currently using Job Phot
 ## Deferred — automation condition fields with no backing data model
 - [ ] `custom_field` condition — schemaless by design (any org-defined custom field on a client). Needs its own field-picker (which custom field?) + per-type value input (text/number/date/boolean), plus wiring in [condition-fields.ts](src/lib/automations/condition-fields.ts) and the evaluator in [sequence-enrollment.ts](src/lib/automations/sequence-enrollment.ts). Currently silently never matches.
 - [ ] `opt_in_texts` condition — there's no SMS/text opt-in column anywhere in the schema (checked `clients` table columns exhaustively). Needs the actual texting-opt-in feature built first; the condition field is purely decorative until then. Currently silently never matches.
+
+## Cleanup — dead ConditionField union members
+- [ ] `client_type`, `client_status`, `job_type` (as a condition field), `job_status`, `tag` (as a condition field), `property_city`, `revenue_ytd`, `last_job_date` in [crm-automations.ts](src/types/crm-automations.ts)'s `ConditionField` type are leftover "Legacy" entries — not in the `CONDITION_GROUPS` picklist (unselectable in the UI) and not referenced anywhere in the evaluator. Harmless but dead; safe to delete next time this file is touched.
