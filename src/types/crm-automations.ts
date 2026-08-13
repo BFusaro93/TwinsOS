@@ -6,7 +6,7 @@ export type TriggerType =
   | 'client_source_updated'
   | 'client_created'
   | 'client_reactivated'
-  | 'contract_about_to_expire'
+  | 'client_referred'
   | 'credit_card_charge_failed'
   | 'credit_card_about_to_expire'
   | 'credit_card_updated'
@@ -14,6 +14,12 @@ export type TriggerType =
   | 'lead_cancelled'
   | 'lead_converted_to_client'
   | 'lead_created'
+  // Contract
+  | 'contract_about_to_expire'
+  | 'contract_created'
+  | 'contract_signed'
+  // Damage Case
+  | 'damage_case_created'
   // Estimate
   | 'estimate_created'
   | 'estimate_lost'
@@ -54,7 +60,6 @@ export type TriggerType =
   | 'ticket_reopened'
   // Legacy / keep for compatibility
   | 'client_status_changed'
-  | 'contract_signed'
   | 'date_based'
   | 'manual';
 

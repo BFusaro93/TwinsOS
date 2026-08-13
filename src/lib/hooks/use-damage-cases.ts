@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 import { mapDamageCase, mapDamageCaseExpense } from "@/lib/supabase/mappers";
+import { fireAutomationTrigger } from "@/lib/automations/fire-trigger-client";
 import type { DamageCase, DamageCaseExpense, DamageCaseStatus, DamageCaseType } from "@/types";
 
 export function useDamageCases() {
@@ -89,10 +90,33 @@ export function useCreateDamageCase() {
         .select()
         .single();
       if (error) throw error;
-      return mapDamageCase(data);
+
+      // damage_cases.customer_name is free text (no client_id FK — see
+      // CLAUDE.md's "informal client name strings" gotcha, that migration is
+      // deferred). Resolve it to a real client here, exact-match only
+      // (trimmed/lowercased, same normalization the invoices bulk-import
+      // byName lookup uses), purely to decide whether to fire the automation
+      // trigger — nothing gets persisted back onto the damage_cases row.
+      let matchedClientId: string | null = null;
+      const normalizedName = input.customerName.trim().toLowerCase();
+      if (normalizedName) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: clients } = await (supabase as any)
+          .from("clients")
+          .select("id, display_name")
+          .is("deleted_at", null);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const match = (clients ?? []).find((c: any) => c.display_name.trim().toLowerCase() === normalizedName);
+        matchedClientId = match?.id ?? null;
+      }
+
+      return { ...mapDamageCase(data), matchedClientId };
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ["damage-cases"] });
+      if (result.matchedClientId) {
+        fireAutomationTrigger({ triggerType: "damage_case_created", clientId: result.matchedClientId });
+      }
     },
   });
 }

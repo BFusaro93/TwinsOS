@@ -52,12 +52,24 @@ const TRIGGER_GROUPS: { label: string; items: { value: TriggerType; label: strin
       { value: "lead_created", label: "Lead was created" },
       { value: "lead_cancelled", label: "Lead cancelled" },
       { value: "lead_converted_to_client", label: "Lead was converted to client" },
-      { value: "contract_about_to_expire", label: "Contract is about to expire" },
+      { value: "client_referred", label: "Client referred a new lead/client" },
       { value: "credit_card_charge_failed", label: "Credit card charge failed" },
       { value: "credit_card_about_to_expire", label: "Credit card is about to expire" },
       { value: "credit_card_updated", label: "Credit card was updated" },
       { value: "has_opted_in_emails", label: "Has opted in for emails" },
     ],
+  },
+  {
+    label: "Contract",
+    items: [
+      { value: "contract_created", label: "Contract was created" },
+      { value: "contract_signed", label: "Contract was signed" },
+      { value: "contract_about_to_expire", label: "Contract is about to expire" },
+    ],
+  },
+  {
+    label: "Damage Case",
+    items: [{ value: "damage_case_created", label: "Damage case was created" }],
   },
   {
     label: "Estimate",

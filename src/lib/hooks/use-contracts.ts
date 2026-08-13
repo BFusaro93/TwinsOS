@@ -2,6 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
+import { fireAutomationTrigger } from "@/lib/automations/fire-trigger-client";
 import type {
   CRMContract,
   CRMContractNote,
@@ -160,7 +161,10 @@ export function useCreateContract() {
       if (error) throw error;
       return mapContract(data);
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["crm-contracts"] }),
+    onSuccess: (contract) => {
+      qc.invalidateQueries({ queryKey: ["crm-contracts"] });
+      fireAutomationTrigger({ triggerType: "contract_created", clientId: contract.clientId });
+    },
   });
 }
 
@@ -204,7 +208,7 @@ export function useUpdateContractStatus() {
     }) => {
       const supabase = createClient();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error } = await (supabase as any)
+      const { data, error } = await (supabase as any)
         .from("crm_contracts")
         .update({
           status,
@@ -212,11 +216,17 @@ export function useUpdateContractStatus() {
             ? { signed_at: new Date().toISOString(), signed_by: signedBy ?? null }
             : {}),
         })
-        .eq("id", id);
+        .eq("id", id)
+        .select("client_id")
+        .single();
       if (error) throw error;
+      return { clientId: data?.client_id as string | undefined, status };
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ["crm-contracts"] });
+      if (data.status === "signed" && data.clientId) {
+        fireAutomationTrigger({ triggerType: "contract_signed", clientId: data.clientId });
+      }
     },
   });
 }

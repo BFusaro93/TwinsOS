@@ -493,9 +493,9 @@ export function useUpdateClient() {
 
       // Fetch the "before" values for fields whose automation trigger only
       // fires on an actual change, not on every generic profile-edit save.
-      let before: { source: string | null; ok_to_email: boolean | null } | null = null;
-      if (updates.source !== undefined || updates.okToEmail !== undefined) {
-        const { data } = await supabase.from("clients").select("source, ok_to_email").eq("id", id).single();
+      let before: { source: string | null; ok_to_email: boolean | null; referred_by_client_id: string | null } | null = null;
+      if (updates.source !== undefined || updates.okToEmail !== undefined || updates.referredByClientId !== undefined) {
+        const { data } = await supabase.from("clients").select("source, ok_to_email, referred_by_client_id").eq("id", id).single();
         before = data;
       }
 
@@ -552,7 +552,10 @@ export function useUpdateClient() {
 
       const sourceChanged = updates.source !== undefined && before && updates.source !== before.source;
       const emailsOptedIn = updates.okToEmail === true && before && before.ok_to_email !== true;
-      return { sourceChanged, emailsOptedIn };
+      const newReferrerId = updates.referredByClientId && before && updates.referredByClientId !== before.referred_by_client_id
+        ? updates.referredByClientId
+        : null;
+      return { sourceChanged, emailsOptedIn, newReferrerId };
     },
     onSuccess: (result, { id }) => {
       qc.invalidateQueries({ queryKey: ["clients"] });
@@ -562,6 +565,12 @@ export function useUpdateClient() {
       }
       if (result?.emailsOptedIn) {
         fireAutomationTrigger({ triggerType: "has_opted_in_emails", clientId: id });
+      }
+      if (result?.newReferrerId) {
+        // Fires for the REFERRER's own record, not the client being edited —
+        // a referral automation (e.g. a thank-you/reward sequence) targets
+        // whoever made the referral, not the person they referred.
+        fireAutomationTrigger({ triggerType: "client_referred", clientId: result.newReferrerId });
       }
     },
   });

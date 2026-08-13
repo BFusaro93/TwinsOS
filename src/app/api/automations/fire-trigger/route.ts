@@ -41,6 +41,10 @@ const ALLOWED_TRIGGER_TYPES: ReadonlySet<TriggerType> = new Set([
   "invoice_created",
   "job_cancelled",
   "package_created",
+  "contract_created",
+  "contract_signed",
+  "client_referred",
+  "damage_case_created",
 ]);
 
 export async function POST(req: NextRequest) {
