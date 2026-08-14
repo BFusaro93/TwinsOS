@@ -820,6 +820,69 @@ async function handleRun(request: Request) {
         continue;
       }
 
+      if (currentEvent.event_type === "note") {
+        // Builder-only annotation ("visible only in the builder") — no
+        // client-facing or DB side effect, just advance past it.
+        const action = await advanceEnrollmentPastStep(adminClient, {
+          enrollmentId: enrollId,
+          events: events ?? [],
+          completedPosition: next_event_position,
+          nowIso,
+        });
+        await logSequenceExecution(adminClient, {
+          orgId, enrollmentId: enrollId, sequenceId: sequence_id, clientId: client_id,
+          eventId: currentEvent.id, eventType: "note", action: "note_skipped",
+        });
+        crmFired.push({ enrollmentId: enrollId, action: `note skipped → ${action}` });
+        continue;
+      }
+
+      if (currentEvent.event_type === "tags") {
+        const addTags: string[] = Array.isArray(eventConfig.add_tags) ? eventConfig.add_tags : [];
+        const removeTags: string[] = Array.isArray(eventConfig.remove_tags) ? eventConfig.remove_tags : [];
+
+        if (addTags.length > 0) {
+          const { error: addErr } = await (adminClient as AdminClient)
+            .from("client_tags")
+            .upsert(
+              addTags.map((tag) => ({ org_id: orgId, client_id, tag })),
+              { onConflict: "org_id,client_id,tag", ignoreDuplicates: true }
+            );
+          if (addErr) {
+            crmSkipped.push({ enrollmentId: enrollId, reason: `failed to add tags: ${addErr.message}` });
+            continue;
+          }
+        }
+        if (removeTags.length > 0) {
+          const { error: removeErr } = await (adminClient as AdminClient)
+            .from("client_tags")
+            .delete()
+            .eq("client_id", client_id)
+            .in("tag", removeTags);
+          if (removeErr) {
+            crmSkipped.push({ enrollmentId: enrollId, reason: `failed to remove tags: ${removeErr.message}` });
+            continue;
+          }
+        }
+
+        const action = await advanceEnrollmentPastStep(adminClient, {
+          enrollmentId: enrollId,
+          events: events ?? [],
+          completedPosition: next_event_position,
+          nowIso,
+        });
+        const detail = [
+          addTags.length ? `+${addTags.join(",")}` : null,
+          removeTags.length ? `-${removeTags.join(",")}` : null,
+        ].filter(Boolean).join(" ");
+        await logSequenceExecution(adminClient, {
+          orgId, enrollmentId: enrollId, sequenceId: sequence_id, clientId: client_id,
+          eventId: currentEvent.id, eventType: "tags", action: "tags_updated", detail,
+        });
+        crmFired.push({ enrollmentId: enrollId, action: `tags updated → ${action}` });
+        continue;
+      }
+
       await logSequenceExecution(adminClient, {
         orgId, enrollmentId: enrollId, sequenceId: sequence_id, clientId: client_id,
         eventId: currentEvent.id, eventType: currentEvent.event_type, action: "unsupported_event_type",
