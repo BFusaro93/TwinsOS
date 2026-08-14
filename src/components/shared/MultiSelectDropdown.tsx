@@ -51,6 +51,18 @@ export function MultiSelectDropdown({ options, selected, onChange, placeholder =
 
   const label = selected.length === 0 ? placeholder : `${selected.length} selected`;
 
+  // This popover usually opens on top of a Radix Dialog (Sequence Rules,
+  // If Branch), and Dialog's body-scroll-lock intercepts wheel/touch events
+  // globally for anything outside its own recognized scroll region — the
+  // Popover's portal content isn't one of them, so plain overflow-y-auto
+  // alone doesn't respond to the wheel/trackpad (only dragging the scrollbar
+  // thumb still works, since that's a pointer drag, not a wheel event).
+  // Scrolling manually here bypasses whatever swallowed the native scroll.
+  function handleWheel(e: React.WheelEvent<HTMLDivElement>) {
+    e.currentTarget.scrollTop += e.deltaY;
+    e.stopPropagation();
+  }
+
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
@@ -85,7 +97,7 @@ export function MultiSelectDropdown({ options, selected, onChange, placeholder =
               viewport didn't reliably pick up wheel/trackpad scroll inside a
               Popover, leaving only the drag-the-thumb scrollbar as a way to
               scroll. */}
-          <div className="flex h-48 flex-col gap-1 overflow-y-auto pr-2">
+          <div className="flex h-48 flex-col gap-1 overflow-y-auto pr-2" onWheel={handleWheel}>
             {filtered.length === 0 && (
               <p className="py-2 text-center text-xs text-slate-400 italic">No matches</p>
             )}
