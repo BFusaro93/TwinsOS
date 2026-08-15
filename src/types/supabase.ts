@@ -1387,6 +1387,9 @@ export type Database = {
           service_city: string | null
           service_state: string | null
           service_zip: string | null
+          sms_opt_in: boolean
+          sms_opt_in_at: string | null
+          sms_opt_in_source: string | null
           source: string | null
           status: string
           turf_sqft: number | null
@@ -1451,6 +1454,9 @@ export type Database = {
           service_city?: string | null
           service_state?: string | null
           service_zip?: string | null
+          sms_opt_in?: boolean
+          sms_opt_in_at?: string | null
+          sms_opt_in_source?: string | null
           source?: string | null
           status?: string
           turf_sqft?: number | null
@@ -1515,6 +1521,9 @@ export type Database = {
           service_city?: string | null
           service_state?: string | null
           service_zip?: string | null
+          sms_opt_in?: boolean
+          sms_opt_in_at?: string | null
+          sms_opt_in_source?: string | null
           source?: string | null
           status?: string
           turf_sqft?: number | null
@@ -8888,6 +8897,8 @@ export type Database = {
           stripe_subscription_id: string | null
           stripe_subscription_status: string | null
           tax_rate_percent: number
+          twilio_account_sid: string | null
+          twilio_messaging_service_sid: string | null
           updated_at: string
         }
         Insert: {
@@ -8915,6 +8926,8 @@ export type Database = {
           stripe_subscription_id?: string | null
           stripe_subscription_status?: string | null
           tax_rate_percent?: number
+          twilio_account_sid?: string | null
+          twilio_messaging_service_sid?: string | null
           updated_at?: string
         }
         Update: {
@@ -8942,6 +8955,8 @@ export type Database = {
           stripe_subscription_id?: string | null
           stripe_subscription_status?: string | null
           tax_rate_percent?: number
+          twilio_account_sid?: string | null
+          twilio_messaging_service_sid?: string | null
           updated_at?: string
         }
         Relationships: []

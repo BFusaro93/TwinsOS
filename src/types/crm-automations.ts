@@ -186,6 +186,7 @@ export interface TicketConfig {
 export interface TextConfig {
   message: string;
   to: string[];
+  require_approval: boolean;
 }
 
 export interface NoteConfig {

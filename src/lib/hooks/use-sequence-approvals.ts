@@ -10,10 +10,13 @@ export interface PendingSequenceApproval {
   sequenceName: string;
   clientId: string | null;
   clientName: string | null;
-  toEmail: string;
+  channel: "email" | "sms";
+  toEmail: string | null;
   toName: string | null;
-  subject: string;
-  bodyHtml: string;
+  subject: string | null;
+  bodyHtml: string | null;
+  toPhone: string | null;
+  bodyText: string | null;
   createdAt: string;
 }
 
@@ -27,7 +30,7 @@ export function usePendingSequenceApprovals() {
       const supabase = db();
       const { data, error } = await supabase
         .from("crm_sequence_step_approvals")
-        .select("id, enrollment_id, sequence_id, client_id, to_email, to_name, subject, body_html, created_at, crm_automation_sequences(name), clients(display_name)")
+        .select("id, enrollment_id, sequence_id, client_id, channel, to_email, to_name, subject, body_html, to_phone, body_text, created_at, crm_automation_sequences(name), clients(display_name)")
         .eq("status", "pending")
         .order("created_at", { ascending: true });
       if (error) throw error;
@@ -40,10 +43,13 @@ export function usePendingSequenceApprovals() {
         sequenceName: row.crm_automation_sequences?.name ?? "Sequence",
         clientId: row.client_id,
         clientName: row.clients?.display_name ?? null,
+        channel: row.channel,
         toEmail: row.to_email,
         toName: row.to_name,
         subject: row.subject,
         bodyHtml: row.body_html,
+        toPhone: row.to_phone,
+        bodyText: row.body_text,
         createdAt: row.created_at,
       }));
     },

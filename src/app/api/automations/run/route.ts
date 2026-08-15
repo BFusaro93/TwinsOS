@@ -5,6 +5,7 @@ import { Resend } from "resend";
 import type { Database } from "@/types/supabase";
 import { shouldStopSequence, logSequenceExecution } from "@/lib/automations/sequence-enrollment";
 import { resolveEmailStepContent, sendResolvedSequenceEmail, advanceEnrollmentPastStep } from "@/lib/automations/sequence-email";
+import { resolveSmsStepContent, sendResolvedSequenceSms } from "@/lib/automations/sequence-sms";
 import { notifyStaffOfNewTicket, notifyTicketAssigned } from "@/lib/ticket-notify";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -673,6 +674,83 @@ async function handleRun(request: Request) {
           detail: `${built.subject} → ${built.toEmail}`,
         });
         crmFired.push({ enrollmentId: enrollId, action: `email sent → ${action}` });
+        continue;
+      }
+
+      if (currentEvent.event_type === "text_message") {
+        const built = await resolveSmsStepContent(adminClient, {
+          orgId,
+          clientId: client_id,
+          bodyTemplate: eventConfig.message ?? "",
+        });
+        if ("error" in built) {
+          await logSequenceExecution(adminClient, {
+            orgId, enrollmentId: enrollId, sequenceId: sequence_id, clientId: client_id,
+            eventId: currentEvent.id, eventType: "text_message", action: "sms_skipped", detail: built.error,
+          });
+          crmSkipped.push({ enrollmentId: enrollId, reason: built.error });
+          continue;
+        }
+
+        // "Requires approval" — same park-in-the-queue pattern as email.
+        if (eventConfig.require_approval) {
+          const { error: approvalErr } = await (adminClient as AdminClient)
+            .from("crm_sequence_step_approvals")
+            .insert({
+              org_id: orgId,
+              enrollment_id: enrollId,
+              event_id: currentEvent.id,
+              sequence_id,
+              client_id,
+              estimate_id: estimate_id ?? null,
+              channel: "sms",
+              to_phone: built.toPhone,
+              body_text: built.bodyText,
+            });
+          if (approvalErr && approvalErr.code !== "23505") {
+            crmSkipped.push({ enrollmentId: enrollId, reason: `failed to create approval: ${approvalErr.message}` });
+            continue;
+          }
+          await (adminClient as AdminClient)
+            .from("crm_sequence_enrollments")
+            .update({ awaiting_approval: true, updated_at: nowIso })
+            .eq("id", enrollId);
+          await logSequenceExecution(adminClient, {
+            orgId, enrollmentId: enrollId, sequenceId: sequence_id, clientId: client_id,
+            eventId: currentEvent.id, eventType: "text_message", action: "awaiting_approval",
+            detail: built.bodyText,
+          });
+          crmFired.push({ enrollmentId: enrollId, action: "awaiting approval" });
+          continue;
+        }
+
+        const sendResult = await sendResolvedSequenceSms(adminClient, {
+          orgId,
+          clientId: client_id ?? null,
+          toPhone: built.toPhone,
+          bodyText: built.bodyText,
+        });
+        if (!sendResult.ok) {
+          await logSequenceExecution(adminClient, {
+            orgId, enrollmentId: enrollId, sequenceId: sequence_id, clientId: client_id,
+            eventId: currentEvent.id, eventType: "text_message", action: "sms_skipped", detail: sendResult.reason,
+          });
+          crmSkipped.push({ enrollmentId: enrollId, reason: sendResult.reason });
+          continue;
+        }
+
+        const action = await advanceEnrollmentPastStep(adminClient, {
+          enrollmentId: enrollId,
+          events: events ?? [],
+          completedPosition: next_event_position,
+          nowIso,
+        });
+        await logSequenceExecution(adminClient, {
+          orgId, enrollmentId: enrollId, sequenceId: sequence_id, clientId: client_id,
+          eventId: currentEvent.id, eventType: "text_message", action: "sms_sent",
+          detail: `${built.bodyText} → ${built.toPhone}`,
+        });
+        crmFired.push({ enrollmentId: enrollId, action: `sms sent → ${action}` });
         continue;
       }
 

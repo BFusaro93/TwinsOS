@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 import { useUpdateEvent } from "@/lib/hooks/use-crm-automations";
 import type { CRMSequenceEvent } from "@/types/crm-automations";
 import { toast } from "sonner";
@@ -35,6 +36,7 @@ export function TextEventDialog({ open, onOpenChange, event }: Props) {
   const c = event.config;
   const [message, setMessage] = useState<string>(c.message ?? "");
   const [to, setTo] = useState<string[]>(c.to ?? ["client_primary_phone"]);
+  const [requireApproval, setRequireApproval] = useState<boolean>(c.require_approval ?? false);
   const [saving, setSaving] = useState(false);
 
   function toggleTo(value: string) {
@@ -49,7 +51,7 @@ export function TextEventDialog({ open, onOpenChange, event }: Props) {
       await updateEvent.mutateAsync({
         id: event.id,
         sequenceId: event.sequenceId,
-        config: { message, to },
+        config: { message, to, require_approval: requireApproval },
       });
       onOpenChange(false);
     } catch {
@@ -96,6 +98,16 @@ export function TextEventDialog({ open, onOpenChange, event }: Props) {
                 </Label>
               </div>
             ))}
+          </div>
+          <div className="flex items-center gap-3">
+            <Switch
+              id="text-require-approval"
+              checked={requireApproval}
+              onCheckedChange={setRequireApproval}
+            />
+            <Label htmlFor="text-require-approval" className="cursor-pointer">
+              Require approval before sending
+            </Label>
           </div>
         </div>
         <DialogFooter>

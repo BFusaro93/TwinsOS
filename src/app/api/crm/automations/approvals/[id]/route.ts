@@ -1,14 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { sendResolvedSequenceEmail, advanceEnrollmentPastStep } from "@/lib/automations/sequence-email";
+import { sendResolvedSequenceSms } from "@/lib/automations/sequence-sms";
 import { logSequenceExecution } from "@/lib/automations/sequence-enrollment";
 
 /**
  * POST /api/crm/automations/approvals/[id] — approve or reject a pending
- * email-step approval (crm_sequence_step_approvals). Approving sends the
- * already-resolved email and advances the enrollment past that step;
- * rejecting stops that enrollment's run of the sequence — this gates the one
- * send, not the automation/sequence configuration as a whole.
+ * email or text-message step approval (crm_sequence_step_approvals).
+ * Approving sends the already-resolved content (via the channel column) and
+ * advances the enrollment past that step; rejecting stops that enrollment's
+ * run of the sequence — this gates the one send, not the automation/sequence
+ * configuration as a whole.
  */
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -29,7 +31,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const { data: approval, error: approvalErr } = await db
     .from("crm_sequence_step_approvals")
-    .select("id, org_id, enrollment_id, event_id, sequence_id, client_id, estimate_id, to_email, to_name, subject, body_html, status")
+    .select("id, org_id, enrollment_id, event_id, sequence_id, client_id, estimate_id, channel, to_email, to_name, subject, body_html, to_phone, body_text, status")
     .eq("id", id)
     .single();
 
@@ -53,23 +55,31 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       .eq("id", approval.enrollment_id);
     await logSequenceExecution(db, {
       orgId: approval.org_id, enrollmentId: approval.enrollment_id, sequenceId: approval.sequence_id,
-      clientId: approval.client_id, eventId: approval.event_id, eventType: "email",
-      action: "approval_rejected", detail: `${approval.subject} — decided by ${user.id}`,
+      clientId: approval.client_id, eventId: approval.event_id, eventType: approval.channel,
+      action: "approval_rejected", detail: `${approval.subject ?? approval.body_text} — decided by ${user.id}`,
     });
     return NextResponse.json({ ok: true, action: "rejected" });
   }
 
   // Approve: send the already-resolved content, then advance the enrollment
-  // exactly like a normal (non-approval) email step would.
-  const sendResult = await sendResolvedSequenceEmail(db, {
-    orgId: approval.org_id,
-    clientId: approval.client_id ?? null,
-    estimateId: approval.estimate_id,
-    toEmail: approval.to_email,
-    toName: approval.to_name,
-    subject: approval.subject,
-    bodyHtml: approval.body_html,
-  });
+  // exactly like a normal (non-approval) step of that channel would.
+  const sendResult =
+    approval.channel === "sms"
+      ? await sendResolvedSequenceSms(db, {
+          orgId: approval.org_id,
+          clientId: approval.client_id ?? null,
+          toPhone: approval.to_phone,
+          bodyText: approval.body_text,
+        })
+      : await sendResolvedSequenceEmail(db, {
+          orgId: approval.org_id,
+          clientId: approval.client_id ?? null,
+          estimateId: approval.estimate_id,
+          toEmail: approval.to_email,
+          toName: approval.to_name,
+          subject: approval.subject,
+          bodyHtml: approval.body_html,
+        });
   if (!sendResult.ok) {
     return NextResponse.json({ error: sendResult.reason }, { status: 502 });
   }
@@ -109,8 +119,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   await logSequenceExecution(db, {
     orgId: approval.org_id, enrollmentId: approval.enrollment_id, sequenceId: approval.sequence_id,
-    clientId: approval.client_id, eventId: approval.event_id, eventType: "email",
-    action: "approval_approved", detail: `${approval.subject} → ${approval.to_email} — decided by ${user.id}`,
+    clientId: approval.client_id, eventId: approval.event_id, eventType: approval.channel,
+    action: "approval_approved",
+    detail: approval.channel === "sms"
+      ? `${approval.body_text} → ${approval.to_phone} — decided by ${user.id}`
+      : `${approval.subject} → ${approval.to_email} — decided by ${user.id}`,
   });
 
   return NextResponse.json({ ok: true, action: "approved" });

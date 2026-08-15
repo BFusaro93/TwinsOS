@@ -24,7 +24,7 @@ export function PendingApprovalsButton() {
   async function handleDecide(id: string, action: "approve" | "reject") {
     try {
       await decide.mutateAsync({ id, action });
-      toast.success(action === "approve" ? "Email sent" : "Step rejected — sequence stopped");
+      toast.success(action === "approve" ? "Sent" : "Step rejected — sequence stopped");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to record decision");
     }
@@ -41,7 +41,7 @@ export function PendingApprovalsButton() {
       <Sheet open={open} onOpenChange={setOpen}>
         <SheetContent className="w-full max-w-lg">
           <SheetHeader>
-            <SheetTitle>Pending Email Approvals</SheetTitle>
+            <SheetTitle>Pending Approvals</SheetTitle>
           </SheetHeader>
 
           <ScrollArea className="mt-4 h-[calc(100vh-8rem)] pr-3">
@@ -59,14 +59,28 @@ export function PendingApprovalsButton() {
                         {new Date(a.createdAt).toLocaleString()}
                       </span>
                     </div>
-                    <p className="text-sm font-medium text-slate-800">{a.subject}</p>
-                    <p className="text-xs text-slate-500">
-                      To: {a.toName ? `${a.toName} <${a.toEmail}>` : a.toEmail}
-                    </p>
-                    <div
-                      className="mt-2 max-h-32 overflow-y-auto rounded border border-slate-100 bg-slate-50 p-2 text-xs text-slate-600"
-                      dangerouslySetInnerHTML={{ __html: a.bodyHtml || "<em>(empty body)</em>" }}
-                    />
+                    {a.channel === "sms" ? (
+                      <>
+                        <p className="text-sm font-medium text-slate-800">Text message</p>
+                        <p className="text-xs text-slate-500">
+                          To: {a.toName ? `${a.toName} <${a.toPhone}>` : a.toPhone}
+                        </p>
+                        <div className="mt-2 max-h-32 overflow-y-auto whitespace-pre-wrap rounded border border-slate-100 bg-slate-50 p-2 text-xs text-slate-600">
+                          {a.bodyText || "(empty message)"}
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-sm font-medium text-slate-800">{a.subject}</p>
+                        <p className="text-xs text-slate-500">
+                          To: {a.toName ? `${a.toName} <${a.toEmail}>` : a.toEmail}
+                        </p>
+                        <div
+                          className="mt-2 max-h-32 overflow-y-auto rounded border border-slate-100 bg-slate-50 p-2 text-xs text-slate-600"
+                          dangerouslySetInnerHTML={{ __html: a.bodyHtml || "<em>(empty body)</em>" }}
+                        />
+                      </>
+                    )}
                     <div className="mt-3 flex justify-end gap-2">
                       <Button
                         size="sm"
