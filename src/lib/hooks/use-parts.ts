@@ -190,6 +190,48 @@ export function useUpdatePart() {
   });
 }
 
+/**
+ * Manual quantity_on_hand adjustment (the QtyAdjustControl stepper on
+ * PartDetailSheet) — requires a reason, which the RPC folds into the audit
+ * entry's description. Distinct from useUpdatePart, whose plain `.update()`
+ * would land in the DB trigger's generic reason-less "qty X -> Y" fallback.
+ */
+export function useAdjustPartQuantityManual() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { id: string; quantityOnHand: number; reason: string }) => {
+      const supabase = createClient();
+      const { data: part, error: fetchErr } = await supabase
+        .from("parts")
+        .select("product_item_id")
+        .eq("id", input.id)
+        .single();
+      if (fetchErr) throw fetchErr;
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase.rpc as any)("adjust_part_quantity_manual", {
+        p_part_id: input.id,
+        p_new_qty: input.quantityOnHand,
+        p_reason: input.reason,
+      });
+      if (error) throw error;
+
+      if (part.product_item_id) {
+        await supabase
+          .from("product_items")
+          .update({ quantity_on_hand: input.quantityOnHand })
+          .eq("id", part.product_item_id);
+      }
+    },
+    onSuccess: (_, { id }) => {
+      queryClient.invalidateQueries({ queryKey: ["parts"] });
+      queryClient.invalidateQueries({ queryKey: ["parts", id] });
+      queryClient.invalidateQueries({ queryKey: ["products"] });
+      queryClient.invalidateQueries({ queryKey: ["audit-log"] });
+    },
+  });
+}
+
 export function useDeletePart() {
   const queryClient = useQueryClient();
   return useMutation({

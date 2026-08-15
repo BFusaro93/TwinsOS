@@ -29,7 +29,7 @@ import { NewPartDialog } from "@/components/cmms/NewPartDialog";
 import { ManageVendorsDialog } from "@/components/shared/ManageVendorsDialog";
 import { PODetailPanel } from "@/components/po/PODetailPanel";
 
-import { useParts, useUpdatePart } from "@/lib/hooks/use-parts";
+import { useParts, useUpdatePart, useAdjustPartQuantityManual } from "@/lib/hooks/use-parts";
 import { usePartOpenWOQty } from "@/lib/hooks/use-wo-costs";
 import { useRequisitions } from "@/lib/hooks/use-requisitions";
 import { usePurchaseOrders } from "@/lib/hooks/use-purchase-orders";
@@ -84,7 +84,7 @@ function DetailsTab({
   onOrderQty: number;
   woAssignedQty: number;
   qtyOnHand: number;
-  setQtyOnHand: (n: number) => void;
+  setQtyOnHand: (n: number, reason: string) => Promise<void>;
   linkedProductName: string | null;
   onPartClick: (p: Part) => void;
   onAddGenericToOem: (oemId: string) => void;
@@ -632,6 +632,7 @@ export function PartDetailSheet({ part, open, onOpenChange }: PartDetailSheetPro
   const { data: allAssets = [] } = useAssets();
   const { data: allVehicles = [] } = useVehicles();
   const { mutate: updatePart } = useUpdatePart();
+  const { mutateAsync: adjustQtyManualAsync } = useAdjustPartQuantityManual();
   const level = useOverlayLevel();
   const { backdrop: backdropZ, panel: panelZ } = overlayZ(level);
   const { backdrop: childBackdropZ, panel: childPanelZ } = overlayZ(level + 1);
@@ -693,9 +694,9 @@ export function PartDetailSheet({ part, open, onOpenChange }: PartDetailSheetPro
   const effectiveQty = qtyOnHand ?? livePart.quantityOnHand;
   const partId = livePart.id;
 
-  function handleQtyChange(n: number) {
+  async function handleQtyChange(n: number, reason: string) {
+    await adjustQtyManualAsync({ id: partId, quantityOnHand: n, reason });
     setQtyOnHand(n);
-    updatePart({ id: partId, quantityOnHand: n });
   }
 
   function handleVendorsSave(

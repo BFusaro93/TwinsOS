@@ -267,6 +267,51 @@ export function useUpdateProduct() {
   });
 }
 
+/**
+ * Manual quantity_on_hand adjustment (the QtyAdjustControl stepper on
+ * ProductDetailSheet) — requires a reason, folded into the audit entry via
+ * adjust_product_item_quantity() (20260808000000), which already supported
+ * a reason param but wasn't wired up to any UI path until now.
+ */
+export function useAdjustProductQuantityManual() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { id: string; orgId: string; quantityOnHand: number; reason: string }) => {
+      const supabase = createClient();
+      const { data: product, error: fetchErr } = await supabase
+        .from("product_items")
+        .select("quantity_on_hand")
+        .eq("id", input.id)
+        .single();
+      if (fetchErr) throw fetchErr;
+
+      const delta = input.quantityOnHand - Number(product.quantity_on_hand);
+      if (delta === 0) return;
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase.rpc as any)("adjust_product_item_quantity", {
+        p_org_id: input.orgId,
+        p_product_id: input.id,
+        p_delta: delta,
+        p_reason: input.reason,
+      });
+      if (error) throw error;
+
+      await supabase
+        .from("parts")
+        .update({ quantity_on_hand: input.quantityOnHand })
+        .eq("product_item_id", input.id)
+        .is("deleted_at", null);
+    },
+    onSuccess: (_, { id }) => {
+      queryClient.invalidateQueries({ queryKey: ["products"] });
+      queryClient.invalidateQueries({ queryKey: ["products", id] });
+      queryClient.invalidateQueries({ queryKey: ["parts"] });
+      queryClient.invalidateQueries({ queryKey: ["audit-log"] });
+    },
+  });
+}
+
 /** Normalise a raw category string from a CSV to one of the three valid slugs,
  *  accepting common variations in casing, spacing, and phrasing. Returns null
  *  if the value can't be resolved to a known category. */

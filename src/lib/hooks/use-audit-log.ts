@@ -14,6 +14,7 @@ export function useAuditLog(recordType: AuditRecordType, recordId: string) {
         .select("*")
         .eq("record_type", recordType)
         .eq("record_id", recordId)
+        .is("deleted_at", null)
         .order("created_at", { ascending: false });
       if (error) throw error;
       return (data.map(mapAuditEntry)) as AuditEntry[];
@@ -48,7 +49,8 @@ export function useMultiRecordAuditLog(groups: { recordType: AuditRecordType; re
             .from("audit_log")
             .select("*")
             .eq("record_type", g.recordType)
-            .in("record_id", g.recordIds);
+            .in("record_id", g.recordIds)
+            .is("deleted_at", null);
           if (error) throw error;
           return data;
         })
@@ -85,6 +87,7 @@ export function useRecentActivityFeed(limit = 8) {
         .from("audit_log")
         .select("*")
         .in("record_type", CMMS_RECORD_TYPES as unknown as string[])
+        .is("deleted_at", null)
         .order("created_at", { ascending: false })
         .limit(limit);
       if (error) throw error;

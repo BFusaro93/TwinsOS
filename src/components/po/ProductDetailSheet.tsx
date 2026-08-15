@@ -51,7 +51,7 @@ import { useRequisitions } from "@/lib/hooks/use-requisitions";
 import { usePurchaseOrders } from "@/lib/hooks/use-purchase-orders";
 import { useWorkOrders } from "@/lib/hooks/use-work-orders";
 import { useParts } from "@/lib/hooks/use-parts";
-import { useDeleteProduct, useUpdateProduct } from "@/lib/hooks/use-products";
+import { useDeleteProduct, useUpdateProduct, useAdjustProductQuantityManual } from "@/lib/hooks/use-products";
 import { WO_STATUS_LABELS } from "@/lib/constants";
 import { ChemicalApplicationRatesEditor } from "@/components/crm/chemical/ChemicalApplicationRatesEditor";
 import type { ProductItem } from "@/types";
@@ -81,7 +81,7 @@ function DetailsTab({
   product: ProductItem;
   onOrderQty: number;
   qtyOnHand: number;
-  setQtyOnHand: (n: number) => void;
+  setQtyOnHand: (n: number, reason: string) => Promise<void>;
   onManageVendors: () => void;
 }) {
   const margin =
@@ -512,6 +512,7 @@ export function ProductDetailSheet({ product, open, onOpenChange }: ProductDetai
   const { backdrop: childBackdropZ, panel: childPanelZ } = overlayZ(level + 1);
   const { mutate: deleteProduct, isPending: deleting } = useDeleteProduct();
   const { mutate: updateProduct } = useUpdateProduct();
+  const { mutateAsync: adjustQtyManualAsync } = useAdjustProductQuantityManual();
 
   // Prevent outer scroll-lock from blocking scroll inside child portals
   useEffect(() => {
@@ -531,10 +532,11 @@ export function ProductDetailSheet({ product, open, onOpenChange }: ProductDetai
 
   const effectiveQty = qtyOnHand ?? product.quantityOnHand ?? 0;
   const productId = product.id;
+  const productOrgId = product.orgId;
 
-  function handleQtyChange(n: number) {
+  async function handleQtyChange(n: number, reason: string) {
+    await adjustQtyManualAsync({ id: productId, orgId: productOrgId, quantityOnHand: n, reason });
     setQtyOnHand(n);
-    updateProduct({ id: productId, quantityOnHand: n });
   }
 
   function handleVendorsSave(
