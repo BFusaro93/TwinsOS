@@ -11,7 +11,7 @@
     },
     {
       "path": "/api/automations/run",
-      "schedule": "0 11 * * *"
+      "schedule": "*/15 * * * *"
     },
     {
       "path": "/api/cron/contract-invoices",
