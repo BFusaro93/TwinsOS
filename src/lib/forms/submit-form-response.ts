@@ -118,33 +118,99 @@ export async function submitFormResponse(
     null;
 
   // ── Find matching client ──────────────────────────────────────────────────────
+  // Tries progressively weaker signals until one comes back unambiguous
+  // (exactly one candidate client): email first — checked against
+  // client_contacts.email AND clients.primary_email AND clients.billing_email,
+  // since billing_email is frequently left blank while primary_email is the
+  // field that's actually populated — then (unless the form is configured for
+  // strict email-only matching) phone, then name as a last resort. A match is
+  // only accepted when it resolves to exactly one client; an ambiguous result
+  // (e.g. two clients named "John Smith") is treated as "no match" rather than
+  // guessing and misattaching the submission.
   let relatedClientId: string | null = null;
   let result = "On Hold";
 
-  if (submittedEmail || (submittedFirstName && submittedLastName)) {
-    let matchQuery = db.from("clients").select("id").eq("org_id", form.org_id).is("deleted_at", null);
+  // Escapes ILIKE wildcard characters so a submitted name containing "%" or
+  // "_" can't turn into an unintended broad/match-everything pattern.
+  function escapeIlike(value: string): string {
+    return value.replace(/[%_\\]/g, (ch) => `\\${ch}`);
+  }
 
-    if (matchStrategy === "email" && submittedEmail) {
-      matchQuery = matchQuery.eq("billing_email", submittedEmail);
-    } else if (matchStrategy === "name_and_email" && submittedEmail) {
-      const { data: contact } = await db
-        .from("client_contacts")
-        .select("client_id")
-        .eq("org_id", form.org_id)
-        .eq("email", submittedEmail)
-        .is("deleted_at", null)
-        .maybeSingle();
-      if (contact?.client_id) relatedClientId = contact.client_id;
-      if (!relatedClientId) {
-        matchQuery = matchQuery.eq("billing_email", submittedEmail);
-      }
-    } else if ((matchStrategy === "name_email_and_company" || matchStrategy === "custom") && submittedEmail) {
-      matchQuery = matchQuery.eq("billing_email", submittedEmail);
-    }
+  async function uniqueClientIdByContact(
+    column: "email" | "phone",
+    value: string
+  ): Promise<string | null> {
+    const { data } = await db
+      .from("client_contacts")
+      .select("client_id")
+      .eq("org_id", form.org_id)
+      .eq(column, value)
+      .is("deleted_at", null)
+      .limit(2);
+    const ids = [...new Set((data ?? []).map((c: { client_id: string }) => c.client_id))] as string[];
+    return ids.length === 1 ? ids[0] : null;
+  }
 
+  /** Merges two column-equality lookups on `clients` without relying on a
+   *  hand-built `.or()` filter string (which a value containing "," or ")"
+   *  could otherwise break or subtly mis-scope). */
+  async function uniqueClientIdByEitherColumn(
+    columnA: string,
+    columnB: string,
+    value: string
+  ): Promise<string | null> {
+    const [{ data: aRows }, { data: bRows }] = await Promise.all([
+      db.from("clients").select("id").eq("org_id", form.org_id).is("deleted_at", null).eq(columnA, value).limit(2),
+      db.from("clients").select("id").eq("org_id", form.org_id).is("deleted_at", null).eq(columnB, value).limit(2),
+    ]);
+    const ids = [...new Set([...(aRows ?? []), ...(bRows ?? [])].map((c: { id: string }) => c.id))] as string[];
+    return ids.length === 1 ? ids[0] : null;
+  }
+
+  if (submittedEmail) {
+    relatedClientId = await uniqueClientIdByContact("email", submittedEmail);
     if (!relatedClientId) {
-      const { data: matched } = await matchQuery.maybeSingle();
-      if (matched?.id) relatedClientId = matched.id;
+      relatedClientId = await uniqueClientIdByEitherColumn("primary_email", "billing_email", submittedEmail);
+    }
+  }
+
+  const allowPhoneAndNameMatch = matchStrategy !== "email";
+
+  if (!relatedClientId && allowPhoneAndNameMatch && submittedPhone) {
+    relatedClientId = await uniqueClientIdByContact("phone", submittedPhone);
+    if (!relatedClientId) {
+      const { data } = await db
+        .from("clients")
+        .select("id")
+        .eq("org_id", form.org_id)
+        .is("deleted_at", null)
+        .eq("primary_phone", submittedPhone)
+        .limit(2);
+      if ((data ?? []).length === 1) relatedClientId = data[0].id;
+    }
+  }
+
+  if (!relatedClientId && allowPhoneAndNameMatch && submittedFirstName && submittedLastName) {
+    const { data: contacts } = await db
+      .from("client_contacts")
+      .select("client_id")
+      .eq("org_id", form.org_id)
+      .ilike("first_name", escapeIlike(submittedFirstName))
+      .ilike("last_name", escapeIlike(submittedLastName))
+      .is("deleted_at", null)
+      .limit(2);
+    const contactIds = [...new Set((contacts ?? []).map((c: { client_id: string }) => c.client_id))] as string[];
+    if (contactIds.length === 1) {
+      relatedClientId = contactIds[0];
+    } else if (contactIds.length === 0 && submittedName) {
+      const { data } = await db
+        .from("clients")
+        .select("id")
+        .eq("org_id", form.org_id)
+        .is("deleted_at", null)
+        .ilike("display_name", escapeIlike(submittedName))
+        .limit(2);
+      if ((data ?? []).length === 1) relatedClientId = data[0].id;
     }
   }
 
