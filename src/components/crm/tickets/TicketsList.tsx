@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
@@ -436,7 +436,19 @@ interface Props {
 
 const TICKET_TEMPLATE_COLUMNS = ["subject", "clientName", "type", "status", "priority", "category", "body", "dueDate"];
 
-export function TicketsList({ clientId, typeFilter, title = "Tickets", description = "Support and service tickets" }: Props) {
+// useSearchParams (for the ?open= deep-link) requires a Suspense boundary
+// around anything reading it during prerendering — wrap the real component
+// here so every call site (tickets page, calls page, quick-add, client
+// detail panel) is covered without needing its own boundary.
+export function TicketsList(props: Props) {
+  return (
+    <Suspense fallback={null}>
+      <TicketsListInner {...props} />
+    </Suspense>
+  );
+}
+
+function TicketsListInner({ clientId, typeFilter, title = "Tickets", description = "Support and service tickets" }: Props) {
   const listTypeLabel = typeFilter === "call" ? "Call" : typeFilter === "event" ? "Event" : "Ticket";
   const { data: categoryOptions } = useOrgList("ticket_categories");
   const categories = categoryOptions && categoryOptions.length > 0
