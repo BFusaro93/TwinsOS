@@ -7,6 +7,7 @@ import { InvoiceDocument } from "@/components/crm/invoices/pdf/InvoiceDocument";
 import type { InvoicePDFData, InvoicePDFLineItem, OrgPDFData } from "@/components/crm/invoices/pdf/InvoiceDocument";
 import type { InvoicePDFLayoutKey } from "@/types/crm-invoices";
 import { fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
+import { addParagraphSpacing } from "@/lib/utils/document-template-renderer";
 
 const FROM = "Twins Lawn Service <noreply@twinslawnservice.com>";
 
@@ -51,6 +52,7 @@ export async function POST(req: NextRequest) {
     subject?: string;
     bodyHtml?: string;
     templateId?: string;
+    includePdf?: boolean;
   };
   const { invoiceId } = body;
   if (!invoiceId) return NextResponse.json({ error: "invoiceId required" }, { status: 400 });
@@ -131,7 +133,12 @@ export async function POST(req: NextRequest) {
   };
 
   const resolvedSubject = resolveMergeTags(body.subject?.trim() || DEFAULT_SUBJECT, mergeVars);
-  const resolvedBodyContent = resolveMergeTags(body.bodyHtml?.trim() || DEFAULT_BODY, mergeVars);
+  const resolvedBodyContent = addParagraphSpacing(resolveMergeTags(body.bodyHtml?.trim() || DEFAULT_BODY, mergeVars));
+
+  // "Include PDF" — the template's setting, forwarded by the send dialog.
+  // Defaults to true (PDF attached) to preserve prior behavior when no
+  // template is selected.
+  const includePdf = body.includePdf !== false;
 
   // Wrap the (rich-text-authored) body in the same branded shell the PDF uses,
   // so the emailed invoice's header color always matches the attached PDF.
@@ -198,20 +205,22 @@ export async function POST(req: NextRequest) {
   };
 
   let pdfAttachment: { filename: string; content: string } | null = null;
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const buffer = await renderToBuffer(
+  if (includePdf) {
+    try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      createElement(InvoiceDocument as any, { invoice: invoicePdfData, org: orgPdfData, layoutKey }) as any
-    );
-    pdfAttachment = {
-      filename: `invoice-${inv.invoice_number ?? invoiceId}.pdf`,
-      content: Buffer.from(buffer).toString("base64"),
-    };
-  } catch (err) {
-    // Non-fatal — send the email without the attachment rather than blocking
-    // the whole send over a PDF rendering issue.
-    console.error("[email-invoice] PDF render error:", err);
+      const buffer = await renderToBuffer(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        createElement(InvoiceDocument as any, { invoice: invoicePdfData, org: orgPdfData, layoutKey }) as any
+      );
+      pdfAttachment = {
+        filename: `invoice-${inv.invoice_number ?? invoiceId}.pdf`,
+        content: Buffer.from(buffer).toString("base64"),
+      };
+    } catch (err) {
+      // Non-fatal — send the email without the attachment rather than blocking
+      // the whole send over a PDF rendering issue.
+      console.error("[email-invoice] PDF render error:", err);
+    }
   }
 
   const resend = new Resend(process.env.RESEND_API_KEY?.trim());

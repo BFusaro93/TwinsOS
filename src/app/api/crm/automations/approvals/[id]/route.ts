@@ -75,7 +75,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           orgId: approval.org_id,
           clientId: approval.client_id ?? null,
           estimateId: approval.estimate_id,
-          toEmail: approval.to_email,
+          toEmails: approval.to_email.split(",").map((e: string) => e.trim()).filter(Boolean),
           toName: approval.to_name,
           subject: approval.subject,
           bodyHtml: approval.body_html,

@@ -126,7 +126,7 @@ function wrap(inner: string, style: string): string {
 // output, so multi-paragraph rich-text content (built with Enter presses
 // inside a single block) renders with no gap between paragraphs unless we
 // inline the same spacing here.
-function addParagraphSpacing(html: string): string {
+export function addParagraphSpacing(html: string): string {
   return html.replace(/<p(\s[^>]*)?>/gi, (_match, attrs: string | undefined) => {
     const existing = attrs ?? "";
     const styleMatch = existing.match(/style="([^"]*)"/i);

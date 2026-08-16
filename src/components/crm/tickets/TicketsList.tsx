@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import {
   useTickets,
   useCreateTicket,
@@ -461,6 +462,17 @@ export function TicketsList({ clientId, typeFilter, title = "Tickets", descripti
 
   const all = tickets ?? [];
   const selectedTicket = selectedTicketId ? all.find((t) => t.id === selectedTicketId) ?? null : null;
+
+  // Deep-link support: /crm/tickets?open=<ticketId> auto-opens the ticket's
+  // detail sheet (same convention as InvoicesList's ?open= param).
+  const searchParams = useSearchParams();
+  useEffect(() => {
+    const openId = searchParams.get("open");
+    if (openId && all.some((t) => t.id === openId)) {
+      setSelectedTicketId(openId);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, tickets]);
 
   const stats = useMemo(() => {
     const now = new Date();

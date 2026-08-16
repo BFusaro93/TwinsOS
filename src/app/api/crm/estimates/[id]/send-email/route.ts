@@ -8,6 +8,7 @@ import { EstimateDocument } from "@/components/crm/estimates/pdf/EstimateDocumen
 import type { EstimatePDFData, EstimatePDFLineItem, EstimatePDFMilestone, EstimatePDFPhoto, OrgPDFData } from "@/components/crm/estimates/pdf/EstimateDocument";
 import { toDisplaySettings } from "@/lib/estimate-display-settings";
 import { fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
+import { addParagraphSpacing } from "@/lib/utils/document-template-renderer";
 
 const FROM = "Twins Lawn Service <noreply@twinslawnservice.com>";
 
@@ -53,6 +54,7 @@ export async function POST(
     expiresInDays?: number;
     ccEmails?: string[];
     to?: string[];
+    includePdf?: boolean;
   };
 
   if (!body.subject?.trim() || !body.bodyHtml?.trim()) {
@@ -148,7 +150,12 @@ export async function POST(
   };
 
   const resolvedSubject = resolveMergeTags(body.subject, mergeVars);
-  const resolvedBody    = resolveMergeTags(body.bodyHtml, mergeVars);
+  const resolvedBody    = addParagraphSpacing(resolveMergeTags(body.bodyHtml, mergeVars));
+
+  // "Include PDF" — the template's setting, forwarded by the send dialog.
+  // Defaults to true (PDF attached) to preserve prior behavior when no
+  // template is selected.
+  const includePdf = body.includePdf !== false;
 
   // Snapshot estimate state at time of send
   const versionNumber = await getNextVersionNumber(supabase, estimateId);
@@ -294,20 +301,22 @@ export async function POST(
   };
 
   let pdfAttachment: { filename: string; content: string } | null = null;
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const buffer = await renderToBuffer(
+  if (includePdf) {
+    try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      createElement(EstimateDocument as any, { estimate: estimatePdfData, org: orgPdfData }) as any
-    );
-    pdfAttachment = {
-      filename: `estimate-${est.estimate_number}.pdf`,
-      content: Buffer.from(buffer).toString("base64"),
-    };
-  } catch (err) {
-    // Non-fatal — send the email without the attachment rather than blocking
-    // the whole send over a PDF rendering issue.
-    console.error("[send-estimate] PDF render error:", err);
+      const buffer = await renderToBuffer(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        createElement(EstimateDocument as any, { estimate: estimatePdfData, org: orgPdfData }) as any
+      );
+      pdfAttachment = {
+        filename: `estimate-${est.estimate_number}.pdf`,
+        content: Buffer.from(buffer).toString("base64"),
+      };
+    } catch (err) {
+      // Non-fatal — send the email without the attachment rather than blocking
+      // the whole send over a PDF rendering issue.
+      console.error("[send-estimate] PDF render error:", err);
+    }
   }
 
   // Send via Resend

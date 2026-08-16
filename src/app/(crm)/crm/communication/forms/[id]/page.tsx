@@ -1,7 +1,7 @@
 "use client";
 
 import { use, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "@/lib/hooks/use-crm-forms";
 import { FormBuilder } from "@/components/crm/forms/FormBuilder";
 import { FormConfigure } from "@/components/crm/forms/FormConfigure";
@@ -19,8 +19,12 @@ type Tab = "builder" | "configure" | "responses";
 export default function FormDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { data: form, isLoading } = useForm(id);
-  const [tab, setTab] = useState<Tab>("builder");
+  const initialTab = searchParams.get("tab");
+  const [tab, setTab] = useState<Tab>(
+    initialTab === "responses" || initialTab === "configure" ? initialTab : "builder"
+  );
   const [fillOpen, setFillOpen] = useState(false);
   const [embedOpen, setEmbedOpen] = useState(false);
 

@@ -596,6 +596,8 @@ async function handleRun(request: Request) {
           estimateId: estimate_id ?? null,
           subjectTemplate: eventConfig.subject ?? "",
           bodyTemplate: eventConfig.bodyHtml ?? eventConfig.body ?? "",
+          toSelection: eventConfig.to,
+          fromSelection: eventConfig.from,
         });
         if ("error" in built) {
           await logSequenceExecution(adminClient, {
@@ -619,7 +621,7 @@ async function handleRun(request: Request) {
               sequence_id,
               client_id,
               estimate_id: estimate_id ?? null,
-              to_email: built.toEmail,
+              to_email: built.toEmails.join(", "),
               to_name: built.toName || null,
               subject: built.subject,
               body_html: built.bodyHtml,
@@ -648,8 +650,9 @@ async function handleRun(request: Request) {
           orgId,
           clientId: client_id ?? null,
           estimateId: estimate_id ?? null,
-          toEmail: built.toEmail,
+          toEmails: built.toEmails,
           toName: built.toName,
+          fromAddress: built.fromAddress,
           subject: built.subject,
           bodyHtml: built.bodyHtml,
         });
@@ -671,7 +674,7 @@ async function handleRun(request: Request) {
         await logSequenceExecution(adminClient, {
           orgId, enrollmentId: enrollId, sequenceId: sequence_id, clientId: client_id,
           eventId: currentEvent.id, eventType: "email", action: "email_sent",
-          detail: `${built.subject} → ${built.toEmail}`,
+          detail: `${built.subject} → ${built.toEmails.join(", ")}`,
         });
         crmFired.push({ enrollmentId: enrollId, action: `email sent → ${action}` });
         continue;

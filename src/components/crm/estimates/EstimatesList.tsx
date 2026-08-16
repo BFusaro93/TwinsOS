@@ -226,6 +226,7 @@ export function EstimatesList({ clientId }: Props) {
     const template = emailTemplates?.find((t) => t.isDefault) ?? emailTemplates?.[0];
     const subject = template?.subject ?? DEFAULT_SUBJECT;
     const bodyHtml = template?.bodyHtml ?? DEFAULT_TEMPLATE_BODY;
+    const includePdf = template?.includePdf ?? true;
 
     setEmailingSelected(true);
     try {
@@ -234,7 +235,7 @@ export function EstimatesList({ clientId }: Props) {
           fetch(`/api/crm/estimates/${e.id}/send-email`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ subject, bodyHtml, expiresInDays: 30 }),
+            body: JSON.stringify({ subject, bodyHtml, expiresInDays: 30, includePdf }),
           }).then(async (res) => {
             if (!res.ok) {
               const data = await res.json().catch(() => ({}));

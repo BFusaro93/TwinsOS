@@ -21,6 +21,7 @@ type FormState = {
   subject: string;
   bodyHtml: string;
   isDefault: boolean;
+  includePdf: boolean;
 };
 
 const EMPTY_FORM: FormState = {
@@ -29,6 +30,7 @@ const EMPTY_FORM: FormState = {
   subject: "",
   bodyHtml: "",
   isDefault: false,
+  includePdf: true,
 };
 
 interface EmailTemplatesEditorProps {
@@ -62,6 +64,7 @@ export function EmailTemplatesEditor({ templateType, description, mergeTags, emp
       subject: t.subject,
       bodyHtml: t.bodyHtml,
       isDefault: t.isDefault,
+      includePdf: t.includePdf,
     });
     setFormOpen(true);
   }
@@ -87,6 +90,7 @@ export function EmailTemplatesEditor({ templateType, description, mergeTags, emp
         subject: form.subject,
         bodyHtml: form.bodyHtml,
         isDefault: form.isDefault,
+        includePdf: form.includePdf,
         templateType,
       });
       toast.success(form.id ? "Template updated." : "Template created.");
@@ -115,6 +119,7 @@ export function EmailTemplatesEditor({ templateType, description, mergeTags, emp
         subject: t.subject,
         bodyHtml: t.bodyHtml,
         isDefault: true,
+        includePdf: t.includePdf,
         templateType,
       });
       toast.success(`"${t.name}" set as default.`);
@@ -216,6 +221,17 @@ export function EmailTemplatesEditor({ templateType, description, mergeTags, emp
             />
             <Label htmlFor="et-default" className="cursor-pointer">
               Set as default template
+            </Label>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Checkbox
+              id="et-include-pdf"
+              checked={form.includePdf}
+              onCheckedChange={(v) => setForm((f) => ({ ...f, includePdf: !!v }))}
+            />
+            <Label htmlFor="et-include-pdf" className="cursor-pointer">
+              Attach PDF when sending
             </Label>
           </div>
 

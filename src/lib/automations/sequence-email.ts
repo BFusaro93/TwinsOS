@@ -12,24 +12,70 @@ export interface SequenceEventRow {
 }
 
 interface ResolvedEmailContent {
-  toEmail: string;
+  toEmails: string[];
   toName: string;
+  fromAddress: string;
   subject: string;
   bodyHtml: string;
 }
 
-/** Resolves an email step's [mergetag] placeholders against the client/org/estimate context. */
+const DEFAULT_FROM_ADDRESS = "Twins Lawn Service <noreply@twinslawnservice.com>";
+
+/** Resolves an email step's `to`/`from` selections and [mergetag] placeholders against the client/org/estimate context. */
 export async function resolveEmailStepContent(
   supabase: AnyClient,
-  params: { orgId: string; clientId: string; estimateId: string | null; subjectTemplate: string; bodyTemplate: string }
+  params: {
+    orgId: string;
+    clientId: string;
+    estimateId: string | null;
+    subjectTemplate: string;
+    bodyTemplate: string;
+    toSelection?: string[];
+    fromSelection?: string;
+  }
 ): Promise<ResolvedEmailContent | { error: string }> {
   const { data: client } = await supabase
     .from("clients")
-    .select("display_name, primary_email")
+    .select("display_name, primary_email, billing_email, sales_rep_id")
     .eq("id", params.clientId)
     .single();
 
-  if (!client?.primary_email) return { error: "client has no primary_email" };
+  if (!client) return { error: "client not found" };
+
+  const toSelection = params.toSelection?.length ? params.toSelection : ["client_primary"];
+  const toEmails = new Set<string>();
+
+  if (toSelection.includes("client_primary") && client.primary_email) {
+    toEmails.add(client.primary_email as string);
+  }
+  if (toSelection.includes("billing_email") && client.billing_email) {
+    toEmails.add(client.billing_email as string);
+  }
+  if (toSelection.includes("all_contacts")) {
+    const { data: contacts } = await supabase
+      .from("client_contacts")
+      .select("email")
+      .eq("client_id", params.clientId)
+      .eq("ok_to_email", true)
+      .is("deleted_at", null);
+    for (const contact of contacts ?? []) {
+      if (contact.email) toEmails.add(contact.email as string);
+    }
+  }
+
+  if (toEmails.size === 0) return { error: "no resolvable recipient email for the selected 'to' options" };
+
+  let fromAddress = DEFAULT_FROM_ADDRESS;
+  if (params.fromSelection === "sales_rep" && client.sales_rep_id) {
+    const { data: rep } = await supabase
+      .from("profiles")
+      .select("name, email")
+      .eq("id", client.sales_rep_id)
+      .single();
+    if (rep?.email) {
+      fromAddress = rep.name ? `${rep.name} <${rep.email}>` : (rep.email as string);
+    }
+  }
 
   const { data: orgRow } = await supabase
     .from("organizations")
@@ -63,8 +109,9 @@ export async function resolveEmailStepContent(
     template.replace(/\[(\w+)\]/gi, (match) => mergeTags[match.toLowerCase()] ?? match);
 
   return {
-    toEmail: client.primary_email as string,
+    toEmails: [...toEmails],
     toName: clientDisplayName,
+    fromAddress,
     subject: resolve(params.subjectTemplate || "(no subject)"),
     bodyHtml: resolve(params.bodyTemplate || ""),
   };
@@ -77,19 +124,30 @@ export async function resolveEmailStepContent(
  */
 export async function sendResolvedSequenceEmail(
   supabase: AnyClient,
-  params: { orgId: string; clientId: string | null; estimateId: string | null; toEmail: string; toName: string | null; subject: string; bodyHtml: string }
+  params: {
+    orgId: string;
+    clientId: string | null;
+    estimateId: string | null;
+    toEmails: string[];
+    toName: string | null;
+    fromAddress?: string;
+    subject: string;
+    bodyHtml: string;
+  }
 ): Promise<{ ok: true; resendId: string | null } | { ok: false; reason: string }> {
   const resendKey = process.env.RESEND_API_KEY;
   if (!resendKey) return { ok: false, reason: "RESEND_API_KEY not configured" };
 
   const resend = new Resend(resendKey);
   const { data: sent, error: sendErr } = await resend.emails.send({
-    from: "Twins Lawn Service <noreply@twinslawnservice.com>",
-    to: params.toEmail,
+    from: params.fromAddress || DEFAULT_FROM_ADDRESS,
+    to: params.toEmails,
     subject: params.subject,
     html: params.bodyHtml,
   });
   if (sendErr) return { ok: false, reason: `email send failed: ${String(sendErr)}` };
+
+  const toEmailsJoined = params.toEmails.join(", ");
 
   if (params.clientId) {
     await supabase.from("client_activity").insert({
@@ -97,8 +155,8 @@ export async function sendResolvedSequenceEmail(
       client_id: params.clientId,
       activity_type: "email",
       subject: params.subject,
-      body: `Sent to ${params.toEmail} (automation)`,
-      sent_to: params.toEmail,
+      body: `Sent to ${toEmailsJoined} (automation)`,
+      sent_to: toEmailsJoined,
       resend_message_id: sent?.id ?? null,
       occurred_at: new Date().toISOString(),
     });
@@ -108,7 +166,7 @@ export async function sendResolvedSequenceEmail(
     await supabase.from("estimate_emails").insert({
       org_id: params.orgId,
       estimate_id: params.estimateId,
-      to_email: params.toEmail,
+      to_email: toEmailsJoined,
       to_name: params.toName || null,
       subject: params.subject,
       body_html: params.bodyHtml,

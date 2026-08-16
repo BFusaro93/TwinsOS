@@ -10,6 +10,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Paperclip } from "lucide-react";
 import { toast } from "sonner";
@@ -53,6 +54,7 @@ export function SendEstimateDialog({
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
   const [subject, setSubject]   = useState(DEFAULT_SUBJECT);
   const [bodyHtml, setBodyHtml] = useState(DEFAULT_TEMPLATE_BODY);
+  const [includePdf, setIncludePdf] = useState(true);
   const [sending, setSending]   = useState(false);
   const [tab, setTab]           = useState<"compose" | "preview">("compose");
   const [toEmails, setToEmails] = useState<string[]>(clientEmail ? [clientEmail] : []);
@@ -70,14 +72,14 @@ export function SendEstimateDialog({
   useEffect(() => {
     if (!selectedTemplateId) return;
     const tpl = templates.find((t) => t.id === selectedTemplateId);
-    if (tpl) { setSubject(tpl.subject); setBodyHtml(tpl.bodyHtml); }
+    if (tpl) { setSubject(tpl.subject); setBodyHtml(tpl.bodyHtml); setIncludePdf(tpl.includePdf); }
   }, [selectedTemplateId, templates]);
 
   // Auto-select default template on open
   useEffect(() => {
     if (open && templates.length > 0 && !selectedTemplateId) {
       const def = templates.find((t) => t.isDefault);
-      if (def) { setSelectedTemplateId(def.id); setSubject(def.subject); setBodyHtml(def.bodyHtml); }
+      if (def) { setSelectedTemplateId(def.id); setSubject(def.subject); setBodyHtml(def.bodyHtml); setIncludePdf(def.includePdf); }
     }
   }, [open, templates, selectedTemplateId]);
 
@@ -106,7 +108,7 @@ export function SendEstimateDialog({
       const res = await fetch(`/api/crm/estimates/${estimateId}/send-email`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ subject, bodyHtml, expiresInDays: 30, ccEmails, to: toEmails }),
+        body: JSON.stringify({ subject, bodyHtml, expiresInDays: 30, ccEmails, to: toEmails, includePdf }),
       });
       if (!res.ok) {
         const data = await res.json();
@@ -210,10 +212,11 @@ export function SendEstimateDialog({
             </TabsContent>
           </Tabs>
 
-          <p className="flex items-center gap-1.5 text-xs text-slate-400">
+          <label className="flex items-center gap-2 text-xs text-slate-500">
+            <Checkbox checked={includePdf} onCheckedChange={(v) => setIncludePdf(!!v)} />
             <Paperclip className="h-3.5 w-3.5" />
-            The estimate PDF will be attached automatically.
-          </p>
+            Attach the estimate PDF to this email
+          </label>
         </div>
 
         <DialogFooter>

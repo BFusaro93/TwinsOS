@@ -163,10 +163,11 @@ export async function submitFormResponse(
         if (mappedData["client.state"]) clientPatch.billing_state = mappedData["client.state"];
         if (mappedData["client.zip"]) clientPatch.billing_zip = mappedData["client.zip"];
         if (mappedData["client.notes"]) clientPatch.notes_to_crew = mappedData["client.notes"];
+        if (mappedData["client.source"]) clientPatch.source = mappedData["client.source"];
       } else {
         const { data: existing } = await db
           .from("clients")
-          .select("billing_email, primary_phone, billing_address, billing_city, billing_state, billing_zip")
+          .select("billing_email, primary_phone, billing_address, billing_city, billing_state, billing_zip, source")
           .eq("id", relatedClientId)
           .single();
         if (!existing?.billing_email && mappedData["client.email"]) clientPatch.billing_email = mappedData["client.email"];
@@ -175,6 +176,7 @@ export async function submitFormResponse(
         if (!existing?.billing_city && mappedData["client.city"]) clientPatch.billing_city = mappedData["client.city"];
         if (!existing?.billing_state && mappedData["client.state"]) clientPatch.billing_state = mappedData["client.state"];
         if (!existing?.billing_zip && mappedData["client.zip"]) clientPatch.billing_zip = mappedData["client.zip"];
+        if (!existing?.source && mappedData["client.source"]) clientPatch.source = mappedData["client.source"];
       }
 
       if (Object.keys(clientPatch).length > 0) {
@@ -237,7 +239,7 @@ export async function submitFormResponse(
           billing_state: mappedData["client.state"] ?? null,
           billing_zip: mappedData["client.zip"] ?? null,
           notes_to_crew: mappedData["client.notes"] ?? null,
-          source: "form",
+          source: mappedData["client.source"] ?? "form",
           status: "lead",
         })
         .select("id")

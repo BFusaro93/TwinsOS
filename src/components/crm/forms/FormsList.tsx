@@ -110,6 +110,7 @@ function NewFormDialog({ open, onOpenChange }: NewFormDialogProps) {
 // ── Row actions menu ──────────────────────────────────────────────────────────
 
 function FormRowMenu({ form }: { form: CRMForm }) {
+  const router = useRouter();
   const deleteForm = useDeleteForm();
   const updateForm = useUpdateForm(form.id);
   const toggleStatus = form.status === "published" ? "draft" : "published";
@@ -122,6 +123,12 @@ function FormRowMenu({ form }: { form: CRMForm }) {
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
+        <DropdownMenuItem
+          onSelect={() => router.push(`/crm/communication/forms/${form.id}?tab=responses`)}
+        >
+          <ExternalLink className="mr-2 h-3.5 w-3.5" />
+          View Responses
+        </DropdownMenuItem>
         <DropdownMenuItem onSelect={() => updateForm.mutate({ status: toggleStatus as FormStatus })}>
           {toggleStatus === "published" ? "Publish" : "Unpublish"}
         </DropdownMenuItem>

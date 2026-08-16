@@ -138,7 +138,7 @@ function RichTextEditor({ value, onChange, placeholder, minHeight = 120 }, ref) 
       editor.chain().focus().setImage({ src: data.publicUrl }).run();
     } catch (err) {
       console.error("[RichTextEditor] image upload failed", err);
-      toast.error("Failed to upload image");
+      toast.error(err instanceof Error ? `Failed to upload image: ${err.message}` : "Failed to upload image");
     }
   }
 

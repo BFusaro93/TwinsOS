@@ -34,6 +34,7 @@ export interface CRMEmailTemplate {
   bodyHtml: string;
   templateType: "estimate" | "confirmation" | "invoice" | "chemical_application";
   isDefault: boolean;
+  includePdf: boolean;
   createdAt: string;
   updatedAt: string;
 }

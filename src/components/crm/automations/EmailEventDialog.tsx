@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -23,6 +23,8 @@ import {
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useUpdateEvent } from "@/lib/hooks/use-crm-automations";
+import { useDocumentTemplates, useDocumentTemplate } from "@/lib/hooks/use-crm-documents";
+import { renderBlocksToHtml } from "@/lib/utils/document-template-renderer";
 import type { CRMSequenceEvent } from "@/types/crm-automations";
 import { toast } from "sonner";
 
@@ -46,6 +48,13 @@ const TO_OPTIONS = [
   { value: "all_contacts", label: "All contacts (ok to email)" },
 ];
 
+const MERGE_TAGS = [
+  { tag: "[clientfirstname]", label: "Client's first name" },
+  { tag: "[clientfullname]", label: "Client's full name" },
+  { tag: "[companyname]", label: "Your company name" },
+  { tag: "[quotenumber]", label: "Linked estimate/quote number" },
+];
+
 export function EmailEventDialog({ open, onOpenChange, event }: Props) {
   const updateEvent = useUpdateEvent();
   const c = event.config;
@@ -61,6 +70,36 @@ export function EmailEventDialog({ open, onOpenChange, event }: Props) {
   const [weekdaysOnly, setWeekdaysOnly] = useState<boolean>(c.send_weekdays_only ?? false);
   const [requireApproval, setRequireApproval] = useState<boolean>(c.require_approval ?? false);
   const [saving, setSaving] = useState(false);
+  const bodyRef = useRef<HTMLTextAreaElement>(null);
+
+  const [docTemplateId, setDocTemplateId] = useState<string>("");
+  const { data: docTemplates = [] } = useDocumentTemplates();
+  const { data: selectedDocTemplate } = useDocumentTemplate(docTemplateId);
+
+  // Once the chosen document template's blocks load, use them to fill in the
+  // subject/body — merge tags are left unresolved ([clientfirstname], etc.)
+  // so the automation's own send-time resolver fills them in per-recipient.
+  useEffect(() => {
+    if (!selectedDocTemplate) return;
+    if (selectedDocTemplate.subject) setSubject(selectedDocTemplate.subject);
+    setBody(renderBlocksToHtml(selectedDocTemplate.blocks, {}));
+    setDocTemplateId("");
+  }, [selectedDocTemplate]);
+
+  function insertMergeTag(tag: string) {
+    const ta = bodyRef.current;
+    if (!ta) {
+      setBody((b) => b + tag);
+      return;
+    }
+    const start = ta.selectionStart ?? ta.value.length;
+    const end = ta.selectionEnd ?? ta.value.length;
+    setBody((b) => b.slice(0, start) + tag + b.slice(end));
+    requestAnimationFrame(() => {
+      ta.focus();
+      ta.setSelectionRange(start + tag.length, start + tag.length);
+    });
+  }
 
   function toggleTo(value: string) {
     setTo((prev) =>
@@ -219,16 +258,45 @@ export function EmailEventDialog({ open, onOpenChange, event }: Props) {
 
           <TabsContent value="body">
             <div className="flex flex-col gap-1.5">
+              {docTemplates.length > 0 && (
+                <div className="flex flex-col gap-1.5 pb-2">
+                  <Label>Use an existing document</Label>
+                  <Select value={docTemplateId} onValueChange={setDocTemplateId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Choose a saved document to fill in the subject/body…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {docTemplates.map((t) => (
+                        <SelectItem key={t.id} value={t.id}>
+                          {t.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
               <Label>Email Body</Label>
               <Textarea
+                ref={bodyRef}
                 placeholder="Write your email content here…"
                 className="min-h-[300px] font-mono text-sm"
                 value={body}
                 onChange={(e) => setBody(e.target.value)}
               />
-              <p className="text-[11px] text-slate-400">
-                You can use merge tags like {"{{client_name}}"}, {"{{org_name}}"}.
-              </p>
+              <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                <span className="text-[11px] text-slate-400">Insert merge tag:</span>
+                {MERGE_TAGS.map(({ tag, label }) => (
+                  <button
+                    key={tag}
+                    type="button"
+                    title={label}
+                    onClick={() => insertMergeTag(tag)}
+                    className="rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-600 hover:bg-slate-200 transition-colors font-mono"
+                  >
+                    {tag}
+                  </button>
+                ))}
+              </div>
             </div>
           </TabsContent>
         </Tabs>
