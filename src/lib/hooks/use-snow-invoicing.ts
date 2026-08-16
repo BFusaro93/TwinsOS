@@ -87,6 +87,7 @@ export function useGenerateSnowInvoices() {
     ) => {
       const supabase = createClient();
       let invoicesCreated = 0;
+      const invoiceIds: string[] = [];
 
       for (const group of groups) {
         const subtotal = group.visits.reduce((s, v) => s + v.amountCents, 0);
@@ -152,9 +153,10 @@ export function useGenerateSnowInvoices() {
         });
 
         invoicesCreated += 1;
+        invoiceIds.push((newInvoice as { id: string }).id);
       }
 
-      return { invoicesCreated };
+      return { invoicesCreated, invoiceIds };
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["snow-invoicing"] });

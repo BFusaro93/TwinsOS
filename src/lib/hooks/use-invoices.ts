@@ -503,6 +503,7 @@ export function useUpdateInvoiceHeader() {
         service_address?: string | null;
         preferred_payment_method?: string | null;
         sales_rep_id?: string | null;
+        notes?: string | null;
       };
     }) => {
       const supabase = createClient();

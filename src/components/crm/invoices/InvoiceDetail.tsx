@@ -56,6 +56,8 @@ import { AuditTrailTab } from "@/components/shared/AuditTrailTab";
 import { LineItemDiscountPopover, type LineItemDiscountPatch } from "@/components/shared/LineItemDiscountPopover";
 import { ChargeCardDialog } from "@/components/crm/invoices/ChargeCardDialog";
 import { InvoiceEmailDialog } from "@/components/crm/invoices/InvoiceEmailDialog";
+import { Textarea } from "@/components/ui/textarea";
+import { getDisplayInvoiceStatus } from "@/lib/invoice-status";
 
 // ── constants ─────────────────────────────────────────────────────────────────
 
@@ -542,6 +544,7 @@ export function InvoiceDetail({
   const [deleting, setDeleting] = useState(false);
   const [confirmVoidOpen, setConfirmVoidOpen] = useState(false);
   const [voiding, setVoiding] = useState(false);
+  const [notesDraft, setNotesDraft] = useState("");
 
   useEffect(() => {
     if (!invoice) return;
@@ -568,6 +571,7 @@ export function InvoiceDetail({
     setDiscountType(invoice.discountType);
     setDiscountValue(invoice.discountValue);
     setAppliedDiscountId(invoice.appliedDiscountId);
+    setNotesDraft(invoice.notes ?? "");
   }, [invoice?.id]);
 
   function handleTermsChange(newTerms: string) {
@@ -765,7 +769,9 @@ export function InvoiceDetail({
             </h1>
             <p className="text-xs text-slate-400">{invoice.clientName}</p>
           </div>
-          <Badge className={cn("text-[10px] capitalize", STATUS_COLOR[invoice.status])}>{invoice.status}</Badge>
+          <Badge className={cn("text-[10px] capitalize", STATUS_COLOR[getDisplayInvoiceStatus(invoice)])}>
+            {getDisplayInvoiceStatus(invoice)}
+          </Badge>
           {invoice.invoiceNumber == null && (
             <span className="rounded-full bg-yellow-100 px-2 py-0.5 text-[10px] font-semibold text-yellow-700">
               Unsaved — click Save to assign invoice #
@@ -1143,6 +1149,22 @@ export function InvoiceDetail({
                 </tbody>
               </table>
             </div>
+          </div>
+
+          {/* Notes — shown on the invoice PDF/email below the line items */}
+          <div className="mx-8 mb-5 rounded-lg border bg-white p-4 shadow-sm">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-2">Notes</p>
+            <Textarea
+              value={notesDraft}
+              onChange={(e) => setNotesDraft(e.target.value)}
+              onBlur={() => {
+                if (notesDraft !== (invoice.notes ?? "")) {
+                  updateHeader({ id: invoice.id, patch: { notes: notesDraft || null } });
+                }
+              }}
+              placeholder="Add a note that will appear on this invoice's PDF and email…"
+              className="min-h-[70px] text-xs"
+            />
           </div>
 
           {/* Line items */}

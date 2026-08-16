@@ -22,15 +22,25 @@ const AGG_LABELS: Record<string, string> = {
   count: "Count of",
 };
 
+/** Subtotal mode keeps row-level detail (grouped under a divider header with
+ *  a per-group subtotal) instead of collapsing to one row per group — it
+ *  only applies when there's actually a group column to key the sections on. */
+export function isSubtotalMode(config: AnalysisConfig): boolean {
+  return !!config.subtotals && config.groupBy.length > 0;
+}
+
 export function validateAnalysisConfig(config: AnalysisConfig): string | null {
   const dataset = getDataset(config.dataset);
   if (!dataset) return `Unknown dataset: ${config.dataset}`;
 
   const fieldKeys = new Set(dataset.fields.map((f) => f.key));
-  // "Aggregated" mode covers both grouped queries (one or more Group By
-  // columns) and ungrouped grand-total queries (aggregates with zero Group
-  // By columns — Postgres treats the whole filtered set as one group).
-  const aggregated = config.groupBy.length > 0 || config.aggregates.length > 0;
+  // "Aggregated" mode covers both grouped rollup queries (one or more Group
+  // By columns) and ungrouped grand-total queries (aggregates with zero
+  // Group By columns — Postgres treats the whole filtered set as one group).
+  // Subtotal mode is a separate, plain-columns query (grouping happens
+  // client-side for display only), so it's excluded here.
+  const subtotalMode = isSubtotalMode(config);
+  const aggregated = !subtotalMode && (config.groupBy.length > 0 || config.aggregates.length > 0);
 
   if (!aggregated && config.columns.length === 0) {
     return "Select at least one column.";
@@ -70,9 +80,13 @@ export function aggregateAlias(fn: string, column: string): string {
 
 /** Output column defs for an analysis config (drives table rendering + CSV). */
 export function columnsForAnalysis(config: AnalysisConfig): ReportColumnDef[] {
-  const aggregated = config.groupBy.length > 0 || config.aggregates.length > 0;
+  const subtotalMode = isSubtotalMode(config);
+  const aggregated = !subtotalMode && (config.groupBy.length > 0 || config.aggregates.length > 0);
   if (!aggregated) {
-    return config.columns.map((key) => {
+    const columns = subtotalMode && !config.columns.includes(config.groupBy[0])
+      ? [config.groupBy[0], ...config.columns]
+      : config.columns;
+    return columns.map((key) => {
       const field = getDatasetField(config.dataset, key);
       return {
         key,
@@ -144,19 +158,25 @@ export async function runAnalysis(
   const error = validateAnalysisConfig(config);
   if (error) throw new Error(error);
 
-  const aggregated = config.groupBy.length > 0 || config.aggregates.length > 0;
+  const subtotalMode = isSubtotalMode(config);
+  const aggregated = !subtotalMode && (config.groupBy.length > 0 || config.aggregates.length > 0);
+  const columns = columnsForAnalysis(config);
   const { data, error: rpcError } = await (supabase as SupabaseClient).rpc(
     "crm_run_report",
     {
       p_dataset: config.dataset,
-      p_columns: aggregated ? [] : config.columns,
+      // Subtotal mode is a plain-columns query — grouping is purely a
+      // client-side display concern (divider headers + per-group subtotal
+      // rows), so p_group_by/p_aggregates are omitted just like the
+      // ungrouped case; only true rollup mode sends them to the RPC.
+      p_columns: aggregated ? [] : columns.map((c) => c.key),
       p_filters: config.filters.map((f) => ({
         column: f.column,
         op: f.op,
         value: f.value,
       })),
-      p_group_by: config.groupBy.length > 0 ? config.groupBy : null,
-      p_aggregates: config.aggregates.map((a) => ({ column: a.column, fn: a.fn })),
+      p_group_by: aggregated ? config.groupBy : null,
+      p_aggregates: aggregated ? config.aggregates.map((a) => ({ column: a.column, fn: a.fn })) : [],
       p_sort_column: config.sortColumn ?? null,
       p_sort_dir: config.sortDir,
       p_limit: config.limit ?? 1000,
@@ -165,13 +185,25 @@ export async function runAnalysis(
   if (rpcError) throw new Error(rpcError.message);
 
   const payload = data as { rows: ReportResultRow[]; row_count: number };
-  const columns = columnsForAnalysis(config);
-  const rows = payload?.rows ?? [];
+  let rows = payload?.rows ?? [];
+
+  // Stable secondary sort by the group column so same-group rows sit
+  // together for the divider header + subtotal rendering, without
+  // disturbing the user's chosen primary sort order within each group.
+  if (subtotalMode) {
+    const groupKey = config.groupBy[0];
+    rows = [...rows].sort((a, b) =>
+      String(a[groupKey] ?? "").localeCompare(String(b[groupKey] ?? ""))
+    );
+  }
+
   return {
     columns,
     rows,
     totals: computeTotals(columns, rows),
     rowCount: rows.length,
     generatedAt: new Date().toISOString(),
+    sectionColumn: subtotalMode ? config.groupBy[0] : undefined,
+    groupSubtotals: subtotalMode,
   };
 }

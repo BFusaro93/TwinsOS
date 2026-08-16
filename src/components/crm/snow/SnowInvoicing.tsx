@@ -174,7 +174,7 @@ export function SnowInvoicing() {
         {
           action: {
             label: "View Invoices",
-            onClick: () => router.push("/crm/accounting/invoices"),
+            onClick: () => router.push(`/crm/accounting/invoices?ids=${result.invoiceIds.join(",")}`),
           },
         }
       );

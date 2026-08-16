@@ -75,6 +75,10 @@ export const analysisConfigSchema = z.object({
   filters: z.array(analysisFilterSchema).default([]),
   groupBy: z.array(z.string()).default([]),
   aggregates: z.array(analysisAggregateSchema).default([]),
+  /** When true (and groupBy has an entry), keeps row-level detail visible —
+   *  grouped under a divider header per groupBy[0] value with a subtotal row
+   *  per group — instead of collapsing to one row per group. */
+  subtotals: z.boolean().optional(),
   sortColumn: z.string().optional(),
   sortDir: z.enum(["asc", "desc"]).default("asc"),
   limit: z.number().int().positive().max(5000).optional(),
@@ -186,6 +190,9 @@ export interface ReportResult {
    * between consecutive rows.
    */
   sectionColumn?: string;
+  /** When true (used with sectionColumn), also render a per-group subtotal
+   *  row summing each totalable column's values within that group. */
+  groupSubtotals?: boolean;
 }
 
 // ---------- Pre-built report catalog metadata ----------

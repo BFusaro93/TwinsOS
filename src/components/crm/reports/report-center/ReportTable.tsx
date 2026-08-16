@@ -4,7 +4,8 @@ import { Fragment, useEffect, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn, formatCurrency, formatDate } from "@/lib/utils";
-import type { ReportFieldType, ReportResult } from "@/types/crm-reports";
+import { computeTotals } from "@/lib/reports/engine";
+import type { ReportColumnDef, ReportFieldType, ReportResult, ReportResultRow } from "@/types/crm-reports";
 
 const PAGE_SIZE = 100;
 
@@ -38,6 +39,19 @@ export function formatCellValue(value: unknown, type: ReportFieldType): string {
     default:
       return String(value);
   }
+}
+
+/** Sums totalable columns across only the current page's rows belonging to
+ *  one group — subtotals are computed per rendered page rather than globally,
+ *  same page-scoped tradeoff the existing section-header logic already makes. */
+function computeGroupSubtotal(
+  pageRows: ReportResultRow[],
+  sectionKey: string,
+  section: string,
+  columns: ReportColumnDef[]
+): Record<string, number | null> | undefined {
+  const groupRows = pageRows.filter((r) => String(r[sectionKey] ?? "") === section);
+  return computeTotals(columns, groupRows);
 }
 
 function Pager({
@@ -145,7 +159,12 @@ export function ReportTable({ result }: { result: ReportResult }) {
                 {pagedRows.map((row, i) => {
                   const section = sectionKey ? String(row[sectionKey] ?? "") : null;
                   const prevSection = sectionKey && i > 0 ? String(pagedRows[i - 1][sectionKey] ?? "") : null;
+                  const nextSection = sectionKey && i < pagedRows.length - 1 ? String(pagedRows[i + 1][sectionKey] ?? "") : null;
                   const showSectionHeader = section !== null && section !== prevSection;
+                  const isLastOfSection = section !== null && (i === pagedRows.length - 1 || section !== nextSection);
+                  const subtotal = result.groupSubtotals && isLastOfSection
+                    ? computeGroupSubtotal(pagedRows, sectionKey!, section!, displayColumns)
+                    : null;
                   return (
                     <Fragment key={i}>
                       {showSectionHeader && (
@@ -172,6 +191,25 @@ export function ReportTable({ result }: { result: ReportResult }) {
                           </td>
                         ))}
                       </tr>
+                      {subtotal && (
+                        <tr className="border-b bg-slate-50 font-medium text-slate-700">
+                          {displayColumns.map((col, ci) => {
+                            const total = subtotal[col.key];
+                            const hasTotal = col.totalable && total !== undefined && total !== null;
+                            return (
+                              <td
+                                key={col.key}
+                                className={cn(
+                                  "px-3 py-2",
+                                  NUMERIC_TYPES.includes(col.type) && "text-right tabular-nums"
+                                )}
+                              >
+                                {ci === 0 ? `Subtotal — ${section}` : hasTotal ? formatCellValue(total, col.type) : ""}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      )}
                     </Fragment>
                   );
                 })}
