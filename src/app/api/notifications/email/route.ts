@@ -124,6 +124,17 @@ export async function POST(request: Request) {
   const { data: entity } = await adminClient.from(table).select("*").eq("id", entityId).single();
   if (!entity) return NextResponse.json({ error: "Entity not found" }, { status: 404 });
 
+  // This route runs on the service-role client to look up recipients/send
+  // email regardless of the caller's own RLS visibility, so it has to check
+  // org membership itself — without this, any authenticated user could pass
+  // another org's entityId and cause notification emails (with that org's
+  // work order/PO details) to be sent to that other org's users, plus
+  // insert `notifications` rows mixing the caller's org_id with the other
+  // org's user ids.
+  if (entity.org_id !== callerProfile.org_id) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   // ── Determine direct recipients (users personally affected) ──────────────
   const directRecipientIds: string[] = [];
 

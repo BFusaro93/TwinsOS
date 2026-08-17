@@ -91,6 +91,7 @@ export async function POST(request: Request) {
     .from("crm_job_visits")
     .select("id, job_id, crm_jobs(service_address, service_city, service_state, service_zip)")
     .in("id", visitIds)
+    .eq("org_id", profile.org_id)
     .is("deleted_at", null);
 
   if (!visits || visits.length < 2) {

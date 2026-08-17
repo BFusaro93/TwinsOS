@@ -64,6 +64,25 @@ export async function POST(request: Request) {
     .eq("id", entityId)
     .single();
 
+  if (!entity) {
+    return NextResponse.json({ error: "Entity not found" }, { status: 404 });
+  }
+
+  // This route runs on the service-role client (it needs to look up
+  // approvers/send email regardless of the caller's own RLS visibility),
+  // so it must verify org membership itself — without this, any
+  // authenticated user could pass another org's entityId and trigger
+  // approval-request emails (with that org's PO/WO number and total)
+  // to that other org's approvers.
+  const { data: callerProfile } = await supabase
+    .from("profiles")
+    .select("org_id")
+    .eq("id", user.id)
+    .single();
+  if (!callerProfile || entity.org_id !== callerProfile.org_id) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   const entityNumber = entity?.[meta.numberField] ?? meta.fallbackLabel;
 
   // Compute grand total for display (stored in cents)
