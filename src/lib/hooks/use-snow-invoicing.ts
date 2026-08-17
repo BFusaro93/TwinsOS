@@ -5,6 +5,28 @@ import { createClient } from "@/lib/supabase/client";
 import { mapVisit } from "./use-crm-jobs";
 import type { CRMJobVisit } from "@/types/crm-jobs";
 
+// "per_event"/"per_event_per_inch" bill the whole STORM, not each dispatch
+// within it — a job with 2 visits during one storm (e.g. morning + afternoon
+// push) is one event, not two. Unlike "per_push_per_inch" (deliberately
+// per-visit) and "hourly" (naturally per-visit), these two must be billed
+// once per (job, storm event), or a multi-visit storm gets charged twice.
+export function isPerEventBilling(invoiceType: string): boolean {
+  return invoiceType === "per_event" || invoiceType === "per_event_per_inch";
+}
+
+/** Group key for visits that must collapse to a single charge. Falls back to
+ *  the visit's own id (i.e. no grouping) for per-visit billing types. */
+export function billingGroupKey(visit: CRMJobVisit): string {
+  const invoiceType = visit.job?.invoiceType ?? "per_event";
+  if (!isPerEventBilling(invoiceType)) return visit.id;
+  // stormEventId is only set by the dispatch board's storm flow — a visit
+  // created directly (crew app, manual entry) leaves it null. Falling back
+  // to a constant would collapse every storm-less visit of a job, across
+  // every date, into one billed event — fall back to the visit's own date
+  // instead so separate storms still separate into separate events.
+  return `${visit.jobId}::${visit.stormEventId ?? `date:${visit.scheduledDate}`}`;
+}
+
 // ── uninvoiced snow visits ────────────────────────────────────────────────────
 
 export function useUninvoicedSnowVisits(filters: {
@@ -64,7 +86,22 @@ export function useUninvoicedSnowVisits(filters: {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         ((existingLines ?? []) as any[]).map((r) => r.visit_id).filter(Boolean)
       );
-      return visits.filter((v) => !invoicedVisitIds.has(v.id));
+
+      // Per-event billing groups (one charge per job+storm) must not be
+      // partially re-billed: if a storm's morning push was already invoiced
+      // and the afternoon push completes later, the afternoon push would
+      // otherwise appear ALONE in the queue and get priced as a brand new
+      // group — charging the full event price a second time. Once any
+      // member of a group has been invoiced, exclude the whole group rather
+      // than just the already-invoiced visit. (Per-visit billing types are
+      // unaffected — their group key is just their own visit id.)
+      const groupsWithExistingInvoice = new Set(
+        visits.filter((v) => invoicedVisitIds.has(v.id)).map((v) => billingGroupKey(v))
+      );
+
+      return visits.filter(
+        (v) => !invoicedVisitIds.has(v.id) && !groupsWithExistingInvoice.has(billingGroupKey(v))
+      );
     },
   });
 }
@@ -88,14 +125,30 @@ export function useGenerateSnowInvoices() {
       const supabase = createClient();
       let invoicesCreated = 0;
       const invoiceIds: string[] = [];
+      let skippedZeroAmountGroups = 0;
+      let excludedZeroAmountVisits = 0;
 
       for (const group of groups) {
         const subtotal = group.visits.reduce((s, v) => s + v.amountCents, 0);
-        if (subtotal <= 0) continue;
+        if (subtotal <= 0) {
+          // Previously a silent `continue` — the caller reported "success"
+          // even though nothing was billed for this client at all.
+          skippedZeroAmountGroups += 1;
+          continue;
+        }
 
-        const distinctJobIds = new Set(group.visits.map((v) => v.jobId));
+        // A $0 visit inside an otherwise-positive group (e.g. a misconfigured
+        // rate) used to still get a line item inserted with its visit_id,
+        // which permanently marks it "invoiced" in the queue at $0 — the
+        // amount can never be corrected and re-billed. Leave it out of the
+        // line items so it stays in the queue until its pricing is fixed.
+        const billableVisits = group.visits.filter((v) => v.amountCents > 0);
+        excludedZeroAmountVisits += group.visits.length - billableVisits.length;
+        if (billableVisits.length === 0) continue;
+
+        const distinctJobIds = new Set(billableVisits.map((v) => v.jobId));
         const singleJobId = distinctJobIds.size === 1 ? [...distinctJobIds][0] : null;
-        const invoiceDate = group.visits[0]?.serviceDate ?? new Date().toISOString().slice(0, 10);
+        const invoiceDate = billableVisits[0]?.serviceDate ?? new Date().toISOString().slice(0, 10);
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data: newInvoice, error: invErr } = await (supabase as any)
@@ -119,7 +172,7 @@ export function useGenerateSnowInvoices() {
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { error: liErr } = await (supabase as any).from("crm_invoice_line_items").insert(
-          group.visits.map((v, i) => ({
+          billableVisits.map((v, i) => ({
             invoice_id: (newInvoice as { id: string }).id,
             name: v.description,
             description: v.description,
@@ -156,7 +209,7 @@ export function useGenerateSnowInvoices() {
         invoiceIds.push((newInvoice as { id: string }).id);
       }
 
-      return { invoicesCreated, invoiceIds };
+      return { invoicesCreated, invoiceIds, skippedZeroAmountGroups, excludedZeroAmountVisits };
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["snow-invoicing"] });

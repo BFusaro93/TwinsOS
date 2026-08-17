@@ -90,8 +90,11 @@ function ChartVisual({ result, visual }: { result: ReportResult; visual: VisualS
     );
   }
 
-  const tooltipFormatter = (v: number, name: string) => {
-    const c = colFor(result.columns, name);
+  // Recharts passes the series' display `name` (a label, e.g. "Sum of
+  // Balance") as the 2nd formatter arg, not its data key — matching that
+  // against column keys always misses. The dataKey lives on the 3rd arg.
+  const tooltipFormatter = (v: number, _name: string, item: { dataKey?: string | number }) => {
+    const c = colFor(result.columns, item?.dataKey !== undefined ? String(item.dataKey) : undefined);
     return c ? formatCellValue(v, c.type) : v;
   };
 

@@ -31,7 +31,10 @@ export function ReportExportDocument({ title, generatedAt, sections }: ReportExp
         <Text style={styles.title}>{title}</Text>
         <Text style={styles.generatedAt}>Generated {generatedAt}</Text>
         {sections.map((section, si) => (
-          <View key={si} wrap={false}>
+          // wrap defaults to true here (unlike a table row) so a section with
+          // more rows than fit on one page continues onto the next instead of
+          // being silently cut off — only individual rows must stay intact.
+          <View key={si}>
             {section.heading && <Text style={styles.sectionHeading}>{section.heading}</Text>}
             <View style={styles.table}>
               <View style={styles.headerRow}>
@@ -40,7 +43,7 @@ export function ReportExportDocument({ title, generatedAt, sections }: ReportExp
                 ))}
               </View>
               {section.rows.map((row, ri) => (
-                <View key={ri} style={styles.row}>
+                <View key={ri} style={styles.row} wrap={false}>
                   {row.map((cell, ci) => (
                     <Text key={ci} style={styles.cell}>{cell}</Text>
                   ))}

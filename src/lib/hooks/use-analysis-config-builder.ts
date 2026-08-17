@@ -45,7 +45,7 @@ export const FN_OPTIONS: { value: AggregateFn; label: string }[] = [
   { value: "count", label: "Count" },
 ];
 
-export const NUMERIC_FIELD_TYPES = ["money", "number", "hours", "percent"];
+export const NUMERIC_FIELD_TYPES = ["money", "number", "hours", "percent", "bps"];
 
 export function aggregateAlias(agg: BuilderAggregate): string {
   return agg.column === "*" ? "count_all" : `${agg.fn}_${agg.column}`;
@@ -73,6 +73,13 @@ export function toAnalysisFilter(
     const dollars = parseFloat(filter.value);
     if (Number.isNaN(dollars)) return null;
     return { column: filter.column, op: filter.op, value: Math.round(dollars * 100) };
+  }
+  if (field?.type === "bps") {
+    // Displayed/entered as a percent (formatCellValue shows bps/100 with a
+    // "%" suffix) but stored as basis points, same cents-vs-dollars pattern.
+    const percent = parseFloat(filter.value);
+    if (Number.isNaN(percent)) return null;
+    return { column: filter.column, op: filter.op, value: Math.round(percent * 100) };
   }
   if (field?.type === "number" || field?.type === "hours" || field?.type === "percent") {
     const num = parseFloat(filter.value);

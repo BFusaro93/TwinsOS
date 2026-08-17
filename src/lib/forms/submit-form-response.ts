@@ -136,16 +136,21 @@ export async function submitFormResponse(
     return value.replace(/[%_\\]/g, (ch) => `\\${ch}`);
   }
 
-  async function uniqueClientIdByContact(
-    column: "email" | "phone",
-    value: string
-  ): Promise<string | null> {
+  function normalizePhoneDigits(value: string): string {
+    return value.replace(/\D/g, "");
+  }
+
+  /** Email matching must be case-insensitive (Postgres `=` on text is not) —
+   *  also excludes contacts belonging to a soft-deleted client, which the
+   *  plain client_contacts lookup used to miss entirely. */
+  async function uniqueClientIdByContactEmail(value: string): Promise<string | null> {
     const { data } = await db
       .from("client_contacts")
-      .select("client_id")
+      .select("client_id, clients!inner(deleted_at)")
       .eq("org_id", form.org_id)
-      .eq(column, value)
+      .ilike("email", escapeIlike(value))
       .is("deleted_at", null)
+      .is("clients.deleted_at", null)
       .limit(2);
     const ids = [...new Set((data ?? []).map((c: { client_id: string }) => c.client_id))] as string[];
     return ids.length === 1 ? ids[0] : null;
@@ -153,64 +158,130 @@ export async function submitFormResponse(
 
   /** Merges two column-equality lookups on `clients` without relying on a
    *  hand-built `.or()` filter string (which a value containing "," or ")"
-   *  could otherwise break or subtly mis-scope). */
-  async function uniqueClientIdByEitherColumn(
+   *  could otherwise break or subtly mis-scope). Case-insensitive. */
+  async function uniqueClientIdByEitherEmailColumn(
     columnA: string,
     columnB: string,
     value: string
   ): Promise<string | null> {
+    const pattern = escapeIlike(value);
     const [{ data: aRows }, { data: bRows }] = await Promise.all([
-      db.from("clients").select("id").eq("org_id", form.org_id).is("deleted_at", null).eq(columnA, value).limit(2),
-      db.from("clients").select("id").eq("org_id", form.org_id).is("deleted_at", null).eq(columnB, value).limit(2),
+      db.from("clients").select("id").eq("org_id", form.org_id).is("deleted_at", null).ilike(columnA, pattern).limit(2),
+      db.from("clients").select("id").eq("org_id", form.org_id).is("deleted_at", null).ilike(columnB, pattern).limit(2),
     ]);
     const ids = [...new Set([...(aRows ?? []), ...(bRows ?? [])].map((c: { id: string }) => c.id))] as string[];
     return ids.length === 1 ? ids[0] : null;
   }
 
+  /** Phone numbers are stored with whatever punctuation the source used
+   *  ("555-123-4567" vs "(555) 123-4567" vs "5551234567") — compares on
+   *  digits only rather than requiring an exact string match. Scoped to the
+   *  org so the candidate set stays small. */
+  async function uniqueClientIdByPhoneDigits(value: string): Promise<string | null> {
+    const targetDigits = normalizePhoneDigits(value);
+    if (!targetDigits) return null;
+
+    const [{ data: contactRows }, { data: clientRows }] = await Promise.all([
+      db.from("client_contacts").select("client_id, phone, clients!inner(deleted_at)").eq("org_id", form.org_id).is("deleted_at", null).is("clients.deleted_at", null).not("phone", "is", null),
+      db.from("clients").select("id, primary_phone").eq("org_id", form.org_id).is("deleted_at", null).not("primary_phone", "is", null),
+    ]);
+    const ids = new Set<string>();
+    for (const row of (contactRows ?? []) as { client_id: string; phone: string | null }[]) {
+      if (row.phone && normalizePhoneDigits(row.phone) === targetDigits) ids.add(row.client_id);
+    }
+    for (const row of (clientRows ?? []) as { id: string; primary_phone: string | null }[]) {
+      if (row.primary_phone && normalizePhoneDigits(row.primary_phone) === targetDigits) ids.add(row.id);
+    }
+    return ids.size === 1 ? [...ids][0] : null;
+  }
+
+  /** For match strategies stricter than plain email, a signal isn't enough
+   *  on its own — the candidate client must also carry a matching name (or
+   *  company, for the strictest strategy). Checked against every contact on
+   *  the client plus the client's own display name, since a submitted name
+   *  might match either. Conservative: no name/company to check against
+   *  means the corroboration fails rather than passing by default. */
+  async function clientCorroboratedByNameOrCompany(
+    clientId: string,
+    firstName: string | null,
+    lastName: string | null,
+    company: string | null
+  ): Promise<boolean> {
+    if (!firstName && !lastName && !company) return false;
+
+    const { data: client } = await db
+      .from("clients")
+      .select("display_name")
+      .eq("id", clientId)
+      .maybeSingle();
+    const displayName: string = (client?.display_name ?? "").toLowerCase();
+
+    if (company && displayName.includes(company.toLowerCase())) return true;
+
+    if (firstName || lastName) {
+      if (
+        (firstName && displayName.includes(firstName.toLowerCase())) ||
+        (lastName && displayName.includes(lastName.toLowerCase()))
+      ) {
+        return true;
+      }
+      const { data: contacts } = await db
+        .from("client_contacts")
+        .select("first_name, last_name")
+        .eq("client_id", clientId)
+        .is("deleted_at", null);
+      for (const c of (contacts ?? []) as { first_name: string | null; last_name: string | null }[]) {
+        const cFirst = (c.first_name ?? "").toLowerCase();
+        const cLast = (c.last_name ?? "").toLowerCase();
+        if ((firstName && cFirst === firstName.toLowerCase()) || (lastName && cLast === lastName.toLowerCase())) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  // "email" = email is the only signal consulted, full stop. Every other
+  // strategy (name_and_email, name_email_and_company, custom) requires email
+  // to be corroborated by a matching name/company — matching on phone or
+  // name ALONE, with no email at all, used to be treated as sufficient for
+  // any non-"email" strategy, which is how a common name like "John Smith"
+  // could get a stranger's submission attached to an existing client.
+  let emailClientId: string | null = null;
   if (submittedEmail) {
-    relatedClientId = await uniqueClientIdByContact("email", submittedEmail);
-    if (!relatedClientId) {
-      relatedClientId = await uniqueClientIdByEitherColumn("primary_email", "billing_email", submittedEmail);
+    emailClientId = await uniqueClientIdByContactEmail(submittedEmail);
+    if (!emailClientId) {
+      emailClientId = await uniqueClientIdByEitherEmailColumn("primary_email", "billing_email", submittedEmail);
     }
   }
 
-  const allowPhoneAndNameMatch = matchStrategy !== "email";
-
-  if (!relatedClientId && allowPhoneAndNameMatch && submittedPhone) {
-    relatedClientId = await uniqueClientIdByContact("phone", submittedPhone);
-    if (!relatedClientId) {
-      const { data } = await db
-        .from("clients")
-        .select("id")
-        .eq("org_id", form.org_id)
-        .is("deleted_at", null)
-        .eq("primary_phone", submittedPhone)
-        .limit(2);
-      if ((data ?? []).length === 1) relatedClientId = data[0].id;
-    }
-  }
-
-  if (!relatedClientId && allowPhoneAndNameMatch && submittedFirstName && submittedLastName) {
-    const { data: contacts } = await db
-      .from("client_contacts")
-      .select("client_id")
-      .eq("org_id", form.org_id)
-      .ilike("first_name", escapeIlike(submittedFirstName))
-      .ilike("last_name", escapeIlike(submittedLastName))
-      .is("deleted_at", null)
-      .limit(2);
-    const contactIds = [...new Set((contacts ?? []).map((c: { client_id: string }) => c.client_id))] as string[];
-    if (contactIds.length === 1) {
-      relatedClientId = contactIds[0];
-    } else if (contactIds.length === 0 && submittedName) {
-      const { data } = await db
-        .from("clients")
-        .select("id")
-        .eq("org_id", form.org_id)
-        .is("deleted_at", null)
-        .ilike("display_name", escapeIlike(submittedName))
-        .limit(2);
-      if ((data ?? []).length === 1) relatedClientId = data[0].id;
+  if (matchStrategy === "email") {
+    relatedClientId = emailClientId;
+  } else {
+    const requireCompany = matchStrategy === "name_email_and_company";
+    if (
+      emailClientId &&
+      (await clientCorroboratedByNameOrCompany(
+        emailClientId,
+        submittedFirstName,
+        submittedLastName,
+        requireCompany ? mappedCompany : null
+      ))
+    ) {
+      relatedClientId = emailClientId;
+    } else if (submittedPhone) {
+      const phoneClientId = await uniqueClientIdByPhoneDigits(submittedPhone);
+      if (
+        phoneClientId &&
+        (await clientCorroboratedByNameOrCompany(
+          phoneClientId,
+          submittedFirstName,
+          submittedLastName,
+          requireCompany ? mappedCompany : null
+        ))
+      ) {
+        relatedClientId = phoneClientId;
+      }
     }
   }
 

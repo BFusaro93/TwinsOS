@@ -520,7 +520,12 @@ async function handleRun(request: Request) {
         .is("deleted_at", null)
         .order("position", { ascending: true });
 
-      const currentEvent = (events ?? []).find((e: { position: number }) => e.position === next_event_position);
+      // `events` only contains is_active rows, so a deactivated step at
+      // exactly next_event_position must not be treated as "nothing left" —
+      // fall through to whatever active step comes next.
+      const currentEvent = (events ?? [])
+        .filter((e: { position: number }) => e.position >= next_event_position)
+        .sort((a: { position: number }, b: { position: number }) => a.position - b.position)[0];
 
       if (!currentEvent) {
         await (adminClient as AdminClient)
@@ -551,8 +556,13 @@ async function handleRun(request: Request) {
       const eventConfig = (currentEvent.config ?? {}) as Record<string, any>;
 
       if (currentEvent.event_type === "wait") {
-        const nextPos = next_event_position + 1;
-        const nextEvent = (events ?? []).find((e: { position: number }) => e.position === nextPos);
+        // currentEvent may sit past next_event_position (a deactivated gap
+        // was skipped above), so chain from its actual position, and look
+        // for the next ACTIVE step rather than assuming position+1 exists.
+        const nextEvent = (events ?? [])
+          .filter((e: { position: number }) => e.position > currentEvent.position)
+          .sort((a: { position: number }, b: { position: number }) => a.position - b.position)[0];
+        const nextPos = nextEvent?.position ?? currentEvent.position + 1;
         let newFireAt = nowIso;
         if (nextEvent?.event_type === "wait") {
           const days = (nextEvent.config as Record<string, number>)?.days ?? 0;

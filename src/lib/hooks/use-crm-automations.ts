@@ -352,13 +352,29 @@ export function useCreateEvent() {
       config?: Record<string, any>;
       position?: number;
     }) => {
+      // Always derive the position from the sequence's current last step —
+      // every caller previously passed a hardcoded 0 (or a value computed
+      // from a stale local list), so every step in a hand-built sequence
+      // landed at position 0 and only the first ever ran. Ignore the caller's
+      // position entirely rather than trust a value that's easy to get wrong.
+      const { data: existing, error: posError } = await db()
+        .from("crm_sequence_events")
+        .select("position")
+        .eq("sequence_id", values.sequenceId)
+        .is("deleted_at", null)
+        .order("position", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (posError) throw posError;
+      const nextPosition = (existing?.position ?? -1) + 1;
+
       const { data, error } = await db()
         .from("crm_sequence_events")
         .insert({
           sequence_id: values.sequenceId,
           event_type: values.eventType,
           config: values.config ?? {},
-          position: values.position ?? 0,
+          position: nextPosition,
         })
         .select()
         .single();

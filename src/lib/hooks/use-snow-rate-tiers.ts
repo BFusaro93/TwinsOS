@@ -116,8 +116,13 @@ export function useSaveSnowRateTiers() {
       );
       if (insErr) throw insErr;
     },
-    onSuccess: (_d, { jobId }) => {
-      qc.invalidateQueries({ queryKey: ["snow-rate-tiers", jobId] });
+    onSuccess: () => {
+      // Broad invalidation, not just ["snow-rate-tiers", jobId] — the
+      // Snow Invoicing queue caches tiers under a different, batched key
+      // (["snow-rate-tiers", "by-jobs", ...]) that doesn't prefix-match the
+      // per-job key, so editing tiers there left the queue pricing off the
+      // stale (pre-edit) tiers.
+      qc.invalidateQueries({ queryKey: ["snow-rate-tiers"] });
     },
   });
 }

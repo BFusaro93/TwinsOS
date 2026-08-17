@@ -189,8 +189,13 @@ export async function advanceEnrollmentPastStep(
   supabase: AnyClient,
   params: { enrollmentId: string; events: SequenceEventRow[]; completedPosition: number; nowIso: string }
 ): Promise<string> {
-  const nextPos = params.completedPosition + 1;
-  const nextEvent = params.events.find((e) => e.position === nextPos);
+  // `params.events` is pre-filtered to is_active events, so a deactivated
+  // middle step leaves a gap at completedPosition + 1 — matching that exact
+  // position would read "nothing follows" and complete the enrollment early.
+  // Take the next active step by position instead, wherever it actually is.
+  const nextEvent = params.events
+    .filter((e) => e.position > params.completedPosition)
+    .sort((a, b) => a.position - b.position)[0];
 
   if (!nextEvent) {
     await supabase
@@ -206,14 +211,14 @@ export async function advanceEnrollmentPastStep(
     d.setDate(d.getDate() + days);
     await supabase
       .from("crm_sequence_enrollments")
-      .update({ next_event_position: nextPos + 1, next_fire_at: d.toISOString(), updated_at: params.nowIso })
+      .update({ next_event_position: nextEvent.position + 1, next_fire_at: d.toISOString(), updated_at: params.nowIso })
       .eq("id", params.enrollmentId);
     return `advanced → wait ${days}d`;
   }
 
   await supabase
     .from("crm_sequence_enrollments")
-    .update({ next_event_position: nextPos, next_fire_at: params.nowIso, updated_at: params.nowIso })
+    .update({ next_event_position: nextEvent.position, next_fire_at: params.nowIso, updated_at: params.nowIso })
     .eq("id", params.enrollmentId);
-  return `advanced → position ${nextPos}`;
+  return `advanced → position ${nextEvent.position}`;
 }
