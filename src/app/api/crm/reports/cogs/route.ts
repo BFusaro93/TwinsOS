@@ -37,6 +37,29 @@ export async function GET(request: Request) {
   const from = searchParams.get("from");
   const to = searchParams.get("to");
 
+  // Window by actual visit completion date, not crm_jobs.updated_at — a job
+  // completed in an earlier period but re-opened/edited later (status
+  // tweak, note added) would otherwise show up in the WRONG period's COGS,
+  // and a job completed within the window but untouched since would be
+  // wrongly excluded if `to` is tight. crm_jobs has no completion timestamp
+  // of its own; a job's completion date is whichever of its visits actually
+  // completed within range.
+  let qualifyingJobIds: string[] | null = null;
+  if (from || to) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let vq = (supabase as any)
+      .from("crm_job_visits")
+      .select("job_id")
+      .not("completed_at", "is", null);
+    if (from) vq = vq.gte("completed_at", from);
+    if (to) vq = vq.lte("completed_at", to);
+    const { data: qualifyingVisits, error: vErr } = await vq;
+    if (vErr) return NextResponse.json({ error: vErr.message }, { status: 500 });
+    qualifyingJobIds = Array.from(
+      new Set((qualifyingVisits ?? []).map((v: { job_id: string }) => v.job_id))
+    );
+  }
+
   // Fetch completed jobs with service, estimate, and visit data
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let q = (supabase as any)
@@ -53,8 +76,9 @@ export async function GET(request: Request) {
     .is("deleted_at", null)
     .not("service_id", "is", null);
 
-  if (from) q = q.gte("updated_at", from);
-  if (to) q = q.lte("updated_at", to);
+  if (qualifyingJobIds) {
+    q = q.in("id", qualifyingJobIds.length > 0 ? qualifyingJobIds : ["00000000-0000-0000-0000-000000000000"]);
+  }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: jobs, error } = await (q as any);

@@ -40,6 +40,24 @@ export async function GET(request: Request) {
   const to = searchParams.get("to");
   const serviceId = searchParams.get("service_id");
 
+  // crm_jobs has no clocked_out_at column of its own — filtering the jobs
+  // query directly on it (as this route previously did) errored on every
+  // request. A job's completion date here is whichever of its visits was
+  // actually clocked out, matching the men_count/rate_cents lookup below
+  // which already keys off crm_job_visits.clocked_out_at.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let vq = (supabase as any)
+    .from("crm_job_visits")
+    .select("job_id")
+    .not("clocked_out_at", "is", null);
+  if (from) vq = vq.gte("clocked_out_at", from);
+  if (to) vq = vq.lte("clocked_out_at", to);
+  const { data: qualifyingVisits, error: vErr } = await vq;
+  if (vErr) return NextResponse.json({ error: vErr.message }, { status: 500 });
+  const qualifyingJobIds = Array.from(
+    new Set((qualifyingVisits ?? []).map((v: { job_id: string }) => v.job_id))
+  );
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let q = (supabase as any)
     .from("crm_jobs")
@@ -55,10 +73,8 @@ export async function GET(request: Request) {
       estimates:estimate_id ( total_cents, total_budgeted_hours )
     `)
     .is("deleted_at", null)
-    .not("clocked_out_at", "is", null);
+    .in("id", qualifyingJobIds.length > 0 ? qualifyingJobIds : ["00000000-0000-0000-0000-000000000000"]);
 
-  if (from) q = q.gte("clocked_out_at", from);
-  if (to) q = q.lte("clocked_out_at", to);
   if (serviceId) q = q.eq("service_id", serviceId);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
