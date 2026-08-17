@@ -71,7 +71,17 @@ export function useAvbWeeks() {
 export function useUpsertAvbWeek() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ weekEnd, data }: { weekEnd: string; data: AvbWeekData }) => {
+    /**
+     * `expectedUpdatedAt` — pass the `updatedAt` of the record that was loaded
+     * into the editor (AvbDashboard.handleEditWeek) when editing an EXISTING
+     * week. The whole week is one JSONB blob loaded once, edited client-side,
+     * and written back wholesale — without this check, two people editing the
+     * same week concurrently (one fixing crew assignments, another
+     * re-importing a Gusto CSV) would have whoever saves last silently
+     * overwrite the other's edits with no warning. Omit it for a brand-new
+     * week (nothing to conflict with yet).
+     */
+    mutationFn: async ({ weekEnd, data, expectedUpdatedAt }: { weekEnd: string; data: AvbWeekData; expectedUpdatedAt?: string }) => {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");
@@ -82,7 +92,25 @@ export function useUpsertAvbWeek() {
         .single();
       const orgId = profile?.org_id;
       if (!orgId) throw new Error("No org found for user");
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
+      if (expectedUpdatedAt) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: updatedRows, error } = await (supabase as any)
+          .from("avb_weeks")
+          .update({ data: data as unknown as never })
+          .eq("org_id", orgId)
+          .eq("week_end", weekEnd)
+          .eq("updated_at", expectedUpdatedAt)
+          .select("id");
+        if (error) throw error;
+        if (!updatedRows || updatedRows.length === 0) {
+          throw new Error(
+            "This week was modified by someone else since you opened it. Reload the week and re-apply your changes before saving."
+          );
+        }
+        return;
+      }
+
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any)
         .from("avb_weeks")

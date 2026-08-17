@@ -86,7 +86,7 @@ const CREW_COLORS = ["#3b82f6","#22c55e","#ef4444","#f59e0b","#a78bfa","#60ab45"
 
 type Tab = "summary" | "daily" | "history" | "ytd" | "import" | "settings";
 type AvbField = "budgeted" | "actual" | "revenue";
-type AvbWeek = { weekEnd: string; data: AvbWeekData };
+type AvbWeek = { weekEnd: string; data: AvbWeekData; updatedAt?: string };
 
 // ── Utilities ──────────────────────────────────────────────────────────────────
 const pf = (v: unknown) => parseFloat(String(v ?? "").replace(",","")) || 0;
@@ -1536,6 +1536,9 @@ export function AvbDashboard() {
   // When editing an existing week, lock weekEnd so a re-uploaded CSV doesn't
   // create a new row instead of overwriting the existing one.
   const editingOriginalWeekEnd = useRef<string | null>(null);
+  // Captures the updatedAt of the week record as loaded, so saveWeek can
+  // detect if someone else saved this same week in the meantime.
+  const editingWeekUpdatedAt = useRef<string | undefined>(undefined);
   const csvRef = useRef<HTMLInputElement>(null);
   const pdfRef = useRef<HTMLInputElement>(null);
 
@@ -1728,8 +1731,9 @@ export function AvbDashboard() {
   const saveWeek = useCallback(async () => {
     if (!weekEnd) return;
     try {
-      await upsert.mutateAsync({weekEnd,data:wd});
+      await upsert.mutateAsync({weekEnd,data:wd,expectedUpdatedAt:editingWeekUpdatedAt.current});
       editingOriginalWeekEnd.current = null;
+      editingWeekUpdatedAt.current = undefined;
       setViewWeekEnd(weekEnd);
       setTab("summary");
     } catch(e) {
@@ -1739,6 +1743,7 @@ export function AvbDashboard() {
 
   const handleEditWeek = useCallback((w: AvbWeek) => {
     editingOriginalWeekEnd.current = w.weekEnd;
+    editingWeekUpdatedAt.current = w.updatedAt;
     setWd(w.data);
     setWeekEnd(w.weekEnd);
     setImportDay(0);
@@ -1749,6 +1754,7 @@ export function AvbDashboard() {
 
   const handleImportNew = useCallback(() => {
     editingOriginalWeekEnd.current = null;
+    editingWeekUpdatedAt.current = undefined;
     setWd(defaultWeekData(defAssignments, crewDefs));
     setWeekEnd(thisSunday());
     setImportDay(0);
