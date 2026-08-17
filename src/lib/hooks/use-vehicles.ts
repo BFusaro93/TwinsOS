@@ -197,35 +197,43 @@ export function useBulkImportVehicles() {
       const inserts = rows
         .filter((r) => r.name?.trim() && r.assetTag?.trim())
         .map((r) => ({
-          name: r.name.trim(),
-          asset_tag: r.assetTag.trim(),
-          make: r.make?.trim() || null,
-          model: r.model?.trim() || null,
-          year: r.year ? parseInt(r.year) || null : null,
-          license_plate: r.licensePlate?.trim() || null,
-          vin: r.vin?.trim() || null,
-          fuel_type: r.fuelType?.trim() || null,
-          status: normaliseVehicleStatus(r.status ?? ""),
-          assigned_crew: r.assignedCrew?.trim() || null,
-          purchase_vendor_name: r.purchaseVendorName?.trim() || null,
-          purchase_date: r.purchaseDate?.trim() || null,
-          purchase_price: r.purchasePrice ? Math.round(parseFloat(r.purchasePrice) * 100) || null : null,
-          payment_method: r.paymentMethod?.trim() || null,
-          finance_institution: r.financeInstitution?.trim() || null,
-          asset_type: "vehicle",
+          statusProvided: !!r.status?.trim(),
+          row: {
+            name: r.name.trim(),
+            asset_tag: r.assetTag.trim(),
+            make: r.make?.trim() || null,
+            model: r.model?.trim() || null,
+            year: r.year ? parseInt(r.year) || null : null,
+            license_plate: r.licensePlate?.trim() || null,
+            vin: r.vin?.trim() || null,
+            fuel_type: r.fuelType?.trim() || null,
+            status: normaliseVehicleStatus(r.status ?? ""),
+            assigned_crew: r.assignedCrew?.trim() || null,
+            purchase_vendor_name: r.purchaseVendorName?.trim() || null,
+            purchase_date: r.purchaseDate?.trim() || null,
+            purchase_price: r.purchasePrice ? Math.round(parseFloat(r.purchasePrice) * 100) || null : null,
+            payment_method: r.paymentMethod?.trim() || null,
+            finance_institution: r.financeInstitution?.trim() || null,
+            asset_type: "vehicle",
+          },
         }));
       if (inserts.length === 0) return 0;
 
       // Insert one-by-one; on duplicate asset_tag, update the existing row
       let count = 0;
-      for (const row of inserts) {
+      for (const { row, statusProvided } of inserts) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { error } = await (supabase as any).from("vehicles").insert(row);
         if (error?.code === "23505") {
           const { data: { user } } = await supabase.auth.getUser();
           const { data: profile } = await supabase.from("profiles").select("org_id").eq("id", user!.id).single();
+          // Re-importing a CSV to update mileage/VIN/etc with a blank status
+          // column would otherwise reset an in_shop/out_of_service vehicle
+          // back to "active" — normaliseVehicleStatus() defaults any
+          // blank/unrecognized value to "active", so status is only
+          // included in the patch when the CSV cell actually had content.
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          await (supabase as any).from("vehicles").update({
+          const { error: updateErr } = await (supabase as any).from("vehicles").update({
             name: row.name,
             make: row.make,
             model: row.model,
@@ -233,7 +241,7 @@ export function useBulkImportVehicles() {
             license_plate: row.license_plate,
             vin: row.vin,
             fuel_type: row.fuel_type,
-            status: row.status,
+            ...(statusProvided ? { status: row.status } : {}),
             assigned_crew: row.assigned_crew,
             purchase_vendor_name: row.purchase_vendor_name,
             purchase_date: row.purchase_date,
@@ -241,6 +249,7 @@ export function useBulkImportVehicles() {
             payment_method: row.payment_method,
             finance_institution: row.finance_institution,
           }).eq("asset_tag", row.asset_tag).eq("org_id", profile!.org_id).is("deleted_at", null);
+          if (updateErr) throw updateErr;
         } else if (error) {
           throw error;
         }
