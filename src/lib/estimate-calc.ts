@@ -284,12 +284,17 @@ export function computeInstallmentSchedule(
   const start = new Date(startDate + "T00:00:00");
 
   return Array.from({ length: numInstallments }, (_, i) => {
-    const due = new Date(start);
-    due.setMonth(due.getMonth() + i + 1);
-    if (dayOfMonth) {
-      const daysInMonth = new Date(due.getFullYear(), due.getMonth() + 1, 0).getDate();
-      due.setDate(Math.min(dayOfMonth, daysInMonth));
-    }
+    // Building the date directly from (year, targetMonthIndex, day) rather
+    // than mutating a copy of `start` via .setMonth() avoids JS Date's
+    // month-overflow rollover: with no dayOfMonth override, `due` still
+    // carried start's original day-of-month (e.g. 31), and .setMonth()
+    // silently rolls into the FOLLOWING month whenever the target month is
+    // shorter (e.g. Jan 31 + 1 month landed on Mar 3, skipping February
+    // entirely and leaving installments #1/#2 only ~28 days apart).
+    const targetDay = dayOfMonth || start.getDate();
+    const targetMonthIndex = start.getMonth() + i + 1;
+    const daysInTargetMonth = new Date(start.getFullYear(), targetMonthIndex + 1, 0).getDate();
+    const due = new Date(start.getFullYear(), targetMonthIndex, Math.min(targetDay, daysInTargetMonth));
     return {
       number: i + 1,
       amountCents: baseAmount + (i === numInstallments - 1 ? remainder : 0),
