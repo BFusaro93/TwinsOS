@@ -918,17 +918,31 @@ export function useUpdateVisit() {
         }
       }
 
+      // Completing a visit must go through the /complete route below, which
+      // has its own idempotency guard keyed on reading status==='completed'
+      // from the DB (so a repeat "Mark Complete" click doesn't double-invoice
+      // or double-fire automations). Writing status:'completed' here FIRST
+      // would make that guard see the transition as already done and
+      // short-circuit — skipping the auto-invoice, automations, job-close
+      // cascade, and package next-visit recalc entirely, silently. So the
+      // completed transition itself is excluded from this raw update; every
+      // other field in `updates` (e.g. completion_notes, actual_hours) still
+      // writes directly, same as before.
+      const isCompleting = updates.status === 'completed';
+      const { status: _statusOmittedForCompletion, ...updatesWithoutStatus } = updates;
+      const dbUpdates = isCompleting ? updatesWithoutStatus : updates;
+
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any)
         .from('crm_job_visits')
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        .update(updates as any)
+        .update(dbUpdates as any)
         .eq('id', id);
       if (error) throw error;
 
       // Cascade completion to parent job via server route
       let clientId: string | undefined;
-      if (updates.status === 'completed' && id) {
+      if (isCompleting && id) {
         const res = await fetch(`/api/crm/visits/${id}/complete`, { method: 'POST' });
         if (!res.ok) {
           const body = await res.json() as { error?: string };
