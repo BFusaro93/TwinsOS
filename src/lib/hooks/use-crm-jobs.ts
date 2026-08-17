@@ -1501,6 +1501,7 @@ export function useCreateJobsFromEstimate() {
       jobType,
       scheduledDate,
       crewId,
+      schedule,
       notesToCrew,
       services,
       materials,
@@ -1510,6 +1511,7 @@ export function useCreateJobsFromEstimate() {
       jobType: string;
       scheduledDate: string | null;
       crewId: string | null;
+      schedule?: string | null;
       notesToCrew: string | null;
       services: { serviceName: string; serviceId: string | null; qty: number; rateCents: number | null; totalCents: number; budgetedHours?: number; budgetMethod?: string }[];
       materials?: { productItemId: string; productName: string; qty: number; unitPriceCents: number | null }[];
@@ -1528,6 +1530,7 @@ export function useCreateJobsFromEstimate() {
           status: scheduledDate ? "scheduled" : "hold",
           scheduled_date: scheduledDate,
           crew_id: crewId,
+          schedule: schedule ?? null,
           notes_to_crew: notesToCrew,
           source: "estimate",
           rate_cents: services.reduce((s, sv) => s + sv.totalCents, 0),
