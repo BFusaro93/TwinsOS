@@ -778,21 +778,15 @@ export function useRefundPayment() {
     }) => {
       const supabase = createClient();
 
-      // load current payment
+      // refund_payment() reads + clamps + writes refunded_amount_cents
+      // atomically under a row lock, and rejects a refund that would exceed
+      // the payment's original amount — see the RPC migration for why a
+      // plain read-then-update here was unsafe under concurrent refunds.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: pmt, error: pmtErr } = await (supabase as any)
-        .from("crm_payments")
-        .select("refunded_amount_cents, amount_cents")
-        .eq("id", id)
-        .single();
-      if (pmtErr) throw pmtErr;
-
-      const newRefunded = pmt.refunded_amount_cents + refundAmountCents;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error } = await (supabase as any)
-        .from("crm_payments")
-        .update({ refunded_amount_cents: newRefunded })
-        .eq("id", id);
+      const { error } = await (supabase.rpc as any)("refund_payment", {
+        p_payment_id: id,
+        p_refund_amount_cents: refundAmountCents,
+      });
       if (error) throw error;
 
       // Reverse the refund across every invoice this payment was actually

@@ -1,7 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 import { mapPart } from "@/lib/supabase/mappers";
-import { addCostLayer, computeNewUnitCost } from "@/lib/cost-methods";
 import { setParts } from "@/lib/hooks/cost-store";
 import { useSettingsStore } from "@/stores/settings-store";
 import type { Part } from "@/types/cmms";
@@ -269,31 +268,24 @@ export function useReceivePartCostLayer() {
 
       const { data: current, error: fetchErr } = await supabase
         .from("parts")
-        .select("org_id, cost_layers, unit_cost, quantity_on_hand")
+        .select("org_id")
         .eq("id", receipt.partId)
         .single();
       if (fetchErr) throw fetchErr;
 
+      // The cost-layer append and WAC/FIFO recompute happen inside the RPC,
+      // under the same row lock as the quantity update, so two concurrent
+      // receipts of the same part don't race on a stale JS-side read (see
+      // the RPC migration for the corruption this previously caused).
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const currentLayers = (current.cost_layers as any[]) ?? [];
-      const newLayers = addCostLayer(currentLayers, {
-        quantity: receipt.quantity,
-        unitCost: receipt.unitCost,
-        receivedAt: receipt.receivedAt,
-        poNumber: receipt.poNumber,
-      });
-      const newUnitCost = computeNewUnitCost(newLayers, costMethod, current.unit_cost);
-
-      // Goes through an RPC (rather than a plain update) so the quantity
-      // change is attributed in the audit trail to this PO/receipt instead
-      // of showing up as a generic manual "quantity adjusted" edit.
-      const { error: updateErr } = await supabase.rpc("receive_part_quantity", {
+      const { error: updateErr } = await (supabase.rpc as any)("receive_part_quantity", {
         p_org_id: current.org_id as string,
         p_part_id: receipt.partId,
         p_quantity: Math.round(receipt.quantity),
-        p_new_unit_cost: newUnitCost,
-        p_new_cost_layers: newLayers as unknown as import("@/types/supabase").Json,
+        p_layer_unit_cost: receipt.unitCost,
+        p_received_at: receipt.receivedAt,
         p_po_number: receipt.poNumber ?? "",
+        p_cost_method: costMethod,
       });
       if (updateErr) throw updateErr;
     },

@@ -323,12 +323,27 @@ export async function POST(
 
 function advanceDate(from: string, frequency: string): string {
   const d = new Date(from);
+  const monthsToAdd =
+    frequency === "monthly" ? 1 :
+    frequency === "quarterly" ? 3 :
+    frequency === "annual" ? 12 :
+    0;
+
+  if (monthsToAdd > 0) {
+    // Building the target date from (year, targetMonthIndex, clampedDay)
+    // rather than mutating via .setMonth()/.setFullYear() avoids JS Date's
+    // month-overflow rollover: a schedule due Jan 31 advanced with
+    // .setMonth(+1) landed on Mar 3 (Feb has only 28/29 days), silently
+    // skipping February's occurrence entirely.
+    const targetMonthIndex = d.getMonth() + monthsToAdd;
+    const daysInTargetMonth = new Date(d.getFullYear(), targetMonthIndex + 1, 0).getDate();
+    const next = new Date(d.getFullYear(), targetMonthIndex, Math.min(d.getDate(), daysInTargetMonth));
+    return next.toISOString().slice(0, 10);
+  }
+
   switch (frequency) {
-    case "daily":     d.setDate(d.getDate() + 1); break;
-    case "weekly":    d.setDate(d.getDate() + 7); break;
-    case "monthly":   d.setMonth(d.getMonth() + 1); break;
-    case "quarterly": d.setMonth(d.getMonth() + 3); break;
-    case "annual":    d.setFullYear(d.getFullYear() + 1); break;
+    case "daily":  d.setDate(d.getDate() + 1); break;
+    case "weekly": d.setDate(d.getDate() + 7); break;
   }
   return d.toISOString().slice(0, 10);
 }

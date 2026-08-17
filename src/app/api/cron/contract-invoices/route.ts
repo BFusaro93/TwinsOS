@@ -93,7 +93,14 @@ export async function GET(request: Request) {
       ? new Date(now.getFullYear(), now.getMonth() + 1, 1)
       : new Date(now.getFullYear(), now.getMonth(), 1);
     const billingMonthLastDay = new Date(billingMonthDate.getFullYear(), billingMonthDate.getMonth() + 1, 0).getDate();
-    const billingDay = Math.min(todayDay, billingMonthLastDay);
+    // Clamp the contract's OWN configured billing day to the target month's
+    // length — not today's day-of-month. todayDay is already clamped to
+    // THIS month's length (see dueTodayContracts filter above), so for an
+    // advance-billed contract (target month = next month) reusing todayDay
+    // re-clamped a value that was clamped for the wrong month: a billing_day
+    // 31 contract firing on Feb 28 would date a March invoice the 28th
+    // instead of the 31st.
+    const billingDay = Math.min(contract.billing_day_of_month, billingMonthLastDay);
     const billingMonthKey = MONTH_KEYS[billingMonthDate.getMonth()];
     const invoiceDateStr = `${billingMonthDate.getFullYear()}-${String(billingMonthDate.getMonth() + 1).padStart(2, "0")}-${String(billingDay).padStart(2, "0")}`;
     const monthStart = `${billingMonthDate.getFullYear()}-${String(billingMonthDate.getMonth() + 1).padStart(2, "0")}-01`;
@@ -155,6 +162,15 @@ export async function GET(request: Request) {
       .single();
 
     if (invErr) {
+      // 23505 = unique_violation on crm_invoices_one_per_contract_month — a
+      // concurrent run (manual "Create Invoices" click, or an overlapping
+      // cron invocation) already inserted this month's invoice between the
+      // SELECT check above and this INSERT; report it the same as the
+      // pre-existing skip path rather than a raw error.
+      if (invErr.code === "23505") {
+        results.push({ contractId: contract.id, status: "skipped", reason: "already billed for this month" });
+        continue;
+      }
       console.error(`[contract-invoices] invoice insert error for contract ${contract.id}:`, invErr);
       results.push({ contractId: contract.id, status: "skipped", reason: invErr.message });
       continue;

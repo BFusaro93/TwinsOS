@@ -1,7 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 import { mapProductItem } from "@/lib/supabase/mappers";
-import { addCostLayer, computeNewUnitCost } from "@/lib/cost-methods";
 import { setProducts } from "@/lib/hooks/cost-store";
 import { useSettingsStore } from "@/stores/settings-store";
 import type { ProductItem } from "@/types";
@@ -62,28 +61,25 @@ export function useReceiveProductCostLayer() {
 
       const { data: current, error: fetchErr } = await supabase
         .from("product_items")
-        .select("org_id, cost_layers, unit_cost")
+        .select("org_id")
         .eq("id", receipt.productId)
         .single();
       if (fetchErr) throw fetchErr;
 
+      // The cost-layer append and WAC/FIFO recompute happen inside the RPC,
+      // under the same row lock as this read, so two concurrent receipts of
+      // the same product don't race on a stale JS-side read (see the RPC
+      // migration for the corruption this previously caused).
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const currentLayers = (current.cost_layers as any[]) ?? [];
-      const newLayers = addCostLayer(currentLayers, {
-        quantity: receipt.quantity,
-        unitCost: receipt.unitCost,
-        receivedAt: receipt.receivedAt,
-        poNumber: receipt.poNumber,
+      const { error: updateErr } = await (supabase.rpc as any)("receive_product_cost_layer", {
+        p_org_id: current.org_id as string,
+        p_product_id: receipt.productId,
+        p_layer_quantity: receipt.quantity,
+        p_layer_unit_cost: receipt.unitCost,
+        p_received_at: receipt.receivedAt,
+        p_po_number: receipt.poNumber ?? "",
+        p_cost_method: costMethod,
       });
-      const newUnitCost = computeNewUnitCost(newLayers, costMethod, current.unit_cost);
-
-      const { error: updateErr } = await supabase
-        .from("product_items")
-        .update({
-          cost_layers: newLayers as unknown as import("@/types/supabase").Json,
-          unit_cost: newUnitCost,
-        })
-        .eq("id", receipt.productId);
       if (updateErr) throw updateErr;
 
       // quantity_on_hand goes through the atomic adjust RPC (row-locked,
