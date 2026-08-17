@@ -112,17 +112,32 @@ export function computeLineItem(
     budgetedHours = item.qty / item.productionRateSqftPerHr;
   }
 
-  let costCents = item.costCents;
-  if (costCents === 0 && breakevenRateCents && budgetedHours > 0) {
-    costCents = Math.round(budgetedHours * breakevenRateCents);
-  }
-
   const totalBudgetedHours = budgetedHours * item.visits;
 
-  const totalCostCents =
-    item.calcType === 1
-      ? Math.round(costCents * item.qty * item.visits)
-      : costCents;
+  // `costCents` is a PER-UNIT rate everywhere else in this function (it gets
+  // multiplied by qty × visits below, same as a manually-typed cost) — but
+  // `budgetedHours` is the labor time for the FULL qty of this line in one
+  // occurrence, so `budgetedHours × breakevenRateCents` is already a
+  // per-occurrence TOTAL, not a per-unit rate. Auto-filling costCents
+  // directly from that total and then multiplying by qty again squared
+  // qty into the result (a 20,000 sqft / 26-visit line could turn a real
+  // $33,800 labor cost into $676,000,000). Compute the accurate
+  // per-occurrence total first and derive totalCostCents from THAT
+  // (rounding once), and only back it out to a per-unit rate for
+  // costCents' display/storage purposes — dividing first and re-multiplying
+  // a rounded per-unit rate by a large qty would reintroduce the same kind
+  // of rounding-amplification error.
+  let costCents = item.costCents;
+  let totalCostCents: number;
+  if (costCents === 0 && breakevenRateCents && budgetedHours > 0) {
+    const perOccurrenceCostCents = Math.round(budgetedHours * breakevenRateCents);
+    costCents = item.qty > 0 ? Math.round(perOccurrenceCostCents / item.qty) : perOccurrenceCostCents;
+    totalCostCents =
+      item.calcType === 1 ? Math.round(perOccurrenceCostCents * item.visits) : perOccurrenceCostCents;
+  } else {
+    totalCostCents =
+      item.calcType === 1 ? Math.round(costCents * item.qty * item.visits) : costCents;
+  }
 
   const marginBps =
     totalCents > 0
