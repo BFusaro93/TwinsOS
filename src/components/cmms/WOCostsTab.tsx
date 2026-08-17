@@ -125,9 +125,14 @@ function PartsSection({ workOrderId }: { workOrderId: string }) {
   function saveEdit() {
     if (!editingId) return;
     const quantity = Math.max(1, parseInt(editForm.quantity, 10) || 1);
-    const unitCost = Math.round(parseFloat(editForm.unitCost) * 100);
+    // Only fall back to the old unit cost when the input is genuinely
+    // unparseable — `unitCost || fallback` also triggered on a legitimate
+    // $0.00 entry (e.g. a warranty/free part), silently reverting it back
+    // to whatever the cost was before the edit.
+    const parsedUnitCost = parseFloat(editForm.unitCost);
+    const unitCost = Number.isNaN(parsedUnitCost) ? (editingItem?.unitCost ?? 0) : Math.round(parsedUnitCost * 100);
     updatePart(
-      { id: editingId, workOrderId, quantity, unitCost: unitCost || (editingItem?.unitCost ?? 0) },
+      { id: editingId, workOrderId, quantity, unitCost },
       { onSuccess: () => setEditingId(null) }
     );
   }
@@ -387,7 +392,11 @@ function LaborSection({ workOrderId }: { workOrderId: string }) {
   function save() {
     const hours = parseFloat(form.hours);
     const rate = Math.round(parseFloat(form.hourlyRate) * 100);
-    if (!form.technicianName || !hours || !rate) return;
+    // Block only on a missing name or genuinely unparseable numbers — the
+    // prior falsy check (!hours || !rate) also silently blocked a
+    // legitimate 0 (e.g. volunteer/comped labor), with no toast or error to
+    // explain why the dialog just did nothing.
+    if (!form.technicianName || Number.isNaN(hours) || Number.isNaN(rate)) return;
 
     if (isEditing && editingId) {
       updateLabor(
@@ -571,7 +580,11 @@ function VendorSection({ workOrderId }: { workOrderId: string }) {
 
   function save() {
     const costCents = Math.round(parseFloat(form.cost) * 100);
-    if (!form.vendorName || !costCents) return;
+    // Block only on a missing vendor name or a genuinely unparseable cost —
+    // the prior falsy check (!costCents) also silently blocked a legitimate
+    // $0 charge (e.g. a warranty repair), with no toast or error to explain
+    // why the dialog just did nothing.
+    if (!form.vendorName || Number.isNaN(costCents)) return;
 
     if (isEditing && editingId) {
       updateCharge(
