@@ -29,7 +29,12 @@ interface NewReceivingDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   initialData?: GoodsReceipt | null;
-  onReceiptEdit?: (allFullyReceived: boolean) => void;
+  /** Called with each line's PO line item id + this receipt's (possibly
+   *  just-edited) quantityReceived, so the caller can check the PO's true
+   *  CUMULATIVE received total across every receipt — a single receipt's
+   *  own quantityReceived is only ever this receipt's own contribution,
+   *  not the whole PO's status. */
+  onReceiptEdit?: (lines: { lineItemId: string | null; quantityReceived: number }[]) => void;
 }
 
 export function NewReceivingDialog({ open, onOpenChange, initialData, onReceiptEdit }: NewReceivingDialogProps) {
@@ -37,6 +42,7 @@ export function NewReceivingDialog({ open, onOpenChange, initialData, onReceiptE
   const [lines, setLines] = useState<
     Array<{
       id: string;
+      lineItemId: string | null;
       productItemName: string;
       partNumber: string;
       quantityOrdered: number;
@@ -53,6 +59,7 @@ export function NewReceivingDialog({ open, onOpenChange, initialData, onReceiptE
       setLines(
         initialData.lines.map((l) => ({
           id: l.id,
+          lineItemId: l.lineItemId,
           productItemName: l.productItemName,
           partNumber: l.partNumber,
           quantityOrdered: l.quantityOrdered,
@@ -87,8 +94,7 @@ export function NewReceivingDialog({ open, onOpenChange, initialData, onReceiptE
       },
       {
         onSuccess: () => {
-          const allFull = lines.every((l) => l.quantityReceived >= l.quantityOrdered);
-          onReceiptEdit?.(allFull);
+          onReceiptEdit?.(lines.map((l) => ({ lineItemId: l.lineItemId, quantityReceived: l.quantityReceived })));
           onOpenChange(false);
         },
       }

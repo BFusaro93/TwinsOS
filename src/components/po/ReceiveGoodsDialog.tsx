@@ -94,12 +94,22 @@ export function ReceiveGoodsDialog({
   const [notes, setNotes] = useState("");
   const [submitted, setSubmitted] = useState(false);
 
-  // Build the maintenance-part part-number set for quick lookup
-  const maintPartNumbers = new Set(
-    products
-      .filter((p) => p.category === "maintenance_part")
-      .map((p) => p.partNumber)
-  );
+  // Resolves a PO line to its catalog product with the same strict
+  // priority used at submit time below: UUID first, then a non-empty part
+  // number, then exact name. A blank part number must never be used to
+  // match — plenty of legitimate non-maintenance-part lines (mulch,
+  // chemicals, etc.) have no part number, and matching on "" would tag
+  // every one of them as a maintenance part the moment ANY maintenance
+  // part in the catalog also happens to have a blank part number.
+  function matchProductForLine(li: LineItem) {
+    const rawId = li.productItemId?.replace(/^product:/, "") ?? "";
+    return (
+      (rawId ? products.find((p) => p.id === rawId) : null) ??
+      (li.partNumber ? products.find((p) => p.partNumber === li.partNumber) : null) ??
+      (li.productItemName ? products.find((p) => p.name === li.productItemName) : null) ??
+      null
+    );
+  }
 
   // Initialise lines from PO line items whenever dialog opens
   useEffect(() => {
@@ -115,7 +125,7 @@ export function ReceiveGoodsDialog({
             quantityOrdered: li.quantity,
             quantityReceived: remaining, // default to remaining only
             unitCost: li.unitCost,
-            isMaintPart: maintPartNumbers.has(li.partNumber),
+            isMaintPart: matchProductForLine(li)?.category === "maintenance_part",
           };
         })
       );
@@ -155,9 +165,18 @@ export function ReceiveGoodsDialog({
   const salesTax = Math.round(taxableSubtotal * (po.taxRatePercent / 100));
   const grandTotal = subtotal + salesTax + po.shippingCost;
 
-  const allFullyReceived = lines.every(
-    (l) => l.quantityReceived === l.quantityOrdered
-  );
+  // Compares the CUMULATIVE received quantity (this receipt + everything
+  // already received on prior receipts) against what was ordered — a plain
+  // `l.quantityReceived === l.quantityOrdered` only looked at THIS
+  // receipt's quantity, so a PO received across two partial receipts that
+  // together add up to the full order could never reach "completed": the
+  // second (final) receipt's own quantityReceived defaults to the
+  // remaining balance, which only equals quantityOrdered when nothing was
+  // received before it.
+  const allFullyReceived = lines.every((l) => {
+    const alreadyReceived = alreadyReceivedMap.get(l.lineItemId) ?? 0;
+    return alreadyReceived + l.quantityReceived >= l.quantityOrdered;
+  });
   const someReceived = lines.some((l) => l.quantityReceived > 0);
   const isValid = someReceived && receivedById !== "";
 
@@ -182,20 +201,7 @@ export function ReceiveGoodsDialog({
       for (const line of linesToReceive) {
         // Find the PO line item to look up the productItemId
         const poLineItem = po.lineItems.find((li) => li.id === line.lineItemId);
-
-        // Bare product ID (strip prefix if present)
-        const rawId = poLineItem?.productItemId?.replace(/^product:/, "") ?? "";
-
-        // Match product with strict priority:
-        // 1. By UUID (most reliable — set when items are added via the app)
-        // 2. By part number (CSV-imported items that have a part #)
-        // 3. By exact name (last resort for items with no part # and no productItemId)
-        // Never fall back to empty-string part number matching — it would match the
-        // wrong product whenever two items both lack a part number.
-        const matchedProduct =
-          (rawId ? products.find((p) => p.id === rawId) : null) ??
-          (line.partNumber ? products.find((p) => p.partNumber === line.partNumber) : null) ??
-          (line.productItemName ? products.find((p) => p.name === line.productItemName) : null);
+        const matchedProduct = poLineItem ? matchProductForLine(poLineItem) : null;
 
         if (!matchedProduct) {
           throw new Error(`No catalog product found for "${line.productItemName}" — cannot update inventory for this line.`);

@@ -272,12 +272,33 @@ export function ReceivingDetailPanel({ receipt }: ReceivingDetailPanelProps) {
     }
   }
 
-  function handleReceiptEdit(currentReceiptAllFull: boolean) {
+  function handleReceiptEdit(editedLines: { lineItemId: string | null; quantityReceived: number }[]) {
     if (!linkedPO) return;
-    // Check ALL receipts for this PO, not just the current one
-    const poReceipts = allReceipts.filter((r) => r.purchaseOrderId === receipt.purchaseOrderId && r.id !== receipt.id);
-    const othersFull = poReceipts.every((r) => r.lines.every((l) => l.quantityRemaining <= 0));
-    const allFullyReceived = currentReceiptAllFull && othersFull;
+    // quantityRemaining on a receipt's own line is only ever "PO total
+    // minus THAT receipt's own contribution" — comparing every OTHER
+    // receipt's quantityRemaining to 0 was nearly always false for any PO
+    // split across multiple partial receipts, since no single receipt's
+    // own remaining reflects the combined total. Sum actual received
+    // quantities across every receipt (using this edit's numbers for the
+    // receipt being edited) per PO line item, and compare that to what the
+    // PO actually ordered.
+    const otherReceipts = allReceipts.filter(
+      (r) => r.purchaseOrderId === receipt.purchaseOrderId && r.id !== receipt.id
+    );
+    const receivedByLineItemId = new Map<string, number>();
+    for (const r of otherReceipts) {
+      for (const l of r.lines) {
+        if (!l.lineItemId) continue;
+        receivedByLineItemId.set(l.lineItemId, (receivedByLineItemId.get(l.lineItemId) ?? 0) + l.quantityReceived);
+      }
+    }
+    for (const l of editedLines) {
+      if (!l.lineItemId) continue;
+      receivedByLineItemId.set(l.lineItemId, (receivedByLineItemId.get(l.lineItemId) ?? 0) + l.quantityReceived);
+    }
+    const allFullyReceived = linkedPO.lineItems.every(
+      (li) => (receivedByLineItemId.get(li.id) ?? 0) >= li.quantity
+    );
     const newStatus = allFullyReceived ? "completed" : "partially_fulfilled";
     // Only update if different from current PO status
     if (linkedPO.status !== newStatus) {
