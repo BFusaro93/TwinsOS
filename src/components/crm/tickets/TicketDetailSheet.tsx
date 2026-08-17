@@ -83,13 +83,27 @@ const FALLBACK_CATEGORIES = ["Uncategorized", "Estimate", "Billing", "Change Ser
 
 // ── print helper ──────────────────────────────────────────────────────────────
 
+// Ticket fields (subject, category, client/assignee names) can originate
+// from an anonymous public-form submission with no sanitization applied
+// upstream (submit-form-response.ts). Interpolating them unescaped into
+// document.write() lets a crafted "Full Name" or subject field execute
+// script in a staff member's browser session the moment they click Print.
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 function printTicket(ticket: CRMTicket) {
   const win = window.open("", "_blank", "width=700,height=900");
   if (!win) { toast.error("Pop-up blocked — allow pop-ups to print tickets"); return; }
   win.document.write(`<!DOCTYPE html>
 <html>
 <head>
-  <title>Ticket #${ticket.ticketNumber}</title>
+  <title>Ticket #${escapeHtml(String(ticket.ticketNumber))}</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: -apple-system, sans-serif; padding: 32px; color: #111; font-size: 14px; }
@@ -105,20 +119,20 @@ function printTicket(ticket: CRMTicket) {
   </style>
 </head>
 <body>
-  <h1>Ticket #${ticket.ticketNumber}</h1>
+  <h1>Ticket #${escapeHtml(String(ticket.ticketNumber))}</h1>
   <div class="meta">Printed ${new Date().toLocaleString()}</div>
   <table>
-    <tr><td>Subject</td><td>${ticket.subject ?? "(no subject)"}</td></tr>
-    <tr><td>Type</td><td style="text-transform:capitalize">${ticket.type}</td></tr>
-    <tr><td>Status</td><td>${TICKET_STATUS_LABEL[ticket.status]}</td></tr>
-    <tr><td>Priority</td><td style="text-transform:capitalize">${ticket.priority}</td></tr>
-    <tr><td>Category</td><td>${ticket.category ?? "—"}</td></tr>
-    <tr><td>Client</td><td>${ticket.clientName ?? "—"}</td></tr>
-    <tr><td>Assigned To</td><td>${ticket.assignedTo ?? "—"}</td></tr>
+    <tr><td>Subject</td><td>${escapeHtml(ticket.subject ?? "(no subject)")}</td></tr>
+    <tr><td>Type</td><td style="text-transform:capitalize">${escapeHtml(ticket.type)}</td></tr>
+    <tr><td>Status</td><td>${escapeHtml(TICKET_STATUS_LABEL[ticket.status])}</td></tr>
+    <tr><td>Priority</td><td style="text-transform:capitalize">${escapeHtml(ticket.priority)}</td></tr>
+    <tr><td>Category</td><td>${escapeHtml(ticket.category ?? "—")}</td></tr>
+    <tr><td>Client</td><td>${escapeHtml(ticket.clientName ?? "—")}</td></tr>
+    <tr><td>Assigned To</td><td>${escapeHtml(ticket.assignedTo ?? "—")}</td></tr>
     <tr><td>Due Date</td><td>${ticket.dueDate ? new Date(ticket.dueDate + "T12:00:00").toLocaleDateString("en-US", { month:"long", day:"numeric", year:"numeric" }) : "—"}</td></tr>
     <tr><td>Created</td><td>${new Date(ticket.createdAt).toLocaleDateString("en-US", { month:"long", day:"numeric", year:"numeric" })}</td></tr>
   </table>
-  ${ticket.body ? `<div class="body-section"><h2>Notes</h2><p class="body-text">${ticket.body.replace(/</g,"&lt;")}</p></div>` : ""}
+  ${ticket.body ? `<div class="body-section"><h2>Notes</h2><p class="body-text">${escapeHtml(ticket.body)}</p></div>` : ""}
   <script>window.onload=function(){window.print();}<\/script>
 </body>
 </html>`);
