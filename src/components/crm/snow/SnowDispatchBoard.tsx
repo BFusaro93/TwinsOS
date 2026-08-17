@@ -43,6 +43,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { formatCurrency, cn } from "@/lib/utils";
+import { billingGroupKey } from "@/lib/hooks/use-snow-invoicing";
 import { toast } from "sonner";
 import {
   Snowflake, Plus, Printer, Users, ChevronDown, RefreshCw,
@@ -753,7 +754,20 @@ export function SnowDispatchBoard() {
     }
   }
 
-  const totalAmt = visits.reduce((s, v) => s + (v.rateCents ?? v.job?.rateCents ?? 0), 0);
+  // per_event/per_event_per_inch jobs bill once per storm, not per visit —
+  // summing every visit row here double-counted a job with a morning +
+  // afternoon push in the same storm. Collapse to one representative visit
+  // per billingGroupKey (matching what use-snow-invoicing.ts will actually
+  // invoice) before summing.
+  const billableVisits = useMemo(() => {
+    const seen = new Map<string, CRMJobVisit>();
+    for (const v of visits) {
+      const key = billingGroupKey(v);
+      if (!seen.has(key)) seen.set(key, v);
+    }
+    return Array.from(seen.values());
+  }, [visits]);
+  const totalAmt = billableVisits.reduce((s, v) => s + (v.rateCents ?? v.job?.rateCents ?? 0), 0);
 
   return (
     <div className="flex h-full flex-col gap-4">
