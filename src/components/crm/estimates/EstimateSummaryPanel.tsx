@@ -164,7 +164,12 @@ export function EstimateSummaryPanel({ estimate, onRecalculate, recalcPending }:
     void handleRecalc(str, { type: d.discountType, value, appliedId: d.id });
   }
 
-  // Cost breakdown by type (from direct costs)
+  // Cost breakdown by type — direct costs plus line items' own modeled labor
+  // cost (budgetedHours × breakeven rate, computed per computeLineItem). The
+  // server's grossProfitCents = revenueCents - totalCostCents(line items) -
+  // directTotal, so unless line-item cost is folded into a visible row here
+  // too, these "Costs" rows sum to less than what was actually subtracted and
+  // the P&L block doesn't foot against estimate.grossProfitCents below it.
   const costByType: Record<string, number> = {
     labor: 0, sub_contract: 0, service: 0,
     product_material: 0, asset_equipment: 0, other: 0,
@@ -172,6 +177,7 @@ export function EstimateSummaryPanel({ estimate, onRecalculate, recalcPending }:
   directCosts.forEach((dc) => {
     costByType[dc.costType] = (costByType[dc.costType] ?? 0) + dc.totalCents;
   });
+  costByType.labor += lineItems.reduce((s, li) => s + li.totalCostCents, 0);
 
   const totalDirectCents  = directCosts.reduce((s, dc) => s + dc.totalCents, 0);
   const totalCostCents    = lineItems.reduce((s, li) => s + li.totalCostCents, 0) + totalDirectCents;
@@ -284,7 +290,7 @@ export function EstimateSummaryPanel({ estimate, onRecalculate, recalcPending }:
         <p className="mb-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
           Costs
         </p>
-        <PnlRow label="Labor:"            cents={costByType.labor}            bps={pct(costByType.labor)} />
+        <PnlRow label="Labor / Line Items:" cents={costByType.labor}          bps={pct(costByType.labor)} />
         <PnlRow label="Sub Contract:"     cents={costByType.sub_contract}     bps={pct(costByType.sub_contract)} />
         <PnlRow label="Service:"          cents={costByType.service}          bps={pct(costByType.service)} />
         <PnlRow label="Product/Materials:"cents={costByType.product_material} bps={pct(costByType.product_material)} />
