@@ -1,7 +1,36 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import { mapWOPart, mapWOLaborEntry, mapWOVendorCharge } from "@/lib/supabase/mappers";
 import type { WOPart, WOLaborEntry, WOVendorCharge } from "@/types/cmms";
+
+/**
+ * Calls adjust_part_quantity() and warns the user when the requested
+ * deduction was clamped at 0 instead of fully applied (using more of a part
+ * than is currently in stock). The RPC itself doesn't block this — WO parts
+ * usage is routinely recorded before or independent of a formal receiving
+ * step — but silently applying less than requested with no signal at all
+ * left inventory quietly wrong with no way for the person who typed the
+ * quantity to know.
+ */
+async function adjustWOPartQuantity(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  partId: string,
+  delta: number,
+  workOrderId: string
+) {
+  const { data, error } = await supabase
+    .rpc("adjust_part_quantity", { p_part_id: partId, p_delta: delta, p_work_order_id: workOrderId })
+    .single();
+  if (error) throw error;
+  if (data && delta < 0 && data.applied_delta > delta) {
+    const shortBy = delta - data.applied_delta;
+    toast.warning(
+      `Only ${data.old_qty} in stock — ${Math.abs(shortBy)} short. Quantity on hand set to 0 instead of going negative.`
+    );
+  }
+}
 
 // ── Part → Open WO Assignments ───────────────────────────────────────────────
 
@@ -125,12 +154,7 @@ export function useAddWOPart() {
           // mirrors the insert path below, which the restore branch otherwise
           // bypasses entirely (was silently skipping the inventory deduction
           // and its audit_log entry).
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          await (supabase.rpc as any)("adjust_part_quantity", {
-            p_part_id: input.partId,
-            p_delta: -input.quantity,
-            p_work_order_id: input.workOrderId,
-          });
+          await adjustWOPartQuantity(supabase, input.partId, -input.quantity, input.workOrderId);
           await syncPartQtyToProduct(supabase, input.partId);
 
           return mapWOPart(restored);
@@ -154,12 +178,7 @@ export function useAddWOPart() {
 
       // Deduct from inventory when a linked part is added to a WO
       if (input.partId) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await (supabase.rpc as any)("adjust_part_quantity", {
-          p_part_id: input.partId,
-          p_delta: -input.quantity,
-          p_work_order_id: input.workOrderId,
-        });
+        await adjustWOPartQuantity(supabase, input.partId, -input.quantity, input.workOrderId);
         await syncPartQtyToProduct(supabase, input.partId);
       }
 
@@ -208,12 +227,7 @@ export function useUpdateWOPart() {
       if (existing?.part_id) {
         const delta = existing.quantity - quantity; // restore old, deduct new
         if (delta !== 0) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          await (supabase.rpc as any)("adjust_part_quantity", {
-            p_part_id: existing.part_id,
-            p_delta: delta,
-            p_work_order_id: workOrderId,
-          });
+          await adjustWOPartQuantity(supabase, existing.part_id, delta, workOrderId);
           await syncPartQtyToProduct(supabase, existing.part_id);
         }
       }
@@ -250,12 +264,7 @@ export function useDeleteWOPart() {
 
       // Restore inventory when a part is removed from a WO
       if (partId) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await (supabase.rpc as any)("adjust_part_quantity", {
-          p_part_id: partId,
-          p_delta: quantity,
-          p_work_order_id: workOrderId,
-        });
+        await adjustWOPartQuantity(supabase, partId, quantity, workOrderId);
         await syncPartQtyToProduct(supabase, partId);
       }
 
