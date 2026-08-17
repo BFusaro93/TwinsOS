@@ -19,6 +19,13 @@ export async function POST(
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  const { data: callerProfile } = await supabase
+    .from("profiles")
+    .select("org_id")
+    .eq("id", user.id)
+    .single();
+  if (!callerProfile) return NextResponse.json({ error: "Profile not found" }, { status: 403 });
+
   const { id: ticketId } = await params;
   let body: { event?: string; commentBody?: string };
   try {
@@ -39,6 +46,13 @@ export async function POST(
     .eq("id", ticketId)
     .single();
   if (!ticket) return NextResponse.json({ error: "Ticket not found" }, { status: 404 });
+  // adminClient is service-role and bypasses RLS entirely — without this
+  // check, any authenticated user (any org) could POST an event for a
+  // ticket id belonging to a different org and trigger real staff
+  // email/notification sends referencing that org's ticket data.
+  if (ticket.org_id !== callerProfile.org_id) {
+    return NextResponse.json({ error: "Ticket not found" }, { status: 404 });
+  }
 
   const base = {
     orgId: ticket.org_id as string,
