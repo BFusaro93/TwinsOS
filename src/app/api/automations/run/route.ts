@@ -600,6 +600,40 @@ async function handleRun(request: Request) {
           }
         }
 
+        // "Send between HH:MM and HH:MM" — was stored on every step (and
+        // even seeded by every template) but nothing ever read it, so a
+        // step configured to only go out during business hours sent
+        // whenever the cron happened to run. Defer to the next occurrence
+        // of the window rather than skip outright, same pattern as the
+        // weekday check above. NOTE: this processor's cron currently runs
+        // once/day (see vercel.json), so a window that doesn't include that
+        // run time will keep deferring — enforcing the window is only
+        // meaningfully useful once the cron runs more than once a day.
+        if (eventConfig.between_start && eventConfig.between_end) {
+          const now = new Date();
+          const [startH, startM] = String(eventConfig.between_start).split(":").map(Number);
+          const [endH, endM] = String(eventConfig.between_end).split(":").map(Number);
+          if ([startH, startM, endH, endM].every((n) => Number.isFinite(n))) {
+            const nowMinutes = now.getHours() * 60 + now.getMinutes();
+            const startMinutes = startH * 60 + startM;
+            const endMinutes = endH * 60 + endM;
+            if (nowMinutes < startMinutes || nowMinutes > endMinutes) {
+              const d = new Date(now);
+              d.setHours(startH, startM, 0, 0);
+              if (nowMinutes > endMinutes) d.setDate(d.getDate() + 1);
+              await (adminClient as AdminClient)
+                .from("crm_sequence_enrollments")
+                .update({ next_fire_at: d.toISOString(), updated_at: nowIso })
+                .eq("id", enrollId);
+              crmSkipped.push({
+                enrollmentId: enrollId,
+                reason: `deferred to send window ${eventConfig.between_start}-${eventConfig.between_end}`,
+              });
+              continue;
+            }
+          }
+        }
+
         const built = await resolveEmailStepContent(adminClient, {
           orgId,
           clientId: client_id,
