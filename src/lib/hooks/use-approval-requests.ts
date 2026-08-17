@@ -110,7 +110,21 @@ export function useSubmitForApproval() {
         .is("deleted_at", null)
         .maybeSingle();
 
-      if (!flow) return { entityType };
+      // No approval flow configured for this entity type at all — the
+      // entity was already flipped to "pending" above, and with no flow
+      // there's nothing that will ever move it forward. The DB guard
+      // (guard_procurement_approval_status) computes bool_and() over zero
+      // approval_requests rows, which is NULL, not true, so it can't
+      // auto-resolve this either — auto-approve now instead of leaving it
+      // stuck.
+      if (!flow) {
+        const { error: autoErr } = await supabase
+          .from(cfg.table)
+          .update({ [cfg.statusColumn]: "approved" })
+          .eq("id", entityId);
+        if (autoErr) throw autoErr;
+        return { entityType, autoApproved: true };
+      }
 
       const { data: orgUsers } = await supabase
         .from("profiles")
@@ -137,6 +151,18 @@ export function useSubmitForApproval() {
       type StepRow = { id: string; order: number; required_role: string; threshold_cents: number; assigned_user_id: string | null };
       const steps = ((flow as unknown as { approval_flow_steps?: StepRow[] }).approval_flow_steps ?? [])
         .sort((a, b) => a.order - b.order);
+
+      // A flow row exists but has zero steps configured — same dead-end as no
+      // flow at all (nothing will ever populate approval_requests for this
+      // entity), so auto-approve here too instead of leaving it stuck pending.
+      if (steps.length === 0) {
+        const { error: autoErr } = await supabase
+          .from(cfg.table)
+          .update({ [cfg.statusColumn]: "approved" })
+          .eq("id", entityId);
+        if (autoErr) throw autoErr;
+        return { entityType, autoApproved: true };
+      }
 
       const newRequests: Array<{
         org_id: string; entity_type: string; entity_id: string;

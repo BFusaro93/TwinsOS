@@ -13,7 +13,15 @@ const DAY_INDEX: Record<string, number> = {
 function addDays(d: Date, n: number): Date {
   const r = new Date(d); r.setDate(r.getDate() + n); return r;
 }
-function toISODate(d: Date): string { return d.toISOString().slice(0, 10); }
+// Every date this route builds (today.setHours(0,0,0,0), `new Date(str +
+// 'T00:00:00')`, `new Date(year, month, d)`) is constructed at LOCAL
+// midnight — .toISOString() converts through UTC, which only happens to
+// coincide with the local date on a server whose TZ is UTC (true on
+// Vercel, not necessarily true for local dev or any other runtime). A
+// server west of UTC would format every generated visit one day early.
+function toISODate(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
 function isoWeekNumber(d: Date): number {
   const tmp = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
   const dayNum = tmp.getUTCDay() || 7;
