@@ -528,6 +528,42 @@ export function ProductDetailSheet({ product, open, onOpenChange }: ProductDetai
   const selectedPO = selectedPOId ? (purchaseOrders ?? []).find((p) => p.id === selectedPOId) ?? null : null;
   const selectedWO = selectedWOId ? allWOs.find((w) => w.id === selectedWOId) ?? null : null;
 
+  const activeReqStatuses = new Set(["pending_approval", "approved"]);
+  const activePoStatuses = new Set(["requested", "pending", "approved", "ordered", "partially_fulfilled"]);
+
+  const activePoLineItems = (purchaseOrders ?? [])
+    .filter((po) => activePoStatuses.has(po.status))
+    .flatMap((po) => po.lineItems)
+    .filter((li) => li.productItemId === product?.id);
+  const activePoLineItemIds = activePoLineItems.map((li) => li.id);
+
+  // "On order" for a partially_fulfilled PO must reflect only what's still
+  // outstanding — po_line_items.quantity never changes after receiving, so
+  // summing it directly counted units already received into inventory as
+  // still on order, overstating the total. Received quantity lives only on
+  // goods_receipt_lines (summed across every receipt against this line).
+  // Hook is called unconditionally (before the `!product` early return below)
+  // to satisfy rules-of-hooks — it's simply a no-op when there's no product.
+  const { data: receivedByLineItemId = {} } = useQuery({
+    queryKey: ["po-line-received-qty", activePoLineItemIds.slice().sort().join(",")],
+    queryFn: async () => {
+      if (activePoLineItemIds.length === 0) return {};
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from("goods_receipt_lines")
+        .select("po_line_item_id, quantity_received")
+        .in("po_line_item_id", activePoLineItemIds);
+      if (error) throw error;
+      const map: Record<string, number> = {};
+      for (const row of data ?? []) {
+        if (!row.po_line_item_id) continue;
+        map[row.po_line_item_id] = (map[row.po_line_item_id] ?? 0) + row.quantity_received;
+      }
+      return map;
+    },
+    enabled: activePoLineItemIds.length > 0,
+  });
+
   if (!product) return null;
 
   const effectiveQty = qtyOnHand ?? product.quantityOnHand ?? 0;
@@ -551,20 +587,16 @@ export function ProductDetailSheet({ product, open, onOpenChange }: ProductDetai
     });
   }
 
-  const activeReqStatuses = new Set(["pending_approval", "approved"]);
-  const activePoStatuses = new Set(["requested", "pending", "approved", "ordered", "partially_fulfilled"]);
-
   const onOrderQty =
     (requisitions ?? [])
       .filter((r) => activeReqStatuses.has(r.status))
       .flatMap((r) => r.lineItems)
       .filter((li) => li.productItemId === product.id)
       .reduce((sum, li) => sum + li.quantity, 0) +
-    (purchaseOrders ?? [])
-      .filter((po) => activePoStatuses.has(po.status))
-      .flatMap((po) => po.lineItems)
-      .filter((li) => li.productItemId === product.id)
-      .reduce((sum, li) => sum + li.quantity, 0);
+    activePoLineItems.reduce(
+      (sum, li) => sum + Math.max(0, li.quantity - (receivedByLineItemId[li.id] ?? 0)),
+      0
+    );
 
   return (
     <>
