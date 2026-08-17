@@ -116,7 +116,14 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
           serviceName:   li.serviceName ?? "Service",
           serviceId:     li.serviceId ?? null,
           qty:           li.qty,
-          rateCents:     li.rateCents,
+          // The estimate's own total is priced off adjRateCents when the
+          // estimator used the Adj Rate column (estimate-calc.ts uses
+          // `adjRateCents ?? rateCents`) -- sending the un-adjusted rate
+          // here left qty x rateCents != totalCents on the created job's
+          // service, so anything re-deriving a price from qty x rate
+          // (job value rollups, invoice line items) billed a different
+          // number than the client actually accepted.
+          rateCents:     li.adjRateCents ?? li.rateCents,
           totalCents:    li.totalCents - li.discountCents,
           budgetedHours: budgetedHoursFromLineItem(li),
           budgetMethod:  li.budgetMethod,

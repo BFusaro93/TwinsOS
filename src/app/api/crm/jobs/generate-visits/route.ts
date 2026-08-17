@@ -23,9 +23,16 @@ function isoWeekNumber(d: Date): number {
 }
 
 interface OccurrenceRule {
-  frequency: "weekly" | "biweekly";
+  frequency: "weekly" | "biweekly" | "everyNWeeks";
   dayIndex: number;
   biweeklyParity?: "even" | "odd";
+  /** For "everyNWeeks" — the cadence in weeks (3, 4, ...). */
+  intervalWeeks?: number;
+  /** For "everyNWeeks" — a stable reference date the interval counts from
+   *  (the job's own recurrence start date), so the cadence doesn't drift
+   *  depending on when this route happens to be called. Falls back to the
+   *  first candidate date in the generation window if unavailable. */
+  anchorDate?: Date | null;
 }
 
 function parseSchedule(schedule: string | null, scheduleDays: string[]): OccurrenceRule[] {
@@ -96,9 +103,21 @@ function occurrencesInRange(rule: OccurrenceRule, from: Date, to: Date): Date[] 
     cursor.setDate(cursor.getDate() + 1);
     if (cursor > to) return dates;
   }
+  // For "every N weeks", anchor the phase to a stable reference date (the
+  // job's own recurrence start) rather than `from` (the generation
+  // window's start, which shifts every time this route runs) — otherwise
+  // repeated calls would reset the cadence instead of continuing it.
+  const anchor = rule.anchorDate ?? new Date(cursor);
+  while (anchor.getDay() !== rule.dayIndex) anchor.setDate(anchor.getDate() + 1);
+
   while (cursor <= to) {
     if (rule.frequency === "weekly") {
       dates.push(new Date(cursor));
+      cursor.setDate(cursor.getDate() + 7);
+    } else if (rule.frequency === "everyNWeeks" && rule.intervalWeeks) {
+      const diffWeeks = Math.round((cursor.getTime() - anchor.getTime()) / (7 * 86_400_000));
+      const matches = ((diffWeeks % rule.intervalWeeks) + rule.intervalWeeks) % rule.intervalWeeks === 0;
+      if (matches) dates.push(new Date(cursor));
       cursor.setDate(cursor.getDate() + 7);
     } else {
       const weekNum = isoWeekNumber(cursor);
@@ -264,11 +283,17 @@ await (supabase as any).from("crm_jobs").select("*" as any).eq("id", jobId).sing
         } else if (freq === "bi_weekly" || freq === "biweekly") {
           rules = [{ frequency: "biweekly", dayIndex, biweeklyParity: "even" }];
         } else if (freq === "every_3_weeks") {
-          rules = [{ frequency: "biweekly", dayIndex, biweeklyParity: "even" }];
+          // Was mapped to a 14-day (biweekly) cadence instead of 21 days —
+          // "every 3 weeks" was silently firing every 2 weeks.
+          rules = [{ frequency: "everyNWeeks", dayIndex, intervalWeeks: 3, anchorDate: jobStartDate }];
+        } else if (freq === "every_4_weeks") {
+          // Previously fell through to name-based parsing, which has no
+          // pattern for this name and produced zero rules (silently 0
+          // visits generated) — a real, selectable schedule option.
+          rules = [{ frequency: "everyNWeeks", dayIndex, intervalWeeks: 4, anchorDate: jobStartDate }];
         } else if (freq === "monthly") {
           monthlyDates = monthlyOccurrencesInRange(dayIndex, sr.week_of_month ?? "first", windowStart, effectiveEnd);
         }
-        // every_4_weeks: fall through to name-based parsing below
       }
 
       // Narrow the generation window to the schedule's season (MM-DD format).
