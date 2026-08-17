@@ -43,10 +43,24 @@ async function deductPartsInventory(
  * Returns: { parentWorkOrderId: string }
  */
 export async function POST(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id: scheduleId } = await params;
+
+  // The server has no stored org timezone to derive "today" from — trust
+  // the browser's own local calendar date when it's given (a well-formed
+  // YYYY-MM-DD), falling back to the server's UTC date only if it's
+  // missing/malformed (e.g. a direct API call with no body).
+  let clientToday: string | null = null;
+  try {
+    const body = await request.json() as { today?: string };
+    if (body?.today && /^\d{4}-\d{2}-\d{2}$/.test(body.today)) {
+      clientToday = body.today;
+    }
+  } catch {
+    // No/invalid JSON body — fall back below.
+  }
 
   const userClient = await createServerClient();
   const { data: { user }, error: authErr } = await userClient.auth.getUser();
@@ -269,13 +283,13 @@ export async function POST(
   // ── 5. Advance next_due_date on the PM schedule ───────────────────────────
   // Advance from today (actual generation date) so that generating early
   // doesn't push the next due date further out than one interval from now.
-  const today = new Date().toISOString().slice(0, 10);
+  const today = clientToday ?? new Date().toISOString().slice(0, 10);
   const nextDue = advanceDate(today, schedule.frequency);
   await adminClient
     .from("pm_schedules")
     .update({
       next_due_date: nextDue,
-      last_completed_date: new Date().toISOString().slice(0, 10),
+      last_completed_date: today,
     })
     .eq("id", scheduleId);
 
