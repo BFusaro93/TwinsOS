@@ -6,6 +6,7 @@ import { createElement } from "react";
 import { InvoiceDocument } from "@/components/crm/invoices/pdf/InvoiceDocument";
 import type { InvoicePDFData, InvoicePDFLineItem, OrgPDFData } from "@/components/crm/invoices/pdf/InvoiceDocument";
 import type { InvoicePDFLayoutKey } from "@/types/crm-invoices";
+import { buildInvoiceStatementData } from "@/lib/invoices/statement-data";
 
 export async function GET(
   _req: NextRequest,
@@ -81,6 +82,15 @@ export async function GET(
   const addr = (org?.address as Record<string, string>) ?? {};
   const customizations = (org?.customizations as Record<string, unknown>) ?? {};
 
+  const statement = layoutKey === "statement"
+    ? await buildInvoiceStatementData(supabase, {
+        id: inv.id as string,
+        client_id: (inv.client_id as string | null) ?? null,
+        org_id: inv.org_id as string,
+        total_cents: (inv.total_cents as number) ?? 0,
+      })
+    : null;
+
   const invoiceData: InvoicePDFData = {
     invoiceNumber: inv.invoice_number as number,
     description: inv.description as string | null,
@@ -102,6 +112,7 @@ export async function GET(
     amountPaidCents: (inv.amount_paid_cents as number) ?? 0,
     balanceCents: (inv.balance_cents as number) ?? 0,
     lineItems,
+    statement,
   };
 
   const orgData: OrgPDFData = {

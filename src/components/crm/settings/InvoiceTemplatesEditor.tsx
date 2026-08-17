@@ -27,6 +27,7 @@ import type { InvoicePDFLayoutKey, InvoicePDFTemplate } from "@/types/crm-invoic
 const LAYOUT_OPTIONS: { value: InvoicePDFLayoutKey; label: string }[] = [
   { value: "default", label: "Default" },
   { value: "compact", label: "Compact" },
+  { value: "statement", label: "Statement (account activity + payment stub)" },
 ];
 
 function TemplateEditPanel({ template, onClose }: { template: InvoicePDFTemplate; onClose: () => void }) {

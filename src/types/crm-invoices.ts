@@ -210,7 +210,7 @@ export interface CRMContractNote {
 
 /** Which React PDF component renders the invoice. Add a new key here (and a
  *  matching case in InvoiceDocument.tsx) when adding a new visual layout. */
-export type InvoicePDFLayoutKey = "default" | "compact";
+export type InvoicePDFLayoutKey = "default" | "compact" | "statement";
 
 export interface InvoicePDFTemplate {
   id: string;

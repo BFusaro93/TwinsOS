@@ -32,6 +32,13 @@ const SAMPLE_INVOICE: Omit<InvoicePDFData, "invoiceNumber" | "invoiceDate"> = {
     { name: "Lawn Mowing", description: "Weekly mowing service", qty: 4, rateCents: 7500, totalCents: 30000 },
     { name: "Mulch Install", description: "3 yards double-shredded mulch", qty: 1, rateCents: 15000, totalCents: 15000 },
   ],
+  statement: {
+    accountNumber: "10042",
+    previousBalanceCents: 47813,
+    accountBalanceCents: 95626,
+    lastPayment: { amountCents: 47813, date: new Date().toISOString().slice(0, 10), reference: "7219443587" },
+    priorInvoice: { invoiceNumber: 1000, amountCents: 47813, daysPastDue: 1 },
+  },
 };
 
 export async function GET(

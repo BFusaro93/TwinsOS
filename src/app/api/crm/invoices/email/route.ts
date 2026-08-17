@@ -8,6 +8,7 @@ import type { InvoicePDFData, InvoicePDFLineItem, OrgPDFData } from "@/component
 import type { InvoicePDFLayoutKey } from "@/types/crm-invoices";
 import { fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
 import { addParagraphSpacing } from "@/lib/utils/document-template-renderer";
+import { buildInvoiceStatementData } from "@/lib/invoices/statement-data";
 
 const FROM = "Twins Lawn Service <noreply@twinslawnservice.com>";
 
@@ -171,6 +172,14 @@ export async function POST(req: NextRequest) {
   }));
   const addr = (org?.address as Record<string, string>) ?? {};
   const customizations = (org?.customizations as Record<string, unknown>) ?? {};
+  const statement = layoutKey === "statement"
+    ? await buildInvoiceStatementData(supabase, {
+        id: inv.id as string,
+        client_id: (inv.client_id as string | null) ?? null,
+        org_id: inv.org_id as string,
+        total_cents: (inv.total_cents as number) ?? 0,
+      })
+    : null;
   const invoicePdfData: InvoicePDFData = {
     invoiceNumber: inv.invoice_number as number,
     description: inv.description as string | null,
@@ -192,6 +201,7 @@ export async function POST(req: NextRequest) {
     amountPaidCents: (inv.amount_paid_cents as number) ?? 0,
     balanceCents: (inv.balance_cents as number) ?? 0,
     lineItems: pdfLineItems,
+    statement,
   };
   const orgPdfData: OrgPDFData = {
     name: orgName,

@@ -84,6 +84,7 @@ import type { CRMJobVisit, CRMJobService } from "@/types/crm-jobs";
 import { JobCostingTab } from "@/components/crm/jobs/JobCostingTab";
 import { AuditTrailTab } from "@/components/shared/AuditTrailTab";
 import { AttachmentsSection } from "@/components/shared/AttachmentsSection";
+import { SnowRateTiersEditor } from "@/components/crm/jobs/SnowRateTiersEditor";
 
 const STATUS_COLOR: Record<string, string> = {
   scheduled:   "bg-blue-100 text-blue-700",
@@ -1014,6 +1015,9 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                               placeholder="0.00"
                             />
                           </div>
+                        )}
+                        {((edits.invoice_type as string | undefined) ?? job.invoiceType) === "per_event_per_inch" && (
+                          <SnowRateTiersEditor jobId={job.id} />
                         )}
                         <div className="flex flex-col gap-1">
                           <Label className="text-xs text-slate-500">Asset Type</Label>

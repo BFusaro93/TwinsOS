@@ -47,7 +47,7 @@ import { toast } from "sonner";
 import {
   Snowflake, Plus, Printer, Users, ChevronDown, RefreshCw,
   Calendar, Smartphone, CalendarCheck, CheckCircle2, XCircle, CornerDownRight,
-  ListChecks, ThermometerSnowflake, Ruler,
+  ListChecks, ThermometerSnowflake, Ruler, HelpCircle,
 } from "lucide-react";
 import type { CRMJobVisit, VisitStatus, StormEventStatus } from "@/types/crm-jobs";
 
@@ -265,7 +265,15 @@ function AddJobsDialog({
             <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="h-8 text-xs" />
           </div>
           <div className="space-y-1">
-            <Label className="text-[10px] uppercase text-slate-500">Max Trigger Inches</Label>
+            <Label className="flex items-center gap-1 text-[10px] uppercase text-slate-500">
+              Max Trigger Inches
+              <span
+                title="This storm's expected/forecasted depth. Any snow job whose own trigger depth (the depth needed before their contract kicks in) is higher than this number is excluded below by default — this storm isn't deep enough to trigger their service. This value isn't saved; it only filters this dialog's candidate list."
+                className="cursor-help"
+              >
+                <HelpCircle className="h-3 w-3 shrink-0 text-slate-400" />
+              </span>
+            </Label>
             <Input type="number" step="0.1" value={maxTriggerInches} onChange={(e) => setMaxTriggerInches(e.target.value)} placeholder="No limit" className="h-8 text-xs" />
           </div>
           <div className="space-y-1">
