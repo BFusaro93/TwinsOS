@@ -1,4 +1,5 @@
 import { Resend } from "resend";
+import { KNOWN_MERGE_TAG_KEYS } from "@/lib/utils/document-template-renderer";
 
 export const EMAIL_FROM = "Twins Lawn Service <noreply@twinslawnservice.com>";
 
@@ -6,7 +7,13 @@ export const EMAIL_FROM = "Twins Lawn Service <noreply@twinslawnservice.com>";
 export function resolveMergeTags(template: string, vars: Record<string, string>): string {
   return template.replace(/\[(\w+)\]/g, (match) => {
     const key = match.toLowerCase();
-    return vars[key] ?? match;
+    if (key in vars) return vars[key];
+    // A recognized merge-tag name (from the same catalog the Documents tag
+    // picker offers) this call didn't resolve a value for — blank it out
+    // rather than shipping literal "[tag]" text to a real recipient.
+    // Anything else is left alone (likely genuine bracket text typed by
+    // the author, not an unresolved placeholder).
+    return KNOWN_MERGE_TAG_KEYS.has(key) ? "" : match;
   });
 }
 

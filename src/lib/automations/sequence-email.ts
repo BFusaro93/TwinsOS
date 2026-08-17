@@ -1,4 +1,5 @@
 import { Resend } from "resend";
+import { KNOWN_MERGE_TAG_KEYS } from "@/lib/utils/document-template-renderer";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = any;
@@ -36,7 +37,7 @@ export async function resolveEmailStepContent(
 ): Promise<ResolvedEmailContent | { error: string }> {
   const { data: client } = await supabase
     .from("clients")
-    .select("display_name, primary_email, billing_email, sales_rep_id")
+    .select("display_name, primary_email, billing_email, primary_phone, billing_address, billing_city, billing_state, billing_zip, account_number, sales_rep_id")
     .eq("id", params.clientId)
     .single();
 
@@ -104,9 +105,26 @@ export async function resolveEmailStepContent(
     "[clientfullname]": clientDisplayName,
     "[companyname]": orgName,
     "[quotenumber]": estimateNumber ?? "",
+    "[clientemail]": (client.primary_email as string | null) ?? (client.billing_email as string | null) ?? "",
+    "[clientcellphone]": (client.primary_phone as string | null) ?? "",
+    "[clienthomephone]": (client.primary_phone as string | null) ?? "",
+    "[billingaddress1]": (client.billing_address as string | null) ?? "",
+    "[billingcity]": (client.billing_city as string | null) ?? "",
+    "[billingstate]": (client.billing_state as string | null) ?? "",
+    "[billingzip]": (client.billing_zip as string | null) ?? "",
+    "[accountnumber]": (client.account_number as string | null) ?? "",
   };
   const resolve = (template: string) =>
-    template.replace(/\[(\w+)\]/gi, (match) => mergeTags[match.toLowerCase()] ?? match);
+    template.replace(/\[(\w+)\]/gi, (match) => {
+      const key = match.toLowerCase();
+      if (key in mergeTags) return mergeTags[key];
+      // Same reasoning as the shared resolveMergeTags helper: a recognized
+      // Documents tag this narrower automation resolver doesn't know how to
+      // fill in degrades to blank instead of shipping literal "[tag]" text
+      // to a real client — this step's body/subject can come from a
+      // Documents template built with the full ~40-tag picker.
+      return KNOWN_MERGE_TAG_KEYS.has(key) ? "" : match;
+    });
 
   return {
     toEmails: [...toEmails],
