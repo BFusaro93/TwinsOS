@@ -565,9 +565,12 @@ async function handleRun(request: Request) {
         const nextPos = nextEvent?.position ?? currentEvent.position + 1;
         let newFireAt = nowIso;
         if (nextEvent?.event_type === "wait") {
-          const days = (nextEvent.config as Record<string, number>)?.days ?? 0;
+          const waitCfg = nextEvent.config as Record<string, number>;
+          const days = waitCfg?.days ?? 0;
+          const hours = waitCfg?.hours ?? 0;
           const d = new Date();
           d.setDate(d.getDate() + days);
+          d.setHours(d.getHours() + hours);
           newFireAt = d.toISOString();
         }
         await (adminClient as AdminClient)
