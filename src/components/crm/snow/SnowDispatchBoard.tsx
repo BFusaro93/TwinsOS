@@ -598,6 +598,7 @@ function CloseOutDialog({
   const [assetType, setAssetType] = useState("");
   const [materialName, setMaterialName] = useState("");
   const [materialQty, setMaterialQty] = useState("");
+  const [materialUnitCost, setMaterialUnitCost] = useState("");
   const [actualHours, setActualHours] = useState("");
   // Hourly-billed snow jobs invoice actualHours × rate — this close-out flow
   // was the only path for these visits and never captured hours at all, so
@@ -607,6 +608,8 @@ function CloseOutDialog({
 
   async function handleCloseOut() {
     try {
+      const qty = materialQty ? parseFloat(materialQty) : 1;
+      const unitCostCents = materialUnitCost ? Math.round(parseFloat(materialUnitCost) * 100) : 0;
       await Promise.all(visits.map((v) => updateVisit({
         id: v.id,
         jobId: v.jobId,
@@ -618,11 +621,33 @@ function CloseOutDialog({
           temperature: temp ? parseFloat(temp) : null,
           asset_type: assetType || null,
           materials_used: materialName
-            ? [{ name: materialName, qty: materialQty ? parseFloat(materialQty) : 1, rate_cents: 0 }]
+            ? [{ name: materialName, qty, rate_cents: unitCostCents }]
             : [],
           ...(actualHours ? { actual_hours: parseFloat(actualHours) } : {}),
         },
       })));
+      // materials_used on crm_job_visits is display-only — it never feeds
+      // Job Costing/COGS, which read crm_jobs.actual_material_cost_cents,
+      // maintained only via the crm_job_materials table. Without this, every
+      // snow storm's salt/material cost silently showed as $0 in those
+      // reports no matter what was logged here.
+      if (materialName && qty > 0) {
+        await Promise.all(visits.map((v) =>
+          fetch(`/api/crm/jobs/${v.jobId}/materials`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              description: materialName,
+              qty,
+              unitCostCents,
+              visitId: v.id,
+            }),
+          }).catch(() => {
+            // Non-fatal — the visit itself is already closed out; a failed
+            // material-cost record shouldn't block the whole close-out.
+          })
+        ));
+      }
       toast.success(`Closed out ${visits.length} visit${visits.length > 1 ? "s" : ""}`);
       onDone();
       onOpenChange(false);
@@ -658,7 +683,7 @@ function CloseOutDialog({
             <Label>Asset Type</Label>
             <Input value={assetType} onChange={(e) => setAssetType(e.target.value)} placeholder="e.g. Skid Steer" className="h-9 text-sm" />
           </div>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-3 gap-2">
             <div className="space-y-1.5">
               <Label>Material Used</Label>
               <Input value={materialName} onChange={(e) => setMaterialName(e.target.value)} placeholder="e.g. Snow Salt" className="h-9 text-sm" />
@@ -666,6 +691,10 @@ function CloseOutDialog({
             <div className="space-y-1.5">
               <Label>Qty</Label>
               <Input type="number" value={materialQty} onChange={(e) => setMaterialQty(e.target.value)} className="h-9 text-sm" />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Unit Cost ($)</Label>
+              <Input type="number" step="0.01" value={materialUnitCost} onChange={(e) => setMaterialUnitCost(e.target.value)} className="h-9 text-sm" />
             </div>
           </div>
         </div>
