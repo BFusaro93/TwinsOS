@@ -1374,6 +1374,7 @@ export function InvoiceDetail({
         dueDate={invoice.dueDate}
         clientName={invoice.clientName ?? null}
         clientEmail={invoice.clientEmail ?? null}
+        pinnedPdfTemplateId={invoice.pdfTemplateId ?? null}
         open={emailDialogOpen}
         onClose={() => setEmailDialogOpen(false)}
         onSent={handleEmailSent}

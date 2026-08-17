@@ -192,6 +192,8 @@ export async function POST(req: NextRequest) {
         client_id: (inv.client_id as string | null) ?? null,
         org_id: inv.org_id as string,
         total_cents: (inv.total_cents as number) ?? 0,
+        balance_cents: (inv.balance_cents as number) ?? 0,
+        invoice_date: (inv.invoice_date as string | null) ?? null,
       })
     : null;
   const shareToken = await getOrCreateInvoiceShareToken(supabase, {

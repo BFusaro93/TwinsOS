@@ -9,17 +9,29 @@ type AnyClient = any;
  *  layout ignores this data entirely. */
 export async function buildInvoiceStatementData(
   supabase: AnyClient,
-  inv: { id: string; client_id: string | null; org_id: string; total_cents: number | null }
+  inv: {
+    id: string;
+    client_id: string | null;
+    org_id: string;
+    total_cents: number | null;
+    balance_cents: number | null;
+    invoice_date: string | null;
+  }
 ): Promise<InvoicePDFStatementData | null> {
   if (!inv.client_id) return null;
 
+  // Excludes drafts (the customer hasn't received them) and anything dated
+  // after this invoice (a statement can't owe the customer for something
+  // that hasn't happened from their perspective yet).
   const { data: otherInvoices } = await supabase
     .from("crm_invoices")
     .select("invoice_number, invoice_date, due_date, balance_cents, total_cents")
     .eq("client_id", inv.client_id)
     .neq("id", inv.id)
     .neq("status", "void")
+    .neq("status", "draft")
     .is("deleted_at", null)
+    .lte("invoice_date", inv.invoice_date ?? new Date().toISOString().slice(0, 10))
     .order("invoice_date", { ascending: false });
 
   const previousBalanceCents = (otherInvoices ?? []).reduce(
@@ -27,11 +39,19 @@ export async function buildInvoiceStatementData(
     0
   );
 
-  const priorInvoiceRow = (otherInvoices ?? [])[0] ?? null;
+  // "Prior invoice" should be the most recent OTHER invoice that still has
+  // an outstanding balance — the plain newest-by-date row could be one this
+  // invoice already indirectly follows-up on but that's since been paid in
+  // full, which would otherwise print as still owed and "N days past due".
+  const priorInvoiceRow =
+    (otherInvoices ?? []).find(
+      (row: { balance_cents: number | null }) => (row.balance_cents ?? 0) > 0
+    ) ?? null;
   const priorInvoice = priorInvoiceRow
     ? {
         invoiceNumber: priorInvoiceRow.invoice_number as number,
-        amountCents: (priorInvoiceRow.total_cents as number) ?? 0,
+        amountCents: (priorInvoiceRow.balance_cents as number) ?? 0,
+        date: priorInvoiceRow.invoice_date as string,
         daysPastDue: priorInvoiceRow.due_date
           ? Math.max(
               0,
@@ -69,7 +89,11 @@ export async function buildInvoiceStatementData(
   return {
     accountNumber: (clientRow?.account_number as string | null) ?? null,
     previousBalanceCents,
-    accountBalanceCents: previousBalanceCents + (inv.total_cents ?? 0),
+    // The running total is every OTHER invoice's outstanding balance plus
+    // THIS invoice's own outstanding balance — not its total. Using
+    // total_cents overstated the balance by however much of this invoice
+    // had already been paid/credited.
+    accountBalanceCents: previousBalanceCents + (inv.balance_cents ?? 0),
     lastPayment,
     priorInvoice,
   };

@@ -48,13 +48,16 @@ interface Props {
   dueDate: string | null;
   clientName: string | null;
   clientEmail: string | null;
+  /** The PDF template this invoice is already pinned to (crm_invoices.pdf_template_id),
+   *  if any — takes priority over the org default when auto-selecting. */
+  pinnedPdfTemplateId?: string | null;
   open: boolean;
   onClose: () => void;
   onSent: () => void;
 }
 
 export function InvoiceEmailDialog({
-  invoiceId, invoiceNumber, totalCents, balanceCents, dueDate, clientName, clientEmail, open, onClose, onSent,
+  invoiceId, invoiceNumber, totalCents, balanceCents, dueDate, clientName, clientEmail, pinnedPdfTemplateId, open, onClose, onSent,
 }: Props) {
   // Email content (subject/body) templates now live in Documents (doc type
   // "invoice_email") — a richer block-based builder than the old plain
@@ -82,6 +85,15 @@ export function InvoiceEmailDialog({
     if (open) setToEmails(clientEmail ? [clientEmail] : []);
   }, [open, clientEmail]);
 
+  // Same issue for template selection: this dialog stays mounted across
+  // invoices, and both auto-select effects below only fire once (guarded on
+  // "still empty") — without this, invoice A's chosen PDF layout silently
+  // carried over as invoice B's, even though B is pinned to something else.
+  useEffect(() => {
+    setSelectedTemplateId("");
+    setPdfTemplateId("");
+  }, [invoiceId]);
+
   // Once the chosen document template's blocks load, fill in subject/body —
   // merge tags are left unresolved ([clientfirstname], etc.) for the send
   // route's own resolver, same as the automation email-step picker.
@@ -100,13 +112,19 @@ export function InvoiceEmailDialog({
     }
   }, [open, templates, selectedTemplateId]);
 
-  // Auto-select the org's default PDF layout template on open
+  // Default to whatever PDF template this invoice is already pinned to
+  // (matches the server's own priority order: explicit choice > invoice's
+  // own template > org default) rather than always jumping to the org
+  // default/first template regardless of what the invoice was set to.
   useEffect(() => {
     if (open && pdfTemplates.length > 0 && !pdfTemplateId) {
-      const def = pdfTemplates.find((t) => t.isDefault) ?? pdfTemplates[0];
+      const pinned = pinnedPdfTemplateId
+        ? pdfTemplates.find((t) => t.id === pinnedPdfTemplateId)
+        : undefined;
+      const def = pinned ?? pdfTemplates.find((t) => t.isDefault) ?? pdfTemplates[0];
       if (def) setPdfTemplateId(def.id);
     }
-  }, [open, pdfTemplates, pdfTemplateId]);
+  }, [open, pdfTemplates, pdfTemplateId, pinnedPdfTemplateId]);
 
   // Simple preview: replace merge tags with placeholder values for display
   function previewResolve(text: string) {

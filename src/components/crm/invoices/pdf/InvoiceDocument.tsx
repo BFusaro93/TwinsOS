@@ -61,10 +61,10 @@ export interface InvoicePDFStatementData {
   /** The client's total outstanding balance across every OTHER open invoice,
    *  i.e. what they owed before this invoice was added. */
   previousBalanceCents: number;
-  /** previousBalanceCents + this invoice's total. */
+  /** previousBalanceCents + this invoice's own outstanding balance. */
   accountBalanceCents: number;
   lastPayment: { amountCents: number; date: string; reference: string | null } | null;
-  priorInvoice: { invoiceNumber: number; amountCents: number; daysPastDue: number } | null;
+  priorInvoice: { invoiceNumber: number; amountCents: number; date: string; daysPastDue: number } | null;
 }
 
 export interface OrgPDFData {
@@ -637,21 +637,20 @@ function StatementInvoiceLayout({
                 <View style={SS.miniCellValue}><Text>{cents(st.lastPayment.amountCents)}</Text></View>
               </View>
             ) : null}
-            <View style={SS.miniRow}>
-              <View style={SS.miniCellLabel}><Text>Previous Balance</Text></View>
-              <View style={SS.miniCellValue}><Text>{cents(st?.previousBalanceCents ?? 0)}</Text></View>
-            </View>
             {showAccountBalance && (
-              <View style={SS.miniRow}>
-                <View style={SS.miniCellLabel}><Text>Invoice {invoiceLabel} Total</Text></View>
-                <View style={SS.miniCellValue}><Text>{cents(invoice.totalCents)}</Text></View>
-              </View>
-            )}
-            {invoice.taxRateBps > 0 && (
-              <View style={SS.miniRow}>
-                <View style={SS.miniCellLabel}><Text>Sales Tax</Text></View>
-                <View style={SS.miniCellValue}><Text>{cents(invoice.taxCents)}</Text></View>
-              </View>
+              <>
+                <View style={SS.miniRow}>
+                  <View style={SS.miniCellLabel}><Text>Previous Balance</Text></View>
+                  <View style={SS.miniCellValue}><Text>{cents(st?.previousBalanceCents ?? 0)}</Text></View>
+                </View>
+                <View style={SS.miniRow}>
+                  {/* invoice.totalCents is already tax-inclusive — shown here
+                      (not as a separate Sales Tax line) so this column adds
+                      up to Account Balance exactly: Previous + This Invoice. */}
+                  <View style={SS.miniCellLabel}><Text>Invoice {invoiceLabel} Total</Text></View>
+                  <View style={SS.miniCellValue}><Text>{cents(invoice.totalCents)}</Text></View>
+                </View>
+              </>
             )}
             <View style={[SS.miniRow, { borderBottom: "none" }]}>
               {showAccountBalance ? (
@@ -661,8 +660,8 @@ function StatementInvoiceLayout({
                 </>
               ) : (
                 <>
-                  <View style={SS.balanceLabel}><Text>Invoice {invoiceLabel} Total</Text></View>
-                  <View style={SS.balanceValue}><Text>{cents(invoice.totalCents)}</Text></View>
+                  <View style={SS.balanceLabel}><Text>Balance Due</Text></View>
+                  <View style={SS.balanceValue}><Text>{cents(invoice.balanceCents)}</Text></View>
                 </>
               )}
             </View>
@@ -688,7 +687,7 @@ function StatementInvoiceLayout({
 
       {st?.priorInvoice && (
         <View style={SS.activityRow}>
-          <View style={SS.cellDate}><Text style={SS.activityText}>{formatDate(invoice.invoiceDate)}</Text></View>
+          <View style={SS.cellDate}><Text style={SS.activityText}>{formatDate(st.priorInvoice.date)}</Text></View>
           <View style={SS.cellDesc}>
             <Text style={SS.activityText}>
               Invoice #{st.priorInvoice.invoiceNumber}{daysPastDueLabel(st.priorInvoice.daysPastDue)}

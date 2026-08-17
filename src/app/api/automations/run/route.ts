@@ -610,9 +610,19 @@ async function handleRun(request: Request) {
           fromSelection: eventConfig.from,
         });
         if ("error" in built) {
+          // Not a transient failure — e.g. "no resolvable recipient email"
+          // won't resolve itself by trying again tomorrow. Leaving
+          // next_event_position untouched meant this ran (and logged) again
+          // on every single future cron tick, forever. Stop the enrollment
+          // instead; a human fixing the underlying data (e.g. adding the
+          // client's email) can re-enroll them.
+          await (adminClient as AdminClient)
+            .from("crm_sequence_enrollments")
+            .update({ stopped_at: nowIso, updated_at: nowIso })
+            .eq("id", enrollId);
           await logSequenceExecution(adminClient, {
             orgId, enrollmentId: enrollId, sequenceId: sequence_id, clientId: client_id,
-            eventId: currentEvent.id, eventType: "email", action: "email_skipped", detail: built.error,
+            eventId: currentEvent.id, eventType: "email", action: "email_skipped_stopped", detail: built.error,
           });
           crmSkipped.push({ enrollmentId: enrollId, reason: built.error });
           continue;
@@ -635,6 +645,7 @@ async function handleRun(request: Request) {
               to_name: built.toName || null,
               subject: built.subject,
               body_html: built.bodyHtml,
+              from_address: built.fromAddress || null,
             });
           // 23505 = unique_violation on the one-pending-per-enrollment+event
           // index — a concurrent/prior run already queued this approval,

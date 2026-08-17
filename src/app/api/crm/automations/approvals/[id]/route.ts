@@ -31,7 +31,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const { data: approval, error: approvalErr } = await db
     .from("crm_sequence_step_approvals")
-    .select("id, org_id, enrollment_id, event_id, sequence_id, client_id, estimate_id, channel, to_email, to_name, subject, body_html, to_phone, body_text, status")
+    .select("id, org_id, enrollment_id, event_id, sequence_id, client_id, estimate_id, channel, to_email, to_name, subject, body_html, to_phone, body_text, from_address, status")
     .eq("id", id)
     .single();
 
@@ -79,6 +79,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           toName: approval.to_name,
           subject: approval.subject,
           bodyHtml: approval.body_html,
+          fromAddress: approval.from_address ?? undefined,
         });
   if (!sendResult.ok) {
     return NextResponse.json({ error: sendResult.reason }, { status: 502 });
