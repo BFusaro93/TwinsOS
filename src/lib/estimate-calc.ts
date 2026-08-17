@@ -323,7 +323,7 @@ export function computeInstallmentSchedule(
 export async function recalcEstimateTotals(supabase: AnySupabaseClient, estimateId: string) {
   const { data: est, error: estError } = await supabase
     .from("estimates")
-    .select("org_id, tax_rate_bps, overhead_rate_bps, discount_cents")
+    .select("org_id, tax_rate_bps, overhead_rate_bps, discount_cents, discount_type, discount_value")
     .eq("id", estimateId)
     .single();
   if (estError) throw estError;
@@ -355,7 +355,14 @@ export async function recalcEstimateTotals(supabase: AnySupabaseClient, estimate
   const totalCostCents = (lineItems ?? []).reduce((s: number, li: any) => s + li.total_cost_cents, 0);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const directTotal = (directCosts ?? []).reduce((s: number, dc: any) => s + dc.total_cents, 0);
-  const discountCents = est.discount_cents ?? 0;
+  // A "percent" discount is a % of the subtotal at whatever it is NOW, not a
+  // frozen dollar amount from whenever it was applied — re-derive it here so
+  // it stays in sync every time line items change, instead of trusting the
+  // stored discount_cents snapshot (which only `applyNamedDiscount` in
+  // EstimateSummaryPanel writes, and only at the moment a discount is picked).
+  const discountCents = est.discount_type === "percent"
+    ? Math.round(subtotalCents * ((est.discount_value ?? 0) / 10000))
+    : (est.discount_cents ?? 0);
   const revenueCents = subtotalCents - discountCents;
   const taxCents = Math.round((revenueCents * (est.tax_rate_bps ?? 0)) / 10000);
   const totalCents = revenueCents + taxCents;
@@ -377,6 +384,7 @@ export async function recalcEstimateTotals(supabase: AnySupabaseClient, estimate
     .from("estimates")
     .update({
       subtotal_cents: subtotalCents,
+      discount_cents: discountCents,
       tax_cents: taxCents,
       total_cents: totalCents,
       revenue_cents: revenueCents,
