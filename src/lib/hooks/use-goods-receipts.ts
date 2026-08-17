@@ -216,10 +216,17 @@ export function useUpdateGoodsReceipt() {
             }
           }
 
-          const { error: prodErr } = await supabase
-            .from("product_items")
-            .update({ quantity_on_hand: matchedProduct.quantity_on_hand + chg.delta })
-            .eq("id", matchedProduct.id);
+          // Atomic (row-locked, DB-side add) rather than a JS
+          // read-modify-write off `matchedProduct.quantity_on_hand`, which
+          // was read in a separate query moments earlier and could race
+          // with another concurrent receipt/adjustment on the same product.
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { error: prodErr } = await (supabase.rpc as any)("adjust_product_item_quantity", {
+            p_org_id: currentReceipt.org_id,
+            p_product_id: matchedProduct.id,
+            p_delta: chg.delta,
+            p_reason: "goods receipt correction",
+          });
           if (prodErr) throw prodErr;
         }
       }

@@ -62,7 +62,7 @@ export function useReceiveProductCostLayer() {
 
       const { data: current, error: fetchErr } = await supabase
         .from("product_items")
-        .select("cost_layers, unit_cost, quantity_on_hand")
+        .select("org_id, cost_layers, unit_cost")
         .eq("id", receipt.productId)
         .single();
       if (fetchErr) throw fetchErr;
@@ -82,10 +82,23 @@ export function useReceiveProductCostLayer() {
         .update({
           cost_layers: newLayers as unknown as import("@/types/supabase").Json,
           unit_cost: newUnitCost,
-          quantity_on_hand: current.quantity_on_hand + receipt.quantity,
         })
         .eq("id", receipt.productId);
       if (updateErr) throw updateErr;
+
+      // quantity_on_hand goes through the atomic adjust RPC (row-locked,
+      // DB-side add) rather than a JS read-modify-write — two people
+      // receiving the same product concurrently would otherwise race and
+      // lose one increment (last write wins on a value read before the
+      // other's write landed).
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error: qtyErr } = await (supabase.rpc as any)("adjust_product_item_quantity", {
+        p_org_id: current.org_id,
+        p_product_id: receipt.productId,
+        p_delta: receipt.quantity,
+        p_reason: `received via PO${receipt.poNumber ? ` ${receipt.poNumber}` : ""}`,
+      });
+      if (qtyErr) throw qtyErr;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["products"] });
