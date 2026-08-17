@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AlertCircle, ArrowLeft, Download, FileSpreadsheet, FileText, Printer } from "lucide-react";
+import { toast } from "sonner";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -96,13 +97,17 @@ function PrebuiltReportRunner({ def }: { def: PrebuiltReportDef }) {
 
   const handleExportExcel = () => {
     if (!result) return;
-    downloadXLSX(`${def.key}.xlsx`, [
-      {
-        name: def.name,
-        headers: result.columns.map((c) => c.label),
-        rows: result.rows.map((row) => result.columns.map((c) => exportCellValue(row[c.key], c.type))),
-      },
-    ]);
+    try {
+      downloadXLSX(`${def.key}.xlsx`, [
+        {
+          name: def.name,
+          headers: result.columns.map((c) => c.label),
+          rows: result.rows.map((row) => result.columns.map((c) => exportCellValue(row[c.key], c.type))),
+        },
+      ]);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Excel export failed");
+    }
   };
 
   const [exportingPdf, setExportingPdf] = useState(false);
@@ -117,6 +122,8 @@ function PrebuiltReportRunner({ def }: { def: PrebuiltReportDef }) {
           rows: result.rows.map((row) => result.columns.map((c) => formatCellValue(row[c.key], c.type))),
         },
       ]);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "PDF export failed");
     } finally {
       setExportingPdf(false);
     }

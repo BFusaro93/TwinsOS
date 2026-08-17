@@ -164,6 +164,9 @@ export const visualSpecSchema = z.object({
    *  reference; re-picking the same analysis (via "Refresh from source")
    *  re-copies its current config. Purely informational otherwise. */
   savedReportId: z.string().optional(),
+  /** Cell color-coding for the table view — carried over from a saved
+   *  analysis (or set directly), same shape as CustomReport.formatRules. */
+  formatRules: z.array(formatRuleSchema).optional(),
 });
 export type VisualSpec = z.infer<typeof visualSpecSchema>;
 

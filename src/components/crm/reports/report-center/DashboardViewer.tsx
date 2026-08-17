@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AlertCircle, ArrowLeft, Download, FileSpreadsheet, FileText, Pencil } from "lucide-react";
+import { toast } from "sonner";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -104,17 +105,21 @@ function DashboardTabView({ tab, dashboardName }: { tab: DashboardTab; dashboard
 
   const handleExportExcel = () => {
     if (!hasData) return;
-    downloadXLSX(
-      `${dashboardName} - ${tab.name}.xlsx`,
-      panelsWithData.map((panel) => {
-        const result = panelResults[panel.id];
-        return {
-          name: panel.title,
-          headers: result.columns.map((c) => c.label),
-          rows: result.rows.map((row) => result.columns.map((c) => exportCellValue(row[c.key], c.type))),
-        };
-      })
-    );
+    try {
+      downloadXLSX(
+        `${dashboardName} - ${tab.name}.xlsx`,
+        panelsWithData.map((panel) => {
+          const result = panelResults[panel.id];
+          return {
+            name: panel.title,
+            headers: result.columns.map((c) => c.label),
+            rows: result.rows.map((row) => result.columns.map((c) => exportCellValue(row[c.key], c.type))),
+          };
+        })
+      );
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Excel export failed");
+    }
   };
 
   const handleExportPdf = async () => {
@@ -132,6 +137,8 @@ function DashboardTabView({ tab, dashboardName }: { tab: DashboardTab; dashboard
           };
         })
       );
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "PDF export failed");
     } finally {
       setExportingPdf(false);
     }

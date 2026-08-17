@@ -97,7 +97,12 @@ function blankPanel(): DashboardPanel {
  *  rebuilding the query from scratch — `config` is a snapshot copied in now
  *  (refreshable later from the panel editor), `savedReportId` just tracks
  *  which analysis it came from. */
-function panelFromSavedReport(report: { id: string; name: string; config: DashboardPanel["visual"]["config"] }): DashboardPanel {
+function panelFromSavedReport(report: {
+  id: string;
+  name: string;
+  config: DashboardPanel["visual"]["config"];
+  formatRules: DashboardPanel["visual"]["formatRules"];
+}): DashboardPanel {
   return {
     id: crypto.randomUUID(),
     title: report.name,
@@ -108,6 +113,7 @@ function panelFromSavedReport(report: { id: string; name: string; config: Dashbo
       useTabDateRange: false,
       valueColumns: [],
       savedReportId: report.id,
+      formatRules: report.formatRules,
     },
   };
 }
@@ -553,10 +559,6 @@ interface PanelEditorProps {
 }
 
 function PanelEditor({ panel, tabUsesDateFilter, onSave, onCancel }: PanelEditorProps) {
-  const builder = useAnalysisConfigBuilder(
-    panel.visual.config.dataset ? panel.visual.config : undefined
-  );
-
   const [title, setTitle] = useState(panel.title);
   const [size, setSize] = useState<DashboardPanel["size"]>(panel.size);
   const [visualType, setVisualType] = useState<VisualType>(panel.visual.type);
@@ -565,7 +567,22 @@ function PanelEditor({ panel, tabUsesDateFilter, onSave, onCancel }: PanelEditor
   const [valueColumns, setValueColumns] = useState<string[]>(panel.visual.valueColumns);
   const [kpiColumn, setKpiColumn] = useState(panel.visual.kpiColumn ?? "");
   const [savedReportId, setSavedReportId] = useState(panel.visual.savedReportId);
+  const [formatRules, setFormatRules] = useState(panel.visual.formatRules);
   const { data: linkedReport } = useCustomReport(savedReportId);
+
+  const builder = useAnalysisConfigBuilder(
+    panel.visual.config.dataset ? panel.visual.config : undefined,
+    () => {
+      // Switching datasets invalidates any chart column references built
+      // against the old one, and breaks the panel's link to its source
+      // analysis (which is tied to that dataset) — reset both.
+      setLabelColumn("");
+      setValueColumns([]);
+      setKpiColumn("");
+      setSavedReportId(undefined);
+      setFormatRules(undefined);
+    }
+  );
 
   const [previewVisual, setPreviewVisual] = useState<VisualSpec | undefined>(undefined);
   const {
@@ -618,12 +635,14 @@ function PanelEditor({ panel, tabUsesDateFilter, onSave, onCancel }: PanelEditor
       valueColumns,
       kpiColumn: kpiColumn || undefined,
       savedReportId,
+      formatRules,
     };
   };
 
   function handleRefreshFromSource() {
     if (!linkedReport) return;
     hydrateBuilder(builder, linkedReport.config);
+    setFormatRules(linkedReport.formatRules);
   }
 
   function handleUnlink() {

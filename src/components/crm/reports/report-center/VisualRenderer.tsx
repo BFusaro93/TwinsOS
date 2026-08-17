@@ -165,7 +165,7 @@ export function VisualRenderer({
   if (visual.type === "table") {
     return (
       <div className={cn("max-h-72 overflow-auto", className)}>
-        <ReportTable result={result} />
+        <ReportTable result={result} formatRules={visual.formatRules} />
       </div>
     );
   }

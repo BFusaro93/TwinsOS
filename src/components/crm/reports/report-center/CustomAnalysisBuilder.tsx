@@ -85,7 +85,15 @@ export function CustomAnalysisBuilder({ reportId }: { reportId?: string }) {
   const [kpiColumn, setKpiColumn] = useState("");
   const [formatRules, setFormatRules] = useState<FormatRule[]>([]);
 
-  const builder = useAnalysisConfigBuilder(undefined, () => runAnalysis.reset());
+  const builder = useAnalysisConfigBuilder(undefined, () => {
+    // Switching datasets invalidates any chart/format-rule column references
+    // built against the old one — reset rather than leave them dangling.
+    runAnalysis.reset();
+    setLabelColumn("");
+    setValueColumns([]);
+    setKpiColumn("");
+    setFormatRules([]);
+  });
 
   // hydrate once when editing an existing analysis
   useEffect(() => {
@@ -138,6 +146,22 @@ export function CustomAnalysisBuilder({ reportId }: { reportId?: string }) {
 
   const removeFormatRule = (index: number) => {
     setFormatRules((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  /** Format-rule values are stored in the same raw units the row data uses
+   *  (money columns are cents, matching ReportTable's comparison) — this
+   *  resolves a rule column's type so the UI can show/accept dollars while
+   *  storing cents. Prefers the last preview run's actual column types
+   *  (correct even for aggregate aliases like sum_balance_cents), falling
+   *  back to the raw field/aggregate heuristic before a preview exists. */
+  const columnTypeForRule = (key: string): string => {
+    const resultCol = runAnalysis.data?.columns.find((c) => c.key === key);
+    if (resultCol) return resultCol.type;
+    if (grouped) {
+      const agg = aggregates.find((a) => aggregateAlias(a) === key);
+      if (agg) return agg.fn === "count" ? "number" : fields.find((f) => f.key === agg.column)?.type ?? "number";
+    }
+    return fields.find((f) => f.key === key)?.type ?? "text";
   };
 
   const visualSpec: VisualSpec | null = runAnalysis.data
@@ -205,13 +229,17 @@ export function CustomAnalysisBuilder({ reportId }: { reportId?: string }) {
   const handleExportExcel = () => {
     const result = runAnalysis.data;
     if (!result) return;
-    downloadXLSX(`${name.trim() || "analysis"}.xlsx`, [
-      {
-        name: name.trim() || "Analysis",
-        headers: result.columns.map((c) => c.label),
-        rows: result.rows.map((row) => result.columns.map((c) => exportCellValue(row[c.key], c.type))),
-      },
-    ]);
+    try {
+      downloadXLSX(`${name.trim() || "analysis"}.xlsx`, [
+        {
+          name: name.trim() || "Analysis",
+          headers: result.columns.map((c) => c.label),
+          rows: result.rows.map((row) => result.columns.map((c) => exportCellValue(row[c.key], c.type))),
+        },
+      ]);
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : "Excel export failed");
+    }
   };
 
   const [exportingPdf, setExportingPdf] = useState(false);
@@ -449,9 +477,15 @@ export function CustomAnalysisBuilder({ reportId }: { reportId?: string }) {
                   Color-code cells based on a rule, e.g. &quot;Balance &gt; $1,000 → red&quot;.
                 </p>
               )}
-              {formatRules.map((rule, i) => (
+              {formatRules.map((rule, i) => {
+                const ruleColType = columnTypeForRule(rule.column);
+                const isMoney = ruleColType === "money";
+                return (
                 <div key={i} className="flex flex-wrap items-center gap-2">
-                  <Select value={rule.column} onValueChange={(v) => updateFormatRule(i, { column: v })}>
+                  <Select
+                    value={rule.column}
+                    onValueChange={(v) => updateFormatRule(i, { column: v, value: 0 })}
+                  >
                     <SelectTrigger className="h-8 w-48 text-sm">
                       <SelectValue placeholder="Column" />
                     </SelectTrigger>
@@ -476,8 +510,14 @@ export function CustomAnalysisBuilder({ reportId }: { reportId?: string }) {
                   </Select>
                   <Input
                     type="number"
-                    value={rule.value}
-                    onChange={(e) => updateFormatRule(i, { value: Number(e.target.value) })}
+                    step={isMoney ? "0.01" : undefined}
+                    placeholder={isMoney ? "Amount ($)" : "Value"}
+                    value={isMoney ? rule.value / 100 : rule.value}
+                    onChange={(e) => {
+                      const n = parseFloat(e.target.value);
+                      const raw = Number.isNaN(n) ? 0 : n;
+                      updateFormatRule(i, { value: isMoney ? Math.round(raw * 100) : raw });
+                    }}
                     className="h-8 w-28 text-sm"
                   />
                   <Select
@@ -505,7 +545,8 @@ export function CustomAnalysisBuilder({ reportId }: { reportId?: string }) {
                     <X className="h-3.5 w-3.5" />
                   </Button>
                 </div>
-              ))}
+                );
+              })}
               <div>
                 <Button variant="outline" size="sm" onClick={addFormatRule} disabled={outputOptions.length === 0}>
                   <Plus className="mr-1.5 h-3.5 w-3.5" />
