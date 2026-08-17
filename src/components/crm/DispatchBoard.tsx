@@ -2622,7 +2622,22 @@ export function DispatchBoard() {
   }
 
   async function handleSaveOrder() {
-    const order = manualOrder ?? displayVisits.map((v) => v.id);
+    const changedOrder = manualOrder ?? displayVisits.map((v) => v.id);
+    // manualOrder/displayVisits are built from `filtered` — if a crew/status/
+    // search filter is active, visits it hides never appear in changedOrder
+    // at all. Assigning sequential priorities 1..N over changedOrder alone
+    // would leave those hidden visits with their OLD priority values, which
+    // can collide with or interleave the freshly-saved ones once the filter
+    // is cleared, showing a scrambled stop order. Splicing changedOrder back
+    // into the full unfiltered list (same technique handleReorder already
+    // uses per-crew) keeps every hidden visit in its original relative slot
+    // while the visible ones take on the order the user just set — then
+    // every visit in the list gets a fresh, consistent sequential priority.
+    const changedIds = new Set(changedOrder);
+    const fullOrder = allVisits.map((v) => v.id);
+    let ptr = 0;
+    const order = fullOrder.map((id) => (changedIds.has(id) ? changedOrder[ptr++] : id));
+
     const { createClient } = await import("@/lib/supabase/client");
     const supabase = createClient();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
