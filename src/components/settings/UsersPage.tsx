@@ -604,9 +604,14 @@ export function UsersPage() {
                     </TableCell>
 
                     <TableCell>
+                      {/* Editable for admins only — role changes are also
+                          enforced server-side (RLS + trigger), this just
+                          keeps the control from misleadingly appearing
+                          editable to non-admins. */}
                       <Select
                         value={user.role}
                         onValueChange={(v) => handleRoleChange(user.id, v as OrgUser["role"])}
+                        disabled={!isAdmin}
                       >
                         <SelectTrigger className="h-8 w-36 text-xs">
                           <SelectValue>{ROLE_LABELS[user.role as keyof typeof ROLE_LABELS]}</SelectValue>
