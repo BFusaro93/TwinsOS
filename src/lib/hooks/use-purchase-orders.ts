@@ -2,7 +2,34 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import { mapPurchaseOrder } from "@/lib/supabase/mappers";
+import { submitEntityForApproval } from "@/lib/hooks/use-approval-requests";
 import type { PurchaseOrder, POStatus, LineItem } from "@/types";
+
+/**
+ * A PO already in the approval pipeline ("pending" or "approved") must have
+ * its approval_requests chain re-derived whenever a line-item add/edit/delete
+ * changes its grand total — otherwise editing a line item after submission
+ * silently keeps whatever approvers were computed against the OLD total,
+ * bypassing a threshold the new total now crosses. Called after every
+ * line-item mutation below; a no-op for POs not currently in the pipeline
+ * (draft, rejected, ordered, etc).
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function resubmitPOForApprovalIfNeeded(supabase: any, poId: string, grandTotal: number) {
+  const { data: po } = await supabase
+    .from("purchase_orders")
+    .select("status")
+    .eq("id", poId)
+    .single();
+  if (po?.status === "pending" || po?.status === "approved") {
+    await submitEntityForApproval(supabase, {
+      entityId: poId,
+      entityType: "purchase_order",
+      grandTotalCents: grandTotal,
+    });
+    toast.info("PO total changed — re-submitted for approval.");
+  }
+}
 
 /** Safely convert any thrown value (including Supabase PostgrestError) to a readable string. */
 function serializeError(err: unknown): string {
@@ -702,6 +729,7 @@ export function useAddPOLineItem() {
       ]);
       if (lineErr) throw lineErr;
       if (poErr) throw poErr;
+      await resubmitPOForApprovalIfNeeded(supabase, poId, grandTotal);
     },
     onError: (err) => {
       toast.error(`Failed to add line item: ${serializeError(err)}`);
@@ -755,6 +783,7 @@ export function useUpdatePOLineItem() {
           `Line item ${item.id} was not updated — it may not exist or you may not have permission.`
         );
       }
+      await resubmitPOForApprovalIfNeeded(supabase, poId, grandTotal);
     },
     // Optimistically update the cache immediately so that:
     // 1. Any background refetch (window focus, etc.) doesn't overwrite the edit
@@ -836,6 +865,7 @@ export function useDeletePOLineItem() {
       ]);
       if (lineErr) throw lineErr;
       if (poErr) throw poErr;
+      await resubmitPOForApprovalIfNeeded(supabase, poId, grandTotal);
     },
     onMutate: async ({ poId, lineItemId, subtotal, salesTax, grandTotal }) => {
       await queryClient.cancelQueries({ queryKey: ["purchase-orders"] });
