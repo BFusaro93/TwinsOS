@@ -15,7 +15,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Paperclip } from "lucide-react";
 import { toast } from "sonner";
 import { formatCurrency } from "@/lib/utils";
-import { useEmailTemplates } from "@/lib/hooks/use-email-templates";
+import { useDocumentTemplates, useDocumentTemplate } from "@/lib/hooks/use-crm-documents";
+import { useInvoicePDFTemplates } from "@/lib/hooks/use-invoice-pdf-templates";
+import { renderBlocksToHtml } from "@/lib/utils/document-template-renderer";
 import { INVOICE_EMAIL_MERGE_TAGS } from "@/types/crm-proposals";
 import { RichTextEditor, type RichTextEditorHandle } from "@/components/crm/services/RichTextEditor";
 import { RecipientChipInput } from "@/components/shared/RecipientChipInput";
@@ -54,9 +56,16 @@ interface Props {
 export function InvoiceEmailDialog({
   invoiceId, invoiceNumber, totalCents, balanceCents, dueDate, clientName, clientEmail, open, onClose, onSent,
 }: Props) {
-  const { data: templates = [] } = useEmailTemplates("invoice");
+  // Email content (subject/body) templates now live in Documents (doc type
+  // "invoice_email") — a richer block-based builder than the old plain
+  // subject+body records, and the single place all email templates live.
+  const { data: allDocTemplates = [] } = useDocumentTemplates();
+  const templates = allDocTemplates.filter((t) => t.docType === "invoice_email" && t.status === "active");
+  const { data: pdfTemplates = [] } = useInvoicePDFTemplates();
 
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
+  const { data: selectedDocTemplate } = useDocumentTemplate(selectedTemplateId);
+  const [pdfTemplateId, setPdfTemplateId] = useState<string>("");
   const [subject, setSubject]   = useState(DEFAULT_INVOICE_SUBJECT);
   const [bodyHtml, setBodyHtml] = useState(DEFAULT_INVOICE_TEMPLATE_BODY);
   const [includePdf, setIncludePdf] = useState(true);
@@ -73,20 +82,31 @@ export function InvoiceEmailDialog({
     if (open) setToEmails(clientEmail ? [clientEmail] : []);
   }, [open, clientEmail]);
 
-  // Load template when selected
+  // Once the chosen document template's blocks load, fill in subject/body —
+  // merge tags are left unresolved ([clientfirstname], etc.) for the send
+  // route's own resolver, same as the automation email-step picker.
   useEffect(() => {
-    if (!selectedTemplateId) return;
-    const tpl = templates.find((t) => t.id === selectedTemplateId);
-    if (tpl) { setSubject(tpl.subject); setBodyHtml(tpl.bodyHtml); setIncludePdf(tpl.includePdf); }
-  }, [selectedTemplateId, templates]);
+    if (!selectedDocTemplate) return;
+    if (selectedDocTemplate.subject) setSubject(selectedDocTemplate.subject);
+    setBodyHtml(renderBlocksToHtml(selectedDocTemplate.blocks, {}));
+    setIncludePdf(selectedDocTemplate.includePdf);
+  }, [selectedDocTemplate]);
 
-  // Auto-select default template on open
+  // Auto-select the org's default invoice-email document template on open
   useEffect(() => {
     if (open && templates.length > 0 && !selectedTemplateId) {
-      const def = templates.find((t) => t.isDefault);
-      if (def) { setSelectedTemplateId(def.id); setSubject(def.subject); setBodyHtml(def.bodyHtml); setIncludePdf(def.includePdf); }
+      const def = templates.find((t) => t.isDefault) ?? templates[0];
+      if (def) setSelectedTemplateId(def.id);
     }
   }, [open, templates, selectedTemplateId]);
+
+  // Auto-select the org's default PDF layout template on open
+  useEffect(() => {
+    if (open && pdfTemplates.length > 0 && !pdfTemplateId) {
+      const def = pdfTemplates.find((t) => t.isDefault) ?? pdfTemplates[0];
+      if (def) setPdfTemplateId(def.id);
+    }
+  }, [open, pdfTemplates, pdfTemplateId]);
 
   // Simple preview: replace merge tags with placeholder values for display
   function previewResolve(text: string) {
@@ -114,7 +134,7 @@ export function InvoiceEmailDialog({
       const res = await fetch("/api/crm/invoices/email", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ invoiceId, subject, bodyHtml, ccEmails, to: toEmails, includePdf }),
+        body: JSON.stringify({ invoiceId, subject, bodyHtml, ccEmails, to: toEmails, includePdf, templateId: pdfTemplateId || undefined }),
       });
       if (!res.ok) {
         const data = await res.json();
@@ -152,7 +172,7 @@ export function InvoiceEmailDialog({
             placeholder="Add CC recipients…"
           />
 
-          {/* Template picker */}
+          {/* Email content template picker (Documents → Invoice Email) */}
           {templates.length > 0 && (
             <div className="flex items-center gap-3">
               <Label className="w-20 shrink-0 text-xs">Template</Label>
@@ -162,6 +182,24 @@ export function InvoiceEmailDialog({
                 </SelectTrigger>
                 <SelectContent>
                   {templates.map((t) => (
+                    <SelectItem key={t.id} value={t.id}>{t.name}{t.isDefault ? " (default)" : ""}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          {/* PDF layout template picker — which invoice PDF template to attach,
+              overriding the invoice's pinned template / org default just for this send. */}
+          {pdfTemplates.length > 0 && (
+            <div className="flex items-center gap-3">
+              <Label className="w-20 shrink-0 text-xs">PDF Layout</Label>
+              <Select value={pdfTemplateId} onValueChange={setPdfTemplateId}>
+                <SelectTrigger className="h-8 text-xs">
+                  <SelectValue placeholder="Choose a PDF layout…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {pdfTemplates.map((t) => (
                     <SelectItem key={t.id} value={t.id}>{t.name}{t.isDefault ? " (default)" : ""}</SelectItem>
                   ))}
                 </SelectContent>

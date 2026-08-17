@@ -9,6 +9,7 @@ import type { InvoicePDFLayoutKey } from "@/types/crm-invoices";
 import { fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
 import { addParagraphSpacing } from "@/lib/utils/document-template-renderer";
 import { buildInvoiceStatementData } from "@/lib/invoices/statement-data";
+import { getOrCreateInvoiceShareToken, buildInvoiceViewUrl } from "@/lib/invoices/share-token";
 
 const FROM = "Twins Lawn Service <noreply@twinslawnservice.com>";
 
@@ -70,7 +71,7 @@ export async function POST(req: NextRequest) {
       *,
       clients(display_name, primary_email, billing_address, billing_city, billing_state, billing_zip),
       crm_invoice_line_items(*),
-      crm_invoice_pdf_templates(layout_key, logo_url, accent_color, show_notes)
+      crm_invoice_pdf_templates(layout_key, logo_url, accent_color, show_notes, default_notes, advertisement_text)
     `)
     .eq("id", invoiceId)
     .is("deleted_at", null)
@@ -95,14 +96,27 @@ export async function POST(req: NextRequest) {
   const orgName = org?.name ?? "Your Service Provider";
   const orgPhone = ((org?.address as Record<string, string>) ?? {}).phone ?? "";
 
-  // Resolve which PDF template to render — invoice's own wins, else org default.
+  // Resolve which PDF template to render — an explicit choice for this send
+  // wins, then the invoice's own pinned template, then the org default.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let pdfTemplate: any = inv.crm_invoice_pdf_templates ?? null;
+  let pdfTemplate: any = null;
+  if (body.templateId) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: chosenTemplate } = await (supabase as any)
+      .from("crm_invoice_pdf_templates")
+      .select("layout_key, logo_url, accent_color, show_notes, default_notes, advertisement_text")
+      .eq("id", body.templateId)
+      .eq("org_id", inv.org_id)
+      .is("deleted_at", null)
+      .maybeSingle();
+    pdfTemplate = chosenTemplate ?? null;
+  }
+  if (!pdfTemplate) pdfTemplate = inv.crm_invoice_pdf_templates ?? null;
   if (!pdfTemplate) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: defaultTemplate } = await (supabase as any)
       .from("crm_invoice_pdf_templates")
-      .select("layout_key, logo_url, accent_color, show_notes")
+      .select("layout_key, logo_url, accent_color, show_notes, default_notes, advertisement_text")
       .eq("org_id", inv.org_id)
       .eq("is_default", true)
       .is("deleted_at", null)
@@ -172,7 +186,7 @@ export async function POST(req: NextRequest) {
   }));
   const addr = (org?.address as Record<string, string>) ?? {};
   const customizations = (org?.customizations as Record<string, unknown>) ?? {};
-  const statement = layoutKey === "statement"
+  const statement = (layoutKey === "statement" || layoutKey === "statement_invoice_only")
     ? await buildInvoiceStatementData(supabase, {
         id: inv.id as string,
         client_id: (inv.client_id as string | null) ?? null,
@@ -180,6 +194,11 @@ export async function POST(req: NextRequest) {
         total_cents: (inv.total_cents as number) ?? 0,
       })
     : null;
+  const shareToken = await getOrCreateInvoiceShareToken(supabase, {
+    orgId: inv.org_id as string,
+    invoiceId: inv.id as string,
+    createdBy: user.id,
+  });
   const invoicePdfData: InvoicePDFData = {
     invoiceNumber: inv.invoice_number as number,
     description: inv.description as string | null,
@@ -187,7 +206,11 @@ export async function POST(req: NextRequest) {
     dueDate: inv.due_date as string | null,
     poNumber: inv.po_number as string | null,
     terms: inv.terms as string | null,
-    notes: pdfTemplate?.show_notes === false ? null : (inv.notes as string | null),
+    notes: pdfTemplate?.show_notes === false
+      ? null
+      : ((inv.notes as string | null) || (pdfTemplate?.default_notes as string | null) || null),
+    advertisementText: (pdfTemplate?.advertisement_text as string | null) ?? null,
+    viewOnlineUrl: shareToken ? buildInvoiceViewUrl(shareToken) : null,
     clientName: inv.clients?.display_name ?? null,
     clientAddress: inv.clients?.billing_address ?? null,
     clientCity: inv.clients?.billing_city ?? null,

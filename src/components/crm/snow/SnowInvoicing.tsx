@@ -25,7 +25,7 @@ import type { CRMJobVisit } from "@/types/crm-jobs";
 const INVOICE_TYPE_LABEL: Record<string, string> = {
   per_event: "Per Event",
   per_event_per_inch: "Per Event, Per Inch",
-  per_push_per_inch: "Per Push, Per Inch",
+  per_push_per_inch: "Per Push",
   hourly: "Hourly",
 };
 

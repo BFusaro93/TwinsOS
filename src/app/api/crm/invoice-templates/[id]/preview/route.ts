@@ -60,7 +60,7 @@ export async function GET(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: template, error: templateErr } = await (supabase as any)
     .from("crm_invoice_pdf_templates")
-    .select("org_id, layout_key, logo_url, accent_color, show_notes")
+    .select("org_id, layout_key, logo_url, accent_color, show_notes, default_notes, advertisement_text")
     .eq("id", id)
     .single();
 
@@ -82,7 +82,10 @@ export async function GET(
     ...SAMPLE_INVOICE,
     invoiceNumber: 1001,
     invoiceDate: new Date().toISOString().slice(0, 10),
-    notes: template.show_notes === false ? null : SAMPLE_INVOICE.notes,
+    notes: template.show_notes === false
+      ? null
+      : ((template.default_notes as string | null) || SAMPLE_INVOICE.notes),
+    advertisementText: (template.advertisement_text as string | null) ?? null,
   };
 
   const orgData: OrgPDFData = {

@@ -44,6 +44,13 @@ export interface InvoicePDFData {
 
   lineItems: InvoicePDFLineItem[];
 
+  /** Template-level marketing/service-update blurb — same on every invoice
+   *  using that template (e.g. "We now offer junk removal!"). */
+  advertisementText?: string | null;
+
+  /** Public, unauthenticated "view + pay online" link for this invoice. */
+  viewOnlineUrl?: string | null;
+
   /** Only populated for the "statement" layout — account-activity context
    *  (previous balance, last payment, prior invoice) beyond this one invoice. */
   statement?: InvoicePDFStatementData | null;
@@ -300,11 +307,26 @@ function DefaultInvoiceLayout({ invoice, org }: { invoice: InvoicePDFData; org: 
         </View>
       </View>
 
+      {/* ── advertisement ──────────────────────────────────────────── */}
+      {invoice.advertisementText ? (
+        <View style={S.notesSection}>
+          <Text style={S.notesText}>{invoice.advertisementText}</Text>
+        </View>
+      ) : null}
+
       {/* ── notes ──────────────────────────────────────────────────── */}
       {invoice.notes ? (
         <View style={S.notesSection}>
           <Text style={S.notesLabel}>Notes</Text>
           <Text style={S.notesText}>{invoice.notes}</Text>
+        </View>
+      ) : null}
+
+      {/* ── view online ────────────────────────────────────────────── */}
+      {invoice.viewOnlineUrl ? (
+        <View style={S.notesSection}>
+          <Text style={S.notesLabel}>View &amp; Pay Online</Text>
+          <Text style={S.notesText}>{invoice.viewOnlineUrl}</Text>
         </View>
       ) : null}
 
@@ -461,10 +483,23 @@ function CompactInvoiceLayout({ invoice, org }: { invoice: InvoicePDFData; org: 
         </View>
       </View>
 
+      {invoice.advertisementText ? (
+        <View style={SC.notes}>
+          <Text>{invoice.advertisementText}</Text>
+        </View>
+      ) : null}
+
       {invoice.notes ? (
         <View style={SC.notes}>
           <Text style={SC.notesLabel}>Notes</Text>
           <Text>{invoice.notes}</Text>
+        </View>
+      ) : null}
+
+      {invoice.viewOnlineUrl ? (
+        <View style={SC.notes}>
+          <Text style={SC.notesLabel}>View &amp; Pay Online</Text>
+          <Text>{invoice.viewOnlineUrl}</Text>
         </View>
       ) : null}
 
@@ -543,7 +578,17 @@ function daysPastDueLabel(days: number): string {
   return ` -- ${days} DAY${days === 1 ? "" : "S"} PAST DUE`;
 }
 
-function StatementInvoiceLayout({ invoice, org }: { invoice: InvoicePDFData; org: OrgPDFData }) {
+function StatementInvoiceLayout({
+  invoice,
+  org,
+  showAccountBalance = true,
+}: {
+  invoice: InvoicePDFData;
+  org: OrgPDFData;
+  /** false = highlight this invoice's own total/balance instead of the
+   *  running account balance across all the client's other invoices. */
+  showAccountBalance?: boolean;
+}) {
   const st = invoice.statement;
   const clientAddressLine2 = [invoice.clientCity, invoice.clientState, invoice.clientZip].filter(Boolean).join(", ");
   const orgAddressLine2 = [org.city, org.state, org.zip].filter(Boolean).join(", ");
@@ -596,10 +641,12 @@ function StatementInvoiceLayout({ invoice, org }: { invoice: InvoicePDFData; org
               <View style={SS.miniCellLabel}><Text>Previous Balance</Text></View>
               <View style={SS.miniCellValue}><Text>{cents(st?.previousBalanceCents ?? 0)}</Text></View>
             </View>
-            <View style={SS.miniRow}>
-              <View style={SS.miniCellLabel}><Text>Invoice {invoiceLabel} Total</Text></View>
-              <View style={SS.miniCellValue}><Text>{cents(invoice.totalCents)}</Text></View>
-            </View>
+            {showAccountBalance && (
+              <View style={SS.miniRow}>
+                <View style={SS.miniCellLabel}><Text>Invoice {invoiceLabel} Total</Text></View>
+                <View style={SS.miniCellValue}><Text>{cents(invoice.totalCents)}</Text></View>
+              </View>
+            )}
             {invoice.taxRateBps > 0 && (
               <View style={SS.miniRow}>
                 <View style={SS.miniCellLabel}><Text>Sales Tax</Text></View>
@@ -607,8 +654,17 @@ function StatementInvoiceLayout({ invoice, org }: { invoice: InvoicePDFData; org
               </View>
             )}
             <View style={[SS.miniRow, { borderBottom: "none" }]}>
-              <View style={SS.balanceLabel}><Text>Account Balance</Text></View>
-              <View style={SS.balanceValue}><Text>{cents(st?.accountBalanceCents ?? invoice.totalCents)}</Text></View>
+              {showAccountBalance ? (
+                <>
+                  <View style={SS.balanceLabel}><Text>Account Balance</Text></View>
+                  <View style={SS.balanceValue}><Text>{cents(st?.accountBalanceCents ?? invoice.totalCents)}</Text></View>
+                </>
+              ) : (
+                <>
+                  <View style={SS.balanceLabel}><Text>Invoice {invoiceLabel} Total</Text></View>
+                  <View style={SS.balanceValue}><Text>{cents(invoice.totalCents)}</Text></View>
+                </>
+              )}
             </View>
           </View>
         </View>
@@ -677,8 +733,18 @@ function StatementInvoiceLayout({ invoice, org }: { invoice: InvoicePDFData; org
 
       <View style={SS.onlineBox}>
         <Text style={SS.onlineBoxLabel}>To View Your Invoice Online</Text>
-        <Text style={SS.onlineBoxText}>Log in to your client portal to view this invoice and payment history.</Text>
+        <Text style={SS.onlineBoxText}>
+          {invoice.viewOnlineUrl
+            ? `Go to ${invoice.viewOnlineUrl}`
+            : "Log in to your client portal to view this invoice and payment history."}
+        </Text>
       </View>
+
+      {invoice.advertisementText ? (
+        <View style={{ marginTop: 10 }}>
+          <Text style={[SS.activityText, { fontSize: 7.5 }]}>{invoice.advertisementText}</Text>
+        </View>
+      ) : null}
 
       {invoice.notes ? (
         <View style={SS.termsSection}>
@@ -691,7 +757,7 @@ function StatementInvoiceLayout({ invoice, org }: { invoice: InvoicePDFData; org
           <View style={SS.stubRow}><Text style={SS.stubLabel}>Client Name</Text><Text style={SS.stubValue}>{invoice.clientName ?? "—"}</Text></View>
           <View style={SS.stubRow}><Text style={SS.stubLabel}>Invoice #</Text><Text style={SS.stubValue}>{invoiceLabel}</Text></View>
           <View style={SS.stubRow}><Text style={SS.stubLabel}>Invoice Date</Text><Text style={SS.stubValue}>{formatDate(invoice.invoiceDate)}</Text></View>
-          <View style={SS.stubRow}><Text style={SS.stubLabel}>Amount Due</Text><Text style={[SS.stubValue, { fontFamily: "Helvetica-Bold" }]}>{cents(st?.accountBalanceCents ?? invoice.totalCents)}</Text></View>
+          <View style={SS.stubRow}><Text style={SS.stubLabel}>Amount Due</Text><Text style={[SS.stubValue, { fontFamily: "Helvetica-Bold" }]}>{cents(showAccountBalance ? (st?.accountBalanceCents ?? invoice.totalCents) : invoice.balanceCents)}</Text></View>
         </View>
         <View style={SS.stubRight}>
           <Text style={SS.stubTitle}>PAYMENT STUB</Text>
@@ -719,6 +785,8 @@ function renderLayout(layoutKey: InvoicePDFLayoutKey, invoice: InvoicePDFData, o
       return <CompactInvoiceLayout invoice={invoice} org={org} />;
     case "statement":
       return <StatementInvoiceLayout invoice={invoice} org={org} />;
+    case "statement_invoice_only":
+      return <StatementInvoiceLayout invoice={invoice} org={org} showAccountBalance={false} />;
     case "default":
     default:
       return <DefaultInvoiceLayout invoice={invoice} org={org} />;

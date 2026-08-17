@@ -45,6 +45,7 @@ export async function updateSession(request: NextRequest) {
     pathname.startsWith("/confirm") || // email confirmation / auth token handler
     pathname.startsWith("/request") || // public maintenance request portal
     pathname.startsWith("/proposal") || // public estimate/proposal acceptance link
+    pathname.startsWith("/invoice") || // public "view invoice online" / pay-without-login link
     pathname.startsWith("/legal") || // public privacy policy / SMS terms pages
     pathname.startsWith("/portal/login") || // client portal login
     pathname.startsWith("/portal/register") || // client portal registration

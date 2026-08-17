@@ -996,7 +996,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                               <SelectContent>
                                 <SelectItem value="per_event">Per Event</SelectItem>
                                 <SelectItem value="per_event_per_inch">Per Event, Per Inch</SelectItem>
-                                <SelectItem value="per_push_per_inch">Per Push, Per Inch</SelectItem>
+                                <SelectItem value="per_push_per_inch">Per Push</SelectItem>
                                 <SelectItem value="hourly">Hourly</SelectItem>
                                 <SelectItem value="monthly_flat_rate">Monthly Flat Rate</SelectItem>
                               </SelectContent>
@@ -1125,7 +1125,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                           <dt className="text-xs text-slate-500">Invoice Type</dt>
                           <dd className="text-xs font-medium text-slate-800">
                             {job.invoiceType
-                              ? { per_event: "Per Event", per_event_per_inch: "Per Event, Per Inch", per_push_per_inch: "Per Push, Per Inch", hourly: "Hourly", monthly_flat_rate: "Monthly Flat Rate" }[job.invoiceType] ?? job.invoiceType
+                              ? { per_event: "Per Event", per_event_per_inch: "Per Event, Per Inch", per_push_per_inch: "Per Push", hourly: "Hourly", monthly_flat_rate: "Monthly Flat Rate" }[job.invoiceType] ?? job.invoiceType
                               : <span className="text-slate-400 italic">Not set</span>}
                           </dd>
                         </div>

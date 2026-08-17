@@ -27,7 +27,8 @@ import type { InvoicePDFLayoutKey, InvoicePDFTemplate } from "@/types/crm-invoic
 const LAYOUT_OPTIONS: { value: InvoicePDFLayoutKey; label: string }[] = [
   { value: "default", label: "Default" },
   { value: "compact", label: "Compact" },
-  { value: "statement", label: "Statement (account activity + payment stub)" },
+  { value: "statement", label: "Statement (running account balance + payment stub)" },
+  { value: "statement_invoice_only", label: "Statement (this invoice's balance only + payment stub)" },
 ];
 
 function TemplateEditPanel({ template, onClose }: { template: InvoicePDFTemplate; onClose: () => void }) {
@@ -36,6 +37,8 @@ function TemplateEditPanel({ template, onClose }: { template: InvoicePDFTemplate
   const [logoUrl, setLogoUrl] = useState(template.logoUrl ?? "");
   const [accentColor, setAccentColor] = useState(template.accentColor ?? "#60ab45");
   const [showNotes, setShowNotes] = useState(template.showNotes);
+  const [defaultNotes, setDefaultNotes] = useState(template.defaultNotes ?? "");
+  const [advertisementText, setAdvertisementText] = useState(template.advertisementText ?? "");
 
   function handleSave() {
     update.mutate(
@@ -45,6 +48,8 @@ function TemplateEditPanel({ template, onClose }: { template: InvoicePDFTemplate
         logoUrl: logoUrl.trim() || null,
         accentColor: accentColor.trim() || null,
         showNotes,
+        defaultNotes: defaultNotes.trim() || null,
+        advertisementText: advertisementText.trim() || null,
       },
       {
         onSuccess: () => { toast.success("Template updated"); onClose(); },
@@ -98,6 +103,30 @@ function TemplateEditPanel({ template, onClose }: { template: InvoicePDFTemplate
         <Checkbox checked={showNotes} onCheckedChange={(v) => setShowNotes(v === true)} />
         Show invoice notes section
       </label>
+      <div>
+        <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+          Default Notes (used when an invoice has none of its own)
+        </label>
+        <textarea
+          value={defaultNotes}
+          onChange={(e) => setDefaultNotes(e.target.value)}
+          rows={2}
+          placeholder={'e.g. "Thank you for your business!"'}
+          className="w-full rounded-md border border-input bg-background px-3 py-2 text-xs shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+        />
+      </div>
+      <div>
+        <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+          Advertisement / Service Update (shown on every invoice using this template)
+        </label>
+        <textarea
+          value={advertisementText}
+          onChange={(e) => setAdvertisementText(e.target.value)}
+          rows={2}
+          placeholder={'e.g. "We now offer junk removal and dumpster rentals!"'}
+          className="w-full rounded-md border border-input bg-background px-3 py-2 text-xs shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+        />
+      </div>
       <div className="flex items-center gap-2 pt-1">
         <Button size="sm" className="h-7 text-xs" onClick={handleSave} disabled={update.isPending}>
           {update.isPending ? "Saving…" : "Save"}
