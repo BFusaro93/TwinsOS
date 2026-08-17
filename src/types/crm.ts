@@ -81,6 +81,9 @@ export interface Client {
   cancellationReason: string | null;
   revenuePotentialCents: number;
   doNotMarket: boolean;
+  smsOptIn: boolean;
+  smsOptInAt: string | null;
+  smsOptInSource: string | null;
   closedAt: string | null;
   parentClientId: string | null;
   deletedAt: string | null;

@@ -514,6 +514,7 @@ function EditClientDialog({ client, open, onOpenChange }: { client: Client; open
     clientSince: client.clientSince ?? "",
     isTaxable: client.isTaxable,
     doNotMarket: client.doNotMarket,
+    smsOptIn: client.smsOptIn ?? false,
     officeNotes: client.officeNotes ?? "",
     // built-in takeoffs
     turfSqft: client.turfSqft != null ? String(client.turfSqft) : "",
@@ -589,6 +590,7 @@ function EditClientDialog({ client, open, onOpenChange }: { client: Client; open
       clientSince: client.clientSince ?? "",
       isTaxable: client.isTaxable,
       doNotMarket: client.doNotMarket,
+      smsOptIn: client.smsOptIn ?? false,
       officeNotes: client.officeNotes ?? "",
       turfSqft: client.turfSqft != null ? String(client.turfSqft) : "",
       mulchBedSqft: client.mulchBedSqft != null ? String(client.mulchBedSqft) : "",
@@ -996,6 +998,18 @@ function EditClientDialog({ client, open, onOpenChange }: { client: Client; open
                   className="accent-brand-500"
                 />
                 <label htmlFor="doNotMarket" className="text-sm cursor-pointer">Do not market</label>
+              </div>
+              <div className="flex items-center gap-2 pt-1">
+                <input
+                  type="checkbox"
+                  id="smsOptIn"
+                  checked={form.smsOptIn}
+                  onChange={(e) => patch("smsOptIn", e.target.checked)}
+                  className="accent-brand-500"
+                />
+                <label htmlFor="smsOptIn" className="text-sm cursor-pointer">
+                  Opted in to text messages — check only after the client has verbally confirmed consent
+                </label>
               </div>
             </TabsContent>
 
