@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { AlertCircle, ArrowLeft, Download, Play, Save, Trash2 } from "lucide-react";
+import { AlertCircle, ArrowLeft, Download, FileSpreadsheet, FileText, Play, Plus, Save, Trash2, X } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   AlertDialog,
@@ -18,10 +18,22 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { downloadCSV } from "@/lib/csv";
+import { downloadXLSX } from "@/lib/xlsx-export";
+import { exportReportPDF } from "@/lib/reports/export-pdf";
 import {
+  aggregateAlias,
+  aggregateLabel,
   hydrateBuilder,
   useAnalysisConfigBuilder,
 } from "@/lib/hooks/use-analysis-config-builder";
@@ -32,8 +44,28 @@ import {
   useRunAnalysis,
   useUpdateCustomReport,
 } from "@/lib/hooks/use-report-center";
+import type { FormatRule, FormatRuleOp, VisualSpec, VisualType } from "@/types/crm-reports";
+import { FORMAT_COLORS } from "@/types/crm-reports";
 import { AnalysisConfigEditor } from "./AnalysisConfigEditor";
-import { formatCellValue, ReportTable } from "./ReportTable";
+import { exportCellValue, formatCellValue, ReportTable } from "./ReportTable";
+import { VisualRenderer } from "./VisualRenderer";
+
+const VISUAL_TYPE_OPTIONS: { value: VisualType; label: string }[] = [
+  { value: "table", label: "Table" },
+  { value: "kpi", label: "KPI" },
+  { value: "bar", label: "Bar Chart" },
+  { value: "line", label: "Line Chart" },
+  { value: "pie", label: "Pie Chart" },
+];
+
+const FORMAT_RULE_OP_OPTIONS: { value: FormatRuleOp; label: string }[] = [
+  { value: "gt", label: "> greater than" },
+  { value: "gte", label: "≥ greater than or equal" },
+  { value: "lt", label: "< less than" },
+  { value: "lte", label: "≤ less than or equal" },
+  { value: "eq", label: "= equal to" },
+  { value: "neq", label: "≠ not equal to" },
+];
 
 export function CustomAnalysisBuilder({ reportId }: { reportId?: string }) {
   const router = useRouter();
@@ -47,6 +79,11 @@ export function CustomAnalysisBuilder({ reportId }: { reportId?: string }) {
   const [description, setDescription] = useState("");
   const [hydrated, setHydrated] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [visualType, setVisualType] = useState<VisualType>("table");
+  const [labelColumn, setLabelColumn] = useState("");
+  const [valueColumns, setValueColumns] = useState<string[]>([]);
+  const [kpiColumn, setKpiColumn] = useState("");
+  const [formatRules, setFormatRules] = useState<FormatRule[]>([]);
 
   const builder = useAnalysisConfigBuilder(undefined, () => runAnalysis.reset());
 
@@ -56,16 +93,63 @@ export function CustomAnalysisBuilder({ reportId }: { reportId?: string }) {
     setName(existing.name);
     setDescription(existing.description ?? "");
     hydrateBuilder(builder, existing.config);
+    setVisualType(existing.visualType);
+    setLabelColumn(existing.labelColumn ?? "");
+    setValueColumns(existing.valueColumns);
+    setKpiColumn(existing.kpiColumn ?? "");
+    setFormatRules(existing.formatRules ?? []);
     setHydrated(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [existing, hydrated]);
 
-  const { canRun, buildConfig } = builder;
+  const { canRun, buildConfig, grouped, groupBy, aggregates, columns, numericFields, fields } = builder;
+  const isChart = visualType === "bar" || visualType === "line" || visualType === "pie";
+
+  const outputOptions = grouped
+    ? [
+        ...groupBy.map((key) => ({ value: key, label: fields.find((f) => f.key === key)?.label ?? key })),
+        ...aggregates
+          .filter((a) => a.column)
+          .map((a) => ({ value: aggregateAlias(a), label: aggregateLabel(a, fields) })),
+      ]
+    : columns.map((key) => ({ value: key, label: fields.find((f) => f.key === key)?.label ?? key }));
+
+  const valueOptions = grouped
+    ? aggregates
+        .filter((a) => a.column)
+        .map((a) => ({ value: aggregateAlias(a), label: aggregateLabel(a, fields) }))
+    : numericFields.map((f) => ({ value: f.key, label: f.label }));
 
   const handleRun = () => {
     const config = buildConfig();
     if (config) runAnalysis.mutate(config);
   };
+
+  const addFormatRule = () => {
+    setFormatRules((prev) => [
+      ...prev,
+      { column: outputOptions[0]?.value ?? "", op: "gt", value: 0, color: "red" },
+    ]);
+  };
+
+  const updateFormatRule = (index: number, patch: Partial<FormatRule>) => {
+    setFormatRules((prev) => prev.map((r, i) => (i === index ? { ...r, ...patch } : r)));
+  };
+
+  const removeFormatRule = (index: number) => {
+    setFormatRules((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const visualSpec: VisualSpec | null = runAnalysis.data
+    ? {
+        type: visualType,
+        config: buildConfig() ?? { dataset: "", columns: [], filters: [], groupBy: [], aggregates: [], sortDir: "asc" },
+        useTabDateRange: false,
+        labelColumn: labelColumn || undefined,
+        valueColumns,
+        kpiColumn: kpiColumn || undefined,
+      }
+    : null;
 
   const handleSave = async () => {
     const config = buildConfig();
@@ -78,12 +162,22 @@ export function CustomAnalysisBuilder({ reportId }: { reportId?: string }) {
           name: name.trim(),
           description: description.trim() || null,
           config,
+          visualType,
+          labelColumn: labelColumn || undefined,
+          valueColumns,
+          kpiColumn: kpiColumn || undefined,
+          formatRules,
         });
       } else {
         const created = await createReport.mutateAsync({
           name: name.trim(),
           description: description.trim() || null,
           config,
+          visualType,
+          labelColumn: labelColumn || undefined,
+          valueColumns,
+          kpiColumn: kpiColumn || undefined,
+          formatRules,
         });
         router.push(`/crm/admin/reports/analysis/${created.id}`);
       }
@@ -106,6 +200,38 @@ export function CustomAnalysisBuilder({ reportId }: { reportId?: string }) {
       result.columns.map((c) => c.label),
       result.rows.map((row) => result.columns.map((c) => formatCellValue(row[c.key], c.type)))
     );
+  };
+
+  const handleExportExcel = () => {
+    const result = runAnalysis.data;
+    if (!result) return;
+    downloadXLSX(`${name.trim() || "analysis"}.xlsx`, [
+      {
+        name: name.trim() || "Analysis",
+        headers: result.columns.map((c) => c.label),
+        rows: result.rows.map((row) => result.columns.map((c) => exportCellValue(row[c.key], c.type))),
+      },
+    ]);
+  };
+
+  const [exportingPdf, setExportingPdf] = useState(false);
+  const handleExportPdf = async () => {
+    const result = runAnalysis.data;
+    if (!result) return;
+    setExportingPdf(true);
+    try {
+      await exportReportPDF(name.trim() || "Analysis", [
+        {
+          heading: "",
+          columns: result.columns.map((c) => c.label),
+          rows: result.rows.map((row) => result.columns.map((c) => formatCellValue(row[c.key], c.type))),
+        },
+      ]);
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : "PDF export failed");
+    } finally {
+      setExportingPdf(false);
+    }
   };
 
   const saving = createReport.isPending || updateReport.isPending;
@@ -153,7 +279,25 @@ export function CustomAnalysisBuilder({ reportId }: { reportId?: string }) {
               disabled={!runAnalysis.data || runAnalysis.data.rows.length === 0}
             >
               <Download className="mr-1.5 h-3.5 w-3.5" />
-              Export CSV
+              CSV
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleExportExcel}
+              disabled={!runAnalysis.data || runAnalysis.data.rows.length === 0}
+            >
+              <FileSpreadsheet className="mr-1.5 h-3.5 w-3.5" />
+              Excel
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void handleExportPdf()}
+              disabled={!runAnalysis.data || runAnalysis.data.rows.length === 0 || exportingPdf}
+            >
+              <FileText className="mr-1.5 h-3.5 w-3.5" />
+              {exportingPdf ? "Exporting…" : "PDF"}
             </Button>
             <Button size="sm" onClick={handleSave} disabled={!canRun || saving || !name.trim()}>
               <Save className="mr-1.5 h-3.5 w-3.5" />
@@ -203,7 +347,177 @@ export function CustomAnalysisBuilder({ reportId }: { reportId?: string }) {
         <>
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-sm">6. Run</CardTitle>
+              <CardTitle className="text-sm">6. Visualization</CardTitle>
+            </CardHeader>
+            <CardContent className="flex items-center gap-3">
+              <span className="w-32 text-xs font-medium text-slate-600">Display As</span>
+              <Select value={visualType} onValueChange={(v) => setVisualType(v as VisualType)}>
+                <SelectTrigger className="h-9 w-40 text-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {VISUAL_TYPE_OPTIONS.map((o) => (
+                    <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </CardContent>
+          </Card>
+
+          {isChart && (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm">7. Chart Fields</CardTitle>
+              </CardHeader>
+              <CardContent className="flex flex-col gap-4">
+                <div className="flex items-center gap-3">
+                  <span className="w-32 text-xs font-medium text-slate-600">Label Column</span>
+                  <Select value={labelColumn} onValueChange={setLabelColumn}>
+                    <SelectTrigger className="h-8 w-64 text-sm">
+                      <SelectValue placeholder="Choose a label column…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {outputOptions.map((o) => (
+                        <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <p className="mb-1.5 text-xs font-medium text-slate-600">Value Column(s)</p>
+                  {visualType === "pie" ? (
+                    <Select value={valueColumns[0] ?? ""} onValueChange={(v) => setValueColumns([v])}>
+                      <SelectTrigger className="h-8 w-64 text-sm">
+                        <SelectValue placeholder="Choose a value column…" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {valueOptions.map((o) => (
+                          <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 sm:grid-cols-3 lg:grid-cols-4">
+                      {valueOptions.map((o) => (
+                        <label key={o.value} className="flex cursor-pointer items-center gap-2 text-sm text-slate-700">
+                          <Checkbox
+                            checked={valueColumns.includes(o.value)}
+                            onCheckedChange={(checked) =>
+                              setValueColumns((prev) =>
+                                checked === true ? [...prev, o.value] : prev.filter((k) => k !== o.value)
+                              )
+                            }
+                          />
+                          {o.label}
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {visualType === "kpi" && (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm">7. Chart Fields</CardTitle>
+              </CardHeader>
+              <CardContent className="flex items-center gap-3">
+                <span className="w-32 text-xs font-medium text-slate-600">KPI Value</span>
+                <Select value={kpiColumn} onValueChange={setKpiColumn}>
+                  <SelectTrigger className="h-8 w-64 text-sm">
+                    <SelectValue placeholder="Choose a value…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {outputOptions.map((o) => (
+                      <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </CardContent>
+            </Card>
+          )}
+
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm">8. Conditional Formatting</CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-3">
+              {formatRules.length === 0 && (
+                <p className="text-xs text-muted-foreground">
+                  Color-code cells based on a rule, e.g. &quot;Balance &gt; $1,000 → red&quot;.
+                </p>
+              )}
+              {formatRules.map((rule, i) => (
+                <div key={i} className="flex flex-wrap items-center gap-2">
+                  <Select value={rule.column} onValueChange={(v) => updateFormatRule(i, { column: v })}>
+                    <SelectTrigger className="h-8 w-48 text-sm">
+                      <SelectValue placeholder="Column" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {outputOptions.map((o) => (
+                        <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Select
+                    value={rule.op}
+                    onValueChange={(v) => updateFormatRule(i, { op: v as FormatRuleOp })}
+                  >
+                    <SelectTrigger className="h-8 w-44 text-sm">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {FORMAT_RULE_OP_OPTIONS.map((o) => (
+                        <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Input
+                    type="number"
+                    value={rule.value}
+                    onChange={(e) => updateFormatRule(i, { value: Number(e.target.value) })}
+                    className="h-8 w-28 text-sm"
+                  />
+                  <Select
+                    value={rule.color}
+                    onValueChange={(v) => updateFormatRule(i, { color: v as FormatRule["color"] })}
+                  >
+                    <SelectTrigger className="h-8 w-32 text-sm">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {FORMAT_COLORS.map((c) => (
+                        <SelectItem key={c.value} value={c.value}>
+                          <span className="flex items-center gap-1.5">
+                            <span
+                              className="h-3 w-3 rounded-full border"
+                              style={{ backgroundColor: c.bg, borderColor: c.text }}
+                            />
+                            {c.value[0].toUpperCase() + c.value.slice(1)}
+                          </span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => removeFormatRule(i)}>
+                    <X className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              ))}
+              <div>
+                <Button variant="outline" size="sm" onClick={addFormatRule} disabled={outputOptions.length === 0}>
+                  <Plus className="mr-1.5 h-3.5 w-3.5" />
+                  Add Rule
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm">9. Run</CardTitle>
             </CardHeader>
             <CardContent className="flex flex-wrap items-center gap-3">
               <Button size="sm" onClick={handleRun} disabled={!canRun || runAnalysis.isPending}>
@@ -223,7 +537,15 @@ export function CustomAnalysisBuilder({ reportId }: { reportId?: string }) {
               <AlertDescription>{runAnalysis.error.message}</AlertDescription>
             </Alert>
           )}
-          {runAnalysis.data && <ReportTable result={runAnalysis.data} />}
+          {runAnalysis.data && (visualType === "table" ? (
+            <ReportTable result={runAnalysis.data} formatRules={formatRules} />
+          ) : visualSpec ? (
+            <Card>
+              <CardContent className="pt-4">
+                <VisualRenderer result={runAnalysis.data} visual={visualSpec} className="h-80" />
+              </CardContent>
+            </Card>
+          ) : null)}
         </>
       )}
     </div>

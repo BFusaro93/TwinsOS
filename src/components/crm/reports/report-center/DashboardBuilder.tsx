@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -33,10 +34,13 @@ import { getDashboardTemplate } from "@/lib/reports/dashboard-templates";
 import {
   aggregateAlias,
   aggregateLabel,
+  hydrateBuilder,
   useAnalysisConfigBuilder,
 } from "@/lib/hooks/use-analysis-config-builder";
 import {
   useCreateDashboard,
+  useCustomReport,
+  useCustomReports,
   useDashboard,
   useDeleteDashboard,
   useRunVisualQuery,
@@ -89,6 +93,25 @@ function blankPanel(): DashboardPanel {
   };
 }
 
+/** Builds a panel from an already-saved "My Reports" analysis instead of
+ *  rebuilding the query from scratch — `config` is a snapshot copied in now
+ *  (refreshable later from the panel editor), `savedReportId` just tracks
+ *  which analysis it came from. */
+function panelFromSavedReport(report: { id: string; name: string; config: DashboardPanel["visual"]["config"] }): DashboardPanel {
+  return {
+    id: crypto.randomUUID(),
+    title: report.name,
+    size: "half",
+    visual: {
+      type: "table",
+      config: report.config,
+      useTabDateRange: false,
+      valueColumns: [],
+      savedReportId: report.id,
+    },
+  };
+}
+
 /** Fixed "this month" range used for panel previews. */
 const PREVIEW_DATE_RANGE = (() => {
   const now = new Date();
@@ -114,6 +137,8 @@ export function DashboardBuilder({ dashboardId }: { dashboardId?: string }) {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [hydrated, setHydrated] = useState(false);
   const [tabPendingRemoval, setTabPendingRemoval] = useState<DashboardTab | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const { data: savedReports = [] } = useCustomReports();
 
   // hydrate once when editing an existing dashboard
   useEffect(() => {
@@ -417,13 +442,45 @@ export function DashboardBuilder({ dashboardId }: { dashboardId?: string }) {
           )}
 
           {!editingPanel && (
-            <div>
+            <div className="flex items-center gap-2">
               <Button variant="outline" size="sm" onClick={() => setEditingPanel(blankPanel())}>
                 <Plus className="mr-1.5 h-3.5 w-3.5" />
                 Add Panel
               </Button>
+              <Button variant="outline" size="sm" onClick={() => setPickerOpen(true)}>
+                <Plus className="mr-1.5 h-3.5 w-3.5" />
+                Add From Saved Analysis
+              </Button>
             </div>
           )}
+
+          <Dialog open={pickerOpen} onOpenChange={setPickerOpen}>
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle>Add Panel From Saved Analysis</DialogTitle>
+              </DialogHeader>
+              <div className="flex max-h-96 flex-col gap-1 overflow-y-auto">
+                {savedReports.length === 0 && (
+                  <p className="py-4 text-center text-sm text-muted-foreground">
+                    No saved analyses yet — build one in My Reports first.
+                  </p>
+                )}
+                {savedReports.map((r) => (
+                  <button
+                    key={r.id}
+                    onClick={() => {
+                      setEditingPanel(panelFromSavedReport(r));
+                      setPickerOpen(false);
+                    }}
+                    className="flex flex-col rounded-md border p-3 text-left text-sm hover:bg-accent"
+                  >
+                    <span className="font-medium">{r.name}</span>
+                    {r.description && <span className="text-xs text-muted-foreground">{r.description}</span>}
+                  </button>
+                ))}
+              </div>
+            </DialogContent>
+          </Dialog>
 
           {editingPanel && (
             <PanelEditor
@@ -507,6 +564,8 @@ function PanelEditor({ panel, tabUsesDateFilter, onSave, onCancel }: PanelEditor
   const [labelColumn, setLabelColumn] = useState(panel.visual.labelColumn ?? "");
   const [valueColumns, setValueColumns] = useState<string[]>(panel.visual.valueColumns);
   const [kpiColumn, setKpiColumn] = useState(panel.visual.kpiColumn ?? "");
+  const [savedReportId, setSavedReportId] = useState(panel.visual.savedReportId);
+  const { data: linkedReport } = useCustomReport(savedReportId);
 
   const [previewVisual, setPreviewVisual] = useState<VisualSpec | undefined>(undefined);
   const {
@@ -558,8 +617,18 @@ function PanelEditor({ panel, tabUsesDateFilter, onSave, onCancel }: PanelEditor
       labelColumn: labelColumn || undefined,
       valueColumns,
       kpiColumn: kpiColumn || undefined,
+      savedReportId,
     };
   };
+
+  function handleRefreshFromSource() {
+    if (!linkedReport) return;
+    hydrateBuilder(builder, linkedReport.config);
+  }
+
+  function handleUnlink() {
+    setSavedReportId(undefined);
+  }
 
   const handlePreview = () => {
     const visual = buildVisual();
@@ -582,6 +651,21 @@ function PanelEditor({ panel, tabUsesDateFilter, onSave, onCancel }: PanelEditor
 
   return (
     <div className="flex flex-col gap-4 rounded-lg border border-dashed border-slate-300 bg-slate-50/50 p-4">
+      {savedReportId && (
+        <div className="flex items-center justify-between rounded-md border border-brand-200 bg-brand-50 px-3 py-2 text-xs text-brand-800">
+          <span>
+            Linked to saved analysis{linkedReport ? `: "${linkedReport.name}"` : "…"}
+          </span>
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="outline" className="h-6 text-[11px]" onClick={handleRefreshFromSource} disabled={!linkedReport}>
+              Refresh from source
+            </Button>
+            <Button size="sm" variant="ghost" className="h-6 text-[11px]" onClick={handleUnlink}>
+              Unlink
+            </Button>
+          </div>
+        </div>
+      )}
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-sm">1. Panel Settings</CardTitle>

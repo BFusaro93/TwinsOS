@@ -230,6 +230,24 @@ export function AnalysisConfigEditor({
                             <SelectItem value="false">No</SelectItem>
                           </SelectContent>
                         </Select>
+                      ) : field?.options ? (
+                        <Select
+                          value={filter.value}
+                          onValueChange={(v) =>
+                            setFilters((prev) =>
+                              prev.map((f, j) => (j === i ? { ...f, value: v } : f))
+                            )
+                          }
+                        >
+                          <SelectTrigger className="h-8 w-44 text-sm">
+                            <SelectValue placeholder="Value" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {field.options.map((o) => (
+                              <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       ) : (
                         <Input
                           type={filterValueInputType(field)}

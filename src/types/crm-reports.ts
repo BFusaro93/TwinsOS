@@ -22,6 +22,9 @@ export interface DatasetField {
   type: ReportFieldType;
   /** Include in the totals row. Defaults: money/hours = true, others = false. */
   totalable?: boolean;
+  /** Fixed set of valid values (e.g. account_type: residential/commercial) —
+   *  when present, the filter builder renders a dropdown instead of free text. */
+  options?: { value: string; label: string }[];
 }
 
 export interface ReportDataset {
@@ -85,10 +88,45 @@ export const analysisConfigSchema = z.object({
 });
 export type AnalysisConfig = z.infer<typeof analysisConfigSchema>;
 
+// ---------- Conditional formatting (cell color-coding) ----------
+
+export const formatRuleOpSchema = z.enum(["gt", "gte", "lt", "lte", "eq", "neq"]);
+export type FormatRuleOp = z.infer<typeof formatRuleOpSchema>;
+
+export const FORMAT_COLORS = [
+  { value: "red", bg: "#fee2e2", text: "#991b1b" },
+  { value: "yellow", bg: "#fef9c3", text: "#854d0e" },
+  { value: "green", bg: "#dcfce7", text: "#166534" },
+  { value: "blue", bg: "#dbeafe", text: "#1e40af" },
+] as const;
+export type FormatColor = (typeof FORMAT_COLORS)[number]["value"];
+
+export const formatRuleSchema = z.object({
+  column: z.string().min(1),
+  op: formatRuleOpSchema,
+  value: z.number(),
+  color: z.enum(["red", "yellow", "green", "blue"]),
+});
+export type FormatRule = z.infer<typeof formatRuleSchema>;
+
+// ---------- Dashboards (visuals built on the analysis engine) ----------
+
+export const visualTypeSchema = z.enum(["kpi", "table", "bar", "line", "pie"]);
+export type VisualType = z.infer<typeof visualTypeSchema>;
+
 export const customReportInputSchema = z.object({
   name: z.string().min(1).max(120),
   description: z.string().max(500).nullish(),
   config: analysisConfigSchema,
+  /** How to render this saved analysis — table (default) or a chart, same
+   *  visual fields a Dashboard panel has. Kept separate from `config` so
+   *  the query definition stays exactly an AnalysisConfig. */
+  visualType: visualTypeSchema.optional(),
+  labelColumn: z.string().optional(),
+  valueColumns: z.array(z.string()).optional(),
+  kpiColumn: z.string().optional(),
+  /** Cell color-coding for the table view — e.g. balance > $1000 → red. */
+  formatRules: z.array(formatRuleSchema).optional(),
 });
 export type CustomReportInput = z.infer<typeof customReportInputSchema>;
 
@@ -97,14 +135,14 @@ export interface CustomReport {
   name: string;
   description: string | null;
   config: AnalysisConfig;
+  visualType: VisualType;
+  labelColumn: string | null;
+  valueColumns: string[];
+  kpiColumn: string | null;
+  formatRules: FormatRule[];
   createdAt: string;
   updatedAt: string;
 }
-
-// ---------- Dashboards (visuals built on the analysis engine) ----------
-
-export const visualTypeSchema = z.enum(["kpi", "table", "bar", "line", "pie"]);
-export type VisualType = z.infer<typeof visualTypeSchema>;
 
 export const visualSpecSchema = z.object({
   type: visualTypeSchema,
@@ -121,6 +159,11 @@ export const visualSpecSchema = z.object({
   valueColumns: z.array(z.string()).default([]),
   /** Output column to render as the big number for a "kpi" visual. */
   kpiColumn: z.string().optional(),
+  /** Set when this panel was added "from a saved analysis" (My Reports) —
+   *  `config` is a snapshot copied in at add/refresh time, not a live
+   *  reference; re-picking the same analysis (via "Refresh from source")
+   *  re-copies its current config. Purely informational otherwise. */
+  savedReportId: z.string().optional(),
 });
 export type VisualSpec = z.infer<typeof visualSpecSchema>;
 

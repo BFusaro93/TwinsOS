@@ -3,12 +3,14 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { AlertCircle, ArrowLeft, Download, Printer } from "lucide-react";
+import { AlertCircle, ArrowLeft, Download, FileSpreadsheet, FileText, Printer } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Skeleton } from "@/components/ui/skeleton";
 import { downloadCSV } from "@/lib/csv";
+import { downloadXLSX } from "@/lib/xlsx-export";
+import { exportReportPDF } from "@/lib/reports/export-pdf";
 import { useRunReport } from "@/lib/hooks/use-report-center";
 import { getReport } from "@/lib/reports/registry";
 import type { PrebuiltReportDef } from "@/lib/reports/definition-types";
@@ -17,7 +19,7 @@ import {
   computePresetRange,
   ReportFilterBar,
 } from "./ReportFilterBar";
-import { formatCellValue, ReportTable } from "./ReportTable";
+import { exportCellValue, formatCellValue, ReportTable } from "./ReportTable";
 
 const HUB_HREF = "/crm/admin/reports?tab=center";
 
@@ -92,6 +94,34 @@ function PrebuiltReportRunner({ def }: { def: PrebuiltReportDef }) {
     );
   };
 
+  const handleExportExcel = () => {
+    if (!result) return;
+    downloadXLSX(`${def.key}.xlsx`, [
+      {
+        name: def.name,
+        headers: result.columns.map((c) => c.label),
+        rows: result.rows.map((row) => result.columns.map((c) => exportCellValue(row[c.key], c.type))),
+      },
+    ]);
+  };
+
+  const [exportingPdf, setExportingPdf] = useState(false);
+  const handleExportPdf = async () => {
+    if (!result) return;
+    setExportingPdf(true);
+    try {
+      await exportReportPDF(def.name, [
+        {
+          heading: "",
+          columns: result.columns.map((c) => c.label),
+          rows: result.rows.map((row) => result.columns.map((c) => formatCellValue(row[c.key], c.type))),
+        },
+      ]);
+    } finally {
+      setExportingPdf(false);
+    }
+  };
+
   return (
     <div className="flex h-full flex-col gap-4">
       <PageHeader
@@ -116,7 +146,25 @@ function PrebuiltReportRunner({ def }: { def: PrebuiltReportDef }) {
                 disabled={!result || result.rows.length === 0}
               >
                 <Download className="mr-1.5 h-3.5 w-3.5" />
-                Export CSV
+                CSV
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleExportExcel}
+                disabled={!result || result.rows.length === 0}
+              >
+                <FileSpreadsheet className="mr-1.5 h-3.5 w-3.5" />
+                Excel
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => void handleExportPdf()}
+                disabled={!result || result.rows.length === 0 || exportingPdf}
+              >
+                <FileText className="mr-1.5 h-3.5 w-3.5" />
+                {exportingPdf ? "Exporting…" : "PDF"}
               </Button>
               <Button variant="outline" size="sm" onClick={() => window.print()}>
                 <Printer className="mr-1.5 h-3.5 w-3.5" />
