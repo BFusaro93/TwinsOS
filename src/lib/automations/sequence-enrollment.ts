@@ -98,7 +98,7 @@ export async function logSequenceExecution(
   }
 }
 
-/** Enrolls a client into a sequence (after isEligibleForEnrollment has already been checked), computing next_fire_at from the sequence's first event. Returns false if the insert failed. */
+/** Enrolls a client into a sequence (after isEligibleForEnrollment has already been checked), computing next_fire_at from the sequence's first event. Returns the new enrollment's id, or null if the insert failed. */
 export async function enrollClientInSequence(
   supabase: AnyClient,
   params: {
@@ -109,7 +109,7 @@ export async function enrollClientInSequence(
     ticketId?: string | null;
     invoiceId?: string | null;
   }
-): Promise<boolean> {
+): Promise<string | null> {
   const { data: firstEvent } = await supabase
     .from("crm_sequence_events")
     .select("event_type, config")
@@ -144,7 +144,7 @@ export async function enrollClientInSequence(
     .select("id")
     .single();
 
-  if (error || !inserted) return false;
+  if (error || !inserted) return null;
 
   await logSequenceExecution(supabase, {
     orgId: params.orgId,
@@ -153,7 +153,7 @@ export async function enrollClientInSequence(
     clientId: params.clientId,
     action: "enrolled",
   });
-  return true;
+  return inserted.id;
 }
 
 interface ConditionRow {
@@ -608,8 +608,10 @@ export async function triggerConditionsMet(
 export async function fireServiceVisitCompletedTriggers(
   supabase: AnyClient,
   params: { orgId: string; clientId: string; serviceIds: string[] }
-): Promise<void> {
-  if (params.serviceIds.length === 0) return;
+): Promise<string[]> {
+  if (params.serviceIds.length === 0) return [];
+
+  const enrolledIds: string[] = [];
 
   const { data: triggers } = await supabase
     .from("crm_sequence_triggers")
@@ -643,12 +645,15 @@ export async function fireServiceVisitCompletedTriggers(
     });
     if (!eligible) continue;
 
-    await enrollClientInSequence(supabase, {
+    const enrollmentId = await enrollClientInSequence(supabase, {
       sequenceId: trigger.sequence_id,
       orgId: params.orgId,
       clientId: params.clientId,
     });
+    if (enrollmentId) enrolledIds.push(enrollmentId);
   }
+
+  return enrolledIds;
 }
 
 /**
@@ -679,7 +684,9 @@ export async function fireSimpleTrigger(
      */
     matchValues?: string[];
   }
-): Promise<void> {
+): Promise<string[]> {
+  const enrolledIds: string[] = [];
+
   const { data: triggers } = await supabase
     .from("crm_sequence_triggers")
     .select("id, sequence_id, config, crm_automation_sequences(is_active, allow_reentry, reentry_after_minutes, crm_automations(is_active, org_id))")
@@ -720,7 +727,7 @@ export async function fireSimpleTrigger(
     });
     if (!eligible) continue;
 
-    await enrollClientInSequence(supabase, {
+    const enrollmentId = await enrollClientInSequence(supabase, {
       sequenceId: trigger.sequence_id,
       orgId: params.orgId,
       clientId: params.clientId,
@@ -728,5 +735,8 @@ export async function fireSimpleTrigger(
       ticketId: params.ticketId ?? null,
       invoiceId: params.invoiceId ?? null,
     });
+    if (enrollmentId) enrolledIds.push(enrollmentId);
   }
+
+  return enrolledIds;
 }
