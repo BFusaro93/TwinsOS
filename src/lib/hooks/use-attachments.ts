@@ -45,14 +45,20 @@ export function useUploadAttachment(recordType: AttachmentRecordType, recordId: 
       const { data: { user } } = await supabase.auth.getUser();
       const { data: profile } = await supabase
         .from("profiles")
-        .select("name")
+        .select("name, org_id")
         .eq("id", user?.id ?? "")
         .single();
       const uploaderName = profile?.name ?? user?.email ?? "Unknown";
 
       const uploadOne = async (file: File): Promise<UploadResult> => {
         try {
-          const storagePath = `${recordType}/${recordId}/${Date.now()}-${file.name}`;
+          // org_id-prefixed so the storage bucket's RLS policy can actually
+          // scope access per-org (see the attachments_storage_bucket_org_scope
+          // migration) — a bare recordType/recordId path gave the bucket's
+          // wide-open "any authenticated user" policy nothing to check
+          // against, so any org's users could read/overwrite another org's
+          // attachments by guessing or enumerating a path.
+          const storagePath = `${profile?.org_id ?? "unknown"}/${recordType}/${recordId}/${Date.now()}-${file.name}`;
 
           // Fast path: stream File directly — no JS heap copy, fast for local files.
           // The Supabase storage client may either return { error } OR throw depending
