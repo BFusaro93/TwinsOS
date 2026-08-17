@@ -41,6 +41,22 @@ export async function submitWorkRequest(
 ): Promise<{ requestNumber: string; id: string }> {
   const requestNumber = `MR-${new Date().getFullYear()}-${Date.now().toString().slice(-5)}`;
 
+  // The public route resolves org from a slug and calls this with a
+  // service-role client (bypasses RLS) — input.assetId is caller-supplied
+  // and unvalidated, so without this check any caller could smuggle in a
+  // UUID belonging to a DIFFERENT org's asset, writing a cross-tenant FK
+  // into maintenance_requests.asset_id.
+  let validatedAssetId: string | null = null;
+  if (input.assetId) {
+    const { data: asset } = await supabase
+      .from("assets")
+      .select("id")
+      .eq("id", input.assetId)
+      .eq("org_id", org.id)
+      .maybeSingle();
+    validatedAssetId = asset?.id ?? null;
+  }
+
   const { data: mr, error: insertErr } = await supabase
     .from("maintenance_requests")
     .insert({
@@ -50,7 +66,7 @@ export async function submitWorkRequest(
       description: input.description?.trim() || null,
       status: "open",
       priority: normalisePriority(input.priority),
-      asset_id: input.assetId ?? null,
+      asset_id: validatedAssetId,
       asset_name: input.equipment?.trim() || null,
       requested_by_id: attribution.requestedById,
       requested_by_name: input.requestedBy,

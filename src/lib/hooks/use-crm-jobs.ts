@@ -1315,9 +1315,15 @@ export function useBulkImportCRMServices() {
           if (error) throw error;
           updated++;
         } else {
+          // .select("id").single() + updating byCode below matters: two CSV
+          // rows sharing the same code within the same import both miss the
+          // DB-loaded byCode map (neither exists yet when it was built), so
+          // without this the second row fell through to insert a duplicate
+          // service instead of updating the one the first row just created.
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const { error } = await (supabase as any).from("crm_services").insert(payload);
+          const { data: inserted, error } = await (supabase as any).from("crm_services").insert(payload).select("id").single();
           if (error) throw error;
+          if (code && inserted?.id) byCode.set(code.toLowerCase(), inserted.id);
           created++;
         }
       }
