@@ -77,8 +77,15 @@ export function AddProjectMaterialsDialog({
   const [existingReqId, setExistingReqId] = useState("none");
   const [existingPoId, setExistingPoId] = useState("none");
 
+  // This dialog exists specifically to assign materials to a project, and
+  // project_id may only be set on stocked_material/project_material line
+  // items (a DB trigger rejects it otherwise) — maintenance_part products
+  // must not be offered here, or picking one produces a rejected "Failed
+  // to add line item" once the destination requisition/PO is submitted.
   const catalog = [
-    ...products.map((p) => ({ key: `product:${p.id}`, name: p.name, partNumber: p.partNumber, unitCost: p.unitCost })),
+    ...products
+      .filter((p) => p.category !== "maintenance_part")
+      .map((p) => ({ key: `product:${p.id}`, name: p.name, partNumber: p.partNumber, unitCost: p.unitCost })),
     ...parts.map((p) => ({ key: `part:${p.id}`, name: p.name, partNumber: p.partNumber, unitCost: p.unitCost })),
   ];
 
