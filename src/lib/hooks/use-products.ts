@@ -387,10 +387,16 @@ export function useBulkImportProducts() {
       const { data: profile } = await supabase.from("profiles").select("org_id").eq("id", user!.id).single();
 
       for (const row of inserts) {
-        const { error } = await supabase.from("product_items").insert({ ...row, created_by: user?.id ?? null });
+        const { data: created, error } = await supabase
+          .from("product_items")
+          .insert({ ...row, created_by: user?.id ?? null })
+          .select()
+          .single();
+        let productId: string | undefined = created?.id;
+
         if (error?.code === "23505" && row.part_number) {
           // Duplicate part_number — update the existing record instead
-          await supabase.from("product_items").update({
+          const { data: updated } = await supabase.from("product_items").update({
             name: row.name,
             description: row.description,
             category: row.category,
@@ -399,15 +405,60 @@ export function useBulkImportProducts() {
             vendor_name: row.vendor_name,
             is_inventory: row.is_inventory,
             quantity_on_hand: row.quantity_on_hand,
-          }).eq("part_number", row.part_number).eq("org_id", profile!.org_id).is("deleted_at", null);
+          }).eq("part_number", row.part_number).eq("org_id", profile!.org_id).is("deleted_at", null)
+            .select()
+            .single();
+          productId = updated?.id;
         } else if (error) {
           throw error;
         }
+
+        // Mirror maintenance_part rows into CMMS parts inventory — matches
+        // useCreateProduct's mirroring so a bulk-imported maintenance part
+        // shows up in Parts, not just Products.
+        if (row.category === "maintenance_part" && productId) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { data: existingPart } = await (supabase as any)
+            .from("parts")
+            .select("id")
+            .eq("product_item_id", productId)
+            .maybeSingle();
+
+          if (existingPart) {
+            await supabase.from("parts").update({
+              name: row.name,
+              part_number: row.part_number || "",
+              description: row.description || "",
+              unit_cost: row.unit_cost,
+              quantity_on_hand: row.quantity_on_hand,
+              vendor_name: row.vendor_name || "",
+              is_inventory: row.is_inventory,
+            }).eq("id", existingPart.id);
+          } else {
+            await supabase.from("parts").insert({
+              name: row.name,
+              part_number: row.part_number || "",
+              description: row.description || "",
+              category: "maintenance_part",
+              unit_cost: row.unit_cost,
+              quantity_on_hand: row.quantity_on_hand,
+              minimum_stock: 0,
+              vendor_name: row.vendor_name || "",
+              product_item_id: productId,
+              is_inventory: row.is_inventory,
+              created_by: user?.id ?? null,
+            });
+          }
+        }
+
         inserted++;
       }
       return { inserted, skipped };
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["products"] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["products"] });
+      queryClient.invalidateQueries({ queryKey: ["parts"] });
+    },
   });
 }
 
