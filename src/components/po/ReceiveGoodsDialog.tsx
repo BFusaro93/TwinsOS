@@ -77,7 +77,7 @@ export function ReceiveGoodsDialog({
   const { mutateAsync: receivePartLayer } = useReceivePartCostLayer();
   const { mutateAsync: receiveProductLayer } = useReceiveProductCostLayer();
   const { mutate: createReceipt, isPending: saving } = useCreateGoodsReceipt();
-  const { data: allReceipts = [] } = useGoodsReceipts();
+  const { data: allReceipts = [], isFetched: receiptsFetched } = useGoodsReceipts();
   const [applyingInventory, setApplyingInventory] = useState(false);
 
   // Total already received per line item across all prior receipts for this PO
@@ -111,9 +111,15 @@ export function ReceiveGoodsDialog({
     );
   }
 
-  // Initialise lines from PO line items whenever dialog opens
+  // Initialise lines from PO line items whenever the dialog opens. Also
+  // re-runs once `receiptsFetched` flips to true: if the dialog is opened
+  // before useGoodsReceipts() resolves, alreadyReceivedMap is still empty
+  // (allReceipts defaults to []), so `remaining` would default to the FULL
+  // ordered quantity instead of what's actually still outstanding — and
+  // since this effect only depended on `open`, that wrong default would
+  // never get recomputed once the query did resolve.
   useEffect(() => {
-    if (open) {
+    if (open && receiptsFetched) {
       setLines(
         po.lineItems.map((li: LineItem) => {
           const alreadyReceived = alreadyReceivedMap.get(li.id) ?? 0;
@@ -134,7 +140,7 @@ export function ReceiveGoodsDialog({
       setSubmitted(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
+  }, [open, receiptsFetched]);
 
   function handleQtyChange(lineItemId: string, qty: number) {
     setLines((prev) =>
