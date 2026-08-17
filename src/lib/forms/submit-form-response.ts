@@ -15,6 +15,19 @@ function formatFormFieldValue(value: unknown): string {
   return String(value);
 }
 
+// formData is submitted through the fully anonymous public form endpoint —
+// interpolating it unescaped into the notification email's HTML body let a
+// crafted field value inject markup (link/button spoofing, layout
+// injection) into the staff-facing email.
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 interface FormEmailNotification {
   recipients: string; // comma-separated emails, or "account" for the submitter
   fromName?: string;
@@ -543,6 +556,11 @@ export async function submitFormResponse(
     for (const [label, value] of Object.entries(formData)) {
       vars[`[${label.toLowerCase().replace(/[^a-z0-9]/g, "")}]`] = formatFormFieldValue(value);
     }
+    // Escaped counterpart used only for the HTML body/copy block below —
+    // `vars` itself stays raw for the plain-text subject line.
+    const htmlVars: Record<string, string> = Object.fromEntries(
+      Object.entries(vars).map(([k, v]) => [k, escapeHtml(v)])
+    );
 
     const resend = new Resend(process.env.RESEND_API_KEY);
     for (const notif of emailNotifications) {
@@ -556,9 +574,9 @@ export async function submitFormResponse(
 
       const subject = resolveMergeTags(notif.subject || `New submission: ${form.name}`, vars);
       const copyBlock = notif.sendCopy
-        ? `<hr style="margin:16px 0;border:none;border-top:1px solid #e2e8f0"><p style="font-size:12px;color:#64748b">${Object.entries(formData).map(([k, v]) => `<strong>${k}:</strong> ${formatFormFieldValue(v)}`).join("<br>")}</p>`
+        ? `<hr style="margin:16px 0;border:none;border-top:1px solid #e2e8f0"><p style="font-size:12px;color:#64748b">${Object.entries(formData).map(([k, v]) => `<strong>${escapeHtml(k)}:</strong> ${escapeHtml(formatFormFieldValue(v))}`).join("<br>")}</p>`
         : "";
-      const html = resolveMergeTags(notif.body || "", vars).replace(/\n/g, "<br>") + copyBlock;
+      const html = resolveMergeTags(notif.body || "", htmlVars).replace(/\n/g, "<br>") + copyBlock;
       const from = notif.fromEmail ? `${notif.fromName || orgName} <${notif.fromEmail}>` : EMAIL_FROM;
 
       for (const to of recipients) {
