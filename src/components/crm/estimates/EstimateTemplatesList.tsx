@@ -24,6 +24,7 @@ import { toast } from "sonner";
 import { centsToDisplay } from "@/lib/estimate-calc";
 import type { CRMDiscount } from "@/types/crm-discounts";
 import type { EstimateTemplate, EstimateTemplateItem } from "@/types/crm-estimates";
+import type { BudgetMethod } from "@/types/crm-jobs";
 
 // ── template item row (inside edit dialog) ────────────────────────────────────
 
@@ -213,7 +214,14 @@ function EditTemplateDialog({
   const [addOpen, setAddOpen] = useState(false);
   const [search, setSearch] = useState("");
 
-  async function addItem(input: { name: string; id?: string; unit?: string; rateCents?: number | null }) {
+  async function addItem(input: {
+    name: string;
+    id?: string;
+    unit?: string;
+    rateCents?: number | null;
+    budgetMethod?: BudgetMethod;
+    productionRateSqftPerHr?: number | null;
+  }) {
     try {
       await upsert({
         templateId: template.id,
@@ -227,6 +235,8 @@ function EditTemplateDialog({
           visits: 1,
           budgeted_hours: 0,
           sort_order: (template.items ?? []).length,
+          budget_method: input.budgetMethod ?? "manual",
+          production_rate_sqft_per_hr: input.productionRateSqftPerHr ?? null,
         },
       });
       setAddOpen(false);
@@ -326,7 +336,7 @@ function EditTemplateDialog({
                       <button
                         key={s.id}
                         className="flex w-full items-center justify-between px-3 py-1.5 text-xs hover:bg-slate-50"
-                        onClick={() => addItem({ id: s.id, name: s.name, unit: s.unit ?? undefined, rateCents: s.defaultRateCents })}
+                        onClick={() => addItem({ id: s.id, name: s.name, unit: s.unit ?? undefined, rateCents: s.defaultRateCents, budgetMethod: s.budgetMethod, productionRateSqftPerHr: s.productionRateSqftPerHr })}
                       >
                         <span className="font-medium text-slate-900">{s.name}</span>
                         {s.productionRateSqftPerHr && (
