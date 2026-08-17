@@ -66,8 +66,13 @@ export async function POST(
 
   const now = new Date().toISOString();
 
-  // 1. Mark token as accepted
-  await supabase
+  // 1. Mark token as accepted — conditioned on accepted_at still being null so
+  // two concurrent submits (double-click, retry after a timeout) can't both
+  // pass the read check above and then both proceed: only the first UPDATE
+  // actually matches a row, the second is a no-op we detect and reject,
+  // instead of both continuing on to send duplicate confirmation emails and
+  // fire duplicate automation triggers.
+  const { data: claimed, error: claimErr } = await supabase
     .from("estimate_share_tokens")
     .update({
       accepted_at: now,
@@ -75,7 +80,15 @@ export async function POST(
       signature_data: body.signatureData ?? null,
       ip_address: ipAddress,
     })
-    .eq("id", shareToken.id);
+    .eq("id", shareToken.id)
+    .is("accepted_at", null)
+    .select("id");
+  if (claimErr) {
+    return NextResponse.json({ error: "Failed to record acceptance" }, { status: 500 });
+  }
+  if (!claimed || claimed.length === 0) {
+    return NextResponse.json({ error: "Already accepted" }, { status: 409 });
+  }
 
   // 2. Move estimate stage → accepted
   await supabase
