@@ -68,6 +68,31 @@ export async function POST(request: Request) {
     cardBrand = null;
   }
 
+  // `balanceCents` is the balance the intent was created against, captured
+  // at create-intent time — if a second PaymentIntent for the same invoice
+  // was created before the first settled (e.g. the customer opened the pay
+  // link on two devices, or the portal and the public link both created
+  // one), both intents can genuinely succeed as real card charges, each
+  // quoting the FULL balance owed at creation time. Re-check the invoice's
+  // actual remaining balance right before applying this payment and clamp
+  // to it, crediting any excess as unused/prepayment credit rather than
+  // driving the balance negative or double-counting what's owed. This can't
+  // undo a real double charge on the customer's card, but it keeps the
+  // ledger honest about what's actually still owed.
+  const { data: invoiceBefore, error: invoiceBeforeErr } = await supabase
+    .from("crm_invoices")
+    .select("total_cents, amount_paid_cents, status")
+    .eq("id", invoiceId)
+    .single();
+  if (invoiceBeforeErr) {
+    console.error("[crm payments webhook] failed to load invoice before applying payment:", invoiceBeforeErr);
+    return NextResponse.json({ error: "Failed to load invoice" }, { status: 500 });
+  }
+
+  const currentBalanceCents = Math.max(0, invoiceBefore.total_cents - invoiceBefore.amount_paid_cents);
+  const appliedCents = Math.min(balanceCents, currentBalanceCents);
+  const overpaidCents = balanceCents - appliedCents;
+
   const { data: inserted, error: insertErr } = await supabase
     .from("crm_payments")
     .insert({
@@ -75,10 +100,12 @@ export async function POST(request: Request) {
       invoice_id: invoiceId,
       client_id: clientId,
       amount_cents: balanceCents,
-      unused_amount_cents: 0,
+      unused_amount_cents: overpaidCents,
       payment_date: new Date().toISOString().slice(0, 10),
       method: methodForCardBrand(cardBrand),
-      memo: "Paid online via card",
+      memo: overpaidCents > 0
+        ? "Paid online via card (exceeds invoice balance — excess credited to account)"
+        : "Paid online via card",
       is_prepayment: false,
       processing_fee_cents: feeCents,
       stripe_payment_intent_id: paymentIntent.id,
@@ -96,18 +123,11 @@ export async function POST(request: Request) {
   }
 
   try {
-    const { data: invoice, error: invoiceErr } = await supabase
-      .from("crm_invoices")
-      .select("total_cents, amount_paid_cents, status")
-      .eq("id", invoiceId)
-      .single();
-    if (invoiceErr) throw invoiceErr;
-
-    const newPaid = Math.max(0, invoice.amount_paid_cents + balanceCents);
-    const newBalance = Math.max(0, invoice.total_cents - newPaid);
-    const openStatus = invoice.status === "printed" ? "printed" : "sent";
+    const newPaid = invoiceBefore.amount_paid_cents + appliedCents;
+    const newBalance = Math.max(0, invoiceBefore.total_cents - newPaid);
+    const openStatus = invoiceBefore.status === "printed" ? "printed" : "sent";
     const newStatus = newBalance <= 0 ? "paid" : newPaid > 0 ? "partial" : openStatus;
-    const wasNewlyPaid = newStatus === "paid" && invoice.status !== "paid";
+    const wasNewlyPaid = newStatus === "paid" && invoiceBefore.status !== "paid";
 
     const { error: updateErr } = await supabase
       .from("crm_invoices")
@@ -119,17 +139,19 @@ export async function POST(request: Request) {
       await fireSimpleTrigger(supabase, { orgId, clientId, invoiceId, triggerType: "invoice_paid" });
     }
 
-    const { error: allocErr } = await supabase
-      .from("crm_payment_allocations")
-      .insert({ org_id: orgId, payment_id: inserted.id, invoice_id: invoiceId, amount_cents: balanceCents });
-    if (allocErr) throw allocErr;
+    if (appliedCents > 0) {
+      const { error: allocErr } = await supabase
+        .from("crm_payment_allocations")
+        .insert({ org_id: orgId, payment_id: inserted.id, invoice_id: invoiceId, amount_cents: appliedCents });
+      if (allocErr) throw allocErr;
+    }
 
     await supabase.rpc("sync_client_balance", { p_client_id: clientId });
 
     await supabase.from("client_activity").insert({
       client_id: clientId,
       activity_type: "payment",
-      subject: `Payment received: ${methodForCardBrand(cardBrand)} (online)`,
+      subject: `Payment received: ${methodForCardBrand(cardBrand)} (online)${overpaidCents > 0 ? " — partly credited to account" : ""}`,
       amount_cents: balanceCents,
       ref_id: inserted.id,
       ref_table: "crm_payments",
