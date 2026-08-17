@@ -30,6 +30,15 @@ export async function POST(
     return NextResponse.json({ error: "Please describe the changes you'd like" }, { status: 400 });
   }
 
+  // acceptedLineItemIds gets interpolated directly into a PostgREST
+  // .not("id","in", "(...)") filter string below — a malformed id containing
+  // `)`, `,`, or quotes could break the intended filter or change which rows
+  // match, so validate every entry is a real UUID before it's used anywhere.
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (acceptedLineItemIds?.some((itemId) => !UUID_RE.test(itemId))) {
+    return NextResponse.json({ error: "Invalid line item id" }, { status: 400 });
+  }
+
   const supabase = createServiceClient();
 
   // Estimates nav is hidden client-side when disabled (PortalShell), but that's

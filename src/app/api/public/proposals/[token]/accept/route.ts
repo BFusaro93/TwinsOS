@@ -30,6 +30,15 @@ export async function POST(
     return NextResponse.json({ error: "Name is required" }, { status: 400 });
   }
 
+  // acceptedLineItemIds gets interpolated directly into a PostgREST
+  // .not("id","in", "(...)") filter string below — a malformed id containing
+  // `)`, `,`, or quotes could break the intended filter or change which rows
+  // match, so validate every entry is a real UUID before it's used anywhere.
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (body.acceptedLineItemIds?.some((id) => !UUID_RE.test(id))) {
+    return NextResponse.json({ error: "Invalid line item id" }, { status: 400 });
+  }
+
   const supabase = serviceClient();
   const ipAddress = req.headers.get("x-forwarded-for") ?? req.headers.get("x-real-ip") ?? null;
 
