@@ -26,16 +26,23 @@ export async function GET(
   if (tokenErr || !shareToken) {
     return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
   }
+  if (shareToken.revoked_at) {
+    return NextResponse.json({ error: "This invoice link has been revoked" }, { status: 410 });
+  }
   if (shareToken.expires_at && new Date(shareToken.expires_at) < new Date()) {
     return NextResponse.json({ error: "This invoice link has expired" }, { status: 410 });
   }
 
-  // Fire-and-forget view tracking.
-  supabase
-    .from("invoice_share_tokens")
-    .update({ viewed_at: new Date().toISOString() })
-    .eq("id", shareToken.id)
-    .then(() => {/* intentionally ignored */});
+  // Records the FIRST view only (only fires while still null) — awaited
+  // rather than fire-and-forget since a serverless function can be frozen
+  // the instant the response is returned, before an unawaited write lands.
+  if (!shareToken.viewed_at) {
+    await supabase
+      .from("invoice_share_tokens")
+      .update({ viewed_at: new Date().toISOString() })
+      .eq("id", shareToken.id)
+      .is("viewed_at", null);
+  }
 
   const { data: inv, error: invErr } = await supabase
     .from("crm_invoices")

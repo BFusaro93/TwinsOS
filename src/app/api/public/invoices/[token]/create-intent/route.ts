@@ -29,11 +29,14 @@ export async function POST(
 
   const { data: shareToken, error: tokenErr } = await supabase
     .from("invoice_share_tokens")
-    .select("invoice_id, org_id, expires_at")
+    .select("invoice_id, org_id, expires_at, revoked_at")
     .eq("token", token)
     .single();
   if (tokenErr || !shareToken) {
     return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
+  }
+  if (shareToken.revoked_at) {
+    return NextResponse.json({ error: "This invoice link has been revoked" }, { status: 410 });
   }
   if (shareToken.expires_at && new Date(shareToken.expires_at) < new Date()) {
     return NextResponse.json({ error: "This invoice link has expired" }, { status: 410 });

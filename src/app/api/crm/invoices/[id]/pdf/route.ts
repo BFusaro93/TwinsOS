@@ -36,6 +36,7 @@ export async function GET(
       crm_invoice_pdf_templates(layout_key, logo_url, accent_color, show_notes, default_notes, advertisement_text)
     `)
     .eq("id", id)
+    .is("deleted_at", null)
     .single();
 
   if (invErr || !inv) {

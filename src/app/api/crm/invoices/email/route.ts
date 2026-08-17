@@ -62,6 +62,9 @@ export async function POST(req: NextRequest) {
   if (body.to?.some((e) => !isValidEmail(e))) {
     return NextResponse.json({ error: "Invalid recipient email address" }, { status: 400 });
   }
+  if (body.ccEmails?.some((e) => !isValidEmail(e))) {
+    return NextResponse.json({ error: "Invalid CC email address" }, { status: 400 });
+  }
 
   // Load invoice with client, line items, and its own PDF template (if any)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -133,6 +136,18 @@ export async function POST(req: NextRequest) {
   const firstName = clientDisplayName.split(" ")[0] ?? clientDisplayName;
   const lastName = clientDisplayName.split(" ").slice(1).join(" ") ?? "";
 
+  // Computed here (not just where the PDF is built below) so the "View &
+  // Pay Online" link/button can appear in the actual email body too --
+  // previously it only existed inside the attached PDF, so turning off
+  // "Include PDF" (or a plain-text-reading client) meant the recipient had
+  // no way to reach it at all.
+  const shareToken = await getOrCreateInvoiceShareToken(supabase, {
+    orgId: inv.org_id as string,
+    invoiceId: inv.id as string,
+    createdBy: user.id,
+  });
+  const viewOnlineUrl = shareToken ? buildInvoiceViewUrl(shareToken) : null;
+
   const mergeVars: Record<string, string> = {
     "[clientfirstname]":    firstName,
     "[clientlastname]":     lastName,
@@ -145,6 +160,7 @@ export async function POST(req: NextRequest) {
     "[balancedue]":         formatCents(inv.balance_cents ?? 0),
     "[salesrepname]":       orgName,
     "[companyphonenumber]": orgPhone,
+    "[viewinvoiceonline]":  viewOnlineUrl ?? "",
   };
 
   const resolvedSubject = resolveMergeTags(body.subject?.trim() || DEFAULT_SUBJECT, mergeVars);
@@ -168,6 +184,10 @@ export async function POST(req: NextRequest) {
     <p style="color:rgba(255,255,255,.8);margin:4px 0 0;font-size:14px">Invoice #${inv.invoice_number ?? "—"}</p>
   </div>
   <div style="padding:28px 32px;font-size:14px;line-height:1.6">${resolvedBodyContent}</div>
+  ${viewOnlineUrl ? `
+  <div style="padding:0 32px 28px;text-align:center">
+    <a href="${viewOnlineUrl}" style="display:inline-block;background:${brandColor};color:#fff;text-decoration:none;padding:12px 28px;border-radius:6px;font-size:14px;font-weight:600">View &amp; Pay Invoice Online</a>
+  </div>` : ""}
   <div style="background:#f8fafc;padding:16px 32px;border-top:1px solid #e2e8f0;text-align:center">
     <p style="margin:0;font-size:11px;color:#94a3b8">${orgName}</p>
   </div>
@@ -196,11 +216,6 @@ export async function POST(req: NextRequest) {
         invoice_date: (inv.invoice_date as string | null) ?? null,
       })
     : null;
-  const shareToken = await getOrCreateInvoiceShareToken(supabase, {
-    orgId: inv.org_id as string,
-    invoiceId: inv.id as string,
-    createdBy: user.id,
-  });
   const invoicePdfData: InvoicePDFData = {
     invoiceNumber: inv.invoice_number as number,
     description: inv.description as string | null,
@@ -212,7 +227,7 @@ export async function POST(req: NextRequest) {
       ? null
       : ((inv.notes as string | null) || (pdfTemplate?.default_notes as string | null) || null),
     advertisementText: (pdfTemplate?.advertisement_text as string | null) ?? null,
-    viewOnlineUrl: shareToken ? buildInvoiceViewUrl(shareToken) : null,
+    viewOnlineUrl,
     clientName: inv.clients?.display_name ?? null,
     clientAddress: inv.clients?.billing_address ?? null,
     clientCity: inv.clients?.billing_city ?? null,

@@ -84,6 +84,7 @@ export const INVOICE_EMAIL_MERGE_TAGS = [
   { tag: "[balancedue]",         label: "Balance Due" },
   { tag: "[salesrepname]",       label: "Sales Rep Name" },
   { tag: "[companyphonenumber]", label: "Company Phone" },
+  { tag: "[viewinvoiceonline]",  label: "View Invoice Online Link" },
 ] as const;
 
 export type InvoiceMergeTag = typeof INVOICE_EMAIL_MERGE_TAGS[number]["tag"];
