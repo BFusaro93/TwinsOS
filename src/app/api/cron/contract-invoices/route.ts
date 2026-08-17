@@ -149,6 +149,7 @@ export async function GET(request: Request) {
         status: "draft",
         subtotal_cents: monthAmount,
         total_cents: monthAmount,
+        balance_cents: monthAmount,
       })
       .select("id")
       .single();
