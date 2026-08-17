@@ -169,7 +169,16 @@ export function ReceiveGoodsDialog({
     .reduce((sum, l) => sum + l.quantityReceived * l.unitCost, 0)
   );
   const salesTax = Math.round(taxableSubtotal * (po.taxRatePercent / 100));
-  const grandTotal = subtotal + salesTax + po.shippingCost;
+  // A PO-level discount is a single flat amount for the whole order, but
+  // receiving can happen across multiple partial receipts — applying it in
+  // full to every receipt would double- (or triple-) count it, while
+  // omitting it entirely (the prior behavior) overstated every receipt's
+  // total on any PO with a discount. Prorate it by this receipt's share of
+  // the PO's total ordered subtotal instead.
+  const discountShare = po.discountCost > 0 && po.subtotal > 0
+    ? Math.round(po.discountCost * (subtotal / po.subtotal))
+    : 0;
+  const grandTotal = subtotal - discountShare + salesTax + po.shippingCost;
 
   // Compares the CUMULATIVE received quantity (this receipt + everything
   // already received on prior receipts) against what was ordered — a plain
@@ -420,6 +429,12 @@ export function ReceiveGoodsDialog({
                   <span>Subtotal (received)</span>
                   <span className="tabular-nums">{formatCurrency(subtotal)}</span>
                 </div>
+                {discountShare > 0 && (
+                  <div className="flex justify-between py-0.5 text-slate-600">
+                    <span>Discount (prorated)</span>
+                    <span className="tabular-nums">-{formatCurrency(discountShare)}</span>
+                  </div>
+                )}
                 {po.taxRatePercent > 0 && (
                   <div className="flex justify-between py-0.5 text-slate-600">
                     <span>Tax ({po.taxRatePercent}%)</span>
