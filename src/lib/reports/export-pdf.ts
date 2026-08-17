@@ -23,7 +23,11 @@ export async function exportReportPDF(
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `${title}.pdf`;
+  // The `download` attribute wins over the server's Content-Disposition
+  // filename — a title containing "/" (e.g. a dashboard tab named
+  // "Revenue/Q1") would otherwise produce a broken/odd filename.
+  const safeTitle = title.replace(/[\\/:*?"<>|]/g, "").trim() || "report";
+  a.download = `${safeTitle}.pdf`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);

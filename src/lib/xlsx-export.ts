@@ -25,17 +25,19 @@ function sanitizeSheetName(name: string): string {
  *  de-duplicated if that causes a collision. */
 export function downloadXLSX(filename: string, sheets: XLSXSheet[]): void {
   const wb = XLSX.utils.book_new();
+  // Excel sheet names are unique case-INsensitively ("Revenue" and
+  // "revenue" collide), so the collision check has to compare lowercased.
   const usedNames = new Set<string>();
   for (const sheet of sheets) {
     const safeBase = sanitizeSheetName(sheet.name);
     let name = safeBase.slice(0, 31);
     let suffix = 2;
-    while (usedNames.has(name)) {
+    while (usedNames.has(name.toLowerCase())) {
       const base = safeBase.slice(0, 31 - String(suffix).length - 1);
       name = `${base}~${suffix}`;
       suffix += 1;
     }
-    usedNames.add(name);
+    usedNames.add(name.toLowerCase());
     const ws = XLSX.utils.aoa_to_sheet([sheet.headers, ...sheet.rows]);
     XLSX.utils.book_append_sheet(wb, ws, name);
   }

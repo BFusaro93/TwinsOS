@@ -83,6 +83,27 @@ function DashboardTabView({ tab, dashboardName }: { tab: DashboardTab; dashboard
   const [panelResults, setPanelResults] = useState<Record<string, ReportResult>>({});
   const [exportingPdf, setExportingPdf] = useState(false);
 
+  // Without this, changing the date range and immediately exporting (before
+  // the refetch for the new range lands) exported the PREVIOUS range's rows
+  // under the NEW range's filename/title. Clear only the panels that
+  // actually USE the tab's shared date range — panels that don't are
+  // unaffected by this change and would otherwise wrongly disappear from
+  // exports (their query doesn't refetch, so nothing would repopulate them).
+  useEffect(() => {
+    setPanelResults((prev) => {
+      const next = { ...prev };
+      let changed = false;
+      for (const panel of tab.panels) {
+        if (panel.visual.useTabDateRange && panel.id in next) {
+          delete next[panel.id];
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dateRange.from, dateRange.to]);
+
   const handlePanelData = (panelId: string, result: ReportResult) => {
     setPanelResults((prev) => (prev[panelId] === result ? prev : { ...prev, [panelId]: result }));
   };

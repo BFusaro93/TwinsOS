@@ -118,14 +118,20 @@ function panelFromSavedReport(report: CustomReport): DashboardPanel {
   };
 }
 
-/** Fixed "this month" range used for panel previews. */
-const PREVIEW_DATE_RANGE = (() => {
+/** "This month" range used for panel previews, in the viewer's LOCAL
+ *  calendar day — computed fresh on each call (not a module-level constant,
+ *  so a long-lived tab doesn't keep previewing last month once it rolls
+ *  over) using local Y/M/D components directly rather than
+ *  `.toISOString()`, which converts through UTC and can shift the date by
+ *  a day for timezones ahead of UTC. */
+function previewDateRange(): { from: string; to: string } {
   const now = new Date();
   const from = new Date(now.getFullYear(), now.getMonth(), 1);
   const to = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-  const iso = (d: Date) => d.toISOString().slice(0, 10);
+  const iso = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   return { from: iso(from), to: iso(to) };
-})();
+}
 
 export function DashboardBuilder({ dashboardId }: { dashboardId?: string }) {
   const router = useRouter();
@@ -190,11 +196,13 @@ export function DashboardBuilder({ dashboardId }: { dashboardId?: string }) {
   };
 
   const performRemoveTab = (tab: DashboardTab) => {
-    setTabs((prev) => {
-      const next = prev.filter((t) => t.id !== tab.id);
-      if (activeTabId === tab.id) setActiveTabId(next[0]?.id ?? "");
-      return next;
-    });
+    // Calling setActiveTabId inside the setTabs updater was a side effect
+    // in what must be a pure function — updaters can run more than once per
+    // commit (e.g. under StrictMode's double-invoke), which could fire the
+    // side effect twice for one removal. Compute the next list first.
+    const next = tabs.filter((t) => t.id !== tab.id);
+    setTabs(next);
+    if (activeTabId === tab.id) setActiveTabId(next[0]?.id ?? "");
   };
 
   const handleRemoveTab = (tab: DashboardTab) => {
@@ -514,7 +522,7 @@ function PanelPreviewCard({
 }) {
   const { data, isLoading, error } = useRunVisualQuery(
     panel.visual,
-    panel.visual.useTabDateRange ? PREVIEW_DATE_RANGE : undefined
+    panel.visual.useTabDateRange ? previewDateRange() : undefined
   );
 
   return (
@@ -589,7 +597,7 @@ function PanelEditor({ panel, tabUsesDateFilter, onSave, onCancel }: PanelEditor
     data: previewData,
     isLoading: previewLoading,
     error: previewError,
-  } = useRunVisualQuery(previewVisual, previewVisual?.useTabDateRange ? PREVIEW_DATE_RANGE : undefined);
+  } = useRunVisualQuery(previewVisual, previewVisual?.useTabDateRange ? previewDateRange() : undefined);
 
   const { grouped, groupBy, aggregates, columns, numericFields, fields } = builder;
 
