@@ -113,8 +113,23 @@ export async function resolveEmailStepContent(
     toName: clientDisplayName,
     fromAddress,
     subject: resolve(params.subjectTemplate || "(no subject)"),
-    bodyHtml: resolve(params.bodyTemplate || ""),
+    bodyHtml: plainTextToHtml(resolve(params.bodyTemplate || "")),
   };
+}
+
+/** The automation email step's body field is a plain `<textarea>` (no rich
+ *  text), unlike every other send path in the app (invoices, estimates,
+ *  form notifications) which already convert blank-line-separated text into
+ *  paragraphs before sending as HTML. Without this, a hand-typed multi-
+ *  paragraph email arrived as one run-on paragraph — blank lines and single
+ *  line breaks both collapse in HTML unless converted. Left alone if the
+ *  text already contains markup (defensive, in case a legacy body was HTML). */
+function plainTextToHtml(text: string): string {
+  if (/<[a-z][\s\S]*>/i.test(text)) return text;
+  return text
+    .split(/\n{2,}/)
+    .map((para) => `<p style="margin:0 0 12px 0">${para.replace(/\n/g, "<br>")}</p>`)
+    .join("");
 }
 
 /**

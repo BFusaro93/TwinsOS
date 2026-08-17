@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { useFormResponses } from "@/lib/hooks/use-crm-forms";
+import { useFormResponses, useMarkFormResponseRead } from "@/lib/hooks/use-crm-forms";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -162,9 +162,15 @@ interface Props {
 
 export function FormResponses({ formId }: Props) {
   const { data: responses = [], isLoading, refetch } = useFormResponses(formId);
+  const markRead = useMarkFormResponseRead();
   const [search, setSearch] = useState("");
   const [quickFilter, setQuickFilter] = useState<QuickFilter>("all");
   const [selected, setSelected] = useState<CRMFormResponse | null>(null);
+
+  function openResponse(r: CRMFormResponse) {
+    setSelected(r);
+    if (!r.isRead) markRead.mutate({ id: r.id, isRead: true });
+  }
 
   const stats = useMemo(() => ({
     total:     responses.length,
@@ -303,7 +309,7 @@ export function FormResponses({ formId }: Props) {
                 <tr
                   key={r.id}
                   className="border-b hover:bg-slate-50 cursor-pointer"
-                  onClick={() => setSelected(r)}
+                  onClick={() => openResponse(r)}
                 >
                   <td className="px-4 py-3">
                     {!r.isRead && (

@@ -3,6 +3,18 @@ import { resolveMergeTags, EMAIL_FROM } from "@/lib/email/send";
 import { notifyStaffOfNewTicket } from "@/lib/ticket-notify";
 import { fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
 
+/** File-upload answers are stored as `{path, name, size}` objects (see
+ *  FormResponses.tsx) — plain string interpolation of one produces
+ *  "[object Object]" in the ticket body, client activity log, and merge-tag
+ *  values. Render it as just the filename instead. */
+function formatFormFieldValue(value: unknown): string {
+  if (value && typeof value === "object" && "name" in value) {
+    const name = (value as { name?: unknown }).name;
+    if (typeof name === "string") return name;
+  }
+  return String(value);
+}
+
 interface FormEmailNotification {
   recipients: string; // comma-separated emails, or "account" for the submitter
   fromName?: string;
@@ -434,7 +446,7 @@ export async function submitFormResponse(
       client_id: relatedClientId,
       activity_type: "note",
       subject: `Form submitted: ${form.name}`,
-      body: Object.entries(formData).map(([k, v]) => `${k}: ${v}`).join("\n"),
+      body: Object.entries(formData).map(([k, v]) => `${k}: ${formatFormFieldValue(v)}`).join("\n"),
     });
   }
 
@@ -448,7 +460,7 @@ export async function submitFormResponse(
       submittedPhone ? `Phone: ${submittedPhone}` : null,
       submittedMessage ? `\nMessage:\n${submittedMessage}` : null,
       "\n--- Full submission ---",
-      Object.entries(formData).map(([k, v]) => `${k}: ${v}`).join("\n"),
+      Object.entries(formData).map(([k, v]) => `${k}: ${formatFormFieldValue(v)}`).join("\n"),
     ].filter(Boolean).join("\n");
 
     const { data: ticket } = await db
@@ -529,7 +541,7 @@ export async function submitFormResponse(
     // help?" → [howcanwehelp] — lets a notification body reference any field
     // on this specific form without the sender needing to know it in advance.
     for (const [label, value] of Object.entries(formData)) {
-      vars[`[${label.toLowerCase().replace(/[^a-z0-9]/g, "")}]`] = String(value);
+      vars[`[${label.toLowerCase().replace(/[^a-z0-9]/g, "")}]`] = formatFormFieldValue(value);
     }
 
     const resend = new Resend(process.env.RESEND_API_KEY);
@@ -544,7 +556,7 @@ export async function submitFormResponse(
 
       const subject = resolveMergeTags(notif.subject || `New submission: ${form.name}`, vars);
       const copyBlock = notif.sendCopy
-        ? `<hr style="margin:16px 0;border:none;border-top:1px solid #e2e8f0"><p style="font-size:12px;color:#64748b">${Object.entries(formData).map(([k, v]) => `<strong>${k}:</strong> ${v}`).join("<br>")}</p>`
+        ? `<hr style="margin:16px 0;border:none;border-top:1px solid #e2e8f0"><p style="font-size:12px;color:#64748b">${Object.entries(formData).map(([k, v]) => `<strong>${k}:</strong> ${formatFormFieldValue(v)}`).join("<br>")}</p>`
         : "";
       const html = resolveMergeTags(notif.body || "", vars).replace(/\n/g, "<br>") + copyBlock;
       const from = notif.fromEmail ? `${notif.fromName || orgName} <${notif.fromEmail}>` : EMAIL_FROM;
