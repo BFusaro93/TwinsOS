@@ -122,9 +122,16 @@ export const customReportInputSchema = z.object({
    *  visual fields a Dashboard panel has. Kept separate from `config` so
    *  the query definition stays exactly an AnalysisConfig. */
   visualType: visualTypeSchema.optional(),
-  labelColumn: z.string().optional(),
+  // nullish (not optional): the PATCH route only writes a field when it's
+  // present at all, so a client clearing a chart's label/KPI column back to
+  // "none" has to be able to send an explicit null — sending `undefined`
+  // is indistinguishable from "not touching this field" once JSON-encoded
+  // (JSON.stringify drops undefined keys), so the old value would never
+  // actually get cleared, including the dangling reference left behind by a
+  // dataset change.
+  labelColumn: z.string().nullish(),
   valueColumns: z.array(z.string()).optional(),
-  kpiColumn: z.string().optional(),
+  kpiColumn: z.string().nullish(),
   /** Cell color-coding for the table view — e.g. balance > $1000 → red. */
   formatRules: z.array(formatRuleSchema).optional(),
 });

@@ -46,7 +46,7 @@ import {
   useRunVisualQuery,
   useUpdateDashboard,
 } from "@/lib/hooks/use-report-center";
-import type { DashboardPanel, DashboardTab, VisualSpec, VisualType } from "@/types/crm-reports";
+import type { CustomReport, DashboardPanel, DashboardTab, VisualSpec, VisualType } from "@/types/crm-reports";
 import { AnalysisConfigEditor } from "./AnalysisConfigEditor";
 import { VisualRenderer } from "./VisualRenderer";
 
@@ -96,22 +96,22 @@ function blankPanel(): DashboardPanel {
 /** Builds a panel from an already-saved "My Reports" analysis instead of
  *  rebuilding the query from scratch — `config` is a snapshot copied in now
  *  (refreshable later from the panel editor), `savedReportId` just tracks
- *  which analysis it came from. */
-function panelFromSavedReport(report: {
-  id: string;
-  name: string;
-  config: DashboardPanel["visual"]["config"];
-  formatRules: DashboardPanel["visual"]["formatRules"];
-}): DashboardPanel {
+ *  which analysis it came from. Carries over the analysis's own chart
+ *  settings (visualType/label/value/kpi columns) too — without this, adding
+ *  a saved bar/line/pie/KPI analysis to a dashboard silently downgraded it
+ *  to a bare table with no series selected. */
+function panelFromSavedReport(report: CustomReport): DashboardPanel {
   return {
     id: crypto.randomUUID(),
     title: report.name,
     size: "half",
     visual: {
-      type: "table",
+      type: report.visualType,
       config: report.config,
       useTabDateRange: false,
-      valueColumns: [],
+      labelColumn: report.labelColumn ?? undefined,
+      valueColumns: report.valueColumns,
+      kpiColumn: report.kpiColumn ?? undefined,
       savedReportId: report.id,
       formatRules: report.formatRules,
     },
@@ -643,6 +643,13 @@ function PanelEditor({ panel, tabUsesDateFilter, onSave, onCancel }: PanelEditor
     if (!linkedReport) return;
     hydrateBuilder(builder, linkedReport.config);
     setFormatRules(linkedReport.formatRules);
+    // Also pick up chart-setting changes made in My Reports since this panel
+    // was linked/last refreshed — otherwise "refresh" only ever updated the
+    // underlying query, silently leaving a stale visualization behind it.
+    setVisualType(linkedReport.visualType);
+    setLabelColumn(linkedReport.labelColumn ?? "");
+    setValueColumns(linkedReport.valueColumns);
+    setKpiColumn(linkedReport.kpiColumn ?? "");
   }
 
   function handleUnlink() {

@@ -187,9 +187,9 @@ export function CustomAnalysisBuilder({ reportId }: { reportId?: string }) {
           description: description.trim() || null,
           config,
           visualType,
-          labelColumn: labelColumn || undefined,
+          labelColumn: labelColumn || null,
           valueColumns,
-          kpiColumn: kpiColumn || undefined,
+          kpiColumn: kpiColumn || null,
           formatRules,
         });
       } else {
@@ -198,9 +198,9 @@ export function CustomAnalysisBuilder({ reportId }: { reportId?: string }) {
           description: description.trim() || null,
           config,
           visualType,
-          labelColumn: labelColumn || undefined,
+          labelColumn: labelColumn || null,
           valueColumns,
-          kpiColumn: kpiColumn || undefined,
+          kpiColumn: kpiColumn || null,
           formatRules,
         });
         router.push(`/crm/admin/reports/analysis/${created.id}`);
