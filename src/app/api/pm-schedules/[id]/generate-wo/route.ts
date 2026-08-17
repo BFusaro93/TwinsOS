@@ -2,6 +2,37 @@ import { NextResponse } from "next/server";
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createClient } from "@supabase/supabase-js";
 
+type ServerSupabase = Awaited<ReturnType<typeof createServerClient>>;
+
+/**
+ * Mirrors useAddWOPart's insert-path inventory deduction (use-wo-costs.ts) for
+ * wo_parts rows created here by copying pm_schedule_asset_parts templates.
+ * Without this, PM-generated parts were never deducted from parts.quantity_on_hand
+ * at all — but useDeleteWOPart still credits +quantity back on delete, so
+ * removing a PM-generated line inflated stock that generation never reduced.
+ * Uses the session-authenticated client (not the service-role adminClient)
+ * because adjust_part_quantity() requires a real auth.uid() to attribute the
+ * audit entry to.
+ */
+async function deductPartsInventory(
+  userClient: ServerSupabase,
+  workOrderId: string,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  templateParts: any[]
+) {
+  const withParts = templateParts.filter((tp) => tp.part_id);
+  await Promise.all(
+    withParts.map((tp) =>
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (userClient.rpc as any)("adjust_part_quantity", {
+        p_part_id: tp.part_id,
+        p_delta: -tp.quantity,
+        p_work_order_id: workOrderId,
+      })
+    )
+  );
+}
+
 /**
  * POST /api/pm-schedules/[id]/generate-wo
  *
@@ -145,6 +176,7 @@ export async function POST(
           unit_cost: tp.unit_cost,
         }))
       );
+      await deductPartsInventory(userClient, singleWO.id, templateParts);
     }
 
     primaryWOId = singleWO.id;
@@ -227,6 +259,7 @@ export async function POST(
             unit_cost: tp.unit_cost,
           }))
         );
+        await deductPartsInventory(userClient, subWO.id, templateParts);
       }
     }
 
