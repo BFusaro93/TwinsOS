@@ -77,6 +77,24 @@ export async function sendCampaignEmails(
     return { ok: false, error: "No eligible recipients (check Do Not Market / missing emails)" };
   }
 
+  // Claim the campaign with a conditional update, not a plain one — two
+  // near-simultaneous sends (a double-click, a duplicate tab, or a manual
+  // "Send Now" racing the scheduled-send cron) both pass the draft/scheduled
+  // status check above before either write lands; only conditioning this
+  // UPDATE on status still being draft/scheduled (and checking it actually
+  // matched a row) lets the second caller detect it lost the race and bail,
+  // instead of both blasting the full audience and duplicating every send.
+  const { data: claimed, error: claimErr } = await db
+    .from("crm_campaigns")
+    .update({ status: "sending", updated_at: new Date().toISOString() })
+    .eq("id", campaign.id)
+    .in("status", ["draft", "scheduled"])
+    .select("id");
+  if (claimErr) return { ok: false, error: claimErr.message };
+  if (!claimed || claimed.length === 0) {
+    return { ok: false, error: "Campaign has already been sent" };
+  }
+
   const { data: org } = await db
     .from("organizations")
     .select("name, address")
@@ -86,11 +104,6 @@ export async function sendCampaignEmails(
   const orgName = org?.name ?? "Your Service Provider";
   const orgAddress = org?.address ?? null;
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://app.twinslawnservice.com";
-
-  await db
-    .from("crm_campaigns")
-    .update({ status: "sending", updated_at: new Date().toISOString() })
-    .eq("id", campaign.id);
 
   let delivered = 0;
   let failed = 0;
