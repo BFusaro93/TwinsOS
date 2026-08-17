@@ -145,7 +145,10 @@ function DetailsTab({
   function handleAddLineItem() {
     const selected = catalog.find((c) => c.key === addValue);
     if (!selected) return;
-    const qty = Math.max(1, parseInt(addQty) || 1);
+    // quantity is numeric(10,3) in the DB (fractional quantities like 2.5
+    // gallons are valid) — parseInt silently truncated any decimal the user
+    // typed down to a whole number.
+    const qty = Math.max(0.001, Math.round((parseFloat(addQty) || 1) * 1000) / 1000);
     // Preserve up to 4 decimal places (fractional cents) for case/bulk pricing accuracy.
     const costCents = addCost ? Math.round(parseFloat(addCost) * 10000) / 100 : selected.unitCost;
     const rawId = selected.key.replace(/^(product:|part:)/, "");
