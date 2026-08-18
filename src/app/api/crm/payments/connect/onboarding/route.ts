@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { getStripe, isStripeConfigured } from "@/lib/stripe/server";
+import { syncConnectStatusFromStripe } from "@/lib/stripe/connect";
 import { logger } from "@/lib/logger";
 
 const log = logger.child("stripe connect onboarding");
@@ -26,7 +27,7 @@ export async function POST(request: Request) {
 
   const { data: org } = await supabase
     .from("organizations")
-    .select("id, name, stripe_connect_account_id, stripe_connect_charges_enabled")
+    .select("id, name, stripe_connect_account_id")
     .eq("id", profile.org_id)
     .single();
   if (!org) return NextResponse.json({ error: "Organization not found" }, { status: 404 });
@@ -34,11 +35,17 @@ export async function POST(request: Request) {
   const stripe = getStripe();
   const serviceClient = createServiceClient();
 
-  // Already fully onboarded — send them to their own Stripe Standard dashboard
-  // instead of re-running the onboarding flow.
-  if (org.stripe_connect_account_id && org.stripe_connect_charges_enabled) {
-    const loginLink = await stripe.accounts.createLoginLink(org.stripe_connect_account_id);
-    return NextResponse.json({ url: loginLink.url });
+  // Check Stripe directly rather than trusting only the webhook-cached DB
+  // columns — some Stripe workspaces only emit newer v2 Accounts API events,
+  // which this app's webhook doesn't listen for, leaving the cache stale.
+  if (org.stripe_connect_account_id) {
+    const synced = await syncConnectStatusFromStripe(stripe, org.id, org.stripe_connect_account_id);
+    if (synced.chargesEnabled) {
+      // Already fully onboarded — send them to their own Stripe Standard
+      // dashboard instead of re-running the onboarding flow.
+      const loginLink = await stripe.accounts.createLoginLink(org.stripe_connect_account_id);
+      return NextResponse.json({ url: loginLink.url });
+    }
   }
 
   let accountId = org.stripe_connect_account_id;

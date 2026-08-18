@@ -63,6 +63,7 @@ export function ChargeCardDialog({
   onOpenChange: (open: boolean) => void;
   onCharged: () => void;
 }) {
+  const [paymentMethod, setPaymentMethod] = useState<"card" | "us_bank_account">("card");
   const [waiveFee, setWaiveFee] = useState(false);
   const [intent, setIntent] = useState<CreatePaymentIntentResult | null>(null);
   const [succeeded, setSucceeded] = useState(false);
@@ -70,6 +71,7 @@ export function ChargeCardDialog({
 
   function handleOpenChange(next: boolean) {
     if (!next) {
+      setPaymentMethod("card");
       setWaiveFee(false);
       setIntent(null);
       setSucceeded(false);
@@ -79,10 +81,10 @@ export function ChargeCardDialog({
 
   async function handleContinue() {
     try {
-      const result = await createIntent.mutateAsync({ invoiceId, waiveFee });
+      const result = await createIntent.mutateAsync({ invoiceId, waiveFee, paymentMethod });
       setIntent(result);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to start card payment");
+      toast.error(err instanceof Error ? err.message : "Failed to start payment");
     }
   }
 
@@ -99,7 +101,7 @@ export function ChargeCardDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <CreditCard className="h-4 w-4 text-brand-500" />
-            Charge Card
+            Collect Payment
           </DialogTitle>
         </DialogHeader>
 
@@ -125,12 +127,38 @@ export function ChargeCardDialog({
                 <span className="text-slate-500">Balance Due</span>
                 <span className="font-semibold tabular-nums">{formatCurrency(balanceCents)}</span>
               </div>
-              <div className="flex items-center gap-2">
-                <Checkbox id="waive-fee" checked={waiveFee} onCheckedChange={(v) => setWaiveFee(v === true)} />
-                <Label htmlFor="waive-fee" className="text-sm font-normal text-slate-600">
-                  Waive credit card processing fee
-                </Label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPaymentMethod("card")}
+                  className={`rounded-md border px-3 py-2 text-sm font-medium transition-colors ${
+                    paymentMethod === "card"
+                      ? "border-brand-500 bg-brand-50 text-brand-700"
+                      : "border-slate-200 text-slate-600 hover:bg-slate-50"
+                  }`}
+                >
+                  Card
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPaymentMethod("us_bank_account")}
+                  className={`rounded-md border px-3 py-2 text-sm font-medium transition-colors ${
+                    paymentMethod === "us_bank_account"
+                      ? "border-brand-500 bg-brand-50 text-brand-700"
+                      : "border-slate-200 text-slate-600 hover:bg-slate-50"
+                  }`}
+                >
+                  Bank Transfer (ACH)
+                </button>
               </div>
+              {paymentMethod === "card" && (
+                <div className="flex items-center gap-2">
+                  <Checkbox id="waive-fee" checked={waiveFee} onCheckedChange={(v) => setWaiveFee(v === true)} />
+                  <Label htmlFor="waive-fee" className="text-sm font-normal text-slate-600">
+                    Waive credit card processing fee
+                  </Label>
+                </div>
+              )}
               <DialogFooter>
                 <Button variant="outline" onClick={() => handleOpenChange(false)}>
                   Cancel

@@ -1,5 +1,4 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { createClient } from "@/lib/supabase/client";
 
 export interface CreatePaymentIntentResult {
   clientSecret: string;
@@ -19,28 +18,10 @@ export function useConnectStatus() {
   return useQuery<ConnectStatus>({
     queryKey: ["stripe-connect-status"],
     queryFn: async () => {
-      const supabase = createClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("Not authenticated");
-      const { data: profile, error: profileErr } = await supabase
-        .from("profiles")
-        .select("org_id")
-        .eq("id", user.id)
-        .single();
-      if (profileErr) throw profileErr;
-
-      const { data, error } = await supabase
-        .from("organizations")
-        .select("stripe_connect_status, stripe_connect_charges_enabled, stripe_connect_payouts_enabled")
-        .eq("id", profile.org_id)
-        .single();
-      if (error) throw error;
-
-      return {
-        status: data.stripe_connect_status as ConnectStatus["status"],
-        chargesEnabled: data.stripe_connect_charges_enabled,
-        payoutsEnabled: data.stripe_connect_payouts_enabled,
-      };
+      const res = await fetch("/api/crm/payments/connect/status");
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error ?? "Failed to load payment connection status");
+      return body as ConnectStatus;
     },
   });
 }
@@ -58,14 +39,22 @@ export function useStartConnectOnboarding() {
 
 export function useCreateCrmPaymentIntent() {
   return useMutation({
-    mutationFn: async ({ invoiceId, waiveFee }: { invoiceId: string; waiveFee?: boolean }) => {
+    mutationFn: async ({
+      invoiceId,
+      waiveFee,
+      paymentMethod,
+    }: {
+      invoiceId: string;
+      waiveFee?: boolean;
+      paymentMethod: "card" | "us_bank_account";
+    }) => {
       const res = await fetch("/api/crm/payments/create-intent", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ invoiceId, waiveFee }),
+        body: JSON.stringify({ invoiceId, waiveFee, paymentMethod }),
       });
       const body = await res.json();
-      if (!res.ok) throw new Error(body.error ?? "Failed to start card payment");
+      if (!res.ok) throw new Error(body.error ?? "Failed to start payment");
       return body as CreatePaymentIntentResult;
     },
   });

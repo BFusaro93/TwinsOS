@@ -7,6 +7,7 @@ import { computeProcessingFee } from "@/lib/stripe/crm-payments";
 
 const CreateIntentSchema = z.object({
   invoiceId: z.string().uuid(),
+  paymentMethod: z.enum(["card", "us_bank_account"]).default("card"),
 });
 
 export async function POST(request: Request) {
@@ -22,7 +23,7 @@ export async function POST(request: Request) {
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
-  const { invoiceId } = parsed.data;
+  const { invoiceId, paymentMethod } = parsed.data;
 
   const supabase = await createClient();
 
@@ -51,15 +52,20 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Online payments aren't available yet." }, { status: 400 });
   }
 
-  const { feeCents, totalChargeCents } = computeProcessingFee(
-    {
-      ccProcessingFeeEnabled: org.cc_processing_fee_enabled,
-      ccProcessingFeeBps: org.cc_processing_fee_bps,
-      ccProcessingFeeThresholdCents: org.cc_processing_fee_threshold_cents,
-    },
-    invoice.balance_cents,
-    false
-  );
+  // The processing fee only ever applies to card — ACH is the fee-free
+  // alternative by design, so it must never be computed for that path.
+  const { feeCents, totalChargeCents } =
+    paymentMethod === "card"
+      ? computeProcessingFee(
+          {
+            ccProcessingFeeEnabled: org.cc_processing_fee_enabled,
+            ccProcessingFeeBps: org.cc_processing_fee_bps,
+            ccProcessingFeeThresholdCents: org.cc_processing_fee_threshold_cents,
+          },
+          invoice.balance_cents,
+          false
+        )
+      : { feeCents: 0, totalChargeCents: invoice.balance_cents };
 
   const stripe = getStripe();
   // Direct charge on the org's connected account — see create-intent/route.ts
@@ -68,7 +74,7 @@ export async function POST(request: Request) {
     {
       amount: totalChargeCents,
       currency: "usd",
-      payment_method_types: ["card"],
+      payment_method_types: [paymentMethod],
       metadata: {
         source: "crm_invoice",
         org_id: invoice.org_id,
