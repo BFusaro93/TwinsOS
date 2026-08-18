@@ -43,7 +43,7 @@ export async function POST(request: Request) {
 
   const { data: org } = await supabase
     .from("organizations")
-    .select("stripe_connect_account_id, stripe_connect_charges_enabled")
+    .select("stripe_connect_account_id, stripe_connect_charges_enabled, ach_payments_enabled")
     .eq("id", ctx.orgId)
     .single();
   if (!org) return NextResponse.json({ error: "Organization not found" }, { status: 404 });
@@ -53,8 +53,10 @@ export async function POST(request: Request) {
 
   const stripe = getStripe();
 
-  if (paymentMethod === "us_bank_account" && !(await achEnabledForAccount(stripe, org.stripe_connect_account_id))) {
-    return NextResponse.json({ error: "Bank transfer isn't available yet — please pay by card." }, { status: 400 });
+  if (paymentMethod === "us_bank_account") {
+    if (!org.ach_payments_enabled || !(await achEnabledForAccount(stripe, org.stripe_connect_account_id))) {
+      return NextResponse.json({ error: "Bank transfer isn't available yet — please pay by card." }, { status: 400 });
+    }
   }
 
   const customerId = await getOrCreateStripeCustomer(

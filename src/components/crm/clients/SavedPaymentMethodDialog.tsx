@@ -9,6 +9,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useCreateSetupIntent, useSaveSetupIntent, type CreateSetupIntentResult } from "@/lib/hooks/use-saved-payment-methods";
+import { useOrgSettings } from "@/lib/hooks/use-org-settings";
 import { hasPublishableKey, getScopedStripeJs } from "@/lib/stripe/client";
 
 function SetupForm({ onSuccess }: { onSuccess: (setupIntentId: string) => void }) {
@@ -68,6 +69,8 @@ export function SavedPaymentMethodDialog({
   const [enableAutopay, setEnableAutopay] = useState(true);
   const [intent, setIntent] = useState<CreateSetupIntentResult | null>(null);
   const [succeeded, setSucceeded] = useState(false);
+  const { data: orgSettings } = useOrgSettings();
+  const achEnabled = orgSettings?.achPaymentsEnabled ?? false;
   const createSetupIntent = useCreateSetupIntent();
   const saveSetupIntent = useSaveSetupIntent();
 
@@ -130,7 +133,7 @@ export function SavedPaymentMethodDialog({
               <p className="text-sm text-slate-600">
                 Save a card or bank account on file for this client to charge on demand, or enroll in autopay below.
               </p>
-              <div className="grid grid-cols-2 gap-2">
+              <div className={`grid gap-2 ${achEnabled ? "grid-cols-2" : "grid-cols-1"}`}>
                 <button
                   type="button"
                   onClick={() => setPaymentMethod("card")}
@@ -142,17 +145,19 @@ export function SavedPaymentMethodDialog({
                 >
                   Card
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setPaymentMethod("us_bank_account")}
-                  className={`rounded-md border px-3 py-2 text-sm font-medium transition-colors ${
-                    paymentMethod === "us_bank_account"
-                      ? "border-brand-500 bg-brand-50 text-brand-700"
-                      : "border-slate-200 text-slate-600 hover:bg-slate-50"
-                  }`}
-                >
-                  Bank Account (ACH)
-                </button>
+                {achEnabled && (
+                  <button
+                    type="button"
+                    onClick={() => setPaymentMethod("us_bank_account")}
+                    className={`rounded-md border px-3 py-2 text-sm font-medium transition-colors ${
+                      paymentMethod === "us_bank_account"
+                        ? "border-brand-500 bg-brand-50 text-brand-700"
+                        : "border-slate-200 text-slate-600 hover:bg-slate-50"
+                    }`}
+                  >
+                    Bank Account (ACH)
+                  </button>
+                )}
               </div>
               <div className="flex items-center gap-2">
                 <Checkbox

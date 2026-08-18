@@ -23,6 +23,7 @@ export interface OrgSettingsData {
   ccProcessingFeeEnabled: boolean;
   ccProcessingFeePercent: number;
   ccProcessingFeeThresholdDollars: number;
+  achPaymentsEnabled: boolean;
 }
 
 export interface UpdateOrgSettingsInput {
@@ -43,6 +44,7 @@ export interface UpdateOrgSettingsInput {
   ccProcessingFeeEnabled?: boolean;
   ccProcessingFeePercent?: number;
   ccProcessingFeeThresholdDollars?: number;
+  achPaymentsEnabled?: boolean;
 }
 
 function mapOrgSettings(row: Record<string, unknown>): OrgSettingsData {
@@ -74,6 +76,7 @@ function mapOrgSettings(row: Record<string, unknown>): OrgSettingsData {
     ccProcessingFeePercent: typeof row.cc_processing_fee_bps === "number" ? row.cc_processing_fee_bps / 100 : 3.5,
     ccProcessingFeeThresholdDollars:
       typeof row.cc_processing_fee_threshold_cents === "number" ? row.cc_processing_fee_threshold_cents / 100 : 500,
+    achPaymentsEnabled: typeof row.ach_payments_enabled === "boolean" ? row.ach_payments_enabled : false,
   };
 }
 
@@ -93,7 +96,7 @@ export function useOrgSettings() {
 
       const { data, error } = await supabase
         .from("organizations")
-        .select("id, slug, name, brand_color, address, tax_rate_percent, cost_method, portal_enabled, customizations, account_number_prefix, account_number_next, account_number_suffix, default_billing_terms, default_invoice_frequency, default_invoice_delivery, cc_processing_fee_enabled, cc_processing_fee_bps, cc_processing_fee_threshold_cents")
+        .select("id, slug, name, brand_color, address, tax_rate_percent, cost_method, portal_enabled, customizations, account_number_prefix, account_number_next, account_number_suffix, default_billing_terms, default_invoice_frequency, default_invoice_delivery, cc_processing_fee_enabled, cc_processing_fee_bps, cc_processing_fee_threshold_cents, ach_payments_enabled")
         .eq("id", profile.org_id)
         .single();
       if (error) throw error;
@@ -134,6 +137,7 @@ export function useUpdateOrgSettings() {
       if (input.ccProcessingFeePercent !== undefined) patch.cc_processing_fee_bps = Math.round(input.ccProcessingFeePercent * 100);
       if (input.ccProcessingFeeThresholdDollars !== undefined)
         patch.cc_processing_fee_threshold_cents = Math.round(input.ccProcessingFeeThresholdDollars * 100);
+      if (input.achPaymentsEnabled !== undefined) patch.ach_payments_enabled = input.achPaymentsEnabled;
 
       // Merge customizations with existing values instead of replacing them
       if (input.googleMapsApiKey !== undefined) {

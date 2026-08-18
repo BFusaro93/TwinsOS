@@ -8891,6 +8891,7 @@ export type Database = {
           account_number_next: number
           account_number_prefix: string
           account_number_suffix: string
+          ach_payments_enabled: boolean
           address: Json
           brand_color: string
           cc_processing_fee_bps: number
@@ -8924,6 +8925,7 @@ export type Database = {
           account_number_next?: number
           account_number_prefix?: string
           account_number_suffix?: string
+          ach_payments_enabled?: boolean
           address?: Json
           brand_color?: string
           cc_processing_fee_bps?: number
@@ -8957,6 +8959,7 @@ export type Database = {
           account_number_next?: number
           account_number_prefix?: string
           account_number_suffix?: string
+          ach_payments_enabled?: boolean
           address?: Json
           brand_color?: string
           cc_processing_fee_bps?: number
