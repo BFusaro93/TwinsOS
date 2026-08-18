@@ -43,12 +43,16 @@ export function useAvbCrews() {
       const supabase = createClient();
       const orgId = await getOrgId(supabase);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      // Ordered alphabetically by name — sort_order is set once at seed time
+      // and has no UI to edit afterward, so mismatched values (e.g. a crew
+      // added later at sort_order 0) silently scrambled the displayed order
+      // (ENHANCE2 showing above ENHANCE1). Name gives a stable, self-
+      // maintaining order with no stored ordering to drift out of sync.
       const { data, error } = await (supabase as any)
         .from("avb_crews")
         .select("*")
         .eq("org_id", orgId)
-        .order("sort_order", { ascending: true })
-        .order("code",       { ascending: true });
+        .order("name", { ascending: true });
       if (error) throw error;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       return ((data ?? []) as any[]).map((r: Record<string, unknown>) => mapCrew(r));
