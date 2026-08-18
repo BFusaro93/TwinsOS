@@ -121,17 +121,34 @@ export default function Page() {
           </li>
         </ul>
         <p>
-          On any estimate line item, if you leave <strong>Cost</strong> at exactly <strong>$0</strong> and
-          set <strong>Budgeted Hours</strong>, the system automatically computes:
+          A labor line&apos;s <strong>Cost</strong> field auto-fills as{" "}
+          <code className="rounded bg-slate-100 px-1 py-0.5 text-xs">Budgeted Hours × Breakeven Labor Rate</code>{" "}
+          any time it&apos;s left at exactly <strong>$0</strong> — clear it back to $0 to re-trigger the
+          auto-fill, or type any other value to lock in a manual rate. The Cost cell shows the resulting
+          figure in blue once you click away from it — that&apos;s the auto-fill confirming, not an error.
         </p>
-        <p className="rounded bg-slate-50 px-3 py-2 font-mono text-xs text-slate-700">
-          Total Cost = Budgeted Hours × Breakeven Labor Rate
-        </p>
+        <Callout>
+          <strong>Remember:</strong> Cost is a <em>per-unit</em> rate, not the line&apos;s total cost — the
+          actual Total Cost is <code className="rounded bg-amber-100 px-1 py-0.5">Cost × Qty × Visits</code>.
+          See the next section for why this matters.
+        </Callout>
+
+        <h3 className="mt-2 font-semibold text-slate-800">Setting your Breakeven Labor Rate</h3>
         <p>
-          The Cost cell shows the resulting figure in blue once you click away from it — that&apos;s the
-          auto-fill confirming, not an error. Typing any other number into Cost yourself switches that
-          line out of auto mode and locks in your manually-entered value going forward.
+          Set it directly in Settings (Equipt → General → Finance, or Landscapt → Estimates → Labor Rates),
+          or use the <strong>Job Costing Calculator</strong> (Tools) and click{" "}
+          <strong>&quot;Set as project rate&quot;</strong> to save its computed Break Even rate as your
+          org&apos;s Breakeven Labor Rate.
         </p>
+        <Callout>
+          <strong>Don&apos;t double-count overhead.</strong> The Job Costing Calculator&apos;s Break Even
+          rate already bakes in overhead recovery (admin payroll, other overhead, liabilities, spread per
+          hour). If you save that as your Breakeven Labor Rate <em>and</em> also set any Per Cost Type
+          overhead percentage (Labor OH%, Labor Burden%, etc. — see Overhead Recovery above) above 0%,
+          overhead gets applied twice: once already inside the rate that auto-fills Cost, and again as a
+          separate deduction when the estimate totals are calculated. If you use the calculator to set your
+          rate, leave every Per Cost Type percentage (and the Default Flat Overhead Rate %) at 0%.
+        </Callout>
       </Section>
 
       <Section id="cost-field" title="Understanding the Cost Field on Estimate Line Items">
