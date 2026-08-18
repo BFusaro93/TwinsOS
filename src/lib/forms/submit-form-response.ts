@@ -3,6 +3,31 @@ import { resolveMergeTags, EMAIL_FROM } from "@/lib/email/send";
 import { notifyStaffOfNewTicket } from "@/lib/ticket-notify";
 import { fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
 
+/** File-upload answers are stored as `{path, name, size}` objects (see
+ *  FormResponses.tsx) — plain string interpolation of one produces
+ *  "[object Object]" in the ticket body, client activity log, and merge-tag
+ *  values. Render it as just the filename instead. */
+function formatFormFieldValue(value: unknown): string {
+  if (value && typeof value === "object" && "name" in value) {
+    const name = (value as { name?: unknown }).name;
+    if (typeof name === "string") return name;
+  }
+  return String(value);
+}
+
+// formData is submitted through the fully anonymous public form endpoint —
+// interpolating it unescaped into the notification email's HTML body let a
+// crafted field value inject markup (link/button spoofing, layout
+// injection) into the staff-facing email.
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 interface FormEmailNotification {
   recipients: string; // comma-separated emails, or "account" for the submitter
   fromName?: string;
@@ -118,33 +143,170 @@ export async function submitFormResponse(
     null;
 
   // ── Find matching client ──────────────────────────────────────────────────────
+  // Tries progressively weaker signals until one comes back unambiguous
+  // (exactly one candidate client): email first — checked against
+  // client_contacts.email AND clients.primary_email AND clients.billing_email,
+  // since billing_email is frequently left blank while primary_email is the
+  // field that's actually populated — then (unless the form is configured for
+  // strict email-only matching) phone, then name as a last resort. A match is
+  // only accepted when it resolves to exactly one client; an ambiguous result
+  // (e.g. two clients named "John Smith") is treated as "no match" rather than
+  // guessing and misattaching the submission.
   let relatedClientId: string | null = null;
   let result = "On Hold";
 
-  if (submittedEmail || (submittedFirstName && submittedLastName)) {
-    let matchQuery = db.from("clients").select("id").eq("org_id", form.org_id).is("deleted_at", null);
+  // Escapes ILIKE wildcard characters so a submitted name containing "%" or
+  // "_" can't turn into an unintended broad/match-everything pattern.
+  function escapeIlike(value: string): string {
+    return value.replace(/[%_\\]/g, (ch) => `\\${ch}`);
+  }
 
-    if (matchStrategy === "email" && submittedEmail) {
-      matchQuery = matchQuery.eq("billing_email", submittedEmail);
-    } else if (matchStrategy === "name_and_email" && submittedEmail) {
-      const { data: contact } = await db
-        .from("client_contacts")
-        .select("client_id")
-        .eq("org_id", form.org_id)
-        .eq("email", submittedEmail)
-        .is("deleted_at", null)
-        .maybeSingle();
-      if (contact?.client_id) relatedClientId = contact.client_id;
-      if (!relatedClientId) {
-        matchQuery = matchQuery.eq("billing_email", submittedEmail);
-      }
-    } else if ((matchStrategy === "name_email_and_company" || matchStrategy === "custom") && submittedEmail) {
-      matchQuery = matchQuery.eq("billing_email", submittedEmail);
+  function normalizePhoneDigits(value: string): string {
+    return value.replace(/\D/g, "");
+  }
+
+  /** Email matching must be case-insensitive (Postgres `=` on text is not) —
+   *  also excludes contacts belonging to a soft-deleted client, which the
+   *  plain client_contacts lookup used to miss entirely. */
+  async function uniqueClientIdByContactEmail(value: string): Promise<string | null> {
+    const { data } = await db
+      .from("client_contacts")
+      .select("client_id, clients!inner(deleted_at)")
+      .eq("org_id", form.org_id)
+      .ilike("email", escapeIlike(value))
+      .is("deleted_at", null)
+      .is("clients.deleted_at", null)
+      .limit(2);
+    const ids = [...new Set((data ?? []).map((c: { client_id: string }) => c.client_id))] as string[];
+    return ids.length === 1 ? ids[0] : null;
+  }
+
+  /** Merges two column-equality lookups on `clients` without relying on a
+   *  hand-built `.or()` filter string (which a value containing "," or ")"
+   *  could otherwise break or subtly mis-scope). Case-insensitive. */
+  async function uniqueClientIdByEitherEmailColumn(
+    columnA: string,
+    columnB: string,
+    value: string
+  ): Promise<string | null> {
+    const pattern = escapeIlike(value);
+    const [{ data: aRows }, { data: bRows }] = await Promise.all([
+      db.from("clients").select("id").eq("org_id", form.org_id).is("deleted_at", null).ilike(columnA, pattern).limit(2),
+      db.from("clients").select("id").eq("org_id", form.org_id).is("deleted_at", null).ilike(columnB, pattern).limit(2),
+    ]);
+    const ids = [...new Set([...(aRows ?? []), ...(bRows ?? [])].map((c: { id: string }) => c.id))] as string[];
+    return ids.length === 1 ? ids[0] : null;
+  }
+
+  /** Phone numbers are stored with whatever punctuation the source used
+   *  ("555-123-4567" vs "(555) 123-4567" vs "5551234567") — compares on
+   *  digits only rather than requiring an exact string match. Scoped to the
+   *  org so the candidate set stays small. */
+  async function uniqueClientIdByPhoneDigits(value: string): Promise<string | null> {
+    const targetDigits = normalizePhoneDigits(value);
+    if (!targetDigits) return null;
+
+    const [{ data: contactRows }, { data: clientRows }] = await Promise.all([
+      db.from("client_contacts").select("client_id, phone, clients!inner(deleted_at)").eq("org_id", form.org_id).is("deleted_at", null).is("clients.deleted_at", null).not("phone", "is", null),
+      db.from("clients").select("id, primary_phone").eq("org_id", form.org_id).is("deleted_at", null).not("primary_phone", "is", null),
+    ]);
+    const ids = new Set<string>();
+    for (const row of (contactRows ?? []) as { client_id: string; phone: string | null }[]) {
+      if (row.phone && normalizePhoneDigits(row.phone) === targetDigits) ids.add(row.client_id);
     }
+    for (const row of (clientRows ?? []) as { id: string; primary_phone: string | null }[]) {
+      if (row.primary_phone && normalizePhoneDigits(row.primary_phone) === targetDigits) ids.add(row.id);
+    }
+    return ids.size === 1 ? [...ids][0] : null;
+  }
 
-    if (!relatedClientId) {
-      const { data: matched } = await matchQuery.maybeSingle();
-      if (matched?.id) relatedClientId = matched.id;
+  /** For match strategies stricter than plain email, a signal isn't enough
+   *  on its own — the candidate client must also carry a matching name (or
+   *  company, for the strictest strategy). Checked against every contact on
+   *  the client plus the client's own display name, since a submitted name
+   *  might match either. Conservative: no name/company to check against
+   *  means the corroboration fails rather than passing by default. */
+  async function clientCorroboratedByNameOrCompany(
+    clientId: string,
+    firstName: string | null,
+    lastName: string | null,
+    company: string | null
+  ): Promise<boolean> {
+    if (!firstName && !lastName && !company) return false;
+
+    const { data: client } = await db
+      .from("clients")
+      .select("display_name")
+      .eq("id", clientId)
+      .maybeSingle();
+    const displayName: string = (client?.display_name ?? "").toLowerCase();
+
+    if (company && displayName.includes(company.toLowerCase())) return true;
+
+    if (firstName || lastName) {
+      if (
+        (firstName && displayName.includes(firstName.toLowerCase())) ||
+        (lastName && displayName.includes(lastName.toLowerCase()))
+      ) {
+        return true;
+      }
+      const { data: contacts } = await db
+        .from("client_contacts")
+        .select("first_name, last_name")
+        .eq("client_id", clientId)
+        .is("deleted_at", null);
+      for (const c of (contacts ?? []) as { first_name: string | null; last_name: string | null }[]) {
+        const cFirst = (c.first_name ?? "").toLowerCase();
+        const cLast = (c.last_name ?? "").toLowerCase();
+        if ((firstName && cFirst === firstName.toLowerCase()) || (lastName && cLast === lastName.toLowerCase())) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  // "email" = email is the only signal consulted, full stop. Every other
+  // strategy (name_and_email, name_email_and_company, custom) requires email
+  // to be corroborated by a matching name/company — matching on phone or
+  // name ALONE, with no email at all, used to be treated as sufficient for
+  // any non-"email" strategy, which is how a common name like "John Smith"
+  // could get a stranger's submission attached to an existing client.
+  let emailClientId: string | null = null;
+  if (submittedEmail) {
+    emailClientId = await uniqueClientIdByContactEmail(submittedEmail);
+    if (!emailClientId) {
+      emailClientId = await uniqueClientIdByEitherEmailColumn("primary_email", "billing_email", submittedEmail);
+    }
+  }
+
+  if (matchStrategy === "email") {
+    relatedClientId = emailClientId;
+  } else {
+    const requireCompany = matchStrategy === "name_email_and_company";
+    if (
+      emailClientId &&
+      (await clientCorroboratedByNameOrCompany(
+        emailClientId,
+        submittedFirstName,
+        submittedLastName,
+        requireCompany ? mappedCompany : null
+      ))
+    ) {
+      relatedClientId = emailClientId;
+    } else if (submittedPhone) {
+      const phoneClientId = await uniqueClientIdByPhoneDigits(submittedPhone);
+      if (
+        phoneClientId &&
+        (await clientCorroboratedByNameOrCompany(
+          phoneClientId,
+          submittedFirstName,
+          submittedLastName,
+          requireCompany ? mappedCompany : null
+        ))
+      ) {
+        relatedClientId = phoneClientId;
+      }
     }
   }
 
@@ -163,10 +325,11 @@ export async function submitFormResponse(
         if (mappedData["client.state"]) clientPatch.billing_state = mappedData["client.state"];
         if (mappedData["client.zip"]) clientPatch.billing_zip = mappedData["client.zip"];
         if (mappedData["client.notes"]) clientPatch.notes_to_crew = mappedData["client.notes"];
+        if (mappedData["client.source"]) clientPatch.source = mappedData["client.source"];
       } else {
         const { data: existing } = await db
           .from("clients")
-          .select("billing_email, primary_phone, billing_address, billing_city, billing_state, billing_zip")
+          .select("billing_email, primary_phone, billing_address, billing_city, billing_state, billing_zip, source")
           .eq("id", relatedClientId)
           .single();
         if (!existing?.billing_email && mappedData["client.email"]) clientPatch.billing_email = mappedData["client.email"];
@@ -175,6 +338,7 @@ export async function submitFormResponse(
         if (!existing?.billing_city && mappedData["client.city"]) clientPatch.billing_city = mappedData["client.city"];
         if (!existing?.billing_state && mappedData["client.state"]) clientPatch.billing_state = mappedData["client.state"];
         if (!existing?.billing_zip && mappedData["client.zip"]) clientPatch.billing_zip = mappedData["client.zip"];
+        if (!existing?.source && mappedData["client.source"]) clientPatch.source = mappedData["client.source"];
       }
 
       if (Object.keys(clientPatch).length > 0) {
@@ -237,7 +401,7 @@ export async function submitFormResponse(
           billing_state: mappedData["client.state"] ?? null,
           billing_zip: mappedData["client.zip"] ?? null,
           notes_to_crew: mappedData["client.notes"] ?? null,
-          source: "form",
+          source: mappedData["client.source"] ?? "form",
           status: "lead",
         })
         .select("id")
@@ -313,7 +477,7 @@ export async function submitFormResponse(
       client_id: relatedClientId,
       activity_type: "note",
       subject: `Form submitted: ${form.name}`,
-      body: Object.entries(formData).map(([k, v]) => `${k}: ${v}`).join("\n"),
+      body: Object.entries(formData).map(([k, v]) => `${k}: ${formatFormFieldValue(v)}`).join("\n"),
     });
   }
 
@@ -327,7 +491,7 @@ export async function submitFormResponse(
       submittedPhone ? `Phone: ${submittedPhone}` : null,
       submittedMessage ? `\nMessage:\n${submittedMessage}` : null,
       "\n--- Full submission ---",
-      Object.entries(formData).map(([k, v]) => `${k}: ${v}`).join("\n"),
+      Object.entries(formData).map(([k, v]) => `${k}: ${formatFormFieldValue(v)}`).join("\n"),
     ].filter(Boolean).join("\n");
 
     const { data: ticket } = await db
@@ -408,8 +572,13 @@ export async function submitFormResponse(
     // help?" → [howcanwehelp] — lets a notification body reference any field
     // on this specific form without the sender needing to know it in advance.
     for (const [label, value] of Object.entries(formData)) {
-      vars[`[${label.toLowerCase().replace(/[^a-z0-9]/g, "")}]`] = String(value);
+      vars[`[${label.toLowerCase().replace(/[^a-z0-9]/g, "")}]`] = formatFormFieldValue(value);
     }
+    // Escaped counterpart used only for the HTML body/copy block below —
+    // `vars` itself stays raw for the plain-text subject line.
+    const htmlVars: Record<string, string> = Object.fromEntries(
+      Object.entries(vars).map(([k, v]) => [k, escapeHtml(v)])
+    );
 
     const resend = new Resend(process.env.RESEND_API_KEY);
     for (const notif of emailNotifications) {
@@ -423,9 +592,9 @@ export async function submitFormResponse(
 
       const subject = resolveMergeTags(notif.subject || `New submission: ${form.name}`, vars);
       const copyBlock = notif.sendCopy
-        ? `<hr style="margin:16px 0;border:none;border-top:1px solid #e2e8f0"><p style="font-size:12px;color:#64748b">${Object.entries(formData).map(([k, v]) => `<strong>${k}:</strong> ${v}`).join("<br>")}</p>`
+        ? `<hr style="margin:16px 0;border:none;border-top:1px solid #e2e8f0"><p style="font-size:12px;color:#64748b">${Object.entries(formData).map(([k, v]) => `<strong>${escapeHtml(k)}:</strong> ${escapeHtml(formatFormFieldValue(v))}`).join("<br>")}</p>`
         : "";
-      const html = resolveMergeTags(notif.body || "", vars).replace(/\n/g, "<br>") + copyBlock;
+      const html = resolveMergeTags(notif.body || "", htmlVars).replace(/\n/g, "<br>") + copyBlock;
       const from = notif.fromEmail ? `${notif.fromName || orgName} <${notif.fromEmail}>` : EMAIL_FROM;
 
       for (const to of recipients) {

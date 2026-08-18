@@ -213,7 +213,7 @@ export interface CRMContractNote {
 
 /** Which React PDF component renders the invoice. Add a new key here (and a
  *  matching case in InvoiceDocument.tsx) when adding a new visual layout. */
-export type InvoicePDFLayoutKey = "default" | "compact";
+export type InvoicePDFLayoutKey = "default" | "compact" | "statement" | "statement_invoice_only";
 
 export interface InvoicePDFTemplate {
   id: string;
@@ -224,6 +224,13 @@ export interface InvoicePDFTemplate {
   logoUrl: string | null;
   accentColor: string | null;
   showNotes: boolean;
+  /** Fallback text for the PDF's Notes section when an invoice has no notes
+   *  of its own — set once here instead of retyping per invoice. */
+  defaultNotes: string | null;
+  /** Short marketing/service-update blurb shown above the terms/footer
+   *  (e.g. "We now offer junk removal!") — same on every invoice using this
+   *  template. */
+  advertisementText: string | null;
   deletedAt: string | null;
   createdAt: string;
   updatedAt: string;

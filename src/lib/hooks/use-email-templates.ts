@@ -13,6 +13,7 @@ function mapTemplate(row: Record<string, unknown>): CRMEmailTemplate {
     bodyHtml: row.body_html as string,
     templateType: (row.template_type as CRMEmailTemplate["templateType"]) ?? "estimate",
     isDefault: (row.is_default as boolean) ?? false,
+    includePdf: (row.include_pdf as boolean) ?? true,
     createdAt: row.created_at as string,
     updatedAt: row.updated_at as string,
   };
@@ -49,6 +50,7 @@ export function useUpsertEmailTemplate() {
       if (input.bodyHtml !== undefined)     patch.body_html     = input.bodyHtml;
       if (input.templateType !== undefined) patch.template_type = input.templateType;
       if (input.isDefault !== undefined)    patch.is_default    = input.isDefault;
+      if (input.includePdf !== undefined)   patch.include_pdf   = input.includePdf;
       patch.updated_at = new Date().toISOString();
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any

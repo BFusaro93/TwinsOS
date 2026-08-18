@@ -105,7 +105,11 @@ export async function POST(
   const productsHtml = (applications as any[])
     .filter((a) => a.used)
     .map((a) => {
-      const epa = a.product?.epa_registration_number ?? a.epa_number_snapshot;
+      // Prefer the snapshot frozen at time-of-application over the live
+      // catalog join — a correction to the product's EPA # in the catalog
+      // later must not rewrite what this client notice said was actually
+      // applied to their property.
+      const epa = a.epa_number_snapshot ?? a.product?.epa_registration_number;
       const amount = a.chemical_amount != null ? `${a.chemical_amount} ${a.unit?.name ?? ""}`.trim() : "";
       return `<li>${a.product?.name ?? "Chemical"}${amount ? ` — ${amount}` : ""}${epa ? ` (EPA #${epa})` : ""}</li>`;
     })

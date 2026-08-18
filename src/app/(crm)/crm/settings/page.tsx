@@ -74,12 +74,11 @@ import type { CRMService } from "@/types/crm-jobs";
 import { RolesList } from "@/components/crm/roles/RolesList";
 import { EstimateStagesEditor } from "@/components/crm/settings/EstimateStagesEditor";
 import { OverheadSettingsEditor } from "@/components/crm/settings/OverheadSettingsEditor";
+import { LaborRatesEditor } from "@/components/crm/settings/LaborRatesEditor";
 import { ClientPortalTab } from "@/components/crm/settings/ClientPortalSettings";
 import { SnowRoutesEditor } from "@/components/crm/settings/SnowRoutesEditor";
 import { ChemicalTrackingTab } from "@/components/crm/settings/ChemicalTrackingSettings";
 import { InvoiceTemplatesEditor } from "@/components/crm/settings/InvoiceTemplatesEditor";
-import { EmailTemplatesEditor } from "@/components/crm/settings/EmailTemplatesEditor";
-import { INVOICE_EMAIL_MERGE_TAGS } from "@/types/crm-proposals";
 import { useInvoicePDFTemplates } from "@/lib/hooks/use-invoice-pdf-templates";
 import { ApprovalFlowsPage } from "@/components/settings/ApprovalFlowsPage";
 import { BILLING_TERMS_OPTIONS } from "@/lib/constants";
@@ -902,6 +901,9 @@ function EstimatesTab() {
       <AccordionSection title="Won/Lost Reasons" count={estimateReasonItems.length}>
         <OrgListEditor listName="estimate_reasons" addPlaceholder="e.g. Seasonal" />
       </AccordionSection>
+      <AccordionSection title="Labor Rates" count={0}>
+        <LaborRatesEditor />
+      </AccordionSection>
       <AccordionSection title="Overhead Recovery" count={0}>
         <OverheadSettingsEditor />
       </AccordionSection>
@@ -1394,14 +1396,20 @@ function AccountingTab() {
       </AccordionSection>
       <AccordionSection
         title="Invoice Email Templates"
-        description="Email templates used when sending an invoice. The starred template is the default, but any template can be picked from the dropdown when sending."
+        description="Email templates used when sending an invoice now live in Documents, alongside every other template type."
       >
-        <EmailTemplatesEditor
-          templateType="invoice"
-          description="Email templates sent when emailing an invoice."
-          mergeTags={INVOICE_EMAIL_MERGE_TAGS}
-          emptyMessage="No email templates yet. Create one to use when sending invoices."
-        />
+        <div className="flex flex-col gap-2 rounded-md border border-dashed border-slate-200 p-4">
+          <p className="text-sm text-slate-600">
+            Build and edit invoice email templates in <span className="font-medium">Documents</span> — create a
+            document with type &quot;Invoice Email&quot;, and it&apos;ll show up in the template picker when
+            emailing an invoice.
+          </p>
+          <Link href="/crm/settings/documents" className="w-fit">
+            <Button size="sm" variant="outline" className="h-8 text-xs">
+              Go to Documents
+            </Button>
+          </Link>
+        </div>
       </AccordionSection>
     </div>
   );

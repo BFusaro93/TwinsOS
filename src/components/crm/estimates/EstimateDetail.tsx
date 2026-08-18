@@ -475,17 +475,23 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
     try {
       await Promise.all(
         affected.map((li) => {
-          const newRate = isPercent
-            ? Math.round(li.rateCents * (1 + amount / 100))
-            : li.rateCents + Math.round(amount * 100);
+          const applyIncrease = (rate: number) =>
+            Math.max(0, isPercent ? Math.round(rate * (1 + amount / 100)) : rate + Math.round(amount * 100));
+          const newRate = applyIncrease(li.rateCents);
+          // computeLineItem prices off `adjRateCents ?? rateCents` — bumping
+          // only rateCents was a no-op on any line using the Adj Rate
+          // column, since the adjusted rate (now stale) still won and the
+          // recomputed total never changed, even though the toast reported
+          // success. Bump the adjusted rate by the same increase too.
+          const newAdjRate = li.adjRateCents != null ? applyIncrease(li.adjRateCents) : null;
           const updated = computeLineItem({
             calcType: li.calcType,
             qty: li.qty,
-            rateCents: Math.max(0, newRate),
+            rateCents: newRate,
             visits: li.visits,
             budgetedHours: li.budgetedHours,
             costCents: li.costCents,
-            adjRateCents: li.adjRateCents,
+            adjRateCents: newAdjRate,
             unitType: li.unitType ?? undefined,
             productionRateSqftPerHr: li.productionRateSqftPerHr ?? undefined,
             budgetMethod: li.budgetMethod,
@@ -494,7 +500,8 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
             estimateId: estimate.id,
             item: {
               id: li.id,
-              rate_cents: Math.max(0, newRate),
+              rate_cents: newRate,
+              ...(newAdjRate != null ? { adj_rate_cents: newAdjRate } : {}),
               total_cents: updated.totalCents,
               total_budgeted_hours: updated.totalBudgetedHours,
               budgeted_hours: updated.budgetedHours,

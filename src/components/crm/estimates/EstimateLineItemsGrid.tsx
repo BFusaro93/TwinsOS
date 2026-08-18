@@ -8,6 +8,7 @@ import { useCRMServices } from "@/lib/hooks/use-crm-jobs";
 import { useProducts } from "@/lib/hooks/use-products";
 import { useOrgSettings } from "@/lib/hooks/use-org-settings";
 import { useDiscounts } from "@/lib/hooks/use-crm-discounts";
+import { stripHtml } from "@/lib/utils/strip-html";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
@@ -51,22 +52,32 @@ const UNIT_TYPES = ["sqft", "lf", "cuyd", "acres", "hr", "each", "lb", "gal"];
 function InlineNum({
   value,
   onChange,
+  onFocus,
   onBlur,
   className,
   step,
+  zeroAsEmpty = true,
 }: {
   value: number;
   onChange: (v: number) => void;
+  onFocus?: () => void;
   onBlur?: () => void;
   className?: string;
   step?: number;
+  /** `value || ""` makes 0 render as a blank box — the right call for a
+   *  field where 0 means "unset" (Adj Rate), but confusing on Cost: typing
+   *  0 to intentionally reset back to auto-fill mode looked like the input
+   *  silently rejected it (reverting to blank) rather than confirming
+   *  "$0.00 saved". Pass false to show a real 0 as "0" instead of blank. */
+  zeroAsEmpty?: boolean;
 }) {
   return (
     <input
       type="number"
-      value={value || ""}
+      value={value || (zeroAsEmpty ? "" : 0)}
       step={step ?? "any"}
       onChange={(e) => onChange(Number(e.target.value) || 0)}
+      onFocus={onFocus}
       onBlur={onBlur}
       className={cn(
         "w-full rounded border border-slate-200 bg-white px-1.5 py-0.5 text-right text-xs focus:border-brand-400 focus:outline-none",
@@ -266,6 +277,12 @@ function LineItemRow({
 }) {
   const [row, setRow] = useState<RowState>(() => item);
   const [dirty, setDirty] = useState(false);
+  // While the Cost box has focus, always show what's actually in row.costCents
+  // (even 0) rather than the auto-computed blue display — otherwise the
+  // instant costCents hits 0 mid-edit, the auto-fill kicks in and the input's
+  // displayed value snaps to a nonzero computed number WHILE THE USER IS
+  // STILL TYPING, making it look like the field can never be cleared at all.
+  const [costFocused, setCostFocused] = useState(false);
   // `row` only seeds from `item` on mount — writes that happen outside this row
   // (bulk Rate Increase, status changes) update `item` via refetch but never touch
   // this local draft, so the cell would keep showing pre-update values. Resync
@@ -377,6 +394,17 @@ function LineItemRow({
     row.productionRateSqftPerHr > 0 &&
     row.unitType !== "hr" &&
     row.unitType !== "each";
+
+  // Is Cost auto-calculated from Budgeted Hours × the org's breakeven labor
+  // rate? costCents stays 0 (see computeLineItem) for as long as this is
+  // true — display-only, computed fresh from totalCostCents here rather
+  // than persisting a derived per-unit value that would poison the NEXT
+  // Qty/Budgeted-Hours edit (see estimate-calc.ts for the corruption that
+  // caused — a stale derived rate silently re-multiplied by qty again).
+  const isAutoCost = !costFocused && row.costCents === 0 && !!breakevenRateCents && row.budgetedHours > 0;
+  const autoCostPerUnitCents = isAutoCost
+    ? (row.qty > 0 ? row.totalCostCents / row.qty / row.visits : row.totalCostCents / row.visits)
+    : 0;
 
   return (
     <>
@@ -573,17 +601,22 @@ function LineItemRow({
           {bpsToPercent(row.marginBps)}
         </td>
 
-        {/* Cost */}
-        <td className="w-16 px-2 py-1.5">
+        {/* Cost — auto-derived value (blue) is shown but still editable:
+            typing a real number here is what actually sets costCents and
+            switches this line out of auto mode going forward. */}
+        <td className="w-24 px-2 py-1.5">
           <InlineNum
-            value={row.costCents / 100}
+            value={isAutoCost ? autoCostPerUnitCents / 100 : row.costCents / 100}
             onChange={(v) => update("costCents", Math.round(v * 100))}
-            onBlur={save}
+            onFocus={() => setCostFocused(true)}
+            onBlur={() => { setCostFocused(false); save(); }}
+            className={isAutoCost ? "text-blue-600 font-medium" : undefined}
+            zeroAsEmpty={false}
           />
         </td>
 
         {/* T. Cost */}
-        <td className="w-16 px-2 py-1.5 text-right tabular-nums text-slate-500">
+        <td className="w-24 px-2 py-1.5 text-right tabular-nums text-slate-500">
           {centsToDisplay(row.totalCostCents)}
         </td>
 
@@ -795,8 +828,15 @@ export function EstimateLineItemsGrid({ estimateId, items, selectedIds = [], onS
           calc_type: 1,
           qty: 1,
           unit_type: unit,
-          estimate_desc: svc.estimateDesc ?? null,
-          invoice_desc: svc.invoiceDesc ?? null,
+          // Both are authored via a rich-text editor on the Service (Descriptions
+          // tab), but are only ever displayed/edited as plain text once copied
+          // onto a line item (see EstimateDetail.tsx's stripHtml(li.estimateDesc),
+          // the Invoice Description popover's plain textarea, and the actual
+          // invoice line item description on a generated invoice) — strip HTML
+          // here at copy time instead of showing raw "<p>...</p>" everywhere
+          // downstream.
+          estimate_desc: svc.estimateDesc ? stripHtml(svc.estimateDesc) || null : null,
+          invoice_desc: svc.invoiceDesc ? stripHtml(svc.invoiceDesc) || null : null,
           production_rate_sqft_per_hr: prodRate,
           budget_method: budgetMethod,
           rate_cents: svc.rateCents ?? 0,

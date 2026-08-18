@@ -506,6 +506,7 @@ export function useUpdateInvoiceHeader() {
         service_address?: string | null;
         preferred_payment_method?: string | null;
         sales_rep_id?: string | null;
+        notes?: string | null;
       };
     }) => {
       const supabase = createClient();
@@ -524,27 +525,19 @@ export function useUpdateInvoiceHeader() {
 
 // ── shared invoice balance helper ─────────────────────────────────────────────
 
+// Delegates to the apply_payment_to_invoice() RPC, which does the read +
+// balance/status recompute + write atomically (row-locked by its own
+// SELECT ... FOR UPDATE) — a plain JS read-then-write here would let two
+// concurrent calls against the same invoice (e.g. recording a payment while
+// editing an existing allocation) read the same stale amount_paid_cents and
+// have the second write silently clobber the first.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function applyPaymentToInvoice(supabase: any, invoiceId: string, deltaCents: number): Promise<{ newStatus: string; wasNewlyPaid: boolean }> {
-  const { data: inv, error: invErr } = await supabase
-    .from("crm_invoices")
-    .select("total_cents, amount_paid_cents, status")
-    .eq("id", invoiceId)
+  const { data, error } = await supabase
+    .rpc("apply_payment_to_invoice", { p_invoice_id: invoiceId, p_delta_cents: deltaCents })
     .single();
-  if (invErr) throw invErr;
-
-  const newPaid = Math.max(0, inv.amount_paid_cents + deltaCents);
-  const newBalance = Math.max(0, inv.total_cents - newPaid);
-  const openStatus = inv.status === "printed" ? "printed" : "sent";
-  const newStatus = newBalance <= 0 ? "paid" : newPaid > 0 ? "partial" : openStatus;
-
-  const { error: updErr } = await supabase
-    .from("crm_invoices")
-    .update({ amount_paid_cents: newPaid, balance_cents: newBalance, status: newStatus })
-    .eq("id", invoiceId);
-  if (updErr) throw updErr;
-
-  return { newStatus, wasNewlyPaid: newStatus === "paid" && inv.status !== "paid" };
+  if (error) throw error;
+  return { newStatus: data.new_status, wasNewlyPaid: data.was_newly_paid };
 }
 
 export function useRecordPayment() {
@@ -788,21 +781,15 @@ export function useRefundPayment() {
     }) => {
       const supabase = createClient();
 
-      // load current payment
+      // refund_payment() reads + clamps + writes refunded_amount_cents
+      // atomically under a row lock, and rejects a refund that would exceed
+      // the payment's original amount — see the RPC migration for why a
+      // plain read-then-update here was unsafe under concurrent refunds.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: pmt, error: pmtErr } = await (supabase as any)
-        .from("crm_payments")
-        .select("refunded_amount_cents, amount_cents")
-        .eq("id", id)
-        .single();
-      if (pmtErr) throw pmtErr;
-
-      const newRefunded = pmt.refunded_amount_cents + refundAmountCents;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error } = await (supabase as any)
-        .from("crm_payments")
-        .update({ refunded_amount_cents: newRefunded })
-        .eq("id", id);
+      const { error } = await (supabase.rpc as any)("refund_payment", {
+        p_payment_id: id,
+        p_refund_amount_cents: refundAmountCents,
+      });
       if (error) throw error;
 
       // Reverse the refund across every invoice this payment was actually

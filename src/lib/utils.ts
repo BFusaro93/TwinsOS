@@ -115,6 +115,25 @@ export function calculateNextDueDate(
   // Parse YYYY-MM-DD as local time (not UTC) to avoid timezone off-by-one.
   const [y, m, d] = lastCompletedDate.split("-").map(Number);
   const base = new Date(y, m - 1, d);
+
+  const monthsToAdd =
+    frequency === "monthly" ? 1 :
+    frequency === "quarterly" ? 3 :
+    frequency === "annual" ? 12 :
+    0;
+
+  if (monthsToAdd > 0) {
+    // Building the target date from (year, targetMonthIndex, clampedDay)
+    // rather than mutating via .setMonth()/.setFullYear() avoids JS Date's
+    // month-overflow rollover: a schedule due Jan 31 advanced with
+    // .setMonth(+1) landed on Mar 3 (Feb has only 28/29 days), silently
+    // skipping February's occurrence entirely.
+    const targetMonthIndex = base.getMonth() + monthsToAdd;
+    const daysInTargetMonth = new Date(base.getFullYear(), targetMonthIndex + 1, 0).getDate();
+    const next = new Date(base.getFullYear(), targetMonthIndex, Math.min(base.getDate(), daysInTargetMonth));
+    return `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, "0")}-${String(next.getDate()).padStart(2, "0")}`;
+  }
+
   switch (frequency) {
     case "daily":
       base.setDate(base.getDate() + 1);
@@ -122,17 +141,8 @@ export function calculateNextDueDate(
     case "weekly":
       base.setDate(base.getDate() + 7);
       break;
-    case "monthly":
-      base.setMonth(base.getMonth() + 1);
-      break;
-    case "quarterly":
-      base.setMonth(base.getMonth() + 3);
-      break;
-    case "annual":
-      base.setFullYear(base.getFullYear() + 1);
-      break;
   }
-  return base.toISOString().split("T")[0]; // YYYY-MM-DD
+  return `${base.getFullYear()}-${String(base.getMonth() + 1).padStart(2, "0")}-${String(base.getDate()).padStart(2, "0")}`;
 }
 
 /**

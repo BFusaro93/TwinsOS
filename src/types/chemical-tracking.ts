@@ -84,6 +84,8 @@ export interface ChemicalApplication {
   applicatorEmployeeId: string | null;
   applicatorLicenseNumber: string | null;
   epaNumberSnapshot: string | null;
+  reEntryIntervalSnapshot: string | null;
+  restrictedProductSnapshot: boolean | null;
   applicationStartTime: string | null;
   applicationEndTime: string | null;
   temperature: number | null;

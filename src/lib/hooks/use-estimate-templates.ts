@@ -24,6 +24,8 @@ function mapTemplateItem(row: any): EstimateTemplateItem {
     discountType: row.discount_type ?? null,
     discountValue: row.discount_value ?? null,
     appliedDiscountId: row.applied_discount_id ?? null,
+    productionRateSqftPerHr: row.production_rate_sqft_per_hr ? Number(row.production_rate_sqft_per_hr) : null,
+    budgetMethod: row.budget_method ?? "manual",
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };

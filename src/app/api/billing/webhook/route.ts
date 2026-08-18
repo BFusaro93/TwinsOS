@@ -44,21 +44,36 @@ export async function POST(request: Request) {
   const subscriptionId = extractSubscriptionId(event);
   const eventCreated = new Date(event.created * 1000).toISOString();
 
-  // ── Idempotency: record this event id before processing. A duplicate
-  // delivery of the same event hits the PRIMARY KEY constraint and is
-  // treated as "already handled" — skip processing entirely. ────────────────
+  // ── Idempotency: record this event id before processing, with
+  // processed_at left null until processing actually succeeds below. A
+  // duplicate delivery hits the PRIMARY KEY constraint — if the existing
+  // row's processed_at is already set, this event was genuinely already
+  // handled and we skip it; if it's still null, a previous attempt
+  // recorded the event but died before finishing (transient failure), so
+  // this delivery is allowed to (re)process it rather than being silently
+  // swallowed forever. ────────────────────────────────────────────────────
   const { error: dedupeErr } = await db.from("stripe_webhook_events").insert({
     event_id: event.id,
     event_type: event.type,
     subscription_id: subscriptionId,
     event_created: eventCreated,
+    processed_at: null,
   });
   if (dedupeErr) {
     if (dedupeErr.code === "23505") {
-      return NextResponse.json({ received: true, duplicate: true });
+      const { data: existing } = await db
+        .from("stripe_webhook_events")
+        .select("processed_at")
+        .eq("event_id", event.id)
+        .maybeSingle();
+      if (existing?.processed_at) {
+        return NextResponse.json({ received: true, duplicate: true });
+      }
+      // else: fall through and reprocess — a prior attempt never completed.
+    } else {
+      log.error("failed to record event id", { error: dedupeErr, eventId: event.id });
+      return NextResponse.json({ error: "Webhook handler failed" }, { status: 500 });
     }
-    log.error("failed to record event id", { error: dedupeErr, eventId: event.id });
-    return NextResponse.json({ error: "Webhook handler failed" }, { status: 500 });
   }
 
   // ── Stale/out-of-order guard: if a later event for the same subscription
@@ -121,6 +136,8 @@ export async function POST(request: Request) {
     log.error("failed to process event", { error: err, eventType: event.type, eventId: event.id });
     return NextResponse.json({ error: "Webhook handler failed" }, { status: 500 });
   }
+
+  await db.from("stripe_webhook_events").update({ processed_at: new Date().toISOString() }).eq("event_id", event.id);
 
   return NextResponse.json({ received: true });
 }

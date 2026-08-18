@@ -110,8 +110,15 @@ const JOB_TYPE_LABEL: Record<string, string> = {
   project:      "Project",
 };
 
-const today = new Date().toISOString().slice(0, 10);
-const in30 = new Date(Date.now() + 30 * 86400_000).toISOString().slice(0, 10);
+// .toISOString() converts through UTC — for timezones ahead of UTC this
+// shifts the date back a day, e.g. dropping "today" from the active view
+// after evening local time. Format from local Y/M/D components instead.
+function toLocalDateString(date: Date): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+const today = toLocalDateString(new Date());
+const in30 = toLocalDateString(new Date(Date.now() + 30 * 86400_000));
 
 export function JobsList() {
   const router = useRouter();

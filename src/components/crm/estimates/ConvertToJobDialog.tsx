@@ -23,7 +23,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { CalendarDays, Briefcase } from "lucide-react";
 import { toast } from "sonner";
 import { formatCurrency } from "@/lib/utils";
-import { useCreateJobsFromEstimate, useCRMCrews } from "@/lib/hooks/use-crm-jobs";
+import { useCreateJobsFromEstimate, useCRMCrews, useCRMSchedules } from "@/lib/hooks/use-crm-jobs";
 import { budgetedHoursFromLineItem } from "@/lib/estimate-calc";
 import type { Estimate, EstimateLineItem, EstimateDirectCost } from "@/types/crm-estimates";
 
@@ -63,11 +63,13 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
   const [jobType,       setJobType]       = useState("one_time");
   const [scheduledDate, setScheduledDate] = useState("");
   const [crewId,        setCrewId]        = useState("");
+  const [schedule,      setSchedule]      = useState("");
   const [notesToCrew,   setNotesToCrew]   = useState(() =>
     lineItems.map((li) => li.jobNote).filter(Boolean).join("\n").trim()
   );
 
   const { data: crews = [] } = useCRMCrews();
+  const { data: crmSchedules = [] } = useCRMSchedules();
   const createJobs = useCreateJobsFromEstimate();
 
   function toggleAll(checked: boolean) {
@@ -103,6 +105,10 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
       toast.error("Select at least one service line");
       return;
     }
+    if (jobType === "recurring" && !schedule) {
+      toast.error("Schedule is required for recurring jobs");
+      return;
+    }
 
     try {
       const { jobId } = await createJobs.mutateAsync({
@@ -111,12 +117,20 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
         jobType,
         scheduledDate: scheduledDate || null,
         crewId: crewId || null,
+        schedule: jobType === "recurring" ? schedule : null,
         notesToCrew: notesToCrew || null,
         services: selectedItems.map((li) => ({
           serviceName:   li.serviceName ?? "Service",
           serviceId:     li.serviceId ?? null,
           qty:           li.qty,
-          rateCents:     li.rateCents,
+          // The estimate's own total is priced off adjRateCents when the
+          // estimator used the Adj Rate column (estimate-calc.ts uses
+          // `adjRateCents ?? rateCents`) -- sending the un-adjusted rate
+          // here left qty x rateCents != totalCents on the created job's
+          // service, so anything re-deriving a price from qty x rate
+          // (job value rollups, invoice line items) billed a different
+          // number than the client actually accepted.
+          rateCents:     li.adjRateCents ?? li.rateCents,
           totalCents:    li.totalCents - li.discountCents,
           budgetedHours: budgetedHoursFromLineItem(li),
           budgetMethod:  li.budgetMethod,
@@ -285,6 +299,29 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
               className="text-sm"
             />
           </div>
+
+          {jobType === "recurring" && (
+            <div className="flex flex-col gap-1">
+              <Label className="text-xs font-medium text-slate-600">Schedule *</Label>
+              {crmSchedules.length > 0 ? (
+                <Select value={schedule} onValueChange={setSchedule}>
+                  <SelectTrigger className="text-sm"><SelectValue placeholder="Select schedule…" /></SelectTrigger>
+                  <SelectContent>
+                    {crmSchedules.map((s) => (
+                      <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Input
+                  value={schedule}
+                  onChange={(e) => setSchedule(e.target.value)}
+                  placeholder="e.g. Weekly - Monday"
+                  className="text-sm"
+                />
+              )}
+            </div>
+          )}
 
           <div className="flex flex-col gap-1">
             <Label className="text-xs font-medium text-slate-600">Assign Crew</Label>

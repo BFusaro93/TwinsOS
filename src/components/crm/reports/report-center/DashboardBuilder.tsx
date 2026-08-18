@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -33,16 +34,19 @@ import { getDashboardTemplate } from "@/lib/reports/dashboard-templates";
 import {
   aggregateAlias,
   aggregateLabel,
+  hydrateBuilder,
   useAnalysisConfigBuilder,
 } from "@/lib/hooks/use-analysis-config-builder";
 import {
   useCreateDashboard,
+  useCustomReport,
+  useCustomReports,
   useDashboard,
   useDeleteDashboard,
   useRunVisualQuery,
   useUpdateDashboard,
 } from "@/lib/hooks/use-report-center";
-import type { DashboardPanel, DashboardTab, VisualSpec, VisualType } from "@/types/crm-reports";
+import type { CustomReport, DashboardPanel, DashboardTab, VisualSpec, VisualType } from "@/types/crm-reports";
 import { AnalysisConfigEditor } from "./AnalysisConfigEditor";
 import { VisualRenderer } from "./VisualRenderer";
 
@@ -89,14 +93,45 @@ function blankPanel(): DashboardPanel {
   };
 }
 
-/** Fixed "this month" range used for panel previews. */
-const PREVIEW_DATE_RANGE = (() => {
+/** Builds a panel from an already-saved "My Reports" analysis instead of
+ *  rebuilding the query from scratch — `config` is a snapshot copied in now
+ *  (refreshable later from the panel editor), `savedReportId` just tracks
+ *  which analysis it came from. Carries over the analysis's own chart
+ *  settings (visualType/label/value/kpi columns) too — without this, adding
+ *  a saved bar/line/pie/KPI analysis to a dashboard silently downgraded it
+ *  to a bare table with no series selected. */
+function panelFromSavedReport(report: CustomReport): DashboardPanel {
+  return {
+    id: crypto.randomUUID(),
+    title: report.name,
+    size: "half",
+    visual: {
+      type: report.visualType,
+      config: report.config,
+      useTabDateRange: false,
+      labelColumn: report.labelColumn ?? undefined,
+      valueColumns: report.valueColumns,
+      kpiColumn: report.kpiColumn ?? undefined,
+      savedReportId: report.id,
+      formatRules: report.formatRules,
+    },
+  };
+}
+
+/** "This month" range used for panel previews, in the viewer's LOCAL
+ *  calendar day — computed fresh on each call (not a module-level constant,
+ *  so a long-lived tab doesn't keep previewing last month once it rolls
+ *  over) using local Y/M/D components directly rather than
+ *  `.toISOString()`, which converts through UTC and can shift the date by
+ *  a day for timezones ahead of UTC. */
+function previewDateRange(): { from: string; to: string } {
   const now = new Date();
   const from = new Date(now.getFullYear(), now.getMonth(), 1);
   const to = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-  const iso = (d: Date) => d.toISOString().slice(0, 10);
+  const iso = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   return { from: iso(from), to: iso(to) };
-})();
+}
 
 export function DashboardBuilder({ dashboardId }: { dashboardId?: string }) {
   const router = useRouter();
@@ -114,6 +149,8 @@ export function DashboardBuilder({ dashboardId }: { dashboardId?: string }) {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [hydrated, setHydrated] = useState(false);
   const [tabPendingRemoval, setTabPendingRemoval] = useState<DashboardTab | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const { data: savedReports = [] } = useCustomReports();
 
   // hydrate once when editing an existing dashboard
   useEffect(() => {
@@ -159,11 +196,13 @@ export function DashboardBuilder({ dashboardId }: { dashboardId?: string }) {
   };
 
   const performRemoveTab = (tab: DashboardTab) => {
-    setTabs((prev) => {
-      const next = prev.filter((t) => t.id !== tab.id);
-      if (activeTabId === tab.id) setActiveTabId(next[0]?.id ?? "");
-      return next;
-    });
+    // Calling setActiveTabId inside the setTabs updater was a side effect
+    // in what must be a pure function — updaters can run more than once per
+    // commit (e.g. under StrictMode's double-invoke), which could fire the
+    // side effect twice for one removal. Compute the next list first.
+    const next = tabs.filter((t) => t.id !== tab.id);
+    setTabs(next);
+    if (activeTabId === tab.id) setActiveTabId(next[0]?.id ?? "");
   };
 
   const handleRemoveTab = (tab: DashboardTab) => {
@@ -417,13 +456,45 @@ export function DashboardBuilder({ dashboardId }: { dashboardId?: string }) {
           )}
 
           {!editingPanel && (
-            <div>
+            <div className="flex items-center gap-2">
               <Button variant="outline" size="sm" onClick={() => setEditingPanel(blankPanel())}>
                 <Plus className="mr-1.5 h-3.5 w-3.5" />
                 Add Panel
               </Button>
+              <Button variant="outline" size="sm" onClick={() => setPickerOpen(true)}>
+                <Plus className="mr-1.5 h-3.5 w-3.5" />
+                Add From Saved Analysis
+              </Button>
             </div>
           )}
+
+          <Dialog open={pickerOpen} onOpenChange={setPickerOpen}>
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle>Add Panel From Saved Analysis</DialogTitle>
+              </DialogHeader>
+              <div className="flex max-h-96 flex-col gap-1 overflow-y-auto">
+                {savedReports.length === 0 && (
+                  <p className="py-4 text-center text-sm text-muted-foreground">
+                    No saved analyses yet — build one in My Reports first.
+                  </p>
+                )}
+                {savedReports.map((r) => (
+                  <button
+                    key={r.id}
+                    onClick={() => {
+                      setEditingPanel(panelFromSavedReport(r));
+                      setPickerOpen(false);
+                    }}
+                    className="flex flex-col rounded-md border p-3 text-left text-sm hover:bg-accent"
+                  >
+                    <span className="font-medium">{r.name}</span>
+                    {r.description && <span className="text-xs text-muted-foreground">{r.description}</span>}
+                  </button>
+                ))}
+              </div>
+            </DialogContent>
+          </Dialog>
 
           {editingPanel && (
             <PanelEditor
@@ -451,7 +522,7 @@ function PanelPreviewCard({
 }) {
   const { data, isLoading, error } = useRunVisualQuery(
     panel.visual,
-    panel.visual.useTabDateRange ? PREVIEW_DATE_RANGE : undefined
+    panel.visual.useTabDateRange ? previewDateRange() : undefined
   );
 
   return (
@@ -496,10 +567,6 @@ interface PanelEditorProps {
 }
 
 function PanelEditor({ panel, tabUsesDateFilter, onSave, onCancel }: PanelEditorProps) {
-  const builder = useAnalysisConfigBuilder(
-    panel.visual.config.dataset ? panel.visual.config : undefined
-  );
-
   const [title, setTitle] = useState(panel.title);
   const [size, setSize] = useState<DashboardPanel["size"]>(panel.size);
   const [visualType, setVisualType] = useState<VisualType>(panel.visual.type);
@@ -507,13 +574,30 @@ function PanelEditor({ panel, tabUsesDateFilter, onSave, onCancel }: PanelEditor
   const [labelColumn, setLabelColumn] = useState(panel.visual.labelColumn ?? "");
   const [valueColumns, setValueColumns] = useState<string[]>(panel.visual.valueColumns);
   const [kpiColumn, setKpiColumn] = useState(panel.visual.kpiColumn ?? "");
+  const [savedReportId, setSavedReportId] = useState(panel.visual.savedReportId);
+  const [formatRules, setFormatRules] = useState(panel.visual.formatRules);
+  const { data: linkedReport } = useCustomReport(savedReportId);
+
+  const builder = useAnalysisConfigBuilder(
+    panel.visual.config.dataset ? panel.visual.config : undefined,
+    () => {
+      // Switching datasets invalidates any chart column references built
+      // against the old one, and breaks the panel's link to its source
+      // analysis (which is tied to that dataset) — reset both.
+      setLabelColumn("");
+      setValueColumns([]);
+      setKpiColumn("");
+      setSavedReportId(undefined);
+      setFormatRules(undefined);
+    }
+  );
 
   const [previewVisual, setPreviewVisual] = useState<VisualSpec | undefined>(undefined);
   const {
     data: previewData,
     isLoading: previewLoading,
     error: previewError,
-  } = useRunVisualQuery(previewVisual, previewVisual?.useTabDateRange ? PREVIEW_DATE_RANGE : undefined);
+  } = useRunVisualQuery(previewVisual, previewVisual?.useTabDateRange ? previewDateRange() : undefined);
 
   const { grouped, groupBy, aggregates, columns, numericFields, fields } = builder;
 
@@ -558,8 +642,27 @@ function PanelEditor({ panel, tabUsesDateFilter, onSave, onCancel }: PanelEditor
       labelColumn: labelColumn || undefined,
       valueColumns,
       kpiColumn: kpiColumn || undefined,
+      savedReportId,
+      formatRules,
     };
   };
+
+  function handleRefreshFromSource() {
+    if (!linkedReport) return;
+    hydrateBuilder(builder, linkedReport.config);
+    setFormatRules(linkedReport.formatRules);
+    // Also pick up chart-setting changes made in My Reports since this panel
+    // was linked/last refreshed — otherwise "refresh" only ever updated the
+    // underlying query, silently leaving a stale visualization behind it.
+    setVisualType(linkedReport.visualType);
+    setLabelColumn(linkedReport.labelColumn ?? "");
+    setValueColumns(linkedReport.valueColumns);
+    setKpiColumn(linkedReport.kpiColumn ?? "");
+  }
+
+  function handleUnlink() {
+    setSavedReportId(undefined);
+  }
 
   const handlePreview = () => {
     const visual = buildVisual();
@@ -582,6 +685,21 @@ function PanelEditor({ panel, tabUsesDateFilter, onSave, onCancel }: PanelEditor
 
   return (
     <div className="flex flex-col gap-4 rounded-lg border border-dashed border-slate-300 bg-slate-50/50 p-4">
+      {savedReportId && (
+        <div className="flex items-center justify-between rounded-md border border-brand-200 bg-brand-50 px-3 py-2 text-xs text-brand-800">
+          <span>
+            Linked to saved analysis{linkedReport ? `: "${linkedReport.name}"` : "…"}
+          </span>
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="outline" className="h-6 text-[11px]" onClick={handleRefreshFromSource} disabled={!linkedReport}>
+              Refresh from source
+            </Button>
+            <Button size="sm" variant="ghost" className="h-6 text-[11px]" onClick={handleUnlink}>
+              Unlink
+            </Button>
+          </div>
+        </div>
+      )}
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-sm">1. Panel Settings</CardTitle>

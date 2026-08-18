@@ -4,11 +4,38 @@ import { Fragment, useEffect, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn, formatCurrency, formatDate } from "@/lib/utils";
-import type { ReportFieldType, ReportResult } from "@/types/crm-reports";
+import { computeTotals } from "@/lib/reports/engine";
+import { FORMAT_COLORS } from "@/types/crm-reports";
+import type { FormatRule, ReportColumnDef, ReportFieldType, ReportResult, ReportResultRow } from "@/types/crm-reports";
 
 const PAGE_SIZE = 100;
 
 const NUMERIC_TYPES: ReportFieldType[] = ["money", "number", "hours", "percent", "bps"];
+
+/** First matching rule wins (rules are checked in order). Returns the
+ *  background/text color pair to apply to that cell, or null. */
+function matchFormatRule(
+  value: unknown,
+  column: string,
+  rules: FormatRule[] | undefined
+): { bg: string; text: string } | null {
+  if (!rules || rules.length === 0 || typeof value !== "number") return null;
+  for (const rule of rules) {
+    if (rule.column !== column) continue;
+    const matches =
+      rule.op === "gt" ? value > rule.value :
+      rule.op === "gte" ? value >= rule.value :
+      rule.op === "lt" ? value < rule.value :
+      rule.op === "lte" ? value <= rule.value :
+      rule.op === "eq" ? value === rule.value :
+      value !== rule.value;
+    if (matches) {
+      const color = FORMAT_COLORS.find((c) => c.value === rule.color);
+      if (color) return { bg: color.bg, text: color.text };
+    }
+  }
+  return null;
+}
 
 /** Format a single cell for display (also used by CSV export). */
 export function formatCellValue(value: unknown, type: ReportFieldType): string {
@@ -38,6 +65,40 @@ export function formatCellValue(value: unknown, type: ReportFieldType): string {
     default:
       return String(value);
   }
+}
+
+/** Cell value for spreadsheet export (Excel/CSV) — numeric types stay as
+ *  real numbers (money is converted from cents to dollars) so they sort,
+ *  filter, and sum correctly once opened; everything else is the display
+ *  string from formatCellValue. */
+export function exportCellValue(value: unknown, type: ReportFieldType): string | number {
+  if (value === null || value === undefined) return "";
+  switch (type) {
+    case "money":
+      return Number(value) / 100;
+    case "hours":
+    case "number":
+      return Number(value);
+    case "percent":
+      return Number(value);
+    case "bps":
+      return Number(value) / 100;
+    default:
+      return formatCellValue(value, type);
+  }
+}
+
+/** Sums totalable columns across only the current page's rows belonging to
+ *  one group — subtotals are computed per rendered page rather than globally,
+ *  same page-scoped tradeoff the existing section-header logic already makes. */
+function computeGroupSubtotal(
+  pageRows: ReportResultRow[],
+  sectionKey: string,
+  section: string,
+  columns: ReportColumnDef[]
+): Record<string, number | null> | undefined {
+  const groupRows = pageRows.filter((r) => String(r[sectionKey] ?? "") === section);
+  return computeTotals(columns, groupRows);
 }
 
 function Pager({
@@ -83,7 +144,7 @@ function Pager({
   );
 }
 
-export function ReportTable({ result }: { result: ReportResult }) {
+export function ReportTable({ result, formatRules }: { result: ReportResult; formatRules?: FormatRule[] }) {
   const [page, setPage] = useState(0);
 
   useEffect(() => {
@@ -145,7 +206,12 @@ export function ReportTable({ result }: { result: ReportResult }) {
                 {pagedRows.map((row, i) => {
                   const section = sectionKey ? String(row[sectionKey] ?? "") : null;
                   const prevSection = sectionKey && i > 0 ? String(pagedRows[i - 1][sectionKey] ?? "") : null;
+                  const nextSection = sectionKey && i < pagedRows.length - 1 ? String(pagedRows[i + 1][sectionKey] ?? "") : null;
                   const showSectionHeader = section !== null && section !== prevSection;
+                  const isLastOfSection = section !== null && (i === pagedRows.length - 1 || section !== nextSection);
+                  const subtotal = result.groupSubtotals && isLastOfSection
+                    ? computeGroupSubtotal(pagedRows, sectionKey!, section!, displayColumns)
+                    : null;
                   return (
                     <Fragment key={i}>
                       {showSectionHeader && (
@@ -159,19 +225,42 @@ export function ReportTable({ result }: { result: ReportResult }) {
                         </tr>
                       )}
                       <tr className="border-b last:border-0 hover:bg-slate-50">
-                        {displayColumns.map((col) => (
-                          <td
-                            key={col.key}
-                            className={cn(
-                              "px-3 py-2 text-slate-700",
-                              NUMERIC_TYPES.includes(col.type) &&
-                                "text-right tabular-nums"
-                            )}
-                          >
-                            {formatCellValue(row[col.key], col.type)}
-                          </td>
-                        ))}
+                        {displayColumns.map((col) => {
+                          const ruleMatch = matchFormatRule(row[col.key], col.key, formatRules);
+                          return (
+                            <td
+                              key={col.key}
+                              className={cn(
+                                "px-3 py-2 text-slate-700",
+                                NUMERIC_TYPES.includes(col.type) &&
+                                  "text-right tabular-nums"
+                              )}
+                              style={ruleMatch ? { backgroundColor: ruleMatch.bg, color: ruleMatch.text, fontWeight: 600 } : undefined}
+                            >
+                              {formatCellValue(row[col.key], col.type)}
+                            </td>
+                          );
+                        })}
                       </tr>
+                      {subtotal && (
+                        <tr className="border-b bg-slate-50 font-medium text-slate-700">
+                          {displayColumns.map((col, ci) => {
+                            const total = subtotal[col.key];
+                            const hasTotal = col.totalable && total !== undefined && total !== null;
+                            return (
+                              <td
+                                key={col.key}
+                                className={cn(
+                                  "px-3 py-2",
+                                  NUMERIC_TYPES.includes(col.type) && "text-right tabular-nums"
+                                )}
+                              >
+                                {ci === 0 ? `Subtotal — ${section}` : hasTotal ? formatCellValue(total, col.type) : ""}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      )}
                     </Fragment>
                   );
                 })}

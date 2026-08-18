@@ -77,7 +77,7 @@ export function ReceiveGoodsDialog({
   const { mutateAsync: receivePartLayer } = useReceivePartCostLayer();
   const { mutateAsync: receiveProductLayer } = useReceiveProductCostLayer();
   const { mutate: createReceipt, isPending: saving } = useCreateGoodsReceipt();
-  const { data: allReceipts = [] } = useGoodsReceipts();
+  const { data: allReceipts = [], isFetched: receiptsFetched } = useGoodsReceipts();
   const [applyingInventory, setApplyingInventory] = useState(false);
 
   // Total already received per line item across all prior receipts for this PO
@@ -94,16 +94,32 @@ export function ReceiveGoodsDialog({
   const [notes, setNotes] = useState("");
   const [submitted, setSubmitted] = useState(false);
 
-  // Build the maintenance-part part-number set for quick lookup
-  const maintPartNumbers = new Set(
-    products
-      .filter((p) => p.category === "maintenance_part")
-      .map((p) => p.partNumber)
-  );
+  // Resolves a PO line to its catalog product with the same strict
+  // priority used at submit time below: UUID first, then a non-empty part
+  // number, then exact name. A blank part number must never be used to
+  // match — plenty of legitimate non-maintenance-part lines (mulch,
+  // chemicals, etc.) have no part number, and matching on "" would tag
+  // every one of them as a maintenance part the moment ANY maintenance
+  // part in the catalog also happens to have a blank part number.
+  function matchProductForLine(li: LineItem) {
+    const rawId = li.productItemId?.replace(/^product:/, "") ?? "";
+    return (
+      (rawId ? products.find((p) => p.id === rawId) : null) ??
+      (li.partNumber ? products.find((p) => p.partNumber === li.partNumber) : null) ??
+      (li.productItemName ? products.find((p) => p.name === li.productItemName) : null) ??
+      null
+    );
+  }
 
-  // Initialise lines from PO line items whenever dialog opens
+  // Initialise lines from PO line items whenever the dialog opens. Also
+  // re-runs once `receiptsFetched` flips to true: if the dialog is opened
+  // before useGoodsReceipts() resolves, alreadyReceivedMap is still empty
+  // (allReceipts defaults to []), so `remaining` would default to the FULL
+  // ordered quantity instead of what's actually still outstanding — and
+  // since this effect only depended on `open`, that wrong default would
+  // never get recomputed once the query did resolve.
   useEffect(() => {
-    if (open) {
+    if (open && receiptsFetched) {
       setLines(
         po.lineItems.map((li: LineItem) => {
           const alreadyReceived = alreadyReceivedMap.get(li.id) ?? 0;
@@ -115,7 +131,7 @@ export function ReceiveGoodsDialog({
             quantityOrdered: li.quantity,
             quantityReceived: remaining, // default to remaining only
             unitCost: li.unitCost,
-            isMaintPart: maintPartNumbers.has(li.partNumber),
+            isMaintPart: matchProductForLine(li)?.category === "maintenance_part",
           };
         })
       );
@@ -124,7 +140,7 @@ export function ReceiveGoodsDialog({
       setSubmitted(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
+  }, [open, receiptsFetched]);
 
   function handleQtyChange(lineItemId: string, qty: number) {
     setLines((prev) =>
@@ -153,13 +169,25 @@ export function ReceiveGoodsDialog({
     .reduce((sum, l) => sum + l.quantityReceived * l.unitCost, 0)
   );
   const salesTax = Math.round(taxableSubtotal * (po.taxRatePercent / 100));
-  const grandTotal = subtotal + salesTax + po.shippingCost;
+  // A PO-level discount is a single flat amount for the whole order, but
+  // receiving can happen across multiple partial receipts — applying it in
+  // full to every receipt would double- (or triple-) count it, while
+  // omitting it entirely (the prior behavior) overstated every receipt's
+  // total on any PO with a discount. Prorate it by this receipt's share of
+  // the PO's total ordered subtotal instead.
+  const discountShare = po.discountCost > 0 && po.subtotal > 0
+    ? Math.round(po.discountCost * (subtotal / po.subtotal))
+    : 0;
+  const grandTotal = subtotal - discountShare + salesTax + po.shippingCost;
 
-  // A line already fully received in a prior receipt defaults to
-  // quantityReceived: 0 (remaining) in this session's draft — comparing that
-  // bare value to quantityOrdered would wrongly mark a since-completed line
-  // as short, permanently pinning the PO at "partially_fulfilled" once any
-  // line had been received across more than one receipt.
+  // Compares the CUMULATIVE received quantity (this receipt + everything
+  // already received on prior receipts) against what was ordered — a plain
+  // `l.quantityReceived === l.quantityOrdered` only looked at THIS
+  // receipt's quantity, so a PO received across two partial receipts that
+  // together add up to the full order could never reach "completed": the
+  // second (final) receipt's own quantityReceived defaults to the
+  // remaining balance, which only equals quantityOrdered when nothing was
+  // received before it.
   const allFullyReceived = lines.every((l) => {
     const alreadyReceived = alreadyReceivedMap.get(l.lineItemId) ?? 0;
     return alreadyReceived + l.quantityReceived >= l.quantityOrdered;
@@ -188,20 +216,7 @@ export function ReceiveGoodsDialog({
       for (const line of linesToReceive) {
         // Find the PO line item to look up the productItemId
         const poLineItem = po.lineItems.find((li) => li.id === line.lineItemId);
-
-        // Bare product ID (strip prefix if present)
-        const rawId = poLineItem?.productItemId?.replace(/^product:/, "") ?? "";
-
-        // Match product with strict priority:
-        // 1. By UUID (most reliable — set when items are added via the app)
-        // 2. By part number (CSV-imported items that have a part #)
-        // 3. By exact name (last resort for items with no part # and no productItemId)
-        // Never fall back to empty-string part number matching — it would match the
-        // wrong product whenever two items both lack a part number.
-        const matchedProduct =
-          (rawId ? products.find((p) => p.id === rawId) : null) ??
-          (line.partNumber ? products.find((p) => p.partNumber === line.partNumber) : null) ??
-          (line.productItemName ? products.find((p) => p.name === line.productItemName) : null);
+        const matchedProduct = poLineItem ? matchProductForLine(poLineItem) : null;
 
         if (!matchedProduct) {
           throw new Error(`No catalog product found for "${line.productItemName}" — cannot update inventory for this line.`);
@@ -414,6 +429,12 @@ export function ReceiveGoodsDialog({
                   <span>Subtotal (received)</span>
                   <span className="tabular-nums">{formatCurrency(subtotal)}</span>
                 </div>
+                {discountShare > 0 && (
+                  <div className="flex justify-between py-0.5 text-slate-600">
+                    <span>Discount (prorated)</span>
+                    <span className="tabular-nums">-{formatCurrency(discountShare)}</span>
+                  </div>
+                )}
                 {po.taxRatePercent > 0 && (
                   <div className="flex justify-between py-0.5 text-slate-600">
                     <span>Tax ({po.taxRatePercent}%)</span>

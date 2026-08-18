@@ -84,6 +84,8 @@ import type { CRMJobVisit, CRMJobService } from "@/types/crm-jobs";
 import { JobCostingTab } from "@/components/crm/jobs/JobCostingTab";
 import { AuditTrailTab } from "@/components/shared/AuditTrailTab";
 import { AttachmentsSection } from "@/components/shared/AttachmentsSection";
+import { SnowRateTiersEditor } from "@/components/crm/jobs/SnowRateTiersEditor";
+import { SnowMonthlyBillingLink } from "@/components/crm/jobs/SnowMonthlyBillingLink";
 
 const STATUS_COLOR: Record<string, string> = {
   scheduled:   "bg-blue-100 text-blue-700",
@@ -115,6 +117,15 @@ const JOB_TYPE_LABEL: Record<string, string> = {
 function fmtShort(iso: string | null | undefined): string {
   if (!iso) return "—";
   return new Date(iso + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
+// .toISOString() converts through UTC — for timezones ahead of UTC this
+// shifts "today" back a day (e.g. a crew reassignment at 8:30pm ET would
+// exclude today's still-open visits from the propagate-crew update, and a
+// waiting-list job ending today would read as overdue hours early).
+function todayLocalDateString(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 const VISIT_STATUS_COLOR: Record<string, string> = {
@@ -319,7 +330,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
 
       // Propagate crew change to all future scheduled visits
       if ("crew_id" in edits) {
-        const today = new Date().toISOString().slice(0, 10);
+        const today = todayLocalDateString();
         await fetch(`/api/crm/jobs/${job.id}/propagate-crew`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -594,7 +605,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
   const jobServiceIds = new Set(services.map((s) => s.serviceId).filter(Boolean));
   const isChemicalJob = crmServices.some((s) => jobServiceIds.has(s.id) && s.trackChemicals);
   const effectiveStatus = (edits.status as string) ?? job.status;
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayLocalDateString();
   const isOverdue = job.jobType === "waiting_list"
     && job.waitingListEnd != null
     && job.waitingListEnd < today
@@ -995,7 +1006,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                               <SelectContent>
                                 <SelectItem value="per_event">Per Event</SelectItem>
                                 <SelectItem value="per_event_per_inch">Per Event, Per Inch</SelectItem>
-                                <SelectItem value="per_push_per_inch">Per Push, Per Inch</SelectItem>
+                                <SelectItem value="per_push_per_inch">Per Push</SelectItem>
                                 <SelectItem value="hourly">Hourly</SelectItem>
                                 <SelectItem value="monthly_flat_rate">Monthly Flat Rate</SelectItem>
                               </SelectContent>
@@ -1014,6 +1025,12 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                               placeholder="0.00"
                             />
                           </div>
+                        )}
+                        {((edits.invoice_type as string | undefined) ?? job.invoiceType) === "per_event_per_inch" && (
+                          <SnowRateTiersEditor jobId={job.id} />
+                        )}
+                        {((edits.invoice_type as string | undefined) ?? job.invoiceType) === "monthly_flat_rate" && (
+                          <SnowMonthlyBillingLink jobId={job.id} clientId={job.clientId} contractId={job.contractId} />
                         )}
                         <div className="flex flex-col gap-1">
                           <Label className="text-xs text-slate-500">Asset Type</Label>
@@ -1121,7 +1138,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                           <dt className="text-xs text-slate-500">Invoice Type</dt>
                           <dd className="text-xs font-medium text-slate-800">
                             {job.invoiceType
-                              ? { per_event: "Per Event", per_event_per_inch: "Per Event, Per Inch", per_push_per_inch: "Per Push, Per Inch", hourly: "Hourly", monthly_flat_rate: "Monthly Flat Rate" }[job.invoiceType] ?? job.invoiceType
+                              ? { per_event: "Per Event", per_event_per_inch: "Per Event, Per Inch", per_push_per_inch: "Per Push", hourly: "Hourly", monthly_flat_rate: "Monthly Flat Rate" }[job.invoiceType] ?? job.invoiceType
                               : <span className="text-slate-400 italic">Not set</span>}
                           </dd>
                         </div>

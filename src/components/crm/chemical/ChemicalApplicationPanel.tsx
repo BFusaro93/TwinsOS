@@ -101,7 +101,14 @@ function ApplicationRow({
   }
 
   function handleSave() {
-    const employee = employees.find((e) => e.id === applicatorEmployeeId);
+    // applicatorLicenseNumber is a compliance snapshot, not a live join — it
+    // must only be (re)captured when the applicator assignment itself is
+    // actually changing. Re-sending the CURRENT employee's license on every
+    // save (including edits made long after the original application, e.g.
+    // just fixing notes) silently overwrote the historical record if that
+    // employee's license was renewed/changed/revoked in the meantime.
+    const applicatorChanged = (applicatorEmployeeId || null) !== (application.applicatorEmployeeId ?? null);
+    const employee = applicatorChanged ? employees.find((e) => e.id === applicatorEmployeeId) : null;
     save.mutate({
       id: application.id,
       jobId,
@@ -115,7 +122,7 @@ function ApplicationRow({
       areasTreatedIds,
       used,
       applicatorEmployeeId: applicatorEmployeeId || null,
-      applicatorLicenseNumber: employee?.applicatorLicense ?? null,
+      ...(applicatorChanged && { applicatorLicenseNumber: employee?.applicatorLicense ?? null }),
       notes: notes || null,
     });
   }
@@ -290,6 +297,13 @@ export function ChemicalApplicationPanel({ jobId, visitId, propertyId }: Props) 
   function handleAdd() {
     if (!addingProductId) return;
 
+    // Freeze the product's EPA #, re-entry interval, and restricted-product
+    // flag at the moment this application is recorded — all three are
+    // compliance-sensitive and can be corrected/changed later in the
+    // catalog, which must never rewrite the historical record of what was
+    // actually true when this specific application happened.
+    const selectedProduct = chemicalProducts.find((p) => p.id === addingProductId);
+
     let chemicalAmount: number | null | undefined;
     let unitOfMeasureId: string | null | undefined;
     let applicationMethodId: string | null | undefined;
@@ -314,6 +328,9 @@ export function ChemicalApplicationPanel({ jobId, visitId, propertyId }: Props) 
       visitId,
       productId: addingProductId,
       used: true,
+      epaNumberSnapshot: selectedProduct?.epaRegistrationNumber ?? null,
+      reEntryIntervalSnapshot: selectedProduct?.reEntryInterval ?? null,
+      restrictedProductSnapshot: selectedProduct?.restrictedProduct ?? false,
       ...(chemicalAmount !== undefined && { chemicalAmount }),
       ...(unitOfMeasureId !== undefined && { unitOfMeasureId }),
       ...(applicationMethodId !== undefined && { applicationMethodId }),

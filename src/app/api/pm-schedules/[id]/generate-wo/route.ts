@@ -2,6 +2,37 @@ import { NextResponse } from "next/server";
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createClient } from "@supabase/supabase-js";
 
+type ServerSupabase = Awaited<ReturnType<typeof createServerClient>>;
+
+/**
+ * Mirrors useAddWOPart's insert-path inventory deduction (use-wo-costs.ts) for
+ * wo_parts rows created here by copying pm_schedule_asset_parts templates.
+ * Without this, PM-generated parts were never deducted from parts.quantity_on_hand
+ * at all — but useDeleteWOPart still credits +quantity back on delete, so
+ * removing a PM-generated line inflated stock that generation never reduced.
+ * Uses the session-authenticated client (not the service-role adminClient)
+ * because adjust_part_quantity() requires a real auth.uid() to attribute the
+ * audit entry to.
+ */
+async function deductPartsInventory(
+  userClient: ServerSupabase,
+  workOrderId: string,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  templateParts: any[]
+) {
+  const withParts = templateParts.filter((tp) => tp.part_id);
+  await Promise.all(
+    withParts.map((tp) =>
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (userClient.rpc as any)("adjust_part_quantity", {
+        p_part_id: tp.part_id,
+        p_delta: -tp.quantity,
+        p_work_order_id: workOrderId,
+      })
+    )
+  );
+}
+
 /**
  * POST /api/pm-schedules/[id]/generate-wo
  *
@@ -12,10 +43,24 @@ import { createClient } from "@supabase/supabase-js";
  * Returns: { parentWorkOrderId: string }
  */
 export async function POST(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id: scheduleId } = await params;
+
+  // The server has no stored org timezone to derive "today" from — trust
+  // the browser's own local calendar date when it's given (a well-formed
+  // YYYY-MM-DD), falling back to the server's UTC date only if it's
+  // missing/malformed (e.g. a direct API call with no body).
+  let clientToday: string | null = null;
+  try {
+    const body = await request.json() as { today?: string };
+    if (body?.today && /^\d{4}-\d{2}-\d{2}$/.test(body.today)) {
+      clientToday = body.today;
+    }
+  } catch {
+    // No/invalid JSON body — fall back below.
+  }
 
   const userClient = await createServerClient();
   const { data: { user }, error: authErr } = await userClient.auth.getUser();
@@ -145,6 +190,7 @@ export async function POST(
           unit_cost: tp.unit_cost,
         }))
       );
+      await deductPartsInventory(userClient, singleWO.id, templateParts);
     }
 
     primaryWOId = singleWO.id;
@@ -227,6 +273,7 @@ export async function POST(
             unit_cost: tp.unit_cost,
           }))
         );
+        await deductPartsInventory(userClient, subWO.id, templateParts);
       }
     }
 
@@ -236,13 +283,13 @@ export async function POST(
   // ── 5. Advance next_due_date on the PM schedule ───────────────────────────
   // Advance from today (actual generation date) so that generating early
   // doesn't push the next due date further out than one interval from now.
-  const today = new Date().toISOString().slice(0, 10);
+  const today = clientToday ?? new Date().toISOString().slice(0, 10);
   const nextDue = advanceDate(today, schedule.frequency);
   await adminClient
     .from("pm_schedules")
     .update({
       next_due_date: nextDue,
-      last_completed_date: new Date().toISOString().slice(0, 10),
+      last_completed_date: today,
     })
     .eq("id", scheduleId);
 
@@ -276,12 +323,27 @@ export async function POST(
 
 function advanceDate(from: string, frequency: string): string {
   const d = new Date(from);
+  const monthsToAdd =
+    frequency === "monthly" ? 1 :
+    frequency === "quarterly" ? 3 :
+    frequency === "annual" ? 12 :
+    0;
+
+  if (monthsToAdd > 0) {
+    // Building the target date from (year, targetMonthIndex, clampedDay)
+    // rather than mutating via .setMonth()/.setFullYear() avoids JS Date's
+    // month-overflow rollover: a schedule due Jan 31 advanced with
+    // .setMonth(+1) landed on Mar 3 (Feb has only 28/29 days), silently
+    // skipping February's occurrence entirely.
+    const targetMonthIndex = d.getMonth() + monthsToAdd;
+    const daysInTargetMonth = new Date(d.getFullYear(), targetMonthIndex + 1, 0).getDate();
+    const next = new Date(d.getFullYear(), targetMonthIndex, Math.min(d.getDate(), daysInTargetMonth));
+    return next.toISOString().slice(0, 10);
+  }
+
   switch (frequency) {
-    case "daily":     d.setDate(d.getDate() + 1); break;
-    case "weekly":    d.setDate(d.getDate() + 7); break;
-    case "monthly":   d.setMonth(d.getMonth() + 1); break;
-    case "quarterly": d.setMonth(d.getMonth() + 3); break;
-    case "annual":    d.setFullYear(d.getFullYear() + 1); break;
+    case "daily":  d.setDate(d.getDate() + 1); break;
+    case "weekly": d.setDate(d.getDate() + 7); break;
   }
   return d.toISOString().slice(0, 10);
 }

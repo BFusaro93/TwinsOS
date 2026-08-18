@@ -7,6 +7,9 @@ import { InvoiceDocument } from "@/components/crm/invoices/pdf/InvoiceDocument";
 import type { InvoicePDFData, InvoicePDFLineItem, OrgPDFData } from "@/components/crm/invoices/pdf/InvoiceDocument";
 import type { InvoicePDFLayoutKey } from "@/types/crm-invoices";
 import { fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
+import { addParagraphSpacing } from "@/lib/utils/document-template-renderer";
+import { buildInvoiceStatementData } from "@/lib/invoices/statement-data";
+import { getOrCreateInvoiceShareToken, buildInvoiceViewUrl } from "@/lib/invoices/share-token";
 
 const FROM = "Twins Lawn Service <noreply@twinslawnservice.com>";
 
@@ -51,12 +54,16 @@ export async function POST(req: NextRequest) {
     subject?: string;
     bodyHtml?: string;
     templateId?: string;
+    includePdf?: boolean;
   };
   const { invoiceId } = body;
   if (!invoiceId) return NextResponse.json({ error: "invoiceId required" }, { status: 400 });
 
   if (body.to?.some((e) => !isValidEmail(e))) {
     return NextResponse.json({ error: "Invalid recipient email address" }, { status: 400 });
+  }
+  if (body.ccEmails?.some((e) => !isValidEmail(e))) {
+    return NextResponse.json({ error: "Invalid CC email address" }, { status: 400 });
   }
 
   // Load invoice with client, line items, and its own PDF template (if any)
@@ -67,7 +74,7 @@ export async function POST(req: NextRequest) {
       *,
       clients(display_name, primary_email, billing_address, billing_city, billing_state, billing_zip),
       crm_invoice_line_items(*),
-      crm_invoice_pdf_templates(layout_key, logo_url, accent_color, show_notes)
+      crm_invoice_pdf_templates(layout_key, logo_url, accent_color, show_notes, default_notes, advertisement_text)
     `)
     .eq("id", invoiceId)
     .is("deleted_at", null)
@@ -92,14 +99,27 @@ export async function POST(req: NextRequest) {
   const orgName = org?.name ?? "Your Service Provider";
   const orgPhone = ((org?.address as Record<string, string>) ?? {}).phone ?? "";
 
-  // Resolve which PDF template to render — invoice's own wins, else org default.
+  // Resolve which PDF template to render — an explicit choice for this send
+  // wins, then the invoice's own pinned template, then the org default.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let pdfTemplate: any = inv.crm_invoice_pdf_templates ?? null;
+  let pdfTemplate: any = null;
+  if (body.templateId) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: chosenTemplate } = await (supabase as any)
+      .from("crm_invoice_pdf_templates")
+      .select("layout_key, logo_url, accent_color, show_notes, default_notes, advertisement_text")
+      .eq("id", body.templateId)
+      .eq("org_id", inv.org_id)
+      .is("deleted_at", null)
+      .maybeSingle();
+    pdfTemplate = chosenTemplate ?? null;
+  }
+  if (!pdfTemplate) pdfTemplate = inv.crm_invoice_pdf_templates ?? null;
   if (!pdfTemplate) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: defaultTemplate } = await (supabase as any)
       .from("crm_invoice_pdf_templates")
-      .select("layout_key, logo_url, accent_color, show_notes")
+      .select("layout_key, logo_url, accent_color, show_notes, default_notes, advertisement_text")
       .eq("org_id", inv.org_id)
       .eq("is_default", true)
       .is("deleted_at", null)
@@ -116,6 +136,18 @@ export async function POST(req: NextRequest) {
   const firstName = clientDisplayName.split(" ")[0] ?? clientDisplayName;
   const lastName = clientDisplayName.split(" ").slice(1).join(" ") ?? "";
 
+  // Computed here (not just where the PDF is built below) so the "View &
+  // Pay Online" link/button can appear in the actual email body too --
+  // previously it only existed inside the attached PDF, so turning off
+  // "Include PDF" (or a plain-text-reading client) meant the recipient had
+  // no way to reach it at all.
+  const shareToken = await getOrCreateInvoiceShareToken(supabase, {
+    orgId: inv.org_id as string,
+    invoiceId: inv.id as string,
+    createdBy: user.id,
+  });
+  const viewOnlineUrl = shareToken ? buildInvoiceViewUrl(shareToken) : null;
+
   const mergeVars: Record<string, string> = {
     "[clientfirstname]":    firstName,
     "[clientlastname]":     lastName,
@@ -128,10 +160,16 @@ export async function POST(req: NextRequest) {
     "[balancedue]":         formatCents(inv.balance_cents ?? 0),
     "[salesrepname]":       orgName,
     "[companyphonenumber]": orgPhone,
+    "[viewinvoiceonline]":  viewOnlineUrl ?? "",
   };
 
   const resolvedSubject = resolveMergeTags(body.subject?.trim() || DEFAULT_SUBJECT, mergeVars);
-  const resolvedBodyContent = resolveMergeTags(body.bodyHtml?.trim() || DEFAULT_BODY, mergeVars);
+  const resolvedBodyContent = addParagraphSpacing(resolveMergeTags(body.bodyHtml?.trim() || DEFAULT_BODY, mergeVars));
+
+  // "Include PDF" — the template's setting, forwarded by the send dialog.
+  // Defaults to true (PDF attached) to preserve prior behavior when no
+  // template is selected.
+  const includePdf = body.includePdf !== false;
 
   // Wrap the (rich-text-authored) body in the same branded shell the PDF uses,
   // so the emailed invoice's header color always matches the attached PDF.
@@ -146,6 +184,10 @@ export async function POST(req: NextRequest) {
     <p style="color:rgba(255,255,255,.8);margin:4px 0 0;font-size:14px">Invoice #${inv.invoice_number ?? "—"}</p>
   </div>
   <div style="padding:28px 32px;font-size:14px;line-height:1.6">${resolvedBodyContent}</div>
+  ${viewOnlineUrl ? `
+  <div style="padding:0 32px 28px;text-align:center">
+    <a href="${viewOnlineUrl}" style="display:inline-block;background:${brandColor};color:#fff;text-decoration:none;padding:12px 28px;border-radius:6px;font-size:14px;font-weight:600">View &amp; Pay Invoice Online</a>
+  </div>` : ""}
   <div style="background:#f8fafc;padding:16px 32px;border-top:1px solid #e2e8f0;text-align:center">
     <p style="margin:0;font-size:11px;color:#94a3b8">${orgName}</p>
   </div>
@@ -164,6 +206,16 @@ export async function POST(req: NextRequest) {
   }));
   const addr = (org?.address as Record<string, string>) ?? {};
   const customizations = (org?.customizations as Record<string, unknown>) ?? {};
+  const statement = (layoutKey === "statement" || layoutKey === "statement_invoice_only")
+    ? await buildInvoiceStatementData(supabase, {
+        id: inv.id as string,
+        client_id: (inv.client_id as string | null) ?? null,
+        org_id: inv.org_id as string,
+        total_cents: (inv.total_cents as number) ?? 0,
+        balance_cents: (inv.balance_cents as number) ?? 0,
+        invoice_date: (inv.invoice_date as string | null) ?? null,
+      })
+    : null;
   const invoicePdfData: InvoicePDFData = {
     invoiceNumber: inv.invoice_number as number,
     description: inv.description as string | null,
@@ -171,7 +223,11 @@ export async function POST(req: NextRequest) {
     dueDate: inv.due_date as string | null,
     poNumber: inv.po_number as string | null,
     terms: inv.terms as string | null,
-    notes: pdfTemplate?.show_notes === false ? null : (inv.notes as string | null),
+    notes: pdfTemplate?.show_notes === false
+      ? null
+      : ((inv.notes as string | null) || (pdfTemplate?.default_notes as string | null) || null),
+    advertisementText: (pdfTemplate?.advertisement_text as string | null) ?? null,
+    viewOnlineUrl,
     clientName: inv.clients?.display_name ?? null,
     clientAddress: inv.clients?.billing_address ?? null,
     clientCity: inv.clients?.billing_city ?? null,
@@ -185,6 +241,7 @@ export async function POST(req: NextRequest) {
     amountPaidCents: (inv.amount_paid_cents as number) ?? 0,
     balanceCents: (inv.balance_cents as number) ?? 0,
     lineItems: pdfLineItems,
+    statement,
   };
   const orgPdfData: OrgPDFData = {
     name: orgName,
@@ -198,20 +255,22 @@ export async function POST(req: NextRequest) {
   };
 
   let pdfAttachment: { filename: string; content: string } | null = null;
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const buffer = await renderToBuffer(
+  if (includePdf) {
+    try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      createElement(InvoiceDocument as any, { invoice: invoicePdfData, org: orgPdfData, layoutKey }) as any
-    );
-    pdfAttachment = {
-      filename: `invoice-${inv.invoice_number ?? invoiceId}.pdf`,
-      content: Buffer.from(buffer).toString("base64"),
-    };
-  } catch (err) {
-    // Non-fatal — send the email without the attachment rather than blocking
-    // the whole send over a PDF rendering issue.
-    console.error("[email-invoice] PDF render error:", err);
+      const buffer = await renderToBuffer(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        createElement(InvoiceDocument as any, { invoice: invoicePdfData, org: orgPdfData, layoutKey }) as any
+      );
+      pdfAttachment = {
+        filename: `invoice-${inv.invoice_number ?? invoiceId}.pdf`,
+        content: Buffer.from(buffer).toString("base64"),
+      };
+    } catch (err) {
+      // Non-fatal — send the email without the attachment rather than blocking
+      // the whole send over a PDF rendering issue.
+      console.error("[email-invoice] PDF render error:", err);
+    }
   }
 
   const resend = new Resend(process.env.RESEND_API_KEY?.trim());

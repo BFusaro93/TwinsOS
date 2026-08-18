@@ -576,7 +576,9 @@ export function printPO(
 export function printWO(
   workOrder: WorkOrder,
   woParts?: Array<{ partName: string; partNumber: string; quantity: number; unitCost: number }>,
-  comments?: Array<{ authorName: string; body: string; createdAt: string }>
+  comments?: Array<{ authorName: string; body: string; createdAt: string }>,
+  laborEntries?: Array<{ technicianName: string; description: string; hours: number; hourlyRate: number }>,
+  vendorCharges?: Array<{ vendorName: string; description: string; cost: number }>
 ): void {
   const { orgName, logoDataUrl, companyAddress, brandColor } = useSettingsStore.getState();
 
@@ -688,16 +690,80 @@ export function printWO(
       `).join("")}
     </tbody>
   </table>
+  ` : ""}
 
+  ${laborEntries && laborEntries.length > 0 ? `
+  <div class="section-title">Labor</div>
+  <table>
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Technician</th>
+        <th>Description</th>
+        <th class="text-right">Hours</th>
+        <th class="text-right">Rate</th>
+        <th class="text-right">Total</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${laborEntries.map((l, i) => `
+      <tr>
+        <td>${i + 1}</td>
+        <td>${escapeHtml(l.technicianName)}</td>
+        <td>${l.description ? escapeHtml(l.description) : "\u2014"}</td>
+        <td class="text-right">${l.hours}</td>
+        <td class="text-right">${formatMoney(l.hourlyRate)}</td>
+        <td class="text-right">${formatMoney(Math.round(l.hours * l.hourlyRate))}</td>
+      </tr>
+      `).join("")}
+    </tbody>
+  </table>
+  ` : ""}
+
+  ${vendorCharges && vendorCharges.length > 0 ? `
+  <div class="section-title">Vendor Charges</div>
+  <table>
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Vendor</th>
+        <th>Description</th>
+        <th class="text-right">Cost</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${vendorCharges.map((v, i) => `
+      <tr>
+        <td>${i + 1}</td>
+        <td>${escapeHtml(v.vendorName)}</td>
+        <td>${v.description ? escapeHtml(v.description) : "\u2014"}</td>
+        <td class="text-right">${formatMoney(v.cost)}</td>
+      </tr>
+      `).join("")}
+    </tbody>
+  </table>
+  ` : ""}
+
+  ${(() => {
+    const partsTotal = (woParts ?? []).reduce((s, p) => s + p.quantity * p.unitCost, 0);
+    const laborTotal = (laborEntries ?? []).reduce((s, l) => s + Math.round(l.hours * l.hourlyRate), 0);
+    const vendorTotal = (vendorCharges ?? []).reduce((s, v) => s + v.cost, 0);
+    const grandTotal = partsTotal + laborTotal + vendorTotal;
+    if (grandTotal === 0) return "";
+    return `
   <div class="totals-wrapper">
     <div class="totals-box">
+      ${partsTotal > 0 ? `<div class="totals-row"><span class="totals-label">Parts Total</span><span class="totals-value">${formatMoney(partsTotal)}</span></div>` : ""}
+      ${laborTotal > 0 ? `<div class="totals-row"><span class="totals-label">Labor Total</span><span class="totals-value">${formatMoney(laborTotal)}</span></div>` : ""}
+      ${vendorTotal > 0 ? `<div class="totals-row"><span class="totals-label">Vendor Charges Total</span><span class="totals-value">${formatMoney(vendorTotal)}</span></div>` : ""}
       <div class="totals-row grand">
-        <span class="totals-label">Parts Total</span>
-        <span class="totals-value">${formatMoney(woParts.reduce((s, p) => s + p.quantity * p.unitCost, 0))}</span>
+        <span class="totals-label">Total Cost</span>
+        <span class="totals-value">${formatMoney(grandTotal)}</span>
       </div>
     </div>
   </div>
-  ` : ""}
+  `;
+  })()}
 
   ${commentsHtml}
 

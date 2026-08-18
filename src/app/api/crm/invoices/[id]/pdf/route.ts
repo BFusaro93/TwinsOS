@@ -6,6 +6,8 @@ import { createElement } from "react";
 import { InvoiceDocument } from "@/components/crm/invoices/pdf/InvoiceDocument";
 import type { InvoicePDFData, InvoicePDFLineItem, OrgPDFData } from "@/components/crm/invoices/pdf/InvoiceDocument";
 import type { InvoicePDFLayoutKey } from "@/types/crm-invoices";
+import { buildInvoiceStatementData } from "@/lib/invoices/statement-data";
+import { getOrCreateInvoiceShareToken, buildInvoiceViewUrl } from "@/lib/invoices/share-token";
 
 export async function GET(
   _req: NextRequest,
@@ -31,9 +33,10 @@ export async function GET(
       *,
       clients(display_name, billing_address, billing_city, billing_state, billing_zip),
       crm_invoice_line_items(*),
-      crm_invoice_pdf_templates(layout_key, logo_url, accent_color, show_notes)
+      crm_invoice_pdf_templates(layout_key, logo_url, accent_color, show_notes, default_notes, advertisement_text)
     `)
     .eq("id", id)
+    .is("deleted_at", null)
     .single();
 
   if (invErr || !inv) {
@@ -48,7 +51,7 @@ export async function GET(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: defaultTemplate } = await (supabase as any)
       .from("crm_invoice_pdf_templates")
-      .select("layout_key, logo_url, accent_color, show_notes")
+      .select("layout_key, logo_url, accent_color, show_notes, default_notes, advertisement_text")
       .eq("org_id", inv.org_id)
       .eq("is_default", true)
       .is("deleted_at", null)
@@ -81,6 +84,23 @@ export async function GET(
   const addr = (org?.address as Record<string, string>) ?? {};
   const customizations = (org?.customizations as Record<string, unknown>) ?? {};
 
+  const statement = (layoutKey === "statement" || layoutKey === "statement_invoice_only")
+    ? await buildInvoiceStatementData(supabase, {
+        id: inv.id as string,
+        client_id: (inv.client_id as string | null) ?? null,
+        org_id: inv.org_id as string,
+        total_cents: (inv.total_cents as number) ?? 0,
+        balance_cents: (inv.balance_cents as number) ?? 0,
+        invoice_date: (inv.invoice_date as string | null) ?? null,
+      })
+    : null;
+
+  const shareToken = await getOrCreateInvoiceShareToken(supabase, {
+    orgId: inv.org_id as string,
+    invoiceId: inv.id as string,
+    createdBy: user.id,
+  });
+
   const invoiceData: InvoicePDFData = {
     invoiceNumber: inv.invoice_number as number,
     description: inv.description as string | null,
@@ -88,7 +108,11 @@ export async function GET(
     dueDate: inv.due_date as string | null,
     poNumber: inv.po_number as string | null,
     terms: inv.terms as string | null,
-    notes: template?.show_notes === false ? null : (inv.notes as string | null),
+    notes: template?.show_notes === false
+      ? null
+      : ((inv.notes as string | null) || (template?.default_notes as string | null) || null),
+    advertisementText: (template?.advertisement_text as string | null) ?? null,
+    viewOnlineUrl: shareToken ? buildInvoiceViewUrl(shareToken) : null,
     clientName: inv.clients?.display_name ?? null,
     clientAddress: inv.clients?.billing_address ?? null,
     clientCity: inv.clients?.billing_city ?? null,
@@ -102,6 +126,7 @@ export async function GET(
     amountPaidCents: (inv.amount_paid_cents as number) ?? 0,
     balanceCents: (inv.balance_cents as number) ?? 0,
     lineItems,
+    statement,
   };
 
   const orgData: OrgPDFData = {

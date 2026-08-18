@@ -50,7 +50,14 @@ const JOB_TYPE_TITLE: Record<JobType, string> = {
 const DEFAULT_LABOR_RATE = 35;
 
 function todayStr() {
-  const d = new Date();
+  return toLocalDateStr(new Date());
+}
+
+// computePackageVisitSchedule builds dates at local midnight (`new Date(s +
+// "T00:00:00")`) — .toISOString() converts through UTC, which rolls local
+// midnight back to the previous day in any negative UTC-offset timezone (all
+// US timezones), scheduling every package job one day earlier than intended.
+function toLocalDateStr(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
@@ -155,8 +162,8 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
         const end = v.service.endDate ? new Date(v.service.endDate + "T00:00:00") : v.scheduledDate!;
         return end > max ? end : max;
       }, earliest);
-      setStartDate(earliest.toISOString().slice(0, 10));
-      setCompleteByDate(latest.toISOString().slice(0, 10));
+      setStartDate(toLocalDateStr(earliest));
+      setCompleteByDate(toLocalDateStr(latest));
     }
 
     setServices(
@@ -167,7 +174,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
             return {
               serviceId: service.serviceId ?? "",
               serviceName: service.serviceName,
-              startDate: scheduledDate ? scheduledDate.toISOString().slice(0, 10) : "",
+              startDate: scheduledDate ? toLocalDateStr(scheduledDate) : "",
               completeByDate: service.endDate ?? "",
               qty,
               rateCents: service.defaultRateCents ?? matchingService?.defaultRateCents ?? 0,
@@ -510,7 +517,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
                       <SelectContent>
                         <SelectItem value="per_event">Per Event</SelectItem>
                         <SelectItem value="per_event_per_inch">Per Event, Per Inch</SelectItem>
-                        <SelectItem value="per_push_per_inch">Per Push, Per Inch</SelectItem>
+                        <SelectItem value="per_push_per_inch">Per Push</SelectItem>
                         <SelectItem value="hourly">Hourly</SelectItem>
                         <SelectItem value="monthly_flat_rate">Monthly Flat Rate</SelectItem>
                       </SelectContent>

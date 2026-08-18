@@ -8,6 +8,19 @@ import type { PortalSettingsRow } from "@/lib/portal/portal-db";
 
 const FROM = "Twins Lawn Service <noreply@twinslawnservice.com>";
 
+// subject/body/category/clientName below all originate from the anonymous
+// portal user's own POST body — interpolating them unescaped into the
+// notification email HTML let a crafted ticket subject or body execute
+// script/markup in the recipient staff member's email client.
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 export async function GET() {
   const ctx = await getPortalContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -210,20 +223,20 @@ function buildTicketNotificationEmail({
         </tr>
         <tr>
           <td style="padding:28px 32px">
-            <p style="margin:0 0 16px;font-size:15px;color:#475569">Hi ${recipientName},</p>
+            <p style="margin:0 0 16px;font-size:15px;color:#475569">Hi ${escapeHtml(recipientName)},</p>
             <p style="margin:0 0 20px;font-size:15px;line-height:1.6;color:#475569">
-              <strong>${clientName}</strong> submitted a new support ticket from the client portal.
+              <strong>${escapeHtml(clientName)}</strong> submitted a new support ticket from the client portal.
             </p>
 
             <table width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;margin-bottom:24px">
               <tr>
                 <td style="padding:16px 20px">
                   <p style="margin:0 0 4px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#94a3b8">Ticket #${ticketNumber}</p>
-                  <p style="margin:0 0 12px;font-size:16px;font-weight:600;color:#0f172a">${subject}</p>
+                  <p style="margin:0 0 12px;font-size:16px;font-weight:600;color:#0f172a">${escapeHtml(subject)}</p>
                   <p style="margin:0 0 8px;font-size:13px;color:#64748b">
-                    <strong>Category:</strong> ${category}
+                    <strong>Category:</strong> ${escapeHtml(category)}
                   </p>
-                  ${body ? `<p style="margin:8px 0 0;font-size:13px;color:#475569;line-height:1.6;white-space:pre-wrap">${body}</p>` : ""}
+                  ${body ? `<p style="margin:8px 0 0;font-size:13px;color:#475569;line-height:1.6;white-space:pre-wrap">${escapeHtml(body)}</p>` : ""}
                 </td>
               </tr>
             </table>
@@ -236,7 +249,7 @@ function buildTicketNotificationEmail({
         <tr>
           <td style="background:#f8fafc;border-top:1px solid #e2e8f0;padding:16px 32px">
             <p style="margin:0;font-size:12px;color:#94a3b8">
-              This notification was sent because you are ${clientName}'s assigned account manager in ${orgName}.
+              This notification was sent because you are ${escapeHtml(clientName)}'s assigned account manager in ${escapeHtml(orgName)}.
             </p>
           </td>
         </tr>

@@ -122,9 +122,12 @@ export async function enrollClientInSequence(
 
   let nextFireAt = new Date().toISOString();
   if (firstEvent?.event_type === "wait") {
-    const days = (firstEvent.config as Record<string, number> | null)?.days ?? 0;
+    const cfg = firstEvent.config as Record<string, number> | null;
+    const days = cfg?.days ?? 0;
+    const hours = cfg?.hours ?? 0;
     const d = new Date();
     d.setDate(d.getDate() + days);
+    d.setHours(d.getHours() + hours);
     nextFireAt = d.toISOString();
   }
 

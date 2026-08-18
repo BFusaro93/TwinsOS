@@ -42,12 +42,14 @@ export function AnalysisConfigEditor({
     filters,
     groupBy,
     aggregates,
+    subtotals,
     sortColumn,
     sortDir,
     setColumns,
     setFilters,
     setGroupBy,
     setAggregates,
+    setSubtotals,
     setSortColumn,
     setSortDir,
     handleDatasetChange,
@@ -55,6 +57,7 @@ export function AnalysisConfigEditor({
     fields,
     numericFields,
     grouped,
+    subtotalMode,
     sortOptions,
   } = builder;
 
@@ -227,6 +230,24 @@ export function AnalysisConfigEditor({
                             <SelectItem value="false">No</SelectItem>
                           </SelectContent>
                         </Select>
+                      ) : field?.options ? (
+                        <Select
+                          value={filter.value}
+                          onValueChange={(v) =>
+                            setFilters((prev) =>
+                              prev.map((f, j) => (j === i ? { ...f, value: v } : f))
+                            )
+                          }
+                        >
+                          <SelectTrigger className="h-8 w-44 text-sm">
+                            <SelectValue placeholder="Value" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {field.options.map((o) => (
+                              <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       ) : (
                         <Input
                           type={filterValueInputType(field)}
@@ -289,6 +310,22 @@ export function AnalysisConfigEditor({
                 </div>
               </div>
 
+              {groupBy.length > 0 && (
+                <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-700">
+                  <Checkbox
+                    checked={subtotals}
+                    onCheckedChange={(checked) => setSubtotals(checked === true)}
+                  />
+                  Show subtotals per group (keep detail rows)
+                </label>
+              )}
+
+              {subtotalMode ? (
+                <p className="text-xs text-muted-foreground">
+                  Rows stay visible, grouped under a header for each {fields.find((f) => f.key === groupBy[0])?.label ?? groupBy[0]}{" "}
+                  value, with a subtotal row summing every money/hours column beneath each group.
+                </p>
+              ) : (
               <div>
                 <div className="mb-1.5 flex items-center justify-between">
                   <p className="text-xs font-medium text-slate-600">Aggregates</p>
@@ -379,6 +416,7 @@ export function AnalysisConfigEditor({
                     ))}
                   </div>
                 </div>
+              )}
             </CardContent>
           </Card>
 

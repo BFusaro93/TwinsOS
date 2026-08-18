@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { format } from "date-fns";
-import { Pencil, Trash2, Plus, Zap } from "lucide-react";
+import { Pencil, Trash2, Plus, Zap, Sparkles } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -32,8 +32,111 @@ import {
   useCreateAutomation,
   useUpdateAutomation,
   useDeleteAutomation,
+  useCreateSequence,
+  useCreateTrigger,
+  useCreateEvent,
 } from "@/lib/hooks/use-crm-automations";
+import type { EventType, TriggerType } from "@/types/crm-automations";
 import { toast } from "sonner";
+
+interface AutomationTemplate {
+  name: string;
+  description: string;
+  triggerType: TriggerType;
+  events: { eventType: EventType; config: Record<string, unknown> }[];
+}
+
+const AUTOMATION_TEMPLATES: AutomationTemplate[] = [
+  {
+    name: "New Lead Welcome Email",
+    description: "Sends a welcome email as soon as a new lead is created.",
+    triggerType: "lead_created",
+    events: [
+      {
+        eventType: "email",
+        config: {
+          name: "Welcome email",
+          from: "default",
+          to: ["client_primary"],
+          subject: "Thanks for reaching out, [clientfirstname]!",
+          body: "<p>Hi [clientfirstname],</p><p>Thanks for your interest in [companyname]. We'll be in touch shortly to follow up.</p>",
+          category: "general",
+          between_start: "08:00",
+          between_end: "18:00",
+          send_weekdays_only: false,
+          require_approval: false,
+        },
+      },
+    ],
+  },
+  {
+    name: "Estimate Sent Follow-up",
+    description: "Waits 2 days after an estimate is sent, then sends a follow-up email if there's been no response.",
+    triggerType: "estimate_sent",
+    events: [
+      { eventType: "wait", config: { days: 2, hours: 0, minutes: 0 } },
+      {
+        eventType: "email",
+        config: {
+          name: "Estimate follow-up",
+          from: "default",
+          to: ["client_primary"],
+          subject: "Following up on your estimate #[quotenumber]",
+          body: "<p>Hi [clientfirstname],</p><p>Just checking in on the estimate we sent over — let us know if you have any questions!</p>",
+          category: "follow_up",
+          between_start: "08:00",
+          between_end: "18:00",
+          send_weekdays_only: true,
+          require_approval: false,
+        },
+      },
+    ],
+  },
+  {
+    name: "Invoice Past Due Reminder",
+    description: "Sends a payment reminder email when an invoice becomes past due.",
+    triggerType: "invoice_past_due",
+    events: [
+      {
+        eventType: "email",
+        config: {
+          name: "Past due reminder",
+          from: "default",
+          to: ["client_primary", "billing_email"],
+          subject: "Reminder: Your invoice is past due",
+          body: "<p>Hi [clientfirstname],</p><p>This is a friendly reminder that your invoice with [companyname] is past due. Please let us know if you have any questions.</p>",
+          category: "reminder",
+          between_start: "08:00",
+          between_end: "18:00",
+          send_weekdays_only: false,
+          require_approval: false,
+        },
+      },
+    ],
+  },
+  {
+    name: "Form Submitted Thank You",
+    description: "Sends a thank-you email whenever a client submits one of your forms.",
+    triggerType: "form_submitted",
+    events: [
+      {
+        eventType: "email",
+        config: {
+          name: "Form thank you",
+          from: "default",
+          to: ["client_primary"],
+          subject: "Thanks for submitting, [clientfirstname]!",
+          body: "<p>Hi [clientfirstname],</p><p>Thanks for reaching out through our form — we've received your submission and will follow up soon.</p>",
+          category: "general",
+          between_start: "08:00",
+          between_end: "18:00",
+          send_weekdays_only: false,
+          require_approval: false,
+        },
+      },
+    ],
+  },
+];
 
 interface Props {
   newDialogOpen: boolean;
@@ -46,10 +149,14 @@ export function AutomationsList({ newDialogOpen, onNewDialogOpenChange }: Props)
   const createAutomation = useCreateAutomation();
   const updateAutomation = useUpdateAutomation();
   const deleteAutomation = useDeleteAutomation();
+  const createSequence = useCreateSequence();
+  const createTrigger = useCreateTrigger();
+  const createEvent = useCreateEvent();
 
   const [newName, setNewName] = useState("");
   const [newDescription, setNewDescription] = useState("");
   const [creating, setCreating] = useState(false);
+  const [addingTemplate, setAddingTemplate] = useState<string | null>(null);
 
   async function handleCreate() {
     if (!newName.trim()) return;
@@ -67,6 +174,38 @@ export function AutomationsList({ newDialogOpen, onNewDialogOpenChange }: Props)
       toast.error("Failed to create automation");
     } finally {
       setCreating(false);
+    }
+  }
+
+  async function handleAddTemplate(template: AutomationTemplate) {
+    setAddingTemplate(template.name);
+    try {
+      const automation = await createAutomation.mutateAsync({
+        name: template.name,
+        description: template.description,
+      });
+      const sequence = await createSequence.mutateAsync({
+        automationId: automation.id,
+        name: template.name,
+      });
+      await createTrigger.mutateAsync({
+        sequenceId: sequence.id,
+        triggerType: template.triggerType,
+      });
+      for (let i = 0; i < template.events.length; i++) {
+        const step = template.events[i];
+        await createEvent.mutateAsync({
+          sequenceId: sequence.id,
+          eventType: step.eventType,
+          config: step.config,
+          position: i,
+        });
+      }
+      router.push(`/crm/communication/automations/${automation.id}`);
+    } catch {
+      toast.error("Failed to add automation from template");
+    } finally {
+      setAddingTemplate(null);
     }
   }
 
@@ -89,21 +228,60 @@ export function AutomationsList({ newDialogOpen, onNewDialogOpenChange }: Props)
     );
   }
 
+  const templateSection = (
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center gap-2">
+        <Sparkles className="h-4 w-4 text-amber-500" />
+        <p className="text-sm font-semibold text-slate-700">Start from a template</p>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {AUTOMATION_TEMPLATES.map((t) => {
+          const alreadyAdded = automations.some((a) => a.name === t.name);
+          return (
+            <div
+              key={t.name}
+              className="flex flex-col justify-between gap-3 rounded-lg border bg-white p-4 shadow-sm"
+            >
+              <div>
+                <p className="text-sm font-semibold text-slate-800">{t.name}</p>
+                <p className="mt-1 text-xs text-slate-500">{t.description}</p>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                className="self-start"
+                disabled={alreadyAdded || addingTemplate === t.name}
+                onClick={() => handleAddTemplate(t)}
+              >
+                {alreadyAdded ? "Added" : addingTemplate === t.name ? "Adding…" : "+ Add"}
+              </Button>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+
   return (
     <>
       {automations.length === 0 ? (
-        <EmptyState
-          icon={Zap}
-          title="No automations yet"
-          description="Create an automation to build event-driven client sequences."
-          action={
-            <Button size="sm" onClick={() => onNewDialogOpenChange(true)}>
-              <Plus className="mr-1.5 h-4 w-4" />
-              New Automation
-            </Button>
-          }
-        />
+        <div className="flex flex-col gap-6">
+          {templateSection}
+          <EmptyState
+            icon={Zap}
+            title="No automations yet"
+            description="Create an automation to build event-driven client sequences, or add one from a template above."
+            action={
+              <Button size="sm" onClick={() => onNewDialogOpenChange(true)}>
+                <Plus className="mr-1.5 h-4 w-4" />
+                New Automation
+              </Button>
+            }
+          />
+        </div>
       ) : (
+        <div className="flex flex-col gap-6">
+          {templateSection}
         <div className="overflow-hidden rounded-lg border bg-white shadow-sm">
           <Table>
             <TableHeader>
@@ -179,6 +357,7 @@ export function AutomationsList({ newDialogOpen, onNewDialogOpenChange }: Props)
               ))}
             </TableBody>
           </Table>
+        </div>
         </div>
       )}
 

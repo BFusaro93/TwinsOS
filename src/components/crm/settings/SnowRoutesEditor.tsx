@@ -9,6 +9,7 @@ import {
   useSnowRouteStops,
   useAddRouteStop,
   useRemoveRouteStop,
+  useReorderRouteStops,
   useSnowJobs,
 } from "@/lib/hooks/use-snow-dispatch";
 import { useCRMCrews } from "@/lib/hooks/use-crm-jobs";
@@ -29,7 +30,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Plus, X, Route as RouteIcon, Trash2 } from "lucide-react";
+import { Plus, X, Route as RouteIcon, Trash2, ChevronUp, ChevronDown } from "lucide-react";
 
 function ManageStopsDialog({
   routeId, routeName, open, onOpenChange,
@@ -43,7 +44,16 @@ function ManageStopsDialog({
   const { data: snowJobs = [] } = useSnowJobs();
   const addStop = useAddRouteStop();
   const removeStop = useRemoveRouteStop();
+  const reorderStops = useReorderRouteStops();
   const [pickJobId, setPickJobId] = useState("");
+
+  function moveStop(index: number, direction: -1 | 1) {
+    const target = index + direction;
+    if (target < 0 || target >= stops.length) return;
+    const reordered = [...stops];
+    [reordered[index], reordered[target]] = [reordered[target], reordered[index]];
+    reorderStops.mutate({ routeId, orderedStopIds: reordered.map((s) => s.id) });
+  }
 
   const stopJobIds = new Set(stops.map((s) => s.jobId));
   const available = snowJobs.filter((j) => !stopJobIds.has(j.id));
@@ -88,6 +98,24 @@ function ManageStopsDialog({
               <div className="flex-1 min-w-0">
                 <p className="truncate font-medium text-slate-700">{s.clientName ?? "—"}</p>
                 {s.serviceAddress && <p className="truncate text-xs text-slate-400">{s.serviceAddress}</p>}
+              </div>
+              <div className="flex flex-col">
+                <button
+                  onClick={() => moveStop(i, -1)}
+                  disabled={i === 0 || reorderStops.isPending}
+                  className="text-slate-300 hover:text-slate-600 disabled:opacity-30"
+                  title="Move up"
+                >
+                  <ChevronUp className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  onClick={() => moveStop(i, 1)}
+                  disabled={i === stops.length - 1 || reorderStops.isPending}
+                  className="text-slate-300 hover:text-slate-600 disabled:opacity-30"
+                  title="Move down"
+                >
+                  <ChevronDown className="h-3.5 w-3.5" />
+                </button>
               </div>
               <button
                 onClick={() => removeStop.mutate({ id: s.id, routeId })}

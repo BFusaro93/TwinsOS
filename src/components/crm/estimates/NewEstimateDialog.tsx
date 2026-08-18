@@ -149,7 +149,8 @@ export function NewEstimateDialog({ open, onOpenChange, defaultClientId, onCreat
               budgetedHours: item.budgetedHours,
               costCents:     0,
               adjRateCents:  null,
-              budgetMethod:  "manual",
+              budgetMethod:  item.budgetMethod,
+              productionRateSqftPerHr: item.productionRateSqftPerHr,
             }, breakevenRateCents);
             return upsertLineItem({
               estimateId: estimate.id,
@@ -165,7 +166,8 @@ export function NewEstimateDialog({ open, onOpenChange, defaultClientId, onCreat
                 cost_cents:           computed.costCents,
                 adj_rate_cents:       null,
                 sort_order:           idx,
-                budget_method:        "manual",
+                budget_method:        item.budgetMethod,
+                production_rate_sqft_per_hr: item.productionRateSqftPerHr,
                 total_cents:          computed.totalCents,
                 budgeted_hours:       computed.budgetedHours,
                 total_budgeted_hours: computed.totalBudgetedHours,

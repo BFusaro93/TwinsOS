@@ -107,6 +107,7 @@ const MAPPED_FIELD_OPTIONS: { label: string; value: string }[] = [
   { value: "client.state",         label: "Client — State" },
   { value: "client.zip",           label: "Client — Zip Code" },
   { value: "client.notes",         label: "Client — Notes" },
+  { value: "client.source",        label: "Client — Source" },
   { value: "contact.first_name",   label: "Contact — First Name" },
   { value: "contact.last_name",    label: "Contact — Last Name" },
   { value: "contact.email",        label: "Contact — Email" },

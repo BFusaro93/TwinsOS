@@ -30,6 +30,15 @@ export async function POST(
     return NextResponse.json({ error: "Please describe the changes you'd like" }, { status: 400 });
   }
 
+  // acceptedLineItemIds gets interpolated directly into a PostgREST
+  // .not("id","in", "(...)") filter string below — a malformed id containing
+  // `)`, `,`, or quotes could break the intended filter or change which rows
+  // match, so validate every entry is a real UUID before it's used anywhere.
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (acceptedLineItemIds?.some((itemId) => !UUID_RE.test(itemId))) {
+    return NextResponse.json({ error: "Invalid line item id" }, { status: 400 });
+  }
+
   const supabase = createServiceClient();
 
   // Estimates nav is hidden client-side when disabled (PortalShell), but that's
@@ -100,16 +109,27 @@ export async function POST(
           portal_user_id: ctx.userId,
         };
 
+  // Conditioned on stage still being "sent" (re-checked here, not just above)
+  // so two concurrent submits (double-click, retry after a timeout) can't
+  // both pass the stage check above and then both proceed — only the first
+  // UPDATE actually matches a row; the second is a no-op we detect and
+  // reject instead of continuing on to send duplicate confirmation emails
+  // and fire duplicate automation triggers.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error } = await (supabase as any)
+  const { data: updated, error } = await (supabase as any)
     .from("estimates")
     .update({ ...patch, updated_at: now })
     .eq("id", id)
-    .eq("org_id", ctx.orgId);
+    .eq("org_id", ctx.orgId)
+    .eq("stage", "sent")
+    .select("id");
 
   if (error) {
     console.error("[portal/estimates/action] Failed to update estimate:", error);
     return NextResponse.json({ error: "Failed to update estimate" }, { status: 500 });
+  }
+  if (!updated || updated.length === 0) {
+    return NextResponse.json({ error: "Estimate is no longer actionable" }, { status: 409 });
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

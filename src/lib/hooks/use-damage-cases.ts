@@ -70,26 +70,48 @@ export function useCreateDamageCase() {
     }) => {
       const supabase = createClient();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: caseNumber, error: rpcError } = await (supabase as any).rpc("next_damage_case_number");
-      if (rpcError) throw rpcError;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: { user } } = await supabase.auth.getUser();
+
+      // next_damage_case_number() derives the next number from a plain
+      // COUNT(*) — two concurrent "New Damage Case" submissions in the same
+      // org/year can compute the same number, so the insert can collide on
+      // the UNIQUE(org_id, case_number) constraint. Retry with a freshly
+      // generated number rather than surfacing a raw DB error and losing
+      // the user's form input.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data, error } = await (supabase as any)
-        .from("damage_cases")
-        .insert({
-          case_number: caseNumber,
-          case_type: input.caseType,
-          customer_name: input.customerName,
-          property_address: input.propertyAddress || null,
-          date_of_incident: input.dateOfIncident,
-          description: input.description,
-          resolution_notes: input.notes || null,
-          created_by: user?.id ?? null,
-        })
-        .select()
-        .single();
-      if (error) throw error;
+      let data: any = null;
+      let lastError: { code?: string; message?: string } | null = null;
+      for (let attempt = 0; attempt < 3 && !data; attempt++) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: caseNumber, error: rpcError } = await (supabase as any).rpc("next_damage_case_number");
+        if (rpcError) throw rpcError;
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: inserted, error } = await (supabase as any)
+          .from("damage_cases")
+          .insert({
+            case_number: caseNumber,
+            case_type: input.caseType,
+            customer_name: input.customerName,
+            property_address: input.propertyAddress || null,
+            date_of_incident: input.dateOfIncident,
+            description: input.description,
+            resolution_notes: input.notes || null,
+            created_by: user?.id ?? null,
+          })
+          .select()
+          .single();
+
+        if (!error) {
+          data = inserted;
+        } else if (error.code === "23505") {
+          lastError = error;
+          continue;
+        } else {
+          throw error;
+        }
+      }
+      if (!data) throw lastError ?? new Error("Failed to create damage case");
 
       // damage_cases.customer_name is free text (no client_id FK — see
       // CLAUDE.md's "informal client name strings" gotcha, that migration is

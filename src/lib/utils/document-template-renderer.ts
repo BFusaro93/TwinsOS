@@ -10,7 +10,14 @@ export function resolveMergeTags(
 ): string {
   return template.replace(/\[(\w+)\]/g, (match) => {
     const key = match.toLowerCase();
-    return vars[key] ?? match;
+    if (key in vars) return vars[key];
+    // A recognized Documents merge-tag name this call just didn't provide a
+    // value for (e.g. a send path that only resolves a handful of tags, fed
+    // a template built with the full picker) — degrade to blank so it never
+    // ships to a real recipient as literal "[tag]" syntax. Anything NOT a
+    // known tag name is left alone — most likely genuine bracket text the
+    // author typed (e.g. "[12 months]"), not an unresolved placeholder.
+    return KNOWN_MERGE_TAG_KEYS.has(key) ? "" : match;
   });
 }
 
@@ -110,6 +117,8 @@ export const SAMPLE_MERGE_VALUES: Record<string, string> = {
   "[invoicegrid]": "",
 };
 
+export const KNOWN_MERGE_TAG_KEYS = new Set(Object.keys(SAMPLE_MERGE_VALUES));
+
 // ── Block → HTML rendering (shared by preview + send-test-email) ────────────
 
 interface RenderableBlock {
@@ -126,7 +135,7 @@ function wrap(inner: string, style: string): string {
 // output, so multi-paragraph rich-text content (built with Enter presses
 // inside a single block) renders with no gap between paragraphs unless we
 // inline the same spacing here.
-function addParagraphSpacing(html: string): string {
+export function addParagraphSpacing(html: string): string {
   return html.replace(/<p(\s[^>]*)?>/gi, (_match, attrs: string | undefined) => {
     const existing = attrs ?? "";
     const styleMatch = existing.match(/style="([^"]*)"/i);

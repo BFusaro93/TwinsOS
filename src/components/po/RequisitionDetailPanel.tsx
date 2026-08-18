@@ -132,14 +132,23 @@ function DetailsTab({
   const { data: addProjects = [] } = useProjects();
 
   const catalog = [
-    ...products.map((p) => ({ key: `product:${p.id}`, name: p.name, partNumber: p.partNumber, unitCost: p.unitCost, type: "product" as const })),
-    ...parts.map((p) => ({ key: `part:${p.id}`, name: p.name, partNumber: p.partNumber, unitCost: p.unitCost, type: "part" as const })),
+    ...products.map((p) => ({ key: `product:${p.id}`, name: p.name, partNumber: p.partNumber, unitCost: p.unitCost, type: "product" as const, category: p.category })),
+    ...parts.map((p) => ({ key: `part:${p.id}`, name: p.name, partNumber: p.partNumber, unitCost: p.unitCost, type: "part" as const, category: null as string | null })),
   ];
+  // project_id may only be set on stocked_material/project_material lines
+  // (a DB trigger rejects it otherwise) — showing the picker for a
+  // maintenance_part product always produced a rejected "Failed to add
+  // line item" once submitted.
+  const selectedAddItem = catalog.find((c) => c.key === addValue);
+  const canAssignProject = selectedAddItem?.type === "product" && selectedAddItem.category !== "maintenance_part";
 
   function handleAddLineItem() {
     const selected = catalog.find((c) => c.key === addValue);
     if (!selected) return;
-    const qty = Math.max(1, parseInt(addQty) || 1);
+    // quantity is numeric(10,3) in the DB (fractional quantities like 2.5
+    // gallons are valid) — parseInt silently truncated any decimal the user
+    // typed down to a whole number.
+    const qty = Math.max(0.001, Math.round((parseFloat(addQty) || 1) * 1000) / 1000);
     // Preserve up to 4 decimal places (fractional cents) for case/bulk pricing accuracy.
     const costCents = addCost ? Math.round(parseFloat(addCost) * 10000) / 100 : selected.unitCost;
     const rawId = selected.key.replace(/^(product:|part:)/, "");
@@ -153,7 +162,7 @@ function DetailsTab({
       quantity: qty,
       unitCost: costCents,
       totalCost: qty * costCents,
-      projectId: addProjectId === "none" ? null : addProjectId,
+      projectId: canAssignProject && addProjectId !== "none" ? addProjectId : null,
       notes: null,
       taxable: true,
     };
@@ -378,6 +387,11 @@ function DetailsTab({
                   setAddValue(val);
                   const found = catalog.find((c) => c.key === val);
                   if (found) setAddCost((found.unitCost / 100).toFixed(2));
+                  // Otherwise a project chosen for a prior (project-eligible)
+                  // selection stays in state and silently attaches to
+                  // whatever's selected next, even a maintenance_part where
+                  // the picker is now hidden.
+                  setAddProjectId("none");
                 }}
               />
             </div>
@@ -403,7 +417,7 @@ function DetailsTab({
                 />
               </div>
             </div>
-            {addValue.startsWith("product:") && (
+            {canAssignProject && (
               <div className="flex flex-col gap-1">
                 <label className="text-xs font-medium text-slate-600">Project</label>
                 <Select value={addProjectId} onValueChange={setAddProjectId}>

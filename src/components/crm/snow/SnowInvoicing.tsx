@@ -4,7 +4,12 @@ import { Fragment, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useStormEvents } from "@/lib/hooks/use-snow-dispatch";
-import { useUninvoicedSnowVisits, useGenerateSnowInvoices } from "@/lib/hooks/use-snow-invoicing";
+import {
+  useUninvoicedSnowVisits,
+  useGenerateSnowInvoices,
+  billingGroupKey,
+} from "@/lib/hooks/use-snow-invoicing";
+import { useSnowRateTiersForJobs, type SnowRateTier } from "@/lib/hooks/use-snow-rate-tiers";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -24,39 +29,43 @@ import type { CRMJobVisit } from "@/types/crm-jobs";
 const INVOICE_TYPE_LABEL: Record<string, string> = {
   per_event: "Per Event",
   per_event_per_inch: "Per Event, Per Inch",
-  per_push_per_inch: "Per Push, Per Inch",
+  per_push_per_inch: "Per Push",
   hourly: "Hourly",
 };
 
-// "per_event"/"per_event_per_inch" bill the whole STORM, not each dispatch
-// within it — a job with 2 visits during one storm (e.g. morning + afternoon
-// push) is one event, not two. Unlike "per_push_per_inch" (deliberately
-// per-visit — that's the point of that option) and "hourly" (naturally
-// per-visit), these two must be billed once per (job, storm event), or a
-// multi-visit storm gets charged twice.
-function isPerEventBilling(invoiceType: string): boolean {
-  return invoiceType === "per_event" || invoiceType === "per_event_per_inch";
-}
-
-/** Group key for visits that must collapse to a single charge. Falls back to
- *  the visit's own id (i.e. no grouping) for per-visit billing types. */
-function billingGroupKey(visit: CRMJobVisit): string {
-  const invoiceType = visit.job?.invoiceType ?? "per_event";
-  if (!isPerEventBilling(invoiceType)) return visit.id;
-  return `${visit.jobId}::${visit.stormEventId ?? "none"}`;
+/** Prices a storm's total depth against a job's configured tiers (e.g.
+ *  0-3in flat $X, 3-6in flat $Y, ... 12+in $D/in) — the depth's tier is
+ *  whichever one it falls within; the open-ended top tier (maxInches: null)
+ *  bills ratePerInchCents × depth instead of a flat amount. */
+function priceWithTiers(depth: number, tiers: SnowRateTier[]): number | null {
+  if (tiers.length === 0) return null;
+  const sorted = [...tiers].sort((a, b) => a.minInches - b.minInches);
+  for (const tier of sorted) {
+    const withinBounded = tier.maxInches != null && depth >= tier.minInches && depth < tier.maxInches;
+    const withinOpenEnded = tier.maxInches == null && depth >= tier.minInches;
+    if (withinBounded) return tier.rateCents ?? 0;
+    if (withinOpenEnded) return Math.round((tier.ratePerInchCents ?? 0) * depth);
+  }
+  // No tier's range contains this depth (below the lowest tier's minInches,
+  // in a gap between tiers, or above the highest bounded tier with no
+  // open-ended tier to catch the overflow) — null, not 0, so the caller's
+  // `tiered ?? flatRateFallback` actually falls back instead of billing $0.
+  return null;
 }
 
 /** The group's total charge for one storm event — computed once per group,
  *  not once per visit. per_event_per_inch uses the storm's total depth (the
  *  MAX across the group's visits, since depth doesn't accumulate per push
  *  within one storm), not each visit's own depth. */
-function computeGroupAmountCents(groupVisits: CRMJobVisit[]): number {
+function computeGroupAmountCents(groupVisits: CRMJobVisit[], tiersByJobId?: Map<string, SnowRateTier[]>): number {
   const visit = groupVisits[0];
   const job = visit.job;
   const invoiceType = job?.invoiceType ?? "per_event";
   if (invoiceType === "per_event_per_inch") {
     const maxDepth = Math.max(...groupVisits.map((v) => v.snowDepthInches ?? 0));
-    return Math.round((job?.ratePerInchCents ?? 0) * maxDepth);
+    const tiers = job?.id ? tiersByJobId?.get(job.id) : undefined;
+    const tiered = tiers?.length ? priceWithTiers(maxDepth, tiers) : null;
+    return tiered ?? Math.round((job?.ratePerInchCents ?? 0) * maxDepth);
   }
   if (invoiceType === "per_push_per_inch") {
     return Math.round((job?.ratePerInchCents ?? 0) * (visit.snowDepthInches ?? 0));
@@ -68,10 +77,12 @@ function computeGroupAmountCents(groupVisits: CRMJobVisit[]): number {
   return visit.rateCents ?? job?.rateCents ?? serviceTotal;
 }
 
-function describeAmount(visit: CRMJobVisit, groupSize: number): string {
+function describeAmount(visit: CRMJobVisit, groupSize: number, tiersByJobId?: Map<string, SnowRateTier[]>): string {
   const invoiceType = visit.job?.invoiceType ?? "per_event";
   const splitSuffix = groupSize > 1 ? ` (split ÷${groupSize})` : "";
   if (invoiceType === "per_event_per_inch") {
+    const tiers = visit.job?.id ? tiersByJobId?.get(visit.job.id) : undefined;
+    if (tiers?.length) return `event max depth via rate tiers${splitSuffix}`;
     return `event max depth × ${formatCurrency(visit.job?.ratePerInchCents ?? 0)}/in${splitSuffix}`;
   }
   if (invoiceType === "per_push_per_inch") {
@@ -93,6 +104,16 @@ export function SnowInvoicing() {
   const generateInvoices = useGenerateSnowInvoices();
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
+  const perEventPerInchJobIds = useMemo(
+    () => visits.filter((v) => v.job?.invoiceType === "per_event_per_inch" && v.job?.id).map((v) => v.job!.id),
+    [visits]
+  );
+  const {
+    data: tiersByJobId,
+    isLoading: tiersLoading,
+    isError: tiersError,
+  } = useSnowRateTiersForJobs(perEventPerInchJobIds);
+
   const rows = useMemo(() => {
     const byGroup = new Map<string, CRMJobVisit[]>();
     for (const v of visits) {
@@ -106,7 +127,7 @@ export function SnowInvoicing() {
     // equals the group total exactly.
     const amountByVisitId = new Map<string, number>();
     for (const groupVisits of byGroup.values()) {
-      const total = computeGroupAmountCents(groupVisits);
+      const total = computeGroupAmountCents(groupVisits, tiersByJobId);
       const n = groupVisits.length;
       const base = Math.floor(total / n);
       let remainder = total - base * n;
@@ -121,7 +142,7 @@ export function SnowInvoicing() {
       amountCents: amountByVisitId.get(v.id) ?? 0,
       groupSize: byGroup.get(billingGroupKey(v))!.length,
     }));
-  }, [visits]);
+  }, [visits, tiersByJobId]);
 
   const byClient = useMemo(() => {
     const groups = new Map<string, { clientName: string; rows: typeof rows }>();
@@ -169,15 +190,27 @@ export function SnowInvoicing() {
 
     try {
       const result = await generateInvoices.mutateAsync(groups);
-      toast.success(
-        `Generated ${result.invoicesCreated} invoice${result.invoicesCreated !== 1 ? "s" : ""}`,
-        {
-          action: {
-            label: "View Invoices",
-            onClick: () => router.push("/crm/accounting/invoices"),
-          },
-        }
-      );
+      if (result.invoicesCreated > 0) {
+        toast.success(
+          `Generated ${result.invoicesCreated} invoice${result.invoicesCreated !== 1 ? "s" : ""}`,
+          {
+            action: {
+              label: "View Invoices",
+              onClick: () => router.push(`/crm/accounting/invoices?ids=${result.invoiceIds.join(",")}`),
+            },
+          }
+        );
+      }
+      if (result.skippedZeroAmountGroups > 0) {
+        toast.warning(
+          `${result.skippedZeroAmountGroups} client${result.skippedZeroAmountGroups !== 1 ? "s" : ""} skipped — selected visits priced at $0, check rates`
+        );
+      }
+      if (result.excludedZeroAmountVisits > 0) {
+        toast.warning(
+          `${result.excludedZeroAmountVisits} visit${result.excludedZeroAmountVisits !== 1 ? "s" : ""} priced at $0 left in the queue — check rates and re-invoice`
+        );
+      }
       setSelectedIds(new Set());
       void refetch();
     } catch {
@@ -203,6 +236,11 @@ export function SnowInvoicing() {
 
         {selectedIds.size > 0 && (
           <div className="ml-auto flex items-center gap-3">
+            {tiersError && (
+              <span className="text-xs font-medium text-red-600">
+                Couldn&apos;t load storm-depth rate tiers — amounts below may be wrong.
+              </span>
+            )}
             <span className="text-sm text-slate-600">
               {selectedIds.size} selected · <span className="font-semibold">{formatCurrency(selectedTotal)}</span>
             </span>
@@ -210,10 +248,11 @@ export function SnowInvoicing() {
               size="sm"
               className="h-9 text-xs gap-1.5 bg-brand-500 hover:bg-brand-600 text-white"
               onClick={handleGenerate}
-              disabled={generateInvoices.isPending}
+              disabled={generateInvoices.isPending || tiersLoading || tiersError}
+              title={tiersLoading ? "Loading storm-depth rate tiers…" : undefined}
             >
               <FileText className="h-3.5 w-3.5" />
-              {generateInvoices.isPending ? "Generating…" : "Generate Invoices"}
+              {generateInvoices.isPending ? "Generating…" : tiersLoading ? "Loading rates…" : "Generate Invoices"}
             </Button>
           </div>
         )}
@@ -259,7 +298,7 @@ export function SnowInvoicing() {
                       </td>
                       <td className="px-2 py-2 text-slate-500">{visit.scheduledDate}</td>
                       <td className="px-2 py-2 text-slate-500">{visit.job?.services?.[0]?.serviceName ?? "Snow Service"}</td>
-                      <td className="px-2 py-2 text-slate-500">{describeAmount(visit, groupSize)}</td>
+                      <td className="px-2 py-2 text-slate-500">{describeAmount(visit, groupSize, tiersByJobId)}</td>
                       <td className="px-2 py-2 text-right font-medium text-slate-700">{formatCurrency(amountCents)}</td>
                     </tr>
                   ))}

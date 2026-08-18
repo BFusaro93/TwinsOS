@@ -472,7 +472,7 @@ export function VehicleListPage() {
         <SheetContent
           className="flex w-full flex-col overflow-hidden p-0 md:w-[580px] md:max-w-[580px]"
         >
-          {sheetVehicle && <VehicleDetailPanel vehicle={sheetVehicle} />}
+          {sheetVehicle && <VehicleDetailPanel key={sheetVehicle.id} vehicle={sheetVehicle} />}
         </SheetContent>
       </Sheet>
 

@@ -194,7 +194,7 @@ export function GlobalSearchDialog({ open, onOpenChange }: GlobalSearchDialogPro
               <CommandItem
                 key={inv.id}
                 value={`INV-${inv.invoiceNumber} ${inv.clientName ?? ""} invoice`}
-                onSelect={() => go(`/crm/invoices?open=${inv.id}`)}
+                onSelect={() => go(`/crm/accounting/invoices?open=${inv.id}`)}
                 className="flex items-center gap-3"
               >
                 <Receipt className="h-4 w-4 shrink-0 text-slate-400" />

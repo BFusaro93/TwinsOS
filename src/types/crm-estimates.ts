@@ -219,6 +219,8 @@ export interface EstimateTemplateItem {
   discountType: DiscountType | null;
   discountValue: number | null;
   appliedDiscountId: string | null;
+  productionRateSqftPerHr: number | null; // snapshotted from the service when the item is added
+  budgetMethod: BudgetMethod;             // snapshotted from the service when the item is added
   createdAt: string;
   updatedAt: string;
 }

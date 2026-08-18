@@ -1,8 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { useFormResponses } from "@/lib/hooks/use-crm-forms";
+import { useFormResponses, useMarkFormResponseRead } from "@/lib/hooks/use-crm-forms";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -13,7 +14,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { ChevronDown, Paperclip, RotateCcw, Search } from "lucide-react";
+import { ChevronDown, ExternalLink, Paperclip, RotateCcw, Search, Ticket, User } from "lucide-react";
 import type { CRMFormResponse, FormResponseStatus } from "@/types/crm-forms";
 
 // ── Attachment values ─────────────────────────────────────────────────────────
@@ -62,6 +63,7 @@ const QUICK_FILTERS: { key: QuickFilter; label: string }[] = [
 // ── ResponseDetail ────────────────────────────────────────────────────────────
 
 function ResponseDetailPanel({ response, onClose }: { response: CRMFormResponse; onClose: () => void }) {
+  const router = useRouter();
   return (
     <div className="fixed inset-y-0 right-0 z-50 w-[420px] border-l bg-white shadow-xl flex flex-col">
       <div className="flex items-center justify-between border-b px-5 py-4">
@@ -73,6 +75,34 @@ function ResponseDetailPanel({ response, onClose }: { response: CRMFormResponse;
           Close
         </button>
       </div>
+      {(response.relatedTicketId || response.relatedClientId) && (
+        <div className="flex items-center gap-2 border-b bg-slate-50 px-5 py-2.5">
+          {response.relatedTicketId && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 gap-1.5 text-xs"
+              onClick={() => router.push(`/crm/tickets?open=${response.relatedTicketId}`)}
+            >
+              <Ticket className="h-3.5 w-3.5" />
+              View Ticket
+              <ExternalLink className="h-3 w-3" />
+            </Button>
+          )}
+          {response.relatedClientId && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 gap-1.5 text-xs"
+              onClick={() => router.push(`/crm/clients/${response.relatedClientId}`)}
+            >
+              <User className="h-3.5 w-3.5" />
+              View Client
+              <ExternalLink className="h-3 w-3" />
+            </Button>
+          )}
+        </div>
+      )}
       <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
         <div className="grid grid-cols-2 gap-3 text-xs">
           <div>
@@ -132,9 +162,15 @@ interface Props {
 
 export function FormResponses({ formId }: Props) {
   const { data: responses = [], isLoading, refetch } = useFormResponses(formId);
+  const markRead = useMarkFormResponseRead();
   const [search, setSearch] = useState("");
   const [quickFilter, setQuickFilter] = useState<QuickFilter>("all");
   const [selected, setSelected] = useState<CRMFormResponse | null>(null);
+
+  function openResponse(r: CRMFormResponse) {
+    setSelected(r);
+    if (!r.isRead) markRead.mutate({ id: r.id, isRead: true });
+  }
 
   const stats = useMemo(() => ({
     total:     responses.length,
@@ -273,7 +309,7 @@ export function FormResponses({ formId }: Props) {
                 <tr
                   key={r.id}
                   className="border-b hover:bg-slate-50 cursor-pointer"
-                  onClick={() => setSelected(r)}
+                  onClick={() => openResponse(r)}
                 >
                   <td className="px-4 py-3">
                     {!r.isRead && (

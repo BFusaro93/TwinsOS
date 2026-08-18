@@ -70,13 +70,22 @@ interface SubmitForApprovalArgs {
   grandTotalCents: number;
 }
 
-export function useSubmitForApproval() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: async ({ entityId, entityType, grandTotalCents }: SubmitForApprovalArgs) => {
-      const supabase = createClient();
-
+/**
+ * Core (re)submission logic — flips the entity to pending, (re)computes the
+ * approval_requests chain against the current grandTotalCents, and
+ * auto-approves the dead-end cases (no flow, zero steps, all steps
+ * skipped). Extracted from useSubmitForApproval's mutationFn so it can also
+ * be called from PO/requisition line-item mutations: editing (or adding, or
+ * removing) a line item on an already-submitted record must re-run this —
+ * otherwise a total that crosses an approval threshold AFTER submission
+ * keeps whatever approval_requests were computed against the OLD, smaller
+ * total, silently bypassing the higher threshold's required approver.
+ */
+export async function submitEntityForApproval(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  { entityId, entityType, grandTotalCents }: SubmitForApprovalArgs
+): Promise<{ entityType: ApprovalFlow["entityType"]; autoApproved: boolean }> {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");
 
@@ -110,22 +119,36 @@ export function useSubmitForApproval() {
         .is("deleted_at", null)
         .maybeSingle();
 
-      if (!flow) return { entityType };
+      // No approval flow configured for this entity type at all — the
+      // entity was already flipped to "pending" above, and with no flow
+      // there's nothing that will ever move it forward. The DB guard
+      // (guard_procurement_approval_status) computes bool_and() over zero
+      // approval_requests rows, which is NULL, not true, so it can't
+      // auto-resolve this either — auto-approve now instead of leaving it
+      // stuck.
+      if (!flow) {
+        const { error: autoErr } = await supabase
+          .from(cfg.table)
+          .update({ [cfg.statusColumn]: "approved" })
+          .eq("id", entityId);
+        if (autoErr) throw autoErr;
+        return { entityType, autoApproved: true };
+      }
 
       const { data: orgUsers } = await supabase
         .from("profiles")
         .select("id, name, role")
-        .eq("org_id", orgId);
+        .eq("org_id", orgId) as { data: { id: string; name: string; role: string }[] | null };
 
       // crm_estimate steps store a crm_roles.id (not a generic Role) — resolve the
       // people holding that role via their linked crm_employees.user_id.
-      const { data: crmEmployees } = entityType === "crm_estimate"
+      const { data: crmEmployees } = (entityType === "crm_estimate"
         ? await supabase
             .from("crm_employees")
             .select("user_id, crm_role_id, first_name, last_name")
             .eq("org_id", orgId)
             .is("deleted_at", null)
-        : { data: null };
+        : { data: null }) as { data: { user_id: string | null; crm_role_id: string; first_name: string; last_name: string }[] | null };
 
       // Drop any previous requests for this entity
       await supabase
@@ -137,6 +160,18 @@ export function useSubmitForApproval() {
       type StepRow = { id: string; order: number; required_role: string; threshold_cents: number; assigned_user_id: string | null };
       const steps = ((flow as unknown as { approval_flow_steps?: StepRow[] }).approval_flow_steps ?? [])
         .sort((a, b) => a.order - b.order);
+
+      // A flow row exists but has zero steps configured — same dead-end as no
+      // flow at all (nothing will ever populate approval_requests for this
+      // entity), so auto-approve here too instead of leaving it stuck pending.
+      if (steps.length === 0) {
+        const { error: autoErr } = await supabase
+          .from(cfg.table)
+          .update({ [cfg.statusColumn]: "approved" })
+          .eq("id", entityId);
+        if (autoErr) throw autoErr;
+        return { entityType, autoApproved: true };
+      }
 
       const newRequests: Array<{
         org_id: string; entity_type: string; entity_id: string;
@@ -231,6 +266,15 @@ export function useSubmitForApproval() {
       }
 
       return { entityType, autoApproved: false };
+}
+
+export function useSubmitForApproval() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (args: SubmitForApprovalArgs) => {
+      const supabase = createClient();
+      return submitEntityForApproval(supabase, args);
     },
     onMutate: async () => {
       // Block Realtime invalidations for the entire mutation lifecycle

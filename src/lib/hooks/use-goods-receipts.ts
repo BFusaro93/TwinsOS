@@ -216,10 +216,17 @@ export function useUpdateGoodsReceipt() {
             }
           }
 
-          const { error: prodErr } = await supabase
-            .from("product_items")
-            .update({ quantity_on_hand: matchedProduct.quantity_on_hand + chg.delta })
-            .eq("id", matchedProduct.id);
+          // Atomic (row-locked, DB-side add) rather than a JS
+          // read-modify-write off `matchedProduct.quantity_on_hand`, which
+          // was read in a separate query moments earlier and could race
+          // with another concurrent receipt/adjustment on the same product.
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { error: prodErr } = await (supabase.rpc as any)("adjust_product_item_quantity", {
+            p_org_id: currentReceipt.org_id,
+            p_product_id: matchedProduct.id,
+            p_delta: chg.delta,
+            p_reason: "goods receipt correction",
+          });
           if (prodErr) throw prodErr;
         }
       }
@@ -242,8 +249,32 @@ export function useUpdateGoodsReceipt() {
       if (currentReceipt) {
         const taxRate = currentReceipt.tax_rate_percent as number;
         const shippingCost = currentReceipt.shipping_cost as number;
+
+        // The create path (ReceiveGoodsDialog) only taxes lines whose PO
+        // line item is taxable — this edit path retaxed every line
+        // regardless, so correcting any quantity on a receipt with even
+        // one non-taxable line (e.g. a delivery fee) bumped the tax and
+        // grand total. Resolve each line's taxable flag from its PO line
+        // item, same source the create path reads it from.
+        const poLineItemIds = [...oldByLineId.values()]
+          .map((l) => l.po_line_item_id)
+          .filter((v): v is string => !!v);
+        const { data: poLinesForTax } = poLineItemIds.length > 0
+          ? await supabase.from("po_line_items").select("id, taxable").in("id", poLineItemIds)
+          : { data: [] as { id: string; taxable: boolean | null }[] };
+        const taxableByPoLineId = new Map((poLinesForTax ?? []).map((l) => [l.id, l.taxable !== false]));
+        const isLineTaxable = (lineId: string) => {
+          const poLineItemId = oldByLineId.get(lineId)?.po_line_item_id ?? null;
+          return poLineItemId ? (taxableByPoLineId.get(poLineItemId) ?? true) : true;
+        };
+
         const newSubtotal = Math.round(input.lines.reduce((sum, l) => sum + l.quantityReceived * l.unitCost, 0));
-        const newSalesTax = Math.round(newSubtotal * (taxRate / 100));
+        const newTaxableSubtotal = Math.round(
+          input.lines
+            .filter((l) => isLineTaxable(l.id))
+            .reduce((sum, l) => sum + l.quantityReceived * l.unitCost, 0)
+        );
+        const newSalesTax = Math.round(newTaxableSubtotal * (taxRate / 100));
         const newGrandTotal = newSubtotal + newSalesTax + shippingCost;
 
         const headerPatch: Record<string, unknown> = {

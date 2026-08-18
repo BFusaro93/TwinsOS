@@ -2,7 +2,34 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import { mapRequisition } from "@/lib/supabase/mappers";
+import { submitEntityForApproval } from "@/lib/hooks/use-approval-requests";
 import type { ApprovalStatus, LineItem, Requisition } from "@/types";
+
+/**
+ * A requisition already in the approval pipeline ("pending_approval" or
+ * "approved") must have its approval_requests chain re-derived whenever a
+ * line-item add/edit/delete changes its grand total — otherwise editing a
+ * line item after submission silently keeps whatever approvers were computed
+ * against the OLD total, bypassing a threshold the new total now crosses.
+ * Called after every line-item mutation below; a no-op for requisitions not
+ * currently in the pipeline (draft, rejected, ordered, etc).
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function resubmitReqForApprovalIfNeeded(supabase: any, requisitionId: string, grandTotal: number) {
+  const { data: req } = await supabase
+    .from("requisitions")
+    .select("status")
+    .eq("id", requisitionId)
+    .single();
+  if (req?.status === "pending_approval" || req?.status === "approved") {
+    await submitEntityForApproval(supabase, {
+      entityId: requisitionId,
+      entityType: "requisition",
+      grandTotalCents: grandTotal,
+    });
+    toast.info("Requisition total changed — re-submitted for approval.");
+  }
+}
 
 function serializeError(err: unknown): string {
   if (err instanceof Error) return err.message;
@@ -177,6 +204,7 @@ export function useAddRequisitionLineItem() {
         .update({ subtotal: newSubtotal, sales_tax: newSalesTax, grand_total: newGrandTotal })
         .eq("id", requisitionId);
       if (reqErr) throw reqErr;
+      await resubmitReqForApprovalIfNeeded(supabase, requisitionId, newGrandTotal);
     },
     onError: (err) => {
       toast.error(`Failed to add line item: ${serializeError(err)}`);
@@ -380,6 +408,7 @@ export function useUpdateRequisitionLineItem() {
         .update({ subtotal: newSubtotal, sales_tax: newSalesTax, grand_total: newGrandTotal })
         .eq("id", requisitionId);
       if (reqErr) throw reqErr;
+      await resubmitReqForApprovalIfNeeded(supabase, requisitionId, newGrandTotal);
     },
     onError: (err) => {
       toast.error(`Failed to save line item: ${serializeError(err)}`);
@@ -421,6 +450,7 @@ export function useDeleteRequisitionLineItem() {
         .update({ subtotal: newSubtotal, sales_tax: newSalesTax, grand_total: newGrandTotal })
         .eq("id", requisitionId);
       if (reqErr) throw reqErr;
+      await resubmitReqForApprovalIfNeeded(supabase, requisitionId, newGrandTotal);
     },
     onError: (err) => {
       toast.error(`Failed to delete line item: ${serializeError(err)}`);

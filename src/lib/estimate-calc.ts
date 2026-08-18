@@ -14,6 +14,7 @@ const OVERHEAD_SETTINGS_DEFAULTS: OverheadSettings = {
   equipmentOhBps: 0,
   materialsOhBps: 0,
   otherOhBps: 0,
+  flatOverheadRateBps: 0,
 };
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -26,6 +27,7 @@ function mapOverheadSettingsRow(row: any): OverheadSettings {
     equipmentOhBps: row.equipment_oh_bps ?? 0,
     materialsOhBps: row.materials_oh_bps ?? 0,
     otherOhBps: row.other_oh_bps ?? 0,
+    flatOverheadRateBps: row.flat_overhead_rate_bps ?? 0,
   };
 }
 
@@ -112,17 +114,37 @@ export function computeLineItem(
     budgetedHours = item.qty / item.productionRateSqftPerHr;
   }
 
-  let costCents = item.costCents;
-  if (costCents === 0 && breakevenRateCents && budgetedHours > 0) {
-    costCents = Math.round(budgetedHours * breakevenRateCents);
-  }
-
   const totalBudgetedHours = budgetedHours * item.visits;
 
-  const totalCostCents =
-    item.calcType === 1
-      ? Math.round(costCents * item.qty * item.visits)
-      : costCents;
+  // `costCents === 0` is this type's "never manually set" convention (see
+  // this function's docstring) — costCents is left at 0 for as long as the
+  // auto-fill is in control, and totalCostCents alone carries the derived
+  // dollar amount. costCents used to get overwritten with a derived
+  // per-unit rate here (perOccurrenceCostCents / qty) so the Cost column
+  // had something to display — but that value then flowed back in as
+  // `item.costCents` on the NEXT edit (any field, not just Cost itself),
+  // no longer 0, so a further Qty/Budgeted-Hours change fell through to
+  // the plain `costCents × qty × visits` branch below and multiplied an
+  // already-divided-out total by qty A SECOND TIME. Concretely: 79 budgeted
+  // hours at a $69.25/hr breakeven rate on a 325-unit line auto-filled to
+  // $5,470.75 correctly, but bumping budgeted hours back to 80 immediately
+  // after re-multiplied that $5,470.75 by 325 again into $1,777,993.75.
+  // Keeping costCents pinned at 0 while auto mode is active makes every
+  // subsequent edit re-derive fresh from budgetedHours × breakevenRateCents
+  // instead of compounding a stale derived value — the caller is
+  // responsible for computing a separate, display-only per-unit figure
+  // (totalCostCents ÷ qty ÷ visits) if it wants to show one, without
+  // feeding that back in as costCents.
+  let totalCostCents: number;
+  if (item.costCents === 0 && breakevenRateCents && budgetedHours > 0) {
+    const perOccurrenceCostCents = Math.round(budgetedHours * breakevenRateCents);
+    totalCostCents =
+      item.calcType === 1 ? Math.round(perOccurrenceCostCents * item.visits) : perOccurrenceCostCents;
+  } else {
+    totalCostCents =
+      item.calcType === 1 ? Math.round(item.costCents * item.qty * item.visits) : item.costCents;
+  }
+  const costCents = item.costCents;
 
   const marginBps =
     totalCents > 0
@@ -269,12 +291,17 @@ export function computeInstallmentSchedule(
   const start = new Date(startDate + "T00:00:00");
 
   return Array.from({ length: numInstallments }, (_, i) => {
-    const due = new Date(start);
-    due.setMonth(due.getMonth() + i + 1);
-    if (dayOfMonth) {
-      const daysInMonth = new Date(due.getFullYear(), due.getMonth() + 1, 0).getDate();
-      due.setDate(Math.min(dayOfMonth, daysInMonth));
-    }
+    // Building the date directly from (year, targetMonthIndex, day) rather
+    // than mutating a copy of `start` via .setMonth() avoids JS Date's
+    // month-overflow rollover: with no dayOfMonth override, `due` still
+    // carried start's original day-of-month (e.g. 31), and .setMonth()
+    // silently rolls into the FOLLOWING month whenever the target month is
+    // shorter (e.g. Jan 31 + 1 month landed on Mar 3, skipping February
+    // entirely and leaving installments #1/#2 only ~28 days apart).
+    const targetDay = dayOfMonth || start.getDate();
+    const targetMonthIndex = start.getMonth() + i + 1;
+    const daysInTargetMonth = new Date(start.getFullYear(), targetMonthIndex + 1, 0).getDate();
+    const due = new Date(start.getFullYear(), targetMonthIndex, Math.min(targetDay, daysInTargetMonth));
     return {
       number: i + 1,
       amountCents: baseAmount + (i === numInstallments - 1 ? remainder : 0),
@@ -303,7 +330,7 @@ export function computeInstallmentSchedule(
 export async function recalcEstimateTotals(supabase: AnySupabaseClient, estimateId: string) {
   const { data: est, error: estError } = await supabase
     .from("estimates")
-    .select("org_id, tax_rate_bps, overhead_rate_bps, discount_cents")
+    .select("org_id, tax_rate_bps, overhead_rate_bps, discount_cents, discount_type, discount_value")
     .eq("id", estimateId)
     .single();
   if (estError) throw estError;
@@ -335,18 +362,38 @@ export async function recalcEstimateTotals(supabase: AnySupabaseClient, estimate
   const totalCostCents = (lineItems ?? []).reduce((s: number, li: any) => s + li.total_cost_cents, 0);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const directTotal = (directCosts ?? []).reduce((s: number, dc: any) => s + dc.total_cents, 0);
-  const discountCents = est.discount_cents ?? 0;
+  // A "percent" discount is a % of the subtotal at whatever it is NOW, not a
+  // frozen dollar amount from whenever it was applied — re-derive it here so
+  // it stays in sync every time line items change, instead of trusting the
+  // stored discount_cents snapshot (which only `applyNamedDiscount` in
+  // EstimateSummaryPanel writes, and only at the moment a discount is picked).
+  const discountCents = est.discount_type === "percent"
+    ? Math.round(subtotalCents * ((est.discount_value ?? 0) / 10000))
+    : (est.discount_cents ?? 0);
   const revenueCents = subtotalCents - discountCents;
   const taxCents = Math.round((revenueCents * (est.tax_rate_bps ?? 0)) / 10000);
   const totalCents = revenueCents + taxCents;
 
+  // Overhead must be based on the estimate's FULL cost base — line items'
+  // own modeled cost (total_cost_cents) AND estimate_direct_costs rows —
+  // not just one or the other. Previously the flat-rate branch only looked
+  // at totalCostCents (line items) and ignored directTotal entirely, while
+  // the per-type branch only looked at directCosts and ignored line items'
+  // cost entirely: an estimate whose cost lives mostly in Direct Costs
+  // (materials/subcontract/equipment entered there rather than modeled on
+  // line items) showed a configured flat overhead rate (e.g. 15%) but $0
+  // actual Overhead Cost and no gross→net deduction, since totalCostCents
+  // alone was 0. Line items' cost has no cost_type of its own — it's
+  // modeled/production-rate labor cost, so it's treated as 'labor' here,
+  // matching how EstimateSummaryPanel's own cost-breakdown display already
+  // buckets it (costByType.labor += line items' totalCostCents).
   const overheadCostCents = hasPerTypeOverhead(overheadSettings)
     ? (directCosts ?? []).reduce(
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (sum: number, dc: any) => sum + computeDirectCostOverhead(dc.cost_type, dc.total_cents, overheadSettings),
         0
-      )
-    : Math.round((totalCostCents * (est.overhead_rate_bps ?? 0)) / 10000);
+      ) + computeDirectCostOverhead("labor", totalCostCents, overheadSettings)
+    : Math.round(((totalCostCents + directTotal) * (est.overhead_rate_bps ?? 0)) / 10000);
 
   const grossProfitCents = revenueCents - totalCostCents - directTotal;
   const netProfitCents = grossProfitCents - overheadCostCents;
@@ -357,6 +404,7 @@ export async function recalcEstimateTotals(supabase: AnySupabaseClient, estimate
     .from("estimates")
     .update({
       subtotal_cents: subtotalCents,
+      discount_cents: discountCents,
       tax_cents: taxCents,
       total_cents: totalCents,
       revenue_cents: revenueCents,

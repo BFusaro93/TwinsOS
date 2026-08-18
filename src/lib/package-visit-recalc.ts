@@ -52,7 +52,10 @@ export async function recalcNextPackageVisitDate(
 
   const candidate = new Date(`${completedDateStr}T00:00:00`);
   candidate.setDate(candidate.getDate() + nextService.min_days);
-  const candidateStr = candidate.toISOString().slice(0, 10);
+  // .toISOString() converts through UTC — candidate was built at LOCAL
+  // midnight, so this only coincides with the intended date on a server
+  // running in UTC (true on Vercel, not guaranteed elsewhere).
+  const candidateStr = `${candidate.getFullYear()}-${String(candidate.getMonth() + 1).padStart(2, "0")}-${String(candidate.getDate()).padStart(2, "0")}`;
 
   // min_days is a floor, not an exact offset — only push the next visit OUT if the
   // actual completion date requires it; never pull an already-later date earlier.

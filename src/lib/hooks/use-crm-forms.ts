@@ -46,6 +46,24 @@ export function useFormResponses(formId?: string) {
   });
 }
 
+export function useMarkFormResponseRead() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, isRead }: { id: string; isRead: boolean }) => {
+      const res = await fetch("/api/crm/forms/responses", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, isRead }),
+      });
+      if (!res.ok) throw new Error("Failed to update response");
+      return res.json();
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["crm-form-responses"] });
+    },
+  });
+}
+
 // ── Create form ───────────────────────────────────────────────────────────────
 
 export function useCreateForm() {

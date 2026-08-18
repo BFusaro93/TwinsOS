@@ -15,7 +15,15 @@ export const REPORT_DATASETS: ReportDataset[] = [
     fields: [
       { key: "display_name", label: "Client Name", type: "text" },
       { key: "first_name", label: "First Name", type: "text" },
-      { key: "account_type", label: "Account Type", type: "text" },
+      {
+        key: "account_type",
+        label: "Account Type",
+        type: "text",
+        options: [
+          { value: "residential", label: "Residential" },
+          { value: "commercial", label: "Commercial" },
+        ],
+      },
       { key: "status", label: "Status", type: "text" },
       { key: "source", label: "Source", type: "text" },
       { key: "referred_by", label: "Referred By", type: "text" },

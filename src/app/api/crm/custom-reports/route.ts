@@ -7,6 +7,11 @@ interface CustomReportRow {
   name: string;
   description: string | null;
   config: unknown;
+  visual_type: string | null;
+  label_column: string | null;
+  value_columns: string[] | null;
+  kpi_column: string | null;
+  format_rules: unknown;
   created_at: string;
   updated_at: string;
 }
@@ -17,6 +22,11 @@ function mapRow(row: CustomReportRow) {
     name: row.name,
     description: row.description,
     config: row.config,
+    visualType: row.visual_type ?? "table",
+    labelColumn: row.label_column,
+    valueColumns: row.value_columns ?? [],
+    kpiColumn: row.kpi_column,
+    formatRules: row.format_rules ?? [],
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -35,7 +45,7 @@ export async function GET() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data, error } = await (supabase as any)
     .from("crm_custom_reports")
-    .select("id, name, description, config, created_at, updated_at")
+    .select("id, name, description, config, visual_type, label_column, value_columns, kpi_column, format_rules, created_at, updated_at")
     .is("deleted_at", null)
     .order("updated_at", { ascending: false });
 
@@ -79,9 +89,14 @@ export async function POST(request: Request) {
       name: parsed.data.name,
       description: parsed.data.description ?? null,
       config: parsed.data.config,
+      visual_type: parsed.data.visualType ?? "table",
+      label_column: parsed.data.labelColumn ?? null,
+      value_columns: parsed.data.valueColumns ?? [],
+      kpi_column: parsed.data.kpiColumn ?? null,
+      format_rules: parsed.data.formatRules ?? [],
       created_by: user.id,
     })
-    .select("id, name, description, config, created_at, updated_at")
+    .select("id, name, description, config, visual_type, label_column, value_columns, kpi_column, format_rules, created_at, updated_at")
     .single();
 
   if (error || !data) {

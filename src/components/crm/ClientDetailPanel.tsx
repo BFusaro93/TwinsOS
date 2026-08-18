@@ -2794,7 +2794,12 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
   // lead layout (no Jobs/Accounting/Contracts) rather than the full client view.
   const isLeadLike = isLead || client?.status === "lost";
   const hasChildren = (childClients ?? []).length > 0;
-  const totalChildBalance = (childClients ?? []).reduce((sum, c) => sum + c.balanceOutstandingCents, 0);
+  // "Combined balance" is meant to be the total owed across the whole
+  // parent/child rollup — a commercial property-manager parent account that
+  // itself carries a balance (not just its sub-properties) needs that
+  // included too, or this understates what's actually owed.
+  const totalChildBalance = (client?.balanceOutstandingCents ?? 0) +
+    (childClients ?? []).reduce((sum, c) => sum + c.balanceOutstandingCents, 0);
   const { data: leadEstimates } = useEstimates(clientId);
   const revenuePotentialCents = (leadEstimates ?? [])
     .filter((e) => e.stage !== "accepted" && e.stage !== "lost")

@@ -265,15 +265,15 @@ export async function POST(
             }))
           );
 
+          // Atomic increment — two visits for the same client completing
+          // concurrently must not both read the same stale totals and have
+          // the second write clobber the first (see increment_invoice_totals
+          // migration for the full race description).
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          await (supabase as any)
-            .from("crm_invoices")
-            .update({
-              subtotal_cents: existingInvoice.subtotal_cents + subtotal,
-              total_cents: existingInvoice.total_cents + subtotal,
-              balance_cents: existingInvoice.balance_cents + subtotal,
-            })
-            .eq("id", invoiceId);
+          await (supabase.rpc as any)("increment_invoice_totals", {
+            p_invoice_id: invoiceId,
+            p_delta_cents: subtotal,
+          });
 
           if (j.client_id) {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any

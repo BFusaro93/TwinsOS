@@ -1,4 +1,5 @@
 import { Resend } from "resend";
+import { KNOWN_MERGE_TAG_KEYS } from "@/lib/utils/document-template-renderer";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = any;
@@ -12,24 +13,70 @@ export interface SequenceEventRow {
 }
 
 interface ResolvedEmailContent {
-  toEmail: string;
+  toEmails: string[];
   toName: string;
+  fromAddress: string;
   subject: string;
   bodyHtml: string;
 }
 
-/** Resolves an email step's [mergetag] placeholders against the client/org/estimate context. */
+const DEFAULT_FROM_ADDRESS = "Twins Lawn Service <noreply@twinslawnservice.com>";
+
+/** Resolves an email step's `to`/`from` selections and [mergetag] placeholders against the client/org/estimate context. */
 export async function resolveEmailStepContent(
   supabase: AnyClient,
-  params: { orgId: string; clientId: string; estimateId: string | null; subjectTemplate: string; bodyTemplate: string }
+  params: {
+    orgId: string;
+    clientId: string;
+    estimateId: string | null;
+    subjectTemplate: string;
+    bodyTemplate: string;
+    toSelection?: string[];
+    fromSelection?: string;
+  }
 ): Promise<ResolvedEmailContent | { error: string }> {
   const { data: client } = await supabase
     .from("clients")
-    .select("display_name, primary_email")
+    .select("display_name, primary_email, billing_email, primary_phone, billing_address, billing_city, billing_state, billing_zip, account_number, sales_rep_id")
     .eq("id", params.clientId)
     .single();
 
-  if (!client?.primary_email) return { error: "client has no primary_email" };
+  if (!client) return { error: "client not found" };
+
+  const toSelection = params.toSelection?.length ? params.toSelection : ["client_primary"];
+  const toEmails = new Set<string>();
+
+  if (toSelection.includes("client_primary") && client.primary_email) {
+    toEmails.add(client.primary_email as string);
+  }
+  if (toSelection.includes("billing_email") && client.billing_email) {
+    toEmails.add(client.billing_email as string);
+  }
+  if (toSelection.includes("all_contacts")) {
+    const { data: contacts } = await supabase
+      .from("client_contacts")
+      .select("email")
+      .eq("client_id", params.clientId)
+      .eq("ok_to_email", true)
+      .is("deleted_at", null);
+    for (const contact of contacts ?? []) {
+      if (contact.email) toEmails.add(contact.email as string);
+    }
+  }
+
+  if (toEmails.size === 0) return { error: "no resolvable recipient email for the selected 'to' options" };
+
+  let fromAddress = DEFAULT_FROM_ADDRESS;
+  if (params.fromSelection === "sales_rep" && client.sales_rep_id) {
+    const { data: rep } = await supabase
+      .from("profiles")
+      .select("name, email")
+      .eq("id", client.sales_rep_id)
+      .single();
+    if (rep?.email) {
+      fromAddress = rep.name ? `${rep.name} <${rep.email}>` : (rep.email as string);
+    }
+  }
 
   const { data: orgRow } = await supabase
     .from("organizations")
@@ -58,16 +105,49 @@ export async function resolveEmailStepContent(
     "[clientfullname]": clientDisplayName,
     "[companyname]": orgName,
     "[quotenumber]": estimateNumber ?? "",
+    "[clientemail]": (client.primary_email as string | null) ?? (client.billing_email as string | null) ?? "",
+    "[clientcellphone]": (client.primary_phone as string | null) ?? "",
+    "[clienthomephone]": (client.primary_phone as string | null) ?? "",
+    "[billingaddress1]": (client.billing_address as string | null) ?? "",
+    "[billingcity]": (client.billing_city as string | null) ?? "",
+    "[billingstate]": (client.billing_state as string | null) ?? "",
+    "[billingzip]": (client.billing_zip as string | null) ?? "",
+    "[accountnumber]": (client.account_number as string | null) ?? "",
   };
   const resolve = (template: string) =>
-    template.replace(/\[(\w+)\]/gi, (match) => mergeTags[match.toLowerCase()] ?? match);
+    template.replace(/\[(\w+)\]/gi, (match) => {
+      const key = match.toLowerCase();
+      if (key in mergeTags) return mergeTags[key];
+      // Same reasoning as the shared resolveMergeTags helper: a recognized
+      // Documents tag this narrower automation resolver doesn't know how to
+      // fill in degrades to blank instead of shipping literal "[tag]" text
+      // to a real client — this step's body/subject can come from a
+      // Documents template built with the full ~40-tag picker.
+      return KNOWN_MERGE_TAG_KEYS.has(key) ? "" : match;
+    });
 
   return {
-    toEmail: client.primary_email as string,
+    toEmails: [...toEmails],
     toName: clientDisplayName,
+    fromAddress,
     subject: resolve(params.subjectTemplate || "(no subject)"),
-    bodyHtml: resolve(params.bodyTemplate || ""),
+    bodyHtml: plainTextToHtml(resolve(params.bodyTemplate || "")),
   };
+}
+
+/** The automation email step's body field is a plain `<textarea>` (no rich
+ *  text), unlike every other send path in the app (invoices, estimates,
+ *  form notifications) which already convert blank-line-separated text into
+ *  paragraphs before sending as HTML. Without this, a hand-typed multi-
+ *  paragraph email arrived as one run-on paragraph — blank lines and single
+ *  line breaks both collapse in HTML unless converted. Left alone if the
+ *  text already contains markup (defensive, in case a legacy body was HTML). */
+function plainTextToHtml(text: string): string {
+  if (/<[a-z][\s\S]*>/i.test(text)) return text;
+  return text
+    .split(/\n{2,}/)
+    .map((para) => `<p style="margin:0 0 12px 0">${para.replace(/\n/g, "<br>")}</p>`)
+    .join("");
 }
 
 /**
@@ -77,19 +157,30 @@ export async function resolveEmailStepContent(
  */
 export async function sendResolvedSequenceEmail(
   supabase: AnyClient,
-  params: { orgId: string; clientId: string | null; estimateId: string | null; toEmail: string; toName: string | null; subject: string; bodyHtml: string }
+  params: {
+    orgId: string;
+    clientId: string | null;
+    estimateId: string | null;
+    toEmails: string[];
+    toName: string | null;
+    fromAddress?: string;
+    subject: string;
+    bodyHtml: string;
+  }
 ): Promise<{ ok: true; resendId: string | null } | { ok: false; reason: string }> {
   const resendKey = process.env.RESEND_API_KEY;
   if (!resendKey) return { ok: false, reason: "RESEND_API_KEY not configured" };
 
   const resend = new Resend(resendKey);
   const { data: sent, error: sendErr } = await resend.emails.send({
-    from: "Twins Lawn Service <noreply@twinslawnservice.com>",
-    to: params.toEmail,
+    from: params.fromAddress || DEFAULT_FROM_ADDRESS,
+    to: params.toEmails,
     subject: params.subject,
     html: params.bodyHtml,
   });
   if (sendErr) return { ok: false, reason: `email send failed: ${String(sendErr)}` };
+
+  const toEmailsJoined = params.toEmails.join(", ");
 
   if (params.clientId) {
     await supabase.from("client_activity").insert({
@@ -97,8 +188,8 @@ export async function sendResolvedSequenceEmail(
       client_id: params.clientId,
       activity_type: "email",
       subject: params.subject,
-      body: `Sent to ${params.toEmail} (automation)`,
-      sent_to: params.toEmail,
+      body: `Sent to ${toEmailsJoined} (automation)`,
+      sent_to: toEmailsJoined,
       resend_message_id: sent?.id ?? null,
       occurred_at: new Date().toISOString(),
     });
@@ -108,7 +199,7 @@ export async function sendResolvedSequenceEmail(
     await supabase.from("estimate_emails").insert({
       org_id: params.orgId,
       estimate_id: params.estimateId,
-      to_email: params.toEmail,
+      to_email: toEmailsJoined,
       to_name: params.toName || null,
       subject: params.subject,
       body_html: params.bodyHtml,
@@ -131,8 +222,13 @@ export async function advanceEnrollmentPastStep(
   supabase: AnyClient,
   params: { enrollmentId: string; events: SequenceEventRow[]; completedPosition: number; nowIso: string }
 ): Promise<string> {
-  const nextPos = params.completedPosition + 1;
-  const nextEvent = params.events.find((e) => e.position === nextPos);
+  // `params.events` is pre-filtered to is_active events, so a deactivated
+  // middle step leaves a gap at completedPosition + 1 — matching that exact
+  // position would read "nothing follows" and complete the enrollment early.
+  // Take the next active step by position instead, wherever it actually is.
+  const nextEvent = params.events
+    .filter((e) => e.position > params.completedPosition)
+    .sort((a, b) => a.position - b.position)[0];
 
   if (!nextEvent) {
     await supabase
@@ -148,14 +244,14 @@ export async function advanceEnrollmentPastStep(
     d.setDate(d.getDate() + days);
     await supabase
       .from("crm_sequence_enrollments")
-      .update({ next_event_position: nextPos + 1, next_fire_at: d.toISOString(), updated_at: params.nowIso })
+      .update({ next_event_position: nextEvent.position + 1, next_fire_at: d.toISOString(), updated_at: params.nowIso })
       .eq("id", params.enrollmentId);
     return `advanced → wait ${days}d`;
   }
 
   await supabase
     .from("crm_sequence_enrollments")
-    .update({ next_event_position: nextPos, next_fire_at: params.nowIso, updated_at: params.nowIso })
+    .update({ next_event_position: nextEvent.position, next_fire_at: params.nowIso, updated_at: params.nowIso })
     .eq("id", params.enrollmentId);
-  return `advanced → position ${nextPos}`;
+  return `advanced → position ${nextEvent.position}`;
 }

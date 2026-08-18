@@ -14,6 +14,7 @@ import { cn, formatCurrency } from "@/lib/utils";
 import { Plus, FileText, Search, ChevronDown, X, RotateCcw, GitMerge, ArrowUpDown, ArrowUp, ArrowDown, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import type { InvoiceStatus, CRMInvoice } from "@/types/crm-invoices";
+import { isInvoiceOverdue } from "@/lib/invoice-status";
 import { useChargeAutopayInvoice } from "@/lib/hooks/use-autopay-invoices";
 import { InvoiceDetailSheet } from "./InvoiceDetailSheet";
 import { NewInvoiceSheet } from "./NewInvoiceSheet";
@@ -58,10 +59,7 @@ function formatDate(d: string) {
 }
 
 function isOverdue(inv: CRMInvoice) {
-  if (inv.balanceCents <= 0) return false;
-  const effectiveDue = inv.dueDate ?? (inv.terms === "due_on_receipt" ? inv.invoiceDate : null);
-  if (!effectiveDue) return false;
-  return new Date(effectiveDue + "T23:59:59") < new Date();
+  return isInvoiceOverdue(inv);
 }
 
 type ActiveFilterKey =
@@ -193,6 +191,15 @@ export function InvoicesList({ clientId }: Props) {
 
   const allInvoices = invoices ?? [];
 
+  // Deep-link support for "just generated these N invoices" flows (e.g. Snow
+  // Invoicing's "View Invoices" action) — scopes the list to exactly those
+  // ids instead of dumping the user on the full unfiltered list.
+  const idsParam = searchParams.get("ids");
+  const idsFilter = useMemo(
+    () => (idsParam ? new Set(idsParam.split(",").filter(Boolean)) : null),
+    [idsParam]
+  );
+
   // Badge counts for filter tabs — reuse applyQuickFilter so a tab's count
   // always matches what clicking it actually shows.
   const counts = useMemo(() => ({
@@ -209,7 +216,7 @@ export function InvoicesList({ clientId }: Props) {
   }), [allInvoices]);
 
   const filtered = useMemo(() => {
-    let list = applyQuickFilter(allInvoices, quickFilter);
+    let list = idsFilter ? allInvoices.filter((i) => idsFilter.has(i.id)) : applyQuickFilter(allInvoices, quickFilter);
     if (search.trim()) {
       const q = search.toLowerCase();
       list = list.filter(
@@ -247,7 +254,7 @@ export function InvoicesList({ clientId }: Props) {
       return sortDir === "asc" ? cmp : -cmp;
     });
     return list;
-  }, [allInvoices, quickFilter, search, activeFilterKey, filterValue, sortKey, sortDir]);
+  }, [allInvoices, idsFilter, quickFilter, search, activeFilterKey, filterValue, sortKey, sortDir]);
 
   function toggleSort(key: string) {
     if (sortKey === key) setSortDir((d) => d === "asc" ? "desc" : "asc");
@@ -435,6 +442,15 @@ export function InvoicesList({ clientId }: Props) {
             </PermissionGate>
           }
         />
+      )}
+
+      {idsFilter && (
+        <div className="flex items-center justify-between border-b bg-brand-50 px-4 py-2 text-xs text-brand-800">
+          <span>Showing {idsFilter.size} just-generated invoice{idsFilter.size !== 1 ? "s" : ""}.</span>
+          <Link href="/crm/accounting/invoices" className="font-medium underline underline-offset-2">
+            View all invoices
+          </Link>
+        </div>
       )}
 
       {/* ── FilterBar row ── */}

@@ -325,11 +325,18 @@ export function useGenerateContractInvoices() {
             status: "draft",
             subtotal_cents: monthAmount,
             total_cents: monthAmount,
+            balance_cents: monthAmount,
           })
           .select("id")
           .single();
         if (invErr || !invoice) {
-          results.push({ contractId, status: "skipped", reason: invErr?.message ?? "insert failed" });
+          // 23505 = unique_violation on crm_invoices_one_per_contract_month —
+          // a concurrent request (double-click, another tab, or the daily
+          // cron) already inserted this month's invoice between our SELECT
+          // check above and this INSERT; report it the same as the
+          // pre-existing skip path rather than surfacing a raw DB error.
+          const reason = invErr?.code === "23505" ? "already billed for this month" : (invErr?.message ?? "insert failed");
+          results.push({ contractId, status: "skipped", reason });
           continue;
         }
 

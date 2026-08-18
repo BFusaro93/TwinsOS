@@ -45,7 +45,7 @@ export const FN_OPTIONS: { value: AggregateFn; label: string }[] = [
   { value: "count", label: "Count" },
 ];
 
-export const NUMERIC_FIELD_TYPES = ["money", "number", "hours", "percent"];
+export const NUMERIC_FIELD_TYPES = ["money", "number", "hours", "percent", "bps"];
 
 export function aggregateAlias(agg: BuilderAggregate): string {
   return agg.column === "*" ? "count_all" : `${agg.fn}_${agg.column}`;
@@ -74,6 +74,13 @@ export function toAnalysisFilter(
     if (Number.isNaN(dollars)) return null;
     return { column: filter.column, op: filter.op, value: Math.round(dollars * 100) };
   }
+  if (field?.type === "bps") {
+    // Displayed/entered as a percent (formatCellValue shows bps/100 with a
+    // "%" suffix) but stored as basis points, same cents-vs-dollars pattern.
+    const percent = parseFloat(filter.value);
+    if (Number.isNaN(percent)) return null;
+    return { column: filter.column, op: filter.op, value: Math.round(percent * 100) };
+  }
   if (field?.type === "number" || field?.type === "hours" || field?.type === "percent") {
     const num = parseFloat(filter.value);
     if (Number.isNaN(num)) return null;
@@ -98,6 +105,7 @@ export interface AnalysisConfigBuilder {
   filters: BuilderFilter[];
   groupBy: string[];
   aggregates: BuilderAggregate[];
+  subtotals: boolean;
   sortColumn: string;
   sortDir: "asc" | "desc";
   setDataset: (v: string) => void;
@@ -107,13 +115,17 @@ export interface AnalysisConfigBuilder {
   setAggregates: (
     v: BuilderAggregate[] | ((prev: BuilderAggregate[]) => BuilderAggregate[])
   ) => void;
+  setSubtotals: (v: boolean) => void;
   setSortColumn: (v: string) => void;
   setSortDir: (v: "asc" | "desc") => void;
   handleDatasetChange: (next: string) => void;
   datasetDef: ReportDataset | undefined;
   fields: DatasetField[];
   numericFields: DatasetField[];
+  /** True only for a full rollup (one row per group, detail columns dropped). */
   grouped: boolean;
+  /** True when Group By + "keep detail rows" subtotals are both on. */
+  subtotalMode: boolean;
   sortOptions: { value: string; label: string }[];
   canRun: boolean;
   buildConfig: () => AnalysisConfig | null;
@@ -146,12 +158,17 @@ export function useAnalysisConfigBuilder(
   const [aggregates, setAggregates] = useState<BuilderAggregate[]>(
     (initial?.aggregates ?? []).map((a) => ({ column: a.column, fn: a.fn }))
   );
+  const [subtotals, setSubtotals] = useState(initial?.subtotals ?? false);
   const [sortColumn, setSortColumn] = useState(initial?.sortColumn ?? "");
   const [sortDir, setSortDir] = useState<"asc" | "desc">(initial?.sortDir ?? "asc");
 
   const datasetDef = dataset ? DATASET_MAP[dataset] : undefined;
   const fields = useMemo(() => datasetDef?.fields ?? [], [datasetDef]);
-  const aggregated = groupBy.length > 0 || aggregates.length > 0;
+  // Subtotal mode keeps row-level detail (grouped under a divider header
+  // with a per-group subtotal) instead of collapsing to one row per group —
+  // it's a separate, plain-columns query, so it's excluded from `aggregated`.
+  const subtotalMode = subtotals && groupBy.length > 0;
+  const aggregated = !subtotalMode && (groupBy.length > 0 || aggregates.length > 0);
 
   const numericFields = useMemo(
     () => fields.filter((f) => NUMERIC_FIELD_TYPES.includes(f.type)),
@@ -182,6 +199,7 @@ export function useAnalysisConfigBuilder(
     setFilters([]);
     setGroupBy([]);
     setAggregates([]);
+    setSubtotals(false);
     setSortColumn("");
     onDatasetChange?.(next);
   };
@@ -196,6 +214,7 @@ export function useAnalysisConfigBuilder(
         .filter((f): f is AnalysisFilter => f !== null),
       groupBy,
       aggregates: aggregates.filter((a) => a.column),
+      subtotals: subtotalMode,
       sortColumn: sortColumn || undefined,
       sortDir,
       limit: 500,
@@ -203,7 +222,12 @@ export function useAnalysisConfigBuilder(
   };
 
   const canRun =
-    !!dataset && (aggregated ? groupBy.length + aggregates.length > 0 : columns.length > 0);
+    !!dataset &&
+    (subtotalMode
+      ? columns.length > 0
+      : aggregated
+        ? groupBy.length + aggregates.length > 0
+        : columns.length > 0);
 
   return {
     dataset,
@@ -211,6 +235,7 @@ export function useAnalysisConfigBuilder(
     filters,
     groupBy,
     aggregates,
+    subtotals,
     sortColumn,
     sortDir,
     setDataset,
@@ -218,6 +243,7 @@ export function useAnalysisConfigBuilder(
     setFilters,
     setGroupBy,
     setAggregates,
+    setSubtotals,
     setSortColumn,
     setSortDir,
     handleDatasetChange,
@@ -225,6 +251,7 @@ export function useAnalysisConfigBuilder(
     fields,
     numericFields,
     grouped: aggregated,
+    subtotalMode,
     sortOptions,
     canRun,
     buildConfig,
@@ -252,6 +279,7 @@ export function hydrateBuilder(builder: AnalysisConfigBuilder, cfg: AnalysisConf
   );
   builder.setGroupBy(cfg.groupBy ?? []);
   builder.setAggregates((cfg.aggregates ?? []).map((a) => ({ column: a.column, fn: a.fn })));
+  builder.setSubtotals(cfg.subtotals ?? false);
   builder.setSortColumn(cfg.sortColumn ?? "");
   builder.setSortDir(cfg.sortDir ?? "asc");
 }

@@ -85,24 +85,29 @@ const COL_FILTERS: { key: ColFilterKey; label: string }[] = [
 
 // ── dispatch dialog ──────────────────────────────────────────────────────────
 
+interface DispatchItem {
+  job: CRMJob;
+  /** When set, this item is one visit within a package/multi-service job rather than the whole job. */
+  service: CRMJobService | null;
+}
+
 interface DispatchJobsDialogProps {
-  jobs: CRMJob[];
-  /** When scheduling a single visit within a package job, rather than the whole job. */
-  service?: CRMJobService | null;
+  items: DispatchItem[];
   onOpenChange: (open: boolean) => void;
   onDone: () => void;
 }
 
-function DispatchJobsDialog({ jobs, service, onOpenChange, onDone }: DispatchJobsDialogProps) {
+function DispatchJobsDialog({ items, onOpenChange, onDone }: DispatchJobsDialogProps) {
   const { data: crews } = useCRMCrews();
   const createVisit = useCreateVisit();
-  const [date, setDate] = useState(() => service?.startDate || toLocalDateString(new Date()));
+  const singleService = items.length === 1 ? items[0].service : null;
+  const [date, setDate] = useState(() => singleService?.startDate || toLocalDateString(new Date()));
   const [crewId, setCrewId] = useState("");
 
   async function handleDispatch() {
     if (!date) return;
     await Promise.all(
-      jobs.map((job) =>
+      items.map(({ job, service }) =>
         createVisit.mutateAsync({
           jobId: job.id,
           clientId: job.clientId,
@@ -114,9 +119,9 @@ function DispatchJobsDialog({ jobs, service, onOpenChange, onDone }: DispatchJob
       )
     );
     toast.success(
-      service
-        ? `${service.serviceName} dispatched for ${date}`
-        : `${jobs.length} job${jobs.length > 1 ? "s" : ""} dispatched for ${date}`
+      singleService
+        ? `${singleService.serviceName} dispatched for ${date}`
+        : `${items.length} job${items.length > 1 ? "s" : ""} dispatched for ${date}`
     );
     onDone();
     onOpenChange(false);
@@ -127,7 +132,7 @@ function DispatchJobsDialog({ jobs, service, onOpenChange, onDone }: DispatchJob
       <DialogContent className="max-w-sm">
         <DialogHeader>
           <DialogTitle>
-            {service ? `Dispatch — ${service.serviceName}` : `Dispatch ${jobs.length} Job${jobs.length > 1 ? "s" : ""}`}
+            {singleService ? `Dispatch — ${singleService.serviceName}` : `Dispatch ${items.length} Job${items.length > 1 ? "s" : ""}`}
           </DialogTitle>
         </DialogHeader>
 
@@ -283,12 +288,11 @@ export function WaitingList() {
   const [search, setSearch] = useState("");
   const [activeColFilter, setActiveColFilter] = useState<ColFilterKey | null>(null);
   const [colFilterValue, setColFilterValue] = useState("");
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
   const [visibleKeys, setVisibleKeys] = useState<string[]>(
     WAITING_LIST_COLUMNS.map((c) => c.key)
   );
-  const [dispatchJobs, setDispatchJobs] = useState<CRMJob[] | null>(null);
-  const [dispatchService, setDispatchService] = useState<{ job: CRMJob; service: CRMJobService } | null>(null);
+  const [dispatchItems, setDispatchItems] = useState<DispatchItem[] | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
 
@@ -355,18 +359,18 @@ export function WaitingList() {
     return rows;
   }, [filtered, startDate, endDate]);
 
-  const allSelected = filtered.length > 0 && filtered.every((j) => selectedIds.has(j.id));
-  const someSelected = selectedIds.size > 0;
+  const allSelected = visitRows.length > 0 && visitRows.every((r) => selectedKeys.has(r.key));
+  const someSelected = selectedKeys.size > 0;
 
   function toggleAll() {
-    if (allSelected) setSelectedIds(new Set());
-    else setSelectedIds(new Set(filtered.map((j) => j.id)));
+    if (allSelected) setSelectedKeys(new Set());
+    else setSelectedKeys(new Set(visitRows.map((r) => r.key)));
   }
 
-  function toggleOne(id: string) {
-    setSelectedIds((prev) => {
+  function toggleOne(key: string) {
+    setSelectedKeys((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
+      if (next.has(key)) next.delete(key); else next.add(key);
       return next;
     });
   }
@@ -472,7 +476,7 @@ export function WaitingList() {
               >
                 Actions
                 {someSelected && (
-                  <span className="ml-1 rounded-full bg-white/20 px-1.5 text-[10px]">{selectedIds.size}</span>
+                  <span className="ml-1 rounded-full bg-white/20 px-1.5 text-[10px]">{selectedKeys.size}</span>
                 )}
                 <ChevronDown className="ml-1 h-3 w-3" />
               </Button>
@@ -480,7 +484,9 @@ export function WaitingList() {
             <DropdownMenuContent align="start" className="w-56">
               <DropdownMenuItem
                 disabled={!someSelected}
-                onSelect={() => setDispatchJobs(filtered.filter((j) => selectedIds.has(j.id)))}
+                onSelect={() => setDispatchItems(
+                  visitRows.filter((r) => selectedKeys.has(r.key)).map((r) => ({ job: r.job, service: r.service }))
+                )}
               >
                 <Send className="mr-2 h-3.5 w-3.5" />
                 Dispatch Selected…
@@ -566,9 +572,9 @@ export function WaitingList() {
                   job={job}
                   service={service}
                   visibleKeys={visibleKeys}
-                  selected={selectedIds.has(job.id)}
-                  onToggle={() => toggleOne(job.id)}
-                  onSchedule={() => service ? setDispatchService({ job, service }) : setDispatchJobs([job])}
+                  selected={selectedKeys.has(key)}
+                  onToggle={() => toggleOne(key)}
+                  onSchedule={() => setDispatchItems([{ job, service }])}
                   onOpenJob={() => setSelectedJobId(job.id)}
                 />
               ))
@@ -577,20 +583,11 @@ export function WaitingList() {
         </table>
       </div>
 
-      {dispatchJobs && (
+      {dispatchItems && (
         <DispatchJobsDialog
-          jobs={dispatchJobs}
-          onOpenChange={(open) => { if (!open) setDispatchJobs(null); }}
-          onDone={() => { setSelectedIds(new Set()); refetch(); }}
-        />
-      )}
-
-      {dispatchService && (
-        <DispatchJobsDialog
-          jobs={[dispatchService.job]}
-          service={dispatchService.service}
-          onOpenChange={(open) => { if (!open) setDispatchService(null); }}
-          onDone={() => { refetch(); }}
+          items={dispatchItems}
+          onOpenChange={(open) => { if (!open) setDispatchItems(null); }}
+          onDone={() => { setSelectedKeys(new Set()); refetch(); }}
         />
       )}
 

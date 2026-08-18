@@ -897,7 +897,7 @@ export function useBulkImportLeads() {
           continue;
         }
 
-        const { error } = await supabase.from("clients").insert({
+        const { data: newClient, error } = await supabase.from("clients").insert({
           created_by: user?.id ?? null,
           display_name: displayName,
           account_type: r.accountType?.trim().toLowerCase() === "commercial" ? "commercial" : "residential",
@@ -910,8 +910,16 @@ export function useBulkImportLeads() {
           source: r.source?.trim() || null,
           status: "lead",
           client_since: new Date().toISOString().split("T")[0],
-        });
+        }).select("id").single();
         if (error) throw error;
+        // The dedup maps were only built once from the DB before this loop —
+        // without updating them here, two rows in the SAME csv sharing an
+        // email/phone would both create a new client instead of the second
+        // one matching the first.
+        if (newClient) {
+          if (email) byEmail.set(email, newClient.id);
+          if (phoneDigits) byPhone.set(phoneDigits, newClient.id);
+        }
         created++;
       }
 
@@ -928,15 +936,25 @@ export function useConvertLeadToClient() {
   return useMutation({
     mutationFn: async (id: string) => {
       const supabase = createClient();
-      const { error } = await supabase
+      // Conditioned on status still being "lead" — without this, converting
+      // a client whose status had already moved on (e.g. cancelled/lost via
+      // stale UI state, or a double-click) silently reactivated it as an
+      // active client and fired lead_converted_to_client, bypassing the
+      // intended lead → active transition entirely.
+      const { data: updated, error } = await supabase
         .from("clients")
         .update({ status: "active" })
-        .eq("id", id);
+        .eq("id", id)
+        .eq("status", "lead")
+        .select("id");
       if (error) throw error;
+      return { converted: (updated?.length ?? 0) > 0 };
     },
-    onSuccess: (_d, id) => {
+    onSuccess: (result, id) => {
       qc.invalidateQueries({ queryKey: ["clients"] });
-      fireAutomationTrigger({ triggerType: "lead_converted_to_client", clientId: id });
+      if (result.converted) {
+        fireAutomationTrigger({ triggerType: "lead_converted_to_client", clientId: id });
+      }
     },
   });
 }

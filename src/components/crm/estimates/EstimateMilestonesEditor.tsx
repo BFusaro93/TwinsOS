@@ -31,12 +31,17 @@ function amountFor(type: "flat" | "percent", value: number, totalCents: number):
 function MilestoneRow({
   milestone,
   totalCents,
+  overAllocated,
   clientId,
   salesRepId,
   estimateId,
 }: {
   milestone: EstimateMilestone;
   totalCents: number;
+  /** Milestones collectively total more than the estimate — block invoicing
+   *  until amounts are corrected, so an over-allocation can't turn into a
+   *  real invoice that overbills the client past the estimate's total. */
+  overAllocated: boolean;
   clientId: string;
   salesRepId: string | null;
   estimateId: string;
@@ -127,7 +132,8 @@ function MilestoneRow({
             size="sm"
             variant="outline"
             className="h-8 shrink-0 gap-1 text-xs"
-            disabled={creatingInvoice || amountCents <= 0}
+            disabled={creatingInvoice || amountCents <= 0 || overAllocated}
+            title={overAllocated ? "Milestones total more than the estimate — fix amounts before invoicing" : undefined}
             onClick={async () => {
               try {
                 const invoice = await createInvoice({
@@ -176,6 +182,7 @@ export function EstimateMilestonesEditor({
 
   const totalAllocatedCents = milestones.reduce((s, m) => s + m.amountCents, 0);
   const diffCents = totalCents - totalAllocatedCents;
+  const overAllocated = diffCents < 0;
 
   function handleAdd() {
     create.mutate({
@@ -197,6 +204,7 @@ export function EstimateMilestonesEditor({
           key={m.id}
           milestone={m}
           totalCents={totalCents}
+          overAllocated={overAllocated}
           clientId={clientId}
           salesRepId={salesRepId}
           estimateId={estimateId}

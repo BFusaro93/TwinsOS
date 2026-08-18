@@ -138,7 +138,20 @@ export function PMScheduleDetailPanel({ schedule }: PMScheduleDetailPanelProps) 
     setGenerating(true);
     setGenerateError(null);
     try {
-      const res = await fetch(`/api/pm-schedules/${schedule.id}/generate-wo`, { method: "POST" });
+      // Pass the browser's own local calendar date — the server has no
+      // stored org timezone to derive "today" from, and computing it via
+      // new Date().toISOString() there reads the server's UTC date, which
+      // for any US-based org can already be a day ahead of the org's actual
+      // business day (e.g. generating in the evening local time is already
+      // past UTC midnight) — advanceDate() then compounds that inflated
+      // day, skipping an occurrence.
+      const today = new Date();
+      const todayLocal = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+      const res = await fetch(`/api/pm-schedules/${schedule.id}/generate-wo`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ today: todayLocal }),
+      });
       const json = await res.json() as { parentWorkOrderId?: string; error?: string };
       if (!res.ok) throw new Error(json.error ?? "Failed to generate work orders");
       await queryClient.invalidateQueries({ queryKey: ["work-orders"] });

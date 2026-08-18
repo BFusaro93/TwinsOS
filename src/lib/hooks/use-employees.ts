@@ -254,8 +254,13 @@ export function useBulkImportEmployees() {
           if (error) throw error;
           updated++;
         } else {
-          const { error } = await supabase.from("crm_employees").insert(payload);
+          const { data: newEmployee, error } = await supabase.from("crm_employees").insert(payload).select("id").single();
           if (error) throw error;
+          // The dedup map was only built once from the DB before this loop —
+          // without updating it here, two rows in the SAME csv sharing an
+          // email would both create a new employee instead of the second
+          // one matching (updating) the first.
+          if (newEmployee && email) byEmail.set(email.toLowerCase(), newEmployee.id);
           created++;
         }
       }

@@ -918,17 +918,31 @@ export function useUpdateVisit() {
         }
       }
 
+      // Completing a visit must go through the /complete route below, which
+      // has its own idempotency guard keyed on reading status==='completed'
+      // from the DB (so a repeat "Mark Complete" click doesn't double-invoice
+      // or double-fire automations). Writing status:'completed' here FIRST
+      // would make that guard see the transition as already done and
+      // short-circuit — skipping the auto-invoice, automations, job-close
+      // cascade, and package next-visit recalc entirely, silently. So the
+      // completed transition itself is excluded from this raw update; every
+      // other field in `updates` (e.g. completion_notes, actual_hours) still
+      // writes directly, same as before.
+      const isCompleting = updates.status === 'completed';
+      const { status: _statusOmittedForCompletion, ...updatesWithoutStatus } = updates;
+      const dbUpdates = isCompleting ? updatesWithoutStatus : updates;
+
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any)
         .from('crm_job_visits')
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        .update(updates as any)
+        .update(dbUpdates as any)
         .eq('id', id);
       if (error) throw error;
 
       // Cascade completion to parent job via server route
       let clientId: string | undefined;
-      if (updates.status === 'completed' && id) {
+      if (isCompleting && id) {
         const res = await fetch(`/api/crm/visits/${id}/complete`, { method: 'POST' });
         if (!res.ok) {
           const body = await res.json() as { error?: string };
@@ -1301,9 +1315,15 @@ export function useBulkImportCRMServices() {
           if (error) throw error;
           updated++;
         } else {
+          // .select("id").single() + updating byCode below matters: two CSV
+          // rows sharing the same code within the same import both miss the
+          // DB-loaded byCode map (neither exists yet when it was built), so
+          // without this the second row fell through to insert a duplicate
+          // service instead of updating the one the first row just created.
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const { error } = await (supabase as any).from("crm_services").insert(payload);
+          const { data: inserted, error } = await (supabase as any).from("crm_services").insert(payload).select("id").single();
           if (error) throw error;
+          if (code && inserted?.id) byCode.set(code.toLowerCase(), inserted.id);
           created++;
         }
       }
@@ -1501,6 +1521,7 @@ export function useCreateJobsFromEstimate() {
       jobType,
       scheduledDate,
       crewId,
+      schedule,
       notesToCrew,
       services,
       materials,
@@ -1510,6 +1531,7 @@ export function useCreateJobsFromEstimate() {
       jobType: string;
       scheduledDate: string | null;
       crewId: string | null;
+      schedule?: string | null;
       notesToCrew: string | null;
       services: { serviceName: string; serviceId: string | null; qty: number; rateCents: number | null; totalCents: number; budgetedHours?: number; budgetMethod?: string }[];
       materials?: { productItemId: string; productName: string; qty: number; unitPriceCents: number | null }[];
@@ -1528,6 +1550,7 @@ export function useCreateJobsFromEstimate() {
           status: scheduledDate ? "scheduled" : "hold",
           scheduled_date: scheduledDate,
           crew_id: crewId,
+          schedule: schedule ?? null,
           notes_to_crew: notesToCrew,
           source: "estimate",
           rate_cents: services.reduce((s, sv) => s + sv.totalCents, 0),

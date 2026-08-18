@@ -234,12 +234,17 @@ async function syncOrg(
         continue;
       }
 
-      // Update current_value only when mileage actually increased.
+      // Update current_value only when mileage actually increased — conditioned
+      // on the DB row's CURRENT value (not the in-memory snapshot fetched at
+      // the top of this sync) so a concurrent sync run (this route can fire
+      // from both Vercel Cron and a manual admin POST) can't clobber a higher
+      // value with a lower one based on a stale read.
       if (miles > (meter.current_value ?? 0)) {
         await adminClient
           .from("meters")
           .update({ current_value: miles, last_reading_at: readingAt })
-          .eq("id", meter.id);
+          .eq("id", meter.id)
+          .lt("current_value", miles);
       }
 
       readings++;

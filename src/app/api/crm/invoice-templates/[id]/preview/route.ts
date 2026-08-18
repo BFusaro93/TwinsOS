@@ -32,6 +32,18 @@ const SAMPLE_INVOICE: Omit<InvoicePDFData, "invoiceNumber" | "invoiceDate"> = {
     { name: "Lawn Mowing", description: "Weekly mowing service", qty: 4, rateCents: 7500, totalCents: 30000 },
     { name: "Mulch Install", description: "3 yards double-shredded mulch", qty: 1, rateCents: 15000, totalCents: 15000 },
   ],
+  statement: {
+    accountNumber: "10042",
+    previousBalanceCents: 47813,
+    accountBalanceCents: 95626,
+    lastPayment: { amountCents: 47813, date: new Date().toISOString().slice(0, 10), reference: "7219443587" },
+    priorInvoice: {
+      invoiceNumber: 1000,
+      amountCents: 47813,
+      date: new Date(Date.now() - 30 * 86_400_000).toISOString().slice(0, 10),
+      daysPastDue: 1,
+    },
+  },
 };
 
 export async function GET(
@@ -53,8 +65,9 @@ export async function GET(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: template, error: templateErr } = await (supabase as any)
     .from("crm_invoice_pdf_templates")
-    .select("org_id, layout_key, logo_url, accent_color, show_notes")
+    .select("org_id, layout_key, logo_url, accent_color, show_notes, default_notes, advertisement_text")
     .eq("id", id)
+    .is("deleted_at", null)
     .single();
 
   if (templateErr || !template) {
@@ -75,7 +88,10 @@ export async function GET(
     ...SAMPLE_INVOICE,
     invoiceNumber: 1001,
     invoiceDate: new Date().toISOString().slice(0, 10),
-    notes: template.show_notes === false ? null : SAMPLE_INVOICE.notes,
+    notes: template.show_notes === false
+      ? null
+      : ((template.default_notes as string | null) || SAMPLE_INVOICE.notes),
+    advertisementText: (template.advertisement_text as string | null) ?? null,
   };
 
   const orgData: OrgPDFData = {

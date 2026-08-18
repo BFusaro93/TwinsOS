@@ -2,7 +2,34 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import { mapPurchaseOrder } from "@/lib/supabase/mappers";
+import { submitEntityForApproval } from "@/lib/hooks/use-approval-requests";
 import type { PurchaseOrder, POStatus, LineItem } from "@/types";
+
+/**
+ * A PO already in the approval pipeline ("pending" or "approved") must have
+ * its approval_requests chain re-derived whenever a line-item add/edit/delete
+ * changes its grand total — otherwise editing a line item after submission
+ * silently keeps whatever approvers were computed against the OLD total,
+ * bypassing a threshold the new total now crosses. Called after every
+ * line-item mutation below; a no-op for POs not currently in the pipeline
+ * (draft, rejected, ordered, etc).
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function resubmitPOForApprovalIfNeeded(supabase: any, poId: string, grandTotal: number) {
+  const { data: po } = await supabase
+    .from("purchase_orders")
+    .select("status")
+    .eq("id", poId)
+    .single();
+  if (po?.status === "pending" || po?.status === "approved") {
+    await submitEntityForApproval(supabase, {
+      entityId: poId,
+      entityType: "purchase_order",
+      grandTotalCents: grandTotal,
+    });
+    toast.info("PO total changed — re-submitted for approval.");
+  }
+}
 
 /** Safely convert any thrown value (including Supabase PostgrestError) to a readable string. */
 function serializeError(err: unknown): string {
@@ -400,7 +427,7 @@ async function importDenormalized(supabase: SupabaseClient, rows: Record<string,
       .single();
 
     if (poErr) {
-      if (poErr.code === "23505") { count++; continue; } // duplicate — skip
+      if (poErr.code === "23505") continue; // duplicate — skip, not counted as imported
       throw poErr;
     }
 
@@ -412,7 +439,12 @@ async function importDenormalized(supabase: SupabaseClient, rows: Record<string,
       const unitCostCents = Math.round(unitCostDollars * 100);
       const quantity = parseInt(getField(line, "Ordered Quantity", "orderedQuantity")) || 1;
 
-      // Find or create product catalog entry
+      // Find or create product catalog entry. Every po_line_items row must
+      // reference a catalog entry (CLAUDE.md: "Do not allow free-text item
+      // descriptions on POs") — a blank Part Number in the source CSV used to
+      // skip this whole block, leaving product_item_id null on the inserted
+      // line. Now falls back to matching/creating by item name so a line
+      // always ends up with a real catalog reference.
       let productItemId: string | null = null;
       if (partNumber) {
         const { data: existingProduct } = await supabase
@@ -446,7 +478,43 @@ async function importDenormalized(supabase: SupabaseClient, rows: Record<string,
             .single();
           if (newProduct) productItemId = newProduct.id;
         }
+      } else if (itemName) {
+        const { data: existingByName } = await supabase
+          .from("product_items")
+          .select("id")
+          .eq("name", itemName)
+          .is("deleted_at", null)
+          .limit(1)
+          .maybeSingle();
+
+        if (existingByName) {
+          productItemId = existingByName.id;
+        } else {
+          const { data: newProduct } = await supabase
+            .from("product_items")
+            .insert({
+              name: itemName,
+              part_number: "",
+              description: "",
+              category: "maintenance_part",
+              unit_cost: unitCostCents,
+              price: unitCostCents,
+              vendor_id: vendorId,
+              vendor_name: vendorName,
+              is_inventory: false,
+              alternate_vendors: [],
+              cost_layers: [],
+            })
+            .select("id")
+            .single();
+          if (newProduct) productItemId = newProduct.id;
+        }
       }
+
+      // No part number AND no name to key off of — nothing to link this line
+      // to a catalog entry, so skip it rather than insert a row that violates
+      // the "every line item references a catalog entry" invariant.
+      if (!productItemId) continue;
 
       // Sync to CMMS Parts inventory so the part appears in inventory and links back to this PO
       if (productItemId && partNumber) {
@@ -519,7 +587,11 @@ async function importFlat(supabase: SupabaseClient, rows: Record<string, string>
       vendor_name: r.vendorName.trim(),
       po_date: r.poDate?.trim() || null,
       invoice_number: r.invoiceNumber?.trim() || null,
-      status: r.status?.trim() || "requested",
+      // Raw CSV status text (e.g. "Approved", "Pending Approval", "Complete")
+      // must go through the same normalization importDenormalized uses —
+      // purchase_orders.status has a CHECK constraint on a fixed lowercase
+      // set, so any unnormalized value here throws and aborts that row.
+      status: r.status?.trim() ? mapStatus(r.status.trim()) : "requested",
       notes: r.notes?.trim() || null,
       subtotal: 0,
       tax_rate_percent: 0,
@@ -533,7 +605,7 @@ async function importFlat(supabase: SupabaseClient, rows: Record<string, string>
   for (const row of inserts) {
     const { error } = await supabase.from("purchase_orders").insert(row);
     if (error?.code === "23505") {
-      // skip duplicates
+      continue; // duplicate — skip, not counted as imported
     } else if (error) {
       throw error;
     }
@@ -657,6 +729,7 @@ export function useAddPOLineItem() {
       ]);
       if (lineErr) throw lineErr;
       if (poErr) throw poErr;
+      await resubmitPOForApprovalIfNeeded(supabase, poId, grandTotal);
     },
     onError: (err) => {
       toast.error(`Failed to add line item: ${serializeError(err)}`);
@@ -710,6 +783,7 @@ export function useUpdatePOLineItem() {
           `Line item ${item.id} was not updated — it may not exist or you may not have permission.`
         );
       }
+      await resubmitPOForApprovalIfNeeded(supabase, poId, grandTotal);
     },
     // Optimistically update the cache immediately so that:
     // 1. Any background refetch (window focus, etc.) doesn't overwrite the edit
@@ -791,6 +865,7 @@ export function useDeletePOLineItem() {
       ]);
       if (lineErr) throw lineErr;
       if (poErr) throw poErr;
+      await resubmitPOForApprovalIfNeeded(supabase, poId, grandTotal);
     },
     onMutate: async ({ poId, lineItemId, subtotal, salesTax, grandTotal }) => {
       await queryClient.cancelQueries({ queryKey: ["purchase-orders"] });
