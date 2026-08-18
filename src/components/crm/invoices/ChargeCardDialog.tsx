@@ -257,7 +257,7 @@ export function ChargeCardDialog({
                 <span className="tabular-nums">{formatCurrency(intent.totalChargeCents)}</span>
               </div>
             </div>
-            <Elements stripe={stripeJs} options={{ clientSecret: intent.clientSecret }}>
+            <Elements key={intent.clientSecret} stripe={stripeJs} options={{ clientSecret: intent.clientSecret }}>
               <PayForm totalChargeCents={intent.totalChargeCents} onSuccess={handleSuccess} />
             </Elements>
           </div>
