@@ -6,12 +6,23 @@ import { Elements, PaymentElement, useStripe, useElements } from "@stripe/react-
 import { Loader2, CreditCard, Check, X } from "lucide-react";
 import { useCreatePortalPaymentIntent, type CreatePaymentIntentResult } from "@/lib/hooks/use-portal-payments";
 
-let stripeJsPromise: Promise<StripeJs | null> | null = null;
-function getStripeJs(): Promise<StripeJs | null> | null {
+function hasPublishableKey(): boolean {
+  return Boolean(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY);
+}
+
+// PaymentIntents are created directly on the org's connected Stripe account (a
+// "direct charge"), so Stripe.js must be scoped to that same account to find/
+// confirm it. Cached per account id so re-opening the dialog doesn't reload it.
+const scopedStripeJsCache = new Map<string, Promise<StripeJs | null>>();
+function getScopedStripeJs(connectedAccountId: string): Promise<StripeJs | null> | null {
   const key = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY;
   if (!key) return null;
-  if (!stripeJsPromise) stripeJsPromise = loadStripe(key);
-  return stripeJsPromise;
+  let cached = scopedStripeJsCache.get(connectedAccountId);
+  if (!cached) {
+    cached = loadStripe(key, { stripeAccount: connectedAccountId });
+    scopedStripeJsCache.set(connectedAccountId, cached);
+  }
+  return cached;
 }
 
 function fmt(cents: number) {
@@ -77,7 +88,7 @@ export function PayInvoiceDialog({
   const [succeeded, setSucceeded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const createIntent = useCreatePortalPaymentIntent();
-  const stripeJs = getStripeJs();
+  const stripeJs = intent ? getScopedStripeJs(intent.connectedAccountId) : null;
 
   if (!open) return null;
 
@@ -126,7 +137,7 @@ export function PayInvoiceDialog({
             </button>
           </div>
         ) : !intent ? (
-          !stripeJs ? (
+          !hasPublishableKey() ? (
             <p className="py-4 text-sm text-slate-500">Online payments aren&apos;t available yet.</p>
           ) : (
             <div className="flex flex-col gap-4">

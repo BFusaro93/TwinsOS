@@ -12,12 +12,24 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { formatCurrency } from "@/lib/utils";
 import { useCreateCrmPaymentIntent, type CreatePaymentIntentResult } from "@/lib/hooks/use-crm-card-payments";
 
-let stripeJsPromise: Promise<StripeJs | null> | null = null;
-function getStripeJs(): Promise<StripeJs | null> | null {
+function hasPublishableKey(): boolean {
+  return Boolean(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY);
+}
+
+// The PaymentIntent is created directly on the org's connected Stripe account
+// (a "direct charge"), so Stripe.js must be initialized scoped to that same
+// account — a platform-scoped instance can't find/confirm it. Cached per
+// account id so re-opening the dialog for the same org doesn't reload Stripe.js.
+const scopedStripeJsCache = new Map<string, Promise<StripeJs | null>>();
+function getScopedStripeJs(connectedAccountId: string): Promise<StripeJs | null> | null {
   const key = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY;
   if (!key) return null;
-  if (!stripeJsPromise) stripeJsPromise = loadStripe(key);
-  return stripeJsPromise;
+  let cached = scopedStripeJsCache.get(connectedAccountId);
+  if (!cached) {
+    cached = loadStripe(key, { stripeAccount: connectedAccountId });
+    scopedStripeJsCache.set(connectedAccountId, cached);
+  }
+  return cached;
 }
 
 function PayForm({ totalChargeCents, onSuccess }: { totalChargeCents: number; onSuccess: () => void }) {
@@ -99,7 +111,7 @@ export function ChargeCardDialog({
     onCharged();
   }
 
-  const stripeJs = getStripeJs();
+  const stripeJs = intent ? getScopedStripeJs(intent.connectedAccountId) : null;
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -123,7 +135,7 @@ export function ChargeCardDialog({
             </Button>
           </div>
         ) : !intent ? (
-          !stripeJs ? (
+          !hasPublishableKey() ? (
             <p className="py-4 text-sm text-slate-500">
               Card payments aren&apos;t configured yet. Add the Stripe environment variables to enable this.
             </p>

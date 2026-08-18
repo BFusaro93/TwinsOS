@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/client";
 
 export interface CreatePaymentIntentResult {
   clientSecret: string;
+  connectedAccountId: string;
   balanceCents: number;
   feeCents: number;
   totalChargeCents: number;

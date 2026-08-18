@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import type Stripe from "stripe";
 import { createServiceClient } from "@/lib/supabase/server";
 import { getStripe, isStripeConfigured } from "@/lib/stripe/server";
+import { methodForCardBrand } from "@/lib/stripe/crm-payments";
+import { fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
 import { logger } from "@/lib/logger";
 
 const log = logger.child("stripe connect webhook");
@@ -55,26 +57,161 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Webhook handler failed" }, { status: 500 });
   }
 
-  if (event.type !== "account.updated") {
-    return NextResponse.json({ received: true });
-  }
+  switch (event.type) {
+    case "account.updated": {
+      const account = event.data.object as Stripe.Account;
+      try {
+        const { error } = await db
+          .from("organizations")
+          .update({
+            stripe_connect_status: statusForAccount(account),
+            stripe_connect_charges_enabled: account.charges_enabled,
+            stripe_connect_payouts_enabled: account.payouts_enabled,
+          })
+          .eq("stripe_connect_account_id", account.id);
+        if (error) throw error;
+      } catch (err) {
+        log.error("failed to apply account.updated", { error: err, accountId: account.id });
+        return NextResponse.json({ error: "Webhook handler failed" }, { status: 500 });
+      }
+      break;
+    }
 
-  const account = event.data.object as Stripe.Account;
+    case "payment_intent.payment_failed": {
+      const failedIntent = event.data.object as Stripe.PaymentIntent;
+      const { org_id: failedOrgId, client_id: failedClientId } = failedIntent.metadata ?? {};
+      if (failedIntent.metadata?.source === "crm_invoice" && failedOrgId && failedClientId) {
+        await fireSimpleTrigger(supabase, {
+          orgId: failedOrgId,
+          clientId: failedClientId,
+          triggerType: "credit_card_charge_failed",
+        });
+      }
+      break;
+    }
 
-  try {
-    const { error } = await db
-      .from("organizations")
-      .update({
-        stripe_connect_status: statusForAccount(account),
-        stripe_connect_charges_enabled: account.charges_enabled,
-        stripe_connect_payouts_enabled: account.payouts_enabled,
-      })
-      .eq("stripe_connect_account_id", account.id);
-    if (error) throw error;
-  } catch (err) {
-    log.error("failed to apply account.updated", { error: err, accountId: account.id });
-    return NextResponse.json({ error: "Webhook handler failed" }, { status: 500 });
+    case "payment_intent.succeeded": {
+      const result = await applyCrmInvoicePayment(stripe, db, supabase, event);
+      if (result === "error") {
+        return NextResponse.json({ error: "Failed to apply payment to invoice" }, { status: 500 });
+      }
+      break;
+    }
+
+    default:
+      break;
   }
 
   return NextResponse.json({ received: true });
+}
+
+/** Applies a succeeded crm_invoice PaymentIntent (from a connected account) to its invoice.
+ * Mirrors the platform-account version this superseded in src/app/api/crm/payments/webhook/route.ts. */
+async function applyCrmInvoicePayment(
+  stripe: Stripe,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  db: any,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  event: Stripe.Event
+): Promise<"applied" | "skipped" | "error"> {
+  const paymentIntent = event.data.object as Stripe.PaymentIntent;
+  if (paymentIntent.metadata?.source !== "crm_invoice") return "skipped";
+  if (!event.account) {
+    log.error("payment_intent.succeeded with no connected account on event", { paymentIntentId: paymentIntent.id });
+    return "error";
+  }
+
+  const { org_id: orgId, invoice_id: invoiceId, client_id: clientId } = paymentIntent.metadata;
+  const balanceCents = parseInt(paymentIntent.metadata.balance_cents, 10);
+  const feeCents = parseInt(paymentIntent.metadata.fee_cents, 10);
+
+  if (!orgId || !invoiceId || !clientId || !Number.isFinite(balanceCents) || !Number.isFinite(feeCents)) {
+    log.error("missing/invalid metadata on payment intent", { paymentIntentId: paymentIntent.id });
+    return "error";
+  }
+
+  let cardBrand: string | null = null;
+  try {
+    const charges = await stripe.charges.list(
+      { payment_intent: paymentIntent.id, limit: 1 },
+      { stripeAccount: event.account }
+    );
+    cardBrand = charges.data[0]?.payment_method_details?.card?.brand ?? null;
+  } catch {
+    cardBrand = null;
+  }
+
+  const { data: inserted, error: insertErr } = await db
+    .from("crm_payments")
+    .insert({
+      org_id: orgId,
+      invoice_id: invoiceId,
+      client_id: clientId,
+      amount_cents: balanceCents,
+      unused_amount_cents: 0,
+      payment_date: new Date().toISOString().slice(0, 10),
+      method: methodForCardBrand(cardBrand),
+      memo: "Paid online via card",
+      is_prepayment: false,
+      processing_fee_cents: feeCents,
+      stripe_payment_intent_id: paymentIntent.id,
+    })
+    .select("id")
+    .single();
+
+  if (insertErr) {
+    if (insertErr.code === "23505") {
+      // Already processed this PaymentIntent (Stripe retried the webhook delivery) — no-op.
+      return "skipped";
+    }
+    log.error("failed to insert crm_payments", { error: insertErr, paymentIntentId: paymentIntent.id });
+    return "error";
+  }
+
+  try {
+    const { data: invoice, error: invoiceErr } = await db
+      .from("crm_invoices")
+      .select("total_cents, amount_paid_cents, status")
+      .eq("id", invoiceId)
+      .single();
+    if (invoiceErr) throw invoiceErr;
+
+    const newPaid = Math.max(0, invoice.amount_paid_cents + balanceCents);
+    const newBalance = Math.max(0, invoice.total_cents - newPaid);
+    const openStatus = invoice.status === "printed" ? "printed" : "sent";
+    const newStatus = newBalance <= 0 ? "paid" : newPaid > 0 ? "partial" : openStatus;
+    const wasNewlyPaid = newStatus === "paid" && invoice.status !== "paid";
+
+    const { error: updateErr } = await db
+      .from("crm_invoices")
+      .update({ amount_paid_cents: newPaid, balance_cents: newBalance, status: newStatus })
+      .eq("id", invoiceId);
+    if (updateErr) throw updateErr;
+
+    if (wasNewlyPaid) {
+      await fireSimpleTrigger(supabase, { orgId, clientId, invoiceId, triggerType: "invoice_paid" });
+    }
+
+    const { error: allocErr } = await db
+      .from("crm_payment_allocations")
+      .insert({ org_id: orgId, payment_id: inserted.id, invoice_id: invoiceId, amount_cents: balanceCents });
+    if (allocErr) throw allocErr;
+
+    await db.rpc("sync_client_balance", { p_client_id: clientId });
+
+    await db.from("client_activity").insert({
+      client_id: clientId,
+      activity_type: "payment",
+      subject: `Payment received: ${methodForCardBrand(cardBrand)} (online)`,
+      amount_cents: balanceCents,
+      ref_id: inserted.id,
+      ref_table: "crm_payments",
+    });
+  } catch (err) {
+    log.error("recorded payment but failed to apply it", { error: err, paymentId: inserted.id });
+    return "error";
+  }
+
+  return "applied";
 }

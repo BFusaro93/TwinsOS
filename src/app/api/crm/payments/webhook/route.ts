@@ -8,6 +8,11 @@ import { logger } from "@/lib/logger";
 
 const log = logger.child("crm payments webhook");
 
+// Handles payment_intent events for PaymentIntents created on the PLATFORM
+// account. Since Stripe Connect onboarding, new crm_invoice PaymentIntents are
+// created directly on the org's connected account instead (a "direct charge"),
+// so their events arrive at connect-webhook/route.ts, not here. This endpoint
+// stays live only to finish processing any pre-Connect PaymentIntents still in flight.
 export async function POST(request: Request) {
   if (!isStripeConfigured() || !process.env.STRIPE_CRM_PAYMENTS_WEBHOOK_SECRET) {
     return NextResponse.json({ error: "Card payments are not configured yet" }, { status: 400 });
