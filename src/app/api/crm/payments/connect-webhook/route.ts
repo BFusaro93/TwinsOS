@@ -33,12 +33,17 @@ async function eventAccountOwnedByOrg(
 
 export async function POST(request: Request) {
   if (!isStripeConfigured() || !process.env.STRIPE_CONNECT_WEBHOOK_SECRET) {
+    log.error("connect webhook received but not configured", {
+      hasSecretKey: isStripeConfigured(),
+      hasWebhookSecret: Boolean(process.env.STRIPE_CONNECT_WEBHOOK_SECRET),
+    });
     return NextResponse.json({ error: "Card payments are not configured yet" }, { status: 400 });
   }
 
   const stripe = getStripe();
   const signature = request.headers.get("stripe-signature");
   if (!signature) {
+    log.error("connect webhook missing stripe-signature header");
     return NextResponse.json({ error: "Missing stripe-signature header" }, { status: 400 });
   }
 
