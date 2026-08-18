@@ -516,6 +516,21 @@ function GeneralTab() {
   const [burdenedDraft, setBurdenedDraft] = useState((burdenedLaborRateCents / 100).toFixed(2));
   const [orgNameDraft, setOrgNameDraft] = useState(orgName);
 
+  // The Save buttons below must compare against what's ACTUALLY persisted in
+  // organizations.customizations, not the zustand store's value — the store
+  // ships with hardcoded placeholder defaults (6927 / 5200, i.e. "$69.27" /
+  // "$52.00") that are never written to the DB on their own. If an org has
+  // never saved a rate, typing the exact same number the placeholder already
+  // shows made this comparison see "no change" and permanently disable Save,
+  // so the rate looked configured in the UI but never actually reached the
+  // database (and estimate line item cost auto-fill, which reads the DB
+  // value, never saw it).
+  const remoteCustomizations = (remoteSettings?.customizations as Record<string, unknown>) ?? {};
+  const persistedBreakevenCents =
+    typeof remoteCustomizations.breakevenLaborRateCents === "number" ? remoteCustomizations.breakevenLaborRateCents : -1;
+  const persistedBurdenedCents =
+    typeof remoteCustomizations.burdenedLaborRateCents === "number" ? remoteCustomizations.burdenedLaborRateCents : -1;
+
   useEffect(() => {
     if (!remoteSettings || seeded.current) return;
     seeded.current = true;
@@ -804,7 +819,7 @@ function GeneralTab() {
               <Button
                 size="sm"
                 className="h-8"
-                disabled={Math.round(parseFloat(breakevenDraft) * 100) === breakevenLaborRateCents}
+                disabled={Math.round(parseFloat(breakevenDraft) * 100) === persistedBreakevenCents}
                 onClick={() => {
                   const cents = Math.round((parseFloat(breakevenDraft) || 0) * 100);
                   setBreakevenLaborRateCents(cents);
@@ -833,7 +848,7 @@ function GeneralTab() {
               <Button
                 size="sm"
                 className="h-8"
-                disabled={Math.round(parseFloat(burdenedDraft) * 100) === burdenedLaborRateCents}
+                disabled={Math.round(parseFloat(burdenedDraft) * 100) === persistedBurdenedCents}
                 onClick={() => {
                   const cents = Math.round((parseFloat(burdenedDraft) || 0) * 100);
                   setBurdenedLaborRateCents(cents);

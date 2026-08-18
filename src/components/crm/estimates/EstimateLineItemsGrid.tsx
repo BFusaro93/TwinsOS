@@ -8,6 +8,7 @@ import { useCRMServices } from "@/lib/hooks/use-crm-jobs";
 import { useProducts } from "@/lib/hooks/use-products";
 import { useOrgSettings } from "@/lib/hooks/use-org-settings";
 import { useDiscounts } from "@/lib/hooks/use-crm-discounts";
+import { stripHtml } from "@/lib/utils/strip-html";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
@@ -795,8 +796,15 @@ export function EstimateLineItemsGrid({ estimateId, items, selectedIds = [], onS
           calc_type: 1,
           qty: 1,
           unit_type: unit,
-          estimate_desc: svc.estimateDesc ?? null,
-          invoice_desc: svc.invoiceDesc ?? null,
+          // Both are authored via a rich-text editor on the Service (Descriptions
+          // tab), but are only ever displayed/edited as plain text once copied
+          // onto a line item (see EstimateDetail.tsx's stripHtml(li.estimateDesc),
+          // the Invoice Description popover's plain textarea, and the actual
+          // invoice line item description on a generated invoice) — strip HTML
+          // here at copy time instead of showing raw "<p>...</p>" everywhere
+          // downstream.
+          estimate_desc: svc.estimateDesc ? stripHtml(svc.estimateDesc) || null : null,
+          invoice_desc: svc.invoiceDesc ? stripHtml(svc.invoiceDesc) || null : null,
           production_rate_sqft_per_hr: prodRate,
           budget_method: budgetMethod,
           rate_cents: svc.rateCents ?? 0,

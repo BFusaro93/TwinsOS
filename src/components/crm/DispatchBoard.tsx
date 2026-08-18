@@ -477,7 +477,11 @@ function JobDetailSheet({
   async function handleInvoice() {
     try {
       const serviceDate = visit.scheduledDate ?? new Date().toISOString().slice(0, 10);
-      const masterDescription = visit.invoiceDescription || job?.invoiceDescription || null;
+      // invoiceDescription is authored via a rich-text editor on the Service
+      // (and carried down onto the job/visit) — stripHtml() it before it
+      // reaches an actual generated invoice, or a client-facing invoice
+      // literally shows raw markup like "<p>...</p>".
+      const masterDescription = stripHtml(visit.invoiceDescription || job?.invoiceDescription || "") || null;
       const lineItems = services.map((s) => ({
         name: s.serviceName,
         description: masterDescription || stripHtml(s.serviceInvoiceDescription || "") || s.serviceName,
@@ -490,7 +494,7 @@ function JobDetailSheet({
       const invoice = await createInvoice({
         jobId: visit.jobId,
         clientId: visit.clientId,
-        description: visit.invoiceDescription ?? job?.invoiceDescription ?? serviceName,
+        description: masterDescription ?? serviceName,
         invoiceDate: visit.scheduledDate ?? new Date().toISOString().slice(0, 10),
         lineItems,
         subtotalCents,

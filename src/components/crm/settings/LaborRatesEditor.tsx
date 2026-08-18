@@ -33,6 +33,18 @@ export function LaborRatesEditor() {
     if (typeof savedBurdened === "number") setBurdenedDraft((savedBurdened / 100).toFixed(2));
   }, [remoteSettings]);
 
+  // Compare against what's ACTUALLY persisted, not the zustand store's
+  // in-memory value — the store ships with hardcoded placeholder defaults
+  // (6927 / 5200, i.e. "$69.27" / "$52.00") that are never written to the
+  // DB on their own. Comparing against those made Save permanently disable
+  // itself for anyone whose intended rate happened to match the
+  // placeholder, even though nothing had ever actually been saved.
+  const remoteCustomizations = (remoteSettings?.customizations as Record<string, unknown>) ?? {};
+  const persistedBreakevenCents =
+    typeof remoteCustomizations.breakevenLaborRateCents === "number" ? remoteCustomizations.breakevenLaborRateCents : -1;
+  const persistedBurdenedCents =
+    typeof remoteCustomizations.burdenedLaborRateCents === "number" ? remoteCustomizations.burdenedLaborRateCents : -1;
+
   return (
     <div className="space-y-4 text-xs">
       <p className="text-slate-500">
@@ -59,7 +71,7 @@ export function LaborRatesEditor() {
           <Button
             size="sm"
             className="h-8"
-            disabled={Math.round(parseFloat(breakevenDraft) * 100) === breakevenLaborRateCents}
+            disabled={Math.round(parseFloat(breakevenDraft) * 100) === persistedBreakevenCents}
             onClick={() => {
               const cents = Math.round((parseFloat(breakevenDraft) || 0) * 100);
               setBreakevenLaborRateCents(cents);
@@ -89,7 +101,7 @@ export function LaborRatesEditor() {
           <Button
             size="sm"
             className="h-8"
-            disabled={Math.round(parseFloat(burdenedDraft) * 100) === burdenedLaborRateCents}
+            disabled={Math.round(parseFloat(burdenedDraft) * 100) === persistedBurdenedCents}
             onClick={() => {
               const cents = Math.round((parseFloat(burdenedDraft) || 0) * 100);
               setBurdenedLaborRateCents(cents);
