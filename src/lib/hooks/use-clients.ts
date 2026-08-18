@@ -46,6 +46,7 @@ function mapClient(row: any): Client {
     defaultPaymentMethod: row.default_payment_method ?? null,
     savedPaymentMethodType: row.saved_payment_method_type ?? null,
     savedPaymentMethodSummary: row.saved_payment_method_summary ?? null,
+    autopayEnabled: row.autopay_enabled ?? true,
     invoiceDelivery: row.invoice_delivery ?? "email",
     officeNotes: row.office_notes ?? null,
     paymentMethod: row.payment_method,

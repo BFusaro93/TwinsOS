@@ -65,7 +65,7 @@ import { ClientProjectsTab } from "./ClientProjectsTab";
 import { ClientPhotosTab } from "./ClientPhotosTab";
 import { AerialMeasurementDialog } from "./AerialMeasurementDialog";
 import { SavedPaymentMethodDialog } from "./clients/SavedPaymentMethodDialog";
-import { useRemoveSavedPaymentMethod } from "@/lib/hooks/use-saved-payment-methods";
+import { useRemoveSavedPaymentMethod, useSetAutopayEnabled } from "@/lib/hooks/use-saved-payment-methods";
 import {
   useCustomFieldDefs,
   useClientCustomFieldValues,
@@ -230,6 +230,7 @@ function InfoRow({ label, value }: { label: string; value?: string | null }) {
 function SavedPaymentMethodSection({ client }: { client: Client }) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const removeMethod = useRemoveSavedPaymentMethod();
+  const setAutopayEnabled = useSetAutopayEnabled();
 
   async function handleRemove() {
     if (!confirm("Remove the saved payment method for this client? Autopay will stop until a new one is added.")) return;
@@ -241,11 +242,36 @@ function SavedPaymentMethodSection({ client }: { client: Client }) {
     }
   }
 
+  async function handleToggleAutopay() {
+    try {
+      await setAutopayEnabled.mutateAsync({ clientId: client.id, autopayEnabled: !client.autopayEnabled });
+      toast.success(client.autopayEnabled ? "Autopay turned off" : "Autopay turned on");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to update autopay setting");
+    }
+  }
+
   return (
     <div className="space-y-2">
       {client.savedPaymentMethodSummary ? (
         <div className="flex items-center gap-2 text-sm">
           <span className="text-slate-700">{client.savedPaymentMethodSummary}</span>
+          <span
+            className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
+              client.autopayEnabled ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"
+            }`}
+          >
+            Autopay {client.autopayEnabled ? "On" : "Off"}
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-6 text-xs"
+            onClick={handleToggleAutopay}
+            disabled={setAutopayEnabled.isPending}
+          >
+            Turn {client.autopayEnabled ? "Off" : "On"}
+          </Button>
           <Button variant="outline" size="sm" className="h-6 text-xs" onClick={() => setDialogOpen(true)}>
             Update
           </Button>

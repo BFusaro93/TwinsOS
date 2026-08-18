@@ -5,6 +5,8 @@ import { Elements, PaymentElement, useStripe, useElements } from "@stripe/react-
 import { Loader2, CreditCard, Check } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useCreateSetupIntent, useSaveSetupIntent, type CreateSetupIntentResult } from "@/lib/hooks/use-saved-payment-methods";
 import { hasPublishableKey, getScopedStripeJs } from "@/lib/stripe/client";
@@ -59,6 +61,7 @@ export function SavedPaymentMethodDialog({
   onSaved: () => void;
 }) {
   const [paymentMethod, setPaymentMethod] = useState<"card" | "us_bank_account">("card");
+  const [enableAutopay, setEnableAutopay] = useState(true);
   const [intent, setIntent] = useState<CreateSetupIntentResult | null>(null);
   const [succeeded, setSucceeded] = useState(false);
   const createSetupIntent = useCreateSetupIntent();
@@ -67,6 +70,7 @@ export function SavedPaymentMethodDialog({
   function handleOpenChange(next: boolean) {
     if (!next) {
       setPaymentMethod("card");
+      setEnableAutopay(true);
       setIntent(null);
       setSucceeded(false);
     }
@@ -84,7 +88,7 @@ export function SavedPaymentMethodDialog({
 
   async function handleSetupSuccess(setupIntentId: string) {
     try {
-      await saveSetupIntent.mutateAsync({ clientId, setupIntentId });
+      await saveSetupIntent.mutateAsync({ clientId, setupIntentId, enableAutopay });
       setSucceeded(true);
       onSaved();
     } catch (err) {
@@ -146,6 +150,21 @@ export function SavedPaymentMethodDialog({
                   Bank Account (ACH)
                 </button>
               </div>
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="enable-autopay"
+                  checked={enableAutopay}
+                  onCheckedChange={(v) => setEnableAutopay(v === true)}
+                />
+                <Label htmlFor="enable-autopay" className="text-sm font-normal text-slate-600">
+                  Automatically charge this method (autopay)
+                </Label>
+              </div>
+              {!enableAutopay && (
+                <p className="text-xs text-slate-400">
+                  This method will be kept on file for staff to charge manually, but won&apos;t appear in the To Charge queues.
+                </p>
+              )}
               <DialogFooter>
                 <Button variant="outline" onClick={() => handleOpenChange(false)}>
                   Cancel

@@ -8,6 +8,7 @@ export interface CreateSetupIntentResult {
 export interface SavedPaymentMethodResult {
   type: "card" | "us_bank_account";
   summary: string;
+  autopayEnabled: boolean;
 }
 
 export function useCreateSetupIntent() {
@@ -34,11 +35,19 @@ export function useCreateSetupIntent() {
 export function useSaveSetupIntent() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ clientId, setupIntentId }: { clientId: string; setupIntentId: string }) => {
+    mutationFn: async ({
+      clientId,
+      setupIntentId,
+      enableAutopay,
+    }: {
+      clientId: string;
+      setupIntentId: string;
+      enableAutopay: boolean;
+    }) => {
       const res = await fetch("/api/crm/payments/connect/setup-intent", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ clientId, setupIntentId }),
+        body: JSON.stringify({ clientId, setupIntentId, enableAutopay }),
       });
       const body = await res.json();
       if (!res.ok) throw new Error(body.error ?? "Failed to save payment method");
@@ -47,6 +56,27 @@ export function useSaveSetupIntent() {
     onSuccess: (_result, { clientId }) => {
       qc.invalidateQueries({ queryKey: ["clients", clientId] });
       qc.invalidateQueries({ queryKey: ["clients"] });
+    },
+  });
+}
+
+export function useSetAutopayEnabled() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ clientId, autopayEnabled }: { clientId: string; autopayEnabled: boolean }) => {
+      const res = await fetch("/api/crm/payments/connect/payment-method", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clientId, autopayEnabled }),
+      });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error ?? "Failed to update autopay setting");
+      return body as { autopayEnabled: boolean };
+    },
+    onSuccess: (_result, { clientId }) => {
+      qc.invalidateQueries({ queryKey: ["clients", clientId] });
+      qc.invalidateQueries({ queryKey: ["clients"] });
+      qc.invalidateQueries({ queryKey: ["crm-invoices"] });
     },
   });
 }

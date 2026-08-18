@@ -58,3 +58,39 @@ export async function DELETE(request: Request) {
 
   return NextResponse.json({ removed: true });
 }
+
+const SetAutopaySchema = z.object({ clientId: z.string().uuid(), autopayEnabled: z.boolean() });
+
+/** Flips whether a client's saved payment method is swept by the automatic
+ * "To Charge" / "ACH To Charge" queues, independent of the method itself — lets
+ * staff keep a card on file for occasional manual charges without autopay. */
+export async function PATCH(request: Request) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { data: profile } = await supabase.from("profiles").select("org_id").eq("id", user.id).single();
+  if (!profile) return NextResponse.json({ error: "Profile not found" }, { status: 403 });
+
+  const body = await request.json();
+  const parsed = SetAutopaySchema.safeParse(body);
+  if (!parsed.success) {
+    return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+  }
+  const { clientId, autopayEnabled } = parsed.data;
+
+  const { data: client } = await supabase
+    .from("clients")
+    .select("id")
+    .eq("id", clientId)
+    .eq("org_id", profile.org_id)
+    .is("deleted_at", null)
+    .single();
+  if (!client) return NextResponse.json({ error: "Client not found" }, { status: 404 });
+
+  const serviceClient = createServiceClient();
+  const { error } = await serviceClient.from("clients").update({ autopay_enabled: autopayEnabled }).eq("id", clientId);
+  if (error) return NextResponse.json({ error: "Failed to update autopay setting" }, { status: 500 });
+
+  return NextResponse.json({ autopayEnabled });
+}

@@ -81,6 +81,7 @@ export interface Client {
   // only ever written by the setup-intent save routes.
   savedPaymentMethodType: "card" | "us_bank_account" | null;
   savedPaymentMethodSummary: string | null;
+  autopayEnabled: boolean;
   officeNotes: string | null;
   cancellationReason: string | null;
   revenuePotentialCents: number;

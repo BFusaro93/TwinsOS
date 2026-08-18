@@ -80,7 +80,7 @@ export async function POST(request: Request) {
   });
 }
 
-const SaveSchema = z.object({ setupIntentId: z.string() });
+const SaveSchema = z.object({ setupIntentId: z.string(), enableAutopay: z.boolean().default(true) });
 
 export async function PUT(request: Request) {
   if (!isStripeConfigured()) {
@@ -95,7 +95,7 @@ export async function PUT(request: Request) {
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
-  const { setupIntentId } = parsed.data;
+  const { setupIntentId, enableAutopay } = parsed.data;
 
   const supabase = await createClient();
 
@@ -145,6 +145,7 @@ export async function PUT(request: Request) {
       saved_payment_method_id: pm.id,
       saved_payment_method_type: pm.type,
       saved_payment_method_summary: summary,
+      autopay_enabled: enableAutopay,
     })
     .eq("id", client.id);
   if (error) {
@@ -152,5 +153,5 @@ export async function PUT(request: Request) {
     return NextResponse.json({ error: "Failed to save payment method" }, { status: 500 });
   }
 
-  return NextResponse.json({ type: pm.type, summary });
+  return NextResponse.json({ type: pm.type, summary, autopayEnabled: enableAutopay });
 }

@@ -89,6 +89,7 @@ export async function POST(request: Request) {
 const SaveSchema = z.object({
   clientId: z.string().uuid(),
   setupIntentId: z.string(),
+  enableAutopay: z.boolean().default(true),
 });
 
 /** After the client confirms the SetupIntent with Stripe.js, this records the resulting
@@ -110,7 +111,7 @@ export async function PUT(request: Request) {
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
-  const { clientId, setupIntentId } = parsed.data;
+  const { clientId, setupIntentId, enableAutopay } = parsed.data;
 
   const { data: client } = await supabase
     .from("clients")
@@ -160,6 +161,7 @@ export async function PUT(request: Request) {
       saved_payment_method_id: pm.id,
       saved_payment_method_type: pm.type,
       saved_payment_method_summary: summary,
+      autopay_enabled: enableAutopay,
     })
     .eq("id", clientId);
   if (error) {
@@ -167,5 +169,5 @@ export async function PUT(request: Request) {
     return NextResponse.json({ error: "Failed to save payment method" }, { status: 500 });
   }
 
-  return NextResponse.json({ type: pm.type, summary });
+  return NextResponse.json({ type: pm.type, summary, autopayEnabled: enableAutopay });
 }

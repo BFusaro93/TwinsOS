@@ -115,7 +115,8 @@ function isChargeableBy(i: CRMInvoice, method: "card" | "us_bank_account") {
     i.status !== "draft" &&
     i.status !== "void" &&
     i.balanceCents > 0 &&
-    i.clientSavedPaymentMethodType === method
+    i.clientSavedPaymentMethodType === method &&
+    i.clientAutopayEnabled !== false
   );
 }
 

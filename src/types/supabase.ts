@@ -1333,6 +1333,7 @@ export type Database = {
         Row: {
           account_number: string | null
           account_type: string
+          autopay_enabled: boolean
           balance_credits_cents: number
           balance_outstanding_cents: number
           balance_prepay_cents: number
@@ -1404,6 +1405,7 @@ export type Database = {
         Insert: {
           account_number?: string | null
           account_type?: string
+          autopay_enabled?: boolean
           balance_credits_cents?: number
           balance_outstanding_cents?: number
           balance_prepay_cents?: number
@@ -1475,6 +1477,7 @@ export type Database = {
         Update: {
           account_number?: string | null
           account_type?: string
+          autopay_enabled?: boolean
           balance_credits_cents?: number
           balance_outstanding_cents?: number
           balance_prepay_cents?: number

@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { formatCurrency } from "@/lib/utils";
 import { useCreateCrmPaymentIntent, type CreatePaymentIntentResult } from "@/lib/hooks/use-crm-card-payments";
+import { useChargeAutopayInvoice } from "@/lib/hooks/use-autopay-invoices";
 import { hasPublishableKey, getScopedStripeJs } from "@/lib/stripe/client";
 
 function PayForm({ totalChargeCents, onSuccess }: { totalChargeCents: number; onSuccess: () => void }) {
@@ -54,12 +55,14 @@ function PayForm({ totalChargeCents, onSuccess }: { totalChargeCents: number; on
 export function ChargeCardDialog({
   invoiceId,
   balanceCents,
+  savedPaymentMethod,
   open,
   onOpenChange,
   onCharged,
 }: {
   invoiceId: string;
   balanceCents: number;
+  savedPaymentMethod?: { type: "card" | "us_bank_account"; summary: string } | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onCharged: () => void;
@@ -71,6 +74,7 @@ export function ChargeCardDialog({
   const [intent, setIntent] = useState<CreatePaymentIntentResult | null>(null);
   const [succeeded, setSucceeded] = useState(false);
   const createIntent = useCreateCrmPaymentIntent();
+  const chargeSaved = useChargeAutopayInvoice();
 
   function handleOpenChange(next: boolean) {
     if (!next) {
@@ -82,6 +86,16 @@ export function ChargeCardDialog({
       setSucceeded(false);
     }
     onOpenChange(next);
+  }
+
+  async function handleChargeSaved() {
+    try {
+      await chargeSaved.mutateAsync({ invoiceId });
+      setSucceeded(true);
+      onCharged();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to charge saved payment method");
+    }
   }
 
   async function handleContinue() {
@@ -141,6 +155,16 @@ export function ChargeCardDialog({
                 <span className="text-slate-500">Balance Due</span>
                 <span className="font-semibold tabular-nums">{formatCurrency(balanceCents)}</span>
               </div>
+              {savedPaymentMethod && (
+                <div className="flex items-center justify-between rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
+                  <span className="text-sm text-slate-700">{savedPaymentMethod.summary} on file</span>
+                  <Button size="sm" onClick={() => void handleChargeSaved()} disabled={chargeSaved.isPending}>
+                    {chargeSaved.isPending && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
+                    Charge Saved
+                  </Button>
+                </div>
+              )}
+              {savedPaymentMethod && <p className="text-xs text-slate-400">Or enter a new payment method:</p>}
               <div className="grid grid-cols-2 gap-2">
                 <button
                   type="button"
