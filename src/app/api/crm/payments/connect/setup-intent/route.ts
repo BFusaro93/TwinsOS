@@ -3,6 +3,7 @@ import { z } from "zod";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { getStripe, isStripeConfigured } from "@/lib/stripe/server";
 import { getOrCreateStripeCustomer, summarizePaymentMethod } from "@/lib/stripe/saved-payment-methods";
+import { achEnabledForAccount } from "@/lib/stripe/connect";
 import { logger } from "@/lib/logger";
 
 const log = logger.child("stripe saved payment method (crm)");
@@ -57,6 +58,14 @@ export async function POST(request: Request) {
   }
 
   const stripe = getStripe();
+
+  if (paymentMethod === "us_bank_account" && !(await achEnabledForAccount(stripe, org.stripe_connect_account_id))) {
+    return NextResponse.json(
+      { error: "ACH isn't enabled on this Stripe account yet — enable US bank account payments under Payment methods in the Stripe dashboard first." },
+      { status: 400 }
+    );
+  }
+
   const customerId = await getOrCreateStripeCustomer(
     stripe,
     org.stripe_connect_account_id,

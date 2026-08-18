@@ -42,7 +42,8 @@ function PayForm({ totalChargeCents, onSuccess }: { totalChargeCents: number; on
 
   return (
     <div className="flex flex-col gap-4">
-      <PaymentElement />
+      {/* Staff are entering the client's card, not their own — see SavedPaymentMethodDialog. */}
+      <PaymentElement options={{ wallets: { link: "never" } }} />
       {error && <p className="text-sm text-red-600">{error}</p>}
       <Button onClick={handleConfirm} disabled={submitting || !stripe} className="w-full">
         {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}

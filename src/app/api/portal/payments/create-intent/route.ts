@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getPortalContext } from "@/lib/portal/get-portal-context";
 import { getStripe, isStripeConfigured } from "@/lib/stripe/server";
 import { computeProcessingFee } from "@/lib/stripe/crm-payments";
+import { achEnabledForAccount } from "@/lib/stripe/connect";
 
 const CreateIntentSchema = z.object({
   invoiceId: z.string().uuid(),
@@ -68,6 +69,11 @@ export async function POST(request: Request) {
       : { feeCents: 0, totalChargeCents: invoice.balance_cents };
 
   const stripe = getStripe();
+
+  if (paymentMethod === "us_bank_account" && !(await achEnabledForAccount(stripe, org.stripe_connect_account_id))) {
+    return NextResponse.json({ error: "Bank transfer isn't available yet — please pay by card." }, { status: 400 });
+  }
+
   // Direct charge on the org's connected account — see create-intent/route.ts
   // (CRM staff-facing version) for the same pattern.
   const paymentIntent = await stripe.paymentIntents.create(

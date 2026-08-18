@@ -39,7 +39,11 @@ function SetupForm({ onSuccess }: { onSuccess: (setupIntentId: string) => void }
 
   return (
     <div className="flex flex-col gap-4">
-      <PaymentElement />
+      {/* Staff are entering the CLIENT's card, not their own — Link (Stripe's
+       * autofill/1-click network) defaults to "auto" and puts itself ahead of the
+       * plain card fields, which only makes sense when the person filling in the
+       * form owns the card. */}
+      <PaymentElement options={{ wallets: { link: "never" } }} />
       {error && <p className="text-sm text-red-600">{error}</p>}
       <Button onClick={handleConfirm} disabled={submitting || !stripe} className="w-full">
         {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}

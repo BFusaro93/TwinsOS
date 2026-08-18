@@ -4,6 +4,7 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { getPortalContext } from "@/lib/portal/get-portal-context";
 import { getStripe, isStripeConfigured } from "@/lib/stripe/server";
 import { getOrCreateStripeCustomer, summarizePaymentMethod } from "@/lib/stripe/saved-payment-methods";
+import { achEnabledForAccount } from "@/lib/stripe/connect";
 import { logger } from "@/lib/logger";
 
 const log = logger.child("stripe saved payment method (portal)");
@@ -51,6 +52,11 @@ export async function POST(request: Request) {
   }
 
   const stripe = getStripe();
+
+  if (paymentMethod === "us_bank_account" && !(await achEnabledForAccount(stripe, org.stripe_connect_account_id))) {
+    return NextResponse.json({ error: "Bank transfer isn't available yet — please pay by card." }, { status: 400 });
+  }
+
   const customerId = await getOrCreateStripeCustomer(
     stripe,
     org.stripe_connect_account_id,
