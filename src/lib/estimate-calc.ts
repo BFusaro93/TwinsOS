@@ -367,13 +367,26 @@ export async function recalcEstimateTotals(supabase: AnySupabaseClient, estimate
   const taxCents = Math.round((revenueCents * (est.tax_rate_bps ?? 0)) / 10000);
   const totalCents = revenueCents + taxCents;
 
+  // Overhead must be based on the estimate's FULL cost base — line items'
+  // own modeled cost (total_cost_cents) AND estimate_direct_costs rows —
+  // not just one or the other. Previously the flat-rate branch only looked
+  // at totalCostCents (line items) and ignored directTotal entirely, while
+  // the per-type branch only looked at directCosts and ignored line items'
+  // cost entirely: an estimate whose cost lives mostly in Direct Costs
+  // (materials/subcontract/equipment entered there rather than modeled on
+  // line items) showed a configured flat overhead rate (e.g. 15%) but $0
+  // actual Overhead Cost and no gross→net deduction, since totalCostCents
+  // alone was 0. Line items' cost has no cost_type of its own — it's
+  // modeled/production-rate labor cost, so it's treated as 'labor' here,
+  // matching how EstimateSummaryPanel's own cost-breakdown display already
+  // buckets it (costByType.labor += line items' totalCostCents).
   const overheadCostCents = hasPerTypeOverhead(overheadSettings)
     ? (directCosts ?? []).reduce(
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (sum: number, dc: any) => sum + computeDirectCostOverhead(dc.cost_type, dc.total_cents, overheadSettings),
         0
-      )
-    : Math.round((totalCostCents * (est.overhead_rate_bps ?? 0)) / 10000);
+      ) + computeDirectCostOverhead("labor", totalCostCents, overheadSettings)
+    : Math.round(((totalCostCents + directTotal) * (est.overhead_rate_bps ?? 0)) / 10000);
 
   const grossProfitCents = revenueCents - totalCostCents - directTotal;
   const netProfitCents = grossProfitCents - overheadCostCents;
