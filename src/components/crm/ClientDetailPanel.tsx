@@ -106,6 +106,7 @@ import {
   X,
   ExternalLink,
   Search,
+  CreditCard,
 } from "lucide-react";
 import type { Client, ClientContact, ContactPhone, PhoneType } from "@/types/crm";
 import type { CRMJob, CRMJobVisit, CRMJobService } from "@/types/crm-jobs";
@@ -2897,6 +2898,19 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
 
             {/* Tags + source/client since — bottom-aligned with the balance card */}
             <div className="flex flex-col gap-2">
+              {client.savedPaymentMethodSummary && (
+                <div className="flex items-center gap-1.5 text-xs text-slate-500">
+                  <CreditCard className="h-3.5 w-3.5 text-slate-400" />
+                  {client.savedPaymentMethodSummary}
+                  <span
+                    className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${
+                      client.autopayEnabled ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"
+                    }`}
+                  >
+                    Autopay {client.autopayEnabled ? "On" : "Off"}
+                  </span>
+                </div>
+              )}
               <TagEditor
                 tags={client.tags ?? []}
                 suggestions={orgTags}

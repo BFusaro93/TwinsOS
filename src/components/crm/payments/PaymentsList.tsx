@@ -35,7 +35,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { formatCurrency } from "@/lib/utils";
-import { Plus, RotateCcw, Search, X, Loader2, Check } from "lucide-react";
+import { Plus, RotateCcw, Search, X, Loader2, Check, CreditCard } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { ClientCombobox } from "@/components/shared/ClientCombobox";
 import { ColumnChooser } from "@/components/shared/ColumnChooser";
@@ -479,13 +479,16 @@ export function AddPaymentDialog({
           <DialogTitle className="text-lg font-semibold flex items-center justify-between">
             <span>{isCreditMode ? (isEdit ? "Edit Account Credit" : "Issue Account Credit") : (isEdit ? "Edit Payment" : chargeMode ? "Charge Card / Bank" : "Add Payment")}</span>
             {canCharge && (
-              <button
+              <Button
                 type="button"
+                size="sm"
+                variant={chargeMode ? "outline" : "default"}
                 onClick={() => setChargeMode((v) => !v)}
-                className="text-xs font-normal text-brand-600 hover:underline"
+                className={chargeMode ? "" : "bg-brand-500 hover:bg-brand-600 text-white"}
               >
-                {chargeMode ? "Record a payment instead" : "Charge a card/bank instead"}
-              </button>
+                {!chargeMode && <CreditCard className="mr-1.5 h-3.5 w-3.5" />}
+                {chargeMode ? "Record a payment instead" : "Charge a Card/Bank Instead"}
+              </Button>
             )}
           </DialogTitle>
         </DialogHeader>
