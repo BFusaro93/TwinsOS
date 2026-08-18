@@ -465,7 +465,7 @@ function UserSettingsTab({
               </SelectContent>
             </Select>
           </Field>
-          <Field label="CRM Role">
+          <Field label="Landscapt Role">
             <Select value={form.crm_role_id ?? "none"} onValueChange={(v) => onChange("crm_role_id", v === "none" ? null : v)}>
               <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="No role assigned" /></SelectTrigger>
               <SelectContent>

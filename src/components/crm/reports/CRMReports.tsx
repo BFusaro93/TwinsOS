@@ -56,7 +56,7 @@ export function CRMReports({ hideHeader = false }: { hideHeader?: boolean }) {
       {!hideHeader && (
         <PageHeader
           title="Reports"
-          description="CRM performance metrics and business analytics."
+          description="Landscapt performance metrics and business analytics."
         />
       )}
 
