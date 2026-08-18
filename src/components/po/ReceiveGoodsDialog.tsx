@@ -155,9 +155,15 @@ export function ReceiveGoodsDialog({
   const salesTax = Math.round(taxableSubtotal * (po.taxRatePercent / 100));
   const grandTotal = subtotal + salesTax + po.shippingCost;
 
-  const allFullyReceived = lines.every(
-    (l) => l.quantityReceived === l.quantityOrdered
-  );
+  // A line already fully received in a prior receipt defaults to
+  // quantityReceived: 0 (remaining) in this session's draft — comparing that
+  // bare value to quantityOrdered would wrongly mark a since-completed line
+  // as short, permanently pinning the PO at "partially_fulfilled" once any
+  // line had been received across more than one receipt.
+  const allFullyReceived = lines.every((l) => {
+    const alreadyReceived = alreadyReceivedMap.get(l.lineItemId) ?? 0;
+    return alreadyReceived + l.quantityReceived >= l.quantityOrdered;
+  });
   const someReceived = lines.some((l) => l.quantityReceived > 0);
   const isValid = someReceived && receivedById !== "";
 
