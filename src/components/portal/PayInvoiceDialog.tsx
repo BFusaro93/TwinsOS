@@ -181,7 +181,7 @@ export function PayInvoiceDialog({
                 <span className="tabular-nums">{fmt(intent.totalChargeCents)}</span>
               </div>
             </div>
-            <Elements stripe={stripeJs} options={{ clientSecret: intent.clientSecret }}>
+            <Elements key={intent.clientSecret} stripe={stripeJs} options={{ clientSecret: intent.clientSecret }}>
               <PayForm totalChargeCents={intent.totalChargeCents} onSuccess={handleSuccess} />
             </Elements>
           </div>

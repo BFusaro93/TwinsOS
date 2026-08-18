@@ -41,10 +41,12 @@ export async function POST(request: Request) {
   if (org.stripe_connect_account_id) {
     const synced = await syncConnectStatusFromStripe(stripe, org.id, org.stripe_connect_account_id);
     if (synced.chargesEnabled) {
-      // Already fully onboarded — send them to their own Stripe Standard
-      // dashboard instead of re-running the onboarding flow.
-      const loginLink = await stripe.accounts.createLoginLink(org.stripe_connect_account_id);
-      return NextResponse.json({ url: loginLink.url });
+      // Already fully onboarded. Standard accounts are the connected merchant's own,
+      // independent Stripe account — createLoginLink() is an Express-only API and
+      // always throws "does not have access to the Express Dashboard" for these, so
+      // there's no platform-generated SSO link. They just log into their own
+      // dashboard.stripe.com with their own Stripe credentials.
+      return NextResponse.json({ url: "https://dashboard.stripe.com" });
     }
   }
 

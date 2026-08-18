@@ -165,7 +165,7 @@ export function SavedPaymentMethodDialog({
             </div>
           )
         ) : (
-          <Elements stripe={stripeJs} options={{ clientSecret: intent.clientSecret }}>
+          <Elements key={intent.clientSecret} stripe={stripeJs} options={{ clientSecret: intent.clientSecret }}>
             <SetupForm onSuccess={handleSetupSuccess} />
           </Elements>
         )}
