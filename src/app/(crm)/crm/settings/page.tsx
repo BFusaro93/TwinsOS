@@ -74,6 +74,7 @@ import type { CRMService } from "@/types/crm-jobs";
 import { RolesList } from "@/components/crm/roles/RolesList";
 import { EstimateStagesEditor } from "@/components/crm/settings/EstimateStagesEditor";
 import { OverheadSettingsEditor } from "@/components/crm/settings/OverheadSettingsEditor";
+import { LaborRatesEditor } from "@/components/crm/settings/LaborRatesEditor";
 import { ClientPortalTab } from "@/components/crm/settings/ClientPortalSettings";
 import { SnowRoutesEditor } from "@/components/crm/settings/SnowRoutesEditor";
 import { ChemicalTrackingTab } from "@/components/crm/settings/ChemicalTrackingSettings";
@@ -898,6 +899,9 @@ function EstimatesTab() {
       </AccordionSection>
       <AccordionSection title="Won/Lost Reasons" count={estimateReasonItems.length}>
         <OrgListEditor listName="estimate_reasons" addPlaceholder="e.g. Seasonal" />
+      </AccordionSection>
+      <AccordionSection title="Labor Rates" count={0}>
+        <LaborRatesEditor />
       </AccordionSection>
       <AccordionSection title="Overhead Recovery" count={0}>
         <OverheadSettingsEditor />
