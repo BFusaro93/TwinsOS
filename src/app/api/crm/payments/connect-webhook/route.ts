@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import type Stripe from "stripe";
 import { createServiceClient } from "@/lib/supabase/server";
 import { getStripe, isStripeConfigured } from "@/lib/stripe/server";
-import { methodForPaymentIntent } from "@/lib/stripe/crm-payments";
+import { methodForPaymentIntent, decodeAllocations } from "@/lib/stripe/crm-payments";
 import { statusForAccount } from "@/lib/stripe/connect";
 import { fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
 import { logger } from "@/lib/logger";
@@ -96,7 +96,7 @@ export async function POST(request: Request) {
       const failedIntent = event.data.object as Stripe.PaymentIntent;
       const { org_id: failedOrgId, client_id: failedClientId } = failedIntent.metadata ?? {};
       if (
-        failedIntent.metadata?.source === "crm_invoice" &&
+        (failedIntent.metadata?.source === "crm_invoice" || failedIntent.metadata?.source === "crm_invoice_multi") &&
         failedOrgId &&
         failedClientId &&
         event.account &&
@@ -112,7 +112,12 @@ export async function POST(request: Request) {
     }
 
     case "payment_intent.succeeded": {
-      const result = await applyCrmInvoicePayment(stripe, db, supabase, event);
+      const paymentIntent = event.data.object as Stripe.PaymentIntent;
+      const source = paymentIntent.metadata?.source;
+      const result =
+        source === "crm_invoice_multi"
+          ? await applyCrmInvoiceMultiPayment(stripe, db, supabase, event)
+          : await applyCrmInvoicePayment(stripe, db, supabase, event);
       if (result === "error") {
         return NextResponse.json({ error: "Failed to apply payment to invoice" }, { status: 500 });
       }
@@ -249,6 +254,142 @@ async function applyCrmInvoicePayment(
     });
   } catch (err) {
     log.error("recorded payment but failed to apply it", { error: err, paymentId: inserted.id });
+    return "error";
+  }
+
+  return "applied";
+}
+
+/** Applies a succeeded crm_invoice_multi PaymentIntent — one charge split across several
+ * invoices for the same client — mirrors applyCrmInvoicePayment above but loops the invoice
+ * update + allocation insert per invoice under a single crm_payments row, the same way a
+ * manually-recorded multi-invoice payment is split via crm_payment_allocations. */
+async function applyCrmInvoiceMultiPayment(
+  stripe: Stripe,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  db: any,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  event: Stripe.Event
+): Promise<"applied" | "skipped" | "error"> {
+  const paymentIntent = event.data.object as Stripe.PaymentIntent;
+  if (paymentIntent.metadata?.source !== "crm_invoice_multi") return "skipped";
+  if (!event.account) {
+    log.error("payment_intent.succeeded with no connected account on event", { paymentIntentId: paymentIntent.id });
+    return "error";
+  }
+
+  const { org_id: orgId, client_id: clientId, allocations: encodedAllocations } = paymentIntent.metadata;
+  const feeCents = parseInt(paymentIntent.metadata.fee_cents, 10);
+
+  if (!orgId || !clientId || !encodedAllocations || !Number.isFinite(feeCents)) {
+    log.error("missing/invalid metadata on multi-invoice payment intent", { paymentIntentId: paymentIntent.id });
+    return "error";
+  }
+
+  if (!(await eventAccountOwnedByOrg(db, orgId, event.account))) {
+    log.error("payment intent metadata org_id does not own the connected account the event fired on", {
+      paymentIntentId: paymentIntent.id,
+      orgId,
+      eventAccount: event.account,
+    });
+    return "error";
+  }
+
+  const allocations = decodeAllocations(encodedAllocations);
+  const totalCents = allocations.reduce((sum, a) => sum + a.amountCents, 0);
+
+  let cardBrand: string | null = null;
+  const isAch = paymentIntent.payment_method_types.includes("us_bank_account");
+  if (!isAch) {
+    try {
+      const charges = await stripe.charges.list(
+        { payment_intent: paymentIntent.id, limit: 1 },
+        { stripeAccount: event.account }
+      );
+      cardBrand = charges.data[0]?.payment_method_details?.card?.brand ?? null;
+    } catch {
+      cardBrand = null;
+    }
+  }
+  const method = methodForPaymentIntent(paymentIntent.payment_method_types, cardBrand);
+
+  const { data: inserted, error: insertErr } = await db
+    .from("crm_payments")
+    .insert({
+      org_id: orgId,
+      invoice_id: allocations.length === 1 ? allocations[0].invoiceId : null,
+      client_id: clientId,
+      amount_cents: totalCents,
+      unused_amount_cents: 0,
+      payment_date: new Date().toISOString().slice(0, 10),
+      method,
+      memo: isAch ? "Paid online via bank transfer" : "Paid online via card",
+      is_prepayment: false,
+      processing_fee_cents: feeCents,
+      stripe_payment_intent_id: paymentIntent.id,
+    })
+    .select("id")
+    .single();
+
+  if (insertErr) {
+    if (insertErr.code === "23505") {
+      // Already processed this PaymentIntent (Stripe retried the webhook delivery) — no-op.
+      return "skipped";
+    }
+    log.error("failed to insert crm_payments", { error: insertErr, paymentIntentId: paymentIntent.id });
+    return "error";
+  }
+
+  try {
+    const newlyPaidInvoiceIds: string[] = [];
+
+    for (const alloc of allocations) {
+      const { data: invoice, error: invoiceErr } = await db
+        .from("crm_invoices")
+        .select("total_cents, amount_paid_cents, status")
+        .eq("id", alloc.invoiceId)
+        .eq("org_id", orgId)
+        .single();
+      if (invoiceErr) throw invoiceErr;
+
+      const newPaid = Math.max(0, invoice.amount_paid_cents + alloc.amountCents);
+      const newBalance = Math.max(0, invoice.total_cents - newPaid);
+      const openStatus = invoice.status === "printed" ? "printed" : "sent";
+      const newStatus = newBalance <= 0 ? "paid" : newPaid > 0 ? "partial" : openStatus;
+      const wasNewlyPaid = newStatus === "paid" && invoice.status !== "paid";
+
+      const { error: updateErr } = await db
+        .from("crm_invoices")
+        .update({ amount_paid_cents: newPaid, balance_cents: newBalance, status: newStatus })
+        .eq("id", alloc.invoiceId)
+        .eq("org_id", orgId);
+      if (updateErr) throw updateErr;
+
+      if (wasNewlyPaid) newlyPaidInvoiceIds.push(alloc.invoiceId);
+
+      const { error: allocErr } = await db
+        .from("crm_payment_allocations")
+        .insert({ org_id: orgId, payment_id: inserted.id, invoice_id: alloc.invoiceId, amount_cents: alloc.amountCents });
+      if (allocErr) throw allocErr;
+    }
+
+    for (const invoiceId of newlyPaidInvoiceIds) {
+      await fireSimpleTrigger(supabase, { orgId, clientId, invoiceId, triggerType: "invoice_paid" });
+    }
+
+    await db.rpc("sync_client_balance", { p_client_id: clientId });
+
+    await db.from("client_activity").insert({
+      client_id: clientId,
+      activity_type: "payment",
+      subject: `Payment received: ${method} (online) — ${allocations.length} invoices`,
+      amount_cents: totalCents,
+      ref_id: inserted.id,
+      ref_table: "crm_payments",
+    });
+  } catch (err) {
+    log.error("recorded multi-invoice payment but failed to apply it", { error: err, paymentId: inserted.id });
     return "error";
   }
 
