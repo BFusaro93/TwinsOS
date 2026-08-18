@@ -1,18 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { loadStripe, type Stripe as StripeJs } from "@stripe/stripe-js";
 import { Elements, PaymentElement, useStripe, useElements } from "@stripe/react-stripe-js";
 import { Loader2, CreditCard, Check, X } from "lucide-react";
 import { useCreatePortalPaymentIntent, type CreatePaymentIntentResult } from "@/lib/hooks/use-portal-payments";
-
-let stripeJsPromise: Promise<StripeJs | null> | null = null;
-function getStripeJs(): Promise<StripeJs | null> | null {
-  const key = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY;
-  if (!key) return null;
-  if (!stripeJsPromise) stripeJsPromise = loadStripe(key);
-  return stripeJsPromise;
-}
+import { hasPublishableKey, getScopedStripeJs } from "@/lib/stripe/client";
 
 function fmt(cents: number) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
@@ -77,7 +69,7 @@ export function PayInvoiceDialog({
   const [succeeded, setSucceeded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const createIntent = useCreatePortalPaymentIntent();
-  const stripeJs = getStripeJs();
+  const stripeJs = intent ? getScopedStripeJs(intent.connectedAccountId) : null;
 
   if (!open) return null;
 
@@ -126,7 +118,7 @@ export function PayInvoiceDialog({
             </button>
           </div>
         ) : !intent ? (
-          !stripeJs ? (
+          !hasPublishableKey() ? (
             <p className="py-4 text-sm text-slate-500">Online payments aren&apos;t available yet.</p>
           ) : (
             <div className="flex flex-col gap-4">

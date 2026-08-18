@@ -93,6 +93,7 @@ import { useInvoices, usePayments, useBulkImportInvoices, useBulkImportPayments 
 import { useTickets, useBulkImportTickets } from "@/lib/hooks/use-tickets";
 import { useEmployees, useBulkImportEmployees } from "@/lib/hooks/use-employees";
 import { NotificationsPage } from "@/components/settings/NotificationsPage";
+import { useConnectStatus, useStartConnectOnboarding, type ConnectStatus } from "@/lib/hooks/use-crm-card-payments";
 
 // ── AccordionSection ──────────────────────────────────────────────────────────
 
@@ -1133,6 +1134,69 @@ function ServicesTab() {
   );
 }
 
+// ── ConnectAccountSection ────────────────────────────────────────────────────
+// Lets the org connect its own Stripe Standard account so client card payments
+// (crm_payments) route directly to their bank account instead of a shared
+// platform account. Separate from Stripe subscription billing entirely.
+
+const CONNECT_STATUS_LABEL: Record<ConnectStatus["status"], string> = {
+  not_started: "Not connected",
+  pending: "Onboarding in progress",
+  active: "Connected",
+  restricted: "Action needed",
+};
+
+function ConnectAccountSection() {
+  const { data: connectStatus, isLoading } = useConnectStatus();
+  const { mutateAsync: startOnboarding, isPending: redirecting } = useStartConnectOnboarding();
+
+  async function handleConnect() {
+    try {
+      const { url } = await startOnboarding();
+      window.location.href = url;
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to start Stripe onboarding");
+    }
+  }
+
+  if (isLoading) {
+    return <p className="p-4 text-sm text-slate-400">Loading…</p>;
+  }
+
+  const status = connectStatus?.status ?? "not_started";
+  const statusColor =
+    status === "active"
+      ? "bg-emerald-100 text-emerald-700"
+      : status === "restricted"
+        ? "bg-red-100 text-red-700"
+        : status === "pending"
+          ? "bg-amber-100 text-amber-700"
+          : "bg-slate-100 text-slate-600";
+
+  return (
+    <div className="space-y-4 p-4">
+      <div className="flex items-center gap-2">
+        <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${statusColor}`}>
+          {CONNECT_STATUS_LABEL[status]}
+        </span>
+      </div>
+      <p className="text-sm text-slate-600">
+        Connect a Stripe account to accept client card payments on invoices. Client payments go
+        directly to your own bank account via Stripe payouts &mdash; TwinsOS never holds your funds.
+      </p>
+      <Button size="sm" onClick={() => void handleConnect()} disabled={redirecting}>
+        {redirecting
+          ? "Redirecting…"
+          : status === "active"
+            ? "Manage on Stripe"
+            : status === "not_started"
+              ? "Connect with Stripe"
+              : "Continue Setup"}
+      </Button>
+    </div>
+  );
+}
+
 // ── AccountingTab ─────────────────────────────────────────────────────────────
 
 function AccountingTab() {
@@ -1223,6 +1287,14 @@ function AccountingTab() {
             This rate is used as the default for new invoices. Each client can have their own tax rate set on their profile — that takes priority over this org default.
           </p>
         </div>
+      </AccordionSection>
+      <AccordionSection
+        title="Card Payments (Stripe)"
+        count={0}
+        defaultOpen
+        description="Connect your own Stripe account to accept client card payments and receive payouts directly."
+      >
+        <ConnectAccountSection />
       </AccordionSection>
       <AccordionSection
         title="Credit Card Processing Fee"

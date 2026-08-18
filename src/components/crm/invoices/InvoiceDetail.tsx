@@ -55,6 +55,7 @@ import type { DiscountType, CRMDiscount } from "@/types/crm-discounts";
 import { AuditTrailTab } from "@/components/shared/AuditTrailTab";
 import { LineItemDiscountPopover, type LineItemDiscountPatch } from "@/components/shared/LineItemDiscountPopover";
 import { ChargeCardDialog } from "@/components/crm/invoices/ChargeCardDialog";
+import { useConnectStatus } from "@/lib/hooks/use-crm-card-payments";
 import { InvoiceEmailDialog } from "@/components/crm/invoices/InvoiceEmailDialog";
 
 // ── constants ─────────────────────────────────────────────────────────────────
@@ -517,6 +518,8 @@ export function InvoiceDetail({
   const salesReps = (employees ?? []).filter((e) => e.isSalesRep && e.userId);
   const { data: discounts = [] } = useDiscounts();
   const activeDiscounts = discounts.filter((d) => d.isActive);
+  const { data: connectStatus } = useConnectStatus();
+  const cardPaymentsReady = connectStatus?.chargesEnabled ?? false;
 
   const [activeTab, setActiveTab] = useState<"invoice" | "audit">("invoice");
   const [lineItemPickerOpen, setLineItemPickerOpen] = useState(false);
@@ -799,7 +802,8 @@ export function InvoiceDetail({
           </Button>
           <Button variant="outline" size="sm" className="h-8 text-xs"
             onClick={() => setChargeCardOpen(true)}
-            disabled={invoice.status === "void" || invoice.balanceCents <= 0}>
+            disabled={invoice.status === "void" || invoice.balanceCents <= 0 || !cardPaymentsReady}
+            title={cardPaymentsReady ? undefined : "Connect your Stripe account in Settings > Accounting to accept card payments"}>
             <CreditCard className="mr-1 h-3.5 w-3.5 text-brand-500" /> Charge Card
           </Button>
           <Button variant="outline" size="sm" className="h-8 text-xs"

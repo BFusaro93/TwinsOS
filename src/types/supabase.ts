@@ -8892,6 +8892,10 @@ export type Database = {
           plan: string
           portal_enabled: boolean
           slug: string
+          stripe_connect_account_id: string | null
+          stripe_connect_charges_enabled: boolean
+          stripe_connect_payouts_enabled: boolean
+          stripe_connect_status: string
           stripe_customer_id: string | null
           stripe_price_id: string | null
           stripe_subscription_id: string | null
@@ -8921,6 +8925,10 @@ export type Database = {
           plan?: string
           portal_enabled?: boolean
           slug: string
+          stripe_connect_account_id?: string | null
+          stripe_connect_charges_enabled?: boolean
+          stripe_connect_payouts_enabled?: boolean
+          stripe_connect_status?: string
           stripe_customer_id?: string | null
           stripe_price_id?: string | null
           stripe_subscription_id?: string | null
@@ -8950,6 +8958,10 @@ export type Database = {
           plan?: string
           portal_enabled?: boolean
           slug?: string
+          stripe_connect_account_id?: string | null
+          stripe_connect_charges_enabled?: boolean
+          stripe_connect_payouts_enabled?: boolean
+          stripe_connect_status?: string
           stripe_customer_id?: string | null
           stripe_price_id?: string | null
           stripe_subscription_id?: string | null

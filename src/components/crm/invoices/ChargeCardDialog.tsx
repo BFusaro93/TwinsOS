@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { loadStripe, type Stripe as StripeJs } from "@stripe/stripe-js";
 import { Elements, PaymentElement, useStripe, useElements } from "@stripe/react-stripe-js";
 import { Loader2, CreditCard, Check } from "lucide-react";
 import { toast } from "sonner";
@@ -11,14 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { formatCurrency } from "@/lib/utils";
 import { useCreateCrmPaymentIntent, type CreatePaymentIntentResult } from "@/lib/hooks/use-crm-card-payments";
-
-let stripeJsPromise: Promise<StripeJs | null> | null = null;
-function getStripeJs(): Promise<StripeJs | null> | null {
-  const key = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY;
-  if (!key) return null;
-  if (!stripeJsPromise) stripeJsPromise = loadStripe(key);
-  return stripeJsPromise;
-}
+import { hasPublishableKey, getScopedStripeJs } from "@/lib/stripe/client";
 
 function PayForm({ totalChargeCents, onSuccess }: { totalChargeCents: number; onSuccess: () => void }) {
   const stripe = useStripe();
@@ -99,7 +91,7 @@ export function ChargeCardDialog({
     onCharged();
   }
 
-  const stripeJs = getStripeJs();
+  const stripeJs = intent ? getScopedStripeJs(intent.connectedAccountId) : null;
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -123,7 +115,7 @@ export function ChargeCardDialog({
             </Button>
           </div>
         ) : !intent ? (
-          !stripeJs ? (
+          !hasPublishableKey() ? (
             <p className="py-4 text-sm text-slate-500">
               Card payments aren&apos;t configured yet. Add the Stripe environment variables to enable this.
             </p>
