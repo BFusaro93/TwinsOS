@@ -345,11 +345,16 @@ async function applyCrmInvoiceMultiPayment(
     const newlyPaidInvoiceIds: string[] = [];
 
     for (const alloc of allocations) {
+      // Scoped by client_id as well as org_id/id: metadata.client_id and the encoded
+      // allocation list are two independently-editable metadata keys on a PaymentIntent
+      // a connected account's own owner can forge — this stops a same-org mismatch
+      // between the two from applying one client's charge to another client's invoice.
       const { data: invoice, error: invoiceErr } = await db
         .from("crm_invoices")
         .select("total_cents, amount_paid_cents, status")
         .eq("id", alloc.invoiceId)
         .eq("org_id", orgId)
+        .eq("client_id", clientId)
         .single();
       if (invoiceErr) throw invoiceErr;
 
@@ -363,7 +368,8 @@ async function applyCrmInvoiceMultiPayment(
         .from("crm_invoices")
         .update({ amount_paid_cents: newPaid, balance_cents: newBalance, status: newStatus })
         .eq("id", alloc.invoiceId)
-        .eq("org_id", orgId);
+        .eq("org_id", orgId)
+        .eq("client_id", clientId);
       if (updateErr) throw updateErr;
 
       if (wasNewlyPaid) newlyPaidInvoiceIds.push(alloc.invoiceId);
