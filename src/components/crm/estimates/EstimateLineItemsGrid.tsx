@@ -595,7 +595,7 @@ function LineItemRow({
         {/* Cost — auto-derived value (blue) is shown but still editable:
             typing a real number here is what actually sets costCents and
             switches this line out of auto mode going forward. */}
-        <td className="w-16 px-2 py-1.5">
+        <td className="w-24 px-2 py-1.5">
           <InlineNum
             value={isAutoCost ? autoCostPerUnitCents / 100 : row.costCents / 100}
             onChange={(v) => update("costCents", Math.round(v * 100))}
@@ -606,7 +606,7 @@ function LineItemRow({
         </td>
 
         {/* T. Cost */}
-        <td className="w-16 px-2 py-1.5 text-right tabular-nums text-slate-500">
+        <td className="w-24 px-2 py-1.5 text-right tabular-nums text-slate-500">
           {centsToDisplay(row.totalCostCents)}
         </td>
 
