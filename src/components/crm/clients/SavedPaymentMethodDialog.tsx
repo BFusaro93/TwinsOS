@@ -124,7 +124,7 @@ export function SavedPaymentMethodDialog({
           ) : (
             <div className="flex flex-col gap-4 py-2">
               <p className="text-sm text-slate-600">
-                Save a card or bank account on file for this client so invoices can be charged automatically.
+                Save a card or bank account on file for this client to charge on demand, or enroll in autopay below.
               </p>
               <div className="grid grid-cols-2 gap-2">
                 <button

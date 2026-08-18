@@ -3342,7 +3342,7 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
                 <InfoRow label="Tax code" value={client.salesTaxCode} />
               </div>
               <h3 className="mb-3 mt-6 text-xs font-semibold uppercase tracking-wide text-slate-400">
-                Autopay
+                Payment Method on File
               </h3>
               <SavedPaymentMethodSection client={client} />
             </div>
