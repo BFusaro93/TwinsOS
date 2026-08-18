@@ -156,7 +156,7 @@ function DirectCostRow({
       </td>
 
       {/* Qty */}
-      <td className="w-14 px-3 py-1.5">
+      <td className="w-24 px-3 py-1.5">
         <input
           type="number"
           value={row.qty}
@@ -167,7 +167,7 @@ function DirectCostRow({
       </td>
 
       {/* Rate */}
-      <td className="w-20 px-3 py-1.5">
+      <td className="w-28 px-3 py-1.5">
         <input
           type="number"
           value={row.rateCents / 100}
