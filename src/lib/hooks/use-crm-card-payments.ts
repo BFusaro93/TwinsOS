@@ -36,7 +36,7 @@ export function useConnectStatus() {
       if (error) throw error;
 
       return {
-        status: data.stripe_connect_status,
+        status: data.stripe_connect_status as ConnectStatus["status"],
         chargesEnabled: data.stripe_connect_charges_enabled,
         payoutsEnabled: data.stripe_connect_payouts_enabled,
       };
