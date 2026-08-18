@@ -109,6 +109,53 @@ async function syncPartQtyToProduct(
   }
 }
 
+/**
+ * Links a part to the asset/vehicle a WO is for in `asset_parts`, so it shows
+ * up as "commonly used on this asset" going forward. `asset_parts.asset_id`
+ * is polymorphic (no FK) and already holds vehicle ids too when a WO is
+ * vehicle-linked, so no branching on linked_entity_type is needed here.
+ * No-ops if the WO isn't linked to an asset/vehicle, or the link already
+ * exists; restores it if it was previously removed.
+ */
+async function linkPartToAssetFromWO(
+  supabase: ReturnType<typeof createClient>,
+  workOrderId: string,
+  partId: string,
+  partName: string,
+  partNumber: string
+) {
+  const { data: wo } = await supabase
+    .from("work_orders")
+    .select("asset_id")
+    .eq("id", workOrderId)
+    .single();
+  if (!wo?.asset_id) return;
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: existing } = await (supabase as any)
+    .from("asset_parts")
+    .select("id, deleted_at")
+    .eq("asset_id", wo.asset_id)
+    .eq("part_id", partId)
+    .maybeSingle();
+
+  if (!existing) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (supabase as any).from("asset_parts").insert({
+      asset_id: wo.asset_id,
+      part_id: partId,
+      part_name: partName,
+      part_number: partNumber,
+    });
+  } else if (existing.deleted_at) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (supabase as any)
+      .from("asset_parts")
+      .update({ deleted_at: null, part_name: partName, part_number: partNumber })
+      .eq("id", existing.id);
+  }
+}
+
 export function useAddWOPart() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -156,6 +203,7 @@ export function useAddWOPart() {
           // and its audit_log entry).
           await adjustWOPartQuantity(supabase, input.partId, -input.quantity, input.workOrderId);
           await syncPartQtyToProduct(supabase, input.partId);
+          await linkPartToAssetFromWO(supabase, input.workOrderId, input.partId, input.partName, input.partNumber);
 
           return mapWOPart(restored);
         }
@@ -180,6 +228,7 @@ export function useAddWOPart() {
       if (input.partId) {
         await adjustWOPartQuantity(supabase, input.partId, -input.quantity, input.workOrderId);
         await syncPartQtyToProduct(supabase, input.partId);
+        await linkPartToAssetFromWO(supabase, input.workOrderId, input.partId, input.partName, input.partNumber);
       }
 
       return mapWOPart(data);
@@ -188,6 +237,7 @@ export function useAddWOPart() {
       queryClient.invalidateQueries({ queryKey: ["wo-parts", workOrderId] });
       queryClient.invalidateQueries({ queryKey: ["parts"] });
       queryClient.invalidateQueries({ queryKey: ["products"] });
+      queryClient.invalidateQueries({ queryKey: ["asset-parts"] });
     },
   });
 }

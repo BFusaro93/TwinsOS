@@ -496,11 +496,14 @@ function AvbNumberInput({
   value: number;
   onCommit: (v: string) => void;
 }) {
-  const [local, setLocal] = useState(value > 0 ? String(value) : "");
+  // Bad PDF imports have produced negative budgeted/actual/revenue values;
+  // showing them as blank made them indistinguishable from a real 0 and
+  // impossible to spot without querying the database directly.
+  const [local, setLocal] = useState(value !== 0 ? String(value) : "");
   const prevValue = useRef(value);
   if (prevValue.current !== value) {
     prevValue.current = value;
-    setLocal(value > 0 ? String(value) : "");
+    setLocal(value !== 0 ? String(value) : "");
   }
   return (
     <input
@@ -512,7 +515,9 @@ function AvbNumberInput({
       onChange={e => setLocal(e.target.value)}
       onBlur={() => onCommit(local)}
       onWheel={e => e.currentTarget.blur()}
-      className="w-full rounded border border-slate-200 bg-white px-1.5 py-1 text-right text-xs"
+      className={`w-full rounded border px-1.5 py-1 text-right text-xs ${
+        value < 0 ? "border-red-300 bg-red-50 text-red-700" : "border-slate-200 bg-white"
+      }`}
     />
   );
 }

@@ -11,6 +11,7 @@ export type TriggerType =
   | 'credit_card_about_to_expire'
   | 'credit_card_updated'
   | 'has_opted_in_emails'
+  | 'has_opted_in_sms'
   | 'lead_cancelled'
   | 'lead_converted_to_client'
   | 'lead_created'

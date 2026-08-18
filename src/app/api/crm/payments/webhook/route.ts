@@ -4,7 +4,15 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { getStripe, isStripeConfigured } from "@/lib/stripe/server";
 import { methodForCardBrand } from "@/lib/stripe/crm-payments";
 import { fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
+import { logger } from "@/lib/logger";
 
+const log = logger.child("crm payments webhook");
+
+// Handles payment_intent events for PaymentIntents created on the PLATFORM
+// account. Since Stripe Connect onboarding, new crm_invoice PaymentIntents are
+// created directly on the org's connected account instead (a "direct charge"),
+// so their events arrive at connect-webhook/route.ts, not here. This endpoint
+// stays live only to finish processing any pre-Connect PaymentIntents still in flight.
 export async function POST(request: Request) {
   if (!isStripeConfigured() || !process.env.STRIPE_CRM_PAYMENTS_WEBHOOK_SECRET) {
     return NextResponse.json({ error: "Card payments are not configured yet" }, { status: 400 });
@@ -22,7 +30,7 @@ export async function POST(request: Request) {
   try {
     event = stripe.webhooks.constructEvent(rawBody, signature, process.env.STRIPE_CRM_PAYMENTS_WEBHOOK_SECRET);
   } catch (err) {
-    console.error("[crm payments webhook] signature verification failed:", err);
+    log.error("signature verification failed", { error: err });
     return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
   }
 
@@ -54,7 +62,7 @@ export async function POST(request: Request) {
   const feeCents = parseInt(paymentIntent.metadata.fee_cents, 10);
 
   if (!orgId || !invoiceId || !clientId || !Number.isFinite(balanceCents) || !Number.isFinite(feeCents)) {
-    console.error("[crm payments webhook] missing/invalid metadata on payment intent", paymentIntent.id);
+    log.error("missing/invalid metadata on payment intent", { paymentIntentId: paymentIntent.id });
     return NextResponse.json({ error: "Invalid payment intent metadata" }, { status: 400 });
   }
 
@@ -118,7 +126,7 @@ export async function POST(request: Request) {
       // Already processed this PaymentIntent (Stripe retried the webhook delivery) — no-op.
       return NextResponse.json({ received: true });
     }
-    console.error("[crm payments webhook] failed to insert crm_payments:", insertErr);
+    log.error("failed to insert crm_payments", { error: insertErr, paymentIntentId: paymentIntent.id });
     return NextResponse.json({ error: "Failed to record payment" }, { status: 500 });
   }
 
@@ -157,7 +165,7 @@ export async function POST(request: Request) {
       ref_table: "crm_payments",
     });
   } catch (err) {
-    console.error(`[crm payments webhook] recorded payment ${inserted.id} but failed to apply it:`, err);
+    log.error("recorded payment but failed to apply it", { error: err, paymentId: inserted.id });
     return NextResponse.json({ error: "Failed to apply payment to invoice" }, { status: 500 });
   }
 

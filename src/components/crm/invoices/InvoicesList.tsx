@@ -11,10 +11,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ImportExportMenu } from "@/components/shared/ImportExportMenu";
 import { exportCSV } from "@/lib/csv";
 import { cn, formatCurrency } from "@/lib/utils";
-import { Plus, FileText, Search, ChevronDown, X, RotateCcw, GitMerge, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
+import { Plus, FileText, Search, ChevronDown, X, RotateCcw, GitMerge, ArrowUpDown, ArrowUp, ArrowDown, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import type { InvoiceStatus, CRMInvoice } from "@/types/crm-invoices";
 import { isInvoiceOverdue } from "@/lib/invoice-status";
+import { useChargeAutopayInvoice } from "@/lib/hooks/use-autopay-invoices";
 import { InvoiceDetailSheet } from "./InvoiceDetailSheet";
 import { NewInvoiceSheet } from "./NewInvoiceSheet";
 import { MergeInvoicesDialog } from "./MergeInvoicesDialog";
@@ -85,19 +86,37 @@ type QuickFilter =
   | "past_due"
   | "to_email"
   | "to_print"
+  | "to_charge_card"
+  | "to_charge_ach"
   | "paid"
   | "void";
 
 const QUICK_FILTERS: { key: QuickFilter; label: string }[] = [
-  { key: "all",        label: "All Invoices" },
-  { key: "uninvoiced", label: "Uninvoiced" },
-  { key: "open",       label: "Open" },
-  { key: "past_due",   label: "Past Due" },
-  { key: "to_email",   label: "To Email" },
-  { key: "to_print",   label: "To Print" },
-  { key: "paid",       label: "Paid" },
-  { key: "void",       label: "Void" },
+  { key: "all",            label: "All Invoices" },
+  { key: "uninvoiced",     label: "Uninvoiced" },
+  { key: "open",           label: "Open" },
+  { key: "past_due",       label: "Past Due" },
+  { key: "to_email",       label: "To Email" },
+  { key: "to_print",       label: "To Print" },
+  { key: "to_charge_card", label: "To Charge" },
+  { key: "to_charge_ach",  label: "ACH To Charge" },
+  { key: "paid",           label: "Paid" },
+  { key: "void",           label: "Void" },
 ];
+
+// "Invoices to Charge" / "ACH Invoices to Charge" — open invoices for clients
+// with a card/bank account on file for autopay (set in the client's Details
+// tab or by the client themselves on the portal). Charging is manual — staff
+// pick invoices from here and hit Charge, it's not an automatic background job.
+function isChargeableBy(i: CRMInvoice, method: "card" | "us_bank_account") {
+  return (
+    i.status !== "draft" &&
+    i.status !== "void" &&
+    i.balanceCents > 0 &&
+    i.clientSavedPaymentMethodType === method &&
+    i.clientAutopayEnabled !== false
+  );
+}
 
 // A client's invoice_delivery preference ("email" | "print" | "both") gates which
 // queue an invoice belongs to — a print-only client's invoices never clutter the
@@ -122,6 +141,8 @@ function applyQuickFilter(invoices: CRMInvoice[], filter: QuickFilter): CRMInvoi
     case "past_due": return invoices.filter((i) => i.status !== "draft" && isOverdue(i));
     case "to_email": return invoices.filter(needsEmail);
     case "to_print": return invoices.filter(needsPrint);
+    case "to_charge_card": return invoices.filter((i) => isChargeableBy(i, "card"));
+    case "to_charge_ach":  return invoices.filter((i) => isChargeableBy(i, "us_bank_account"));
     case "paid":     return invoices.filter((i) => i.status === "paid");
     case "void":     return invoices.filter((i) => i.status === "void");
     default:         return invoices.filter((i) => i.status !== "draft");
@@ -188,6 +209,8 @@ export function InvoicesList({ clientId }: Props) {
     past_due:   applyQuickFilter(allInvoices, "past_due").length,
     to_email:   applyQuickFilter(allInvoices, "to_email").length,
     to_print:   applyQuickFilter(allInvoices, "to_print").length,
+    to_charge_card: applyQuickFilter(allInvoices, "to_charge_card").length,
+    to_charge_ach:  applyQuickFilter(allInvoices, "to_charge_ach").length,
     paid:       applyQuickFilter(allInvoices, "paid").length,
     void:       applyQuickFilter(allInvoices, "void").length,
   }), [allInvoices]);
@@ -299,6 +322,48 @@ export function InvoicesList({ clientId }: Props) {
     } finally {
       setEmailingSelected(false);
     }
+  }
+
+  const chargeInvoice = useChargeAutopayInvoice();
+  const [chargingId, setChargingId] = useState<string | null>(null);
+  const [chargingAll, setChargingAll] = useState(false);
+  const onChargeTab = quickFilter === "to_charge_card" || quickFilter === "to_charge_ach";
+
+  async function handleCharge(inv: CRMInvoice) {
+    setChargingId(inv.id);
+    try {
+      const result = await chargeInvoice.mutateAsync({ invoiceId: inv.id });
+      toast.success(
+        `Charged ${inv.clientName} ${formatCurrency(result.totalChargeCents)}${
+          result.feeCents > 0 ? ` (incl. ${formatCurrency(result.feeCents)} fee)` : ""
+        }`
+      );
+      refetchInvoices();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : `Failed to charge invoice #${inv.invoiceNumber}`);
+    } finally {
+      setChargingId(null);
+    }
+  }
+
+  async function handleChargeAll() {
+    if (filtered.length === 0) return;
+    if (!confirm(`Charge all ${filtered.length} invoice(s) in this tab now?`)) return;
+    setChargingAll(true);
+    let succeeded = 0;
+    let failed = 0;
+    for (const inv of filtered) {
+      try {
+        await chargeInvoice.mutateAsync({ invoiceId: inv.id });
+        succeeded++;
+      } catch {
+        failed++;
+      }
+    }
+    setChargingAll(false);
+    if (succeeded > 0) toast.success(`Charged ${succeeded} invoice${succeeded !== 1 ? "s" : ""}`);
+    if (failed > 0) toast.error(`Failed to charge ${failed} invoice${failed !== 1 ? "s" : ""}`);
+    refetchInvoices();
   }
 
   const allSelected = filtered.length > 0 && filtered.every((i) => selectedIds.has(i.id));
@@ -462,6 +527,17 @@ export function InvoicesList({ clientId }: Props) {
               >
                 Print Selected
               </DropdownMenuItem>
+              {onChargeTab && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    disabled={filtered.length === 0 || chargingAll}
+                    onSelect={() => void handleChargeAll()}
+                  >
+                    {chargingAll ? "Charging…" : `Charge All (${filtered.length})`}
+                  </DropdownMenuItem>
+                </>
+              )}
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 disabled={!someSelected}
@@ -689,6 +765,18 @@ export function InvoicesList({ clientId }: Props) {
                       <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setOpenInvoiceId(inv.id)}>
                         <FileText className="mr-1 h-3 w-3" /> Open
                       </Button>
+                      {inv.clientSavedPaymentMethodType && inv.balanceCents > 0 && inv.status !== "void" && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 text-xs text-brand-600 hover:text-brand-700"
+                          onClick={(e) => { e.stopPropagation(); void handleCharge(inv); }}
+                          disabled={chargingId === inv.id || chargingAll}
+                        >
+                          {chargingId === inv.id && <Loader2 className="mr-1 h-3 w-3 animate-spin" />}
+                          Charge
+                        </Button>
+                      )}
                       {inv.status !== "void" && (
                         <Button variant="ghost" size="sm" className="h-7 text-xs text-slate-400 hover:text-red-500" onClick={() => markVoid(inv)}>
                           Void

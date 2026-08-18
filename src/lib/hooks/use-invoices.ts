@@ -102,6 +102,9 @@ export function mapInvoice(row: any): CRMInvoice {
     clientDefaultTaxRateBps: row.clients?.default_tax_rate_bps ?? 0,
     clientDefaultTerms: row.clients?.default_terms ?? "due_on_receipt",
     clientDefaultPaymentMethod: row.clients?.default_payment_method ?? null,
+    clientSavedPaymentMethodType: row.clients?.saved_payment_method_type ?? null,
+    clientSavedPaymentMethodSummary: row.clients?.saved_payment_method_summary ?? null,
+    clientAutopayEnabled: row.clients?.autopay_enabled ?? true,
     salesRepName: row.profiles?.name ?? null,
     clientInvoiceDelivery: row.clients?.invoice_delivery ?? "email",
     lineItems: (row.crm_invoice_line_items ?? []).map(mapLineItem),
@@ -119,7 +122,7 @@ export function useInvoices(clientId?: string) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let q = (supabase as any)
         .from("crm_invoices")
-        .select("*, clients(display_name, billing_address, billing_city, billing_state, billing_zip, invoice_delivery), profiles!crm_invoices_sales_rep_id_fkey(name), crm_invoice_line_items(id, name, description, total_cents, is_taxable)")
+        .select("*, clients(display_name, billing_address, billing_city, billing_state, billing_zip, invoice_delivery, saved_payment_method_type, saved_payment_method_summary, autopay_enabled), profiles!crm_invoices_sales_rep_id_fkey(name), crm_invoice_line_items(id, name, description, total_cents, is_taxable)")
         .is("deleted_at", null)
         .order("invoice_date", { ascending: false });
       if (clientId) q = q.eq("client_id", clientId);
@@ -138,7 +141,7 @@ export function useInvoice(id: string) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
         .from("crm_invoices")
-        .select("*, clients(display_name, primary_email, billing_address, billing_city, billing_state, billing_zip, default_tax_rate_bps, default_terms, default_payment_method), profiles!crm_invoices_sales_rep_id_fkey(name), crm_invoice_line_items(*), crm_payments(*)")
+        .select("*, clients(display_name, primary_email, billing_address, billing_city, billing_state, billing_zip, default_tax_rate_bps, default_terms, default_payment_method, saved_payment_method_type, saved_payment_method_summary, autopay_enabled), profiles!crm_invoices_sales_rep_id_fkey(name), crm_invoice_line_items(*), crm_payments(*)")
         .eq("id", id)
         .is("deleted_at", null)
         .single();

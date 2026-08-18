@@ -1,18 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { loadStripe, type Stripe as StripeJs } from "@stripe/stripe-js";
 import { Elements, PaymentElement, useStripe, useElements } from "@stripe/react-stripe-js";
 import { Loader2, CreditCard, Check, X } from "lucide-react";
 import { useCreatePortalPaymentIntent, type CreatePaymentIntentResult } from "@/lib/hooks/use-portal-payments";
-
-let stripeJsPromise: Promise<StripeJs | null> | null = null;
-function getStripeJs(): Promise<StripeJs | null> | null {
-  const key = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY;
-  if (!key) return null;
-  if (!stripeJsPromise) stripeJsPromise = loadStripe(key);
-  return stripeJsPromise;
-}
+import { hasPublishableKey, getScopedStripeJs } from "@/lib/stripe/client";
 
 function fmt(cents: number) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
@@ -73,15 +65,17 @@ export function PayInvoiceDialog({
   onClose: () => void;
   onPaid: () => void;
 }) {
+  const [paymentMethod, setPaymentMethod] = useState<"card" | "us_bank_account">("card");
   const [intent, setIntent] = useState<CreatePaymentIntentResult | null>(null);
   const [succeeded, setSucceeded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const createIntent = useCreatePortalPaymentIntent();
-  const stripeJs = getStripeJs();
+  const stripeJs = intent ? getScopedStripeJs(intent.connectedAccountId) : null;
 
   if (!open) return null;
 
   function handleClose() {
+    setPaymentMethod("card");
     setIntent(null);
     setSucceeded(false);
     setError(null);
@@ -91,7 +85,7 @@ export function PayInvoiceDialog({
   async function start() {
     setError(null);
     try {
-      const result = await createIntent.mutateAsync(invoiceId);
+      const result = await createIntent.mutateAsync({ invoiceId, paymentMethod });
       setIntent(result);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to start payment");
@@ -126,13 +120,37 @@ export function PayInvoiceDialog({
             </button>
           </div>
         ) : !intent ? (
-          !stripeJs ? (
+          !hasPublishableKey() ? (
             <p className="py-4 text-sm text-slate-500">Online payments aren&apos;t available yet.</p>
           ) : (
             <div className="flex flex-col gap-4">
               <div className="flex justify-between text-sm">
                 <span className="text-slate-500">Amount Due</span>
                 <span className="font-semibold tabular-nums">{fmt(balanceCents)}</span>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPaymentMethod("card")}
+                  className={`rounded-md border px-3 py-2 text-sm font-medium transition-colors ${
+                    paymentMethod === "card"
+                      ? "border-brand-500 bg-brand-50 text-brand-700"
+                      : "border-slate-200 text-slate-600 hover:bg-slate-50"
+                  }`}
+                >
+                  Card
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPaymentMethod("us_bank_account")}
+                  className={`rounded-md border px-3 py-2 text-sm font-medium transition-colors ${
+                    paymentMethod === "us_bank_account"
+                      ? "border-brand-500 bg-brand-50 text-brand-700"
+                      : "border-slate-200 text-slate-600 hover:bg-slate-50"
+                  }`}
+                >
+                  Bank Transfer (ACH)
+                </button>
               </div>
               {error && <p className="text-sm text-red-600">{error}</p>}
               <button
@@ -163,7 +181,7 @@ export function PayInvoiceDialog({
                 <span className="tabular-nums">{fmt(intent.totalChargeCents)}</span>
               </div>
             </div>
-            <Elements stripe={stripeJs} options={{ clientSecret: intent.clientSecret }}>
+            <Elements key={intent.clientSecret} stripe={stripeJs} options={{ clientSecret: intent.clientSecret }}>
               <PayForm totalChargeCents={intent.totalChargeCents} onSuccess={handleSuccess} />
             </Elements>
           </div>

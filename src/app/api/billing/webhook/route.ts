@@ -4,6 +4,9 @@ import { Resend } from "resend";
 import { createServiceClient } from "@/lib/supabase/server";
 import { getStripe, isStripeConfigured } from "@/lib/stripe/server";
 import { getPlanForPriceId } from "@/lib/stripe/plans";
+import { logger } from "@/lib/logger";
+
+const log = logger.child("stripe webhook");
 
 // Subscription statuses that mean the org is no longer in good standing and
 // should lose paid-plan access — not just the literal "canceled" event.
@@ -30,7 +33,7 @@ export async function POST(request: Request) {
   try {
     event = stripe.webhooks.constructEvent(rawBody, signature, process.env.STRIPE_WEBHOOK_SECRET);
   } catch (err) {
-    console.error("[stripe webhook] signature verification failed:", err);
+    log.error("signature verification failed", { error: err });
     return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
   }
 
@@ -68,7 +71,7 @@ export async function POST(request: Request) {
       }
       // else: fall through and reprocess — a prior attempt never completed.
     } else {
-      console.error("[stripe webhook] failed to record event id:", dedupeErr);
+      log.error("failed to record event id", { error: dedupeErr, eventId: event.id });
       return NextResponse.json({ error: "Webhook handler failed" }, { status: 500 });
     }
   }
@@ -87,7 +90,11 @@ export async function POST(request: Request) {
       .limit(1)
       .maybeSingle();
     if (newerEvent) {
-      console.info(`[stripe webhook] skipping stale event ${event.id} (${event.type}) — a newer event for subscription ${subscriptionId} was already processed`);
+      log.info("skipping stale event", {
+        eventId: event.id,
+        eventType: event.type,
+        subscriptionId,
+      });
       return NextResponse.json({ received: true, stale: true });
     }
   }
@@ -126,7 +133,7 @@ export async function POST(request: Request) {
         break;
     }
   } catch (err) {
-    console.error(`[stripe webhook] failed to process ${event.type}:`, err);
+    log.error("failed to process event", { error: err, eventType: event.type, eventId: event.id });
     return NextResponse.json({ error: "Webhook handler failed" }, { status: 500 });
   }
 
@@ -207,7 +214,7 @@ async function notifyPaymentFailed(
   if (recipients.length === 0) return;
 
   if (!process.env.RESEND_API_KEY) {
-    console.warn(`[stripe webhook] payment failed for org ${org.id} but RESEND_API_KEY is not set — skipping notification email`);
+    log.warn("payment failed but RESEND_API_KEY is not set — skipping notification email", { orgId: org.id });
     return;
   }
 
@@ -239,6 +246,6 @@ async function notifyPaymentFailed(
       `,
     });
   } catch (err) {
-    console.error(`[stripe webhook] failed to send payment-failed notification for org ${org.id}:`, err);
+    log.error("failed to send payment-failed notification", { error: err, orgId: org.id });
   }
 }

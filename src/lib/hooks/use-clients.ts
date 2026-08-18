@@ -44,6 +44,9 @@ function mapClient(row: any): Client {
     defaultTaxRateBps: row.default_tax_rate_bps ?? 0,
     defaultTerms: row.default_terms ?? "due_on_receipt",
     defaultPaymentMethod: row.default_payment_method ?? null,
+    savedPaymentMethodType: row.saved_payment_method_type ?? null,
+    savedPaymentMethodSummary: row.saved_payment_method_summary ?? null,
+    autopayEnabled: row.autopay_enabled ?? true,
     invoiceDelivery: row.invoice_delivery ?? "email",
     officeNotes: row.office_notes ?? null,
     paymentMethod: row.payment_method,
@@ -79,6 +82,9 @@ function mapClient(row: any): Client {
     cancellationReason: row.cancellation_reason ?? null,
     revenuePotentialCents: row.revenue_potential_cents ?? 0,
     doNotMarket: row.do_not_market ?? false,
+    smsOptIn: row.sms_opt_in ?? false,
+    smsOptInAt: row.sms_opt_in_at ?? null,
+    smsOptInSource: row.sms_opt_in_source ?? null,
     closedAt: row.closed_at ?? null,
     parentClientId: row.parent_client_id,
     deletedAt: row.deleted_at,
@@ -493,11 +499,13 @@ export function useUpdateClient() {
 
       // Fetch the "before" values for fields whose automation trigger only
       // fires on an actual change, not on every generic profile-edit save.
-      let before: { source: string | null; ok_to_email: boolean | null; referred_by_client_id: string | null; payment_method: string | null } | null = null;
-      if (updates.source !== undefined || updates.okToEmail !== undefined || updates.referredByClientId !== undefined || updates.paymentMethod !== undefined) {
-        const { data } = await supabase.from("clients").select("source, ok_to_email, referred_by_client_id, payment_method").eq("id", id).single();
+      let before: { source: string | null; ok_to_email: boolean | null; referred_by_client_id: string | null; payment_method: string | null; sms_opt_in: boolean | null } | null = null;
+      if (updates.source !== undefined || updates.okToEmail !== undefined || updates.referredByClientId !== undefined || updates.paymentMethod !== undefined || updates.smsOptIn !== undefined) {
+        const { data } = await supabase.from("clients").select("source, ok_to_email, referred_by_client_id, payment_method, sms_opt_in").eq("id", id).single();
         before = data;
       }
+
+      const smsOptInJustEnabled = updates.smsOptIn === true && before && before.sms_opt_in !== true;
 
       const { error } = await supabase
         .from("clients")
@@ -546,6 +554,9 @@ export function useUpdateClient() {
           linear_ft_perimeter: updates.linearFtPerimeter ?? null,
           linear_ft_edging: updates.linearFtEdging ?? null,
           yards_of_mulch: updates.yardsOfMulch ?? null,
+          sms_opt_in: updates.smsOptIn,
+          sms_opt_in_at: smsOptInJustEnabled ? new Date().toISOString() : undefined,
+          sms_opt_in_source: smsOptInJustEnabled ? "manual" : undefined,
         })
         .eq("id", id);
       if (error) throw error;
@@ -560,6 +571,7 @@ export function useUpdateClient() {
         sourceChanged,
         newSource: updates.source ?? null,
         emailsOptedIn,
+        smsOptInJustEnabled,
         newReferrerId,
         paymentMethodChanged,
         newPaymentMethod: updates.paymentMethod ?? null,
@@ -584,6 +596,9 @@ export function useUpdateClient() {
       }
       if (result?.emailsOptedIn) {
         fireAutomationTrigger({ triggerType: "has_opted_in_emails", clientId: id });
+      }
+      if (result?.smsOptInJustEnabled) {
+        fireAutomationTrigger({ triggerType: "has_opted_in_sms", clientId: id });
       }
       if (result?.newReferrerId) {
         // Fires for the REFERRER's own record, not the client being edited —

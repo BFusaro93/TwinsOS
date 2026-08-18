@@ -53,6 +53,82 @@ interface WorkOrderDetailPanelProps {
   workOrder: WorkOrder;
 }
 
+/**
+ * Category multi-select popover with its own optimistic local state. Toggling
+ * a checkbox needs to flip instantly — waiting on `workOrder.categories` to
+ * come back around through the update mutation's round trip (patch cache +
+ * invalidate + refetch) left the popover looking unresponsive to every click
+ * until the whole detail panel was closed and reopened, even though the
+ * write itself succeeded. `selected` mirrors the server value once it
+ * catches up, so an external change (e.g. another tab) still wins.
+ */
+function CategoryPicker({
+  categories,
+  enabledCats,
+  onCategoryChange,
+}: {
+  categories: string[];
+  enabledCats: Array<{ id: string; label: string }>;
+  onCategoryChange: (categories: string[]) => void;
+}) {
+  const [selected, setSelected] = useState(categories);
+  useEffect(() => {
+    setSelected(categories);
+  }, [categories]);
+
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      {selected.map((catId) => {
+        const cat = enabledCats.find((c) => c.id === catId);
+        return (
+          <span
+            key={catId}
+            className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700"
+          >
+            {cat?.label ?? catId}
+          </span>
+        );
+      })}
+      <Popover>
+        <PopoverTrigger asChild>
+          <button
+            type="button"
+            className="inline-flex h-6 items-center gap-1 rounded-full border border-dashed border-slate-300 px-2 text-[11px] text-slate-500 hover:bg-slate-50"
+          >
+            {selected.length === 0 ? "Add" : "Edit"}
+            <ChevronDown className="h-3 w-3 opacity-50" />
+          </button>
+        </PopoverTrigger>
+        <PopoverContent className="w-48 max-h-60 overflow-y-auto p-1" align="start" avoidCollisions sideOffset={4}>
+          <div className="flex flex-col">
+            {enabledCats.map((c) => {
+              const isChecked = selected.includes(c.id);
+              return (
+                <div
+                  key={c.id}
+                  role="option"
+                  aria-selected={isChecked}
+                  className="flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-xs hover:bg-accent"
+                  onClick={() => {
+                    const nextCats = isChecked
+                      ? selected.filter((id) => id !== c.id)
+                      : [...selected, c.id];
+                    setSelected(nextCats);
+                    onCategoryChange(nextCats);
+                  }}
+                >
+                  <Checkbox checked={isChecked} />
+                  <span className="truncate">{c.label}</span>
+                </div>
+              );
+            })}
+          </div>
+        </PopoverContent>
+      </Popover>
+    </div>
+  );
+}
+
 function MetaRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="grid grid-cols-2 gap-2 py-1.5">
@@ -484,62 +560,17 @@ function DetailsTab({
         />
         <MetaRow
           label="Category"
-          value={(() => {
-            const selectedCats = workOrder.categories.length > 0
-              ? workOrder.categories
-              : (workOrder.category ? [workOrder.category] : []);
-            const enabledCats = woCategories.filter((c) => c.enabled);
-            return (
-              <div className="flex flex-wrap items-center gap-1.5">
-                {selectedCats.map((catId) => {
-                  const cat = enabledCats.find((c) => c.id === catId);
-                  return (
-                    <span
-                      key={catId}
-                      className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700"
-                    >
-                      {cat?.label ?? catId}
-                    </span>
-                  );
-                })}
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <button
-                      type="button"
-                      className="inline-flex h-6 items-center gap-1 rounded-full border border-dashed border-slate-300 px-2 text-[11px] text-slate-500 hover:bg-slate-50"
-                    >
-                      {selectedCats.length === 0 ? "Add" : "Edit"}
-                      <ChevronDown className="h-3 w-3 opacity-50" />
-                    </button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-48 max-h-60 overflow-y-auto p-1" align="start" avoidCollisions sideOffset={4}>
-                    <div className="flex flex-col">
-                      {enabledCats.map((c) => {
-                        const isChecked = selectedCats.includes(c.id);
-                        return (
-                          <div
-                            key={c.id}
-                            role="option"
-                            aria-selected={isChecked}
-                            className="flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-xs hover:bg-accent"
-                            onClick={() => {
-                              const nextCats = isChecked
-                                ? selectedCats.filter((id) => id !== c.id)
-                                : [...selectedCats, c.id];
-                              onCategoryChange(nextCats);
-                            }}
-                          >
-                            <Checkbox checked={isChecked} />
-                            <span className="truncate">{c.label}</span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </PopoverContent>
-                </Popover>
-              </div>
-            );
-          })()}
+          value={
+            <CategoryPicker
+              categories={
+                workOrder.categories.length > 0
+                  ? workOrder.categories
+                  : (workOrder.category ? [workOrder.category] : [])
+              }
+              enabledCats={woCategories.filter((c) => c.enabled)}
+              onCategoryChange={onCategoryChange}
+            />
+          }
         />
         <MetaRow
           label="Type"

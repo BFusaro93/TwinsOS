@@ -1,9 +1,12 @@
 import { NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
+import { createClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
+import type { Database } from "@/types/supabase";
 import { recalcNextPackageVisitDate } from "@/lib/package-visit-recalc";
 import { stripHtml } from "@/lib/utils/strip-html";
 import { fireServiceVisitCompletedTriggers, fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
+import { processEnrollmentImmediately } from "@/lib/automations/sequence-processor";
 
 // Billing-period boundaries (inclusive, "YYYY-MM-DD") for batching auto-invoices
 // under a client's weekly/monthly invoice_frequency. Computed in UTC to avoid
@@ -412,10 +415,30 @@ export async function POST(
           .filter((id): id is string => !!id);
       }
 
+      const newEnrollmentIds: string[] = [];
       if (serviceIds.length > 0) {
-        await fireServiceVisitCompletedTriggers(supabase, { orgId, clientId: v.client_id, serviceIds });
+        newEnrollmentIds.push(...await fireServiceVisitCompletedTriggers(supabase, { orgId, clientId: v.client_id, serviceIds }));
       }
-      await fireSimpleTrigger(supabase, { orgId, clientId: v.client_id, triggerType: "visit_completed", matchValues: serviceIds });
+      newEnrollmentIds.push(
+        ...await fireSimpleTrigger(supabase, { orgId, clientId: v.client_id, triggerType: "visit_completed", matchValues: serviceIds })
+      );
+
+      // Drive each new enrollment through any steps due right now (e.g. an
+      // email with no "wait" in front of it) instead of leaving it queued
+      // for the next daily /api/automations/run cron sweep — this is what
+      // gets a "visit completed" notification out within seconds rather than
+      // waiting up to a day. Needs the service-role client since the
+      // processor writes across tables (notifications, tickets, etc.) not
+      // all covered by this request's RLS-scoped session.
+      if (newEnrollmentIds.length > 0) {
+        const adminClient = createClient<Database>(
+          process.env.NEXT_PUBLIC_SUPABASE_URL!,
+          process.env.SUPABASE_SERVICE_ROLE_KEY!
+        );
+        for (const enrollmentId of newEnrollmentIds) {
+          await processEnrollmentImmediately(adminClient, enrollmentId);
+        }
+      }
     }
   } catch (err) {
     console.error("[visits/complete] automation trigger enrollment failed:", err);

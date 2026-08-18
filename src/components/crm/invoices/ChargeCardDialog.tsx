@@ -1,24 +1,19 @@
 "use client";
 
 import { useState } from "react";
-import { loadStripe, type Stripe as StripeJs } from "@stripe/stripe-js";
 import { Elements, PaymentElement, useStripe, useElements } from "@stripe/react-stripe-js";
 import { Loader2, CreditCard, Check } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { formatCurrency } from "@/lib/utils";
 import { useCreateCrmPaymentIntent, type CreatePaymentIntentResult } from "@/lib/hooks/use-crm-card-payments";
-
-let stripeJsPromise: Promise<StripeJs | null> | null = null;
-function getStripeJs(): Promise<StripeJs | null> | null {
-  const key = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY;
-  if (!key) return null;
-  if (!stripeJsPromise) stripeJsPromise = loadStripe(key);
-  return stripeJsPromise;
-}
+import { useChargeAutopayInvoice } from "@/lib/hooks/use-autopay-invoices";
+import { useOrgSettings } from "@/lib/hooks/use-org-settings";
+import { hasPublishableKey, getScopedStripeJs } from "@/lib/stripe/client";
 
 function PayForm({ totalChargeCents, onSuccess }: { totalChargeCents: number; onSuccess: () => void }) {
   const stripe = useStripe();
@@ -48,7 +43,8 @@ function PayForm({ totalChargeCents, onSuccess }: { totalChargeCents: number; on
 
   return (
     <div className="flex flex-col gap-4">
-      <PaymentElement />
+      {/* Staff are entering the client's card, not their own — see SavedPaymentMethodDialog. */}
+      <PaymentElement options={{ wallets: { link: "never" } }} />
       {error && <p className="text-sm text-red-600">{error}</p>}
       <Button onClick={handleConfirm} disabled={submitting || !stripe} className="w-full">
         {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
@@ -61,36 +57,66 @@ function PayForm({ totalChargeCents, onSuccess }: { totalChargeCents: number; on
 export function ChargeCardDialog({
   invoiceId,
   balanceCents,
+  savedPaymentMethod,
   open,
   onOpenChange,
   onCharged,
 }: {
   invoiceId: string;
   balanceCents: number;
+  savedPaymentMethod?: { type: "card" | "us_bank_account"; summary: string } | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onCharged: () => void;
 }) {
+  const [paymentMethod, setPaymentMethod] = useState<"card" | "us_bank_account">("card");
   const [waiveFee, setWaiveFee] = useState(false);
+  const [overrideFee, setOverrideFee] = useState(false);
+  const [overrideFeeDollars, setOverrideFeeDollars] = useState("");
   const [intent, setIntent] = useState<CreatePaymentIntentResult | null>(null);
   const [succeeded, setSucceeded] = useState(false);
+  const { data: orgSettings } = useOrgSettings();
+  const achEnabled = orgSettings?.achPaymentsEnabled ?? false;
   const createIntent = useCreateCrmPaymentIntent();
+  const chargeSaved = useChargeAutopayInvoice();
 
   function handleOpenChange(next: boolean) {
     if (!next) {
+      setPaymentMethod("card");
       setWaiveFee(false);
+      setOverrideFee(false);
+      setOverrideFeeDollars("");
       setIntent(null);
       setSucceeded(false);
     }
     onOpenChange(next);
   }
 
-  async function handleContinue() {
+  async function handleChargeSaved() {
     try {
-      const result = await createIntent.mutateAsync({ invoiceId, waiveFee });
+      await chargeSaved.mutateAsync({ invoiceId });
+      setSucceeded(true);
+      onCharged();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to charge saved payment method");
+    }
+  }
+
+  async function handleContinue() {
+    let overrideFeeCents: number | undefined;
+    if (overrideFee && !waiveFee) {
+      const dollars = parseFloat(overrideFeeDollars);
+      if (isNaN(dollars) || dollars < 0) {
+        toast.error("Enter a valid fee amount");
+        return;
+      }
+      overrideFeeCents = Math.round(dollars * 100);
+    }
+    try {
+      const result = await createIntent.mutateAsync({ invoiceId, waiveFee, overrideFeeCents, paymentMethod });
       setIntent(result);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to start card payment");
+      toast.error(err instanceof Error ? err.message : "Failed to start payment");
     }
   }
 
@@ -99,7 +125,7 @@ export function ChargeCardDialog({
     onCharged();
   }
 
-  const stripeJs = getStripeJs();
+  const stripeJs = intent ? getScopedStripeJs(intent.connectedAccountId) : null;
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -107,7 +133,7 @@ export function ChargeCardDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <CreditCard className="h-4 w-4 text-brand-500" />
-            Charge Card
+            Collect Payment
           </DialogTitle>
         </DialogHeader>
 
@@ -123,7 +149,7 @@ export function ChargeCardDialog({
             </Button>
           </div>
         ) : !intent ? (
-          !stripeJs ? (
+          !hasPublishableKey() ? (
             <p className="py-4 text-sm text-slate-500">
               Card payments aren&apos;t configured yet. Add the Stripe environment variables to enable this.
             </p>
@@ -133,12 +159,81 @@ export function ChargeCardDialog({
                 <span className="text-slate-500">Balance Due</span>
                 <span className="font-semibold tabular-nums">{formatCurrency(balanceCents)}</span>
               </div>
-              <div className="flex items-center gap-2">
-                <Checkbox id="waive-fee" checked={waiveFee} onCheckedChange={(v) => setWaiveFee(v === true)} />
-                <Label htmlFor="waive-fee" className="text-sm font-normal text-slate-600">
-                  Waive credit card processing fee
-                </Label>
+              {savedPaymentMethod && (
+                <div className="flex items-center justify-between rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
+                  <span className="text-sm text-slate-700">{savedPaymentMethod.summary} on file</span>
+                  <Button size="sm" onClick={() => void handleChargeSaved()} disabled={chargeSaved.isPending}>
+                    {chargeSaved.isPending && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
+                    Charge Saved
+                  </Button>
+                </div>
+              )}
+              {savedPaymentMethod && <p className="text-xs text-slate-400">Or enter a new payment method:</p>}
+              <div className={`grid gap-2 ${achEnabled ? "grid-cols-2" : "grid-cols-1"}`}>
+                <button
+                  type="button"
+                  onClick={() => setPaymentMethod("card")}
+                  className={`rounded-md border px-3 py-2 text-sm font-medium transition-colors ${
+                    paymentMethod === "card"
+                      ? "border-brand-500 bg-brand-50 text-brand-700"
+                      : "border-slate-200 text-slate-600 hover:bg-slate-50"
+                  }`}
+                >
+                  Card
+                </button>
+                {achEnabled && (
+                  <button
+                    type="button"
+                    onClick={() => setPaymentMethod("us_bank_account")}
+                    className={`rounded-md border px-3 py-2 text-sm font-medium transition-colors ${
+                      paymentMethod === "us_bank_account"
+                        ? "border-brand-500 bg-brand-50 text-brand-700"
+                        : "border-slate-200 text-slate-600 hover:bg-slate-50"
+                    }`}
+                  >
+                    Bank Transfer (ACH)
+                  </button>
+                )}
               </div>
+              {paymentMethod === "card" && (
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-center gap-2">
+                    <Checkbox
+                      id="waive-fee"
+                      checked={waiveFee}
+                      onCheckedChange={(v) => setWaiveFee(v === true)}
+                    />
+                    <Label htmlFor="waive-fee" className="text-sm font-normal text-slate-600">
+                      Waive credit card processing fee
+                    </Label>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Checkbox
+                      id="override-fee"
+                      checked={overrideFee}
+                      disabled={waiveFee}
+                      onCheckedChange={(v) => setOverrideFee(v === true)}
+                    />
+                    <Label htmlFor="override-fee" className="text-sm font-normal text-slate-600">
+                      Override fee amount
+                    </Label>
+                  </div>
+                  {overrideFee && !waiveFee && (
+                    <div className="flex items-center gap-2 pl-6">
+                      <span className="text-sm text-slate-500">$</span>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        placeholder="0.00"
+                        value={overrideFeeDollars}
+                        onChange={(e) => setOverrideFeeDollars(e.target.value)}
+                        className="h-8 w-28"
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
               <DialogFooter>
                 <Button variant="outline" onClick={() => handleOpenChange(false)}>
                   Cancel
@@ -168,7 +263,7 @@ export function ChargeCardDialog({
                 <span className="tabular-nums">{formatCurrency(intent.totalChargeCents)}</span>
               </div>
             </div>
-            <Elements stripe={stripeJs} options={{ clientSecret: intent.clientSecret }}>
+            <Elements key={intent.clientSecret} stripe={stripeJs} options={{ clientSecret: intent.clientSecret }}>
               <PayForm totalChargeCents={intent.totalChargeCents} onSuccess={handleSuccess} />
             </Elements>
           </div>

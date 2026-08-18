@@ -69,7 +69,7 @@ export async function submitFormResponse(
 ): Promise<{ ok: true; result: string } | { ok: false; error: string }> {
   const { data: formFields } = await db
     .from("crm_form_fields")
-    .select("id, label, mapped_field")
+    .select("id, label, mapped_field, field_type")
     .eq("form_id", form.id)
     .is("deleted_at", null);
 
@@ -425,6 +425,24 @@ export async function submitFormResponse(
     }
   } else {
     result = relatedClientId ? "On Hold — Matched" : "On Hold — New";
+  }
+
+  // ── SMS opt-in consent capture ────────────────────────────────────────────────
+  // A checked sms_optin field is affirmative, TCPA-required consent — only ever
+  // sets consent true, never clears it (an unchecked/absent box just means this
+  // particular form didn't ask, not that the client revoked prior consent).
+  if (relatedClientId && formFields) {
+    const optInField = formFields.find((f: { field_type?: string }) => f.field_type === "sms_optin");
+    if (optInField && formData[optInField.label] === "true") {
+      await db
+        .from("clients")
+        .update({
+          sms_opt_in: true,
+          sms_opt_in_at: new Date().toISOString(),
+          sms_opt_in_source: "form",
+        })
+        .eq("id", relatedClientId);
+    }
   }
 
   // ── Apply Tags on Submit ──────────────────────────────────────────────────────
