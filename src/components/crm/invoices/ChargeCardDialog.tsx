@@ -6,6 +6,7 @@ import { Loader2, CreditCard, Check } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { formatCurrency } from "@/lib/utils";
@@ -65,6 +66,8 @@ export function ChargeCardDialog({
 }) {
   const [paymentMethod, setPaymentMethod] = useState<"card" | "us_bank_account">("card");
   const [waiveFee, setWaiveFee] = useState(false);
+  const [overrideFee, setOverrideFee] = useState(false);
+  const [overrideFeeDollars, setOverrideFeeDollars] = useState("");
   const [intent, setIntent] = useState<CreatePaymentIntentResult | null>(null);
   const [succeeded, setSucceeded] = useState(false);
   const createIntent = useCreateCrmPaymentIntent();
@@ -73,6 +76,8 @@ export function ChargeCardDialog({
     if (!next) {
       setPaymentMethod("card");
       setWaiveFee(false);
+      setOverrideFee(false);
+      setOverrideFeeDollars("");
       setIntent(null);
       setSucceeded(false);
     }
@@ -80,8 +85,17 @@ export function ChargeCardDialog({
   }
 
   async function handleContinue() {
+    let overrideFeeCents: number | undefined;
+    if (overrideFee && !waiveFee) {
+      const dollars = parseFloat(overrideFeeDollars);
+      if (isNaN(dollars) || dollars < 0) {
+        toast.error("Enter a valid fee amount");
+        return;
+      }
+      overrideFeeCents = Math.round(dollars * 100);
+    }
     try {
-      const result = await createIntent.mutateAsync({ invoiceId, waiveFee, paymentMethod });
+      const result = await createIntent.mutateAsync({ invoiceId, waiveFee, overrideFeeCents, paymentMethod });
       setIntent(result);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to start payment");
@@ -152,11 +166,42 @@ export function ChargeCardDialog({
                 </button>
               </div>
               {paymentMethod === "card" && (
-                <div className="flex items-center gap-2">
-                  <Checkbox id="waive-fee" checked={waiveFee} onCheckedChange={(v) => setWaiveFee(v === true)} />
-                  <Label htmlFor="waive-fee" className="text-sm font-normal text-slate-600">
-                    Waive credit card processing fee
-                  </Label>
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-center gap-2">
+                    <Checkbox
+                      id="waive-fee"
+                      checked={waiveFee}
+                      onCheckedChange={(v) => setWaiveFee(v === true)}
+                    />
+                    <Label htmlFor="waive-fee" className="text-sm font-normal text-slate-600">
+                      Waive credit card processing fee
+                    </Label>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Checkbox
+                      id="override-fee"
+                      checked={overrideFee}
+                      disabled={waiveFee}
+                      onCheckedChange={(v) => setOverrideFee(v === true)}
+                    />
+                    <Label htmlFor="override-fee" className="text-sm font-normal text-slate-600">
+                      Override fee amount
+                    </Label>
+                  </div>
+                  {overrideFee && !waiveFee && (
+                    <div className="flex items-center gap-2 pl-6">
+                      <span className="text-sm text-slate-500">$</span>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        placeholder="0.00"
+                        value={overrideFeeDollars}
+                        onChange={(e) => setOverrideFeeDollars(e.target.value)}
+                        className="h-8 w-28"
+                      />
+                    </div>
+                  )}
                 </div>
               )}
               <DialogFooter>
