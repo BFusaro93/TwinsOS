@@ -43,3 +43,30 @@ export function methodForPaymentIntent(paymentMethodTypes: string[], cardBrand: 
   if (paymentMethodTypes.includes("us_bank_account")) return "ACH/E-Check";
   return methodForCardBrand(cardBrand);
 }
+
+export interface InvoiceAllocation {
+  invoiceId: string;
+  amountCents: number;
+}
+
+/** A single charge split across multiple invoices is carried through Stripe metadata as a
+ * compact "invoiceId:amountCents,invoiceId:amountCents" string — metadata values are capped
+ * at 500 characters, so this stays far more compact than JSON for the handful of invoices a
+ * real charge would ever cover. */
+export function encodeAllocations(allocations: InvoiceAllocation[]): string {
+  return allocations.map((a) => `${a.invoiceId}:${a.amountCents}`).join(",");
+}
+
+export function decodeAllocations(encoded: string): InvoiceAllocation[] {
+  return encoded
+    .split(",")
+    .filter(Boolean)
+    .map((pair) => {
+      const [invoiceId, amountStr] = pair.split(":");
+      return { invoiceId, amountCents: parseInt(amountStr, 10) };
+    });
+}
+
+/** Stripe metadata values are capped at 500 characters — this is the practical limit on how
+ * many invoices one charge can be split across. */
+export const MAX_ALLOCATION_METADATA_LENGTH = 500;

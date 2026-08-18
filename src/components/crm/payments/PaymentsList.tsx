@@ -3,8 +3,17 @@
 import { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import { Elements, PaymentElement, useStripe, useElements } from "@stripe/react-stripe-js";
 import { usePayments, useRecordPayment, useUpdatePayment, useRefundPayment, useInvoices, usePaymentAllocations, useBulkImportPayments } from "@/lib/hooks/use-invoices";
 import { useClients } from "@/lib/hooks/use-clients";
+import { useConnectStatus } from "@/lib/hooks/use-crm-card-payments";
+import { useOrgSettings } from "@/lib/hooks/use-org-settings";
+import {
+  useCreateMultiPaymentIntent,
+  useChargeMultiSaved,
+  type CreateMultiPaymentIntentResult,
+} from "@/lib/hooks/use-multi-invoice-charge";
+import { hasPublishableKey, getScopedStripeJs } from "@/lib/stripe/client";
 import { ImportExportMenu } from "@/components/shared/ImportExportMenu";
 import { exportCSV } from "@/lib/csv";
 import { Button } from "@/components/ui/button";
@@ -26,7 +35,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { formatCurrency } from "@/lib/utils";
-import { Plus, RotateCcw, Search, X } from "lucide-react";
+import { Plus, RotateCcw, Search, X, Loader2, Check } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { ClientCombobox } from "@/components/shared/ClientCombobox";
 import { ColumnChooser } from "@/components/shared/ColumnChooser";
@@ -77,6 +86,46 @@ interface InvoiceAllocation {
 
 import type { CRMPayment } from "@/types/crm-invoices";
 
+// ── multi-invoice charge form (fresh card/bank entry) ───────────────────────
+
+function ChargeMultiForm({ totalChargeCents, onSuccess }: { totalChargeCents: number; onSuccess: () => void }) {
+  const stripe = useStripe();
+  const elements = useElements();
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleConfirm() {
+    if (!stripe || !elements) return;
+    setSubmitting(true);
+    setError(null);
+    const { error: confirmError, paymentIntent } = await stripe.confirmPayment({
+      elements,
+      redirect: "if_required",
+    });
+    setSubmitting(false);
+    if (confirmError) {
+      setError(confirmError.message ?? "Payment failed");
+      return;
+    }
+    if (paymentIntent?.status === "succeeded" || paymentIntent?.status === "processing") {
+      onSuccess();
+    } else {
+      setError("Payment was not completed");
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      <PaymentElement options={{ wallets: { link: "never" } }} />
+      {error && <p className="text-sm text-red-600">{error}</p>}
+      <Button onClick={handleConfirm} disabled={submitting || !stripe} className="w-full">
+        {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+        Charge {formatCurrency(totalChargeCents)}
+      </Button>
+    </div>
+  );
+}
+
 export function AddPaymentDialog({
   open,
   onOpenChange,
@@ -100,6 +149,18 @@ export function AddPaymentDialog({
   const { mutateAsync: record, isPending: isRecording } = useRecordPayment();
   const { mutateAsync: update, isPending: isUpdating } = useUpdatePayment();
   const isPending = isRecording || isUpdating;
+
+  // ── charge card/bank now, instead of recording an already-received payment ──
+  const { data: connectStatus } = useConnectStatus();
+  const { data: orgSettings } = useOrgSettings();
+  const achEnabled = orgSettings?.achPaymentsEnabled ?? false;
+  const canCharge = !isEdit && !isCreditMode && hasPublishableKey() && (connectStatus?.chargesEnabled ?? false);
+  const [chargeMode, setChargeMode] = useState(false);
+  const [chargePaymentMethod, setChargePaymentMethod] = useState<"card" | "us_bank_account">("card");
+  const [chargeIntent, setChargeIntent] = useState<CreateMultiPaymentIntentResult | null>(null);
+  const [chargeSucceeded, setChargeSucceeded] = useState(false);
+  const createMultiIntent = useCreateMultiPaymentIntent();
+  const chargeMultiSaved = useChargeMultiSaved();
 
   function todayLocal() {
     const d = new Date();
@@ -249,6 +310,51 @@ export function AddPaymentDialog({
     setIsPrepayment(false);
     setAutoAllocate(false);
     setAllocations([]);
+    setChargeMode(false);
+    setChargePaymentMethod("card");
+    setChargeIntent(null);
+    setChargeSucceeded(false);
+  }
+
+  const chargeAllocations = allocations
+    .filter((a) => a.amountCents > 0)
+    .map((a) => ({ invoiceId: a.invoiceId, amountCents: a.amountCents }));
+  const selectedClientForCharge = (clients ?? []).find((c) => c.id === clientId);
+  const chargeSavedMethodType = selectedClientForCharge?.savedPaymentMethodType ?? null;
+  const chargeSavedMethodSummary = selectedClientForCharge?.savedPaymentMethodSummary ?? null;
+
+  async function handleChargeSaved() {
+    if (chargeAllocations.length === 0) {
+      toast.error("Allocate the amount to at least one invoice first");
+      return;
+    }
+    try {
+      await chargeMultiSaved.mutateAsync({ clientId, allocations: chargeAllocations });
+      setChargeSucceeded(true);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to charge saved payment method");
+    }
+  }
+
+  async function handleChargeNew() {
+    if (chargeAllocations.length === 0) {
+      toast.error("Allocate the amount to at least one invoice first");
+      return;
+    }
+    try {
+      const result = await createMultiIntent.mutateAsync({
+        clientId,
+        allocations: chargeAllocations,
+        paymentMethod: chargePaymentMethod,
+      });
+      setChargeIntent(result);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to start payment");
+    }
+  }
+
+  function handleChargeSuccess() {
+    setChargeSucceeded(true);
   }
 
   async function submit(andNew: boolean) {
@@ -312,12 +418,75 @@ export function AddPaymentDialog({
 
   const selectedClient = (clients ?? []).find((c) => c.id === clientId);
 
+  const chargeStripeJs = chargeIntent ? getScopedStripeJs(chargeIntent.connectedAccountId) : null;
+
+  if (chargeSucceeded) {
+    return (
+      <Dialog open={open} onOpenChange={(o) => { if (!o) resetForm(); onOpenChange(o); }}>
+        <DialogContent className="max-w-sm">
+          <div className="flex flex-col items-center gap-2 py-6 text-center">
+            <Check className="h-8 w-8 text-green-500" />
+            <p className="text-sm font-medium text-slate-900">Payment submitted</p>
+            <p className="text-xs text-slate-500">
+              Invoice balances will update in a few seconds once it&apos;s confirmed.
+            </p>
+            <Button size="sm" className="mt-2" onClick={() => { resetForm(); onOpenChange(false); }}>
+              Done
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    );
+  }
+
+  if (chargeIntent) {
+    return (
+      <Dialog open={open} onOpenChange={(o) => { if (!o) resetForm(); onOpenChange(o); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-semibold">Charge Payment Method</DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col gap-4 py-2">
+            <div className="flex flex-col gap-1 text-sm">
+              <div className="flex justify-between">
+                <span className="text-slate-500">Amount</span>
+                <span className="tabular-nums">{formatCurrency(chargeIntent.balanceCents)}</span>
+              </div>
+              {chargeIntent.feeCents > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Processing Fee</span>
+                  <span className="tabular-nums">{formatCurrency(chargeIntent.feeCents)}</span>
+                </div>
+              )}
+              <div className="flex justify-between border-t pt-1 font-semibold">
+                <span>Total Charge</span>
+                <span className="tabular-nums">{formatCurrency(chargeIntent.totalChargeCents)}</span>
+              </div>
+            </div>
+            <Elements key={chargeIntent.clientSecret} stripe={chargeStripeJs} options={{ clientSecret: chargeIntent.clientSecret }}>
+              <ChargeMultiForm totalChargeCents={chargeIntent.totalChargeCents} onSuccess={handleChargeSuccess} />
+            </Elements>
+          </div>
+        </DialogContent>
+      </Dialog>
+    );
+  }
+
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) resetForm(); onOpenChange(o); }}>
       <DialogContent className="max-w-3xl p-0 gap-0">
         <DialogHeader className="px-6 py-4 border-b">
-          <DialogTitle className="text-lg font-semibold">
-            {isCreditMode ? (isEdit ? "Edit Account Credit" : "Issue Account Credit") : (isEdit ? "Edit Payment" : "Add Payment")}
+          <DialogTitle className="text-lg font-semibold flex items-center justify-between">
+            <span>{isCreditMode ? (isEdit ? "Edit Account Credit" : "Issue Account Credit") : (isEdit ? "Edit Payment" : chargeMode ? "Charge Card / Bank" : "Add Payment")}</span>
+            {canCharge && (
+              <button
+                type="button"
+                onClick={() => setChargeMode((v) => !v)}
+                className="text-xs font-normal text-brand-600 hover:underline"
+              >
+                {chargeMode ? "Record a payment instead" : "Charge a card/bank instead"}
+              </button>
+            )}
           </DialogTitle>
         </DialogHeader>
 
@@ -388,7 +557,7 @@ export function AddPaymentDialog({
                 </div>
               </div>
 
-              {!isCreditMode && (
+              {!isCreditMode && !chargeMode && (
                 <>
                   <Label className="text-right text-sm font-medium">Check #</Label>
                   <Input
@@ -412,15 +581,56 @@ export function AddPaymentDialog({
                 </>
               )}
 
-              <Label className="text-right text-sm font-medium">{isCreditMode ? "Reason" : "Memo"}</Label>
-              <Input
-                className="h-8 text-sm"
-                value={memo}
-                onChange={(e) => setMemo(e.target.value)}
-                placeholder={isCreditMode ? "e.g. Billing correction, goodwill credit…" : undefined}
-              />
+              {chargeMode && (
+                <>
+                  <Label className="text-right text-sm font-medium">Method</Label>
+                  <div className="flex flex-col gap-2">
+                    <div className={`grid gap-2 ${achEnabled ? "grid-cols-2" : "grid-cols-1"} w-72`}>
+                      <button
+                        type="button"
+                        onClick={() => setChargePaymentMethod("card")}
+                        className={`rounded-md border px-3 py-1.5 text-sm font-medium transition-colors ${
+                          chargePaymentMethod === "card"
+                            ? "border-brand-500 bg-brand-50 text-brand-700"
+                            : "border-slate-200 text-slate-600 hover:bg-slate-50"
+                        }`}
+                      >
+                        Card
+                      </button>
+                      {achEnabled && (
+                        <button
+                          type="button"
+                          onClick={() => setChargePaymentMethod("us_bank_account")}
+                          className={`rounded-md border px-3 py-1.5 text-sm font-medium transition-colors ${
+                            chargePaymentMethod === "us_bank_account"
+                              ? "border-brand-500 bg-brand-50 text-brand-700"
+                              : "border-slate-200 text-slate-600 hover:bg-slate-50"
+                          }`}
+                        >
+                          Bank Account (ACH)
+                        </button>
+                      )}
+                    </div>
+                    {chargeSavedMethodType && (
+                      <p className="text-xs text-slate-500">Saved on file: {chargeSavedMethodSummary}</p>
+                    )}
+                  </div>
+                </>
+              )}
 
-              {!isCreditMode && (
+              {!chargeMode && (
+                <>
+                  <Label className="text-right text-sm font-medium">{isCreditMode ? "Reason" : "Memo"}</Label>
+                  <Input
+                    className="h-8 text-sm"
+                    value={memo}
+                    onChange={(e) => setMemo(e.target.value)}
+                    placeholder={isCreditMode ? "e.g. Billing correction, goodwill credit…" : undefined}
+                  />
+                </>
+              )}
+
+              {!isCreditMode && !chargeMode && (
                 <>
                   <Label htmlFor="prepayment-check" className="text-right text-sm font-medium cursor-pointer whitespace-nowrap">Is a pre-payment?</Label>
                   <Checkbox
@@ -527,22 +737,47 @@ export function AddPaymentDialog({
 
         {/* Footer */}
         <div className="flex items-center justify-center gap-3 border-t bg-slate-50 px-6 py-4">
-          {!isEdit && (
-            <Button
-              className="bg-[#4a4a4a] hover:bg-[#3a3a3a] text-white px-6"
-              onClick={() => submit(true)}
-              disabled={isPending}
-            >
-              Save &amp; New
-            </Button>
+          {chargeMode ? (
+            <>
+              {chargeSavedMethodType && (
+                <Button
+                  className="bg-[#4a4a4a] hover:bg-[#3a3a3a] text-white px-6"
+                  onClick={() => void handleChargeSaved()}
+                  disabled={chargeMultiSaved.isPending || chargeAllocations.length === 0}
+                >
+                  {chargeMultiSaved.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Charge Saved {chargeAllocations.length > 0 ? formatCurrency(amountApplied) : ""}
+                </Button>
+              )}
+              <Button
+                className="bg-[#4a4a4a] hover:bg-[#3a3a3a] text-white px-6"
+                onClick={() => void handleChargeNew()}
+                disabled={createMultiIntent.isPending || chargeAllocations.length === 0}
+              >
+                {createMultiIntent.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                {chargeSavedMethodType ? "Charge New Method" : `Charge ${chargeAllocations.length > 0 ? formatCurrency(amountApplied) : ""}`}
+              </Button>
+            </>
+          ) : (
+            <>
+              {!isEdit && (
+                <Button
+                  className="bg-[#4a4a4a] hover:bg-[#3a3a3a] text-white px-6"
+                  onClick={() => submit(true)}
+                  disabled={isPending}
+                >
+                  Save &amp; New
+                </Button>
+              )}
+              <Button
+                className="bg-[#4a4a4a] hover:bg-[#3a3a3a] text-white px-6"
+                onClick={() => submit(false)}
+                disabled={isPending}
+              >
+                {isPending ? "Saving…" : "Save & Close"}
+              </Button>
+            </>
           )}
-          <Button
-            className="bg-[#4a4a4a] hover:bg-[#3a3a3a] text-white px-6"
-            onClick={() => submit(false)}
-            disabled={isPending}
-          >
-            {isPending ? "Saving…" : "Save & Close"}
-          </Button>
           <span className="text-slate-400 text-sm">or</span>
           <button
             className="text-brand-600 text-sm hover:underline"
