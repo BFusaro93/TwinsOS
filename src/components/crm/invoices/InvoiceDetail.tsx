@@ -1336,6 +1336,11 @@ export function InvoiceDetail({
       <ChargeCardDialog
         invoiceId={invoice.id}
         balanceCents={invoice.balanceCents}
+        savedPaymentMethod={
+          invoice.clientSavedPaymentMethodType
+            ? { type: invoice.clientSavedPaymentMethodType, summary: invoice.clientSavedPaymentMethodSummary ?? "Saved method" }
+            : null
+        }
         open={chargeCardOpen}
         onOpenChange={setChargeCardOpen}
         onCharged={() => {

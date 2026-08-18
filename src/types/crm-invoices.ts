@@ -115,6 +115,9 @@ export interface CRMInvoice {
   clientDefaultTaxRateBps?: number;
   clientDefaultTerms?: string;
   clientDefaultPaymentMethod?: string | null;
+  clientSavedPaymentMethodType?: "card" | "us_bank_account" | null;
+  clientSavedPaymentMethodSummary?: string | null;
+  clientAutopayEnabled?: boolean;
   salesRepName?: string | null;
   clientInvoiceDelivery?: 'email' | 'print' | 'both';
   lineItems?: InvoiceLineItem[];

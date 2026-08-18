@@ -42,16 +42,18 @@ export function useCreateCrmPaymentIntent() {
     mutationFn: async ({
       invoiceId,
       waiveFee,
+      overrideFeeCents,
       paymentMethod,
     }: {
       invoiceId: string;
       waiveFee?: boolean;
+      overrideFeeCents?: number;
       paymentMethod: "card" | "us_bank_account";
     }) => {
       const res = await fetch("/api/crm/payments/create-intent", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ invoiceId, waiveFee, paymentMethod }),
+        body: JSON.stringify({ invoiceId, waiveFee, overrideFeeCents, paymentMethod }),
       });
       const body = await res.json();
       if (!res.ok) throw new Error(body.error ?? "Failed to start payment");

@@ -7,6 +7,7 @@ import { computeProcessingFee } from "@/lib/stripe/crm-payments";
 const CreateIntentSchema = z.object({
   invoiceId: z.string().uuid(),
   waiveFee: z.boolean().optional(),
+  overrideFeeCents: z.number().int().min(0).optional(),
   paymentMethod: z.enum(["card", "us_bank_account"]).default("card"),
 });
 
@@ -31,7 +32,7 @@ export async function POST(request: Request) {
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
-  const { invoiceId, waiveFee, paymentMethod } = parsed.data;
+  const { invoiceId, waiveFee, overrideFeeCents, paymentMethod } = parsed.data;
 
   const { data: invoice } = await supabase
     .from("crm_invoices")
@@ -71,7 +72,8 @@ export async function POST(request: Request) {
             ccProcessingFeeThresholdCents: org.cc_processing_fee_threshold_cents,
           },
           invoice.balance_cents,
-          waiveFee ?? false
+          waiveFee ?? false,
+          overrideFeeCents
         )
       : { feeCents: 0, totalChargeCents: invoice.balance_cents };
 

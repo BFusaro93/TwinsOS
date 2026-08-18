@@ -64,6 +64,8 @@ import { SendClientEmailDialog } from "./SendClientEmailDialog";
 import { ClientProjectsTab } from "./ClientProjectsTab";
 import { ClientPhotosTab } from "./ClientPhotosTab";
 import { AerialMeasurementDialog } from "./AerialMeasurementDialog";
+import { SavedPaymentMethodDialog } from "./clients/SavedPaymentMethodDialog";
+import { useRemoveSavedPaymentMethod, useSetAutopayEnabled } from "@/lib/hooks/use-saved-payment-methods";
 import {
   useCustomFieldDefs,
   useClientCustomFieldValues,
@@ -217,6 +219,86 @@ function InfoRow({ label, value }: { label: string; value?: string | null }) {
     <div className="flex items-start gap-2 text-sm">
       <span className="shrink-0 text-slate-400">{label}</span>
       <span className="text-slate-700">{value}</span>
+    </div>
+  );
+}
+
+// ── SavedPaymentMethodSection ─────────────────────────────────────────────────
+// Card/bank on file for autopay ("Invoices to Charge" queues use this, not the
+// invoice-level default_payment_method preference above).
+
+function SavedPaymentMethodSection({ client }: { client: Client }) {
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const removeMethod = useRemoveSavedPaymentMethod();
+  const setAutopayEnabled = useSetAutopayEnabled();
+
+  async function handleRemove() {
+    if (!confirm("Remove the saved payment method for this client? Autopay will stop until a new one is added.")) return;
+    try {
+      await removeMethod.mutateAsync({ clientId: client.id });
+      toast.success("Payment method removed");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to remove payment method");
+    }
+  }
+
+  async function handleToggleAutopay() {
+    try {
+      await setAutopayEnabled.mutateAsync({ clientId: client.id, autopayEnabled: !client.autopayEnabled });
+      toast.success(client.autopayEnabled ? "Autopay turned off" : "Autopay turned on");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to update autopay setting");
+    }
+  }
+
+  return (
+    <div className="space-y-2">
+      {client.savedPaymentMethodSummary ? (
+        <div className="flex items-center gap-2 text-sm">
+          <span className="text-slate-700">{client.savedPaymentMethodSummary}</span>
+          <span
+            className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
+              client.autopayEnabled ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"
+            }`}
+          >
+            Autopay {client.autopayEnabled ? "On" : "Off"}
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-6 text-xs"
+            onClick={handleToggleAutopay}
+            disabled={setAutopayEnabled.isPending}
+          >
+            Turn {client.autopayEnabled ? "Off" : "On"}
+          </Button>
+          <Button variant="outline" size="sm" className="h-6 text-xs" onClick={() => setDialogOpen(true)}>
+            Update
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-6 text-xs text-red-600 hover:text-red-700"
+            onClick={handleRemove}
+            disabled={removeMethod.isPending}
+          >
+            Remove
+          </Button>
+        </div>
+      ) : (
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-slate-400">No payment method on file</span>
+          <Button variant="outline" size="sm" className="h-6 text-xs" onClick={() => setDialogOpen(true)}>
+            Add
+          </Button>
+        </div>
+      )}
+      <SavedPaymentMethodDialog
+        clientId={client.id}
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        onSaved={() => toast.success("Payment method saved")}
+      />
     </div>
   );
 }
@@ -3259,6 +3341,10 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
                 <InfoRow label="Invoice terms" value={client.defaultTerms?.replace(/_/g, " ")} />
                 <InfoRow label="Tax code" value={client.salesTaxCode} />
               </div>
+              <h3 className="mb-3 mt-6 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                Payment Method on File
+              </h3>
+              <SavedPaymentMethodSection client={client} />
             </div>
             <div>
               <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">

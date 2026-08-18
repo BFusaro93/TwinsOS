@@ -1333,6 +1333,7 @@ export type Database = {
         Row: {
           account_number: string | null
           account_type: string
+          autopay_enabled: boolean
           balance_credits_cents: number
           balance_outstanding_cents: number
           balance_prepay_cents: number
@@ -1383,6 +1384,9 @@ export type Database = {
           revenue_potential_cents: number
           sales_rep_id: string | null
           sales_tax_code: string | null
+          saved_payment_method_id: string | null
+          saved_payment_method_summary: string | null
+          saved_payment_method_type: string | null
           service_address: string | null
           service_city: string | null
           service_state: string | null
@@ -1392,6 +1396,7 @@ export type Database = {
           sms_opt_in_source: string | null
           source: string | null
           status: string
+          stripe_customer_id: string | null
           turf_sqft: number | null
           unsubscribe_token: string
           updated_at: string
@@ -1400,6 +1405,7 @@ export type Database = {
         Insert: {
           account_number?: string | null
           account_type?: string
+          autopay_enabled?: boolean
           balance_credits_cents?: number
           balance_outstanding_cents?: number
           balance_prepay_cents?: number
@@ -1450,6 +1456,9 @@ export type Database = {
           revenue_potential_cents?: number
           sales_rep_id?: string | null
           sales_tax_code?: string | null
+          saved_payment_method_id?: string | null
+          saved_payment_method_summary?: string | null
+          saved_payment_method_type?: string | null
           service_address?: string | null
           service_city?: string | null
           service_state?: string | null
@@ -1459,6 +1468,7 @@ export type Database = {
           sms_opt_in_source?: string | null
           source?: string | null
           status?: string
+          stripe_customer_id?: string | null
           turf_sqft?: number | null
           unsubscribe_token?: string
           updated_at?: string
@@ -1467,6 +1477,7 @@ export type Database = {
         Update: {
           account_number?: string | null
           account_type?: string
+          autopay_enabled?: boolean
           balance_credits_cents?: number
           balance_outstanding_cents?: number
           balance_prepay_cents?: number
@@ -1517,6 +1528,9 @@ export type Database = {
           revenue_potential_cents?: number
           sales_rep_id?: string | null
           sales_tax_code?: string | null
+          saved_payment_method_id?: string | null
+          saved_payment_method_summary?: string | null
+          saved_payment_method_type?: string | null
           service_address?: string | null
           service_city?: string | null
           service_state?: string | null
@@ -1526,6 +1540,7 @@ export type Database = {
           sms_opt_in_source?: string | null
           source?: string | null
           status?: string
+          stripe_customer_id?: string | null
           turf_sqft?: number | null
           unsubscribe_token?: string
           updated_at?: string

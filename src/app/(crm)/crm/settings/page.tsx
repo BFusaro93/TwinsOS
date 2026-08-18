@@ -1343,7 +1343,7 @@ function AccountingTab() {
             </Button>
           </div>
           <p className="text-xs text-slate-400">
-            Staff can waive the fee on an individual invoice when charging a card from the invoice detail view.
+            Staff can waive the fee, or override it with a custom amount, on an individual invoice when charging a card from the invoice detail view.
           </p>
         </div>
       </AccordionSection>

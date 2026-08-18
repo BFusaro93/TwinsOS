@@ -137,6 +137,61 @@ export const REVENUE_REPORTS: PrebuiltReportDef[] = [
     },
   },
   {
+    key: "credit-card-processing-fees",
+    section: "revenue",
+    name: "Credit Card Processing Fees",
+    description:
+      "Processing fees collected from clients on card payments — this is company revenue, tracked separately from the invoice amount it was collected alongside.",
+    filters: [dateRangeFilterDef("Payment Date", "this_month")],
+    notes: [
+      "Only card payments carry a fee — ACH payments are always fee-free by design.",
+      "A fee of $0 on a card payment means the fee was waived or the balance was under the settings threshold.",
+    ],
+    run: async ({ supabase, params }) => {
+      const { from, to } = resolveDateRange(params, "this_month");
+      let query = supabase
+        .from("crm_payments")
+        .select(
+          "payment_date, method, amount_cents, processing_fee_cents, clients:client_id(display_name)"
+        )
+        .is("deleted_at", null)
+        .gt("processing_fee_cents", 0);
+      if (from) query = query.gte("payment_date", from);
+      if (to) query = query.lte("payment_date", to);
+      const { data, error } = await query.order("payment_date", { ascending: false }).limit(5000);
+      if (error) throw new Error(error.message);
+
+      type Row = {
+        payment_date: string | null;
+        method: string | null;
+        amount_cents: number | null;
+        processing_fee_cents: number | null;
+        clients: { display_name: string | null } | null;
+      };
+      const rows = ((data ?? []) as unknown as Row[]).map((r) => ({
+        payment_date: r.payment_date,
+        client_name: r.clients?.display_name ?? "(unknown)",
+        method: r.method,
+        amount_cents: r.amount_cents ?? 0,
+        processing_fee_cents: r.processing_fee_cents ?? 0,
+      }));
+
+      const totalFeeCents = rows.reduce((sum, r) => sum + r.processing_fee_cents, 0);
+
+      return buildResult(
+        [
+          col("payment_date", "Payment Date", "date"),
+          col("client_name", "Client"),
+          col("method", "Method"),
+          col("amount_cents", "Payment Amount", "money"),
+          col("processing_fee_cents", "Processing Fee", "money"),
+        ],
+        rows,
+        [`Total processing fees collected in this period: $${(totalFeeCents / 100).toFixed(2)}`]
+      );
+    },
+  },
+  {
     key: "revenue-by-postal-code",
     section: "revenue",
     name: "Revenue by Postal Code",
