@@ -211,6 +211,7 @@ function JobDetailSheet({
   onEditTimes,
   memberTimes,
   anchorVisitId,
+  allVisits,
 }: {
   visit: CRMJobVisit;
   open: boolean;
@@ -222,6 +223,9 @@ function JobDetailSheet({
   /** The stop's anchor visit id — see EditJobTimesDialog for why member-time
    * writes must target this instead of visit.id. */
   anchorVisitId: string;
+  /** Every visit on the board for the selected date — used to warn when a
+   * Start/End edit overlaps another stop already assigned to this crew. */
+  allVisits: CRMJobVisit[];
 }) {
   const { mutateAsync: updateVisit, isPending } = useUpdateVisit();
   const router = useRouter();
@@ -341,6 +345,18 @@ function JobDetailSheet({
       if (field === "start_time") setStartTime(visit.startTime ?? ""); else setEndTime(visit.endTime ?? "");
       return;
     }
+    // Dispatch board Start/End is time on site, not a reserved appointment
+    // window, so nothing else stops the same crew being entered on two
+    // stops at once — warn (don't block) so the dispatcher can catch a
+    // fat-fingered entry or genuinely decide it's fine.
+    const overlapCrewId = visit.crewId ?? job?.crewId ?? null;
+    const conflictWith = findOverlappingCrewVisit(
+      allVisits,
+      { id: visit.id, crewId: overlapCrewId, scheduledDate: visit.scheduledDate },
+      newStart,
+      newEnd
+    );
+    if (conflictWith) toast.warning(`This crew is already scheduled at ${conflictWith} during this window`);
     // Job Start/End are the actual times (crew punches often need dispatcher
     // correction) — keep clocked_in_at/clocked_out_at in sync so the crew
     // app and report date-filters agree with whatever the dispatcher enters.
@@ -1411,6 +1427,36 @@ function isEndBeforeStart(start: string, end: string): boolean {
   return !!start && !!end && end <= start;
 }
 
+// Dispatch board Start/End is time ON SITE, not a reserved appointment
+// window — nothing else stops the same crew being entered as on two sites
+// at once. Same "HH:MM" string-compare rule as isEndBeforeStart: both
+// windows must be fully set, and they overlap iff each starts before the
+// other ends.
+function timeRangesOverlap(aStart: string, aEnd: string, bStart: string, bEnd: string): boolean {
+  return !!aStart && !!aEnd && !!bStart && !!bEnd && aStart < bEnd && bStart < aEnd;
+}
+
+/** Finds another visit assigned to the same crew on the same day whose
+ * Start/End overlaps the window being saved. Returns a short label for a
+ * warning toast (the conflicting stop's client/address), or null if clear.
+ * A warning, not a block — dispatchers sometimes genuinely need to enter
+ * overlapping times (e.g. correcting a punch after the fact). */
+function findOverlappingCrewVisit(
+  visits: CRMJobVisit[],
+  current: { id: string; crewId: string | null; scheduledDate: string },
+  start: string,
+  end: string
+): string | null {
+  if (!current.crewId) return null;
+  const conflict = visits.find((v) =>
+    v.id !== current.id &&
+    (v.crewId ?? null) === current.crewId &&
+    v.scheduledDate === current.scheduledDate &&
+    timeRangesOverlap(start, end, v.startTime ?? "", v.endTime ?? "")
+  );
+  return conflict ? (conflict.clientName || conflict.job?.serviceAddress || "another stop") : null;
+}
+
 function EditJobTimeRow({
   crewMemberId,
   memberName,
@@ -1716,6 +1762,7 @@ function VisitRow({
   manualRouteMode,
   memberTimes,
   anchorVisitId,
+  allVisits,
 }: {
   visit: CRMJobVisit;
   /** 1-based position of this visit within its own crew's stops for the day (not the global row index). */
@@ -1743,6 +1790,9 @@ function VisitRow({
   /** The stop's anchor visit id (see EditJobTimesDialog) — crm_crew_member_times
    * rows always live here, even for a sibling service visit like this one. */
   anchorVisitId: string;
+  /** Every visit on the board for the selected date — used to warn when a
+   * Start/End edit overlaps another stop already assigned to this crew. */
+  allVisits: CRMJobVisit[];
 }) {
   const job      = visit.job;
   const services = job?.services ?? [];
@@ -1833,6 +1883,15 @@ function VisitRow({
       if (field === "start_time") setStartVal(visit.startTime ?? ""); else setEndVal(visit.endTime ?? "");
       return;
     }
+    // Same overlap warning as the job panel's saveAppointmentTime — see
+    // there for why this is a warning, not a block.
+    const conflictWith = findOverlappingCrewVisit(
+      allVisits,
+      { id: visit.id, crewId: effectiveCrewId, scheduledDate: visit.scheduledDate },
+      newStart,
+      newEnd
+    );
+    if (conflictWith) toast.warning(`This crew is already scheduled at ${conflictWith} during this window`);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const updates: Record<string, any> = { [field]: value || null };
     // Start/End IS the crew's actual time on site (a dispatcher correction of
@@ -3430,6 +3489,7 @@ export function DispatchBoard() {
                   manualRouteMode={manualRouteMode}
                   memberTimes={memberTimesByVisitId.get(visit.id) ?? EMPTY_MEMBER_TIMES}
                   anchorVisitId={anchorVisitIdByVisitId.get(visit.id) ?? visit.id}
+                  allVisits={allVisits}
                 />
               ))
             )}
@@ -3450,6 +3510,7 @@ export function DispatchBoard() {
           onEditTimes={(v) => setEditTimesVisitId(v.id)}
           memberTimes={memberTimesByVisitId.get(detailVisit.id) ?? EMPTY_MEMBER_TIMES}
           anchorVisitId={anchorVisitIdByVisitId.get(detailVisit.id) ?? detailVisit.id}
+          allVisits={allVisits}
         />
       )}
 
