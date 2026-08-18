@@ -1,8 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { User, MapPin, Phone, Plus, Loader2, Check, X, ChevronDown } from "lucide-react";
+import { User, MapPin, Phone, Plus, Loader2, Check, X, ChevronDown, CreditCard } from "lucide-react";
 import { formatPhoneNumber } from "@/lib/utils/phone";
+import { SavedPaymentMethodDialog } from "@/components/portal/SavedPaymentMethodDialog";
+import { useRemovePortalPaymentMethod } from "@/lib/hooks/use-portal-saved-payment-method";
 
 const CONTACT_TYPES = [
   "Owner",
@@ -34,6 +36,8 @@ interface Client {
   billing_city: string | null;
   billing_state: string | null;
   billing_zip: string | null;
+  saved_payment_method_type: string | null;
+  saved_payment_method_summary: string | null;
 }
 
 interface Contact {
@@ -232,6 +236,63 @@ function AddContactForm({ onAdded }: { onAdded: (c: Contact) => void }) {
   );
 }
 
+function PaymentMethodCard({
+  initialSummary,
+}: {
+  initialSummary: string | null;
+}) {
+  const [summary, setSummary] = useState(initialSummary);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [removing, setRemoving] = useState(false);
+  const removeMethod = useRemovePortalPaymentMethod();
+
+  async function handleRemove() {
+    setRemoving(true);
+    try {
+      await removeMethod.mutateAsync();
+      setSummary(null);
+    } catch {
+      // Leave the current summary displayed — the request will show as failed via the button re-enabling.
+    } finally {
+      setRemoving(false);
+    }
+  }
+
+  return (
+    <div className="bg-white rounded-xl border border-slate-200 p-4">
+      <div className="flex items-center gap-2 mb-3">
+        <CreditCard className="h-4 w-4 text-slate-400" />
+        <h2 className="text-sm font-semibold text-slate-700">Payment Method</h2>
+      </div>
+      {summary ? (
+        <div className="flex items-center justify-between">
+          <span className="text-sm text-slate-800">{summary}</span>
+          <div className="flex gap-3">
+            <button onClick={() => setDialogOpen(true)} className="text-xs text-brand-600 hover:underline">
+              Update
+            </button>
+            <button onClick={handleRemove} disabled={removing} className="text-xs text-red-600 hover:underline disabled:opacity-50">
+              Remove
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="flex items-center justify-between">
+          <span className="text-sm text-slate-400">No payment method on file.</span>
+          <button onClick={() => setDialogOpen(true)} className="text-xs text-brand-600 hover:underline">
+            Add
+          </button>
+        </div>
+      )}
+      <SavedPaymentMethodDialog
+        open={dialogOpen}
+        onClose={() => setDialogOpen(false)}
+        onSaved={(newSummary) => setSummary(newSummary)}
+      />
+    </div>
+  );
+}
+
 export default function PortalAccountPage({
   client,
   email,
@@ -283,6 +344,8 @@ export default function PortalAccountPage({
           </div>
           <p className="text-sm text-slate-700">{address || "No address on file."}</p>
         </div>
+
+        <PaymentMethodCard initialSummary={client.saved_payment_method_summary} />
       </div>
 
       {/* Contacts */}

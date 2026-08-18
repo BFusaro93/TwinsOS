@@ -77,6 +77,10 @@ export interface Client {
   balanceCreditsCents: number;
   balancePrepaymentsCents: number;
   defaultPaymentMethod: string | null;
+  // Card/bank on file for autopay, saved via Stripe SetupIntent — read-only here,
+  // only ever written by the setup-intent save routes.
+  savedPaymentMethodType: "card" | "us_bank_account" | null;
+  savedPaymentMethodSummary: string | null;
   officeNotes: string | null;
   cancellationReason: string | null;
   revenuePotentialCents: number;

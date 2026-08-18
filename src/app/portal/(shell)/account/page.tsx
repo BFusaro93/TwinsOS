@@ -12,7 +12,9 @@ export default async function AccountPage() {
   const [clientRes, contactsRes] = await Promise.all([
     supabase
       .from("clients")
-      .select("display_name, first_name, last_name, primary_email, primary_phone, billing_address, billing_city, billing_state, billing_zip")
+      .select(
+        "display_name, first_name, last_name, primary_email, primary_phone, billing_address, billing_city, billing_state, billing_zip, saved_payment_method_type, saved_payment_method_summary"
+      )
       .eq("id", ctx.clientId)
       .single(),
 
