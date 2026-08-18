@@ -1182,7 +1182,7 @@ function ConnectAccountSection() {
       </div>
       <p className="text-sm text-slate-600">
         Connect a Stripe account to accept client card payments on invoices. Client payments go
-        directly to your own bank account via Stripe payouts &mdash; TwinsOS never holds your funds.
+        directly to your own bank account via Stripe payouts &mdash; Landscapt never holds your funds.
       </p>
       <Button size="sm" onClick={() => void handleConnect()} disabled={redirecting}>
         {redirecting

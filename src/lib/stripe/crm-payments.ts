@@ -30,3 +30,10 @@ const CARD_BRAND_TO_METHOD: Record<string, string> = {
 export function methodForCardBrand(brand: string | null | undefined): string {
   return (brand && CARD_BRAND_TO_METHOD[brand]) ?? "Other";
 }
+
+/** crm_payments.method for a succeeded PaymentIntent — ACH never has a "card brand"
+ * to look up, so it's tagged directly from the payment method type used. */
+export function methodForPaymentIntent(paymentMethodTypes: string[], cardBrand: string | null | undefined): string {
+  if (paymentMethodTypes.includes("us_bank_account")) return "ACH/E-Check";
+  return methodForCardBrand(cardBrand);
+}

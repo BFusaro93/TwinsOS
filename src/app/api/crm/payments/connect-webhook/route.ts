@@ -2,19 +2,12 @@ import { NextResponse } from "next/server";
 import type Stripe from "stripe";
 import { createServiceClient } from "@/lib/supabase/server";
 import { getStripe, isStripeConfigured } from "@/lib/stripe/server";
-import { methodForCardBrand } from "@/lib/stripe/crm-payments";
+import { methodForPaymentIntent } from "@/lib/stripe/crm-payments";
+import { statusForAccount } from "@/lib/stripe/connect";
 import { fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
 import { logger } from "@/lib/logger";
 
 const log = logger.child("stripe connect webhook");
-
-/** Stripe's own statuses for a connected account (there's no `status` field on the
- * Account object) — derived from the requirements/capabilities. */
-function statusForAccount(account: Stripe.Account): "active" | "restricted" | "pending" {
-  if (account.requirements?.disabled_reason) return "restricted";
-  if (account.charges_enabled && account.payouts_enabled) return "active";
-  return "pending";
-}
 
 /** A Standard connected account is a full, independent Stripe account — its
  * owner can call the Stripe API directly and create a PaymentIntent with
@@ -172,15 +165,19 @@ async function applyCrmInvoicePayment(
   }
 
   let cardBrand: string | null = null;
-  try {
-    const charges = await stripe.charges.list(
-      { payment_intent: paymentIntent.id, limit: 1 },
-      { stripeAccount: event.account }
-    );
-    cardBrand = charges.data[0]?.payment_method_details?.card?.brand ?? null;
-  } catch {
-    cardBrand = null;
+  const isAch = paymentIntent.payment_method_types.includes("us_bank_account");
+  if (!isAch) {
+    try {
+      const charges = await stripe.charges.list(
+        { payment_intent: paymentIntent.id, limit: 1 },
+        { stripeAccount: event.account }
+      );
+      cardBrand = charges.data[0]?.payment_method_details?.card?.brand ?? null;
+    } catch {
+      cardBrand = null;
+    }
   }
+  const method = methodForPaymentIntent(paymentIntent.payment_method_types, cardBrand);
 
   const { data: inserted, error: insertErr } = await db
     .from("crm_payments")
@@ -191,8 +188,8 @@ async function applyCrmInvoicePayment(
       amount_cents: balanceCents,
       unused_amount_cents: 0,
       payment_date: new Date().toISOString().slice(0, 10),
-      method: methodForCardBrand(cardBrand),
-      memo: "Paid online via card",
+      method,
+      memo: isAch ? "Paid online via bank transfer" : "Paid online via card",
       is_prepayment: false,
       processing_fee_cents: feeCents,
       stripe_payment_intent_id: paymentIntent.id,
@@ -245,7 +242,7 @@ async function applyCrmInvoicePayment(
     await db.from("client_activity").insert({
       client_id: clientId,
       activity_type: "payment",
-      subject: `Payment received: ${methodForCardBrand(cardBrand)} (online)`,
+      subject: `Payment received: ${method} (online)`,
       amount_cents: balanceCents,
       ref_id: inserted.id,
       ref_table: "crm_payments",

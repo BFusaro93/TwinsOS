@@ -804,7 +804,7 @@ export function InvoiceDetail({
             onClick={() => setChargeCardOpen(true)}
             disabled={invoice.status === "void" || invoice.balanceCents <= 0 || !cardPaymentsReady}
             title={cardPaymentsReady ? undefined : "Connect your Stripe account in Settings > Accounting to accept card payments"}>
-            <CreditCard className="mr-1 h-3.5 w-3.5 text-brand-500" /> Charge Card
+            <CreditCard className="mr-1 h-3.5 w-3.5 text-brand-500" /> Collect Payment
           </Button>
           <Button variant="outline" size="sm" className="h-8 text-xs"
             onClick={handlePrint}>
