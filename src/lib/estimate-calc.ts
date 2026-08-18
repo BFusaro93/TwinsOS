@@ -116,30 +116,35 @@ export function computeLineItem(
 
   const totalBudgetedHours = budgetedHours * item.visits;
 
-  // `costCents` is a PER-UNIT rate everywhere else in this function (it gets
-  // multiplied by qty × visits below, same as a manually-typed cost) — but
-  // `budgetedHours` is the labor time for the FULL qty of this line in one
-  // occurrence, so `budgetedHours × breakevenRateCents` is already a
-  // per-occurrence TOTAL, not a per-unit rate. Auto-filling costCents
-  // directly from that total and then multiplying by qty again squared
-  // qty into the result (a 20,000 sqft / 26-visit line could turn a real
-  // $33,800 labor cost into $676,000,000). Compute the accurate
-  // per-occurrence total first and derive totalCostCents from THAT
-  // (rounding once), and only back it out to a per-unit rate for
-  // costCents' display/storage purposes — dividing first and re-multiplying
-  // a rounded per-unit rate by a large qty would reintroduce the same kind
-  // of rounding-amplification error.
-  let costCents = item.costCents;
+  // `costCents === 0` is this type's "never manually set" convention (see
+  // this function's docstring) — costCents is left at 0 for as long as the
+  // auto-fill is in control, and totalCostCents alone carries the derived
+  // dollar amount. costCents used to get overwritten with a derived
+  // per-unit rate here (perOccurrenceCostCents / qty) so the Cost column
+  // had something to display — but that value then flowed back in as
+  // `item.costCents` on the NEXT edit (any field, not just Cost itself),
+  // no longer 0, so a further Qty/Budgeted-Hours change fell through to
+  // the plain `costCents × qty × visits` branch below and multiplied an
+  // already-divided-out total by qty A SECOND TIME. Concretely: 79 budgeted
+  // hours at a $69.25/hr breakeven rate on a 325-unit line auto-filled to
+  // $5,470.75 correctly, but bumping budgeted hours back to 80 immediately
+  // after re-multiplied that $5,470.75 by 325 again into $1,777,993.75.
+  // Keeping costCents pinned at 0 while auto mode is active makes every
+  // subsequent edit re-derive fresh from budgetedHours × breakevenRateCents
+  // instead of compounding a stale derived value — the caller is
+  // responsible for computing a separate, display-only per-unit figure
+  // (totalCostCents ÷ qty ÷ visits) if it wants to show one, without
+  // feeding that back in as costCents.
   let totalCostCents: number;
-  if (costCents === 0 && breakevenRateCents && budgetedHours > 0) {
+  if (item.costCents === 0 && breakevenRateCents && budgetedHours > 0) {
     const perOccurrenceCostCents = Math.round(budgetedHours * breakevenRateCents);
-    costCents = item.qty > 0 ? Math.round(perOccurrenceCostCents / item.qty) : perOccurrenceCostCents;
     totalCostCents =
       item.calcType === 1 ? Math.round(perOccurrenceCostCents * item.visits) : perOccurrenceCostCents;
   } else {
     totalCostCents =
-      item.calcType === 1 ? Math.round(costCents * item.qty * item.visits) : costCents;
+      item.calcType === 1 ? Math.round(item.costCents * item.qty * item.visits) : item.costCents;
   }
+  const costCents = item.costCents;
 
   const marginBps =
     totalCents > 0

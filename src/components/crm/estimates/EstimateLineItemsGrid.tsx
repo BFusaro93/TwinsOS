@@ -379,6 +379,17 @@ function LineItemRow({
     row.unitType !== "hr" &&
     row.unitType !== "each";
 
+  // Is Cost auto-calculated from Budgeted Hours × the org's breakeven labor
+  // rate? costCents stays 0 (see computeLineItem) for as long as this is
+  // true — display-only, computed fresh from totalCostCents here rather
+  // than persisting a derived per-unit value that would poison the NEXT
+  // Qty/Budgeted-Hours edit (see estimate-calc.ts for the corruption that
+  // caused — a stale derived rate silently re-multiplied by qty again).
+  const isAutoCost = row.costCents === 0 && !!breakevenRateCents && row.budgetedHours > 0;
+  const autoCostPerUnitCents = isAutoCost
+    ? (row.qty > 0 ? row.totalCostCents / row.qty / row.visits : row.totalCostCents / row.visits)
+    : 0;
+
   return (
     <>
       {/* ── main row ──────────────────────────────────────────────────────── */}
@@ -574,12 +585,15 @@ function LineItemRow({
           {bpsToPercent(row.marginBps)}
         </td>
 
-        {/* Cost */}
+        {/* Cost — auto-derived value (blue) is shown but still editable:
+            typing a real number here is what actually sets costCents and
+            switches this line out of auto mode going forward. */}
         <td className="w-16 px-2 py-1.5">
           <InlineNum
-            value={row.costCents / 100}
+            value={isAutoCost ? autoCostPerUnitCents / 100 : row.costCents / 100}
             onChange={(v) => update("costCents", Math.round(v * 100))}
             onBlur={save}
+            className={isAutoCost ? "text-blue-600 font-medium" : undefined}
           />
         </td>
 
