@@ -49,3 +49,12 @@ export async function syncConnectStatusFromStripe(
 
   return synced;
 }
+
+/** Whether a connected account has actually activated ACH (US bank account) payments
+ * in Stripe — `payment_method_types: ['us_bank_account']` on a PaymentIntent/SetupIntent
+ * doesn't reject a request from an account that hasn't turned this on for itself, so
+ * checks that want to offer/accept ACH need to gate on this explicitly. */
+export async function achEnabledForAccount(stripe: Stripe, accountId: string): Promise<boolean> {
+  const account = await stripe.accounts.retrieve(accountId);
+  return account.capabilities?.us_bank_account_ach_payments === "active";
+}
