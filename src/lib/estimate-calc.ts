@@ -14,6 +14,7 @@ const OVERHEAD_SETTINGS_DEFAULTS: OverheadSettings = {
   equipmentOhBps: 0,
   materialsOhBps: 0,
   otherOhBps: 0,
+  flatOverheadRateBps: 0,
 };
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -26,6 +27,7 @@ function mapOverheadSettingsRow(row: any): OverheadSettings {
     equipmentOhBps: row.equipment_oh_bps ?? 0,
     materialsOhBps: row.materials_oh_bps ?? 0,
     otherOhBps: row.other_oh_bps ?? 0,
+    flatOverheadRateBps: row.flat_overhead_rate_bps ?? 0,
   };
 }
 

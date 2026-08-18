@@ -222,6 +222,20 @@ export function useCreateEstimate() {
     }) => {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
+
+      // Pre-fill the new estimate's own flat Overhead Rate % from the org's
+      // configured default (Settings → Estimates → Overhead Recovery), so a
+      // company that wants a standard flat rate doesn't have to retype it
+      // on every estimate — still editable afterward on the estimate itself.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: profile } = await (supabase as any).from("profiles").select("org_id").eq("id", user?.id).maybeSingle();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: overheadRow } = profile?.org_id
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        ? await (supabase as any).from("crm_overhead_settings").select("flat_overhead_rate_bps").eq("org_id", profile.org_id).maybeSingle()
+        : { data: null };
+      const defaultOverheadRateBps = overheadRow?.flat_overhead_rate_bps ?? 0;
+
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
         .from("estimates")
@@ -233,6 +247,7 @@ export function useCreateEstimate() {
           estimate_date: values.estimateDate,
           valid_until_date: values.validUntilDate ?? null,
           stage: values.stage ?? "draft",
+          overhead_rate_bps: defaultOverheadRateBps,
           ...(values.displaySettings ? { display_settings: values.displaySettings } : {}),
         })
         .select()

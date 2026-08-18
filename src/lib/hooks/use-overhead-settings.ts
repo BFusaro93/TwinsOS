@@ -11,6 +11,11 @@ export interface OverheadSettings {
   equipmentOhBps: number;
   materialsOhBps: number;
   otherOhBps: number;
+  /** Org-wide default for a new estimate's own flat Overhead Rate % —
+   *  purely a pre-fill convenience, still editable per estimate, and (like
+   *  the flat rate always has) ignored whenever any per-type % above is
+   *  active. */
+  flatOverheadRateBps: number;
 }
 
 export const OVERHEAD_SETTINGS_DEFAULTS: OverheadSettings = {
@@ -21,6 +26,7 @@ export const OVERHEAD_SETTINGS_DEFAULTS: OverheadSettings = {
   equipmentOhBps: 0,
   materialsOhBps: 0,
   otherOhBps: 0,
+  flatOverheadRateBps: 0,
 };
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -33,6 +39,7 @@ function mapRow(row: any): OverheadSettings {
     equipmentOhBps: row.equipment_oh_bps ?? 0,
     materialsOhBps: row.materials_oh_bps ?? 0,
     otherOhBps: row.other_oh_bps ?? 0,
+    flatOverheadRateBps: row.flat_overhead_rate_bps ?? 0,
   };
 }
 
@@ -88,6 +95,7 @@ export function useUpsertOverheadSettings() {
             equipment_oh_bps: values.equipmentOhBps,
             materials_oh_bps: values.materialsOhBps,
             other_oh_bps: values.otherOhBps,
+            flat_overhead_rate_bps: values.flatOverheadRateBps,
             updated_at: new Date().toISOString(),
           },
           { onConflict: "org_id" }
