@@ -16,6 +16,28 @@ function statusForAccount(account: Stripe.Account): "active" | "restricted" | "p
   return "pending";
 }
 
+/** A Standard connected account is a full, independent Stripe account — its
+ * owner can call the Stripe API directly and create a PaymentIntent with
+ * ARBITRARY metadata (including another org's org_id/invoice_id). Never trust
+ * PaymentIntent.metadata.org_id on its own: confirm the account the event
+ * actually fired on (event.account) is the one on file for that org first. */
+async function eventAccountOwnedByOrg(
+  // any: the generated Supabase types don't yet cover every table this webhook touches
+  // (crm_payment_allocations, client_activity, stripe_webhook_events) — same pattern as
+  // the pre-existing billing/crm-payments webhooks this one supersedes.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  db: any,
+  orgId: string,
+  eventAccount: string
+): Promise<boolean> {
+  const { data } = await db
+    .from("organizations")
+    .select("stripe_connect_account_id")
+    .eq("id", orgId)
+    .single();
+  return data?.stripe_connect_account_id === eventAccount;
+}
+
 export async function POST(request: Request) {
   if (!isStripeConfigured() || !process.env.STRIPE_CONNECT_WEBHOOK_SECRET) {
     return NextResponse.json({ error: "Card payments are not configured yet" }, { status: 400 });
@@ -80,7 +102,13 @@ export async function POST(request: Request) {
     case "payment_intent.payment_failed": {
       const failedIntent = event.data.object as Stripe.PaymentIntent;
       const { org_id: failedOrgId, client_id: failedClientId } = failedIntent.metadata ?? {};
-      if (failedIntent.metadata?.source === "crm_invoice" && failedOrgId && failedClientId) {
+      if (
+        failedIntent.metadata?.source === "crm_invoice" &&
+        failedOrgId &&
+        failedClientId &&
+        event.account &&
+        (await eventAccountOwnedByOrg(db, failedOrgId, event.account))
+      ) {
         await fireSimpleTrigger(supabase, {
           orgId: failedOrgId,
           clientId: failedClientId,
@@ -109,6 +137,9 @@ export async function POST(request: Request) {
  * Mirrors the platform-account version this superseded in src/app/api/crm/payments/webhook/route.ts. */
 async function applyCrmInvoicePayment(
   stripe: Stripe,
+  // any: the generated Supabase types don't yet cover every table this webhook touches
+  // (crm_payment_allocations, client_activity, stripe_webhook_events) — same pattern as
+  // the pre-existing billing/crm-payments webhooks this one supersedes.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   db: any,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -128,6 +159,15 @@ async function applyCrmInvoicePayment(
 
   if (!orgId || !invoiceId || !clientId || !Number.isFinite(balanceCents) || !Number.isFinite(feeCents)) {
     log.error("missing/invalid metadata on payment intent", { paymentIntentId: paymentIntent.id });
+    return "error";
+  }
+
+  if (!(await eventAccountOwnedByOrg(db, orgId, event.account))) {
+    log.error("payment intent metadata org_id does not own the connected account the event fired on", {
+      paymentIntentId: paymentIntent.id,
+      orgId,
+      eventAccount: event.account,
+    });
     return "error";
   }
 
@@ -174,6 +214,7 @@ async function applyCrmInvoicePayment(
       .from("crm_invoices")
       .select("total_cents, amount_paid_cents, status")
       .eq("id", invoiceId)
+      .eq("org_id", orgId)
       .single();
     if (invoiceErr) throw invoiceErr;
 
@@ -186,7 +227,8 @@ async function applyCrmInvoicePayment(
     const { error: updateErr } = await db
       .from("crm_invoices")
       .update({ amount_paid_cents: newPaid, balance_cents: newBalance, status: newStatus })
-      .eq("id", invoiceId);
+      .eq("id", invoiceId)
+      .eq("org_id", orgId);
     if (updateErr) throw updateErr;
 
     if (wasNewlyPaid) {

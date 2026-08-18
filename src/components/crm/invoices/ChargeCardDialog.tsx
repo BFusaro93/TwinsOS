@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { loadStripe, type Stripe as StripeJs } from "@stripe/stripe-js";
 import { Elements, PaymentElement, useStripe, useElements } from "@stripe/react-stripe-js";
 import { Loader2, CreditCard, Check } from "lucide-react";
 import { toast } from "sonner";
@@ -11,26 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { formatCurrency } from "@/lib/utils";
 import { useCreateCrmPaymentIntent, type CreatePaymentIntentResult } from "@/lib/hooks/use-crm-card-payments";
-
-function hasPublishableKey(): boolean {
-  return Boolean(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY);
-}
-
-// The PaymentIntent is created directly on the org's connected Stripe account
-// (a "direct charge"), so Stripe.js must be initialized scoped to that same
-// account — a platform-scoped instance can't find/confirm it. Cached per
-// account id so re-opening the dialog for the same org doesn't reload Stripe.js.
-const scopedStripeJsCache = new Map<string, Promise<StripeJs | null>>();
-function getScopedStripeJs(connectedAccountId: string): Promise<StripeJs | null> | null {
-  const key = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY;
-  if (!key) return null;
-  let cached = scopedStripeJsCache.get(connectedAccountId);
-  if (!cached) {
-    cached = loadStripe(key, { stripeAccount: connectedAccountId });
-    scopedStripeJsCache.set(connectedAccountId, cached);
-  }
-  return cached;
-}
+import { hasPublishableKey, getScopedStripeJs } from "@/lib/stripe/client";
 
 function PayForm({ totalChargeCents, onSuccess }: { totalChargeCents: number; onSuccess: () => void }) {
   const stripe = useStripe();
