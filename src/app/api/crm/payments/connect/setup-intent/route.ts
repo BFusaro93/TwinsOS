@@ -46,7 +46,7 @@ export async function POST(request: Request) {
 
   const { data: org } = await supabase
     .from("organizations")
-    .select("stripe_connect_account_id, stripe_connect_charges_enabled")
+    .select("stripe_connect_account_id, stripe_connect_charges_enabled, ach_payments_enabled")
     .eq("id", profile.org_id)
     .single();
   if (!org) return NextResponse.json({ error: "Organization not found" }, { status: 404 });
@@ -59,11 +59,16 @@ export async function POST(request: Request) {
 
   const stripe = getStripe();
 
-  if (paymentMethod === "us_bank_account" && !(await achEnabledForAccount(stripe, org.stripe_connect_account_id))) {
-    return NextResponse.json(
-      { error: "ACH isn't enabled on this Stripe account yet — enable US bank account payments under Payment methods in the Stripe dashboard first." },
-      { status: 400 }
-    );
+  if (paymentMethod === "us_bank_account") {
+    if (!org.ach_payments_enabled) {
+      return NextResponse.json({ error: "ACH payments aren't enabled — turn them on in Settings first." }, { status: 400 });
+    }
+    if (!(await achEnabledForAccount(stripe, org.stripe_connect_account_id))) {
+      return NextResponse.json(
+        { error: "ACH isn't enabled on this Stripe account yet — enable US bank account payments under Payment methods in the Stripe dashboard first." },
+        { status: 400 }
+      );
+    }
   }
 
   const customerId = await getOrCreateStripeCustomer(

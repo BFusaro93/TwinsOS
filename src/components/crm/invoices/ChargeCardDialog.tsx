@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { formatCurrency } from "@/lib/utils";
 import { useCreateCrmPaymentIntent, type CreatePaymentIntentResult } from "@/lib/hooks/use-crm-card-payments";
 import { useChargeAutopayInvoice } from "@/lib/hooks/use-autopay-invoices";
+import { useOrgSettings } from "@/lib/hooks/use-org-settings";
 import { hasPublishableKey, getScopedStripeJs } from "@/lib/stripe/client";
 
 function PayForm({ totalChargeCents, onSuccess }: { totalChargeCents: number; onSuccess: () => void }) {
@@ -74,6 +75,8 @@ export function ChargeCardDialog({
   const [overrideFeeDollars, setOverrideFeeDollars] = useState("");
   const [intent, setIntent] = useState<CreatePaymentIntentResult | null>(null);
   const [succeeded, setSucceeded] = useState(false);
+  const { data: orgSettings } = useOrgSettings();
+  const achEnabled = orgSettings?.achPaymentsEnabled ?? false;
   const createIntent = useCreateCrmPaymentIntent();
   const chargeSaved = useChargeAutopayInvoice();
 
@@ -166,7 +169,7 @@ export function ChargeCardDialog({
                 </div>
               )}
               {savedPaymentMethod && <p className="text-xs text-slate-400">Or enter a new payment method:</p>}
-              <div className="grid grid-cols-2 gap-2">
+              <div className={`grid gap-2 ${achEnabled ? "grid-cols-2" : "grid-cols-1"}`}>
                 <button
                   type="button"
                   onClick={() => setPaymentMethod("card")}
@@ -178,17 +181,19 @@ export function ChargeCardDialog({
                 >
                   Card
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setPaymentMethod("us_bank_account")}
-                  className={`rounded-md border px-3 py-2 text-sm font-medium transition-colors ${
-                    paymentMethod === "us_bank_account"
-                      ? "border-brand-500 bg-brand-50 text-brand-700"
-                      : "border-slate-200 text-slate-600 hover:bg-slate-50"
-                  }`}
-                >
-                  Bank Transfer (ACH)
-                </button>
+                {achEnabled && (
+                  <button
+                    type="button"
+                    onClick={() => setPaymentMethod("us_bank_account")}
+                    className={`rounded-md border px-3 py-2 text-sm font-medium transition-colors ${
+                      paymentMethod === "us_bank_account"
+                        ? "border-brand-500 bg-brand-50 text-brand-700"
+                        : "border-slate-200 text-slate-600 hover:bg-slate-50"
+                    }`}
+                  >
+                    Bank Transfer (ACH)
+                  </button>
+                )}
               </div>
               {paymentMethod === "card" && (
                 <div className="flex flex-col gap-2">

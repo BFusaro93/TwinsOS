@@ -1213,6 +1213,19 @@ function AccountingTab() {
   const [feeThresholdDraft, setFeeThresholdDraft] = useState<string>("");
   const [feeSaving, setFeeSaving] = useState(false);
 
+  const [achSaving, setAchSaving] = useState(false);
+  async function toggleAch(next: boolean) {
+    setAchSaving(true);
+    try {
+      await updateOrg({ achPaymentsEnabled: next });
+      toast.success(next ? "ACH payments enabled" : "ACH payments disabled");
+    } catch {
+      toast.error("Failed to update ACH setting");
+    } finally {
+      setAchSaving(false);
+    }
+  }
+
   useEffect(() => {
     if (orgSettings) setTaxDraft(String(orgSettings.taxRatePercent ?? ""));
   }, [orgSettings?.taxRatePercent]);
@@ -1295,6 +1308,22 @@ function AccountingTab() {
         description="Connect your own Stripe account to accept client card payments and receive payouts directly."
       >
         <ConnectAccountSection />
+        <div className="flex items-center gap-2 border-t px-4 py-4">
+          <Checkbox
+            id="ach-payments-enabled"
+            checked={orgSettings?.achPaymentsEnabled ?? false}
+            disabled={achSaving}
+            onCheckedChange={(v) => toggleAch(v === true)}
+          />
+          <Label htmlFor="ach-payments-enabled" className="font-normal">
+            Enable ACH / bank transfer payments
+          </Label>
+        </div>
+        <p className="px-4 pb-4 text-xs text-slate-400">
+          When off, staff and clients only see the Card option — the Bank Account choice is hidden everywhere
+          (client detail, invoices, portal). This is TwinsOS&apos;s own switch, separate from any payment-method
+          toggle in your Stripe dashboard.
+        </p>
       </AccordionSection>
       <AccordionSection
         title="Credit Card Processing Fee"

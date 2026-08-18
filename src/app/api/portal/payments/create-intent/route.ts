@@ -44,7 +44,7 @@ export async function POST(request: Request) {
   const { data: org } = await supabase
     .from("organizations")
     .select(
-      "cc_processing_fee_enabled, cc_processing_fee_bps, cc_processing_fee_threshold_cents, stripe_connect_account_id, stripe_connect_charges_enabled"
+      "cc_processing_fee_enabled, cc_processing_fee_bps, cc_processing_fee_threshold_cents, stripe_connect_account_id, stripe_connect_charges_enabled, ach_payments_enabled"
     )
     .eq("id", ctx.orgId)
     .single();
@@ -70,8 +70,10 @@ export async function POST(request: Request) {
 
   const stripe = getStripe();
 
-  if (paymentMethod === "us_bank_account" && !(await achEnabledForAccount(stripe, org.stripe_connect_account_id))) {
-    return NextResponse.json({ error: "Bank transfer isn't available yet — please pay by card." }, { status: 400 });
+  if (paymentMethod === "us_bank_account") {
+    if (!org.ach_payments_enabled || !(await achEnabledForAccount(stripe, org.stripe_connect_account_id))) {
+      return NextResponse.json({ error: "Bank transfer isn't available yet — please pay by card." }, { status: 400 });
+    }
   }
 
   // Direct charge on the org's connected account — see create-intent/route.ts
