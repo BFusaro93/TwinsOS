@@ -55,17 +55,24 @@ function InlineNum({
   onBlur,
   className,
   step,
+  zeroAsEmpty = true,
 }: {
   value: number;
   onChange: (v: number) => void;
   onBlur?: () => void;
   className?: string;
   step?: number;
+  /** `value || ""` makes 0 render as a blank box — the right call for a
+   *  field where 0 means "unset" (Adj Rate), but confusing on Cost: typing
+   *  0 to intentionally reset back to auto-fill mode looked like the input
+   *  silently rejected it (reverting to blank) rather than confirming
+   *  "$0.00 saved". Pass false to show a real 0 as "0" instead of blank. */
+  zeroAsEmpty?: boolean;
 }) {
   return (
     <input
       type="number"
-      value={value || ""}
+      value={value || (zeroAsEmpty ? "" : 0)}
       step={step ?? "any"}
       onChange={(e) => onChange(Number(e.target.value) || 0)}
       onBlur={onBlur}
@@ -594,6 +601,7 @@ function LineItemRow({
             onChange={(v) => update("costCents", Math.round(v * 100))}
             onBlur={save}
             className={isAutoCost ? "text-blue-600 font-medium" : undefined}
+            zeroAsEmpty={false}
           />
         </td>
 
