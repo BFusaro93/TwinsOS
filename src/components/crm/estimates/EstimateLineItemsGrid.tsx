@@ -52,6 +52,7 @@ const UNIT_TYPES = ["sqft", "lf", "cuyd", "acres", "hr", "each", "lb", "gal"];
 function InlineNum({
   value,
   onChange,
+  onFocus,
   onBlur,
   className,
   step,
@@ -59,6 +60,7 @@ function InlineNum({
 }: {
   value: number;
   onChange: (v: number) => void;
+  onFocus?: () => void;
   onBlur?: () => void;
   className?: string;
   step?: number;
@@ -75,6 +77,7 @@ function InlineNum({
       value={value || (zeroAsEmpty ? "" : 0)}
       step={step ?? "any"}
       onChange={(e) => onChange(Number(e.target.value) || 0)}
+      onFocus={onFocus}
       onBlur={onBlur}
       className={cn(
         "w-full rounded border border-slate-200 bg-white px-1.5 py-0.5 text-right text-xs focus:border-brand-400 focus:outline-none",
@@ -274,6 +277,12 @@ function LineItemRow({
 }) {
   const [row, setRow] = useState<RowState>(() => item);
   const [dirty, setDirty] = useState(false);
+  // While the Cost box has focus, always show what's actually in row.costCents
+  // (even 0) rather than the auto-computed blue display — otherwise the
+  // instant costCents hits 0 mid-edit, the auto-fill kicks in and the input's
+  // displayed value snaps to a nonzero computed number WHILE THE USER IS
+  // STILL TYPING, making it look like the field can never be cleared at all.
+  const [costFocused, setCostFocused] = useState(false);
   // `row` only seeds from `item` on mount — writes that happen outside this row
   // (bulk Rate Increase, status changes) update `item` via refetch but never touch
   // this local draft, so the cell would keep showing pre-update values. Resync
@@ -392,7 +401,7 @@ function LineItemRow({
   // than persisting a derived per-unit value that would poison the NEXT
   // Qty/Budgeted-Hours edit (see estimate-calc.ts for the corruption that
   // caused — a stale derived rate silently re-multiplied by qty again).
-  const isAutoCost = row.costCents === 0 && !!breakevenRateCents && row.budgetedHours > 0;
+  const isAutoCost = !costFocused && row.costCents === 0 && !!breakevenRateCents && row.budgetedHours > 0;
   const autoCostPerUnitCents = isAutoCost
     ? (row.qty > 0 ? row.totalCostCents / row.qty / row.visits : row.totalCostCents / row.visits)
     : 0;
@@ -599,7 +608,8 @@ function LineItemRow({
           <InlineNum
             value={isAutoCost ? autoCostPerUnitCents / 100 : row.costCents / 100}
             onChange={(v) => update("costCents", Math.round(v * 100))}
-            onBlur={save}
+            onFocus={() => setCostFocused(true)}
+            onBlur={() => { setCostFocused(false); save(); }}
             className={isAutoCost ? "text-blue-600 font-medium" : undefined}
             zeroAsEmpty={false}
           />
