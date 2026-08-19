@@ -244,6 +244,13 @@ export const PLAN_FEATURE_CATEGORIES: PlanFeatureCategory[] = [
         highlight: false,
         values: { starter: false, cmms: false, growth: "Add-on", enterprise: true },
       },
+      {
+        key: "zapier",
+        label: "Zapier integration",
+        description: "Connect to thousands of apps with Zapier — no add-on, included on every plan.",
+        highlight: false,
+        values: { starter: true, cmms: true, growth: true, enterprise: true },
+      },
     ],
   },
   {

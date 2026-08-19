@@ -3,16 +3,9 @@ export type PlatformModule = "landscapt" | "equipt";
 /** Add-ons a plan already includes at no extra charge — see addons.ts for the full catalog. */
 export type BundledAddonKey = "job_photos" | "client_portal" | "route_optimization" | "advanced_reporting" | "api_access";
 
+// Order here drives display order everywhere this list is rendered
+// (SubscriptionTab's plan cards, PlanComparisonTable's columns).
 export const BILLABLE_PLANS = [
-  {
-    plan: "starter",
-    label: "Starter",
-    envVar: "STRIPE_PRICE_STARTER",
-    modules: ["landscapt"] as PlatformModule[],
-    seatsIncluded: 5,
-    seatOverageCents: 2000,
-    bundledAddons: [] as BundledAddonKey[],
-  },
   {
     // Internal key stays "cmms" (matches the STRIPE_PRICE_CMMS/
     // STRIPE_PRICE_SEAT_OVERAGE_CMMS env vars and the DB plan value already
@@ -24,6 +17,15 @@ export const BILLABLE_PLANS = [
     modules: ["equipt"] as PlatformModule[],
     seatsIncluded: 5,
     seatOverageCents: 1500,
+    bundledAddons: [] as BundledAddonKey[],
+  },
+  {
+    plan: "starter",
+    label: "Starter",
+    envVar: "STRIPE_PRICE_STARTER",
+    modules: ["landscapt"] as PlatformModule[],
+    seatsIncluded: 5,
+    seatOverageCents: 2000,
     bundledAddons: [] as BundledAddonKey[],
   },
   {
