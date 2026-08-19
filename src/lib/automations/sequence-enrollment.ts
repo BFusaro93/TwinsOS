@@ -1,4 +1,5 @@
 import type { ConditionField, ConditionOperator, TriggerConfig, TriggerType } from "@/types/crm-automations";
+import { isZapierTriggerType, notifyZapierSubscribers } from "@/lib/integrations/zapier";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = any;
@@ -739,6 +740,21 @@ export async function fireSimpleTrigger(
       invoiceId: params.invoiceId ?? null,
     });
     if (enrollmentId) enrolledIds.push(enrollmentId);
+  }
+
+  // Fan out to any Zapier REST Hook subscriptions for this trigger type —
+  // independent of whether any internal sequence matched above, since a Zap
+  // may be the only thing configured for this event.
+  if (isZapierTriggerType(params.triggerType)) {
+    await notifyZapierSubscribers(supabase, params.orgId, params.triggerType, {
+      triggerType: params.triggerType,
+      clientId: params.clientId,
+      estimateId: params.estimateId ?? null,
+      ticketId: params.ticketId ?? null,
+      invoiceId: params.invoiceId ?? null,
+      matchValues: params.matchValues ?? null,
+      firedAt: new Date().toISOString(),
+    });
   }
 
   return enrolledIds;

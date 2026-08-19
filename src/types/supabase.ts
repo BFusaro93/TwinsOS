@@ -11251,6 +11251,41 @@ export type Database = {
           },
         ]
       }
+      zapier_webhook_subscriptions: {
+        Row: {
+          created_at: string
+          deleted_at: string | null
+          id: string
+          org_id: string
+          target_url: string
+          trigger_type: string
+        }
+        Insert: {
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          org_id: string
+          target_url: string
+          trigger_type: string
+        }
+        Update: {
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          org_id?: string
+          target_url?: string
+          trigger_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "zapier_webhook_subscriptions_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       rpt_chemical_applications: {
