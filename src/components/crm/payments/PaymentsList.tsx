@@ -412,7 +412,12 @@ export function AddPaymentDialog({
         }
       }
     } catch (err) {
-      const detail = err instanceof Error ? err.message : String(err);
+      const detail =
+        err instanceof Error
+          ? err.message
+          : typeof err === "object" && err !== null && "message" in err
+            ? String((err as { message: unknown }).message)
+            : String(err);
       toast.error(
         `${isEdit ? "Failed to update" : isCreditMode ? "Failed to issue credit" : "Failed to record payment"}: ${detail}`
       );
