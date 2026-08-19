@@ -39,11 +39,16 @@ export function useBillingInfo() {
         .single();
       if (error) throw error;
 
+      // Crew accounts (profiles.role === "crew") are shared field-clock-in
+      // logins, not real named seats — same distinction (dashboard)/layout.tsx
+      // already draws when confining them to /crm/crew — so they don't count
+      // toward the plan's seat limit or its overage billing.
       const { count: seatsUsed } = await supabase
         .from("profiles")
         .select("id", { count: "exact", head: true })
         .eq("org_id", profile.org_id)
-        .neq("status", "inactive");
+        .neq("status", "inactive")
+        .neq("role", "crew");
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const addonRows = await (supabase as any)

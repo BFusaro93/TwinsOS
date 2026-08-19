@@ -52,11 +52,14 @@ export async function GET(request: Request) {
   let failed = 0;
   for (const org of orgs ?? []) {
     try {
+      // Crew accounts are shared field-clock-in logins, not real named seats —
+      // see the matching comment in use-billing.ts.
       const { count: seatsUsed } = await supabase
         .from("profiles")
         .select("id", { count: "exact", head: true })
         .eq("org_id", org.id)
-        .neq("status", "inactive");
+        .neq("status", "inactive")
+        .neq("role", "crew");
 
       const subscription = await stripe.subscriptions.retrieve(org.stripe_subscription_id);
       await syncSeatOverage(stripe, subscription, org.plan, seatsUsed ?? 0, {
