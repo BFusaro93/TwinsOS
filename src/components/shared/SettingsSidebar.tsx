@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ArrowLeft, Leaf, UserCog, Wrench, Sprout } from "lucide-react";
+import { ArrowLeft, Leaf, UserCog, Wrench, Sprout, HelpCircle, Library } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useUIStore, useCurrentUserStore } from "@/stores";
 import { useSettingsStore } from "@/stores/settings-store";
@@ -20,6 +20,8 @@ const SETTINGS_NAV: SettingsNavItem[] = [
   { label: "Master Account", href: "/settings", icon: UserCog, exact: true, description: "Users, organization, branding & billing" },
   { label: "Equipt Settings", href: "/settings/equipt", icon: Wrench, description: "CMMS & purchasing configuration" },
   { label: "Landscapt Settings", href: "/settings/landscapt", icon: Sprout, description: "CRM & field service configuration" },
+  { label: "Support", href: "/settings/support", icon: HelpCircle, description: "Guides, FAQ, and contact" },
+  { label: "Docs", href: "/settings/docs", icon: Library, description: "Step-by-step guides for every part of the platform" },
 ];
 
 export function SettingsSidebar() {

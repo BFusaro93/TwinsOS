@@ -1,7 +1,7 @@
 import { PageHeader } from "@/components/shared/PageHeader";
 import { SupportPage } from "@/components/settings/SupportPage";
 
-export default function SupportPageRoute() {
+export default function EquiptSupportPage() {
   return (
     <div className="flex flex-col gap-8 pb-12">
       <PageHeader
