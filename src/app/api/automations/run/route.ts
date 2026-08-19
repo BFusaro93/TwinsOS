@@ -4,6 +4,8 @@ import { createClient as createServerClient } from "@/lib/supabase/server";
 import { Resend } from "resend";
 import type { Database } from "@/types/supabase";
 import { processDueEnrollment } from "@/lib/automations/sequence-processor";
+import { notifyZapierSubscribers } from "@/lib/integrations/zapier";
+import { POLLING_TRIGGERS } from "@/lib/integrations/zapier-triggers";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AdminClient = ReturnType<typeof createClient<any>>;
@@ -313,12 +315,38 @@ async function handleRun(request: Request) {
       if (!callerOrgId) {
         return NextResponse.json({ error: "Event-fired automations require an authenticated caller" }, { status: 401 });
       }
-      const { eventTrigger, toStatus, assetId, assetName } = body as {
+      const { eventTrigger, toStatus, assetId, assetName, workOrderId, purchaseOrderId } = body as {
         eventTrigger: typeof EVENT_TRIGGER_TYPES[number];
         toStatus?: string;
         assetId?: string | null;
         assetName?: string | null;
+        workOrderId?: string | null;
+        purchaseOrderId?: string | null;
       };
+
+      // Fan out to any Zapier REST Hook subscriptions for the CMMS trigger
+      // types that piggyback on this same event round-trip — best-effort,
+      // independent of whether any internal automation matched below.
+      if (eventTrigger === "wo_status_change" && toStatus === "done" && workOrderId) {
+        const config = POLLING_TRIGGERS.work_order_completed;
+        const { data: wo } = await (adminClient as AdminClient)
+          .from("work_orders")
+          .select(config.columns)
+          .eq("id", workOrderId)
+          .eq("org_id", callerOrgId)
+          .maybeSingle();
+        if (wo) await notifyZapierSubscribers(adminClient, callerOrgId, "work_order_completed", config.map(wo));
+      }
+      if (eventTrigger === "po_status_change" && toStatus === "approved" && purchaseOrderId) {
+        const config = POLLING_TRIGGERS.po_approved;
+        const { data: po } = await (adminClient as AdminClient)
+          .from("purchase_orders")
+          .select(config.columns)
+          .eq("id", purchaseOrderId)
+          .eq("org_id", callerOrgId)
+          .maybeSingle();
+        if (po) await notifyZapierSubscribers(adminClient, callerOrgId, "po_approved", config.map(po));
+      }
 
       let autoQuery = (adminClient as AdminClient)
         .from("automations")

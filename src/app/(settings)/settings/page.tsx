@@ -7,16 +7,18 @@ import { UsersPage } from "@/components/settings/UsersPage";
 import { OrganizationTab } from "@/components/settings/OrganizationTab";
 import { BrandingTab } from "@/components/settings/BrandingTab";
 import { SubscriptionTab } from "@/components/settings/SubscriptionTab";
+import { ZapierIntegrationCard } from "@/components/settings/ZapierIntegrationCard";
 
-const TAB_KEYS = ["organization", "branding", "users", "subscription"] as const;
+const TAB_KEYS = ["organization", "branding", "users", "subscription", "integrations"] as const;
 type TabKey = (typeof TAB_KEYS)[number];
 
 function tabLabel(tab: TabKey): string {
   switch (tab) {
-    case "users":        return "Users";
+    case "users":         return "Users";
     case "organization":  return "Organization";
     case "branding":      return "Branding";
     case "subscription":  return "Subscription";
+    case "integrations":  return "Integrations";
   }
 }
 
@@ -67,6 +69,12 @@ function MasterAccountSettings() {
 
           <TabsContent value="subscription" className="mt-0">
             <SubscriptionTab />
+          </TabsContent>
+
+          <TabsContent value="integrations" className="mt-0">
+            <div className="max-w-2xl">
+              <ZapierIntegrationCard />
+            </div>
           </TabsContent>
         </div>
       </Tabs>
