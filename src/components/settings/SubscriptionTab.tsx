@@ -16,6 +16,8 @@ import {
   useSmsUsage,
 } from "@/lib/hooks/use-billing";
 import type { BillablePlan } from "@/lib/stripe/plans";
+import { getHighlightsForPlan } from "@/lib/stripe/plan-features";
+import { PlanComparisonTable } from "./PlanComparisonTable";
 
 const ACTIVE_STATUSES = new Set(["trialing", "active", "past_due"]);
 
@@ -45,9 +47,9 @@ export function SubscriptionTab() {
   const [checkoutClientSecret, setCheckoutClientSecret] = useState<string | null>(null);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
   const [addonError, setAddonError] = useState<string | null>(null);
+  const [showComparison, setShowComparison] = useState(false);
 
   const isActiveSubscriber = ACTIVE_STATUSES.has(billing?.stripeSubscriptionStatus ?? "");
-  const moduleLabels: Record<string, string> = { landscapt: "Landscapt", equipt: "Equipt" };
   const smsEnabled = billing?.enabledAddons.includes("sms") ?? false;
   const { data: smsUsage } = useSmsUsage(smsEnabled);
 
@@ -174,17 +176,17 @@ export function SubscriptionTab() {
             <div key={p.plan} className="flex flex-col rounded-lg border bg-white p-5 shadow-sm">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{p.label}</p>
               <p className="mt-1 text-xl font-bold text-slate-900">{priceLabel}</p>
-              <p className="mt-2 text-xs text-slate-500">
-                {p.modules.map((m) => moduleLabels[m] ?? m).join(" + ")}
+              <ul className="mt-3 flex flex-col gap-1.5">
+                {getHighlightsForPlan(p.plan as BillablePlan).map((h) => (
+                  <li key={h} className="flex items-start gap-1.5 text-xs text-slate-600">
+                    <Check className="mt-0.5 h-3 w-3 shrink-0 text-brand-600" />
+                    {h}
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-2 text-xs text-slate-400">
+                +{(p.seatOverageCents / 100).toLocaleString(undefined, { style: "currency", currency: "USD" })}/seat after included seats
               </p>
-              <p className="mt-1 text-xs text-slate-500">
-                {p.seatsIncluded} seats included · +{(p.seatOverageCents / 100).toLocaleString(undefined, { style: "currency", currency: "USD" })}/seat after
-              </p>
-              {p.bundledAddons.length > 0 && (
-                <p className="mt-1 text-xs text-slate-500">
-                  Includes: {p.bundledAddons.map((a) => a.replace(/_/g, " ")).join(", ")}
-                </p>
-              )}
               <div className="mt-4 flex-1" />
               <Button
                 className="mt-2 bg-brand-500 hover:bg-brand-600"
@@ -208,6 +210,21 @@ export function SubscriptionTab() {
       </div>
 
       {checkoutError && <p className="text-sm text-red-600">{checkoutError}</p>}
+
+      <div>
+        <button
+          type="button"
+          onClick={() => setShowComparison((v) => !v)}
+          className="text-sm font-medium text-brand-600 hover:text-brand-700"
+        >
+          {showComparison ? "Hide full plan comparison" : "Compare all plans in detail →"}
+        </button>
+        {showComparison && (
+          <div className="mt-4">
+            <PlanComparisonTable />
+          </div>
+        )}
+      </div>
 
       {/* Add-ons */}
       <div className="rounded-lg border bg-white p-5 shadow-sm">
