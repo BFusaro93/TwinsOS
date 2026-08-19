@@ -14,8 +14,12 @@ export const BILLABLE_PLANS = [
     bundledAddons: [] as BundledAddonKey[],
   },
   {
+    // Internal key stays "cmms" (matches the STRIPE_PRICE_CMMS/
+    // STRIPE_PRICE_SEAT_OVERAGE_CMMS env vars and the DB plan value already
+    // in use) — only the customer-facing label changed to match the Equipt
+    // product name used everywhere else.
     plan: "cmms",
-    label: "CMMS",
+    label: "Equipt",
     envVar: "STRIPE_PRICE_CMMS",
     modules: ["equipt"] as PlatformModule[],
     seatsIncluded: 5,
