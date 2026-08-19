@@ -7,13 +7,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 /**
- * Zapier connection card — shared by Equipt's Settings > Integrations
- * (src/app/(dashboard)/settings/page.tsx) and Landscapt's CRM Settings >
- * Integrations (src/app/(crm)/crm/settings/page.tsx). The Zapier API key is
- * org-wide (integrations table, provider = 'zapier'), and most of what it
- * triggers/creates is CRM domain (clients, tickets, jobs, invoices,
- * estimates) — so it's shown in both settings surfaces rather than picking
- * just one, since an org admin might only ever visit one of them.
+ * Zapier connection card — lives in Master Account Settings > Integrations
+ * (src/app/(settings)/settings/page.tsx), not under Equipt or Landscapt
+ * settings. The Zapier API key is org-wide (integrations table,
+ * provider = 'zapier') and not gated by either product: the Starter plan
+ * doesn't include Equipt but does include Zapier, so putting this under
+ * Equipt's settings would have hidden it from orgs that can actually use it.
  */
 export function ZapierIntegrationCard() {
   const { data: zapier, refetch } = useIntegration("zapier");

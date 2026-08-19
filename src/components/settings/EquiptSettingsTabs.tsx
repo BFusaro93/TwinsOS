@@ -40,7 +40,6 @@ import {
 import { Input } from "@/components/ui/input";
 import { ApprovalFlowsPage } from "@/components/settings/ApprovalFlowsPage";
 import { NotificationsPage } from "@/components/settings/NotificationsPage";
-import { ZapierIntegrationCard } from "@/components/settings/ZapierIntegrationCard";
 import { Toggle } from "@/components/settings/settings-ui";
 import { useSettingsStore } from "@/stores/settings-store";
 import type { FieldRequirement } from "@/stores/settings-store";
@@ -1308,8 +1307,6 @@ function IntegrationsTab() {
           </div>
         </div>
       </div>
-
-      <ZapierIntegrationCard />
     </div>
   );
 }

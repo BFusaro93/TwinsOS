@@ -92,7 +92,6 @@ import { useInvoices, usePayments, useBulkImportInvoices, useBulkImportPayments 
 import { useTickets, useBulkImportTickets } from "@/lib/hooks/use-tickets";
 import { useEmployees, useBulkImportEmployees } from "@/lib/hooks/use-employees";
 import { NotificationsPage } from "@/components/settings/NotificationsPage";
-import { ZapierIntegrationCard } from "@/components/settings/ZapierIntegrationCard";
 import { useConnectStatus, useStartConnectOnboarding, type ConnectStatus } from "@/lib/hooks/use-crm-card-payments";
 
 // ── AccordionSection ──────────────────────────────────────────────────────────
@@ -1601,9 +1600,6 @@ function IntegrationsTab() {
 
       {/* Google Maps */}
       <GoogleMapsCard />
-
-      {/* Zapier */}
-      <ZapierIntegrationCard />
 
     </div>
   );
