@@ -76,6 +76,7 @@ import { EstimateStagesEditor } from "@/components/crm/settings/EstimateStagesEd
 import { OverheadSettingsEditor } from "@/components/crm/settings/OverheadSettingsEditor";
 import { LaborRatesEditor } from "@/components/crm/settings/LaborRatesEditor";
 import { ClientPortalTab } from "@/components/crm/settings/ClientPortalSettings";
+import { ZapierIntegrationCard } from "@/components/settings/ZapierIntegrationCard";
 import { SnowRoutesEditor } from "@/components/crm/settings/SnowRoutesEditor";
 import { ChemicalTrackingTab } from "@/components/crm/settings/ChemicalTrackingSettings";
 import { InvoiceTemplatesEditor } from "@/components/crm/settings/InvoiceTemplatesEditor";
@@ -1601,6 +1602,9 @@ function IntegrationsTab() {
 
       {/* Google Maps */}
       <GoogleMapsCard />
+
+      {/* Zapier */}
+      <ZapierIntegrationCard />
 
     </div>
   );
