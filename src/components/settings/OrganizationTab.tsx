@@ -1,18 +1,17 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Check, Copy, ExternalLink } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Toggle, SettingRow } from "@/components/settings/settings-ui";
+import { SettingRow } from "@/components/settings/settings-ui";
 import { useSettingsStore } from "@/stores/settings-store";
 import { useOrgSettings, useUpdateOrgSettings } from "@/lib/hooks/use-org-settings";
 
-// General organization settings — name, address, tax rate, labor rates, and
-// the public maintenance-request portal toggle. Branding (logo/accent color)
-// lives in BrandingTab; this is the master-account "Organization" tab and is
-// also the general/company-info section for Equipt's own settings.
+// General organization settings — name, address, tax rate, and labor rates.
+// Branding (logo/accent color) lives in BrandingTab; the maintenance-request
+// portal toggle lives in Equipt settings (it's an Equipt-specific feature).
+// This is the master-account "Organization" tab.
 export function OrganizationTab() {
   const {
     orgName,
@@ -21,8 +20,6 @@ export function OrganizationTab() {
     setCompanyAddress,
     taxRatePercent,
     setTaxRatePercent,
-    portalEnabled,
-    setPortalEnabled,
     breakevenLaborRateCents,
     setBreakevenLaborRateCents,
     burdenedLaborRateCents,
@@ -65,8 +62,6 @@ export function OrganizationTab() {
     if (typeof savedBurdened === "number") setBurdenedDraft((savedBurdened / 100).toFixed(2));
   }, [remoteSettings, seeded]);
 
-  const [copied, setCopied] = useState(false);
-
   return (
     <div className="flex flex-col gap-6">
       {/* Organization */}
@@ -77,11 +72,13 @@ export function OrganizationTab() {
         </div>
         <Separator />
         <div className="px-6">
-          <SettingRow
-            label="Organization Name"
-            description="Your company name as it appears across the platform"
-          >
-            <div className="flex gap-2">
+          {/* Organization name */}
+          <div className="flex flex-col gap-2 py-4 md:flex-row md:items-start md:justify-between md:gap-8">
+            <div className="flex-1">
+              <p className="text-sm font-medium text-slate-900">Organization Name</p>
+              <p className="mt-0.5 text-xs text-slate-500">Your company name as it appears across the platform</p>
+            </div>
+            <div className="flex w-full gap-2 md:w-80 md:shrink-0">
               <Input
                 value={orgNameDraft}
                 onChange={(e) => setOrgNameDraft(e.target.value)}
@@ -99,7 +96,7 @@ export function OrganizationTab() {
                 Save
               </Button>
             </div>
-          </SettingRow>
+          </div>
           <Separator />
           {/* Company address */}
           <div className="flex flex-col gap-2 py-4 md:flex-row md:items-start md:justify-between md:gap-8">
@@ -107,7 +104,7 @@ export function OrganizationTab() {
               <p className="text-sm font-medium text-slate-900">Company Address</p>
               <p className="mt-0.5 text-xs text-slate-500">Printed in the header of purchase orders</p>
             </div>
-            <div className="flex w-full flex-col gap-2 md:w-64 md:shrink-0">
+            <div className="flex w-full flex-col gap-2 md:w-80 md:shrink-0">
               <Input
                 placeholder="Street address"
                 value={companyAddress.street}
@@ -128,18 +125,18 @@ export function OrganizationTab() {
                   className="h-8 text-sm"
                 />
               </div>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="flex gap-2">
                 <Input
                   placeholder="ZIP"
                   value={companyAddress.zip}
                   onChange={(e) => setCompanyAddress({ zip: e.target.value })}
-                  className="h-8 text-sm"
+                  className="h-8 w-24 shrink-0 text-sm"
                 />
                 <Input
                   placeholder="Phone"
                   value={companyAddress.phone}
                   onChange={(e) => setCompanyAddress({ phone: e.target.value })}
-                  className="h-8 text-sm"
+                  className="h-8 flex-1 text-sm"
                 />
               </div>
               <Button
@@ -259,74 +256,6 @@ export function OrganizationTab() {
                 }}
               >
                 Save
-              </Button>
-            </div>
-          </SettingRow>
-        </div>
-      </div>
-
-      {/* Requests Portal */}
-      <div className="rounded-lg border bg-white shadow-sm">
-        <div className="px-6 py-4">
-          <h2 className="text-sm font-semibold text-slate-900">Maintenance Request Portal</h2>
-          <p className="mt-0.5 text-xs text-slate-500">
-            A public link where anyone — employees, contractors, or guests — can submit a
-            maintenance request without logging in.
-          </p>
-        </div>
-        <Separator />
-        <div className="px-6">
-          <SettingRow
-            label="Accept Submissions"
-            description="When disabled, the portal shows a closed message and no submissions are accepted."
-          >
-            <Toggle enabled={portalEnabled} onToggle={() => {
-              setPortalEnabled(!portalEnabled);
-              updateOrgSettings({ portalEnabled: !portalEnabled });
-            }} />
-          </SettingRow>
-          <SettingRow
-            label="Portal Link"
-            description="Share this URL with anyone who should be able to submit requests."
-          >
-            <div className="flex items-center gap-2">
-              <div className="flex h-8 flex-1 min-w-0 items-center rounded-md border bg-slate-50 px-3">
-                <span className="truncate text-xs text-slate-600 font-mono">
-                  {typeof window !== "undefined" ? window.location.origin : "https://yourapp.com"}/request/{remoteSettings?.slug ?? ""}
-                </span>
-              </div>
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-8 shrink-0 gap-1.5 text-xs"
-                onClick={() => {
-                  const url = `${window.location.origin}/request/${remoteSettings?.slug ?? ""}`;
-                  navigator.clipboard.writeText(url).then(() => {
-                    setCopied(true);
-                    setTimeout(() => setCopied(false), 2000);
-                  });
-                }}
-              >
-                {copied ? (
-                  <>
-                    <Check className="h-3 w-3 text-emerald-600" />
-                    Copied
-                  </>
-                ) : (
-                  <>
-                    <Copy className="h-3 w-3" />
-                    Copy
-                  </>
-                )}
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-8 shrink-0 gap-1.5 text-xs"
-                onClick={() => window.open(`/request/${remoteSettings?.slug ?? ""}`, "_blank")}
-              >
-                <ExternalLink className="h-3 w-3" />
-                Open
               </Button>
             </div>
           </SettingRow>

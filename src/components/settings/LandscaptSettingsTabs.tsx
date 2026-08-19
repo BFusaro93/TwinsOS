@@ -1329,7 +1329,6 @@ function AccountingTab() {
       </AccordionSection>
       <AccordionSection
         title="Credit Card Processing Fee"
-        count={0}
         description="Optional surcharge added when a client pays an invoice by credit card, computed at the moment the card is charged — it never changes the invoice itself."
       >
         <div className="space-y-4 p-4">
@@ -2027,7 +2026,7 @@ type TabKey = (typeof TAB_KEYS)[number];
 function tabLabel(tab: TabKey): string {
   switch (tab) {
     case "general":           return "General";
-    case "users":             return "Users & Roles";
+    case "users":             return "Roles";
     case "crm":               return "Clients";
     case "estimates":         return "Estimates";
     case "notifications":     return "Notifications";

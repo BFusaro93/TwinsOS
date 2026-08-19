@@ -8,7 +8,7 @@ import { OrganizationTab } from "@/components/settings/OrganizationTab";
 import { BrandingTab } from "@/components/settings/BrandingTab";
 import { SubscriptionTab } from "@/components/settings/SubscriptionTab";
 
-const TAB_KEYS = ["users", "organization", "branding", "subscription"] as const;
+const TAB_KEYS = ["organization", "branding", "users", "subscription"] as const;
 type TabKey = (typeof TAB_KEYS)[number];
 
 function tabLabel(tab: TabKey): string {
@@ -24,7 +24,7 @@ function MasterAccountSettings() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const requestedTab = searchParams.get("tab");
-  const defaultTab = TAB_KEYS.includes(requestedTab as TabKey) ? (requestedTab as TabKey) : "users";
+  const defaultTab = TAB_KEYS.includes(requestedTab as TabKey) ? (requestedTab as TabKey) : "organization";
 
   return (
     <div className="flex flex-col gap-0">

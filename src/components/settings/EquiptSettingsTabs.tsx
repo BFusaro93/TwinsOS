@@ -8,6 +8,8 @@ import {
   ChevronUp,
   ClipboardCheck,
   Cog,
+  Copy,
+  ExternalLink,
   FileText,
   Loader2,
   Plus,
@@ -43,7 +45,7 @@ import { useSettingsStore } from "@/stores/settings-store";
 import type { FieldRequirement } from "@/stores/settings-store";
 import type { Part } from "@/types/cmms";
 import { type CostMethod } from "@/lib/cost-methods";
-import { useUpdateOrgSettings } from "@/lib/hooks/use-org-settings";
+import { useOrgSettings, useUpdateOrgSettings } from "@/lib/hooks/use-org-settings";
 import { useIntegration, useUpsertIntegration } from "@/lib/hooks/use-integrations";
 import { useWorkOrders, useBulkImportWorkOrders } from "@/lib/hooks/use-work-orders";
 import { useAssets, useBulkImportAssets } from "@/lib/hooks/use-assets";
@@ -128,6 +130,92 @@ function CostingTab() {
           takes effect immediately for new line items. Existing Requisitions, Purchase Orders, and
           Work Orders are not modified.
         </p>
+      </div>
+    </div>
+  );
+}
+
+// ── RequestPortalTab ──────────────────────────────────────────────────────────
+
+function RequestPortalTab() {
+  const { portalEnabled, setPortalEnabled } = useSettingsStore();
+  const { data: remoteSettings } = useOrgSettings();
+  const { mutate: updateOrgSettings } = useUpdateOrgSettings();
+  const [copied, setCopied] = useState(false);
+
+  return (
+    <div className="rounded-lg border bg-white shadow-sm">
+      <div className="px-6 py-4">
+        <h2 className="text-sm font-semibold text-slate-900">Maintenance Request Portal</h2>
+        <p className="mt-0.5 text-xs text-slate-500">
+          A public link where anyone — employees, contractors, or guests — can submit a
+          maintenance request without logging in.
+        </p>
+      </div>
+      <Separator />
+      <div className="px-6">
+        <div className="flex flex-col gap-2 py-4 md:flex-row md:items-start md:justify-between md:gap-8">
+          <div className="flex-1">
+            <p className="text-sm font-medium text-slate-900">Accept Submissions</p>
+            <p className="mt-0.5 text-xs text-slate-500">
+              When disabled, the portal shows a closed message and no submissions are accepted.
+            </p>
+          </div>
+          <div className="w-full md:w-48 md:shrink-0">
+            <Toggle enabled={portalEnabled} onToggle={() => {
+              setPortalEnabled(!portalEnabled);
+              updateOrgSettings({ portalEnabled: !portalEnabled });
+            }} />
+          </div>
+        </div>
+        <div className="flex flex-col gap-2 py-4 md:flex-row md:items-start md:justify-between md:gap-8">
+          <div className="flex-1">
+            <p className="text-sm font-medium text-slate-900">Portal Link</p>
+            <p className="mt-0.5 text-xs text-slate-500">
+              Share this URL with anyone who should be able to submit requests.
+            </p>
+          </div>
+          <div className="flex w-full items-center gap-2 md:w-80 md:shrink-0">
+            <div className="flex h-8 flex-1 min-w-0 items-center rounded-md border bg-slate-50 px-3">
+              <span className="truncate text-xs text-slate-600 font-mono">
+                {typeof window !== "undefined" ? window.location.origin : "https://yourapp.com"}/request/{remoteSettings?.slug ?? ""}
+              </span>
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 shrink-0 gap-1.5 text-xs"
+              onClick={() => {
+                const url = `${window.location.origin}/request/${remoteSettings?.slug ?? ""}`;
+                navigator.clipboard.writeText(url).then(() => {
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 2000);
+                });
+              }}
+            >
+              {copied ? (
+                <>
+                  <Check className="h-3 w-3 text-emerald-600" />
+                  Copied
+                </>
+              ) : (
+                <>
+                  <Copy className="h-3 w-3" />
+                  Copy
+                </>
+              )}
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 shrink-0 gap-1.5 text-xs"
+              onClick={() => window.open(`/request/${remoteSettings?.slug ?? ""}`, "_blank")}
+            >
+              <ExternalLink className="h-3 w-3" />
+              Open
+            </Button>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -1025,6 +1113,7 @@ function tabLabel(tab: string): string {
     case "import_export":  return "Import / Export";
     case "notifications":  return "Notifications";
     case "integrations":   return "Integrations";
+    case "request_portal": return "Request Portal";
     default:               return tab;
   }
 }
@@ -1234,6 +1323,7 @@ const TAB_KEYS = [
   "import_export",
   "notifications",
   "integrations",
+  "request_portal",
 ] as const;
 
 export function EquiptSettingsTabs() {
@@ -1284,6 +1374,10 @@ export function EquiptSettingsTabs() {
 
           <TabsContent value="integrations" className="mt-0">
             <IntegrationsTab />
+          </TabsContent>
+
+          <TabsContent value="request_portal" className="mt-0">
+            <RequestPortalTab />
           </TabsContent>
         </div>
       </Tabs>
