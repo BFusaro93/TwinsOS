@@ -108,6 +108,58 @@ export function useCreateCheckoutSession() {
   });
 }
 
+export function useToggleAddon() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ addon, enabled }: { addon: string; enabled: boolean }) => {
+      const res = await fetch("/api/billing/addons", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ addon, enabled }),
+      });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error ?? "Failed to update add-on");
+      return body as { enabled: boolean; bundled: boolean };
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["billing-info"] });
+    },
+  });
+}
+
+export interface SmsUsage {
+  count: number;
+  overageBilledCents: number;
+}
+
+export function useSmsUsage(enabled: boolean) {
+  return useQuery<SmsUsage | null>({
+    queryKey: ["sms-usage"],
+    enabled,
+    queryFn: async () => {
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return null;
+      const { data: profile } = await supabase.from("profiles").select("org_id").eq("id", user.id).single();
+      if (!profile) return null;
+
+      const periodStart = new Date();
+      periodStart.setUTCDate(1);
+      const periodStartStr = periodStart.toISOString().slice(0, 10);
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data } = await (supabase as any)
+        .from("organization_sms_usage")
+        .select("count, overage_billed_cents")
+        .eq("org_id", profile.org_id)
+        .eq("period_start", periodStartStr)
+        .maybeSingle();
+
+      return { count: data?.count ?? 0, overageBilledCents: data?.overage_billed_cents ?? 0 };
+    },
+  });
+}
+
 export function useCreatePortalSession() {
   return useMutation({
     mutationFn: async () => {

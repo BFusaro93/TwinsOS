@@ -8924,6 +8924,44 @@ export type Database = {
           },
         ]
       }
+      organization_sms_usage: {
+        Row: {
+          count: number
+          created_at: string
+          id: string
+          org_id: string
+          overage_billed_cents: number
+          period_start: string
+          updated_at: string
+        }
+        Insert: {
+          count?: number
+          created_at?: string
+          id?: string
+          org_id?: string
+          overage_billed_cents?: number
+          period_start: string
+          updated_at?: string
+        }
+        Update: {
+          count?: number
+          created_at?: string
+          id?: string
+          org_id?: string
+          overage_billed_cents?: number
+          period_start?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "organization_sms_usage_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       organizations: {
         Row: {
           account_number_next: number
@@ -11842,6 +11880,10 @@ export type Database = {
       }
       delete_job_product: {
         Args: { p_job_product_id: string }
+        Returns: undefined
+      }
+      increment_sms_usage: {
+        Args: { p_org_id: string; p_period_start: string }
         Returns: undefined
       }
       insert_audit_entry: {
