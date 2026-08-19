@@ -74,5 +74,17 @@ export async function sendClientSms(
     });
   }
 
+  // Feeds the SMS add-on's included-volume/overage billing (Phase 3) — every
+  // successful send counts, regardless of which org/messaging-service sent
+  // it. Best-effort: a failure here shouldn't fail the send itself.
+  const periodStart = new Date();
+  periodStart.setUTCDate(1);
+  await supabase
+    .rpc("increment_sms_usage", {
+      p_org_id: params.orgId,
+      p_period_start: periodStart.toISOString().slice(0, 10),
+    })
+    .then(() => {}, () => {});
+
   return { ok: true, sid: payload?.sid ?? null };
 }

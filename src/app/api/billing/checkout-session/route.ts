@@ -2,10 +2,9 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { getStripe, isStripeConfigured } from "@/lib/stripe/server";
-import { getPriceIdForPlan, isBillablePlan, isProduct } from "@/lib/stripe/plans";
+import { getPriceIdForPlan, isBillablePlan } from "@/lib/stripe/plans";
 
 const CheckoutSessionSchema = z.object({
-  product: z.string().refine(isProduct, { message: "Unknown product" }),
   plan: z.string().refine(isBillablePlan, { message: "Unknown plan" }),
 });
 
@@ -33,11 +32,10 @@ export async function POST(request: Request) {
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
-  const { product, plan } = parsed.data;
 
-  const priceId = getPriceIdForPlan(product, plan);
+  const priceId = getPriceIdForPlan(parsed.data.plan);
   if (!priceId) {
-    return NextResponse.json({ error: `No Stripe price configured for ${product} plan "${plan}"` }, { status: 400 });
+    return NextResponse.json({ error: `No Stripe price configured for plan "${parsed.data.plan}"` }, { status: 400 });
   }
 
   const { data: org } = await supabase
@@ -67,25 +65,25 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: updateError.message }, { status: 500 });
     }
   } else {
-    // Guard against creating a second, independent subscription for the SAME
-    // product: mode: "subscription" checkout always creates a NEW
-    // subscription — it never updates/replaces an existing one. Equipt and
-    // Landscapt are separate subscriptions under the same Stripe customer, so
-    // only look at the existing subscription tagged for this product — an
-    // active subscription for the OTHER product must not block or get
-    // clobbered by this checkout.
+    // Guard against creating a second, independent subscription: mode:
+    // "subscription" checkout always creates a NEW subscription — it never
+    // updates/replaces an existing one. If this customer already has a live
+    // subscription, change its price in place (with proration) instead of
+    // starting a second Stripe subscription that would double-bill the org
+    // and leave the first one orphaned once stripe_subscription_id gets
+    // overwritten by whichever webhook event lands last.
     const existingSubs = await stripe.subscriptions.list({
       customer: stripeCustomerId,
       status: "all",
-      limit: 10,
+      limit: 5,
     });
-    const activeSub = existingSubs.data.find(
-      (s) => s.metadata?.product === product && ["active", "trialing", "past_due"].includes(s.status)
+    const activeSub = existingSubs.data.find((s) =>
+      ["active", "trialing", "past_due"].includes(s.status)
     );
     if (activeSub) {
       const item = activeSub.items.data[0];
       if (item && item.price.id === priceId) {
-        return NextResponse.json({ error: `This organization is already subscribed to this ${product} plan` }, { status: 422 });
+        return NextResponse.json({ error: "This organization is already subscribed to this plan" }, { status: 422 });
       }
       await stripe.subscriptions.update(activeSub.id, {
         items: item ? [{ id: item.id, price: priceId }] : [{ price: priceId }],
@@ -105,8 +103,8 @@ export async function POST(request: Request) {
     customer: stripeCustomerId,
     client_reference_id: org.id,
     line_items: [{ price: priceId, quantity: 1 }],
-    subscription_data: { metadata: { org_id: org.id, product } },
-    return_url: `${origin}/settings?tab=subscription&product=${product}&checkout=return&session_id={CHECKOUT_SESSION_ID}`,
+    subscription_data: { metadata: { org_id: org.id } },
+    return_url: `${origin}/settings?tab=subscription&checkout=return&session_id={CHECKOUT_SESSION_ID}`,
   });
 
   return NextResponse.json({ clientSecret: session.client_secret });

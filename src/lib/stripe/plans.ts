@@ -1,18 +1,45 @@
-export type Product = "equipt" | "landscapt";
+export type PlatformModule = "landscapt" | "equipt";
 
-export const PRODUCTS: { product: Product; label: string }[] = [
-  { product: "equipt", label: "Equipt" },
-  { product: "landscapt", label: "Landscapt" },
-];
-
-export function isProduct(value: string): value is Product {
-  return PRODUCTS.some((p) => p.product === value);
-}
+/** Add-ons a plan already includes at no extra charge — see addons.ts for the full catalog. */
+export type BundledAddonKey = "job_photos" | "client_portal" | "route_optimization" | "advanced_reporting" | "api_access";
 
 export const BILLABLE_PLANS = [
-  { plan: "starter", label: "Starter" },
-  { plan: "growth", label: "Growth" },
-  { plan: "enterprise", label: "Enterprise" },
+  {
+    plan: "starter",
+    label: "Starter",
+    envVar: "STRIPE_PRICE_STARTER",
+    modules: ["landscapt"] as PlatformModule[],
+    seatsIncluded: 5,
+    seatOverageCents: 2000,
+    bundledAddons: [] as BundledAddonKey[],
+  },
+  {
+    plan: "cmms",
+    label: "CMMS",
+    envVar: "STRIPE_PRICE_CMMS",
+    modules: ["equipt"] as PlatformModule[],
+    seatsIncluded: 5,
+    seatOverageCents: 1500,
+    bundledAddons: [] as BundledAddonKey[],
+  },
+  {
+    plan: "growth",
+    label: "Growth",
+    envVar: "STRIPE_PRICE_GROWTH",
+    modules: ["landscapt", "equipt"] as PlatformModule[],
+    seatsIncluded: 10,
+    seatOverageCents: 2000,
+    bundledAddons: ["job_photos", "client_portal"] as BundledAddonKey[],
+  },
+  {
+    plan: "enterprise",
+    label: "Enterprise",
+    envVar: "STRIPE_PRICE_ENTERPRISE",
+    modules: ["landscapt", "equipt"] as PlatformModule[],
+    seatsIncluded: 20,
+    seatOverageCents: 2000,
+    bundledAddons: ["job_photos", "client_portal", "route_optimization", "advanced_reporting", "api_access"] as BundledAddonKey[],
+  },
 ] as const;
 
 export type BillablePlan = (typeof BILLABLE_PLANS)[number]["plan"];
@@ -21,27 +48,45 @@ export function isBillablePlan(value: string): value is BillablePlan {
   return BILLABLE_PLANS.some((p) => p.plan === value);
 }
 
-// Env var name for a given product+plan, e.g. STRIPE_PRICE_EQUIPT_STARTER.
-function envVarFor(product: Product, plan: BillablePlan): string {
-  return `STRIPE_PRICE_${product.toUpperCase()}_${plan.toUpperCase()}`;
+export function getPlanConfig(plan: BillablePlan) {
+  const entry = BILLABLE_PLANS.find((p) => p.plan === plan);
+  if (!entry) throw new Error(`Unknown plan "${plan}"`);
+  return entry;
 }
 
-export function getPriceIdForPlan(product: Product, plan: BillablePlan): string | null {
-  return process.env[envVarFor(product, plan)] ?? null;
+export function getPriceIdForPlan(plan: BillablePlan): string | null {
+  const entry = BILLABLE_PLANS.find((p) => p.plan === plan);
+  if (!entry) return null;
+  return process.env[entry.envVar] ?? null;
 }
 
-export function getPlanForPriceId(product: Product, priceId: string): BillablePlan | null {
-  const entry = BILLABLE_PLANS.find((p) => process.env[envVarFor(product, p.plan)] === priceId);
+export function getPlanForPriceId(priceId: string): BillablePlan | null {
+  const entry = BILLABLE_PLANS.find((p) => process.env[p.envVar] === priceId);
   return entry?.plan ?? null;
 }
 
-// Looks up which product a price id belongs to, for webhook events that only
-// carry a price id (no subscription metadata yet, e.g. legacy subscriptions).
-export function getProductForPriceId(priceId: string): Product | null {
-  for (const { product } of PRODUCTS) {
-    for (const { plan } of BILLABLE_PLANS) {
-      if (process.env[envVarFor(product, plan)] === priceId) return product;
-    }
-  }
-  return null;
+/** Modules a plan unlocks. Trial orgs (plan === "trial") and anything unrecognized get full access — see AskUserQuestion decision: trial is full-featured for the 30-day window. */
+export function getModulesForPlan(plan: string): PlatformModule[] {
+  if (isBillablePlan(plan)) return getPlanConfig(plan).modules;
+  return ["landscapt", "equipt"];
+}
+
+export function planIncludesModule(plan: string, module: PlatformModule): boolean {
+  return getModulesForPlan(plan).includes(module);
+}
+
+/** Seat count and per-seat overage price for a plan, honoring an org's custom override (Enterprise deals) when set. */
+export function getSeatConfig(
+  plan: string,
+  overrides: { seatsIncludedOverride?: number | null; seatOverageCentsOverride?: number | null } = {}
+): { seatsIncluded: number; seatOverageCents: number } {
+  const base = isBillablePlan(plan) ? getPlanConfig(plan) : { seatsIncluded: 5, seatOverageCents: 2000 };
+  return {
+    seatsIncluded: overrides.seatsIncludedOverride ?? base.seatsIncluded,
+    seatOverageCents: overrides.seatOverageCentsOverride ?? base.seatOverageCents,
+  };
+}
+
+export function planIncludesAddon(plan: string, addon: BundledAddonKey): boolean {
+  return isBillablePlan(plan) && (getPlanConfig(plan).bundledAddons as readonly string[]).includes(addon);
 }

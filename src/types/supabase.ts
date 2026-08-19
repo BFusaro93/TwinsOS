@@ -8886,6 +8886,82 @@ export type Database = {
           },
         ]
       }
+      organization_addons: {
+        Row: {
+          addon_key: string
+          created_at: string
+          enabled: boolean
+          id: string
+          org_id: string
+          stripe_subscription_item_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          addon_key: string
+          created_at?: string
+          enabled?: boolean
+          id?: string
+          org_id?: string
+          stripe_subscription_item_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          addon_key?: string
+          created_at?: string
+          enabled?: boolean
+          id?: string
+          org_id?: string
+          stripe_subscription_item_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "organization_addons_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      organization_sms_usage: {
+        Row: {
+          count: number
+          created_at: string
+          id: string
+          org_id: string
+          overage_billed_cents: number
+          period_start: string
+          updated_at: string
+        }
+        Insert: {
+          count?: number
+          created_at?: string
+          id?: string
+          org_id?: string
+          overage_billed_cents?: number
+          period_start: string
+          updated_at?: string
+        }
+        Update: {
+          count?: number
+          created_at?: string
+          id?: string
+          org_id?: string
+          overage_billed_cents?: number
+          period_start?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "organization_sms_usage_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       organizations: {
         Row: {
           account_number_next: number
@@ -8893,6 +8969,7 @@ export type Database = {
           account_number_suffix: string
           ach_payments_enabled: boolean
           address: Json
+          billing_interval: string
           brand_color: string
           cc_processing_fee_bps: number
           cc_processing_fee_enabled: boolean
@@ -8907,6 +8984,8 @@ export type Database = {
           name: string
           plan: string
           portal_enabled: boolean
+          seat_overage_cents_override: number | null
+          seats_included_override: number | null
           slug: string
           stripe_connect_account_id: string | null
           stripe_connect_charges_enabled: boolean
@@ -8917,6 +8996,7 @@ export type Database = {
           stripe_subscription_id: string | null
           stripe_subscription_status: string | null
           tax_rate_percent: number
+          trial_ends_at: string | null
           twilio_account_sid: string | null
           twilio_messaging_service_sid: string | null
           updated_at: string
@@ -8927,6 +9007,7 @@ export type Database = {
           account_number_suffix?: string
           ach_payments_enabled?: boolean
           address?: Json
+          billing_interval?: string
           brand_color?: string
           cc_processing_fee_bps?: number
           cc_processing_fee_enabled?: boolean
@@ -8941,6 +9022,8 @@ export type Database = {
           name: string
           plan?: string
           portal_enabled?: boolean
+          seat_overage_cents_override?: number | null
+          seats_included_override?: number | null
           slug: string
           stripe_connect_account_id?: string | null
           stripe_connect_charges_enabled?: boolean
@@ -8951,6 +9034,7 @@ export type Database = {
           stripe_subscription_id?: string | null
           stripe_subscription_status?: string | null
           tax_rate_percent?: number
+          trial_ends_at?: string | null
           twilio_account_sid?: string | null
           twilio_messaging_service_sid?: string | null
           updated_at?: string
@@ -8961,6 +9045,7 @@ export type Database = {
           account_number_suffix?: string
           ach_payments_enabled?: boolean
           address?: Json
+          billing_interval?: string
           brand_color?: string
           cc_processing_fee_bps?: number
           cc_processing_fee_enabled?: boolean
@@ -8975,6 +9060,8 @@ export type Database = {
           name?: string
           plan?: string
           portal_enabled?: boolean
+          seat_overage_cents_override?: number | null
+          seats_included_override?: number | null
           slug?: string
           stripe_connect_account_id?: string | null
           stripe_connect_charges_enabled?: boolean
@@ -8985,6 +9072,7 @@ export type Database = {
           stripe_subscription_id?: string | null
           stripe_subscription_status?: string | null
           tax_rate_percent?: number
+          trial_ends_at?: string | null
           twilio_account_sid?: string | null
           twilio_messaging_service_sid?: string | null
           updated_at?: string
@@ -11761,6 +11849,13 @@ export type Database = {
         }
         Returns: undefined
       }
+      apply_payment_to_invoice: {
+        Args: { p_delta_cents: number; p_invoice_id: string }
+        Returns: {
+          new_status: string
+          was_newly_paid: boolean
+        }[]
+      }
       assign_invoice_number: { Args: { p_invoice_id: string }; Returns: number }
       crm_recompute_job_actual_hours: {
         Args: { p_job_id: string }
@@ -11785,6 +11880,10 @@ export type Database = {
       }
       delete_job_product: {
         Args: { p_job_product_id: string }
+        Returns: undefined
+      }
+      increment_sms_usage: {
+        Args: { p_org_id: string; p_period_start: string }
         Returns: undefined
       }
       insert_audit_entry: {
@@ -11812,6 +11911,12 @@ export type Database = {
           p_quantity: number
         }
         Returns: undefined
+      }
+      refund_payment: {
+        Args: { p_payment_id: string; p_refund_amount_cents: number }
+        Returns: {
+          new_refunded_amount_cents: number
+        }[]
       }
       set_job_product_status: {
         Args: { p_job_product_id: string; p_new_status: string }

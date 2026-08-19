@@ -3,7 +3,8 @@ import type Stripe from "stripe";
 import { Resend } from "resend";
 import { createServiceClient } from "@/lib/supabase/server";
 import { getStripe, isStripeConfigured } from "@/lib/stripe/server";
-import { getPlanForPriceId, getProductForPriceId, type Product } from "@/lib/stripe/plans";
+import { getPlanForPriceId } from "@/lib/stripe/plans";
+import { syncSeatOverage } from "@/lib/stripe/seat-sync";
 import { logger } from "@/lib/logger";
 
 const log = logger.child("stripe webhook");
@@ -108,7 +109,7 @@ export async function POST(request: Request) {
           typeof session.subscription === "string" ? session.subscription : session.subscription?.id;
         if (orgId && sessionSubscriptionId) {
           const subscription = await stripe.subscriptions.retrieve(sessionSubscriptionId);
-          await applySubscriptionToOrg(db, { id: orgId }, subscription);
+          await applySubscriptionToOrg(stripe, db, { id: orgId }, subscription);
         }
         break;
       }
@@ -117,7 +118,7 @@ export async function POST(request: Request) {
         const subscription = event.data.object as Stripe.Subscription;
         const customerId =
           typeof subscription.customer === "string" ? subscription.customer : subscription.customer.id;
-        await applySubscriptionToOrg(db, { stripeCustomerId: customerId }, subscription);
+        await applySubscriptionToOrg(stripe, db, { stripeCustomerId: customerId }, subscription);
         break;
       }
       case "invoice.payment_failed": {
@@ -165,49 +166,52 @@ function extractSubscriptionId(event: Stripe.Event): string | null {
 }
 
 async function applySubscriptionToOrg(
+  stripe: Stripe,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   db: any,
   lookup: { id: string } | { stripeCustomerId: string },
   subscription: Stripe.Subscription
 ) {
+  // items.data[0] is always the base plan price — a seat-overage item (if
+  // present) is added/removed by syncSeatOverage below and never the first
+  // item on a subscription created through checkout-session.ts.
   const priceId = subscription.items.data[0]?.price.id ?? null;
+  const plan = priceId ? getPlanForPriceId(priceId) : null;
 
-  // Which product this subscription belongs to: prefer the metadata tagged
-  // at checkout time; fall back to matching the price id against the known
-  // per-product env vars for subscriptions created before product tagging
-  // existed.
-  const product = (subscription.metadata?.product as Product | undefined) ??
-    (priceId ? getProductForPriceId(priceId) : null);
-
-  const patch: Record<string, unknown> = {};
-
-  if (product) {
-    const plan = priceId ? getPlanForPriceId(product, priceId) : null;
-    patch[`${product}_stripe_subscription_id`] = subscription.id;
-    patch[`${product}_stripe_subscription_status`] = subscription.status;
-    patch[`${product}_stripe_price_id`] = priceId;
-    if (DOWNGRADE_STATUSES.has(subscription.status)) {
-      patch[`${product}_plan`] = "trial";
-    } else if (plan) {
-      patch[`${product}_plan`] = plan;
-    }
-  } else {
-    // No product tag or price match at all — legacy single-product
-    // subscription. Keep writing the legacy columns so old orgs don't lose
-    // their plan.
-    patch.stripe_subscription_id = subscription.id;
-    patch.stripe_subscription_status = subscription.status;
-    patch.stripe_price_id = priceId;
-    if (DOWNGRADE_STATUSES.has(subscription.status)) {
-      patch.plan = "trial";
-    }
+  const patch: Record<string, unknown> = {
+    stripe_subscription_id: subscription.id,
+    stripe_subscription_status: subscription.status,
+    stripe_price_id: priceId,
+  };
+  if (DOWNGRADE_STATUSES.has(subscription.status)) {
+    patch.plan = "trial";
+  } else if (plan) {
+    patch.plan = plan;
   }
 
-  const query = db.from("organizations").update(patch);
-  const { error } =
+  const query = db
+    .from("organizations")
+    .update(patch)
+    .select("id, plan, seats_included_override, seat_overage_cents_override")
+    .single();
+  const { data: org, error } =
     "id" in lookup ? await query.eq("id", lookup.id) : await query.eq("stripe_customer_id", lookup.stripeCustomerId);
 
   if (error) throw error;
+
+  // A downgraded/canceled subscription doesn't need its overage item
+  // reconciled — the subscription itself is ending or already gone.
+  if (!DOWNGRADE_STATUSES.has(subscription.status) && org?.plan) {
+    const { count: seatsUsed } = await db
+      .from("profiles")
+      .select("id", { count: "exact", head: true })
+      .eq("org_id", org.id)
+      .neq("status", "inactive");
+    await syncSeatOverage(stripe, subscription, org.plan, seatsUsed ?? 0, {
+      seatsIncludedOverride: org.seats_included_override,
+      seatOverageCentsOverride: org.seat_overage_cents_override,
+    });
+  }
 }
 
 /** Emails the org's admins that a subscription renewal payment failed. Best-effort. */

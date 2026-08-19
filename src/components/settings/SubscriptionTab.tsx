@@ -12,8 +12,10 @@ import {
   usePlans,
   useCreateCheckoutSession,
   useCreatePortalSession,
+  useToggleAddon,
+  useSmsUsage,
 } from "@/lib/hooks/use-billing";
-import type { BillablePlan, Product } from "@/lib/stripe/plans";
+import type { BillablePlan } from "@/lib/stripe/plans";
 
 const ACTIVE_STATUSES = new Set(["trialing", "active", "past_due"]);
 
@@ -34,15 +36,30 @@ function formatPrice(amountCents: number | null, currency: string | null, interv
   return interval ? `${amount}/${interval}` : amount;
 }
 
-function ProductSubscriptionCard({ product, label }: { product: Product; label: string }) {
-  const { data: billing, isLoading: billingLoading } = useBillingInfo(product);
-  const { data: plansData, isLoading: plansLoading } = usePlans(product);
-  const createCheckoutSession = useCreateCheckoutSession(product);
+export function SubscriptionTab() {
+  const { data: billing, isLoading: billingLoading } = useBillingInfo();
+  const { data: plansData, isLoading: plansLoading } = usePlans();
+  const createCheckoutSession = useCreateCheckoutSession();
   const createPortalSession = useCreatePortalSession();
+  const toggleAddon = useToggleAddon();
   const [checkoutClientSecret, setCheckoutClientSecret] = useState<string | null>(null);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
+  const [addonError, setAddonError] = useState<string | null>(null);
 
   const isActiveSubscriber = ACTIVE_STATUSES.has(billing?.stripeSubscriptionStatus ?? "");
+  const moduleLabels: Record<string, string> = { landscapt: "Landscapt", equipt: "Equipt" };
+  const smsEnabled = billing?.enabledAddons.includes("sms") ?? false;
+  const { data: smsUsage } = useSmsUsage(smsEnabled);
+
+  async function handleToggleAddon(addon: string, enabled: boolean) {
+    setAddonError(null);
+    try {
+      await toggleAddon.mutateAsync({ addon, enabled });
+      toast.success(enabled ? "Add-on enabled" : "Add-on removed");
+    } catch (err) {
+      setAddonError(err instanceof Error ? err.message : "Failed to update add-on");
+    }
+  }
 
   async function handleSubscribe(plan: BillablePlan) {
     setCheckoutError(null);
@@ -56,7 +73,7 @@ function ProductSubscriptionCard({ product, label }: { product: Product; label: 
       if ("updated" in result) {
         // Already had a live subscription — its price was changed in place,
         // no checkout needed.
-        toast.success(`${label} plan updated`);
+        toast.success("Plan updated");
         return;
       }
       setCheckoutClientSecret(result.clientSecret);
@@ -76,7 +93,7 @@ function ProductSubscriptionCard({ product, label }: { product: Product; label: 
 
   if (billingLoading || plansLoading) {
     return (
-      <div className="flex items-center justify-center rounded-lg border bg-white py-16 text-slate-400 shadow-sm">
+      <div className="flex items-center justify-center py-16 text-slate-400">
         <Loader2 className="h-5 w-5 animate-spin" />
       </div>
     );
@@ -88,10 +105,10 @@ function ProductSubscriptionCard({ product, label }: { product: Product; label: 
         <div className="flex items-start gap-3">
           <CreditCard className="mt-0.5 h-5 w-5 shrink-0 text-brand-500" />
           <div>
-            <p className="text-sm font-semibold text-brand-800">{label} billing isn&apos;t connected yet</p>
+            <p className="text-sm font-semibold text-brand-800">Billing isn&apos;t connected yet</p>
             <p className="mt-0.5 text-xs text-brand-600">
-              Add the STRIPE_PRICE_{product.toUpperCase()}_* variables (starter/growth/enterprise) to
-              enable {label} subscriptions. See .env.local.example.
+              Add STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY, and
+              the STRIPE_PRICE_* variables to enable subscriptions. See .env.local.example.
             </p>
           </div>
         </div>
@@ -106,7 +123,7 @@ function ProductSubscriptionCard({ product, label }: { product: Product; label: 
         <div className="flex flex-col gap-4 p-6 md:flex-row md:items-start md:justify-between">
           <div>
             <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
-              {label} — Current Plan
+              Current Plan
             </p>
             <h2 className="text-2xl font-bold capitalize text-slate-900">{billing?.plan ?? "trial"}</h2>
             {billing?.stripeSubscriptionStatus && (
@@ -115,6 +132,24 @@ function ProductSubscriptionCard({ product, label }: { product: Product; label: 
                 <span className="font-semibold capitalize text-slate-700">
                   {billing.stripeSubscriptionStatus.replace("_", " ")}
                 </span>
+              </p>
+            )}
+            {billing && (
+              <p className="mt-1 text-sm text-slate-500">
+                Seats: <span className="font-semibold text-slate-700">{billing.seatsUsed}</span> of{" "}
+                {billing.seatsIncluded} included
+                {billing.seatsUsed > billing.seatsIncluded && (
+                  <span className="ml-1 text-amber-600">
+                    (+{billing.seatsUsed - billing.seatsIncluded} over — billed at{" "}
+                    {(billing.seatOverageCents / 100).toLocaleString(undefined, { style: "currency", currency: "USD" })}
+                    /seat next cycle)
+                  </span>
+                )}
+              </p>
+            )}
+            {billing?.plan === "trial" && billing.trialEndsAt && (
+              <p className="mt-1 text-sm text-slate-500">
+                Trial ends <span className="font-semibold text-slate-700">{new Date(billing.trialEndsAt).toLocaleDateString()}</span>
               </p>
             )}
           </div>
@@ -131,7 +166,7 @@ function ProductSubscriptionCard({ product, label }: { product: Product; label: 
       </div>
 
       {/* Plans */}
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
         {plansData.plans.map((p) => {
           const priceLabel = p.configured ? formatPrice(p.amountCents, p.currency, p.interval) ?? "Contact us" : "Not configured";
           const isCurrent = billing?.plan === p.plan && isActiveSubscriber;
@@ -139,6 +174,17 @@ function ProductSubscriptionCard({ product, label }: { product: Product; label: 
             <div key={p.plan} className="flex flex-col rounded-lg border bg-white p-5 shadow-sm">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{p.label}</p>
               <p className="mt-1 text-xl font-bold text-slate-900">{priceLabel}</p>
+              <p className="mt-2 text-xs text-slate-500">
+                {p.modules.map((m) => moduleLabels[m] ?? m).join(" + ")}
+              </p>
+              <p className="mt-1 text-xs text-slate-500">
+                {p.seatsIncluded} seats included · +{(p.seatOverageCents / 100).toLocaleString(undefined, { style: "currency", currency: "USD" })}/seat after
+              </p>
+              {p.bundledAddons.length > 0 && (
+                <p className="mt-1 text-xs text-slate-500">
+                  Includes: {p.bundledAddons.map((a) => a.replace(/_/g, " ")).join(", ")}
+                </p>
+              )}
               <div className="mt-4 flex-1" />
               <Button
                 className="mt-2 bg-brand-500 hover:bg-brand-600"
@@ -163,10 +209,60 @@ function ProductSubscriptionCard({ product, label }: { product: Product; label: 
 
       {checkoutError && <p className="text-sm text-red-600">{checkoutError}</p>}
 
+      {/* Add-ons */}
+      <div className="rounded-lg border bg-white p-5 shadow-sm">
+        <p className="mb-4 text-xs font-semibold uppercase tracking-wide text-slate-400">Add-ons</p>
+        <div className="flex flex-col divide-y divide-slate-100">
+          {plansData.addons.map((a) => {
+            const currentPlan = plansData.plans.find((p) => p.plan === billing?.plan);
+            const bundled = currentPlan?.bundledAddons.includes(a.key) ?? false;
+            const enabled = bundled || (billing?.enabledAddons.includes(a.key) ?? false);
+            const priceLabel = a.configured ? formatPrice(a.amountCents, a.currency, a.interval) ?? "Contact us" : "Not configured";
+            return (
+              <div key={a.key} className="flex flex-col gap-2 py-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-slate-800">{a.label}</p>
+                  <p className="text-xs text-slate-500">
+                    {bundled ? "Included in your plan" : priceLabel}
+                    {a.metered && !bundled && " (500 messages included, then $10 per 250 over)"}
+                  </p>
+                  {a.key === "sms" && enabled && smsUsage && (
+                    <p className="mt-1 text-xs text-slate-400">
+                      {smsUsage.count.toLocaleString()} sent this period
+                      {smsUsage.overageBilledCents > 0 &&
+                        ` · ${(smsUsage.overageBilledCents / 100).toLocaleString(undefined, { style: "currency", currency: "USD" })} overage billed`}
+                    </p>
+                  )}
+                </div>
+                <Button
+                  variant={enabled ? "outline" : "default"}
+                  size="sm"
+                  disabled={bundled || !a.configured || toggleAddon.isPending}
+                  className={enabled ? "" : "bg-brand-500 hover:bg-brand-600"}
+                  onClick={() => handleToggleAddon(a.key, !enabled)}
+                >
+                  {bundled ? (
+                    <>
+                      <Check className="mr-1.5 h-3.5 w-3.5" />
+                      Included
+                    </>
+                  ) : enabled ? (
+                    "Remove"
+                  ) : (
+                    "Add"
+                  )}
+                </Button>
+              </div>
+            );
+          })}
+        </div>
+        {addonError && <p className="mt-3 text-sm text-red-600">{addonError}</p>}
+      </div>
+
       <Dialog open={checkoutClientSecret != null} onOpenChange={(open) => !open && setCheckoutClientSecret(null)}>
         <DialogContent className="max-w-2xl p-0">
           <DialogHeader className="p-6 pb-0">
-            <DialogTitle>Subscribe to {label}</DialogTitle>
+            <DialogTitle>Subscribe</DialogTitle>
           </DialogHeader>
           <div className="max-h-[80vh] overflow-y-auto p-6 pt-2">
             {checkoutClientSecret && (
@@ -177,28 +273,6 @@ function ProductSubscriptionCard({ product, label }: { product: Product; label: 
           </div>
         </DialogContent>
       </Dialog>
-    </div>
-  );
-}
-
-// Equipt and Landscapt are billed as separate Stripe subscriptions under the
-// same org-level Stripe customer — subscribe to either one alone, or both.
-export function SubscriptionTab() {
-  return (
-    <div className="flex flex-col gap-8">
-      <div>
-        <h2 className="mb-3 text-sm font-semibold text-slate-900">Equipt</h2>
-        <ProductSubscriptionCard product="equipt" label="Equipt" />
-      </div>
-      <div>
-        <h2 className="mb-3 text-sm font-semibold text-slate-900">Landscapt</h2>
-        <ProductSubscriptionCard product="landscapt" label="Landscapt" />
-      </div>
-      <p className="text-xs text-slate-400">
-        Equipt and Landscapt are billed independently — subscribe to one product or to both.
-        Manage Billing opens Stripe&apos;s billing portal for the whole account, including any
-        subscriptions to both products.
-      </p>
     </div>
   );
 }
