@@ -1,8 +1,46 @@
 "use client";
 
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { useQuery } from "@tanstack/react-query";
 import { BarChart2, Wrench, NotepadText, Leaf, Truck, Users, ExternalLink, Settings, Camera } from "lucide-react";
 import { useCurrentUserStore } from "@/stores";
+import { createClient } from "@/lib/supabase/client";
+import { isBillablePlan } from "@/lib/stripe/plans";
+
+/**
+ * Picked a paid plan at signup instead of "start free trial"? Checkout can't
+ * run until email confirmation gives us an authenticated session, so
+ * organizations.pending_plan records the choice and this is the first
+ * authenticated page they land on — send them straight into checkout for it.
+ */
+function usePendingPlanRedirect() {
+  const router = useRouter();
+  const { data: pendingPlan } = useQuery({
+    queryKey: ["org-pending-plan"],
+    queryFn: async () => {
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return null;
+      const { data: profile } = await supabase.from("profiles").select("org_id").eq("id", user.id).single();
+      if (!profile) return null;
+      const { data: org } = await supabase
+        .from("organizations")
+        .select("pending_plan")
+        .eq("id", profile.org_id)
+        .single();
+      return org?.pending_plan ?? null;
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+
+  useEffect(() => {
+    if (pendingPlan && isBillablePlan(pendingPlan)) {
+      router.replace(`/settings?tab=subscription&autoSubscribe=${pendingPlan}`);
+    }
+  }, [pendingPlan, router]);
+}
 
 const INTERNAL_BOX =
   "group flex flex-col items-center gap-5 rounded-2xl border-2 border-slate-200 bg-white p-10 shadow-sm transition-all duration-150 hover:border-brand-400 hover:shadow-lg";
@@ -53,6 +91,7 @@ function CrewHome() {
 
 export default function HomePage() {
   const { currentUser } = useCurrentUserStore();
+  usePendingPlanRedirect();
 
   if (currentUser.role === "crew") {
     return <CrewHome />;

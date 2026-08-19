@@ -1,18 +1,32 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Building2, CheckCircle2, Leaf, Loader2 } from "lucide-react";
+import { Building2, Check, CheckCircle2, Leaf, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createClient } from "@/lib/supabase/client";
+import type { BillablePlan } from "@/lib/stripe/plans";
+import { getHighlightsForPlan } from "@/lib/stripe/plan-features";
+import type { BillingPlanInfo } from "@/app/api/billing/plans/route";
 
-type Step = "form" | "confirm";
+type Step = "plan" | "form" | "confirm";
+
+function formatPrice(amountCents: number | null, currency: string | null, interval: string | null): string | null {
+  if (amountCents == null || !currency) return null;
+  const amount = (amountCents / 100).toLocaleString(undefined, {
+    style: "currency",
+    currency: currency.toUpperCase(),
+  });
+  return interval ? `${amount}/${interval}` : amount;
+}
 
 export default function SignupPage() {
   const router = useRouter();
 
+  const [plans, setPlans] = useState<BillingPlanInfo[]>([]);
+  const [selectedPlan, setSelectedPlan] = useState<BillablePlan | null>(null);
   const [companyName, setCompanyName] = useState("");
   const [name, setName]               = useState("");
   const [email, setEmail]             = useState("");
@@ -20,7 +34,19 @@ export default function SignupPage() {
   const [confirm, setConfirm]         = useState("");
   const [error, setError]             = useState<string | null>(null);
   const [loading, setLoading]         = useState(false);
-  const [step, setStep]               = useState<Step>("form");
+  const [step, setStep]               = useState<Step>("plan");
+
+  useEffect(() => {
+    fetch("/api/billing/plans")
+      .then((res) => res.json())
+      .then((body) => {
+        if (body.stripeEnabled) setPlans(body.plans);
+      })
+      .catch(() => {
+        // Plan pricing is a nice-to-have here — signup still works with the
+        // default "start free trial" option if this fails.
+      });
+  }, []);
 
   // ── Validation ──────────────────────────────────────────────────────────────
 
@@ -53,7 +79,7 @@ export default function SignupPage() {
       const orgRes = await fetch("/api/orgs/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ companyName: companyName.trim() }),
+        body: JSON.stringify({ companyName: companyName.trim(), plan: selectedPlan }),
       });
       const orgData = await orgRes.json();
       if (!orgRes.ok) {
@@ -90,6 +116,80 @@ export default function SignupPage() {
     } finally {
       setLoading(false);
     }
+  }
+
+  // ── Plan picker ─────────────────────────────────────────────────────────────
+
+  if (step === "plan") {
+    return (
+      <div className="w-full max-w-3xl">
+        <div className="mb-8 flex flex-col items-center gap-2">
+          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-brand-500">
+            <Leaf className="h-6 w-6 text-white" />
+          </div>
+          <h1 className="text-2xl font-bold text-slate-900">Equipt</h1>
+          <p className="text-sm text-slate-500">Choose how you&apos;d like to get started</p>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+          <button
+            type="button"
+            onClick={() => setSelectedPlan(null)}
+            className={`flex flex-col rounded-xl border-2 bg-white p-4 text-left shadow-sm transition-colors ${
+              selectedPlan === null ? "border-brand-500" : "border-transparent hover:border-slate-200"
+            }`}
+          >
+            <p className="text-xs font-semibold uppercase tracking-wide text-brand-600">Recommended</p>
+            <p className="mt-1 text-lg font-bold text-slate-900">30-Day Free Trial</p>
+            <p className="mt-1 text-xs text-slate-500">Full access to Landscapt and Equipt — no card required. Pick a plan any time.</p>
+          </button>
+
+          {plans.map((p) => {
+            const priceLabel = p.configured ? formatPrice(p.amountCents, p.currency, p.interval) : null;
+            return (
+              <button
+                key={p.plan}
+                type="button"
+                onClick={() => setSelectedPlan(p.plan as BillablePlan)}
+                className={`flex flex-col rounded-xl border-2 bg-white p-4 text-left shadow-sm transition-colors ${
+                  selectedPlan === p.plan ? "border-brand-500" : "border-transparent hover:border-slate-200"
+                }`}
+              >
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{p.label}</p>
+                <p className="mt-1 text-lg font-bold text-slate-900">{priceLabel ?? "Contact us"}</p>
+                <ul className="mt-2 flex flex-col gap-1">
+                  {getHighlightsForPlan(p.plan as BillablePlan)
+                    .slice(0, 3)
+                    .map((h) => (
+                      <li key={h} className="flex items-start gap-1 text-xs text-slate-600">
+                        <Check className="mt-0.5 h-3 w-3 shrink-0 text-brand-600" />
+                        {h}
+                      </li>
+                    ))}
+                </ul>
+              </button>
+            );
+          })}
+        </div>
+
+        <p className="mt-6 text-center text-xs text-slate-500">
+          {selectedPlan
+            ? "You'll create your account first, then confirm your email and check out."
+            : "You can subscribe to a paid plan any time from Settings → Subscription."}
+        </p>
+
+        <Button className="mt-4 w-full bg-brand-500 hover:bg-brand-600" onClick={() => setStep("form")}>
+          Continue
+        </Button>
+
+        <p className="mt-4 text-center text-xs text-slate-500">
+          Already have an account?{" "}
+          <a href="/login" className="text-brand-600 hover:underline">
+            Sign in
+          </a>
+        </p>
+      </div>
+    );
   }
 
   // ── Confirmation screen ─────────────────────────────────────────────────────
@@ -141,6 +241,14 @@ export default function SignupPage() {
           <Building2 className="h-4 w-4 shrink-0 text-slate-400" />
           You&apos;ll be set up as the admin of your new workspace.
         </div>
+
+        <button
+          type="button"
+          onClick={() => setStep("plan")}
+          className="mb-4 text-xs font-medium text-brand-600 hover:underline"
+        >
+          &larr; {selectedPlan ? `Change plan (${plans.find((p) => p.plan === selectedPlan)?.label ?? selectedPlan})` : "Change plan (30-day free trial)"}
+        </button>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           {/* Company */}

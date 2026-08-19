@@ -8982,6 +8982,7 @@ export type Database = {
           default_invoice_frequency: string
           id: string
           name: string
+          pending_plan: string | null
           plan: string
           portal_enabled: boolean
           seat_overage_cents_override: number | null
@@ -9020,6 +9021,7 @@ export type Database = {
           default_invoice_frequency?: string
           id?: string
           name: string
+          pending_plan?: string | null
           plan?: string
           portal_enabled?: boolean
           seat_overage_cents_override?: number | null
@@ -9058,6 +9060,7 @@ export type Database = {
           default_invoice_frequency?: string
           id?: string
           name?: string
+          pending_plan?: string | null
           plan?: string
           portal_enabled?: boolean
           seat_overage_cents_override?: number | null

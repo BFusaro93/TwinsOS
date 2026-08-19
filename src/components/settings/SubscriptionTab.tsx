@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { loadStripe, type Stripe as StripeJs } from "@stripe/stripe-js";
 import { EmbeddedCheckoutProvider, EmbeddedCheckout } from "@stripe/react-stripe-js";
 import { CreditCard, Check, Loader2 } from "lucide-react";
@@ -17,6 +18,7 @@ import {
 } from "@/lib/hooks/use-billing";
 import type { BillablePlan } from "@/lib/stripe/plans";
 import { getHighlightsForPlan } from "@/lib/stripe/plan-features";
+import { isBillablePlan } from "@/lib/stripe/plans";
 import { PlanComparisonTable } from "./PlanComparisonTable";
 
 const ACTIVE_STATUSES = new Set(["trialing", "active", "past_due"]);
@@ -39,6 +41,7 @@ function formatPrice(amountCents: number | null, currency: string | null, interv
 }
 
 export function SubscriptionTab() {
+  const searchParams = useSearchParams();
   const { data: billing, isLoading: billingLoading } = useBillingInfo();
   const { data: plansData, isLoading: plansLoading } = usePlans();
   const createCheckoutSession = useCreateCheckoutSession();
@@ -48,6 +51,7 @@ export function SubscriptionTab() {
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
   const [addonError, setAddonError] = useState<string | null>(null);
   const [showComparison, setShowComparison] = useState(false);
+  const autoSubscribeTriggered = useRef(false);
 
   const isActiveSubscriber = ACTIVE_STATUSES.has(billing?.stripeSubscriptionStatus ?? "");
   const smsEnabled = billing?.enabledAddons.includes("sms") ?? false;
@@ -83,6 +87,23 @@ export function SubscriptionTab() {
       setCheckoutError(err instanceof Error ? err.message : "Failed to start checkout");
     }
   }
+
+  // Landed here via the signup plan picker (organizations.pending_plan) —
+  // open checkout for the chosen plan automatically, once, as soon as the
+  // live plan catalog is loaded.
+  useEffect(() => {
+    const autoSubscribe = searchParams.get("autoSubscribe");
+    if (
+      !autoSubscribeTriggered.current &&
+      autoSubscribe &&
+      isBillablePlan(autoSubscribe) &&
+      plansData?.stripeEnabled
+    ) {
+      autoSubscribeTriggered.current = true;
+      handleSubscribe(autoSubscribe);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, plansData?.stripeEnabled]);
 
   async function handleManageBilling() {
     try {
