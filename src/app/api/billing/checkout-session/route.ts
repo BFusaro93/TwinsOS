@@ -40,12 +40,19 @@ export async function POST(request: Request) {
 
   const { data: org } = await supabase
     .from("organizations")
-    .select("id, name, stripe_customer_id")
+    .select("id, name, stripe_customer_id, pending_plan")
     .eq("id", profile.org_id)
     .single();
   if (!org) return NextResponse.json({ error: "Organization not found" }, { status: 404 });
 
   const stripe = getStripe();
+
+  // Clear pending_plan (set at signup) as soon as checkout is actually
+  // acted on for this org, so the auto-subscribe prompt doesn't re-trigger
+  // on a future login regardless of which plan they end up choosing here.
+  if (org.pending_plan) {
+    await createServiceClient().from("organizations").update({ pending_plan: null }).eq("id", org.id);
+  }
 
   let stripeCustomerId = org.stripe_customer_id;
   if (!stripeCustomerId) {

@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
 import { getStripe, isStripeConfigured } from "@/lib/stripe/server";
 import { BILLABLE_PLANS, getPriceIdForPlan } from "@/lib/stripe/plans";
 import { ADDON_CATALOG, getPriceIdForAddon } from "@/lib/stripe/addons";
@@ -32,11 +31,10 @@ export interface BillingAddonInfo {
   metered: boolean;
 }
 
+// Public endpoint — no auth required. Prices/plan metadata aren't sensitive,
+// and the signup page's plan picker needs to show real pricing before an
+// account (and session) exists.
 export async function GET() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
   if (!isStripeConfigured()) {
     return NextResponse.json({
       stripeEnabled: false,
