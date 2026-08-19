@@ -25,7 +25,7 @@ import {
 import { TagEditor } from "@/components/crm/TagEditor";
 import { useTicket } from "@/lib/hooks/use-tickets";
 import { useClientJobs, useUpdateJobStatus, useJobVisits, useClientAllVisits, useAllCRMServices } from "@/lib/hooks/use-crm-jobs";
-import { useInvoices, usePayments, usePayment } from "@/lib/hooks/use-invoices";
+import { useInvoices, usePayments, usePayment, usePaymentAllocations } from "@/lib/hooks/use-invoices";
 import { useEstimates } from "@/lib/hooks/use-estimates";
 import { useContracts } from "@/lib/hooks/use-contracts";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -316,12 +316,29 @@ function PaymentDetailDialog({
   const [editOpen, setEditOpen] = useState(false);
   const [refundOpen, setRefundOpen] = useState(false);
   const { data: invoices } = useInvoices(payment?.clientId ?? undefined);
+  const { data: allocations } = usePaymentAllocations(payment?.id);
 
-  // All invoices with any amount paid — best approximation of what this payment touched
-  const paidInvoices = useMemo(
-    () => (invoices ?? []).filter((inv) => inv.amountPaidCents > 0 && inv.status !== "void"),
-    [invoices]
-  );
+  // The exact invoices (and amounts) this specific payment was applied to —
+  // via crm_payment_allocations, falling back to the payment's own invoiceId
+  // for older payments recorded before that table existed.
+  const paidInvoices = useMemo(() => {
+    if (!payment) return [];
+    const invoiceById: Record<string, CRMInvoice> = {};
+    for (const inv of invoices ?? []) invoiceById[inv.id] = inv;
+    if (allocations && allocations.length > 0) {
+      return allocations
+        .map((a) => {
+          const inv = invoiceById[a.invoice_id];
+          return inv ? { id: inv.id, invoiceNumber: inv.invoiceNumber, amountPaidCents: a.amount_cents } : null;
+        })
+        .filter((x): x is { id: string; invoiceNumber: number; amountPaidCents: number } => x !== null);
+    }
+    if (payment.invoiceId) {
+      const inv = invoiceById[payment.invoiceId];
+      if (inv) return [{ id: inv.id, invoiceNumber: inv.invoiceNumber, amountPaidCents: payment.amountCents }];
+    }
+    return [];
+  }, [invoices, allocations, payment]);
 
   if (!payment && !editOpen && !refundOpen) return null;
   return (
