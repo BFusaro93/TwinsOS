@@ -1,12 +1,19 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 import type { BillablePlan } from "@/lib/stripe/plans";
-import type { BillingPlanInfo } from "@/app/api/billing/plans/route";
+import { getSeatConfig } from "@/lib/stripe/plans";
+import type { BillingPlanInfo, BillingAddonInfo } from "@/app/api/billing/plans/route";
 
 export interface BillingInfo {
   plan: string;
   stripeSubscriptionStatus: string | null;
   hasStripeCustomer: boolean;
+  billingInterval: string;
+  trialEndsAt: string | null;
+  seatsIncluded: number;
+  seatOverageCents: number;
+  seatsUsed: number;
+  enabledAddons: string[];
 }
 
 export function useBillingInfo() {
@@ -25,22 +32,49 @@ export function useBillingInfo() {
 
       const { data, error } = await supabase
         .from("organizations")
-        .select("plan, stripe_subscription_status, stripe_customer_id")
+        .select(
+          "plan, stripe_subscription_status, stripe_customer_id, billing_interval, trial_ends_at, seats_included_override, seat_overage_cents_override"
+        )
         .eq("id", profile.org_id)
         .single();
       if (error) throw error;
+
+      const { count: seatsUsed } = await supabase
+        .from("profiles")
+        .select("id", { count: "exact", head: true })
+        .eq("org_id", profile.org_id)
+        .neq("status", "inactive");
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const addonRows = await (supabase as any)
+        .from("organization_addons")
+        .select("addon_key")
+        .eq("org_id", profile.org_id)
+        .eq("enabled", true);
+
+      const { seatsIncluded, seatOverageCents } = getSeatConfig(data.plan, {
+        seatsIncludedOverride: data.seats_included_override,
+        seatOverageCentsOverride: data.seat_overage_cents_override,
+      });
 
       return {
         plan: data.plan,
         stripeSubscriptionStatus: data.stripe_subscription_status,
         hasStripeCustomer: Boolean(data.stripe_customer_id),
+        billingInterval: data.billing_interval,
+        trialEndsAt: data.trial_ends_at,
+        seatsIncluded,
+        seatOverageCents,
+        seatsUsed: seatsUsed ?? 0,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        enabledAddons: (addonRows.data ?? []).map((r: any) => r.addon_key),
       };
     },
   });
 }
 
 export function usePlans() {
-  return useQuery<{ stripeEnabled: boolean; plans: BillingPlanInfo[] }>({
+  return useQuery<{ stripeEnabled: boolean; plans: BillingPlanInfo[]; addons: BillingAddonInfo[] }>({
     queryKey: ["billing-plans"],
     queryFn: async () => {
       const res = await fetch("/api/billing/plans");
