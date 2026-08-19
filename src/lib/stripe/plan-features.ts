@@ -204,6 +204,13 @@ export const PLAN_FEATURE_CATEGORIES: PlanFeatureCategory[] = [
         highlight: false,
         values: { starter: "Add-on", cmms: false, growth: true, enterprise: true },
       },
+      {
+        key: "call_notes",
+        label: "Call notes & reminders",
+        description: "Log a call on a client's activity timeline and set a follow-up reminder from it.",
+        highlight: false,
+        values: { starter: true, cmms: false, growth: true, enterprise: true },
+      },
     ],
   },
   {
