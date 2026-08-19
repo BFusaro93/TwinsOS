@@ -202,11 +202,14 @@ async function applySubscriptionToOrg(
   // A downgraded/canceled subscription doesn't need its overage item
   // reconciled — the subscription itself is ending or already gone.
   if (!DOWNGRADE_STATUSES.has(subscription.status) && org?.plan) {
+    // Crew accounts are shared field-clock-in logins, not real named seats —
+    // see the matching comment in use-billing.ts.
     const { count: seatsUsed } = await db
       .from("profiles")
       .select("id", { count: "exact", head: true })
       .eq("org_id", org.id)
-      .neq("status", "inactive");
+      .neq("status", "inactive")
+      .neq("role", "crew");
     await syncSeatOverage(stripe, subscription, org.plan, seatsUsed ?? 0, {
       seatsIncludedOverride: org.seats_included_override,
       seatOverageCentsOverride: org.seat_overage_cents_override,
