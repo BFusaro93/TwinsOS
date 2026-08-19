@@ -2028,7 +2028,7 @@ function tabLabel(tab: TabKey): string {
   switch (tab) {
     case "general":           return "General";
     case "users":             return "Users & Roles";
-    case "crm":               return "CRM";
+    case "crm":               return "Clients";
     case "estimates":         return "Estimates";
     case "notifications":     return "Notifications";
     case "services":          return "Services";

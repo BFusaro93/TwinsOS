@@ -24,10 +24,10 @@ export default function CRMLayout({ children }: { children: React.ReactNode }) {
     return (
       <div className="flex h-dvh items-center justify-center bg-slate-50 p-6">
         <div className="max-w-md rounded-lg border bg-white p-6 text-center shadow-sm">
-          <h1 className="text-lg font-semibold text-slate-900">No CRM access yet</h1>
+          <h1 className="text-lg font-semibold text-slate-900">No Landscapt access yet</h1>
           <p className="mt-2 text-sm text-slate-500">
-            Your login isn&apos;t linked to a CRM employee record, so you don&apos;t have access to this
-            section. Ask an admin to add you under Team &rarr; Employees and assign a CRM role.
+            Your login isn&apos;t linked to a Landscapt employee record, so you don&apos;t have access to
+            this section. Ask an admin to add you under Team &rarr; Employees and assign a Landscapt role.
           </p>
           <Link href="/dashboard" className="mt-4 inline-block text-sm font-medium text-brand-600 hover:text-brand-700">
             Go to dashboard &rarr;

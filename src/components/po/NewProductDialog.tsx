@@ -301,7 +301,7 @@ export function NewProductDialog({ open, onOpenChange, initialData, onCreated }:
               <>
                 <div className="col-span-2 rounded-md border border-brand-100 bg-brand-50 px-3 py-2.5">
                   <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-brand-600">
-                    CMMS Settings
+                    Equipt Settings
                   </p>
                   <div className="grid grid-cols-2 gap-3">
                     <div className="grid gap-1.5">

@@ -99,7 +99,15 @@ function RateRow({
 }
 
 export function EstimateSummaryPanel({ estimate, onRecalculate, recalcPending }: Props) {
-  const lineItems   = estimate.lineItems ?? [];
+  // estimate.lineItems comes straight from the raw estimate_line_items
+  // select with no filter — it includes every soft-deleted and "lost"
+  // historical row ever created on this estimate. recalcEstimateTotals
+  // (the server-authoritative total) filters those out
+  // (.neq("status", "lost").is("deleted_at", null)); this panel re-derives
+  // its own cost breakdown client-side and must apply the identical filter
+  // or its rows silently include stale/deleted totals the server total
+  // never counted.
+  const lineItems   = (estimate.lineItems ?? []).filter((li) => !li.deletedAt && li.status !== "lost");
   const directCosts = estimate.directCosts ?? [];
   const { data: discounts = [] } = useDiscounts();
   const activeDiscounts = discounts.filter((d) => d.isActive);
