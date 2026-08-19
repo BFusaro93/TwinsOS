@@ -22,6 +22,9 @@ export const ZAPIER_TRIGGER_TYPES = [
   "ticket_closed",
   "invoice_created",
   "invoice_paid",
+  "contract_signed",
+  "damage_case_created",
+  "visit_dispatched",
 ] as const satisfies readonly TriggerType[];
 
 export type ZapierTriggerType = (typeof ZAPIER_TRIGGER_TYPES)[number];
