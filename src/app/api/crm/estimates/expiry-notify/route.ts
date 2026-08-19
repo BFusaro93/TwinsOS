@@ -66,7 +66,7 @@ export async function GET(req: NextRequest) {
 
     const org = est.organizations as Record<string, unknown> | null;
     const client = est.clients as Record<string, unknown> | null;
-    const orgName = (org?.name as string) ?? "TwinsOS";
+    const orgName = (org?.name as string) ?? "Your Organization";
     const brandColor = (org?.brand_color as string) ?? "#60ab45";
     const estimateNum = String(est.estimate_number as number).padStart(5, "0");
     const clientName = (client?.display_name as string) ?? "Unknown Client";

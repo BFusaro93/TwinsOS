@@ -24,6 +24,7 @@ import {
   Receipt,
   Zap,
   CreditCard,
+  Plug,
 } from "lucide-react";
 import type { ElementType } from "react";
 
@@ -716,7 +717,7 @@ export const DOC_SECTIONS: DocSection[] = [
           {
             step: "One-time setup: connect your Stripe account",
             detail:
-              "CRM > Settings > Card Payments (Stripe). Click Connect and complete Stripe's onboarding — this creates a Standard connected Stripe account for your org, fully independent of TwinsOS's own billing. Charges, payouts, and your Stripe dashboard login are entirely managed by Stripe; TwinsOS only initiates charges and listens for the result.",
+              "CRM > Settings > Card Payments (Stripe). Click Connect and complete Stripe's onboarding — this creates a Standard connected Stripe account for your org, fully independent of Landscapt's own billing. Charges, payouts, and your Stripe dashboard login are entirely managed by Stripe; Landscapt only initiates charges and listens for the result.",
           },
           {
             step: "Managing your Stripe account",
@@ -726,7 +727,7 @@ export const DOC_SECTIONS: DocSection[] = [
           {
             step: "Turning on ACH / bank transfer payments",
             detail:
-              "Stripe's own ACH toggle in their dashboard does not control whether TwinsOS can accept bank transfers — it only affects Stripe's automatic payment-method detection. Enabling ACH here requires two things: ACH Direct Debit activated on your Stripe account, and the separate 'Enable ACH / bank transfer payments' checkbox in CRM > Settings > Card Payments (Stripe). Until both are on, only card payments are offered.",
+              "Stripe's own ACH toggle in their dashboard does not control whether Landscapt can accept bank transfers — it only affects Stripe's automatic payment-method detection. Enabling ACH here requires two things: ACH Direct Debit activated on your Stripe account, and the separate 'Enable ACH / bank transfer payments' checkbox in CRM > Settings > Card Payments (Stripe). Until both are on, only card payments are offered.",
           },
           {
             step: "Processing fees",
@@ -922,6 +923,44 @@ export const DOC_SECTIONS: DocSection[] = [
           },
         ],
       },
+      {
+        id: "zapier-integration",
+        title: "Connecting Zapier",
+        summary: "Trigger Zaps on Equipt and Landscapt events, or create records from a Zap.",
+        icon: Plug,
+        steps: [
+          {
+            step: "Generate your key",
+            detail:
+              "Go to Master Account Settings > Integrations (not Equipt Settings or Landscapt Settings — this connection is account-wide and works regardless of your plan). Click Generate Key and copy it — it's shown once, in full. Paste it into the API Key field when connecting the Equipt/Landscapt app in Zapier.",
+          },
+          {
+            step: "Landscapt triggers",
+            detail:
+              "New Client, New Lead, Lead Converted to Client, Client Cancelled, New Estimate, Estimate Won/Lost, New Job, New Ticket, Ticket Closed, New Invoice, Invoice Paid, Contract Signed, New Damage Case, and Visit Dispatched all fire instantly — the moment the event happens, not on a delay.",
+          },
+          {
+            step: "Equipt triggers",
+            detail:
+              "New Asset, New Work Order, New Requisition, New Purchase Order, PM Schedule Due, Part Low Stock, and New Vendor check every few minutes rather than firing instantly. Work Order Completed and PO Approved are instant. A delayed poll rarely matters for these — low stock and PM-due don't need a same-second alert.",
+          },
+          {
+            step: "Meter Threshold",
+            detail:
+              "This trigger is configured per-Zap rather than always meaning one fixed thing: pick a meter (or leave it blank to watch every meter), a threshold value, and a direction (at least / at most). Example: watch Truck #4's odometer and fire once it reaches 50,000 miles. This is separate from any meter-threshold automations already configured inside Equipt itself.",
+          },
+          {
+            step: "Actions",
+            detail:
+              "A Zap can create a Client, Job, or Ticket (or add a note to a client's activity timeline) in Landscapt, and a Work Order or Requisition in Equipt. Every vendor/client/asset/work-order ID a Zap passes in is checked against your org before anything is created.",
+          },
+          {
+            step: "Rotating the key",
+            detail:
+              "Clicking Regenerate immediately invalidates the old key — any Zaps still using it will need to be reconnected with the new one before they'll work again.",
+          },
+        ],
+      },
     ],
   },
 ];
@@ -1062,6 +1101,10 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       {
         q: "How do I connect the Samsara integration for vehicle odometers?",
         a: "Go to Settings > Integrations and enter your Samsara API key. Once connected, vehicle odometer readings sync automatically and update the corresponding vehicle meter, which can trigger mileage-based automations.",
+      },
+      {
+        q: "How do I connect Zapier?",
+        a: "Go to Master Account Settings > Integrations and click Generate Key — this is account-wide, not tied to Equipt or Landscapt specifically. Paste the key into Zapier's API Key field when connecting the app. Most Landscapt triggers fire instantly; most Equipt triggers check every few minutes instead. See the Connecting Zapier article under Documentation > Administration for the full list of triggers and actions.",
       },
     ],
   },

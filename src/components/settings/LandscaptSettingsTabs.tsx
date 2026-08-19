@@ -1323,7 +1323,7 @@ function AccountingTab() {
         </div>
         <p className="px-4 pb-4 text-xs text-slate-400">
           When off, staff and clients only see the Card option — the Bank Account choice is hidden everywhere
-          (client detail, invoices, portal). This is TwinsOS&apos;s own switch, separate from any payment-method
+          (client detail, invoices, portal). This is Landscapt&apos;s own switch, separate from any payment-method
           toggle in your Stripe dashboard.
         </p>
       </AccordionSection>

@@ -1,6 +1,6 @@
 # Zapier Integration — User Guide
 
-TwinsOS (Equipt + Landscapt) connects to Zapier so you can automate work between
+Equipt + Landscapt connects to Zapier so you can automate work between
 this platform and 9,000+ other apps — Slack, Google Sheets, QuickBooks,
 Twilio, email, and anything else Zapier supports. This guide explains what's
 available, how to connect, and exactly what each trigger and action does.
@@ -25,7 +25,7 @@ Every trigger below supports two delivery methods, and you don't have to
 choose — Zapier handles this automatically:
 
 - **Instant (REST Hook)** — when you turn on a Zap, Zapier registers a
-  webhook URL with us. The moment the event happens inside TwinsOS, we POST
+  webhook URL with us. The moment the event happens, we POST
   the event data straight to that URL. This is how *most* triggers work.
 - **Polling (fallback)** — Zapier also periodically calls our API directly
   to check for new matching records. This is what powers the "Test" step
@@ -63,14 +63,14 @@ Landscapt, so a Zap fires at the same moment an internal automation would.
 
 ---
 
-## Equipt / CMMS triggers
+## Equipt triggers
 
 These fire on asset, maintenance, and procurement events. Equipt has no
 single internal "event happened" dispatcher the way Landscapt does — most of
 these mutations write straight to the database from the browser — so most of
 this list is **polling-only**, and two get instant delivery because they
 happen to already round-trip through a server route for an unrelated reason
-(the internal CMMS automations feature).
+(Equipt's own internal automations feature).
 
 | Trigger | Fires when… | Delivery |
 |---|---|---|
@@ -93,7 +93,7 @@ small addition on our end to fire at the point the event happens.
 
 ### Meter Threshold — how it works
 
-Unlike the other CMMS triggers, this one is *parameterized* — you tell
+Unlike the other Equipt triggers, this one is *parameterized* — you tell
 Zapier what to watch for when you set up the Zap, rather than it always
 meaning one fixed thing:
 
@@ -113,15 +113,15 @@ aren't affected by anything you set up in Zapier.
 
 ---
 
-## Actions (things a Zap can create in TwinsOS)
+## Actions (things a Zap can create in Equipt + Landscapt)
 
 | Action | Creates | Required fields | Optional fields |
 |---|---|---|---|
 | **Create Client** | A new client (Landscapt) | Display Name | First/Last Name, Email, Phone, Account Type (residential/commercial), Source, Service Address/City/State/Zip |
 | **Create Ticket** | A support ticket, attached to a client | Client, Subject | Body, Priority (low/normal/high/urgent), Category, Type, Due Date |
 | **Add Note to Client** | An entry on a client's activity timeline | Client, Note text | Subject |
-| **Create Work Order** | A CMMS work order | Title | Asset, Description, Priority, Type, Due Date |
-| **Create Requisition** | A CMMS purchase requisition (starts as a draft) | Title | Vendor, linked Work Order, Notes |
+| **Create Work Order** | An Equipt work order | Title | Asset, Description, Priority, Type, Due Date |
+| **Create Requisition** | An Equipt purchase requisition (starts as a draft) | Title | Vendor, linked Work Order, Notes |
 
 A "Create Job" action for Landscapt jobs also exists (job type, client,
 scheduled date) if you need to schedule work directly from a Zap.
@@ -140,6 +140,6 @@ accidentally write into another company's account.
 - **Update actions** — right now Zaps can only *create* new records, not
   update existing ones (e.g. "update ticket status from a Zap"). Let us know
   if that's something you need.
-- **More instant triggers** — see the note under the CMMS table above; a few
+- **More instant triggers** — see the note under the Equipt table above; a few
   more of those could become instant with a small change if it matters for
   your workflow.
