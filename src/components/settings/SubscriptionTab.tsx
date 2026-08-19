@@ -43,6 +43,7 @@ export function SubscriptionTab() {
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
 
   const isActiveSubscriber = ACTIVE_STATUSES.has(billing?.stripeSubscriptionStatus ?? "");
+  const moduleLabels: Record<string, string> = { landscapt: "Landscapt", equipt: "Equipt" };
 
   async function handleSubscribe(plan: BillablePlan) {
     setCheckoutError(null);
@@ -117,6 +118,24 @@ export function SubscriptionTab() {
                 </span>
               </p>
             )}
+            {billing && (
+              <p className="mt-1 text-sm text-slate-500">
+                Seats: <span className="font-semibold text-slate-700">{billing.seatsUsed}</span> of{" "}
+                {billing.seatsIncluded} included
+                {billing.seatsUsed > billing.seatsIncluded && (
+                  <span className="ml-1 text-amber-600">
+                    (+{billing.seatsUsed - billing.seatsIncluded} over — billed at{" "}
+                    {(billing.seatOverageCents / 100).toLocaleString(undefined, { style: "currency", currency: "USD" })}
+                    /seat next cycle)
+                  </span>
+                )}
+              </p>
+            )}
+            {billing?.plan === "trial" && billing.trialEndsAt && (
+              <p className="mt-1 text-sm text-slate-500">
+                Trial ends <span className="font-semibold text-slate-700">{new Date(billing.trialEndsAt).toLocaleDateString()}</span>
+              </p>
+            )}
           </div>
           {billing?.hasStripeCustomer && (
             <Button variant="outline" onClick={handleManageBilling} disabled={createPortalSession.isPending}>
@@ -131,7 +150,7 @@ export function SubscriptionTab() {
       </div>
 
       {/* Plans */}
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
         {plansData.plans.map((p) => {
           const priceLabel = p.configured ? formatPrice(p.amountCents, p.currency, p.interval) ?? "Contact us" : "Not configured";
           const isCurrent = billing?.plan === p.plan && isActiveSubscriber;
@@ -139,6 +158,17 @@ export function SubscriptionTab() {
             <div key={p.plan} className="flex flex-col rounded-lg border bg-white p-5 shadow-sm">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{p.label}</p>
               <p className="mt-1 text-xl font-bold text-slate-900">{priceLabel}</p>
+              <p className="mt-2 text-xs text-slate-500">
+                {p.modules.map((m) => moduleLabels[m] ?? m).join(" + ")}
+              </p>
+              <p className="mt-1 text-xs text-slate-500">
+                {p.seatsIncluded} seats included · +{(p.seatOverageCents / 100).toLocaleString(undefined, { style: "currency", currency: "USD" })}/seat after
+              </p>
+              {p.bundledAddons.length > 0 && (
+                <p className="mt-1 text-xs text-slate-500">
+                  Includes: {p.bundledAddons.map((a) => a.replace(/_/g, " ")).join(", ")}
+                </p>
+              )}
               <div className="mt-4 flex-1" />
               <Button
                 className="mt-2 bg-brand-500 hover:bg-brand-600"

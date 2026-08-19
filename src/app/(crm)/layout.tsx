@@ -10,15 +10,34 @@ import { SettingsLoader } from "@/components/shared/SettingsLoader";
 import { QuickAddOverlay } from "@/components/crm/QuickAddOverlay";
 import { useUIStore } from "@/stores";
 import { useCrmAccess } from "@/lib/hooks/use-permissions";
+import { useModuleAccess } from "@/lib/hooks/use-module-access";
 
 export default function CRMLayout({ children }: { children: React.ReactNode }) {
   const { sidebarOpen, setSidebarOpen } = useUIStore();
   const pathname = usePathname();
   const { allowed, isLoading } = useCrmAccess(pathname);
+  const { allowed: planAllowed, isLoading: planLoading } = useModuleAccess("landscapt");
 
   useEffect(() => {
     setSidebarOpen(false);
   }, [pathname, setSidebarOpen]);
+
+  if (!planLoading && !planAllowed) {
+    return (
+      <div className="flex h-dvh items-center justify-center bg-slate-50 p-6">
+        <div className="max-w-md rounded-lg border bg-white p-6 text-center shadow-sm">
+          <h1 className="text-lg font-semibold text-slate-900">Landscapt isn&apos;t on your plan</h1>
+          <p className="mt-2 text-sm text-slate-500">
+            Your current subscription doesn&apos;t include the Landscapt (CRM) module. Upgrade to Growth
+            or Enterprise, or contact us, to turn it on.
+          </p>
+          <Link href="/settings?tab=subscription" className="mt-4 inline-block text-sm font-medium text-brand-600 hover:text-brand-700">
+            Go to Subscription settings &rarr;
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   if (!isLoading && !allowed) {
     return (
