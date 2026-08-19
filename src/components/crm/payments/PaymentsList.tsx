@@ -411,8 +411,11 @@ export function AddPaymentDialog({
           resetForm();
         }
       }
-    } catch {
-      toast.error(isEdit ? "Failed to update" : isCreditMode ? "Failed to issue credit" : "Failed to record payment");
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      toast.error(
+        `${isEdit ? "Failed to update" : isCreditMode ? "Failed to issue credit" : "Failed to record payment"}: ${detail}`
+      );
     }
   }
 
