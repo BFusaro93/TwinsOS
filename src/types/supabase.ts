@@ -10612,21 +10612,21 @@ export type Database = {
           event_created: string
           event_id: string
           event_type: string
-          processed_at: string
+          processed_at: string | null
           subscription_id: string | null
         }
         Insert: {
           event_created: string
           event_id: string
           event_type: string
-          processed_at?: string
+          processed_at?: string | null
           subscription_id?: string | null
         }
         Update: {
           event_created?: string
           event_id?: string
           event_type?: string
-          processed_at?: string
+          processed_at?: string | null
           subscription_id?: string | null
         }
         Relationships: []
