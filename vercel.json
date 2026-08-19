@@ -44,6 +44,10 @@
     {
       "path": "/api/cron/ticket-past-due",
       "schedule": "0 9 * * *"
+    },
+    {
+      "path": "/api/cron/sync-seat-overage",
+      "schedule": "0 5 * * *"
     }
   ]
 }
