@@ -172,6 +172,13 @@ export const PLAN_FEATURE_CATEGORIES: PlanFeatureCategory[] = [
         values: { starter: true, cmms: false, growth: true, enterprise: true },
       },
       {
+        key: "stripe_processing",
+        label: "Stripe-powered payment processing",
+        description: "Card: 3.5% processing fee on payments over $500 (waivable per charge). ACH bank transfer: no processing fee.",
+        highlight: true,
+        values: { starter: true, cmms: false, growth: true, enterprise: true },
+      },
+      {
         key: "autopay",
         label: "Saved payment methods & autopay",
         description: "Keep a card or bank account on file, with optional automatic charging on invoice due dates.",
