@@ -426,7 +426,7 @@ export function AddPaymentDialog({
   if (chargeSucceeded) {
     return (
       <Dialog open={open} onOpenChange={(o) => { if (!o) resetForm(); onOpenChange(o); }}>
-        <DialogContent className="max-w-sm">
+        <DialogContent className="max-w-3xl">
           <div className="flex flex-col items-center gap-2 py-6 text-center">
             <Check className="h-8 w-8 text-green-500" />
             <p className="text-sm font-medium text-slate-900">Payment submitted</p>
@@ -445,7 +445,7 @@ export function AddPaymentDialog({
   if (chargeIntent) {
     return (
       <Dialog open={open} onOpenChange={(o) => { if (!o) resetForm(); onOpenChange(o); }}>
-        <DialogContent className="max-w-sm">
+        <DialogContent className="max-w-3xl">
           <DialogHeader>
             <DialogTitle className="text-lg font-semibold">Charge Payment Method</DialogTitle>
           </DialogHeader>
