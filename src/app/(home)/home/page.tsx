@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { BarChart2, Wrench, NotepadText, Leaf, Truck, Users, ExternalLink, ClipboardList, Camera } from "lucide-react";
+import { BarChart2, Wrench, NotepadText, Leaf, Truck, Users, ExternalLink, Settings, Camera } from "lucide-react";
 import { useCurrentUserStore } from "@/stores";
 
 const INTERNAL_BOX =
@@ -114,23 +114,15 @@ export default function HomePage() {
 
       {/* External app shortcuts */}
       <div className="mt-5 grid w-full max-w-5xl grid-cols-1 gap-5 sm:grid-cols-3">
-        <a
-          href="https://my.serviceautopilot.com/UserLogin.aspx"
-          target="_blank"
-          rel="noopener noreferrer"
-          className={EXTERNAL_BOX}
-        >
+        <Link href="/settings" className={EXTERNAL_BOX}>
           <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-100 text-slate-500 transition-colors group-hover:bg-slate-200">
-            <ClipboardList className="h-6 w-6" />
+            <Settings className="h-6 w-6" />
           </div>
           <div className="text-center">
-            <div className="flex items-center justify-center gap-1.5">
-              <p className="text-base font-semibold text-slate-700">Service Autopilot</p>
-              <ExternalLink className="h-3.5 w-3.5 text-slate-400" />
-            </div>
-            <p className="mt-0.5 text-xs text-slate-400">CRM &amp; job management</p>
+            <p className="text-base font-semibold text-slate-700">Settings</p>
+            <p className="mt-0.5 text-xs text-slate-400">Org, branding &amp; subscriptions</p>
           </div>
-        </a>
+        </Link>
 
         <a
           href="https://launcher.myapps.microsoft.com/api/signin/f92a2fea-344f-41bc-9293-72562ec4ee57?tenantId=c32bfd53-52c9-4186-989f-1985ff7eb8ae"
