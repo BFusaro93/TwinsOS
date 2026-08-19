@@ -250,6 +250,7 @@ async function applyCrmInvoicePayment(
     await db.rpc("sync_client_balance", { p_client_id: clientId });
 
     await db.from("client_activity").insert({
+      org_id: orgId,
       client_id: clientId,
       activity_type: "payment",
       subject: `Payment received: ${method} (online)`,
@@ -392,6 +393,7 @@ async function applyCrmInvoiceMultiPayment(
     await db.rpc("sync_client_balance", { p_client_id: clientId });
 
     await db.from("client_activity").insert({
+      org_id: orgId,
       client_id: clientId,
       activity_type: "payment",
       subject: `Payment received: ${method} (online) — ${allocations.length} invoices`,

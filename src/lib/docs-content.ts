@@ -23,6 +23,7 @@ import {
   Snowflake,
   Receipt,
   Zap,
+  CreditCard,
 } from "lucide-react";
 import type { ElementType } from "react";
 
@@ -703,6 +704,59 @@ export const DOC_SECTIONS: DocSection[] = [
             step: "Linking job costs to vendor POs",
             detail:
               "To reconcile what a job actually cost against vendor purchase orders, assign the PO line item to a CRM Project (via the line item's Project field) rather than to a specific job — cost tracking rolls up at the project level.",
+          },
+        ],
+      },
+      {
+        id: "online-payments-stripe",
+        title: "Online Payments (Stripe)",
+        summary: "Connect your Stripe account, then save cards/bank accounts on file and charge clients directly from an invoice.",
+        icon: CreditCard,
+        steps: [
+          {
+            step: "One-time setup: connect your Stripe account",
+            detail:
+              "CRM > Settings > Card Payments (Stripe). Click Connect and complete Stripe's onboarding — this creates a Standard connected Stripe account for your org, fully independent of TwinsOS's own billing. Charges, payouts, and your Stripe dashboard login are entirely managed by Stripe; TwinsOS only initiates charges and listens for the result.",
+          },
+          {
+            step: "Managing your Stripe account",
+            detail:
+              "Once connected, 'Manage on Stripe' opens dashboard.stripe.com directly — log in there with your own Stripe credentials to see payouts, statements, and update your bank details for deposits.",
+          },
+          {
+            step: "Turning on ACH / bank transfer payments",
+            detail:
+              "Stripe's own ACH toggle in their dashboard does not control whether TwinsOS can accept bank transfers — it only affects Stripe's automatic payment-method detection. Enabling ACH here requires two things: ACH Direct Debit activated on your Stripe account, and the separate 'Enable ACH / bank transfer payments' checkbox in CRM > Settings > Card Payments (Stripe). Until both are on, only card payments are offered.",
+          },
+          {
+            step: "Processing fees",
+            detail:
+              "A processing fee is added automatically to card charges (not ACH) to cover the Stripe rate. Staff can waive the fee or override it to a custom amount on any single charge. Fees collected flow into the Profit & Loss report as 'Credit card processing fees' income, and the Credit Card Processing Fees report itemizes every fee by payment.",
+          },
+          {
+            step: "Saving a card or bank account on file",
+            detail:
+              "From a client's Details tab, use 'Payment Method on File' to save a card or ACH bank account — staff can enter the client's card themselves, without the client needing to do anything on their end. Saving a method defaults to enrolling the client in Autopay, but there's a checkbox to save the method without turning Autopay on, for clients who just want a card kept on file for you to charge manually.",
+          },
+          {
+            step: "Autopay vs. a saved method",
+            detail:
+              "A saved payment method and Autopay are independent settings, toggled separately in the client's Payment Method on File section. Autopay On means the client's saved method is eligible for the 'To Charge' / 'ACH To Charge' invoice tabs and bulk 'Charge All' action. Autopay Off still lets staff charge that saved method any time via 'Charge Saved' — it just won't be swept up automatically.",
+          },
+          {
+            step: "Charging an invoice",
+            detail:
+              "From an invoice, 'Charge Saved' uses the client's card/bank on file; the Card/Bank toggle lets staff key in a fresh card or account for a one-off charge instead. The Invoices list's 'To Charge' and 'ACH To Charge' tabs show every invoice eligible for its respective saved method, with a per-row Charge button and a bulk 'Charge All' in the Actions menu.",
+          },
+          {
+            step: "Charging across multiple invoices at once",
+            detail:
+              "In Add Payment, 'Charge a Card/Bank Instead' switches the same client + invoice allocation table used for recording a manual payment into a real Stripe charge — one card/bank charge for the combined total, split across however many invoices are checked, using the client's saved method or a freshly entered card/bank.",
+          },
+          {
+            step: "Where a payment shows up",
+            detail:
+              "A successful online charge posts automatically as a payment against the invoice(s) it was allocated to — no manual recording needed. It can take a few seconds after checkout to appear while Stripe's confirmation is processed; if it hasn't shown up after a minute, check the payment wasn't declined before assuming something's wrong.",
           },
         ],
       },
