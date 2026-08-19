@@ -190,7 +190,7 @@ export function useUpdateWorkOrderStatus() {
       fetch("/api/automations/run", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ eventTrigger: "wo_status_change", toStatus: status }),
+        body: JSON.stringify({ eventTrigger: "wo_status_change", toStatus: status, workOrderId: id }),
       }).catch(() => {});
     },
   });

@@ -8,8 +8,8 @@ type AdminClient = ReturnType<typeof createClient<any>>;
 
 const log = logger.child("zapier");
 
-/** Trigger types exposed to Zapier as REST Hook subscriptions / polling triggers. */
-export const ZAPIER_TRIGGER_TYPES = [
+/** Landscapt/CRM trigger types exposed to Zapier — a subset of crm-automations' TriggerType. */
+export const ZAPIER_CRM_TRIGGER_TYPES = [
   "client_created",
   "lead_created",
   "lead_converted_to_client",
@@ -27,6 +27,34 @@ export const ZAPIER_TRIGGER_TYPES = [
   "visit_dispatched",
 ] as const satisfies readonly TriggerType[];
 
+/**
+ * Equipt/CMMS trigger types exposed to Zapier. Unlike the CRM side, CMMS has
+ * no single "fire this trigger type" dispatch chokepoint (its mutations
+ * write to Supabase directly from the browser) — these are plain string
+ * literals, not drawn from an existing CMMS trigger-type union. Most are
+ * polling-only (see zapier-triggers.ts); work_order_completed and po_approved
+ * additionally get REST Hook push piggybacked on the wo_status_change /
+ * po_status_change round-trip that /api/automations/run already receives.
+ */
+export const ZAPIER_CMMS_TRIGGER_TYPES = [
+  "asset_created",
+  "work_order_created",
+  "work_order_completed",
+  "requisition_created",
+  "po_created",
+  "po_approved",
+  "pm_schedule_due",
+  "part_low_stock",
+  "vendor_created",
+] as const;
+
+export const ZAPIER_TRIGGER_TYPES = [
+  ...ZAPIER_CRM_TRIGGER_TYPES,
+  ...ZAPIER_CMMS_TRIGGER_TYPES,
+] as const;
+
+export type ZapierCrmTriggerType = (typeof ZAPIER_CRM_TRIGGER_TYPES)[number];
+export type ZapierCmmsTriggerType = (typeof ZAPIER_CMMS_TRIGGER_TYPES)[number];
 export type ZapierTriggerType = (typeof ZAPIER_TRIGGER_TYPES)[number];
 
 export function isZapierTriggerType(value: string): value is ZapierTriggerType {

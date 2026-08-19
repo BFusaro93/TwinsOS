@@ -16,6 +16,15 @@ export interface PollingTriggerConfig {
   requireNotNull?: string[];
   hasSoftDelete: boolean;
   orderBy: string;
+  /**
+   * In-memory filter applied after fetch, for conditions PostgREST can't
+   * express as a simple column-vs-literal eq() — e.g. comparing two columns
+   * on the same row (quantity_on_hand vs minimum_stock) or "due by today"
+   * (next_due_date vs now). Fetches a wider page (200) before filtering and
+   * slicing to the usual 25, since the filter can reject most rows.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  postFilter?: (row: any) => boolean;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   map: (row: any) => Record<string, unknown>;
 }
@@ -181,6 +190,107 @@ export const POLLING_TRIGGERS: Record<ZapierTriggerType, PollingTriggerConfig> =
     map: (v) => ({
       id: v.id, jobId: v.job_id, clientId: v.client_id, crewId: v.crew_id,
       assignedEmployeeId: v.assigned_employee_id, dispatchedAt: v.dispatched_at,
+    }),
+  },
+
+  // ── Equipt / CMMS ──────────────────────────────────────────────────────────
+
+  asset_created: {
+    table: "assets",
+    columns: "id, name, asset_tag, asset_type, status, location, manufacturer, model, created_at",
+    hasSoftDelete: true,
+    orderBy: "created_at",
+    map: (a) => ({
+      id: a.id, name: a.name, assetTag: a.asset_tag, assetType: a.asset_type, status: a.status,
+      location: a.location, manufacturer: a.manufacturer, model: a.model, createdAt: a.created_at,
+    }),
+  },
+  work_order_created: {
+    table: "work_orders",
+    columns: "id, work_order_number, title, asset_id, asset_name, status, priority, wo_type, due_date, created_at",
+    hasSoftDelete: true,
+    orderBy: "created_at",
+    map: (w) => ({
+      id: w.id, workOrderNumber: w.work_order_number, title: w.title, assetId: w.asset_id,
+      assetName: w.asset_name, status: w.status, priority: w.priority, woType: w.wo_type,
+      dueDate: w.due_date, createdAt: w.created_at,
+    }),
+  },
+  work_order_completed: {
+    table: "work_orders",
+    columns: "id, work_order_number, title, asset_id, asset_name, priority, updated_at",
+    filters: { status: "done" },
+    hasSoftDelete: true,
+    orderBy: "updated_at",
+    map: (w) => ({
+      id: w.id, workOrderNumber: w.work_order_number, title: w.title, assetId: w.asset_id,
+      assetName: w.asset_name, priority: w.priority, completedAt: w.updated_at,
+    }),
+  },
+  requisition_created: {
+    table: "requisitions",
+    columns: "id, requisition_number, title, status, vendor_id, vendor_name, work_order_id, grand_total, created_at",
+    hasSoftDelete: true,
+    orderBy: "created_at",
+    map: (r) => ({
+      id: r.id, requisitionNumber: r.requisition_number, title: r.title, status: r.status,
+      vendorId: r.vendor_id, vendorName: r.vendor_name, workOrderId: r.work_order_id,
+      grandTotalCents: r.grand_total, createdAt: r.created_at,
+    }),
+  },
+  po_created: {
+    table: "purchase_orders",
+    columns: "id, po_number, status, vendor_id, vendor_name, requisition_id, grand_total, po_date, created_at",
+    hasSoftDelete: true,
+    orderBy: "created_at",
+    map: (p) => ({
+      id: p.id, poNumber: p.po_number, status: p.status, vendorId: p.vendor_id, vendorName: p.vendor_name,
+      requisitionId: p.requisition_id, grandTotalCents: p.grand_total, poDate: p.po_date, createdAt: p.created_at,
+    }),
+  },
+  po_approved: {
+    table: "purchase_orders",
+    columns: "id, po_number, vendor_id, vendor_name, grand_total, updated_at",
+    filters: { status: "approved" },
+    hasSoftDelete: true,
+    orderBy: "updated_at",
+    map: (p) => ({
+      id: p.id, poNumber: p.po_number, vendorId: p.vendor_id, vendorName: p.vendor_name,
+      grandTotalCents: p.grand_total, approvedAt: p.updated_at,
+    }),
+  },
+  pm_schedule_due: {
+    table: "pm_schedules",
+    columns: "id, title, asset_id, asset_name, frequency, next_due_date, last_completed_date",
+    filters: { is_active: true },
+    hasSoftDelete: true,
+    orderBy: "next_due_date",
+    postFilter: (p) => !!p.next_due_date && new Date(p.next_due_date) <= new Date(),
+    map: (p) => ({
+      id: p.id, title: p.title, assetId: p.asset_id, assetName: p.asset_name, frequency: p.frequency,
+      nextDueDate: p.next_due_date, lastCompletedDate: p.last_completed_date,
+    }),
+  },
+  part_low_stock: {
+    table: "parts",
+    columns: "id, name, part_number, category, quantity_on_hand, minimum_stock, vendor_id, vendor_name, updated_at",
+    hasSoftDelete: true,
+    orderBy: "updated_at",
+    postFilter: (p) => Number(p.quantity_on_hand) <= Number(p.minimum_stock),
+    map: (p) => ({
+      id: p.id, name: p.name, partNumber: p.part_number, category: p.category,
+      quantityOnHand: p.quantity_on_hand, minimumStock: p.minimum_stock,
+      vendorId: p.vendor_id, vendorName: p.vendor_name,
+    }),
+  },
+  vendor_created: {
+    table: "vendors",
+    columns: "id, name, contact_name, email, phone, vendor_type, is_active, created_at",
+    hasSoftDelete: true,
+    orderBy: "created_at",
+    map: (v) => ({
+      id: v.id, name: v.name, contactName: v.contact_name, email: v.email, phone: v.phone,
+      vendorType: v.vendor_type, isActive: v.is_active, createdAt: v.created_at,
     }),
   },
 };

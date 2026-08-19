@@ -35,11 +35,14 @@ export async function GET(
     query = query.not(column, "is", null);
   }
 
-  const { data, error } = await query.order(config.orderBy, { ascending: false }).limit(25);
+  const { data, error } = await query
+    .order(config.orderBy, { ascending: false })
+    .limit(config.postFilter ? 200 : 25);
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json((data ?? []).map(config.map));
+  const rows = config.postFilter ? (data ?? []).filter(config.postFilter).slice(0, 25) : (data ?? []);
+  return NextResponse.json(rows.map(config.map));
 }
