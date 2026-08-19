@@ -35,6 +35,11 @@ export const ZAPIER_CRM_TRIGGER_TYPES = [
  * polling-only (see zapier-triggers.ts); work_order_completed and po_approved
  * additionally get REST Hook push piggybacked on the wo_status_change /
  * po_status_change round-trip that /api/automations/run already receives.
+ * meter_threshold is polling-only by design — Zapier passes meterId/
+ * threshold/operator as query params (the Zap author configures which meter
+ * and what threshold when setting up the trigger), same idea as the
+ * internal automations engine's per-automation meter_threshold config, but
+ * evaluated per-request instead of stored server-side.
  */
 export const ZAPIER_CMMS_TRIGGER_TYPES = [
   "asset_created",
@@ -46,6 +51,7 @@ export const ZAPIER_CMMS_TRIGGER_TYPES = [
   "pm_schedule_due",
   "part_low_stock",
   "vendor_created",
+  "meter_threshold",
 ] as const;
 
 export const ZAPIER_TRIGGER_TYPES = [

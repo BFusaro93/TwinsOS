@@ -43,6 +43,9 @@ export async function GET(
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  const rows = config.postFilter ? (data ?? []).filter(config.postFilter).slice(0, 25) : (data ?? []);
+  const searchParams = new URL(request.url).searchParams;
+  const rows = config.postFilter
+    ? (data ?? []).filter((row) => config.postFilter!(row, searchParams)).slice(0, 25)
+    : (data ?? []);
   return NextResponse.json(rows.map(config.map));
 }

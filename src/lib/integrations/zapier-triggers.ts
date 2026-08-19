@@ -19,12 +19,14 @@ export interface PollingTriggerConfig {
   /**
    * In-memory filter applied after fetch, for conditions PostgREST can't
    * express as a simple column-vs-literal eq() — e.g. comparing two columns
-   * on the same row (quantity_on_hand vs minimum_stock) or "due by today"
-   * (next_due_date vs now). Fetches a wider page (200) before filtering and
+   * on the same row (quantity_on_hand vs minimum_stock), "due by today"
+   * (next_due_date vs now), or a threshold check parameterized by the Zap
+   * author's own trigger input fields (meter_threshold's meterId/threshold/
+   * operator query params). Fetches a wider page (200) before filtering and
    * slicing to the usual 25, since the filter can reject most rows.
    */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  postFilter?: (row: any) => boolean;
+  postFilter?: (row: any, searchParams: URLSearchParams) => boolean;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   map: (row: any) => Record<string, unknown>;
 }
@@ -291,6 +293,30 @@ export const POLLING_TRIGGERS: Record<ZapierTriggerType, PollingTriggerConfig> =
     map: (v) => ({
       id: v.id, name: v.name, contactName: v.contact_name, email: v.email, phone: v.phone,
       vendorType: v.vendor_type, isActive: v.is_active, createdAt: v.created_at,
+    }),
+  },
+  meter_threshold: {
+    table: "meters",
+    columns: "id, name, unit, current_value, asset_id, asset_name, last_reading_at, updated_at",
+    hasSoftDelete: true,
+    orderBy: "updated_at",
+    // Query params (set by the Zap author when configuring the trigger):
+    //   meterId    — restrict to one meter (omit to check all of the org's meters)
+    //   threshold  — the value to compare against (omit to just list current meter values)
+    //   operator   — "gte" (default) or "lte"
+    postFilter: (m, searchParams) => {
+      const meterId = searchParams.get("meterId");
+      if (meterId && m.id !== meterId) return false;
+      const thresholdParam = searchParams.get("threshold");
+      if (thresholdParam === null) return true;
+      const threshold = Number(thresholdParam);
+      const operator = searchParams.get("operator") === "lte" ? "lte" : "gte";
+      const value = Number(m.current_value);
+      return operator === "lte" ? value <= threshold : value >= threshold;
+    },
+    map: (m) => ({
+      id: m.id, name: m.name, unit: m.unit, currentValue: m.current_value, assetId: m.asset_id,
+      assetName: m.asset_name, lastReadingAt: m.last_reading_at, updatedAt: m.updated_at,
     }),
   },
 };
