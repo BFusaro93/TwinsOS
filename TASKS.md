@@ -22,5 +22,16 @@ Decided 2026-08-18: Projects stays under Equipt (it's PO/procurement cost tracki
 
 - [ ] Move the Photos nav entry into the Landscapt sidebar/menu (routes, links, any Equipt-specific gating) once a full nav reorg is greenlit.
 
+## Backlog — Home Works pricing-page feature parity
+Identified 2026-08-19 comparing TwinsOS's plan/feature matrix against homeworks.com/pricing. Not started; no design decisions made yet on scope/UI. Explicitly declined (do not build): card-on-file requirement, pay-in-full as a distinct enforced option, automated/scheduled invoicing, and expense tracking beyond the existing PO/vendor cost flow.
+
+- [ ] Bulk pricing update — raise/lower Products catalog prices in bulk, flat-rate or percentage-based
+- [ ] Two-way text messaging — inbound SMS replies land in the client's activity timeline/tickets, not just outbound sends
+- [ ] Upsells — a curated list of add-on services crews can offer/sell from the field
+- [ ] Offline mode — crew mobile app keeps working (queues actions) when cell coverage drops
+- [ ] Saved routes — persist and reuse a dispatch route instead of re-optimizing from scratch each time
+- [ ] Unscheduled work — a dedicated queue of accepted-estimate jobs not yet scheduled, for bulk scheduling
+- [ ] Multi-location support — one login spanning multiple org/business accounts (current model is strictly one org per user)
+
 ## Cleanup — dead ConditionField union members
 - [ ] `client_type`, `client_status`, `job_type` (as a condition field), `job_status`, `tag` (as a condition field), `property_city`, `revenue_ytd`, `last_job_date` in [crm-automations.ts](src/types/crm-automations.ts)'s `ConditionField` type are leftover "Legacy" entries — not in the `CONDITION_GROUPS` picklist (unselectable in the UI) and not referenced anywhere in the evaluator. Harmless but dead; safe to delete next time this file is touched.

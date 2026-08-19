@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from "react";
 import { useUsers, useInviteUser, useUpdateUserRole, useDeactivateUser, useUpdatePhotoModuleAccess } from "@/lib/hooks/use-users";
+import { useModuleAccess } from "@/lib/hooks/use-module-access";
 import { Switch } from "@/components/ui/switch";
 import { useCurrentUserStore } from "@/stores";
 import type { OrgUser } from "@/types";
@@ -51,6 +52,12 @@ function avatarColor(id: string): string {
   const code = id.split("").reduce((acc, c) => acc + c.charCodeAt(0), 0);
   return AVATAR_COLORS[code % AVATAR_COLORS.length];
 }
+
+// These roles only make sense for orgs with the Equipt (CMMS) module on
+// their plan — an org that only subscribes to Landscapt has no purchase
+// orders, work orders, or assets for a Purchaser/Technician/Requestor to
+// act on, and offering them here just confuses which role to pick.
+const CMMS_ONLY_ROLES = new Set<OrgUser["role"]>(["purchaser", "technician", "requestor"]);
 
 const ROLE_LABELS: Record<OrgUser["role"], string> = {
   admin: "Admin",
@@ -200,9 +207,10 @@ interface InviteUserDialogProps {
   onOpenChange: (open: boolean) => void;
   onInvite: (name: string, email: string, role: OrgUser["role"]) => Promise<void>;
   submitting?: boolean;
+  showCmmsRoles?: boolean;
 }
 
-function InviteUserDialog({ open, onOpenChange, onInvite, submitting = false }: InviteUserDialogProps) {
+function InviteUserDialog({ open, onOpenChange, onInvite, submitting = false, showCmmsRoles = true }: InviteUserDialogProps) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<OrgUser["role"] | "">("");
@@ -272,10 +280,10 @@ function InviteUserDialog({ open, onOpenChange, onInvite, submitting = false }: 
               <SelectContent>
                 <SelectItem value="admin">Admin</SelectItem>
                 <SelectItem value="manager">Manager</SelectItem>
-                <SelectItem value="purchaser">Purchaser</SelectItem>
-                <SelectItem value="technician">Technician</SelectItem>
+                {showCmmsRoles && <SelectItem value="purchaser">Purchaser</SelectItem>}
+                {showCmmsRoles && <SelectItem value="technician">Technician</SelectItem>}
                 <SelectItem value="viewer">Viewer</SelectItem>
-                <SelectItem value="requestor">Requestor</SelectItem>
+                {showCmmsRoles && <SelectItem value="requestor">Requestor</SelectItem>}
                 <SelectItem value="crew">Crew</SelectItem>
               </SelectContent>
             </Select>
@@ -477,6 +485,11 @@ export function UsersPage() {
   const { mutate: deactivate } = useDeactivateUser();
   const { mutate: updatePhotoAccess } = useUpdatePhotoModuleAccess();
   const [resendingId, setResendingId] = useState<string | null>(null);
+  // Avoid a flash of hidden roles while the org's plan is still loading —
+  // only hide Purchaser/Technician/Requestor once we're sure Equipt isn't on it.
+  const { allowed: equiptAllowed, isLoading: equiptLoading } = useModuleAccess("equipt");
+  const showCmmsRoles = equiptLoading || equiptAllowed;
+  const visibleRoleDefs = showCmmsRoles ? ROLES : ROLES.filter((r) => !CMMS_ONLY_ROLES.has(r.key as OrgUser["role"]));
 
   async function handleResendInvite(user: OrgUser) {
     setResendingId(user.id);
@@ -619,11 +632,11 @@ export function UsersPage() {
                         <SelectContent>
                           <SelectItem value="admin">Admin</SelectItem>
                           <SelectItem value="manager">Manager</SelectItem>
-                          <SelectItem value="purchaser">Purchaser</SelectItem>
-                          <SelectItem value="technician">Technician</SelectItem>
+                          {showCmmsRoles && <SelectItem value="purchaser">Purchaser</SelectItem>}
+                          {showCmmsRoles && <SelectItem value="technician">Technician</SelectItem>}
                           <SelectItem value="crew">Crew</SelectItem>
                           <SelectItem value="viewer">Viewer</SelectItem>
-                          <SelectItem value="requestor">Requestor</SelectItem>
+                          {showCmmsRoles && <SelectItem value="requestor">Requestor</SelectItem>}
                         </SelectContent>
                       </Select>
                     </TableCell>
@@ -697,7 +710,7 @@ export function UsersPage() {
         <TabsContent value="roles" className="mt-6">
           <div className="flex flex-col gap-4">
             <p className="text-sm text-slate-500">System-defined roles control what each team member can access and do in the platform.</p>
-            {ROLES.map((role) => (
+            {visibleRoleDefs.map((role) => (
               <div key={role.key} className="rounded-lg border bg-white p-5 shadow-sm">
                 <div className="flex items-center gap-3 mb-3">
                   <h3 className="font-semibold text-slate-900">{role.name}</h3>
@@ -725,6 +738,7 @@ export function UsersPage() {
         onOpenChange={setInviteOpen}
         onInvite={handleInvite}
         submitting={inviting}
+        showCmmsRoles={showCmmsRoles}
       />
 
       <CreateCrewAccountDialog

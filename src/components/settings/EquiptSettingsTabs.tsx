@@ -6,7 +6,6 @@ import {
   Check,
   ChevronDown,
   ChevronUp,
-  ClipboardList,
   ClipboardCheck,
   Cog,
   Copy,
@@ -16,9 +15,7 @@ import {
   Plus,
   BookOpen,
   ShoppingCart,
-  Trash2,
   Truck,
-  Upload,
   X,
 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -32,7 +29,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -41,14 +37,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
 import { ApprovalFlowsPage } from "@/components/settings/ApprovalFlowsPage";
 import { NotificationsPage } from "@/components/settings/NotificationsPage";
-import { SubscriptionTab } from "@/components/settings/SubscriptionTab";
 import { ZapierIntegrationCard } from "@/components/settings/ZapierIntegrationCard";
+import { Toggle } from "@/components/settings/settings-ui";
 import { useSettingsStore } from "@/stores/settings-store";
 import type { FieldRequirement } from "@/stores/settings-store";
 import type { Part } from "@/types/cmms";
-import { COST_METHOD_LABELS, type CostMethod } from "@/lib/cost-methods";
+import { type CostMethod } from "@/lib/cost-methods";
 import { useOrgSettings, useUpdateOrgSettings } from "@/lib/hooks/use-org-settings";
 import { useIntegration, useUpsertIntegration } from "@/lib/hooks/use-integrations";
 import { useWorkOrders, useBulkImportWorkOrders } from "@/lib/hooks/use-work-orders";
@@ -63,90 +60,7 @@ import { downloadCSV, readCSVFile } from "@/lib/csv";
 import { autoMapColumns, remapRows } from "@/components/shared/ImportExportMenu";
 import { cn, formatCurrency } from "@/lib/utils";
 
-// ── Shared helpers ────────────────────────────────────────────────────────────
-
-function Toggle({ enabled, onToggle }: { enabled: boolean; onToggle: () => void }) {
-  return (
-    <button
-      role="switch"
-      aria-checked={enabled}
-      onClick={onToggle}
-      className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none ${
-        enabled ? "bg-brand-500" : "bg-slate-200"
-      }`}
-    >
-      <span
-        className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
-          enabled ? "translate-x-4" : "translate-x-0"
-        }`}
-      />
-    </button>
-  );
-}
-
-function BrandColorPicker({ color, onChange }: { color: string; onChange: (c: string) => void }) {
-  const [draft, setDraft] = useState(color);
-
-  // Keep draft in sync when color changes from outside (e.g. store resets)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  React.useEffect(() => { setDraft(color); }, [color]);
-
-  function commit(value: string) {
-    if (/^#[0-9A-Fa-f]{6}$/.test(value)) {
-      onChange(value);
-    } else {
-      setDraft(color); // revert to last valid
-    }
-  }
-
-  return (
-    <div className="flex items-center gap-2">
-      <input
-        type="color"
-        value={color}
-        onChange={(e) => { onChange(e.target.value); setDraft(e.target.value); }}
-        className="h-9 w-12 cursor-pointer rounded border border-slate-200 p-0.5"
-        title="Pick a color"
-      />
-      <Input
-        value={draft}
-        maxLength={7}
-        placeholder="#60ab45"
-        onChange={(e) => setDraft(e.target.value)}
-        onBlur={() => commit(draft)}
-        onKeyDown={(e) => { if (e.key === "Enter") commit(draft); }}
-        className="h-8 w-28 font-mono text-sm"
-      />
-      <div
-        className="h-8 w-8 rounded border border-slate-200"
-        style={{ backgroundColor: color }}
-        title={color}
-      />
-    </div>
-  );
-}
-
-function SettingRow({
-  label,
-  description,
-  children,
-}: {
-  label: string;
-  description?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="flex flex-col gap-2 py-4 md:flex-row md:items-start md:justify-between md:gap-8">
-      <div className="flex-1">
-        <p className="text-sm font-medium text-slate-900">{label}</p>
-        {description && (
-          <p className="mt-0.5 text-xs text-slate-500">{description}</p>
-        )}
-      </div>
-      <div className="w-full md:w-48 md:shrink-0">{children}</div>
-    </div>
-  );
-}
+// ── CostingTab ────────────────────────────────────────────────────────────────
 
 const COST_METHOD_OPTIONS: { value: CostMethod; label: string; description: string }[] = [
   {
@@ -217,6 +131,92 @@ function CostingTab() {
           takes effect immediately for new line items. Existing Requisitions, Purchase Orders, and
           Work Orders are not modified.
         </p>
+      </div>
+    </div>
+  );
+}
+
+// ── RequestPortalTab ──────────────────────────────────────────────────────────
+
+function RequestPortalTab() {
+  const { portalEnabled, setPortalEnabled } = useSettingsStore();
+  const { data: remoteSettings } = useOrgSettings();
+  const { mutate: updateOrgSettings } = useUpdateOrgSettings();
+  const [copied, setCopied] = useState(false);
+
+  return (
+    <div className="rounded-lg border bg-white shadow-sm">
+      <div className="px-6 py-4">
+        <h2 className="text-sm font-semibold text-slate-900">Maintenance Request Portal</h2>
+        <p className="mt-0.5 text-xs text-slate-500">
+          A public link where anyone — employees, contractors, or guests — can submit a
+          maintenance request without logging in.
+        </p>
+      </div>
+      <Separator />
+      <div className="px-6">
+        <div className="flex flex-col gap-2 py-4 md:flex-row md:items-start md:justify-between md:gap-8">
+          <div className="flex-1">
+            <p className="text-sm font-medium text-slate-900">Accept Submissions</p>
+            <p className="mt-0.5 text-xs text-slate-500">
+              When disabled, the portal shows a closed message and no submissions are accepted.
+            </p>
+          </div>
+          <div className="w-full md:w-48 md:shrink-0">
+            <Toggle enabled={portalEnabled} onToggle={() => {
+              setPortalEnabled(!portalEnabled);
+              updateOrgSettings({ portalEnabled: !portalEnabled });
+            }} />
+          </div>
+        </div>
+        <div className="flex flex-col gap-2 py-4 md:flex-row md:items-start md:justify-between md:gap-8">
+          <div className="flex-1">
+            <p className="text-sm font-medium text-slate-900">Portal Link</p>
+            <p className="mt-0.5 text-xs text-slate-500">
+              Share this URL with anyone who should be able to submit requests.
+            </p>
+          </div>
+          <div className="flex w-full items-center gap-2 md:w-80 md:shrink-0">
+            <div className="flex h-8 flex-1 min-w-0 items-center rounded-md border bg-slate-50 px-3">
+              <span className="truncate text-xs text-slate-600 font-mono">
+                {typeof window !== "undefined" ? window.location.origin : "https://yourapp.com"}/request/{remoteSettings?.slug ?? ""}
+              </span>
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 shrink-0 gap-1.5 text-xs"
+              onClick={() => {
+                const url = `${window.location.origin}/request/${remoteSettings?.slug ?? ""}`;
+                navigator.clipboard.writeText(url).then(() => {
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 2000);
+                });
+              }}
+            >
+              {copied ? (
+                <>
+                  <Check className="h-3 w-3 text-emerald-600" />
+                  Copied
+                </>
+              ) : (
+                <>
+                  <Copy className="h-3 w-3" />
+                  Copy
+                </>
+              )}
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 shrink-0 gap-1.5 text-xs"
+              onClick={() => window.open(`/request/${remoteSettings?.slug ?? ""}`, "_blank")}
+            >
+              <ExternalLink className="h-3 w-3" />
+              Open
+            </Button>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -479,456 +479,6 @@ function CustomPartCategoriesCleanup({
             </button>
           </div>
         ))}
-      </div>
-    </div>
-  );
-}
-
-// ── GeneralTab ────────────────────────────────────────────────────────────────
-
-function GeneralTab() {
-  const {
-    orgName,
-    setOrgName,
-    logoDataUrl,
-    setLogoDataUrl,
-    companyAddress,
-    setCompanyAddress,
-    taxRatePercent,
-    setTaxRatePercent,
-    brandColor,
-    setBrandColor,
-    portalEnabled,
-    setPortalEnabled,
-    breakevenLaborRateCents,
-    setBreakevenLaborRateCents,
-    burdenedLaborRateCents,
-    setBurdenedLaborRateCents,
-    loadFromRemote,
-  } = useSettingsStore();
-
-  const { data: remoteSettings } = useOrgSettings();
-  const { mutate: updateOrgSettings, isPending: savingSettings } = useUpdateOrgSettings();
-  const seeded = useRef(false);
-  const [addressSaved, setAddressSaved] = useState(false);
-
-  const [taxDraft, setTaxDraft] = useState(taxRatePercent);
-  const [breakevenDraft, setBreakevenDraft] = useState((breakevenLaborRateCents / 100).toFixed(2));
-  const [burdenedDraft, setBurdenedDraft] = useState((burdenedLaborRateCents / 100).toFixed(2));
-  const [orgNameDraft, setOrgNameDraft] = useState(orgName);
-
-  // The Save buttons below must compare against what's ACTUALLY persisted in
-  // organizations.customizations, not the zustand store's value — the store
-  // ships with hardcoded placeholder defaults (6927 / 5200, i.e. "$69.27" /
-  // "$52.00") that are never written to the DB on their own. If an org has
-  // never saved a rate, typing the exact same number the placeholder already
-  // shows made this comparison see "no change" and permanently disable Save,
-  // so the rate looked configured in the UI but never actually reached the
-  // database (and estimate line item cost auto-fill, which reads the DB
-  // value, never saw it).
-  const remoteCustomizations = (remoteSettings?.customizations as Record<string, unknown>) ?? {};
-  const persistedBreakevenCents =
-    typeof remoteCustomizations.breakevenLaborRateCents === "number" ? remoteCustomizations.breakevenLaborRateCents : -1;
-  const persistedBurdenedCents =
-    typeof remoteCustomizations.burdenedLaborRateCents === "number" ? remoteCustomizations.burdenedLaborRateCents : -1;
-
-  useEffect(() => {
-    if (!remoteSettings || seeded.current) return;
-    seeded.current = true;
-    loadFromRemote({
-      orgName: remoteSettings.name,
-      brandColor: remoteSettings.brandColor,
-      address: remoteSettings.address,
-      taxRatePercent: remoteSettings.taxRatePercent,
-      costMethod: remoteSettings.costMethod,
-      portalEnabled: remoteSettings.portalEnabled,
-      ...((remoteSettings.customizations as Record<string, unknown>) ?? {}),
-    } as Parameters<typeof loadFromRemote>[0]);
-    // Sync controlled draft inputs to the DB values on first load.
-    setOrgNameDraft(remoteSettings.name);
-    setTaxDraft(remoteSettings.taxRatePercent);
-    const savedRate = (remoteSettings.customizations as Record<string, unknown>)?.breakevenLaborRateCents;
-    if (typeof savedRate === "number") setBreakevenDraft((savedRate / 100).toFixed(2));
-    const savedBurdened = (remoteSettings.customizations as Record<string, unknown>)?.burdenedLaborRateCents;
-    if (typeof savedBurdened === "number") setBurdenedDraft((savedBurdened / 100).toFixed(2));
-  }, [remoteSettings, loadFromRemote]);
-
-  const logoInputRef = useRef<HTMLInputElement>(null);
-  const [copied, setCopied] = useState(false);
-
-  async function handleLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    e.target.value = "";
-    try {
-      const { createClient } = await import("@/lib/supabase/client");
-      const supabase = createClient();
-      const ext = file.name.split(".").pop() ?? "png";
-      const path = `logos/company-logo-${Date.now()}.${ext}`;
-      const { error: uploadError } = await supabase.storage
-        .from("thumbnails")
-        .upload(path, file, { upsert: true });
-      if (uploadError) throw uploadError;
-      const { data } = supabase.storage.from("thumbnails").getPublicUrl(path);
-      setLogoDataUrl(data.publicUrl);
-      updateOrgSettings({ customizations: { logoDataUrl: data.publicUrl } });
-    } catch {
-      // Fall back to base64 if storage fails
-      const reader = new FileReader();
-      reader.onload = (ev) => {
-        const result = ev.target?.result as string;
-        setLogoDataUrl(result);
-        updateOrgSettings({ customizations: { logoDataUrl: result } });
-      };
-      reader.readAsDataURL(file);
-    }
-  }
-
-  return (
-    <div className="flex flex-col gap-6">
-      {/* Organization */}
-      <div className="rounded-lg border bg-white shadow-sm">
-        <div className="px-6 py-4">
-          <h2 className="text-sm font-semibold text-slate-900">Organization</h2>
-          <p className="mt-0.5 text-xs text-slate-500">General settings for {orgName}</p>
-        </div>
-        <Separator />
-        <div className="px-6">
-          <SettingRow
-            label="Organization Name"
-            description="Your company name as it appears across the platform"
-          >
-            <div className="flex gap-2">
-              <Input
-                value={orgNameDraft}
-                onChange={(e) => setOrgNameDraft(e.target.value)}
-                className="h-8 text-sm"
-              />
-              <Button
-                size="sm"
-                className="h-8 shrink-0"
-                disabled={orgNameDraft.trim() === orgName || !orgNameDraft.trim()}
-                onClick={() => {
-                  setOrgName(orgNameDraft.trim());
-                  updateOrgSettings({ name: orgNameDraft.trim() });
-                }}
-              >
-                Save
-              </Button>
-            </div>
-          </SettingRow>
-        </div>
-      </div>
-
-      {/* Branding */}
-      <div className="rounded-lg border bg-white shadow-sm">
-        <div className="px-6 py-4">
-          <h2 className="text-sm font-semibold text-slate-900">Branding</h2>
-          <p className="mt-0.5 text-xs text-slate-500">
-            Logo and address used on printed purchase orders
-          </p>
-        </div>
-        <Separator />
-        <div className="px-6">
-          {/* Logo upload */}
-          <div className="flex flex-col gap-2 py-4 md:flex-row md:items-start md:justify-between md:gap-8">
-            <div className="flex-1">
-              <p className="text-sm font-medium text-slate-900">Company Logo</p>
-              <p className="mt-0.5 text-xs text-slate-500">
-                Displayed in the sidebar and on printed POs. Recommended: PNG or SVG with transparent
-                background.
-              </p>
-            </div>
-            <div className="flex w-full flex-col gap-2 md:w-64 md:shrink-0">
-              {logoDataUrl ? (
-                <div className="flex items-center gap-3">
-                  <div className="flex h-14 w-40 items-center justify-center rounded-md border bg-slate-50 p-2">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={logoDataUrl}
-                      alt="Company logo"
-                      className="max-h-full max-w-full object-contain"
-                    />
-                  </div>
-                  <div className="flex flex-col gap-1">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-7 gap-1 text-xs"
-                      onClick={() => logoInputRef.current?.click()}
-                    >
-                      <Upload className="h-3 w-3" /> Replace
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="h-7 gap-1 text-xs text-red-500 hover:text-red-600"
-                      onClick={() => { setLogoDataUrl(null); updateOrgSettings({ customizations: { logoDataUrl: null } }); }}
-                    >
-                      <Trash2 className="h-3 w-3" /> Remove
-                    </Button>
-                  </div>
-                </div>
-              ) : (
-                <button
-                  onClick={() => logoInputRef.current?.click()}
-                  className="flex h-20 w-full flex-col items-center justify-center gap-1.5 rounded-md border-2 border-dashed border-slate-200 bg-slate-50 text-slate-400 transition-colors hover:border-brand-400 hover:text-brand-500"
-                >
-                  <Upload className="h-5 w-5" />
-                  <span className="text-xs font-medium">Upload logo</span>
-                </button>
-              )}
-              <input
-                ref={logoInputRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={handleLogoUpload}
-              />
-            </div>
-          </div>
-          <Separator />
-          {/* Brand Color */}
-          <SettingRow
-            label="Accent Color"
-            description="Used on printed PO and WO PDFs"
-          >
-            <BrandColorPicker
-              color={brandColor}
-              onChange={(c) => { setBrandColor(c); updateOrgSettings({ brandColor: c }); }}
-            />
-          </SettingRow>
-          <Separator />
-          {/* Company address */}
-          <div className="flex flex-col gap-2 py-4 md:flex-row md:items-start md:justify-between md:gap-8">
-            <div className="flex-1">
-              <p className="text-sm font-medium text-slate-900">Company Address</p>
-              <p className="mt-0.5 text-xs text-slate-500">Printed in the header of purchase orders</p>
-            </div>
-            <div className="flex w-full flex-col gap-2 md:w-64 md:shrink-0">
-              <Input
-                placeholder="Street address"
-                value={companyAddress.street}
-                onChange={(e) => setCompanyAddress({ street: e.target.value })}
-                className="h-8 text-sm"
-              />
-              <div className="grid grid-cols-2 gap-2">
-                <Input
-                  placeholder="City"
-                  value={companyAddress.city}
-                  onChange={(e) => setCompanyAddress({ city: e.target.value })}
-                  className="h-8 text-sm"
-                />
-                <Input
-                  placeholder="State"
-                  value={companyAddress.state}
-                  onChange={(e) => setCompanyAddress({ state: e.target.value })}
-                  className="h-8 text-sm"
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <Input
-                  placeholder="ZIP"
-                  value={companyAddress.zip}
-                  onChange={(e) => setCompanyAddress({ zip: e.target.value })}
-                  className="h-8 text-sm"
-                />
-                <Input
-                  placeholder="Phone"
-                  value={companyAddress.phone}
-                  onChange={(e) => setCompanyAddress({ phone: e.target.value })}
-                  className="h-8 text-sm"
-                />
-              </div>
-              <Button
-                size="sm"
-                className="h-8 w-full"
-                disabled={savingSettings}
-                onClick={() => {
-                  setAddressSaved(false);
-                  updateOrgSettings(
-                    { address: companyAddress },
-                    {
-                      onSuccess: () => {
-                        setAddressSaved(true);
-                        setTimeout(() => setAddressSaved(false), 2000);
-                      },
-                    }
-                  );
-                }}
-              >
-                {savingSettings ? "Saving..." : addressSaved ? "Saved!" : "Save Address"}
-              </Button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Finance */}
-      <div className="rounded-lg border bg-white shadow-sm">
-        <div className="px-6 py-4">
-          <h2 className="text-sm font-semibold text-slate-900">Finance</h2>
-          <p className="mt-0.5 text-xs text-slate-500">
-            Tax and currency defaults applied to new requisitions and purchase orders
-          </p>
-        </div>
-        <Separator />
-        <div className="px-6">
-          <SettingRow
-            label="Default Sales Tax Rate"
-            description="Applied to new POs and requisitions. Can be overridden per record."
-          >
-            <div className="flex items-center gap-2">
-              <input
-                type="number"
-                min={0}
-                max={30}
-                step={0.1}
-                value={taxDraft}
-                onChange={(e) => setTaxDraft(parseFloat(e.target.value) || 0)}
-                className="w-20 rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-900 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
-              />
-              <span className="text-sm text-slate-500">%</span>
-              <Button
-                size="sm"
-                className="h-8"
-                disabled={taxDraft === taxRatePercent}
-                onClick={() => {
-                  setTaxRatePercent(taxDraft);
-                  updateOrgSettings({ taxRatePercent: taxDraft });
-                }}
-              >
-                Save
-              </Button>
-            </div>
-          </SettingRow>
-          <SettingRow
-            label="Breakeven Labor Rate"
-            description="Fully-loaded cost per labor hour — wages + burden + non-billable uplift + fixed overhead recovery. Used in Job Costing and Project net profit (full rate)."
-          >
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-slate-500">$</span>
-              <input
-                type="number"
-                min={0}
-                step={0.01}
-                value={breakevenDraft}
-                onChange={(e) => setBreakevenDraft(e.target.value)}
-                className="w-24 rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-900 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
-              />
-              <span className="text-sm text-slate-500">/hr</span>
-              <Button
-                size="sm"
-                className="h-8"
-                disabled={Math.round(parseFloat(breakevenDraft) * 100) === persistedBreakevenCents}
-                onClick={() => {
-                  const cents = Math.round((parseFloat(breakevenDraft) || 0) * 100);
-                  setBreakevenLaborRateCents(cents);
-                  updateOrgSettings({ customizations: { breakevenLaborRateCents: cents } });
-                }}
-              >
-                Save
-              </Button>
-            </div>
-          </SettingRow>
-          <SettingRow
-            label="Burdened Labor Rate"
-            description="Wages + burden + non-billable uplift only — no fixed overhead recovery. Shows project net profit before overhead absorption."
-          >
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-slate-500">$</span>
-              <input
-                type="number"
-                min={0}
-                step={0.01}
-                value={burdenedDraft}
-                onChange={(e) => setBurdenedDraft(e.target.value)}
-                className="w-24 rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-900 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
-              />
-              <span className="text-sm text-slate-500">/hr</span>
-              <Button
-                size="sm"
-                className="h-8"
-                disabled={Math.round(parseFloat(burdenedDraft) * 100) === persistedBurdenedCents}
-                onClick={() => {
-                  const cents = Math.round((parseFloat(burdenedDraft) || 0) * 100);
-                  setBurdenedLaborRateCents(cents);
-                  updateOrgSettings({ customizations: { burdenedLaborRateCents: cents } });
-                }}
-              >
-                Save
-              </Button>
-            </div>
-          </SettingRow>
-        </div>
-      </div>
-
-      {/* Requests Portal */}
-      <div className="rounded-lg border bg-white shadow-sm">
-        <div className="px-6 py-4">
-          <h2 className="text-sm font-semibold text-slate-900">Maintenance Request Portal</h2>
-          <p className="mt-0.5 text-xs text-slate-500">
-            A public link where anyone — employees, contractors, or guests — can submit a
-            maintenance request without logging in.
-          </p>
-        </div>
-        <Separator />
-        <div className="px-6">
-          <SettingRow
-            label="Accept Submissions"
-            description="When disabled, the portal shows a closed message and no submissions are accepted."
-          >
-            <Toggle enabled={portalEnabled} onToggle={() => {
-              setPortalEnabled(!portalEnabled);
-              updateOrgSettings({ portalEnabled: !portalEnabled });
-            }} />
-          </SettingRow>
-          <SettingRow
-            label="Portal Link"
-            description="Share this URL with anyone who should be able to submit requests."
-          >
-            <div className="flex items-center gap-2">
-              <div className="flex h-8 flex-1 min-w-0 items-center rounded-md border bg-slate-50 px-3">
-                <span className="truncate text-xs text-slate-600 font-mono">
-                  {typeof window !== "undefined" ? window.location.origin : "https://yourapp.com"}/request/{remoteSettings?.slug ?? ""}
-                </span>
-              </div>
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-8 shrink-0 gap-1.5 text-xs"
-                onClick={() => {
-                  const url = `${window.location.origin}/request/${remoteSettings?.slug ?? ""}`;
-                  navigator.clipboard.writeText(url).then(() => {
-                    setCopied(true);
-                    setTimeout(() => setCopied(false), 2000);
-                  });
-                }}
-              >
-                {copied ? (
-                  <>
-                    <Check className="h-3 w-3 text-emerald-600" />
-                    Copied
-                  </>
-                ) : (
-                  <>
-                    <Copy className="h-3 w-3" />
-                    Copy
-                  </>
-                )}
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-8 shrink-0 gap-1.5 text-xs"
-                onClick={() => window.open(`/request/${remoteSettings?.slug ?? ""}`, "_blank")}
-              >
-                <ExternalLink className="h-3 w-3" />
-                Open
-              </Button>
-            </div>
-          </SettingRow>
-        </div>
       </div>
     </div>
   );
@@ -1557,8 +1107,6 @@ function ImportExportTab() {
 
 function tabLabel(tab: string): string {
   switch (tab) {
-    case "general":        return "General";
-    case "subscription":   return "Subscription";
     case "customizations": return "Customizations";
     case "required_fields": return "Required Fields";
     case "approval_flows": return "Approval Flows";
@@ -1566,6 +1114,7 @@ function tabLabel(tab: string): string {
     case "import_export":  return "Import / Export";
     case "notifications":  return "Notifications";
     case "integrations":   return "Integrations";
+    case "request_portal": return "Request Portal";
     default:               return tab;
   }
 }
@@ -1765,31 +1314,29 @@ function IntegrationsTab() {
   );
 }
 
-// ── Main SettingsPage component ───────────────────────────────────────────────
+// ── Main EquiptSettingsTabs component ─────────────────────────────────────────
+// Rendered both at /settings/equipt (top-level Settings hub) and at /settings
+// inside Equipt's own dashboard shell — same component, same UI, no drift.
 
-export default function SettingsPage() {
-  const TAB_KEYS = [
-    "general",
-    "subscription",
-    "customizations",
-    "required_fields",
-    "approval_flows",
-    "costing",
-    "import_export",
-    "notifications",
-    "integrations",
-  ] as const;
+const TAB_KEYS = [
+  "customizations",
+  "required_fields",
+  "approval_flows",
+  "costing",
+  "import_export",
+  "notifications",
+  "integrations",
+  "request_portal",
+] as const;
 
-  // Suppress unused import warning for COST_METHOD_LABELS — it is used by CostingTab
-  void COST_METHOD_LABELS;
-
+export function EquiptSettingsTabs() {
   return (
     <div className="flex flex-col gap-0">
       <div className="px-4 pt-4 pb-0 md:px-6 md:pt-6">
-        <h1 className="text-xl font-semibold text-slate-900">Settings</h1>
-        <p className="mt-1 text-sm text-slate-500">Manage your organization settings</p>
+        <h1 className="text-xl font-semibold text-slate-900">Equipt Settings</h1>
+        <p className="mt-1 text-sm text-slate-500">CMMS &amp; purchasing configuration</p>
       </div>
-      <Tabs defaultValue="general" className="mt-4">
+      <Tabs defaultValue="customizations" className="mt-4">
         <div className="border-b px-4 md:px-6">
           <TabsList className="h-auto flex-wrap gap-0 rounded-none bg-transparent p-0">
             {TAB_KEYS.map((tab) => (
@@ -1804,14 +1351,6 @@ export default function SettingsPage() {
           </TabsList>
         </div>
         <div className="p-4 md:p-6">
-          <TabsContent value="general" className="mt-0">
-            <GeneralTab />
-          </TabsContent>
-
-          <TabsContent value="subscription" className="mt-0">
-            <SubscriptionTab />
-          </TabsContent>
-
           <TabsContent value="customizations" className="mt-0">
             <CustomizationsTab />
           </TabsContent>
@@ -1838,6 +1377,10 @@ export default function SettingsPage() {
 
           <TabsContent value="integrations" className="mt-0">
             <IntegrationsTab />
+          </TabsContent>
+
+          <TabsContent value="request_portal" className="mt-0">
+            <RequestPortalTab />
           </TabsContent>
         </div>
       </Tabs>
