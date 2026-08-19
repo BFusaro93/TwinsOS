@@ -11941,14 +11941,29 @@ export type Database = {
       next_damage_case_number: { Args: never; Returns: string }
       receive_part_quantity: {
         Args: {
-          p_new_cost_layers: Json
-          p_new_unit_cost: number
+          p_cost_method: string
+          p_layer_unit_cost: number
           p_org_id: string
           p_part_id: string
           p_po_number: string
           p_quantity: number
+          p_received_at: string
         }
         Returns: undefined
+      }
+      receive_product_cost_layer: {
+        Args: {
+          p_cost_method: string
+          p_layer_quantity: number
+          p_layer_unit_cost: number
+          p_org_id: string
+          p_po_number: string
+          p_product_id: string
+          p_received_at: string
+        }
+        Returns: {
+          new_unit_cost: number
+        }[]
       }
       refund_payment: {
         Args: { p_payment_id: string; p_refund_amount_cents: number }

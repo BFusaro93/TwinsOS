@@ -149,6 +149,19 @@ function DetailsTab({
   const [selectedPartId, setSelectedPartId] = useState<string | null>(null);
   const [vendorSheetOpen, setVendorSheetOpen] = useState(false);
   const [overlayPOId, setOverlayPOId] = useState<string | null>(null);
+  const [incompleteReceiptWarningOpen, setIncompleteReceiptWarningOpen] = useState(false);
+
+  const allLineItemsReceived = lineItems.every(
+    (li) => (receivedQtyByLineItemId?.get(li.id) ?? 0) >= li.quantity
+  );
+
+  function handleMarkComplete() {
+    if (allLineItemsReceived) {
+      handleStatusChange("completed");
+    } else {
+      setIncompleteReceiptWarningOpen(true);
+    }
+  }
   const selectedVendor = vendors.find((v) => v.id === po.vendorId) ?? null;
   const selectedProduct = products.find((p) => p.id === selectedProductId) ?? null;
   const selectedPart = parts.find((p) => p.id === selectedPartId) ?? null;
@@ -211,7 +224,7 @@ function DetailsTab({
           </>)}
           {(status === "ordered" || status === "partially_fulfilled") && (<>
             <Button size="sm" onClick={onSendToReceiving}>Send to Receiving</Button>
-            <Button size="sm" variant="outline" onClick={() => handleStatusChange("completed")}>Mark Complete</Button>
+            <Button size="sm" variant="outline" onClick={handleMarkComplete}>Mark Complete</Button>
           </>)}
           {(status === "rejected" || status === "canceled" || status === "pending") && (
             <Button size="sm" variant="outline" onClick={() => handleStatusChange("requested")}>Reset to Requested</Button>
@@ -345,6 +358,30 @@ function DetailsTab({
         open={vendorSheetOpen && !!selectedVendor}
         onOpenChange={setVendorSheetOpen}
       />
+
+      <AlertDialog open={incompleteReceiptWarningOpen} onOpenChange={setIncompleteReceiptWarningOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Not all line items have been received</AlertDialogTitle>
+            <AlertDialogDescription>
+              At least one line item on <strong>{po.poNumber}</strong> has not been fully received
+              through Send to Receiving. Marking this PO complete without receiving it will not
+              update parts/inventory. Are you sure you want to mark it complete anyway?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                handleStatusChange("completed");
+                setIncompleteReceiptWarningOpen(false);
+              }}
+            >
+              Mark Complete Anyway
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
