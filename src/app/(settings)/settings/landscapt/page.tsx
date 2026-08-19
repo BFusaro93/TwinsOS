@@ -2,6 +2,6 @@
 
 import { LandscaptSettingsTabs } from "@/components/settings/LandscaptSettingsTabs";
 
-export default function CRMSettingsPage() {
+export default function LandscaptSettingsHubPage() {
   return <LandscaptSettingsTabs />;
 }

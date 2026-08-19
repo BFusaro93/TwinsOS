@@ -3,7 +3,7 @@ import type Stripe from "stripe";
 import { Resend } from "resend";
 import { createServiceClient } from "@/lib/supabase/server";
 import { getStripe, isStripeConfigured } from "@/lib/stripe/server";
-import { getPlanForPriceId } from "@/lib/stripe/plans";
+import { getPlanForPriceId, getProductForPriceId, type Product } from "@/lib/stripe/plans";
 import { logger } from "@/lib/logger";
 
 const log = logger.child("stripe webhook");
@@ -171,17 +171,36 @@ async function applySubscriptionToOrg(
   subscription: Stripe.Subscription
 ) {
   const priceId = subscription.items.data[0]?.price.id ?? null;
-  const plan = priceId ? getPlanForPriceId(priceId) : null;
 
-  const patch: Record<string, unknown> = {
-    stripe_subscription_id: subscription.id,
-    stripe_subscription_status: subscription.status,
-    stripe_price_id: priceId,
-  };
-  if (DOWNGRADE_STATUSES.has(subscription.status)) {
-    patch.plan = "trial";
-  } else if (plan) {
-    patch.plan = plan;
+  // Which product this subscription belongs to: prefer the metadata tagged
+  // at checkout time; fall back to matching the price id against the known
+  // per-product env vars for subscriptions created before product tagging
+  // existed.
+  const product = (subscription.metadata?.product as Product | undefined) ??
+    (priceId ? getProductForPriceId(priceId) : null);
+
+  const patch: Record<string, unknown> = {};
+
+  if (product) {
+    const plan = priceId ? getPlanForPriceId(product, priceId) : null;
+    patch[`${product}_stripe_subscription_id`] = subscription.id;
+    patch[`${product}_stripe_subscription_status`] = subscription.status;
+    patch[`${product}_stripe_price_id`] = priceId;
+    if (DOWNGRADE_STATUSES.has(subscription.status)) {
+      patch[`${product}_plan`] = "trial";
+    } else if (plan) {
+      patch[`${product}_plan`] = plan;
+    }
+  } else {
+    // No product tag or price match at all — legacy single-product
+    // subscription. Keep writing the legacy columns so old orgs don't lose
+    // their plan.
+    patch.stripe_subscription_id = subscription.id;
+    patch.stripe_subscription_status = subscription.status;
+    patch.stripe_price_id = priceId;
+    if (DOWNGRADE_STATUSES.has(subscription.status)) {
+      patch.plan = "trial";
+    }
   }
 
   const query = db.from("organizations").update(patch);

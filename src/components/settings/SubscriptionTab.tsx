@@ -13,7 +13,7 @@ import {
   useCreateCheckoutSession,
   useCreatePortalSession,
 } from "@/lib/hooks/use-billing";
-import type { BillablePlan } from "@/lib/stripe/plans";
+import type { BillablePlan, Product } from "@/lib/stripe/plans";
 
 const ACTIVE_STATUSES = new Set(["trialing", "active", "past_due"]);
 
@@ -34,10 +34,10 @@ function formatPrice(amountCents: number | null, currency: string | null, interv
   return interval ? `${amount}/${interval}` : amount;
 }
 
-export function SubscriptionTab() {
-  const { data: billing, isLoading: billingLoading } = useBillingInfo();
-  const { data: plansData, isLoading: plansLoading } = usePlans();
-  const createCheckoutSession = useCreateCheckoutSession();
+function ProductSubscriptionCard({ product, label }: { product: Product; label: string }) {
+  const { data: billing, isLoading: billingLoading } = useBillingInfo(product);
+  const { data: plansData, isLoading: plansLoading } = usePlans(product);
+  const createCheckoutSession = useCreateCheckoutSession(product);
   const createPortalSession = useCreatePortalSession();
   const [checkoutClientSecret, setCheckoutClientSecret] = useState<string | null>(null);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
@@ -56,7 +56,7 @@ export function SubscriptionTab() {
       if ("updated" in result) {
         // Already had a live subscription — its price was changed in place,
         // no checkout needed.
-        toast.success("Plan updated");
+        toast.success(`${label} plan updated`);
         return;
       }
       setCheckoutClientSecret(result.clientSecret);
@@ -76,7 +76,7 @@ export function SubscriptionTab() {
 
   if (billingLoading || plansLoading) {
     return (
-      <div className="flex items-center justify-center py-16 text-slate-400">
+      <div className="flex items-center justify-center rounded-lg border bg-white py-16 text-slate-400 shadow-sm">
         <Loader2 className="h-5 w-5 animate-spin" />
       </div>
     );
@@ -88,10 +88,10 @@ export function SubscriptionTab() {
         <div className="flex items-start gap-3">
           <CreditCard className="mt-0.5 h-5 w-5 shrink-0 text-brand-500" />
           <div>
-            <p className="text-sm font-semibold text-brand-800">Billing isn&apos;t connected yet</p>
+            <p className="text-sm font-semibold text-brand-800">{label} billing isn&apos;t connected yet</p>
             <p className="mt-0.5 text-xs text-brand-600">
-              Add STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY, and
-              the STRIPE_PRICE_* variables to enable subscriptions. See .env.local.example.
+              Add the STRIPE_PRICE_{product.toUpperCase()}_* variables (starter/growth/enterprise) to
+              enable {label} subscriptions. See .env.local.example.
             </p>
           </div>
         </div>
@@ -106,7 +106,7 @@ export function SubscriptionTab() {
         <div className="flex flex-col gap-4 p-6 md:flex-row md:items-start md:justify-between">
           <div>
             <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
-              Current Plan
+              {label} — Current Plan
             </p>
             <h2 className="text-2xl font-bold capitalize text-slate-900">{billing?.plan ?? "trial"}</h2>
             {billing?.stripeSubscriptionStatus && (
@@ -166,7 +166,7 @@ export function SubscriptionTab() {
       <Dialog open={checkoutClientSecret != null} onOpenChange={(open) => !open && setCheckoutClientSecret(null)}>
         <DialogContent className="max-w-2xl p-0">
           <DialogHeader className="p-6 pb-0">
-            <DialogTitle>Subscribe</DialogTitle>
+            <DialogTitle>Subscribe to {label}</DialogTitle>
           </DialogHeader>
           <div className="max-h-[80vh] overflow-y-auto p-6 pt-2">
             {checkoutClientSecret && (
@@ -177,6 +177,28 @@ export function SubscriptionTab() {
           </div>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+// Equipt and Landscapt are billed as separate Stripe subscriptions under the
+// same org-level Stripe customer — subscribe to either one alone, or both.
+export function SubscriptionTab() {
+  return (
+    <div className="flex flex-col gap-8">
+      <div>
+        <h2 className="mb-3 text-sm font-semibold text-slate-900">Equipt</h2>
+        <ProductSubscriptionCard product="equipt" label="Equipt" />
+      </div>
+      <div>
+        <h2 className="mb-3 text-sm font-semibold text-slate-900">Landscapt</h2>
+        <ProductSubscriptionCard product="landscapt" label="Landscapt" />
+      </div>
+      <p className="text-xs text-slate-400">
+        Equipt and Landscapt are billed independently — subscribe to one product or to both.
+        Manage Billing opens Stripe&apos;s billing portal for the whole account, including any
+        subscriptions to both products.
+      </p>
     </div>
   );
 }

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getStripe, isStripeConfigured } from "@/lib/stripe/server";
-import { BILLABLE_PLANS, getPriceIdForPlan } from "@/lib/stripe/plans";
+import { BILLABLE_PLANS, getPriceIdForPlan, isProduct } from "@/lib/stripe/plans";
 import { logger } from "@/lib/logger";
 
 const log = logger.child("stripe billing plans");
@@ -16,10 +16,16 @@ export interface BillingPlanInfo {
   interval: string | null;
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const productParam = new URL(request.url).searchParams.get("product");
+  if (!productParam || !isProduct(productParam)) {
+    return NextResponse.json({ error: "product must be 'equipt' or 'landscapt'" }, { status: 400 });
+  }
+  const product = productParam;
 
   if (!isStripeConfigured()) {
     return NextResponse.json({
@@ -40,7 +46,7 @@ export async function GET() {
 
   const plans: BillingPlanInfo[] = await Promise.all(
     BILLABLE_PLANS.map(async (p) => {
-      const priceId = getPriceIdForPlan(p.plan);
+      const priceId = getPriceIdForPlan(product, p.plan);
       if (!priceId) {
         return { plan: p.plan, label: p.label, configured: false, priceId: null, amountCents: null, currency: null, interval: null };
       }
@@ -56,7 +62,7 @@ export async function GET() {
           interval: price.recurring?.interval ?? null,
         };
       } catch (err) {
-        log.error("failed to retrieve price for plan", { error: err, plan: p.plan, priceId });
+        log.error("failed to retrieve price for plan", { error: err, product, plan: p.plan, priceId });
         return { plan: p.plan, label: p.label, configured: false, priceId: null, amountCents: null, currency: null, interval: null };
       }
     })
