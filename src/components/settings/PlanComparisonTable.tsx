@@ -37,7 +37,10 @@ export function PlanComparisonTable() {
               </tr>
               {category.features.map((feature) => (
                 <tr key={feature.key} className="border-b last:border-0">
-                  <td className="px-4 py-3 text-slate-700">{feature.label}</td>
+                  <td className="px-4 py-3">
+                    <p className="font-medium text-slate-800">{feature.label}</p>
+                    <p className="mt-0.5 text-xs text-slate-500">{feature.description}</p>
+                  </td>
                   {BILLABLE_PLANS.map((p) => {
                     const value = feature.values[p.plan];
                     return (
