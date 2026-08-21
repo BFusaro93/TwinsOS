@@ -33,6 +33,9 @@ import type { ElementType } from "react";
 export interface DocStep {
   step: string;
   detail: string;
+  /** Optional in-app link rendered under the detail text (e.g. to a full reference page). */
+  href?: string;
+  linkLabel?: string;
 }
 
 export interface DocArticle {
@@ -958,6 +961,13 @@ export const DOC_SECTIONS: DocSection[] = [
             step: "Rotating the key",
             detail:
               "Clicking Regenerate immediately invalidates the old key — any Zaps still using it will need to be reconnected with the new one before they'll work again.",
+          },
+          {
+            step: "Full reference guide",
+            detail:
+              "Every trigger and action, with sample payloads and field-by-field explanations, lives on one dedicated page.",
+            href: "/settings/support/zapier-guide",
+            linkLabel: "Open the full Zapier guide",
           },
         ],
       },
