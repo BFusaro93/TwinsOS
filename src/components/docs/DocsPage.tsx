@@ -11,6 +11,7 @@ import {
   Menu,
   X,
 } from "lucide-react";
+import Link from "next/link";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -228,6 +229,15 @@ function ArticleView({
               <p className="mt-1.5 text-sm leading-relaxed text-slate-600">
                 {step.detail}
               </p>
+              {step.href && (
+                <Link
+                  href={step.href}
+                  className="mt-2 inline-flex items-center gap-1 text-sm font-medium text-brand-600 hover:text-brand-700"
+                >
+                  {step.linkLabel ?? "Learn more"}
+                  <ArrowRight className="h-3.5 w-3.5" />
+                </Link>
+              )}
             </div>
           </li>
         ))}
