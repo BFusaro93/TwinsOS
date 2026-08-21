@@ -932,7 +932,7 @@ export const DOC_SECTIONS: DocSection[] = [
           {
             step: "Generate your key",
             detail:
-              "Go to Master Account Settings > Integrations (not Equipt Settings or Landscapt Settings — this connection is account-wide and works regardless of your plan). Click Generate Key and copy it — it's shown once, in full. Paste it into the API Key field when connecting the Equipt/Landscapt app in Zapier.",
+              "Go to Master Account Settings > Integrations (not Equipt Settings or Landscapt Settings — this connection is account-wide and works regardless of your plan). Click Generate Key and copy it — it's shown once, in full. Paste it into the API Key field when connecting the Equipt/Landscapt app in Zapier. A link to the full, detailed guide below sits right under the key on that page.",
           },
           {
             step: "Landscapt triggers",
@@ -1104,7 +1104,7 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       },
       {
         q: "How do I connect Zapier?",
-        a: "Go to Master Account Settings > Integrations and click Generate Key — this is account-wide, not tied to Equipt or Landscapt specifically. Paste the key into Zapier's API Key field when connecting the app. Most Landscapt triggers fire instantly; most Equipt triggers check every few minutes instead. See the Connecting Zapier article under Documentation > Administration for the full list of triggers and actions.",
+        a: "Go to Master Account Settings > Integrations and click Generate Key — this is account-wide, not tied to Equipt or Landscapt specifically. Paste the key into Zapier's API Key field when connecting the app. Most Landscapt triggers fire instantly; most Equipt triggers check every few minutes instead. There's a full, detailed guide to every trigger and action linked right on that Integrations tab, under the API key.",
       },
     ],
   },
