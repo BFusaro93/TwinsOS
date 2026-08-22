@@ -1,23 +1,8 @@
 import { NextResponse } from "next/server";
-import { z } from "zod";
 import { adminClient, authenticateApiRequest } from "@/lib/api/auth";
 import { jsonError } from "@/lib/api/route-helpers";
 import { ASSET_SELECT, shapeAsset } from "../shape";
-
-const updateAssetSchema = z.object({
-  name: z.string().min(1).optional(),
-  assetTag: z.string().optional(),
-  equipmentNumber: z.string().optional(),
-  assetType: z.string().optional(),
-  status: z.enum(["active", "inactive", "in_shop", "out_of_service", "disposed"]).optional(),
-  make: z.string().optional(),
-  model: z.string().optional(),
-  year: z.number().int().optional(),
-  serialNumber: z.string().optional(),
-  division: z.string().optional(),
-  location: z.string().optional(),
-  notes: z.string().optional(),
-});
+import { updateAssetSchema } from "../validation";
 
 /** GET /api/v1/assets/[id] — fetch one asset. Requires scope "assets:read". */
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {

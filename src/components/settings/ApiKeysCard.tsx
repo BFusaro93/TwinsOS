@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
+import { ArrowRight } from "lucide-react";
 import { useApiKeys, useCreateApiKey, useRevokeApiKey } from "@/lib/hooks/use-api-keys";
 import { API_SCOPE_RESOURCES, scopeString, tierLabel } from "@/lib/api/scopes";
 import { Button } from "@/components/ui/button";
@@ -87,6 +89,16 @@ export function ApiKeysCard() {
         <Button size="sm" onClick={() => setCreateOpen(true)}>
           Create Key
         </Button>
+      </div>
+
+      <div className="border-b bg-slate-50 px-6 py-3">
+        <Link
+          href="/settings/support/api-docs"
+          className="inline-flex items-center gap-1 text-xs font-medium text-brand-600 hover:text-brand-700"
+        >
+          View the public API docs — every endpoint, scope, and request shape
+          <ArrowRight className="h-3 w-3" />
+        </Link>
       </div>
 
       <div className="px-6 py-5">

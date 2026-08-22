@@ -1,18 +1,8 @@
 import { NextResponse } from "next/server";
-import { z } from "zod";
 import { adminClient, authenticateApiRequest } from "@/lib/api/auth";
 import { jsonError, parsePagination } from "@/lib/api/route-helpers";
 import { WORK_ORDER_SELECT, shapeWorkOrder } from "./shape";
-
-const createWorkOrderSchema = z.object({
-  title: z.string().min(1),
-  assetId: z.string().uuid().optional(),
-  description: z.string().optional(),
-  priority: z.enum(["low", "medium", "high", "critical"]).optional(),
-  woType: z.enum(["reactive", "preventive"]).optional(),
-  dueDate: z.string().optional(),
-  category: z.string().optional(),
-});
+import { createWorkOrderSchema } from "./validation";
 
 /** GET /api/v1/work-orders — list the org's work orders. Requires scope "work_orders:read". */
 export async function GET(request: Request) {
