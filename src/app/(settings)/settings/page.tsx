@@ -8,6 +8,7 @@ import { OrganizationTab } from "@/components/settings/OrganizationTab";
 import { BrandingTab } from "@/components/settings/BrandingTab";
 import { SubscriptionTab } from "@/components/settings/SubscriptionTab";
 import { ZapierIntegrationCard } from "@/components/settings/ZapierIntegrationCard";
+import { ApiKeysCard } from "@/components/settings/ApiKeysCard";
 
 const TAB_KEYS = ["organization", "branding", "users", "subscription", "integrations"] as const;
 type TabKey = (typeof TAB_KEYS)[number];
@@ -74,6 +75,7 @@ function MasterAccountSettings() {
           <TabsContent value="integrations" className="mt-0">
             <div className="max-w-2xl">
               <ZapierIntegrationCard />
+              <ApiKeysCard />
             </div>
           </TabsContent>
         </div>
