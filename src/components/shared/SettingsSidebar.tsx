@@ -6,9 +6,11 @@ import { ArrowLeft, Leaf, UserCog, Wrench, Sprout, HelpCircle, Library } from "l
 import { cn } from "@/lib/utils";
 import { useUIStore, useCurrentUserStore } from "@/stores";
 import { useSettingsStore } from "@/stores/settings-store";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 import type { LucideIcon } from "lucide-react";
 
 interface SettingsNavItem {
+  key: "master" | "equipt" | "landscapt" | "support" | "docs";
   label: string;
   href: string;
   icon: LucideIcon;
@@ -17,11 +19,11 @@ interface SettingsNavItem {
 }
 
 const SETTINGS_NAV: SettingsNavItem[] = [
-  { label: "Master Account", href: "/settings", icon: UserCog, exact: true, description: "Users, organization, branding & billing" },
-  { label: "Equipt Settings", href: "/settings/equipt", icon: Wrench, description: "CMMS & purchasing configuration" },
-  { label: "Landscapt Settings", href: "/settings/landscapt", icon: Sprout, description: "CRM & field service configuration" },
-  { label: "Support", href: "/settings/support", icon: HelpCircle, description: "Guides, FAQ, and contact" },
-  { label: "Docs", href: "/settings/docs", icon: Library, description: "Step-by-step guides for every part of the platform" },
+  { key: "master",    label: "Master Account", href: "/settings", icon: UserCog, exact: true, description: "Users, organization, branding & billing" },
+  { key: "equipt",    label: "Equipt Settings", href: "/settings/equipt", icon: Wrench, description: "CMMS & purchasing configuration" },
+  { key: "landscapt", label: "Landscapt Settings", href: "/settings/landscapt", icon: Sprout, description: "CRM & field service configuration" },
+  { key: "support",   label: "Support", href: "/settings/support", icon: HelpCircle, description: "Guides, FAQ, and contact" },
+  { key: "docs",      label: "Docs", href: "/settings/docs", icon: Library, description: "Step-by-step guides for every part of the platform" },
 ];
 
 export function SettingsSidebar() {
@@ -29,6 +31,17 @@ export function SettingsSidebar() {
   const { sidebarCollapsed } = useUIStore();
   const { logoDataUrl, orgName } = useSettingsStore();
   const { currentUser } = useCurrentUserStore();
+  const { can, isAdmin } = usePermissions();
+
+  // Master Account is admin-only; Landscapt Settings needs the crm_settings
+  // permission (admins always pass both — see the pages themselves for the
+  // actual enforcement, this just keeps the nav from advertising links that
+  // would immediately bounce to an access-denied screen).
+  const visibleNav = SETTINGS_NAV.filter((item) => {
+    if (item.key === "master") return isAdmin || currentUser.role === "admin";
+    if (item.key === "landscapt") return can("crm_settings");
+    return true;
+  });
 
   return (
     <aside
@@ -64,7 +77,7 @@ export function SettingsSidebar() {
             Settings
           </p>
         )}
-        {SETTINGS_NAV.map((item) => {
+        {visibleNav.map((item) => {
           const isActive = item.exact
             ? pathname === item.href
             : pathname === item.href || pathname.startsWith(item.href + "/");

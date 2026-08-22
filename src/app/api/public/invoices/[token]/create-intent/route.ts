@@ -59,10 +59,18 @@ export async function POST(
 
   const { data: org } = await supabase
     .from("organizations")
-    .select("cc_processing_fee_enabled, cc_processing_fee_bps, cc_processing_fee_threshold_cents")
+    .select(
+      "cc_processing_fee_enabled, cc_processing_fee_bps, cc_processing_fee_threshold_cents, stripe_connect_account_id, stripe_connect_charges_enabled"
+    )
     .eq("id", invoice.org_id)
     .single();
   if (!org) return NextResponse.json({ error: "Organization not found" }, { status: 404 });
+  if (!org.stripe_connect_account_id || !org.stripe_connect_charges_enabled) {
+    return NextResponse.json(
+      { error: "This organization hasn't finished setting up card payments yet." },
+      { status: 400 }
+    );
+  }
 
   const { feeCents, totalChargeCents } = computeProcessingFee(
     {
@@ -75,22 +83,29 @@ export async function POST(
   );
 
   const stripe = getStripe();
-  const paymentIntent = await stripe.paymentIntents.create({
-    amount: totalChargeCents,
-    currency: "usd",
-    payment_method_types: ["card"],
-    metadata: {
-      source: "crm_invoice",
-      org_id: invoice.org_id,
-      invoice_id: invoice.id,
-      client_id: invoice.client_id,
-      balance_cents: String(invoice.balance_cents),
-      fee_cents: String(feeCents),
+  // Created directly on the org's connected account (a "direct charge") so the
+  // funds land in their own Stripe balance/payouts, never the platform's —
+  // same as every other crm_invoice payment entry point (see create-intent.ts).
+  const paymentIntent = await stripe.paymentIntents.create(
+    {
+      amount: totalChargeCents,
+      currency: "usd",
+      payment_method_types: ["card"],
+      metadata: {
+        source: "crm_invoice",
+        org_id: invoice.org_id,
+        invoice_id: invoice.id,
+        client_id: invoice.client_id,
+        balance_cents: String(invoice.balance_cents),
+        fee_cents: String(feeCents),
+      },
     },
-  });
+    { stripeAccount: org.stripe_connect_account_id }
+  );
 
   return NextResponse.json({
     clientSecret: paymentIntent.client_secret,
+    connectedAccountId: org.stripe_connect_account_id,
     balanceCents: invoice.balance_cents,
     feeCents,
     totalChargeCents,
