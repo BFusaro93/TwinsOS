@@ -33,10 +33,5 @@ Identified 2026-08-19 comparing TwinsOS's plan/feature matrix against homeworks.
 - [ ] Unscheduled work — a dedicated queue of accepted-estimate jobs not yet scheduled, for bulk scheduling
 - [ ] Multi-location support — one login spanning multiple org/business accounts (current model is strictly one org per user)
 
-## Committed — features already listed as included on the pricing page
-Marked `true` in [plan-features.ts](src/lib/stripe/plan-features.ts) for every plan ahead of being built, per an explicit product decision (not an oversight) — build before this is publicly marketing-facing, since the pricing page currently claims it's live.
-
-- [ ] Zapier integration — decided 2026-08-19 to include on all 4 plans, no add-on. Not built yet; no code, no design.
-
 ## Cleanup — dead ConditionField union members
 - [ ] `client_type`, `client_status`, `job_type` (as a condition field), `job_status`, `tag` (as a condition field), `property_city`, `revenue_ytd`, `last_job_date` in [crm-automations.ts](src/types/crm-automations.ts)'s `ConditionField` type are leftover "Legacy" entries — not in the `CONDITION_GROUPS` picklist (unselectable in the UI) and not referenced anywhere in the evaluator. Harmless but dead; safe to delete next time this file is touched.

@@ -58,6 +58,8 @@ import { useProducts, useBulkImportProducts } from "@/lib/hooks/use-products";
 import { downloadCSV, readCSVFile } from "@/lib/csv";
 import { autoMapColumns, remapRows } from "@/components/shared/ImportExportMenu";
 import { cn, formatCurrency } from "@/lib/utils";
+import { useCurrentUserStore } from "@/stores";
+import { AccessDenied } from "@/components/shared/AccessDenied";
 
 // ── CostingTab ────────────────────────────────────────────────────────────────
 
@@ -1312,8 +1314,6 @@ function IntegrationsTab() {
 }
 
 // ── Main EquiptSettingsTabs component ─────────────────────────────────────────
-// Rendered both at /settings/equipt (top-level Settings hub) and at /settings
-// inside Equipt's own dashboard shell — same component, same UI, no drift.
 
 const TAB_KEYS = [
   "customizations",
@@ -1326,7 +1326,29 @@ const TAB_KEYS = [
   "request_portal",
 ] as const;
 
+// Equipt has no per-permission role system like Landscapt's crm_roles — just
+// the flat admin/manager/technician/purchaser/viewer/requestor/crew tiers
+// (see Role in types/common.ts). Settings covers customizations, required
+// fields, approval flow config, costing method, and integrations — configuring
+// how the module works, not day-to-day CMMS/PO work — so it's limited to the
+// two tiers with organization-wide authority, same idea as Master Account
+// Settings being admin-only.
+const EQUIPT_SETTINGS_ROLES = new Set(["admin", "manager"]);
+
 export function EquiptSettingsTabs() {
+  const { currentUser, currentUserLoaded } = useCurrentUserStore();
+
+  if (currentUserLoaded && !EQUIPT_SETTINGS_ROLES.has(currentUser.role)) {
+    return (
+      <AccessDenied
+        title="No access to Equipt Settings"
+        message="Equipt Settings is limited to admins and managers. Ask an admin if you need something changed here."
+        href="/dashboard"
+        linkLabel="Go to Equipt"
+      />
+    );
+  }
+
   return (
     <div className="flex flex-col gap-0">
       <div className="px-4 pt-4 pb-0 md:px-6 md:pt-6">

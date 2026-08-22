@@ -33,12 +33,15 @@ export function SettingsSidebar() {
   const { currentUser } = useCurrentUserStore();
   const { can, isAdmin } = usePermissions();
 
-  // Master Account is admin-only; Landscapt Settings needs the crm_settings
-  // permission (admins always pass both — see the pages themselves for the
-  // actual enforcement, this just keeps the nav from advertising links that
-  // would immediately bounce to an access-denied screen).
+  // Master Account is admin-only; Equipt Settings is admin/manager (must
+  // match EQUIPT_SETTINGS_ROLES in EquiptSettingsTabs.tsx); Landscapt
+  // Settings needs the crm_settings permission (admins always pass all
+  // three — see the pages themselves for the actual enforcement, this just
+  // keeps the nav from advertising links that would immediately bounce to
+  // an access-denied screen).
   const visibleNav = SETTINGS_NAV.filter((item) => {
     if (item.key === "master") return isAdmin || currentUser.role === "admin";
+    if (item.key === "equipt") return currentUser.role === "admin" || currentUser.role === "manager";
     if (item.key === "landscapt") return can("crm_settings");
     return true;
   });

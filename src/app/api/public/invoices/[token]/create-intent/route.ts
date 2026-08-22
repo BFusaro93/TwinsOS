@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { getStripe, isStripeConfigured } from "@/lib/stripe/server";
 import { computeProcessingFee } from "@/lib/stripe/crm-payments";
+import { chargeIdempotencyKey } from "@/lib/stripe/idempotency";
 
 // Public, unauthenticated "pay without logging in" endpoint. Mirrors the
 // authenticated /api/crm/payments/create-intent exactly — same metadata
@@ -100,7 +101,10 @@ export async function POST(
         fee_cents: String(feeCents),
       },
     },
-    { stripeAccount: org.stripe_connect_account_id }
+    {
+      stripeAccount: org.stripe_connect_account_id,
+      idempotencyKey: chargeIdempotencyKey(["crm_invoice_public", invoice.id, totalChargeCents]),
+    }
   );
 
   return NextResponse.json({
