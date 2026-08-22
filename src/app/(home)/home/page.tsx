@@ -4,8 +4,9 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import { BarChart2, Wrench, NotepadText, Leaf, Truck, Users, ExternalLink, Settings, Camera } from "lucide-react";
+import { BarChart2, Wrench, NotepadText, Leaf, Truck, Users, ExternalLink, Settings, Camera, Sprout } from "lucide-react";
 import { useCurrentUserStore } from "@/stores";
+import { useSettingsStore } from "@/stores/settings-store";
 import { createClient } from "@/lib/supabase/client";
 import { isBillablePlan } from "@/lib/stripe/plans";
 
@@ -52,13 +53,24 @@ const EXTERNAL_BOX =
   "group flex flex-col items-center gap-4 rounded-2xl border-2 border-slate-200 bg-white p-8 shadow-sm transition-all duration-150 hover:border-slate-400 hover:shadow-lg";
 
 function CrewHome() {
+  const { logoDataUrl, orgName } = useSettingsStore();
+
   return (
     <div className="flex min-h-dvh flex-col items-center justify-center bg-slate-50 p-6">
       <div className="mb-10 flex flex-col items-center gap-3">
-        <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-500 shadow-md">
-          <Leaf className="h-7 w-7 text-white" />
-        </div>
-        <h1 className="text-3xl font-bold tracking-tight text-slate-900">Equipt</h1>
+        {logoDataUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={logoDataUrl}
+            alt={orgName}
+            className="h-14 w-14 rounded-2xl object-contain shadow-md"
+          />
+        ) : (
+          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-500 shadow-md">
+            <Leaf className="h-7 w-7 text-white" />
+          </div>
+        )}
+        <h1 className="text-3xl font-bold tracking-tight text-slate-900">Landscapt</h1>
         <p className="text-sm text-slate-500">What would you like to do?</p>
       </div>
 
@@ -91,6 +103,7 @@ function CrewHome() {
 
 export default function HomePage() {
   const { currentUser } = useCurrentUserStore();
+  const { logoDataUrl, orgName } = useSettingsStore();
   usePendingPlanRedirect();
 
   if (currentUser.role === "crew") {
@@ -101,15 +114,24 @@ export default function HomePage() {
     <div className="flex min-h-dvh flex-col items-center justify-center bg-slate-50 p-6">
       {/* Logo / header */}
       <div className="mb-12 flex flex-col items-center gap-3">
-        <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-500 shadow-md">
-          <Leaf className="h-7 w-7 text-white" />
-        </div>
-        <h1 className="text-3xl font-bold tracking-tight text-slate-900">Equipt</h1>
+        {logoDataUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={logoDataUrl}
+            alt={orgName}
+            className="h-14 w-14 rounded-2xl object-contain shadow-md"
+          />
+        ) : (
+          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-500 shadow-md">
+            <Leaf className="h-7 w-7 text-white" />
+          </div>
+        )}
+        <h1 className="text-3xl font-bold tracking-tight text-slate-900">Landscapt</h1>
         <p className="text-sm text-slate-500">Select a section to get started</p>
       </div>
 
       {/* Primary app boxes */}
-      <div className="grid w-full max-w-5xl grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid w-full max-w-6xl grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-5">
         <Link href="/dashboards/avb" className={INTERNAL_BOX}>
           <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-brand-50 text-brand-500 transition-colors group-hover:bg-brand-100">
             <BarChart2 className="h-8 w-8" />
@@ -127,6 +149,16 @@ export default function HomePage() {
           <div className="text-center">
             <p className="text-lg font-semibold text-slate-900">Equipt</p>
             <p className="mt-1 text-sm text-slate-500">Work orders, purchasing &amp; asset management</p>
+          </div>
+        </Link>
+
+        <Link href="/crm/home" className={INTERNAL_BOX}>
+          <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-brand-50 text-brand-500 transition-colors group-hover:bg-brand-100">
+            <Sprout className="h-8 w-8" />
+          </div>
+          <div className="text-center">
+            <p className="text-lg font-semibold text-slate-900">Landscapt</p>
+            <p className="mt-1 text-sm text-slate-500">Clients, estimates &amp; scheduling</p>
           </div>
         </Link>
 
