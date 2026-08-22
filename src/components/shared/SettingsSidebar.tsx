@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { useUIStore, useCurrentUserStore } from "@/stores";
 import { useSettingsStore } from "@/stores/settings-store";
 import { usePermissions } from "@/lib/hooks/use-permissions";
+import { LANDSCAPT_SETTINGS_ACCESS_KEYS } from "@/lib/permissions/settings-access";
 import type { LucideIcon } from "lucide-react";
 
 interface SettingsNavItem {
@@ -35,14 +36,15 @@ export function SettingsSidebar() {
 
   // Master Account is admin-only; Equipt Settings is admin/manager (must
   // match EQUIPT_SETTINGS_ROLES in EquiptSettingsTabs.tsx); Landscapt
-  // Settings needs the crm_settings permission (admins always pass all
-  // three — see the pages themselves for the actual enforcement, this just
-  // keeps the nav from advertising links that would immediately bounce to
-  // an access-denied screen).
+  // Settings needs any one of the 5 settings_access permissions (must match
+  // LandscaptSettingsTabs.tsx's own gate — admins always pass all three via
+  // usePermissions().can() — see the pages themselves for the actual
+  // enforcement, this just keeps the nav from advertising links that would
+  // immediately bounce to an access-denied screen).
   const visibleNav = SETTINGS_NAV.filter((item) => {
     if (item.key === "master") return isAdmin || currentUser.role === "admin";
     if (item.key === "equipt") return currentUser.role === "admin" || currentUser.role === "manager";
-    if (item.key === "landscapt") return can("crm_settings");
+    if (item.key === "landscapt") return LANDSCAPT_SETTINGS_ACCESS_KEYS.some(can);
     return true;
   });
 

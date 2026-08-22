@@ -95,6 +95,7 @@ import { NotificationsPage } from "@/components/settings/NotificationsPage";
 import { useConnectStatus, useStartConnectOnboarding, type ConnectStatus } from "@/lib/hooks/use-crm-card-payments";
 import { usePermissions } from "@/lib/hooks/use-permissions";
 import { AccessDenied } from "@/components/shared/AccessDenied";
+import { LANDSCAPT_SETTINGS_ACCESS_KEYS } from "@/lib/permissions/settings-access";
 
 // ── AccordionSection ──────────────────────────────────────────────────────────
 
@@ -2045,17 +2046,12 @@ function tabLabel(tab: TabKey): string {
 export function LandscaptSettingsTabs() {
   const { can, isLoading } = usePermissions();
 
-  // Landscapt has many CRM role types (sales, dispatch, accounting, field
-  // management, ...) with individually configurable permissions — unlike
-  // Master Account Settings, this isn't admin-only. It's gated by the
-  // existing crm_settings permission bit (PERMISSION_TABS.home.settings_access
-  // in crm-roles.ts), which admins always satisfy via usePermissions().can().
   if (isLoading) return null;
-  if (!can("crm_settings")) {
+  if (!LANDSCAPT_SETTINGS_ACCESS_KEYS.some(can)) {
     return (
       <AccessDenied
         title="No access to Landscapt Settings"
-        message="Your Landscapt role doesn't include Settings access. Ask an admin to grant the CRM Settings permission on your role if you need to change something here."
+        message="Your Landscapt role doesn't include Settings access. Ask an admin to grant a Settings Access permission (Account, Company, CRM, Scheduling, or Accounting Settings) on your role if you need to change something here."
         href="/crm"
         linkLabel="Go to Landscapt"
       />
