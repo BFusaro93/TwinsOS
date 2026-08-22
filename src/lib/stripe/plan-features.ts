@@ -132,6 +132,13 @@ export const PLAN_FEATURE_CATEGORIES: PlanFeatureCategory[] = [
         values: { starter: true, cmms: false, growth: true, enterprise: true },
       },
       {
+        key: "ai_estimate_drafting",
+        label: "AI-drafted estimate line items",
+        description: "Describe the work in plain language and get suggested line items from Claude, based on your services and past won estimates. Limited to 50 drafts per organization per day.",
+        highlight: true,
+        values: { starter: true, cmms: false, growth: true, enterprise: true },
+      },
+      {
         key: "dispatch",
         label: "Dispatch board & scheduling",
         description: "Daily crew scheduling view, modeled after Service Autopilot's dispatch board.",
