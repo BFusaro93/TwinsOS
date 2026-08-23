@@ -930,7 +930,7 @@ export function PaymentsList({ clientId }: Props) {
           title="Payments"
           description={!isLoading ? `${(payments ?? []).length} payments` : undefined}
           action={
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <ImportExportMenu
                 entityLabel="Payments"
                 templateColumns={PAYMENT_TEMPLATE_COLUMNS}

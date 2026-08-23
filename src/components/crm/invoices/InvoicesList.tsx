@@ -405,7 +405,7 @@ export function InvoicesList({ clientId }: Props) {
           description={!isLoading ? `${allInvoices.length} invoices` : undefined}
           action={
             <PermissionGate permission="acct_add_modify_invoices">
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <ImportExportMenu
                   entityLabel="Invoices"
                   templateColumns={INVOICE_TEMPLATE_COLUMNS}

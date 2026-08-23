@@ -270,7 +270,7 @@ export function EstimatesList({ clientId }: Props) {
           title="Estimates"
           description={!isLoading ? `${allEstimates.length} estimates${totalIncome > 0 ? ` · ${formatCurrency(totalIncome)} income · ${bpsToPercent(avgMarginBps)} avg margin` : ""}` : undefined}
           action={
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <ImportExportMenu
                 entityLabel="Estimates"
                 templateColumns={ESTIMATE_TEMPLATE_COLUMNS}

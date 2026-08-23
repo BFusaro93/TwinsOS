@@ -17,7 +17,7 @@ export default function AutomationsPage() {
         title="Automations"
         description="Build event-driven sequences that automatically act on your clients."
         action={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Button variant="outline" size="sm" className="gap-1.5" asChild>
               <Link href="/crm/communication/automations/activity">
                 <History className="h-4 w-4" />

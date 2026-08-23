@@ -202,7 +202,7 @@ export function JobsList() {
         title="Jobs"
         description="All scheduled and completed jobs"
         action={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Button size="sm" variant="outline" onClick={() => setNewJobOpen(true)}>
               <Plus className="mr-1.5 h-4 w-4" />
               Add Job

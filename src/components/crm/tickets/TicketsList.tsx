@@ -612,7 +612,7 @@ function TicketsListInner({ clientId, typeFilter, title = "Tickets", description
         title={title}
         description={description}
         action={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <ImportExportMenu
               entityLabel={title}
               templateColumns={TICKET_TEMPLATE_COLUMNS}
