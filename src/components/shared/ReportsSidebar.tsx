@@ -6,6 +6,7 @@ import { TrendingUp, ArrowLeft, Leaf, ShieldCheck, DollarSign, FileText, Calcula
 import { cn } from "@/lib/utils";
 import { useUIStore, useCurrentUserStore } from "@/stores";
 import { useSettingsStore } from "@/stores/settings-store";
+import { useIsInternalOrg } from "@/lib/hooks/use-internal-org";
 import type { LucideIcon } from "lucide-react";
 
 interface ReportsNavItem {
@@ -13,6 +14,7 @@ interface ReportsNavItem {
   href: string;
   icon: LucideIcon;
   hideFromCrew?: boolean;
+  internalOnly?: boolean;
 }
 
 interface ReportsNavSection {
@@ -24,11 +26,11 @@ const REPORTS_NAV: ReportsNavSection[] = [
   {
     label: "Dashboards",
     items: [
-      { label: "Financial",           href: "/dashboards/financials",  icon: DollarSign,  hideFromCrew: true},
-      { label: "Labor Efficiency",    href: "/dashboards/avb",         icon: TrendingUp },
-      { label: "Driver Safety Scores",href: "/dashboards/safety",      icon: ShieldCheck },
-      { label: "CRM Report",          href: "/dashboards/crm",         icon: FileText,    hideFromCrew: true},
-      { label: "KPI Scorecard",       href: "/dashboards/kpis",        icon: Target,      hideFromCrew: true},
+      { label: "Financial",           href: "/dashboards/financials",  icon: DollarSign,  hideFromCrew: true, internalOnly: true },
+      { label: "Labor Efficiency",    href: "/dashboards/avb",         icon: TrendingUp,                      internalOnly: true },
+      { label: "Driver Safety Scores",href: "/dashboards/safety",      icon: ShieldCheck,                     internalOnly: true },
+      { label: "CRM Report",          href: "/dashboards/crm",         icon: FileText,    hideFromCrew: true, internalOnly: true },
+      { label: "KPI Scorecard",       href: "/dashboards/kpis",        icon: Target,      hideFromCrew: true },
     ],
   },
 ];
@@ -40,6 +42,7 @@ export function ReportsSidebar() {
   const { currentUser } = useCurrentUserStore();
   const isAdmin = currentUser.role === "admin";
   const isCrew = currentUser.role === "crew";
+  const { isInternalOrg } = useIsInternalOrg();
 
   return (
     <aside
@@ -89,6 +92,7 @@ export function ReportsSidebar() {
             {section.items
               .filter((item) => item.href !== "/dashboards/financials" || isAdmin)
               .filter((item) => !item.hideFromCrew || !isCrew)
+              .filter((item) => !item.internalOnly || isInternalOrg)
               .map((item) => {
               const isActive =
                 pathname === item.href || pathname.startsWith(item.href + "/");
