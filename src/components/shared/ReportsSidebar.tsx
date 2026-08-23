@@ -2,11 +2,26 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { TrendingUp, ArrowLeft, Leaf, ShieldCheck, DollarSign, FileText, Calculator, Target, LayoutDashboard } from "lucide-react";
+import {
+  TrendingUp,
+  ArrowLeft,
+  Leaf,
+  ShieldCheck,
+  DollarSign,
+  FileText,
+  Target,
+  LayoutDashboard,
+  Wrench,
+  CalendarCheck,
+  BarChart2,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useUIStore, useCurrentUserStore } from "@/stores";
 import { useSettingsStore } from "@/stores/settings-store";
 import { useIsInternalOrg } from "@/lib/hooks/use-internal-org";
+import { useModuleAccess } from "@/lib/hooks/use-module-access";
+import { useDashboards } from "@/lib/hooks/use-report-center";
+import type { PlatformModule } from "@/lib/stripe/plans";
 import type { LucideIcon } from "lucide-react";
 
 interface ReportsNavItem {
@@ -15,26 +30,51 @@ interface ReportsNavItem {
   icon: LucideIcon;
   hideFromCrew?: boolean;
   internalOnly?: boolean;
+  requiresModule?: PlatformModule;
 }
 
-interface ReportsNavSection {
-  label: string;
-  items: ReportsNavItem[];
-}
-
-const REPORTS_NAV: ReportsNavSection[] = [
-  {
-    label: "Dashboards",
-    items: [
-      { label: "Overview",            href: "/dashboards",             icon: LayoutDashboard },
-      { label: "Financial",           href: "/dashboards/financials",  icon: DollarSign,  hideFromCrew: true, internalOnly: true },
-      { label: "Labor Efficiency",    href: "/dashboards/avb",         icon: TrendingUp,                      internalOnly: true },
-      { label: "Driver Safety Scores",href: "/dashboards/safety",      icon: ShieldCheck,                     internalOnly: true },
-      { label: "CRM Report",          href: "/dashboards/crm",         icon: FileText,    hideFromCrew: true, internalOnly: true },
-      { label: "KPI Scorecard",       href: "/dashboards/kpis",        icon: Target,      hideFromCrew: true },
-    ],
-  },
+const DASHBOARDS_NAV: ReportsNavItem[] = [
+  { label: "Overview",            href: "/dashboards",                 icon: LayoutDashboard },
+  { label: "Equipt Dashboard",    href: "/dashboards/equipt",          icon: Wrench,      requiresModule: "equipt" },
+  { label: "Landscapt My Day",    href: "/dashboards/myday",           icon: CalendarCheck, requiresModule: "landscapt" },
+  { label: "Reports Dashboard",   href: "/dashboards/landscapt-reports", icon: BarChart2, requiresModule: "landscapt" },
+  { label: "KPI Scorecard",       href: "/dashboards/kpis",            icon: Target,      hideFromCrew: true },
+  { label: "Financial",           href: "/dashboards/financials",      icon: DollarSign,  hideFromCrew: true, internalOnly: true },
+  { label: "Labor Efficiency",    href: "/dashboards/avb",             icon: TrendingUp,                      internalOnly: true },
+  { label: "Driver Safety Scores",href: "/dashboards/safety",          icon: ShieldCheck,                     internalOnly: true },
+  { label: "CRM Report",          href: "/dashboards/crm",             icon: FileText,    hideFromCrew: true, internalOnly: true },
 ];
+
+function NavLink({
+  href,
+  icon: Icon,
+  label,
+  sidebarCollapsed,
+  isActive,
+}: {
+  href: string;
+  icon: LucideIcon;
+  label: string;
+  sidebarCollapsed: boolean;
+  isActive: boolean;
+}) {
+  return (
+    <Link
+      href={href}
+      className={cn(
+        "flex items-center gap-3 px-4 py-2 text-sm transition-colors",
+        isActive
+          ? "border-l-2 border-brand-400 bg-white/5 text-brand-400"
+          : "border-l-2 border-transparent text-slate-300 hover:bg-white/5 hover:text-white",
+        sidebarCollapsed && "justify-center px-0"
+      )}
+      title={sidebarCollapsed ? label : undefined}
+    >
+      <Icon className="h-4 w-4 shrink-0" />
+      {!sidebarCollapsed && <span className="truncate">{label}</span>}
+    </Link>
+  );
+}
 
 export function ReportsSidebar() {
   const pathname = usePathname();
@@ -44,6 +84,15 @@ export function ReportsSidebar() {
   const isAdmin = currentUser.role === "admin";
   const isCrew = currentUser.role === "crew";
   const { isInternalOrg } = useIsInternalOrg();
+  const { allowed: hasEquipt } = useModuleAccess("equipt");
+  const { allowed: hasLandscapt } = useModuleAccess("landscapt");
+  const { data: customDashboards = [] } = useDashboards();
+
+  const hasModule = (module?: PlatformModule) =>
+    !module || (module === "equipt" ? hasEquipt : hasLandscapt);
+
+  const isActivePath = (href: string) =>
+    pathname === href || (href !== "/dashboards" && pathname.startsWith(href + "/"));
 
   return (
     <aside
@@ -83,44 +132,38 @@ export function ReportsSidebar() {
 
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto py-4">
-        {REPORTS_NAV.map((section) => (
-          <div key={section.label} className="mb-4">
-            {!sidebarCollapsed && (
-              <p className="mb-1 px-4 text-[10px] font-semibold uppercase tracking-widest text-slate-400">
-                {section.label}
-              </p>
-            )}
-            {section.items
-              .filter((item) => item.href !== "/dashboards/financials" || isAdmin)
-              .filter((item) => !item.hideFromCrew || !isCrew)
-              .filter((item) => !item.internalOnly || isInternalOrg)
-              .map((item) => {
-              const isActive =
-                pathname === item.href ||
-                (item.href !== "/dashboards" && pathname.startsWith(item.href + "/"));
-              const Icon = item.icon;
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={cn(
-                    "flex items-center gap-3 px-4 py-2 text-sm transition-colors",
-                    isActive
-                      ? "border-l-2 border-brand-400 bg-white/5 text-brand-400"
-                      : "border-l-2 border-transparent text-slate-300 hover:bg-white/5 hover:text-white",
-                    sidebarCollapsed && "justify-center px-0"
-                  )}
-                  title={sidebarCollapsed ? item.label : undefined}
-                >
-                  <Icon className="h-4 w-4 shrink-0" />
-                  {!sidebarCollapsed && (
-                    <span className="truncate">{item.label}</span>
-                  )}
-                </Link>
-              );
-            })}
-          </div>
-        ))}
+        <div className="mb-4">
+          {!sidebarCollapsed && (
+            <p className="mb-1 px-4 text-[10px] font-semibold uppercase tracking-widest text-slate-400">
+              Dashboards
+            </p>
+          )}
+          {DASHBOARDS_NAV.filter((item) => item.href !== "/dashboards/financials" || isAdmin)
+            .filter((item) => !item.hideFromCrew || !isCrew)
+            .filter((item) => !item.internalOnly || isInternalOrg)
+            .filter((item) => hasModule(item.requiresModule))
+            .map((item) => (
+              <NavLink
+                key={item.href}
+                href={item.href}
+                icon={item.icon}
+                label={item.label}
+                sidebarCollapsed={sidebarCollapsed}
+                isActive={isActivePath(item.href)}
+              />
+            ))}
+          {hasLandscapt &&
+            customDashboards.map((dashboard) => (
+              <NavLink
+                key={dashboard.id}
+                href={`/dashboards/custom/${dashboard.id}`}
+                icon={LayoutDashboard}
+                label={dashboard.name}
+                sidebarCollapsed={sidebarCollapsed}
+                isActive={isActivePath(`/dashboards/custom/${dashboard.id}`)}
+              />
+            ))}
+        </div>
       </nav>
 
       {/* Back to CMMS */}

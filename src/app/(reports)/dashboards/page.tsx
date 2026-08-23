@@ -61,7 +61,7 @@ export default function DashboardsHomePage() {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {hasEquipt && (
           <DashboardCard
-            href="/dashboard"
+            href="/dashboards/equipt"
             icon={Wrench}
             title="Equipt Dashboard"
             description="Work orders, purchasing & asset management"
@@ -70,7 +70,7 @@ export default function DashboardsHomePage() {
 
         {hasLandscapt && (
           <DashboardCard
-            href="/crm/home"
+            href="/dashboards/myday"
             icon={CalendarCheck}
             title="Landscapt My Day"
             description="Your daily schedule and tasks"
@@ -79,7 +79,7 @@ export default function DashboardsHomePage() {
 
         {hasLandscapt && (
           <DashboardCard
-            href="/crm/admin/reports"
+            href="/dashboards/landscapt-reports"
             icon={BarChart2}
             title="Reports Dashboard"
             description="Landscapt's built-in reporting dashboard"
@@ -128,7 +128,7 @@ export default function DashboardsHomePage() {
           customDashboards.map((dashboard) => (
             <DashboardCard
               key={dashboard.id}
-              href={`/crm/admin/reports/dashboards/${dashboard.id}`}
+              href={`/dashboards/custom/${dashboard.id}`}
               icon={LayoutDashboard}
               title={dashboard.name}
               description={
