@@ -48,7 +48,7 @@ export function ReportsHub() {
               value="dashboards"
               className="rounded-none border-b-2 border-transparent px-4 data-[state=active]:border-brand-500 data-[state=active]:bg-transparent data-[state=active]:shadow-none"
             >
-              Dashboards
+              Custom Dashboards
             </TabsTrigger>
             <TabsTrigger
               value="center"

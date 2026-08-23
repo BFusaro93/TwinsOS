@@ -78,7 +78,7 @@ function CrewHome() {
 
       {/* Primary tiles */}
       <div className="grid w-full max-w-lg grid-cols-1 gap-5 sm:grid-cols-2">
-        <Link href="/dashboards/kpis" className={CREW_BOX}>
+        <Link href="/dashboards" className={CREW_BOX}>
           <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-brand-50 text-brand-500 transition-colors group-hover:bg-brand-100">
             <BarChart2 className="h-8 w-8" />
           </div>
@@ -139,7 +139,7 @@ export default function HomePage() {
 
       {/* Primary app boxes */}
       <div className="grid w-full max-w-6xl grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-5">
-        <Link href="/dashboards/kpis" className={INTERNAL_BOX}>
+        <Link href="/dashboards" className={INTERNAL_BOX}>
           <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-brand-50 text-brand-500 transition-colors group-hover:bg-brand-100">
             <BarChart2 className="h-8 w-8" />
           </div>
@@ -168,7 +168,7 @@ export default function HomePage() {
             </div>
             <div className="text-center">
               <p className="text-lg font-semibold text-slate-900">Landscapt</p>
-              <p className="mt-1 text-sm text-slate-500">Clients, estimates, scheduling &amp; invoicing</p>
+              <p className="mt-1 text-sm text-slate-500">Clients, estimating, scheduling &amp; invoicing</p>
             </div>
           </Link>
         )}

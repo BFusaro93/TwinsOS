@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { TrendingUp, ArrowLeft, Leaf, ShieldCheck, DollarSign, FileText, Calculator, Target } from "lucide-react";
+import { TrendingUp, ArrowLeft, Leaf, ShieldCheck, DollarSign, FileText, Calculator, Target, LayoutDashboard } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useUIStore, useCurrentUserStore } from "@/stores";
 import { useSettingsStore } from "@/stores/settings-store";
@@ -26,6 +26,7 @@ const REPORTS_NAV: ReportsNavSection[] = [
   {
     label: "Dashboards",
     items: [
+      { label: "Overview",            href: "/dashboards",             icon: LayoutDashboard },
       { label: "Financial",           href: "/dashboards/financials",  icon: DollarSign,  hideFromCrew: true, internalOnly: true },
       { label: "Labor Efficiency",    href: "/dashboards/avb",         icon: TrendingUp,                      internalOnly: true },
       { label: "Driver Safety Scores",href: "/dashboards/safety",      icon: ShieldCheck,                     internalOnly: true },
@@ -95,7 +96,8 @@ export function ReportsSidebar() {
               .filter((item) => !item.internalOnly || isInternalOrg)
               .map((item) => {
               const isActive =
-                pathname === item.href || pathname.startsWith(item.href + "/");
+                pathname === item.href ||
+                (item.href !== "/dashboards" && pathname.startsWith(item.href + "/"));
               const Icon = item.icon;
               return (
                 <Link
