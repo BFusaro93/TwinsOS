@@ -1748,11 +1748,11 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
 
   return (
     <>
-    <div className="grid min-h-[600px] bg-white px-3" style={{ gridTemplateColumns: "1fr 10px 1fr 10px 1fr" }}>
+    <div className="grid min-h-[600px] grid-cols-1 bg-white px-3 md:grid-cols-[1fr_10px_1fr_10px_1fr]">
       {/* Left — Jobs */}
       <div className="flex flex-col bg-white">
-        <div className="flex items-center justify-between bg-[#4a4a4a] px-4 py-2">
-          <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-y-1 bg-[#4a4a4a] px-4 py-2">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
             <span className="font-semibold text-sm text-white">Jobs</span>
             <span className="rounded-full bg-white/20 px-1.5 py-0.5 text-[10px] font-medium text-white">{(allJobs ?? []).length}</span>
             <span className="text-white/30 text-xs">|</span>
@@ -1910,12 +1910,12 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
       </div>
 
       {/* Divider column */}
-      <div className="flex justify-center bg-white"><div className="w-px h-full bg-slate-200" /></div>
+      <div className="hidden justify-center bg-white md:flex"><div className="w-px h-full bg-slate-200" /></div>
 
       {/* Middle — Accounting */}
       <div className="flex flex-col bg-white">
-        <div className="flex items-center justify-between bg-[#4a4a4a] px-4 py-2">
-          <div className="flex items-center gap-1.5">
+        <div className="flex flex-wrap items-center justify-between gap-y-1 bg-[#4a4a4a] px-4 py-2">
+          <div className="flex min-w-0 flex-wrap items-center gap-1.5">
             <span className="font-semibold text-sm text-white">Accounting</span>
             <button
               className="text-[11px] text-white/70 hover:text-white"
@@ -1981,14 +1981,14 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
       </div>
 
       {/* Divider column */}
-      <div className="flex justify-center bg-white"><div className="w-px h-full bg-slate-200" /></div>
+      <div className="hidden justify-center bg-white md:flex"><div className="w-px h-full bg-slate-200" /></div>
 
       {/* Right — Estimates + Contracts */}
       <div className="flex flex-col bg-white divide-y">
         {/* Estimates */}
         <div className="flex flex-col">
-          <div className="flex items-center justify-between bg-[#4a4a4a] px-4 py-2">
-            <div className="flex items-center gap-1.5">
+          <div className="flex flex-wrap items-center justify-between gap-y-1 bg-[#4a4a4a] px-4 py-2">
+            <div className="flex min-w-0 flex-wrap items-center gap-1.5">
               <span className="font-semibold text-sm text-white">Open Estimates</span>
               <span className="rounded-full bg-white/20 px-1.5 py-0.5 text-[10px] font-medium text-white">{openEstimates.length}</span>
               <button
@@ -2035,8 +2035,8 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
 
         {/* Contracts */}
         <div className="flex flex-col">
-          <div className="flex items-center justify-between bg-[#4a4a4a] px-4 py-2">
-            <div className="flex items-center gap-1.5">
+          <div className="flex flex-wrap items-center justify-between gap-y-1 bg-[#4a4a4a] px-4 py-2">
+            <div className="flex min-w-0 flex-wrap items-center gap-1.5">
               <span className="font-semibold text-sm text-white">Contracts</span>
               <span className="rounded-full bg-white/20 px-1.5 py-0.5 text-[10px] font-medium text-white">{(contracts ?? []).length}</span>
               <button className="text-[11px] text-white/70 hover:text-white" onClick={() => onSwitchTab?.("contracts")}>All</button>
@@ -3264,7 +3264,7 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
 
       {/* Sub-panels: Properties + Contacts + Office Notes */}
       <div className="border-b bg-slate-50/60 px-6 py-4">
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         {/* Properties */}
         <div className="rounded-lg border border-slate-200 bg-white px-4 py-3">
           <div className="mb-2 flex items-center justify-between">
