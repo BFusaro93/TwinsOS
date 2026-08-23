@@ -1,6 +1,7 @@
 "use client";
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import { useOrgList } from "@/lib/hooks/use-org-lists";
 import { fireAutomationTrigger } from "@/lib/automations/fire-trigger-client";
@@ -330,6 +331,40 @@ export function useAddClientProperty() {
         notes_to_crew: property.notesToCrew,
         is_master: false,
       });
+      if (error) throw error;
+    },
+    onSuccess: (_data, { clientId }) => {
+      qc.invalidateQueries({ queryKey: ["clients", clientId, "properties"] });
+    },
+  });
+}
+
+export function useUpdateClientProperty() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      id,
+      clientId,
+      property,
+    }: {
+      id: string;
+      clientId: string;
+      property: { name?: string; address?: string; city?: string; state?: string; zip?: string; gateCode?: string; notesToCrew?: string };
+    }) => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase as any)
+        .from("client_properties")
+        .update({
+          name: property.name,
+          address: property.address,
+          city: property.city,
+          state: property.state,
+          zip: property.zip,
+          gate_lock_code: property.gateCode,
+          notes_to_crew: property.notesToCrew,
+        })
+        .eq("id", id);
       if (error) throw error;
     },
     onSuccess: (_data, { clientId }) => {
@@ -982,6 +1017,9 @@ export function useAddClientTag() {
       qc.invalidateQueries({ queryKey: ["clients", clientId] });
       fireAutomationTrigger({ triggerType: "tag_added", clientId, matchValues: [tag] });
     },
+    onError: () => {
+      toast.error("Failed to add tag");
+    },
   });
 }
 
@@ -1001,6 +1039,9 @@ export function useRemoveClientTag() {
       qc.invalidateQueries({ queryKey: ["clients"] });
       qc.invalidateQueries({ queryKey: ["clients", clientId] });
       fireAutomationTrigger({ triggerType: "tag_removed", clientId, matchValues: [tag] });
+    },
+    onError: () => {
+      toast.error("Failed to remove tag");
     },
   });
 }
