@@ -56,7 +56,7 @@ export async function GET(req: NextRequest) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: profile } = await (supabase as any)
       .from("profiles")
-      .select("email, full_name, notification_prefs")
+      .select("email, name, notification_prefs")
       .eq("id", createdBy)
       .single();
 
@@ -79,7 +79,7 @@ export async function GET(req: NextRequest) {
     }).format((est.total_cents as number ?? 0) / 100);
 
     const html = buildExpiryEmail({
-      orgName, brandColor, repName: profile.full_name ?? profile.email,
+      orgName, brandColor, repName: profile.name ?? profile.email,
       clientName, estimateNum, validUntil, daysLeft, total: totalFormatted,
       estimateId: est.id as string,
     });

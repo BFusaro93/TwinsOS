@@ -44,6 +44,12 @@ export function NewVendorDialog({ open, onOpenChange, initialData, onCreated }: 
   const [notes, setNotes] = useState("");
   const [w9Status, setW9Status] = useState("");
   const [isActive, setIsActive] = useState(true);
+  // Not editable from this form (no Vendor Type / W9 date fields here) —
+  // preserved as-is so saving an edit doesn't clobber values set elsewhere
+  // (e.g. CSV import, or a future W9 document workflow).
+  const [vendorType, setVendorType] = useState<string | null>(null);
+  const [w9ReceivedDate, setW9ReceivedDate] = useState<string | null>(null);
+  const [w9ExpirationDate, setW9ExpirationDate] = useState<string | null>(null);
 
   const createVendor = useCreateVendor();
   const updateVendor = useUpdateVendor();
@@ -59,6 +65,9 @@ export function NewVendorDialog({ open, onOpenChange, initialData, onCreated }: 
       setNotes(initialData.notes ?? "");
       setW9Status(initialData.w9Status);
       setIsActive(initialData.isActive);
+      setVendorType(initialData.vendorType ?? null);
+      setW9ReceivedDate(initialData.w9ReceivedDate ?? null);
+      setW9ExpirationDate(initialData.w9ExpirationDate ?? null);
     }
   }, [open, initialData]);
 
@@ -75,6 +84,9 @@ export function NewVendorDialog({ open, onOpenChange, initialData, onCreated }: 
     setNotes("");
     setW9Status("");
     setIsActive(true);
+    setVendorType(null);
+    setW9ReceivedDate(null);
+    setW9ExpirationDate(null);
   }
 
   function handleSubmit(e: React.FormEvent) {
@@ -87,11 +99,11 @@ export function NewVendorDialog({ open, onOpenChange, initialData, onCreated }: 
       address: address || "",
       website: website || null,
       notes: notes || null,
-      vendorType: null,
+      vendorType,
       isActive,
       w9Status: (w9Status as Vendor["w9Status"]) || "not_requested",
-      w9ReceivedDate: null,
-      w9ExpirationDate: null,
+      w9ReceivedDate,
+      w9ExpirationDate,
     };
 
     if (isEditing && initialData) {

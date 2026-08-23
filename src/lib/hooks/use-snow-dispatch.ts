@@ -247,8 +247,9 @@ export function useSnowRouteStops(routeId: string) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
         .from("crm_snow_route_stops")
-        .select("*, crm_jobs(service_address, clients(display_name))")
+        .select("*, crm_jobs!inner(service_address, clients(display_name))")
         .eq("route_id", routeId)
+        .is("crm_jobs.deleted_at", null)
         .order("sort_order", { ascending: true });
       if (error) throw error;
       return (data.map(mapSnowRouteStop)) as SnowRouteStop[];

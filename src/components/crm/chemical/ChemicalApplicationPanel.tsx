@@ -109,22 +109,25 @@ function ApplicationRow({
     // employee's license was renewed/changed/revoked in the meantime.
     const applicatorChanged = (applicatorEmployeeId || null) !== (application.applicatorEmployeeId ?? null);
     const employee = applicatorChanged ? employees.find((e) => e.id === applicatorEmployeeId) : null;
-    save.mutate({
-      id: application.id,
-      jobId,
-      visitId,
-      productId: application.productId,
-      chemicalAmount: chemicalAmount ? parseFloat(chemicalAmount) : null,
-      solutionAmount: solutionAmount ? parseFloat(solutionAmount) : null,
-      unitOfMeasureId: unitOfMeasureId || null,
-      applicationMethodId: applicationMethodId || null,
-      targetIds,
-      areasTreatedIds,
-      used,
-      applicatorEmployeeId: applicatorEmployeeId || null,
-      ...(applicatorChanged && { applicatorLicenseNumber: employee?.applicatorLicense ?? null }),
-      notes: notes || null,
-    });
+    save.mutate(
+      {
+        id: application.id,
+        jobId,
+        visitId,
+        productId: application.productId,
+        chemicalAmount: chemicalAmount ? parseFloat(chemicalAmount) : null,
+        solutionAmount: solutionAmount ? parseFloat(solutionAmount) : null,
+        unitOfMeasureId: unitOfMeasureId || null,
+        applicationMethodId: applicationMethodId || null,
+        targetIds,
+        areasTreatedIds,
+        used,
+        applicatorEmployeeId: applicatorEmployeeId || null,
+        ...(applicatorChanged && { applicatorLicenseNumber: employee?.applicatorLicense ?? null }),
+        notes: notes || null,
+      },
+      { onError: () => toast.error("Failed to save chemical application") }
+    );
   }
 
   return (
@@ -323,32 +326,38 @@ export function ChemicalApplicationPanel({ jobId, visitId, propertyId }: Props) 
       }
     }
 
-    saveApplication.mutate({
-      jobId,
-      visitId,
-      productId: addingProductId,
-      used: true,
-      epaNumberSnapshot: selectedProduct?.epaRegistrationNumber ?? null,
-      reEntryIntervalSnapshot: selectedProduct?.reEntryInterval ?? null,
-      restrictedProductSnapshot: selectedProduct?.restrictedProduct ?? false,
-      ...(chemicalAmount !== undefined && { chemicalAmount }),
-      ...(unitOfMeasureId !== undefined && { unitOfMeasureId }),
-      ...(applicationMethodId !== undefined && { applicationMethodId }),
-    });
+    saveApplication.mutate(
+      {
+        jobId,
+        visitId,
+        productId: addingProductId,
+        used: true,
+        epaNumberSnapshot: selectedProduct?.epaRegistrationNumber ?? null,
+        reEntryIntervalSnapshot: selectedProduct?.reEntryInterval ?? null,
+        restrictedProductSnapshot: selectedProduct?.restrictedProduct ?? false,
+        ...(chemicalAmount !== undefined && { chemicalAmount }),
+        ...(unitOfMeasureId !== undefined && { unitOfMeasureId }),
+        ...(applicationMethodId !== undefined && { applicationMethodId }),
+      },
+      { onError: () => toast.error("Failed to add chemical") }
+    );
     setAddingProductId("");
   }
 
   function applyConditionsToAll() {
     applications.forEach((a) => {
-      saveApplication.mutate({
-        id: a.id,
-        jobId,
-        visitId,
-        temperature: temperature ? parseFloat(temperature) : null,
-        windSpeed: windSpeed ? parseFloat(windSpeed) : null,
-        windDirection: windDirection || null,
-        phLevel: phLevel ? parseFloat(phLevel) : null,
-      });
+      saveApplication.mutate(
+        {
+          id: a.id,
+          jobId,
+          visitId,
+          temperature: temperature ? parseFloat(temperature) : null,
+          windSpeed: windSpeed ? parseFloat(windSpeed) : null,
+          windDirection: windDirection || null,
+          phLevel: phLevel ? parseFloat(phLevel) : null,
+        },
+        { onError: () => toast.error(`Failed to update conditions for ${a.productName ?? "a chemical"}`) }
+      );
     });
   }
 

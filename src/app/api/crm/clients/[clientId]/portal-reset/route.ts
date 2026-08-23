@@ -28,6 +28,7 @@ export async function DELETE(
     .select("id, user_id")
     .eq("client_id", clientId)
     .eq("org_id", profile.org_id)
+    .is("deleted_at", null)
     .single() as { data: { id: string; user_id: string } | null };
 
   if (!portalUser) {

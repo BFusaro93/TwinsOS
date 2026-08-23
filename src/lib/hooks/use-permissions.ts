@@ -40,22 +40,24 @@ async function fetchUserPermissions(): Promise<{
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: employee } = await (supabase as any)
     .from("crm_employees")
-    .select("crm_role_id, crm_roles(name, permissions)")
+    .select("crm_role_id, crm_roles(name, permissions, deleted_at)")
     .eq("user_id", user.id)
     .is("deleted_at", null)
     .maybeSingle();
 
-  if (!employee?.crm_role_id) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const role = employee?.crm_roles as any;
+  // A soft-deleted role (crm_roles.deleted_at set) must stop granting access —
+  // the join above doesn't filter deleted_at itself, so treat it as unassigned.
+  if (!employee?.crm_role_id || !role || role.deleted_at) {
     return { permissions: {}, isAdmin, roleId: null, roleName: null, profileRole: profile?.role ?? null, hasEmployeeLink: !!employee };
   }
 
   return {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    permissions: (employee.crm_roles as any)?.permissions ?? {},
+    permissions: role.permissions ?? {},
     isAdmin,
     roleId: employee.crm_role_id,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    roleName: (employee.crm_roles as any)?.name ?? null,
+    roleName: role.name ?? null,
     profileRole: profile?.role ?? null,
     hasEmployeeLink: true,
   };

@@ -55,7 +55,7 @@ function mapClient(row: any): Client {
     isTaxable: row.is_taxable ?? true,
     salesTaxCode: row.sales_tax_code,
     salesRepId: row.sales_rep_id,
-    salesRepName: row.profiles?.full_name ?? null,
+    salesRepName: row.profiles?.name ?? null,
     source: row.source,
     referredBy: row.referred_by,
     referredByClientId: row.referred_by_client_id ?? null,
