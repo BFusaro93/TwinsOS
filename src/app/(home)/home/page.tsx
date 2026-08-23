@@ -4,12 +4,14 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import { BarChart2, Wrench, NotepadText, Leaf, Truck, Users, ExternalLink, Settings, Camera, Sprout } from "lucide-react";
+import { BarChart2, Wrench, NotepadText, Leaf, ExternalLink, Settings, Camera, Sprout } from "lucide-react";
 import { useCurrentUserStore } from "@/stores";
 import { useSettingsStore } from "@/stores/settings-store";
 import { createClient } from "@/lib/supabase/client";
 import { isBillablePlan } from "@/lib/stripe/plans";
 import { useModuleAccess, useAddonAccess } from "@/lib/hooks/use-module-access";
+import { useOrgSettings } from "@/lib/hooks/use-org-settings";
+import { parseHomeShortcuts, getHomeShortcutIcon } from "@/lib/home-shortcuts";
 
 /**
  * Picked a paid plan at signup instead of "start free trial"? Checkout can't
@@ -111,6 +113,8 @@ export default function HomePage() {
   const { allowed: hasEquipt } = useModuleAccess("equipt");
   const { allowed: hasLandscapt } = useModuleAccess("landscapt");
   const { allowed: hasJobPhotos } = useAddonAccess("job_photos");
+  const { data: orgSettings } = useOrgSettings();
+  const shortcuts = parseHomeShortcuts(orgSettings?.customizations);
   usePendingPlanRedirect();
 
   if (currentUser.role === "crew") {
@@ -210,41 +214,29 @@ export default function HomePage() {
           </div>
         </Link>
 
-        <a
-          href="https://launcher.myapps.microsoft.com/api/signin/f92a2fea-344f-41bc-9293-72562ec4ee57?tenantId=c32bfd53-52c9-4186-989f-1985ff7eb8ae"
-          target="_blank"
-          rel="noopener noreferrer"
-          className={EXTERNAL_BOX}
-        >
-          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-100 text-slate-500 transition-colors group-hover:bg-slate-200">
-            <Truck className="h-6 w-6" />
-          </div>
-          <div className="text-center">
-            <div className="flex items-center justify-center gap-1.5">
-              <p className="text-base font-semibold text-slate-700">Samsara</p>
-              <ExternalLink className="h-3.5 w-3.5 text-slate-400" />
-            </div>
-            <p className="mt-0.5 text-xs text-slate-400">Fleet &amp; driver safety</p>
-          </div>
-        </a>
-
-        <a
-          href="https://app.gusto.com/login"
-          target="_blank"
-          rel="noopener noreferrer"
-          className={EXTERNAL_BOX}
-        >
-          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-100 text-slate-500 transition-colors group-hover:bg-slate-200">
-            <Users className="h-6 w-6" />
-          </div>
-          <div className="text-center">
-            <div className="flex items-center justify-center gap-1.5">
-              <p className="text-base font-semibold text-slate-700">Gusto</p>
-              <ExternalLink className="h-3.5 w-3.5 text-slate-400" />
-            </div>
-            <p className="mt-0.5 text-xs text-slate-400">Payroll &amp; HR</p>
-          </div>
-        </a>
+        {shortcuts.map((shortcut) => {
+          const Icon = getHomeShortcutIcon(shortcut.icon);
+          return (
+            <a
+              key={shortcut.id}
+              href={shortcut.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={EXTERNAL_BOX}
+            >
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-100 text-slate-500 transition-colors group-hover:bg-slate-200">
+                <Icon className="h-6 w-6" />
+              </div>
+              <div className="text-center">
+                <div className="flex items-center justify-center gap-1.5">
+                  <p className="text-base font-semibold text-slate-700">{shortcut.name}</p>
+                  <ExternalLink className="h-3.5 w-3.5 text-slate-400" />
+                </div>
+                <p className="mt-0.5 text-xs text-slate-400">{shortcut.subtitle}</p>
+              </div>
+            </a>
+          );
+        })}
       </div>
     </div>
   );
