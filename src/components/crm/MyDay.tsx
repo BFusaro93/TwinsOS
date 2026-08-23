@@ -118,7 +118,7 @@ export function MyDay() {
       </div>
 
       {/* KPI cards */}
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {/* Open Tickets */}
         <div className="rounded-lg border bg-white p-4 shadow-sm">
           <div className="flex items-start justify-between mb-2">
@@ -199,7 +199,7 @@ export function MyDay() {
       <RevenueSnapshot />
 
       {/* Two-column content */}
-      <div className="grid grid-cols-[3fr_2fr] gap-4 flex-1">
+      <div className="grid grid-cols-1 md:grid-cols-[3fr_2fr] gap-4 flex-1">
         {/* Left column */}
         <div className="flex flex-col gap-4">
           {/* Open Tickets */}

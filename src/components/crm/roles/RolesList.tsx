@@ -17,7 +17,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Plus, ShieldCheck, Trash2 } from "lucide-react";
-import { PermissionGate } from "@/components/shared/PermissionGate";
+import { PermissionGate, useGate } from "@/components/shared/PermissionGate";
 import { toast } from "sonner";
 
 // ── permission section component ──────────────────────────────────────────────
@@ -186,17 +186,19 @@ function RoleDialog({
 
         {/* Permission tabs */}
         <Tabs defaultValue={tabKeys[0]} className="flex flex-1 flex-col overflow-hidden">
-          <TabsList className="shrink-0 border-b border-t bg-white rounded-none justify-start px-6 h-10 gap-0">
-            {tabKeys.map((tabKey) => (
-              <TabsTrigger
-                key={tabKey}
-                value={tabKey}
-                className="h-full rounded-none border-b-2 border-transparent px-5 py-0 text-sm data-[state=active]:border-brand-500 data-[state=active]:bg-transparent data-[state=active]:shadow-none"
-              >
-                {PERMISSION_TABS[tabKey].label}
-              </TabsTrigger>
-            ))}
-          </TabsList>
+          <div className="shrink-0 overflow-x-auto border-b border-t bg-white px-6">
+            <TabsList className="rounded-none justify-start h-10 gap-0 min-w-max">
+              {tabKeys.map((tabKey) => (
+                <TabsTrigger
+                  key={tabKey}
+                  value={tabKey}
+                  className="h-full rounded-none border-b-2 border-transparent px-5 py-0 text-sm data-[state=active]:border-brand-500 data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+                >
+                  {PERMISSION_TABS[tabKey].label}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </div>
 
           <div className="flex-1 overflow-auto px-6 py-4">
             {tabKeys.map((tabKey) => (
@@ -227,6 +229,8 @@ export function RolesList() {
   const { data: roles, isLoading } = useRoles(false);
   const { mutateAsync: update } = useUpdateRole();
   const { mutateAsync: deleteRole } = useDeleteRole();
+  const { can } = useGate();
+  const canManageRoles = can("allow_roles_access");
   const [filter, setFilter] = useState<ActiveFilter>("active");
   const [dialogRole, setDialogRole] = useState<CRMRole | "new" | null>(null);
 
@@ -329,8 +333,8 @@ export function RolesList() {
               filtered.map((role) => (
                 <tr
                   key={role.id}
-                  className="border-b hover:bg-slate-50 cursor-pointer"
-                  onClick={() => setDialogRole(role)}
+                  className={`border-b ${canManageRoles ? "cursor-pointer hover:bg-slate-50" : "cursor-default"}`}
+                  onClick={() => canManageRoles && setDialogRole(role)}
                 >
                   <td className="px-4 py-2.5" onClick={(e) => e.stopPropagation()}>
                     <input type="checkbox" className="rounded border-slate-300 accent-brand-500" />
@@ -356,12 +360,14 @@ export function RolesList() {
                     })}
                   </td>
                   <td className="px-4 py-2.5" onClick={(e) => e.stopPropagation()}>
-                    <button
-                      onClick={() => handleDelete(role)}
-                      className="text-slate-300 hover:text-red-500"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
+                    <PermissionGate permission="allow_roles_access">
+                      <button
+                        onClick={() => handleDelete(role)}
+                        className="text-slate-300 hover:text-red-500"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </PermissionGate>
                   </td>
                 </tr>
               ))

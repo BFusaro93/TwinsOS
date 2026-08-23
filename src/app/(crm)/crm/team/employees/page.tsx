@@ -66,7 +66,7 @@ export default function EmployeesPage() {
         title="Employees"
         description="Manage your team members, roles, and payroll info"
         action={
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             {viewToggle}
             <ImportExportMenu
               entityLabel="Employees"

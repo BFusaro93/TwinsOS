@@ -341,12 +341,16 @@ function ScheduleDialog({ open, schedule, onClose }: ScheduleDialogProps) {
       seasonEnd: form.seasonEnd || null,
       weekOfMonth: form.frequency === 'monthly' ? (form.weekOfMonth ?? 'first') : null,
     };
-    if (schedule) {
-      await updateSchedule.mutateAsync({ id: schedule.id, patch: payload });
-    } else {
-      await createSchedule.mutateAsync(payload);
+    try {
+      if (schedule) {
+        await updateSchedule.mutateAsync({ id: schedule.id, patch: payload });
+      } else {
+        await createSchedule.mutateAsync(payload);
+      }
+      onClose();
+    } catch {
+      toast.error(schedule ? "Failed to update schedule" : "Failed to create schedule");
     }
-    onClose();
   }
 
   const isBiWeekly = form.frequency === 'bi_weekly';
@@ -371,7 +375,7 @@ function ScheduleDialog({ open, schedule, onClose }: ScheduleDialogProps) {
           <DialogTitle>{schedule ? 'Edit Schedule' : 'Add Schedule'}</DialogTitle>
         </DialogHeader>
 
-        <div className="flex gap-5 pt-2">
+        <div className="flex flex-col md:flex-row gap-5 pt-2">
           {/* Left: form */}
           <form onSubmit={handleSubmit} className="flex-1 space-y-4">
             <div className="space-y-1.5">
@@ -458,7 +462,7 @@ function ScheduleDialog({ open, schedule, onClose }: ScheduleDialogProps) {
           </form>
 
           {/* Right: date preview */}
-          <div className="w-52 shrink-0 flex flex-col rounded-lg border overflow-hidden self-start">
+          <div className="w-full md:w-52 md:shrink-0 flex flex-col rounded-lg border overflow-hidden self-start">
             <div className="text-white text-xs font-semibold px-3 py-2 flex items-center gap-1.5" style={{ backgroundColor: brandColor }}>
               <CalendarDays className="h-3.5 w-3.5" /> Upcoming Dates
             </div>
@@ -525,13 +529,21 @@ export default function SchedulesPage() {
   function handleClose() { setDialogOpen(false); setEditing(null); }
 
   async function handleToggleActive(s: CRMSchedule) {
-    await updateSchedule.mutateAsync({ id: s.id, patch: { isActive: !s.isActive } });
+    try {
+      await updateSchedule.mutateAsync({ id: s.id, patch: { isActive: !s.isActive } });
+    } catch {
+      toast.error("Failed to update schedule");
+    }
   }
 
   async function handleConfirmDelete() {
     if (!deleteTarget) return;
-    await deleteSchedule.mutateAsync(deleteTarget.id);
-    setDeleteTarget(null);
+    try {
+      await deleteSchedule.mutateAsync(deleteTarget.id);
+      setDeleteTarget(null);
+    } catch {
+      toast.error("Failed to delete schedule");
+    }
   }
 
   return (
@@ -581,7 +593,7 @@ export default function SchedulesPage() {
         </div>
       </div>
 
-      <div className="rounded-lg border border-slate-200 overflow-hidden">
+      <div className="rounded-lg border border-slate-200 overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-slate-50 border-b border-slate-200">
             <tr>

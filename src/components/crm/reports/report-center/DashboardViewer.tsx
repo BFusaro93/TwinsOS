@@ -319,17 +319,19 @@ export function DashboardViewer({ dashboardId }: { dashboardId: string }) {
           className="flex flex-1 flex-col overflow-hidden"
         >
           {tabs.length > 1 && (
-            <TabsList className="h-10 w-fit justify-start gap-1 rounded-none border-b bg-transparent p-0">
-              {tabs.map((tab) => (
-                <TabsTrigger
-                  key={tab.id}
-                  value={tab.id}
-                  className="rounded-none border-b-2 border-transparent px-4 data-[state=active]:border-brand-500 data-[state=active]:bg-transparent data-[state=active]:shadow-none"
-                >
-                  {tab.name}
-                </TabsTrigger>
-              ))}
-            </TabsList>
+            <div className="overflow-x-auto border-b">
+              <TabsList className="h-10 min-w-max justify-start gap-1 rounded-none bg-transparent p-0">
+                {tabs.map((tab) => (
+                  <TabsTrigger
+                    key={tab.id}
+                    value={tab.id}
+                    className="rounded-none border-b-2 border-transparent px-4 data-[state=active]:border-brand-500 data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+                  >
+                    {tab.name}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            </div>
           )}
           {tabs.map((tab) => (
             <TabsContent key={tab.id} value={tab.id} className="mt-4 flex-1 overflow-auto">

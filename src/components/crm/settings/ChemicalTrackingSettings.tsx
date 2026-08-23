@@ -449,7 +449,7 @@ function NoticeEmailTemplatesEditor() {
       )}
 
       {!isLoading && templates.length > 0 && (
-        <div className="rounded-lg border border-slate-200 overflow-hidden">
+        <div className="rounded-lg border border-slate-200 overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-slate-50 text-xs text-slate-500 uppercase tracking-wide">
               <tr>

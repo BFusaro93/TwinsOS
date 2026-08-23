@@ -464,7 +464,7 @@ function SnowCrewAssignDialog({
                           className="rounded bg-slate-50 border px-2 py-1.5 group relative cursor-grab active:cursor-grabbing"
                         >
                           <p className="text-xs font-medium text-slate-700 truncate">{v.clientName ?? "—"}</p>
-                          <button onClick={() => reassign(v.id, null, v.jobId)} className="absolute top-1 right-1 hidden group-hover:flex text-[9px] text-slate-400 hover:text-red-500">✕</button>
+                          <button onClick={() => reassign(v.id, null, v.jobId)} className="absolute top-1 right-1 flex md:hidden md:group-hover:flex text-[9px] text-slate-400 hover:text-red-500">✕</button>
                         </div>
                       ))}
                     </div>

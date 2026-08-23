@@ -16,6 +16,7 @@ import {
   useUpdateClientContact,
   useDeleteClientContact,
   useAddClientProperty,
+  useUpdateClientProperty,
   useAddClientTag,
   useRemoveClientTag,
   useOrgTags,
@@ -108,7 +109,7 @@ import {
   Search,
   CreditCard,
 } from "lucide-react";
-import type { Client, ClientContact, ContactPhone, PhoneType } from "@/types/crm";
+import type { Client, ClientContact, ClientProperty, ContactPhone, PhoneType } from "@/types/crm";
 import type { CRMJob, CRMJobVisit, CRMJobService } from "@/types/crm-jobs";
 
 // Contact types — configurable via Settings in a future sprint
@@ -1451,11 +1452,28 @@ function ContactDialog({
 
 // ── AddPropertyDialog ─────────────────────────────────────────────────────────
 
-function AddPropertyDialog({ clientId, open, onOpenChange }: { clientId: string; open: boolean; onOpenChange: (o: boolean) => void }) {
-  const { mutateAsync: addProperty, isPending } = useAddClientProperty();
+function AddPropertyDialog({ clientId, open, onOpenChange, property }: { clientId: string; open: boolean; onOpenChange: (o: boolean) => void; property?: ClientProperty | null }) {
+  const isEditing = !!property;
+  const { mutateAsync: addProperty, isPending: isAdding } = useAddClientProperty();
+  const { mutateAsync: updateProperty, isPending: isUpdating } = useUpdateClientProperty();
+  const isPending = isAdding || isUpdating;
   const [form, setForm] = useState({
     name: "", address: "", city: "", state: "", zip: "", gateCode: "", notesToCrew: "",
   });
+
+  // Seed the form whenever the dialog opens (either for a new property, or to edit an existing one)
+  useEffect(() => {
+    if (!open) return;
+    setForm({
+      name: property?.name ?? "",
+      address: property?.address ?? "",
+      city: property?.city ?? "",
+      state: property?.state ?? "",
+      zip: property?.zip ?? "",
+      gateCode: property?.gateCode ?? "",
+      notesToCrew: property?.notesToCrew ?? "",
+    });
+  }, [open, property]);
 
   function patch(k: keyof typeof form, v: string) {
     setForm((p) => ({ ...p, [k]: v }));
@@ -1464,17 +1482,21 @@ function AddPropertyDialog({ clientId, open, onOpenChange }: { clientId: string;
   async function handleSave() {
     if (!form.address.trim() && !form.name.trim()) { toast.error("Address or name is required"); return; }
     try {
-      await addProperty({ clientId, property: { ...form } });
-      toast.success("Property added");
-      setForm({ name: "", address: "", city: "", state: "", zip: "", gateCode: "", notesToCrew: "" });
+      if (isEditing && property) {
+        await updateProperty({ id: property.id, clientId, property: { ...form } });
+        toast.success("Property updated");
+      } else {
+        await addProperty({ clientId, property: { ...form } });
+        toast.success("Property added");
+      }
       onOpenChange(false);
-    } catch { toast.error("Failed to add property"); }
+    } catch { toast.error(isEditing ? "Failed to update property" : "Failed to add property"); }
   }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
-        <DialogHeader><DialogTitle>Add Property</DialogTitle></DialogHeader>
+        <DialogHeader><DialogTitle>{isEditing ? "Edit Property" : "Add Property"}</DialogTitle></DialogHeader>
         <div className="grid gap-3 py-1">
           <div className="flex flex-col gap-1.5">
             <Label>Property Name / Label</Label>
@@ -2341,7 +2363,7 @@ function AllContactsModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="flex flex-col bg-white rounded-lg shadow-2xl w-[700px] max-h-[80vh]">
+      <div className="flex flex-col bg-white rounded-lg shadow-2xl w-[calc(100%-2rem)] mx-4 md:w-[700px] max-h-[80vh]">
         <div className="flex items-center justify-between border-b px-6 py-3">
           <h2 className="text-base font-semibold text-neutral-800">All Contacts</h2>
           <div className="flex items-center gap-3">
@@ -2408,6 +2430,95 @@ function AllContactsModal({
   );
 }
 
+function AllPropertiesModal({
+  properties,
+  onClose,
+  onOpenProperty,
+  onAddProperty,
+}: {
+  properties: ClientProperty[];
+  onClose: () => void;
+  onOpenProperty: (p: ClientProperty) => void;
+  onAddProperty: () => void;
+}) {
+  const [search, setSearch] = useState("");
+
+  const filtered = properties.filter((p) => {
+    if (!search.trim()) return true;
+    const q = search.toLowerCase();
+    return (
+      (p.name ?? "").toLowerCase().includes(q) ||
+      (p.address ?? "").toLowerCase().includes(q) ||
+      (p.city ?? "").toLowerCase().includes(q)
+    );
+  });
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+      <div className="flex flex-col bg-white rounded-lg shadow-2xl w-[calc(100%-2rem)] mx-4 md:w-[700px] max-h-[80vh]">
+        <div className="flex items-center justify-between border-b px-6 py-3">
+          <h2 className="text-base font-semibold text-neutral-800">All Properties</h2>
+          <div className="flex items-center gap-3">
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search name, address, city…"
+              className="text-xs border border-neutral-200 rounded px-2.5 py-1.5 w-56 focus:outline-none focus:ring-1 focus:ring-neutral-400"
+            />
+            <Button variant="outline" size="sm" className="h-7 px-2 text-xs" onClick={onAddProperty}>
+              <Plus className="mr-1 h-3 w-3" /> Add Property
+            </Button>
+            <button onClick={onClose} className="text-neutral-400 hover:text-neutral-600">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+
+        <div className="overflow-auto flex-1">
+          {filtered.length === 0 ? (
+            <div className="p-6 text-sm text-neutral-400 text-center">No properties found.</div>
+          ) : (
+            <table className="w-full text-xs">
+              <thead className="sticky top-0 bg-neutral-600 text-white">
+                <tr>
+                  <th className="px-4 py-2 text-left font-medium">Name</th>
+                  <th className="px-4 py-2 text-left font-medium">Address</th>
+                  <th className="px-4 py-2 text-left font-medium">City</th>
+                  <th className="px-4 py-2 text-left font-medium">State</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {filtered.map((p) => (
+                  <tr
+                    key={p.id}
+                    className="cursor-pointer hover:bg-neutral-50"
+                    onClick={() => onOpenProperty(p)}
+                  >
+                    <td className="px-4 py-2.5 font-medium text-neutral-800">
+                      {p.name ?? "—"}
+                      {p.isMaster && (
+                        <Badge variant="secondary" className="ml-1.5 text-[9px] h-4 px-1.5">Master</Badge>
+                      )}
+                    </td>
+                    <td className="px-4 py-2.5 text-neutral-600">{p.address ?? "—"}</td>
+                    <td className="px-4 py-2.5 text-neutral-600">{p.city ?? "—"}</td>
+                    <td className="px-4 py-2.5 text-neutral-600">{p.state ?? "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+
+        <div className="border-t px-6 py-2 text-xs text-neutral-400">
+          {filtered.length} propert{filtered.length !== 1 ? "ies" : "y"}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function AllAccountingModal({
   invoices,
   payments,
@@ -2456,7 +2567,7 @@ function AllAccountingModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="flex flex-col bg-white rounded-lg shadow-2xl w-[900px] max-h-[80vh]">
+      <div className="flex flex-col bg-white rounded-lg shadow-2xl w-[calc(100%-2rem)] mx-4 md:w-[900px] max-h-[80vh]">
         <div className="flex items-center justify-between border-b px-6 py-3">
           <h2 className="text-base font-semibold text-neutral-800">All Accounting</h2>
           <div className="flex items-center gap-3">
@@ -2555,7 +2666,7 @@ function AllEstimatesModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="flex flex-col bg-white rounded-lg shadow-2xl w-[900px] max-h-[80vh]">
+      <div className="flex flex-col bg-white rounded-lg shadow-2xl w-[calc(100%-2rem)] mx-4 md:w-[900px] max-h-[80vh]">
         <div className="flex items-center justify-between border-b px-6 py-3">
           <h2 className="text-base font-semibold text-neutral-800">All Estimates</h2>
           <div className="flex items-center gap-3">
@@ -2679,7 +2790,7 @@ function ClientAllVisitsModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="flex flex-col bg-white rounded-lg shadow-2xl w-[900px] max-h-[80vh]">
+      <div className="flex flex-col bg-white rounded-lg shadow-2xl w-[calc(100%-2rem)] mx-4 md:w-[900px] max-h-[80vh]">
         {/* Header */}
         <div className="flex items-center justify-between border-b px-6 py-3">
           <h2 className="text-base font-semibold text-neutral-800">{title}</h2>
@@ -2788,6 +2899,8 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
   const [editContact, setEditContact] = useState<ClientContact | null>(null);
   const [allContactsOpen, setAllContactsOpen] = useState(false);
   const [addPropertyOpen, setAddPropertyOpen] = useState(false);
+  const [editProperty, setEditProperty] = useState<ClientProperty | null>(null);
+  const [allPropertiesOpen, setAllPropertiesOpen] = useState(false);
   const [aerialMeasurementOpen, setAerialMeasurementOpen] = useState(false);
   const [linkParentOpen, setLinkParentOpen] = useState(false);
   const [newTicketOpen, setNewTicketOpen] = useState(false);
@@ -2851,7 +2964,7 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
     <div className="flex h-full flex-col overflow-y-auto">
       {/* Header */}
       <div className="border-b px-6 py-3">
-        <div className="flex items-stretch justify-between gap-4">
+        <div className="flex flex-col gap-4 md:flex-row md:items-stretch md:justify-between">
           {/* Left column — stretches to match balance card height */}
           <div className="min-w-0 flex-1 flex flex-col">
             {/* Name + status row */}
@@ -2947,9 +3060,9 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
             </div>
           </div>
 
-          <div className="flex flex-col items-end gap-2 shrink-0">
+          <div className="flex flex-col items-start gap-2 shrink-0 md:items-end">
             {/* Action buttons row */}
-            <div className="flex items-center gap-1.5">
+            <div className="flex flex-wrap items-center gap-1.5">
               {onExpandChange && (
                 <Button
                   variant="outline"
@@ -3163,7 +3276,7 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
             </span>
             <div className="flex items-center gap-1">
               {(properties ?? []).length > 0 && (
-                <button className="text-[10px] text-brand-600 hover:underline">All</button>
+                <button className="text-[10px] text-brand-600 hover:underline" onClick={() => setAllPropertiesOpen(true)}>All</button>
               )}
               <Button
                 variant="ghost"
@@ -3180,7 +3293,12 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
           ) : (
             <div className="space-y-1.5">
               {(properties ?? []).slice(0, 4).map((p) => (
-                <div key={p.id} className="flex items-center justify-between rounded border border-slate-200 bg-white px-2.5 py-1.5 text-xs shadow-sm">
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => setEditProperty(p)}
+                  className="flex w-full items-center justify-between rounded border border-slate-200 bg-white px-2.5 py-1.5 text-left text-xs shadow-sm hover:border-brand-300 hover:bg-brand-50/30"
+                >
                   <div className="min-w-0">
                     {p.name && <p className="text-[10px] font-medium text-slate-400 uppercase tracking-wide">{p.name}</p>}
                     <span className="truncate text-slate-700">
@@ -3189,10 +3307,16 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
                     </span>
                   </div>
                   <ChevronRight className="h-3 w-3 shrink-0 text-slate-300" />
-                </div>
+                </button>
               ))}
               {(properties ?? []).length > 4 && (
-                <p className="text-xs text-slate-400">+{(properties ?? []).length - 4} more</p>
+                <button
+                  type="button"
+                  className="text-xs text-brand-600 hover:underline"
+                  onClick={() => setAllPropertiesOpen(true)}
+                >
+                  +{(properties ?? []).length - 4} more
+                </button>
               )}
             </div>
           )}
@@ -3442,6 +3566,20 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
         />
       )}
       <AddPropertyDialog clientId={clientId} open={addPropertyOpen} onOpenChange={setAddPropertyOpen} />
+      <AddPropertyDialog
+        clientId={clientId}
+        open={!!editProperty}
+        onOpenChange={(o) => { if (!o) setEditProperty(null); }}
+        property={editProperty}
+      />
+      {allPropertiesOpen && (
+        <AllPropertiesModal
+          properties={properties ?? []}
+          onClose={() => setAllPropertiesOpen(false)}
+          onOpenProperty={(p) => { setAllPropertiesOpen(false); setEditProperty(p); }}
+          onAddProperty={() => { setAllPropertiesOpen(false); setAddPropertyOpen(true); }}
+        />
+      )}
       <AerialMeasurementDialog clientId={clientId} open={aerialMeasurementOpen} onOpenChange={setAerialMeasurementOpen} />
       <NewTicketDialog open={newTicketOpen} onOpenChange={setNewTicketOpen} defaultClientId={clientId} />
       <LinkParentDialog

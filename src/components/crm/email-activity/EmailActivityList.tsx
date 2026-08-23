@@ -286,7 +286,7 @@ export function EmailActivityList() {
       {/* White column filter bar */}
       <div className="flex items-center gap-1.5 border-b bg-white px-4 py-2">
         <span className="shrink-0 text-xs font-medium text-slate-500 mr-1">Select a Filter:</span>
-        <div className="flex items-center gap-1 overflow-x-auto">
+        <div className="flex min-w-0 items-center gap-1 overflow-x-auto">
           {COLUMN_FILTERS.map(({ key, label }) => (
             <button
               key={key}
@@ -325,8 +325,8 @@ export function EmailActivityList() {
       </div>
 
       {/* Dark actions bar */}
-      <div className="flex items-center justify-between bg-[#4a4a4a] px-4 py-2">
-        <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-y-2 bg-[#4a4a4a] px-4 py-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-2 gap-y-1">
           {/* Actions dropdown */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -363,7 +363,7 @@ export function EmailActivityList() {
           </button>
 
           {/* Quick-filter tabs */}
-          <div className="ml-2 flex items-center gap-1 overflow-x-auto">
+          <div className="ml-2 flex min-w-0 items-center gap-1 overflow-x-auto">
             {QUICK_FILTERS.map(({ key, label }) => (
               <button
                 key={key}

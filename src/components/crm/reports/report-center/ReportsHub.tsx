@@ -36,32 +36,34 @@ export function ReportsHub() {
         description="Dashboards, the report catalog, and your saved custom analyses."
       />
       <Tabs value={active} onValueChange={setTab} className="flex flex-1 flex-col overflow-hidden">
-        <TabsList className="h-10 w-fit justify-start gap-1 rounded-none border-b bg-transparent p-0">
-          <TabsTrigger
-            value="dashboard"
-            className="rounded-none border-b-2 border-transparent px-4 data-[state=active]:border-brand-500 data-[state=active]:bg-transparent data-[state=active]:shadow-none"
-          >
-            Dashboard
-          </TabsTrigger>
-          <TabsTrigger
-            value="dashboards"
-            className="rounded-none border-b-2 border-transparent px-4 data-[state=active]:border-brand-500 data-[state=active]:bg-transparent data-[state=active]:shadow-none"
-          >
-            Dashboards
-          </TabsTrigger>
-          <TabsTrigger
-            value="center"
-            className="rounded-none border-b-2 border-transparent px-4 data-[state=active]:border-brand-500 data-[state=active]:bg-transparent data-[state=active]:shadow-none"
-          >
-            Report Center
-          </TabsTrigger>
-          <TabsTrigger
-            value="custom"
-            className="rounded-none border-b-2 border-transparent px-4 data-[state=active]:border-brand-500 data-[state=active]:bg-transparent data-[state=active]:shadow-none"
-          >
-            My Reports
-          </TabsTrigger>
-        </TabsList>
+        <div className="overflow-x-auto border-b">
+          <TabsList className="h-10 min-w-max justify-start gap-1 rounded-none bg-transparent p-0">
+            <TabsTrigger
+              value="dashboard"
+              className="rounded-none border-b-2 border-transparent px-4 data-[state=active]:border-brand-500 data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+            >
+              Dashboard
+            </TabsTrigger>
+            <TabsTrigger
+              value="dashboards"
+              className="rounded-none border-b-2 border-transparent px-4 data-[state=active]:border-brand-500 data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+            >
+              Dashboards
+            </TabsTrigger>
+            <TabsTrigger
+              value="center"
+              className="rounded-none border-b-2 border-transparent px-4 data-[state=active]:border-brand-500 data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+            >
+              Report Center
+            </TabsTrigger>
+            <TabsTrigger
+              value="custom"
+              className="rounded-none border-b-2 border-transparent px-4 data-[state=active]:border-brand-500 data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+            >
+              My Reports
+            </TabsTrigger>
+          </TabsList>
+        </div>
         <TabsContent value="dashboard" className="mt-4 flex-1 overflow-auto">
           <CRMReports hideHeader />
         </TabsContent>

@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Plus, Search, Pencil, Trash2 } from "lucide-react";
 import { usePackages, useDeletePackage } from "@/lib/hooks/use-packages";
 import type { CRMPackage } from "@/types/crm-packages";
+import { toast } from "sonner";
 
 interface Props {
   onAdd: () => void;
@@ -28,7 +29,7 @@ export function PackagesList({ onAdd, onEdit }: Props) {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3 gap-y-2">
         <div className="relative flex-1 max-w-xs">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
           <Input placeholder="Search packages…" value={search}
@@ -47,7 +48,7 @@ export function PackagesList({ onAdd, onEdit }: Props) {
         </Button>
       </div>
 
-      <div className="rounded-lg border bg-white shadow-sm overflow-hidden">
+      <div className="rounded-lg border bg-white shadow-sm overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b bg-slate-50 text-xs font-semibold text-slate-500 uppercase tracking-wide">
@@ -94,7 +95,13 @@ export function PackagesList({ onAdd, onEdit }: Props) {
                       <Pencil className="h-3.5 w-3.5 text-slate-400" />
                     </button>
                     <button
-                      onClick={() => { if (confirm(`Delete "${pkg.name}"?`)) deletePackage.mutate(pkg.id); }}
+                      onClick={() => {
+                        if (confirm(`Delete "${pkg.name}"?`)) {
+                          deletePackage.mutate(pkg.id, {
+                            onError: () => toast.error(`Failed to delete "${pkg.name}"`),
+                          });
+                        }
+                      }}
                       className="rounded p-1 hover:bg-red-50" title="Delete">
                       <Trash2 className="h-3.5 w-3.5 text-red-400" />
                     </button>

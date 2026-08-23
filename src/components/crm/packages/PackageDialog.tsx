@@ -128,6 +128,8 @@ function PackageServiceRow({
         default_b_hrs: next.defaultBHrs !== "" ? parseFloat(next.defaultBHrs) : null,
         default_rate_cents: next.defaultRate !== "" ? Math.round(parseFloat(next.defaultRate) * 100) : null,
       },
+    }, {
+      onError: () => toast.error("Failed to save visit"),
     });
   }
 
@@ -311,7 +313,7 @@ export function PackageDialog({ open, packageId, onClose }: Props) {
         {/* Details tab */}
         {tab === "details" && (
           <div className="flex flex-col gap-4 py-2">
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="flex flex-col gap-1">
                 <Label className="text-xs font-medium text-slate-600">Package Name *</Label>
                 <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. 7-Step Fertilizer" className="text-sm" />
@@ -395,7 +397,9 @@ export function PackageDialog({ open, packageId, onClose }: Props) {
                       svc={s}
                       services={services}
                       schedule={scheduleByServiceId.get(s.id) ?? null}
-                      onDelete={() => deleteSvc.mutate(s.id)}
+                      onDelete={() => deleteSvc.mutate(s.id, {
+                        onError: () => toast.error("Failed to delete visit"),
+                      })}
                     />
                   ))}
                 </tbody>

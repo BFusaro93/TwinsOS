@@ -18,6 +18,7 @@ import {
   type EstimateVersion,
 } from "@/lib/hooks/use-estimates";
 import { useCreateInvoiceFromEstimate } from "@/lib/hooks/use-invoices";
+import { useCRMServices } from "@/lib/hooks/use-crm-jobs";
 import { useApprovalFlow } from "@/lib/hooks/use-approval-flows";
 import { useSubmitForApproval } from "@/lib/hooks/use-approval-requests";
 import { ApprovalChain } from "@/components/shared/ApprovalChain";
@@ -348,6 +349,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
   const { data: overheadSettings } = useOverheadSettings();
   const { data: orgSettings } = useOrgSettings();
   const breakevenRateCents = getBreakevenRateCents(orgSettings?.customizations);
+  const { data: crmServices } = useCRMServices();
   const { mutateAsync: upsertLineItem } = useUpsertLineItem();
   const { mutateAsync: createInvoice, isPending: creatingInvoice } = useCreateInvoiceFromEstimate();
   const { data: changeRequests } = useEstimateChangeRequests(estimateId);
@@ -563,6 +565,15 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
       const existingCount = (estimate.lineItems ?? []).filter((li) => !li.deletedAt).length;
       await Promise.all(
         items.map((item, idx) => {
+          // Carry over the matched service's budget method / production rate
+          // (same as EstimateLineItemsGrid's addService) so an AI-drafted item
+          // for a production_rate service doesn't silently fall back to manual
+          // budgeting with 0 budgeted hours.
+          const matchedService = item.serviceId
+            ? (crmServices ?? []).find((s) => s.id === item.serviceId)
+            : undefined;
+          const budgetMethod = matchedService?.budgetMethod ?? "manual";
+          const productionRate = matchedService?.productionRateSqftPerHr ?? null;
           const computed = computeLineItem({
             calcType: 1,
             qty: item.qty,
@@ -572,8 +583,9 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
             costCents: 0,
             adjRateCents: null,
             unitType: item.unitType,
-            budgetMethod: "manual",
-          });
+            productionRateSqftPerHr: productionRate,
+            budgetMethod,
+          }, breakevenRateCents);
           return upsertLineItem({
             estimateId: estimate.id,
             item: {
@@ -585,11 +597,12 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
               qty: item.qty,
               rate_cents: item.rateCents,
               visits: item.visits,
-              cost_cents: 0,
+              cost_cents: computed.costCents,
               adj_rate_cents: null,
               sort_order: existingCount + idx,
               unit_type: item.unitType,
-              budget_method: "manual",
+              production_rate_sqft_per_hr: productionRate,
+              budget_method: budgetMethod,
               total_cents: computed.totalCents,
               budgeted_hours: computed.budgetedHours,
               total_budgeted_hours: computed.totalBudgetedHours,
@@ -667,7 +680,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
   return (
     <div className="flex h-full flex-col overflow-hidden">
       {/* ── top bar ─────────────────────────────────────────────────── */}
-      <div className="flex items-center justify-between border-b bg-white px-6 py-3 shadow-sm">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b bg-white px-6 py-3 shadow-sm">
         <div className="flex items-center gap-3">
           <button
             onClick={() => {
@@ -701,7 +714,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
           </div>
         </div>
 
-        <div className="flex items-center gap-1.5">
+        <div className="flex flex-wrap items-center gap-1.5 gap-y-2">
           <Button variant="outline" size="sm" className="h-8 text-xs"
             title="Mark this estimate's stage as Accepted — updates the estimate only, not individual line items"
             onClick={() => setWonLostDialog("accepted")}>
@@ -748,7 +761,8 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                   lineItems: (estimate.lineItems ?? [])
                     .filter((li) => !li.deletedAt && li.status !== "lost")
                     .map((li) => ({
-                      description: li.serviceName ?? li.serviceId ?? "Service",
+                      name: li.serviceName ?? li.serviceId ?? "Service",
+                      description: li.invoiceDesc ?? "",
                       qty: li.qty,
                       rateCents: li.rateCents,
                       totalCents: li.totalCents,
@@ -844,7 +858,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
       </div>
 
       {/* ── body ────────────────────────────────────────────────────── */}
-      <div className="flex min-h-0 flex-1 items-start gap-4 overflow-auto p-6">
+      <div className="flex min-h-0 flex-1 flex-col md:flex-row items-start gap-4 overflow-auto p-6">
 
         {/* ── left ── */}
         <div className="flex flex-1 flex-col gap-4 min-w-0 pb-3">
@@ -1205,6 +1219,14 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                       const existingCount = (estimate.lineItems ?? []).filter((li) => !li.deletedAt).length;
                       await Promise.all([
                         ...(tpl.items ?? []).map((item, idx) => {
+                          // Carry over the matched service's budget method / production
+                          // rate so a production_rate service applied via template doesn't
+                          // silently fall back to manual budgeting with 0 budgeted hours.
+                          const matchedService = item.serviceId
+                            ? (crmServices ?? []).find((s) => s.id === item.serviceId)
+                            : undefined;
+                          const budgetMethod = matchedService?.budgetMethod ?? "manual";
+                          const productionRate = matchedService?.productionRateSqftPerHr ?? null;
                           const computed = computeLineItem({
                             calcType: item.calcType,
                             qty: item.qty,
@@ -1214,7 +1236,8 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                             budgetedHours: item.budgetedHours,
                             costCents: 0,
                             adjRateCents: null,
-                            budgetMethod: "manual",
+                            productionRateSqftPerHr: productionRate,
+                            budgetMethod,
                           }, breakevenRateCents);
                           return upsertLineItem({
                             estimateId: estimate.id,
@@ -1230,7 +1253,8 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                               cost_cents: computed.costCents,
                               adj_rate_cents: null,
                               sort_order: existingCount + idx,
-                              budget_method: "manual",
+                              production_rate_sqft_per_hr: productionRate,
+                              budget_method: budgetMethod,
                               total_cents: computed.totalCents,
                               budgeted_hours: computed.budgetedHours,
                               total_budgeted_hours: computed.totalBudgetedHours,
@@ -1507,7 +1531,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
         </div>
 
         {/* ── right: summary panel ── */}
-        <div className="w-64 shrink-0 pb-3">
+        <div className="w-full md:w-64 md:shrink-0 pb-3">
           <EstimateSummaryPanel
             estimate={estimate}
             onRecalculate={handleSaveFinancials}
