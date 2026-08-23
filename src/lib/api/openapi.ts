@@ -3,6 +3,12 @@ import type { ZodTypeAny } from "zod";
 import { createClientSchema, updateClientSchema } from "@/app/api/v1/clients/validation";
 import { createWorkOrderSchema, updateWorkOrderSchema } from "@/app/api/v1/work-orders/validation";
 import { createAssetSchema, updateAssetSchema } from "@/app/api/v1/assets/validation";
+import { createVendorSchema, updateVendorSchema } from "@/app/api/v1/vendors/validation";
+import { createProductSchema, updateProductSchema } from "@/app/api/v1/products/validation";
+import { createProjectSchema, updateProjectSchema } from "@/app/api/v1/projects/validation";
+import { createPmScheduleSchema, updatePmScheduleSchema } from "@/app/api/v1/pm-schedules/validation";
+import { createPartSchema, updatePartSchema } from "@/app/api/v1/parts/validation";
+import { createRequisitionSchema } from "@/app/api/v1/requisitions/validation";
 import type { ApiScopeTier } from "@/lib/api/scopes";
 
 /**
@@ -105,6 +111,187 @@ const ENDPOINTS: EndpointDef[] = [
     scope: "assets:write:safe",
     agentTier: "write:safe",
     requestSchema: updateAssetSchema,
+    hasIdParam: true,
+  },
+
+  { method: "get", path: "/vendors", summary: "List vendors", scope: "vendors:read", agentTier: "read" },
+  {
+    method: "post",
+    path: "/vendors",
+    summary: "Create a vendor",
+    scope: "vendors:write:safe",
+    agentTier: "write:safe",
+    requestSchema: createVendorSchema,
+  },
+  {
+    method: "get",
+    path: "/vendors/{id}",
+    summary: "Get a vendor",
+    scope: "vendors:read",
+    agentTier: "read",
+    hasIdParam: true,
+  },
+  {
+    method: "patch",
+    path: "/vendors/{id}",
+    summary: "Update a vendor",
+    scope: "vendors:write:safe",
+    agentTier: "write:safe",
+    requestSchema: updateVendorSchema,
+    hasIdParam: true,
+  },
+
+  { method: "get", path: "/products", summary: "List products", scope: "products:read", agentTier: "read" },
+  {
+    method: "post",
+    path: "/products",
+    summary: "Create a product catalog entry",
+    scope: "products:write:safe",
+    agentTier: "write:safe",
+    requestSchema: createProductSchema,
+  },
+  {
+    method: "get",
+    path: "/products/{id}",
+    summary: "Get a product catalog entry",
+    scope: "products:read",
+    agentTier: "read",
+    hasIdParam: true,
+  },
+  {
+    method: "patch",
+    path: "/products/{id}",
+    summary: "Update a product catalog entry",
+    scope: "products:write:safe",
+    agentTier: "write:safe",
+    requestSchema: updateProductSchema,
+    hasIdParam: true,
+  },
+
+  { method: "get", path: "/projects", summary: "List projects", scope: "projects:read", agentTier: "read" },
+  {
+    method: "post",
+    path: "/projects",
+    summary: "Create a project",
+    scope: "projects:write:safe",
+    agentTier: "write:safe",
+    requestSchema: createProjectSchema,
+  },
+  {
+    method: "get",
+    path: "/projects/{id}",
+    summary: "Get a project",
+    scope: "projects:read",
+    agentTier: "read",
+    hasIdParam: true,
+  },
+  {
+    method: "patch",
+    path: "/projects/{id}",
+    summary: "Update a project",
+    scope: "projects:write:safe",
+    agentTier: "write:safe",
+    requestSchema: updateProjectSchema,
+    hasIdParam: true,
+  },
+
+  {
+    method: "get",
+    path: "/pm-schedules",
+    summary: "List PM schedules",
+    scope: "pm_schedules:read",
+    agentTier: "read",
+  },
+  {
+    method: "post",
+    path: "/pm-schedules",
+    summary: "Create a PM schedule",
+    scope: "pm_schedules:write:safe",
+    agentTier: "write:safe",
+    requestSchema: createPmScheduleSchema,
+  },
+  {
+    method: "get",
+    path: "/pm-schedules/{id}",
+    summary: "Get a PM schedule",
+    scope: "pm_schedules:read",
+    agentTier: "read",
+    hasIdParam: true,
+  },
+  {
+    method: "patch",
+    path: "/pm-schedules/{id}",
+    summary: "Update a PM schedule",
+    scope: "pm_schedules:write:safe",
+    agentTier: "write:safe",
+    requestSchema: updatePmScheduleSchema,
+    hasIdParam: true,
+  },
+
+  { method: "get", path: "/parts", summary: "List parts", scope: "parts:read", agentTier: "read" },
+  {
+    method: "post",
+    path: "/parts",
+    summary: "Create a part",
+    scope: "parts:write:safe",
+    agentTier: "write:safe",
+    requestSchema: createPartSchema,
+  },
+  {
+    method: "get",
+    path: "/parts/{id}",
+    summary: "Get a part",
+    scope: "parts:read",
+    agentTier: "read",
+    hasIdParam: true,
+  },
+  {
+    method: "patch",
+    path: "/parts/{id}",
+    summary: "Update a part (excludes quantityOnHand — only goods receipt changes stock)",
+    scope: "parts:write:safe",
+    agentTier: "write:safe",
+    requestSchema: updatePartSchema,
+    hasIdParam: true,
+  },
+
+  {
+    method: "get",
+    path: "/requisitions",
+    summary: "List requisitions",
+    scope: "requisitions:read",
+    agentTier: "read",
+  },
+  {
+    method: "post",
+    path: "/requisitions",
+    summary: "Create a draft requisition with line items",
+    scope: "requisitions:write:safe",
+    agentTier: "write:safe",
+    requestSchema: createRequisitionSchema,
+  },
+  {
+    method: "get",
+    path: "/requisitions/{id}",
+    summary: "Get a requisition with its line items",
+    scope: "requisitions:read",
+    agentTier: "read",
+    hasIdParam: true,
+  },
+
+  {
+    method: "get",
+    path: "/purchase-orders",
+    summary: "List purchase orders",
+    scope: "purchase_orders:read",
+    agentTier: "read",
+  },
+  {
+    method: "get",
+    path: "/purchase-orders/{id}",
+    summary: "Get a purchase order with its line items",
+    scope: "purchase_orders:read",
+    agentTier: "read",
     hasIdParam: true,
   },
 ];
