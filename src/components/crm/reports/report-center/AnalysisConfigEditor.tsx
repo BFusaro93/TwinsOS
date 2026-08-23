@@ -349,7 +349,7 @@ export function AnalysisConfigEditor({
                     </p>
                   )}
                   {aggregates.map((agg, i) => (
-                      <div key={i} className="flex items-center gap-2">
+                      <div key={i} className="flex flex-wrap items-center gap-2">
                         <Select
                           value={agg.fn}
                           onValueChange={(v) =>

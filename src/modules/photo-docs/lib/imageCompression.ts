@@ -39,14 +39,17 @@ export function fileToDataUrl(file: File): Promise<string> {
 }
 
 /**
- * Extract GPS coordinates from a File's EXIF data via the browser.
- * Returns null if unavailable (e.g. screenshots, non-GPS cameras).
+ * Get the device's current GPS position at time of upload, to tag where a
+ * photo was taken. Deliberately uses the browser Geolocation API rather than
+ * parsing the file's EXIF GPS tags — mobile browsers routinely strip EXIF
+ * GPS before JS can read it, and most photos here are captured live in the
+ * field, so "where the device is right now" is the more reliable signal.
+ * Returns null if permission is denied or geolocation is unavailable.
  */
 export async function extractGPS(
   file: File,
 ): Promise<{ lat: number; lng: number } | null> {
   try {
-    // Use Geolocation API as primary source (more reliable on mobile)
     if ("geolocation" in navigator) {
       return await new Promise((resolve) => {
         navigator.geolocation.getCurrentPosition(

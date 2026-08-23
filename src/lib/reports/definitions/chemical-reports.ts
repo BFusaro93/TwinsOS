@@ -32,6 +32,8 @@ export const CHEMICAL_REPORTS: PrebuiltReportDef[] = [
         "service_city",
         "chemical_name",
         "epa_registration_number",
+        "re_entry_interval",
+        "restricted_product",
         "chemical_amount",
         "solution_amount",
         "unit_of_measure",

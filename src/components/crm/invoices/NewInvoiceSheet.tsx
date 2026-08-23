@@ -21,7 +21,11 @@ export function NewInvoiceSheet({ open, onClose, defaultClientId }: Props) {
   // Lazy-initialized on mount (not at module scope) so it reflects the
   // actual viewport instead of whatever window.innerWidth was when this
   // chunk first happened to be evaluated.
-  const [width, setWidth] = useState(() => Math.max(MIN_WIDTH, Math.min(1100, typeof window !== "undefined" ? window.innerWidth * 0.75 : 1100)));
+  const [width, setWidth] = useState(() => {
+    const vw = typeof window !== "undefined" ? window.innerWidth : 1100;
+    return Math.min(vw, Math.max(MIN_WIDTH, Math.min(1100, vw * 0.75)));
+  });
+  const [canResize] = useState(() => typeof window !== "undefined" && window.innerWidth >= 768);
   const [invoiceId, setInvoiceId] = useState<string | null>(null);
   const [draftClientId, setDraftClientId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
@@ -124,11 +128,11 @@ export function NewInvoiceSheet({ open, onClose, defaultClientId }: Props) {
   return createPortal(
     <>
       <div className="fixed inset-0 z-40 bg-black/40" onClick={handleClose} />
-      <div className="fixed right-0 top-0 bottom-0 z-50 flex shadow-2xl" style={{ width }}>
+      <div className="fixed right-0 top-0 bottom-0 z-50 flex shadow-2xl max-w-[100vw]" style={{ width }}>
         {/* Drag handle + close */}
         <div
-          className="flex w-8 cursor-ew-resize flex-col items-center bg-slate-100 hover:bg-slate-200 transition-colors flex-shrink-0 border-r border-slate-200"
-          onMouseDown={startDrag}
+          className={`flex w-8 flex-col items-center bg-slate-100 hover:bg-slate-200 transition-colors flex-shrink-0 border-r border-slate-200 ${canResize ? "cursor-ew-resize" : ""}`}
+          onMouseDown={canResize ? startDrag : undefined}
         >
           <button
             className="mt-3 rounded p-1 text-slate-400 hover:bg-slate-300 hover:text-slate-700 transition-colors cursor-pointer"
@@ -138,9 +142,11 @@ export function NewInvoiceSheet({ open, onClose, defaultClientId }: Props) {
           >
             <X className="h-4 w-4" />
           </button>
-          <div className="flex flex-1 items-center">
-            <GripVertical className="h-4 w-4 text-slate-300" />
-          </div>
+          {canResize && (
+            <div className="flex flex-1 items-center">
+              <GripVertical className="h-4 w-4 text-slate-300" />
+            </div>
+          )}
         </div>
 
         <div className="flex flex-1 flex-col overflow-hidden bg-white">

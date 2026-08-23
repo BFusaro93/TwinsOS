@@ -930,7 +930,7 @@ export function PaymentsList({ clientId }: Props) {
           title="Payments"
           description={!isLoading ? `${(payments ?? []).length} payments` : undefined}
           action={
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <ImportExportMenu
                 entityLabel="Payments"
                 templateColumns={PAYMENT_TEMPLATE_COLUMNS}
@@ -970,7 +970,7 @@ export function PaymentsList({ clientId }: Props) {
       {/* Filter bar */}
       <div className="flex items-center gap-1.5 border-b bg-white px-4 py-2">
         <span className="shrink-0 text-xs text-slate-500 font-medium mr-1">Select a Filter:</span>
-        <div className="flex items-center gap-1 overflow-x-auto">
+        <div className="flex min-w-0 items-center gap-1 overflow-x-auto">
           {(["reference", "date", "client", "address", "method"] as FilterField[]).map((key) => {
             const label = { reference: "Reference #", date: "Date", client: "Client", address: "Address", method: "Payment Method" }[key];
             return (
@@ -1013,15 +1013,15 @@ export function PaymentsList({ clientId }: Props) {
       </div>
 
       {/* Dark actions bar */}
-      <div className="flex items-center justify-between bg-[#4a4a4a] px-4 py-2">
-        <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-y-2 bg-[#4a4a4a] px-4 py-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-2 gap-y-1">
           <button
             onClick={() => refetch()}
             className="flex h-7 w-7 items-center justify-center rounded border border-[#6a6a6a] bg-[#5a5a5a] text-white hover:bg-[#6a6a6a]"
           >
             <RotateCcw className="h-3.5 w-3.5" />
           </button>
-          <div className="ml-2 flex items-center gap-1">
+          <div className="ml-2 flex min-w-0 items-center gap-1 overflow-x-auto">
             {(["last30", "deleted"] as Tab[]).map((tab) => (
               <button
                 key={tab}

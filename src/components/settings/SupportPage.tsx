@@ -1,11 +1,13 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import Link from "next/link";
 import {
   LifeBuoy,
   Mail,
   BookOpen,
   ChevronDown,
+  ArrowRight,
   Search,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -49,6 +51,15 @@ function GuideCard({ guide }: { guide: Guide }) {
               <div>
                 <p className="text-sm font-medium text-slate-800">{s.step}</p>
                 <p className="mt-0.5 text-sm leading-relaxed text-slate-600">{s.detail}</p>
+                {s.href && (
+                  <Link
+                    href={s.href}
+                    className="mt-1.5 inline-flex items-center gap-1 text-sm font-medium text-brand-600 hover:text-brand-700"
+                  >
+                    {s.linkLabel ?? "Learn more"}
+                    <ArrowRight className="h-3.5 w-3.5" />
+                  </Link>
+                )}
               </div>
             </li>
           ))}

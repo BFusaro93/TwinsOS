@@ -78,7 +78,7 @@ export function ApiKeysCard() {
   const revokedKeys = (keys ?? []).filter((k) => k.revokedAt);
 
   return (
-    <div className="mt-4 rounded-xl border bg-white shadow-sm">
+    <div className="rounded-xl border bg-white shadow-sm">
       <div className="flex items-center justify-between border-b px-6 py-4">
         <div>
           <p className="text-sm font-semibold text-slate-900">Public API Keys</p>

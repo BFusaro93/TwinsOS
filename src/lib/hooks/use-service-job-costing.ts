@@ -58,7 +58,9 @@ export function useServiceJobCosting(serviceId: string) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       return (viewRes.data ?? []).map((r: any) => {
         const qty = Number(r.qty) || 0;
-        const rateCents = rateCentsById.get(r.id) ?? 0;
+        // r.id is the view's composite "visitId-jobServiceId" key — the rate
+        // lookup keys off crm_job_services.id, which is r.job_service_id.
+        const rateCents = rateCentsById.get(r.job_service_id) ?? 0;
         return {
           id: r.id,
           jobId: r.job_id,

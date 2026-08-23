@@ -440,6 +440,8 @@ export const REPORT_DATASETS: ReportDataset[] = [
       { key: "chemical_name", label: "Chemical", type: "text" },
       { key: "epa_registration_number", label: "EPA #", type: "text" },
       { key: "epa_number_snapshot", label: "EPA # (at time of use)", type: "text" },
+      { key: "re_entry_interval", label: "Re-Entry Interval", type: "text" },
+      { key: "restricted_product", label: "Restricted Product", type: "boolean" },
       { key: "chemical_amount", label: "Chemical Amount", type: "number", totalable: false },
       { key: "solution_amount", label: "Solution Amount", type: "number", totalable: false },
       { key: "unit_of_measure", label: "Unit", type: "text" },

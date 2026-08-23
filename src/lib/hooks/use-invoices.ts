@@ -179,7 +179,7 @@ export function useCreateInvoiceFromEstimate() {
       dueDate?: string;
       poNumber?: string | null;
       lineItems: {
-        description: string; qty: number; rateCents: number; totalCents: number;
+        name?: string | null; description: string; qty: number; rateCents: number; totalCents: number;
         discountCents?: number; discountType?: "percent" | "flat" | null; discountValue?: number | null;
       }[];
       subtotalCents: number;
@@ -224,6 +224,7 @@ export function useCreateInvoiceFromEstimate() {
         const { error: liErr } = await (supabase as any).from("crm_invoice_line_items").insert(
           lineItems.map((li, i) => ({
             invoice_id: inv.id,
+            name: li.name ?? null,
             description: li.description,
             qty: li.qty,
             rate_cents: li.rateCents,

@@ -12,6 +12,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Check, ChevronDown, ChevronsUpDown, X } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
+import { toast } from "sonner";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useDamageCase, useUpdateDamageCase, useDeleteDamageCaseExpense, useDeleteDamageCase } from "@/lib/hooks/use-damage-cases";
 import { usePurchaseOrders } from "@/lib/hooks/use-purchase-orders";
@@ -90,7 +91,10 @@ export function DamageCaseDetailPanel({ caseId, onClose }: Props) {
               {Object.entries(DAMAGE_CASE_STATUS_LABELS).map(([value, label]) => (
                 <DropdownMenuItem
                   key={value}
-                  onSelect={() => updateCase.mutate({ id: data.id, status: value as DamageCaseStatus })}
+                  onSelect={() => updateCase.mutate(
+                    { id: data.id, status: value as DamageCaseStatus },
+                    { onError: () => toast.error("Failed to update status") },
+                  )}
                   className={value === data.status ? "font-medium text-brand-600" : ""}
                 >
                   {label}
@@ -107,7 +111,14 @@ export function DamageCaseDetailPanel({ caseId, onClose }: Props) {
             variant="ghost"
             size="icon"
             className="h-8 w-8 text-slate-400 hover:bg-red-50 hover:text-red-500"
-            onClick={async () => { await deleteCase.mutateAsync(data.id); onClose?.(); }}
+            onClick={async () => {
+              try {
+                await deleteCase.mutateAsync(data.id);
+                onClose?.();
+              } catch {
+                toast.error("Failed to delete case");
+              }
+            }}
           >
             <Trash2 className="h-4 w-4" />
           </Button>
@@ -148,7 +159,10 @@ export function DamageCaseDetailPanel({ caseId, onClose }: Props) {
               size="icon"
               variant="ghost"
               className="h-6 w-6 ml-auto text-muted-foreground hover:text-destructive"
-              onClick={() => updateCase.mutate({ id: data.id, linkedPoId: null })}
+              onClick={() => updateCase.mutate(
+                { id: data.id, linkedPoId: null },
+                { onError: () => toast.error("Failed to unlink PO") },
+              )}
             >
               <X className="h-3.5 w-3.5" />
             </Button>
@@ -172,7 +186,10 @@ export function DamageCaseDetailPanel({ caseId, onClose }: Props) {
                         key={po.id}
                         value={`${po.poNumber} ${po.vendorName}`}
                         onSelect={() => {
-                          updateCase.mutate({ id: data.id, linkedPoId: po.id });
+                          updateCase.mutate(
+                            { id: data.id, linkedPoId: po.id },
+                            { onError: () => toast.error("Failed to link PO") },
+                          );
                           setPoPickerOpen(false);
                         }}
                       >
@@ -239,7 +256,10 @@ export function DamageCaseDetailPanel({ caseId, onClose }: Props) {
                         size="icon"
                         variant="ghost"
                         className="h-7 w-7 text-destructive hover:text-destructive"
-                        onClick={() => deleteExpense.mutate({ id: exp.id, damageCaseId: data.id })}
+                        onClick={() => deleteExpense.mutate(
+                          { id: exp.id, damageCaseId: data.id },
+                          { onError: () => toast.error("Failed to delete expense") },
+                        )}
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </Button>

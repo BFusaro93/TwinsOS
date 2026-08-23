@@ -64,7 +64,7 @@ export default function FormDetailPage({ params }: { params: Promise<{ id: strin
         title={form.name}
         description={form.description ?? "Form builder and responses"}
         action={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Button
               size="sm"
               variant="outline"

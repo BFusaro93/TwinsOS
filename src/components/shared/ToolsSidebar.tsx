@@ -6,6 +6,7 @@ import { ArrowLeft, Leaf, Calculator, PenLine, DollarSign, ShieldAlert, Snowflak
 import { cn } from "@/lib/utils";
 import { useUIStore, useCurrentUserStore } from "@/stores";
 import { useSettingsStore } from "@/stores/settings-store";
+import { useIsInternalOrg } from "@/lib/hooks/use-internal-org";
 import type { LucideIcon } from "lucide-react";
 
 interface ToolsNavItem {
@@ -14,6 +15,7 @@ interface ToolsNavItem {
   icon: LucideIcon;
   description: string;
   hideFromCrew?: boolean;
+  internalOnly?: boolean;
 }
 
 const TOOLS_NAV: ToolsNavItem[] = [
@@ -21,7 +23,7 @@ const TOOLS_NAV: ToolsNavItem[] = [
   { label: "Job Costing",       href: "/tools/job-costing",      icon: DollarSign,   description: "Track per-job material costs",        hideFromCrew: true },
   { label: "Damage Cases",      href: "/tools/damage-cases",     icon: ShieldAlert,  description: "Track property damage & warranty",    hideFromCrew: true },
   { label: "Calculators",       href: "/tools/calculators",      icon: Calculator,   description: "Material quantity calculators" },
-  { label: "Snow Pricing Calculator", href: "/tools/snow-calculator", icon: Snowflake, description: "Season & per-storm snow pricing" },
+  { label: "Snow Pricing Calculator", href: "/tools/snow-calculator", icon: Snowflake, description: "Season & per-storm snow pricing", internalOnly: true },
 ];
 
 export function ToolsSidebar() {
@@ -30,6 +32,7 @@ export function ToolsSidebar() {
   const { logoDataUrl, orgName } = useSettingsStore();
   const { currentUser } = useCurrentUserStore();
   const isCrew = currentUser.role === "crew";
+  const { isInternalOrg } = useIsInternalOrg();
 
   return (
     <aside
@@ -67,6 +70,7 @@ export function ToolsSidebar() {
         )}
         {TOOLS_NAV
           .filter((item) => !item.hideFromCrew || !isCrew)
+          .filter((item) => !item.internalOnly || isInternalOrg)
           .map((item) => {
             const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
             const Icon = item.icon;

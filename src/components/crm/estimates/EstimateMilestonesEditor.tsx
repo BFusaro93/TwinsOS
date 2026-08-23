@@ -70,7 +70,7 @@ function MilestoneRow({
       id: milestone.id,
       estimateId,
       patch: { milestoneType: nextType, milestoneValue, amountCents },
-    });
+    }, { onError: () => toast.error("Failed to save milestone") });
   }
 
   const amountCents = amountFor(type, toMilestoneValue(valueStr), totalCents);
@@ -80,7 +80,7 @@ function MilestoneRow({
       <Input
         value={name}
         onChange={(e) => setName(e.target.value)}
-        onBlur={() => { if (name !== milestone.name) update.mutate({ id: milestone.id, estimateId, patch: { name } }); }}
+        onBlur={() => { if (name !== milestone.name) update.mutate({ id: milestone.id, estimateId, patch: { name } }, { onError: () => toast.error("Failed to save milestone") }); }}
         disabled={locked}
         className="h-8 flex-1 text-sm"
         placeholder="e.g. Deposit"
@@ -156,7 +156,7 @@ function MilestoneRow({
             size="icon"
             variant="ghost"
             className="h-8 w-8 shrink-0 text-slate-400 hover:text-red-500"
-            onClick={() => del.mutate({ id: milestone.id, estimateId })}
+            onClick={() => del.mutate({ id: milestone.id, estimateId }, { onError: () => toast.error("Failed to delete milestone") })}
           >
             <Trash2 className="h-3.5 w-3.5" />
           </Button>
@@ -192,7 +192,7 @@ export function EstimateMilestonesEditor({
       milestoneValue: 0,
       amountCents: 0,
       sortOrder: milestones.length,
-    });
+    }, { onError: () => toast.error("Failed to add milestone") });
   }
 
   if (isLoading) return <p className="text-xs text-slate-400">Loading milestones…</p>;

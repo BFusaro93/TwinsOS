@@ -270,7 +270,7 @@ export function EstimatesList({ clientId }: Props) {
           title="Estimates"
           description={!isLoading ? `${allEstimates.length} estimates${totalIncome > 0 ? ` · ${formatCurrency(totalIncome)} income · ${bpsToPercent(avgMarginBps)} avg margin` : ""}` : undefined}
           action={
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <ImportExportMenu
                 entityLabel="Estimates"
                 templateColumns={ESTIMATE_TEMPLATE_COLUMNS}
@@ -309,7 +309,7 @@ export function EstimatesList({ clientId }: Props) {
       {/* ── 2. White column filter bar ── */}
       <div className="flex items-center gap-1.5 border-b bg-white px-4 py-2">
         <span className="shrink-0 text-xs text-slate-500 font-medium mr-1">Select a Filter:</span>
-        <div className="flex items-center gap-1 overflow-x-auto">
+        <div className="flex min-w-0 items-center gap-1 overflow-x-auto">
           {FILTER_BUTTONS.map(({ key, label }) => (
             <button
               key={key}
@@ -352,8 +352,8 @@ export function EstimatesList({ clientId }: Props) {
       </div>
 
       {/* ── 3. Dark actions bar with stage tabs + search ── */}
-      <div className="flex items-center justify-between bg-[#4a4a4a] px-4 py-2">
-        <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2 gap-y-2 bg-[#4a4a4a] px-4 py-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-2 gap-y-1">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
@@ -413,7 +413,7 @@ export function EstimatesList({ clientId }: Props) {
           >
             <RotateCcw className="h-3.5 w-3.5" />
           </button>
-          <div className="ml-2 flex items-center gap-1 overflow-x-auto">
+          <div className="ml-2 flex min-w-0 items-center gap-1 overflow-x-auto">
             {stageTabs.map(({ value, label }) => {
               const count = counts[value] ?? 0;
               return (

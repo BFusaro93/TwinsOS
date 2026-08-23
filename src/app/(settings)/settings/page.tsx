@@ -9,6 +9,7 @@ import { BrandingTab } from "@/components/settings/BrandingTab";
 import { SubscriptionTab } from "@/components/settings/SubscriptionTab";
 import { ZapierIntegrationCard } from "@/components/settings/ZapierIntegrationCard";
 import { ApiKeysCard } from "@/components/settings/ApiKeysCard";
+import { HomeShortcutsCard } from "@/components/settings/HomeShortcutsCard";
 
 const TAB_KEYS = ["organization", "branding", "users", "subscription", "integrations"] as const;
 type TabKey = (typeof TAB_KEYS)[number];
@@ -73,9 +74,10 @@ function MasterAccountSettings() {
           </TabsContent>
 
           <TabsContent value="integrations" className="mt-0">
-            <div className="max-w-2xl">
+            <div className="flex max-w-2xl flex-col gap-6">
               <ZapierIntegrationCard />
               <ApiKeysCard />
+              <HomeShortcutsCard />
             </div>
           </TabsContent>
         </div>

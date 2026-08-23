@@ -6,6 +6,7 @@ import { ArrowLeft, Leaf, UserCog, Wrench, Sprout, HelpCircle, Library } from "l
 import { cn } from "@/lib/utils";
 import { useUIStore, useCurrentUserStore } from "@/stores";
 import { useSettingsStore } from "@/stores/settings-store";
+import { useModuleAccess } from "@/lib/hooks/use-module-access";
 import type { LucideIcon } from "lucide-react";
 
 interface SettingsNavItem {
@@ -16,19 +17,26 @@ interface SettingsNavItem {
   description: string;
 }
 
-const SETTINGS_NAV: SettingsNavItem[] = [
-  { label: "Master Account", href: "/settings", icon: UserCog, exact: true, description: "Users, organization, branding & billing" },
-  { label: "Equipt Settings", href: "/settings/equipt", icon: Wrench, description: "CMMS & purchasing configuration" },
-  { label: "Landscapt Settings", href: "/settings/landscapt", icon: Sprout, description: "CRM & field service configuration" },
-  { label: "Support", href: "/settings/support", icon: HelpCircle, description: "Guides, FAQ, and contact" },
-  { label: "Docs", href: "/settings/docs", icon: Library, description: "Step-by-step guides for every part of the platform" },
-];
-
 export function SettingsSidebar() {
   const pathname = usePathname();
   const { sidebarCollapsed } = useUIStore();
   const { logoDataUrl, orgName } = useSettingsStore();
   const { currentUser } = useCurrentUserStore();
+  // Requisitions/POs, Vendors, and Products are shared with Landscapt-only
+  // orgs (no Equipt module) — this page is still fully reachable to them
+  // (nothing here is module-gated), but "Equipt Settings" reads as "not for
+  // me" and buries the approval-flow/costing config they DO need.
+  const { allowed: hasEquipt } = useModuleAccess("equipt");
+
+  const SETTINGS_NAV: SettingsNavItem[] = [
+    { label: "Master Account", href: "/settings", icon: UserCog, exact: true, description: "Users, organization, branding & billing" },
+    hasEquipt
+      ? { label: "Equipt Settings", href: "/settings/equipt", icon: Wrench, description: "CMMS & purchasing configuration" }
+      : { label: "Purchasing Settings", href: "/settings/equipt", icon: Wrench, description: "Vendors, requisition & PO approval flows, and inventory costing" },
+    { label: "Landscapt Settings", href: "/settings/landscapt", icon: Sprout, description: "CRM & field service configuration" },
+    { label: "Support", href: "/settings/support", icon: HelpCircle, description: "Guides, FAQ, and contact" },
+    { label: "Docs", href: "/settings/docs", icon: Library, description: "Step-by-step guides for every part of the platform" },
+  ];
 
   return (
     <aside

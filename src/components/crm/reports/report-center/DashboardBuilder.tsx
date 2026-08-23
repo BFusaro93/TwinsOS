@@ -287,13 +287,13 @@ export function DashboardBuilder({ dashboardId }: { dashboardId?: string }) {
             <Input
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="h-9 w-80 text-base font-semibold"
+              className="h-9 w-full sm:w-80 text-base font-semibold"
               placeholder="Untitled Dashboard"
             />
             <Input
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              className="h-8 w-80 text-sm"
+              className="h-8 w-full sm:w-80 text-sm"
               placeholder="Description (optional)"
             />
           </div>
@@ -755,10 +755,10 @@ function PanelEditor({ panel, tabUsesDateFilter, onSave, onCancel }: PanelEditor
             <CardTitle className="text-sm">7. Chart Fields</CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3">
               <span className="w-32 text-xs font-medium text-slate-600">Label Column</span>
               <Select value={labelColumn} onValueChange={setLabelColumn}>
-                <SelectTrigger className="h-8 w-64 text-sm">
+                <SelectTrigger className="h-8 w-full sm:w-64 text-sm">
                   <SelectValue placeholder="Choose a label column…" />
                 </SelectTrigger>
                 <SelectContent>

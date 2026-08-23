@@ -24,6 +24,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { ChevronDown, ExternalLink, MoreHorizontal, Plus, RotateCcw, Search, Trash2, X } from "lucide-react";
+import { toast } from "sonner";
 import type { CRMForm, FormStatus } from "@/types/crm-forms";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -60,11 +61,15 @@ function NewFormDialog({ open, onOpenChange }: NewFormDialogProps) {
 
   async function handleCreate() {
     if (!name.trim()) return;
-    const form = await createForm.mutateAsync({ name: name.trim(), description, status: "draft" });
-    onOpenChange(false);
-    setName("");
-    setDescription("");
-    router.push(`/crm/communication/forms/${form.id}`);
+    try {
+      const form = await createForm.mutateAsync({ name: name.trim(), description, status: "draft" });
+      onOpenChange(false);
+      setName("");
+      setDescription("");
+      router.push(`/crm/communication/forms/${form.id}`);
+    } catch {
+      toast.error("Failed to create form");
+    }
   }
 
   return (
@@ -129,13 +134,22 @@ function FormRowMenu({ form }: { form: CRMForm }) {
           <ExternalLink className="mr-2 h-3.5 w-3.5" />
           View Responses
         </DropdownMenuItem>
-        <DropdownMenuItem onSelect={() => updateForm.mutate({ status: toggleStatus as FormStatus })}>
+        <DropdownMenuItem
+          onSelect={() =>
+            updateForm.mutate(
+              { status: toggleStatus as FormStatus },
+              { onError: () => toast.error("Failed to update form status") }
+            )
+          }
+        >
           {toggleStatus === "published" ? "Publish" : "Unpublish"}
         </DropdownMenuItem>
         <DropdownMenuItem
           className="text-red-600"
           onSelect={() => {
-            if (confirm(`Delete "${form.name}"?`)) deleteForm.mutate(form.id);
+            if (confirm(`Delete "${form.name}"?`)) {
+              deleteForm.mutate(form.id, { onError: () => toast.error("Failed to delete form") });
+            }
           }}
         >
           <Trash2 className="mr-2 h-3.5 w-3.5" />
@@ -222,7 +236,7 @@ export function FormsList() {
       {/* White column filter bar */}
       <div className="flex items-center gap-1.5 border-b bg-white px-4 py-2">
         <span className="shrink-0 text-xs font-medium text-slate-500 mr-1">Select a Filter:</span>
-        <div className="flex items-center gap-1 overflow-x-auto">
+        <div className="flex min-w-0 items-center gap-1 overflow-x-auto">
           {COL_FILTERS.map(({ key, label }) => (
             <button
               key={key}
@@ -258,8 +272,8 @@ export function FormsList() {
       </div>
 
       {/* Dark actions bar */}
-      <div className="flex items-center bg-[#4a4a4a] px-4 py-2">
-        <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-y-2 bg-[#4a4a4a] px-4 py-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-2 gap-y-1">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button size="sm" variant="outline" className="h-7 bg-[#5a5a5a] border-[#6a6a6a] text-white hover:bg-[#6a6a6a] text-xs px-3">
@@ -281,7 +295,7 @@ export function FormsList() {
             <RotateCcw className="h-3.5 w-3.5" />
           </button>
 
-          <div className="ml-2 flex items-center gap-1">
+          <div className="ml-2 flex min-w-0 items-center gap-1 overflow-x-auto">
             {QUICK_FILTERS.map(({ key, label }) => (
               <button
                 key={key}
