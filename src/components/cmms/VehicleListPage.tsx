@@ -79,7 +79,7 @@ const VEHICLE_COLUMNS: ColumnDef[] = [
 export function VehicleListPage() {
   const { data: vehicles, isLoading } = useVehicles();
   const { mutateAsync: bulkImportVehicles } = useBulkImportVehicles();
-  const { data: assets } = useAssets();
+  const { data: assets, isLoading: isAssetsLoading } = useAssets();
   const { data: meters } = useMeters();
 
   // Build vehicleId → current miles from all "miles"/"mi" meters
@@ -168,7 +168,7 @@ export function VehicleListPage() {
     null;
 
   function handleBarcodeScan(raw: string) {
-    if (isLoading) {
+    if (isLoading || isAssetsLoading) {
       toast.error("Vehicles are still loading — try scanning again in a moment.");
       return;
     }

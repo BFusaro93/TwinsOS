@@ -6929,6 +6929,7 @@ export type Database = {
           ticket_number: number
           type: string
           updated_at: string
+          visible_to_client: boolean
         }
         Insert: {
           assigned_to?: string | null
@@ -6949,6 +6950,7 @@ export type Database = {
           ticket_number?: number
           type?: string
           updated_at?: string
+          visible_to_client?: boolean
         }
         Update: {
           assigned_to?: string | null
@@ -6969,6 +6971,7 @@ export type Database = {
           ticket_number?: number
           type?: string
           updated_at?: string
+          visible_to_client?: boolean
         }
         Relationships: [
           {

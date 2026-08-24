@@ -82,9 +82,11 @@ export async function processDueEnrollment(
       const waitConfig = (nextEvent.config as Record<string, number>) ?? {};
       const days = waitConfig.days ?? 0;
       const hours = waitConfig.hours ?? 0;
+      const minutes = waitConfig.minutes ?? 0;
       const d = new Date();
       d.setDate(d.getDate() + days);
       d.setHours(d.getHours() + hours);
+      d.setMinutes(d.getMinutes() + minutes);
       newFireAt = d.toISOString();
     }
     await adminClient

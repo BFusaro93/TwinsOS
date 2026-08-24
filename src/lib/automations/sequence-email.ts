@@ -243,14 +243,19 @@ export async function advanceEnrollmentPastStep(
   }
 
   if (nextEvent.event_type === "wait") {
-    const days = (nextEvent.config as Record<string, number>)?.days ?? 0;
+    const waitConfig = (nextEvent.config as Record<string, number>) ?? {};
+    const days = waitConfig.days ?? 0;
+    const hours = waitConfig.hours ?? 0;
+    const minutes = waitConfig.minutes ?? 0;
     const d = new Date();
     d.setDate(d.getDate() + days);
+    d.setHours(d.getHours() + hours);
+    d.setMinutes(d.getMinutes() + minutes);
     await supabase
       .from("crm_sequence_enrollments")
       .update({ next_event_position: nextEvent.position + 1, next_fire_at: d.toISOString(), updated_at: params.nowIso })
       .eq("id", params.enrollmentId);
-    return `advanced → wait ${days}d`;
+    return `advanced → wait ${days}d ${hours}h ${minutes}m`;
   }
 
   await supabase
