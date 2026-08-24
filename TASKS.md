@@ -38,5 +38,10 @@ Marked `true` in [plan-features.ts](src/lib/stripe/plan-features.ts) for every p
 
 - [ ] Zapier integration — decided 2026-08-19 to include on all 4 plans, no add-on. Not built yet; no code, no design.
 
+## Deferred — public API / MCP: estimate creation stays read-only
+Decided 2026-08-24 while scoping the MCP connector (built on top of the public REST API). Competing field-service CRMs (e.g. Homeworks) expose estimate creation to their MCP/API, letting an agent do things like "find every mowing customer without core aeration scheduled and send them an estimate" end-to-end. TwinsOS deliberately does not: `estimates` is read-only in both `/api/v1/estimates` and the MCP tool set, because estimate creation runs through the Aspire-style budget engine (production rates, labor burden, margin sliders — see [openapi.ts](src/lib/api/openapi.ts) and [estimates/route.ts](src/app/api/v1/estimates/route.ts)) and a direct-insert endpoint would bypass that math.
+
+- [ ] Scope and build a constrained "create estimate from template/service" tool/endpoint that calls the same calculation path the app's own estimate builder uses (not a raw table insert), so an agent could replicate the Homeworks-style bulk-estimate workflow without risking incorrect pricing. Needs a product decision on which inputs are safe to let an agent set (client, property, service, quantity) vs. what must stay app-computed (rates, margin, totals).
+
 ## Cleanup — dead ConditionField union members
 - [ ] `client_type`, `client_status`, `job_type` (as a condition field), `job_status`, `tag` (as a condition field), `property_city`, `revenue_ytd`, `last_job_date` in [crm-automations.ts](src/types/crm-automations.ts)'s `ConditionField` type are leftover "Legacy" entries — not in the `CONDITION_GROUPS` picklist (unselectable in the UI) and not referenced anywhere in the evaluator. Harmless but dead; safe to delete next time this file is touched.
