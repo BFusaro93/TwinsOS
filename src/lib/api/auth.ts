@@ -31,17 +31,17 @@ export type ApiAuthResult =
   | { ok: false; status: 401 | 403 | 429; error: string };
 
 /**
- * Authenticates a public API request against api_keys.key_hash, checks the
- * required scope, and enforces the key's per-minute rate limit via the
- * increment_api_key_rate_limit RPC (one row per key per calendar minute —
- * see migration 20260903000000_api_keys.sql). A scope of "*" grants access
- * to every resource/tier, for admin-issued internal keys.
+ * Resolves the bearer token on a request to its api_keys row and enforces
+ * the key's per-minute rate limit via the increment_api_key_rate_limit RPC
+ * (one row per key per calendar minute — see migration
+ * 20260903000000_api_keys.sql), without checking any particular scope.
+ * Used directly by the MCP server (src/app/api/mcp/route.ts), which
+ * authenticates a key once per connection and then decides which tools to
+ * expose from its `scopes`, rather than gating a single known endpoint.
+ * authenticateApiRequest() below is the REST-route wrapper that also checks
+ * a required scope.
  */
-export async function authenticateApiRequest(
-  request: Request,
-  requiredScope: string,
-  db: AdminClient = adminClient()
-): Promise<ApiAuthResult> {
+export async function resolveApiKey(request: Request, db: AdminClient = adminClient()): Promise<ApiAuthResult> {
   const authHeader = request.headers.get("Authorization") ?? "";
   const match = authHeader.match(/^Bearer (.+)$/);
   if (!match) {
@@ -63,9 +63,6 @@ export async function authenticateApiRequest(
   }
 
   const scopes = (keyRow.scopes as string[]) ?? [];
-  if (!scopes.includes("*") && !scopes.includes(requiredScope)) {
-    return { ok: false, status: 403, error: `Missing required scope: ${requiredScope}` };
-  }
 
   const windowStart = new Date();
   windowStart.setSeconds(0, 0);
@@ -83,4 +80,24 @@ export async function authenticateApiRequest(
   await db.from("api_keys").update({ last_used_at: new Date().toISOString() }).eq("id", keyRow.id as string);
 
   return { ok: true, orgId: keyRow.org_id as string, keyId: keyRow.id as string, scopes };
+}
+
+/**
+ * Authenticates a public API request against api_keys.key_hash and checks
+ * the required scope. A scope of "*" grants access to every resource/tier,
+ * for admin-issued internal keys.
+ */
+export async function authenticateApiRequest(
+  request: Request,
+  requiredScope: string,
+  db: AdminClient = adminClient()
+): Promise<ApiAuthResult> {
+  const result = await resolveApiKey(request, db);
+  if (!result.ok) return result;
+
+  if (!result.scopes.includes("*") && !result.scopes.includes(requiredScope)) {
+    return { ok: false, status: 403, error: `Missing required scope: ${requiredScope}` };
+  }
+
+  return result;
 }
