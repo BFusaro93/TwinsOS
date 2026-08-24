@@ -1,7 +1,8 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
-import { adminClient, resolveApiKey } from "@/lib/api/auth";
+import { adminClient, peekApiKeyScopes } from "@/lib/api/auth";
 import { logger } from "@/lib/logger";
+import { registerResourceTools } from "./tools";
 
 const log = logger.child("mcp-server");
 
@@ -10,14 +11,20 @@ const log = logger.child("mcp-server");
  * different protocol on top. Stateless Streamable HTTP: a fresh McpServer +
  * transport per request (no in-memory session state), matching how the REST
  * routes and Vercel's serverless model both already work. Tools are
- * registered per-request based on the authenticated key's scopes (see
- * buildToolSet in ./tools.ts, added in a later phase of this build) — a key
- * only ever sees tools it's actually allowed to call, rather than a fixed
- * tool list gated per-call.
+ * registered per-request based on the connecting key's scopes (see
+ * registerResourceTools in ./tools.ts) — a key only ever sees tools it's
+ * actually allowed to call, rather than a fixed tool list gated per-call.
+ *
+ * Auth here uses peekApiKeyScopes (no rate-limit charge) rather than
+ * resolveApiKey: each resource tool delegates to the real REST route
+ * handler, which runs its own full authenticateApiRequest() — that's where
+ * the rate-limit increment for the call actually happens, exactly once.
+ * Charging it again here too would silently halve every key's effective
+ * rate limit for MCP traffic vs. REST traffic.
  */
 async function handleMcpRequest(request: Request): Promise<Response> {
   const db = adminClient();
-  const auth = await resolveApiKey(request, db);
+  const auth = await peekApiKeyScopes(request, db);
   if (!auth.ok) {
     return Response.json(
       { jsonrpc: "2.0", error: { code: -32001, message: auth.error }, id: null },
@@ -27,15 +34,12 @@ async function handleMcpRequest(request: Request): Promise<Response> {
 
   const server = new McpServer({ name: "twinsos", version: "0.1.0" });
 
-  // The full resource tool set (read / write:safe, generated from the same
-  // ENDPOINTS registry as the OpenAPI spec) lands in the next part of this
-  // phase. One tool is registered here regardless: the SDK only wires up
-  // its tools/list + tools/call request handlers the first time a tool is
-  // registered (confirmed against the SDK directly — an empty tool set
-  // otherwise answers tools/list with "Method not found", not `{ tools: [] }`),
-  // so a real first tool is required, not just harmless to add. `whoami` is
-  // a natural pick: it lets a connecting agent see which org/scopes the key
-  // it was handed actually has before trying anything else.
+  // whoami is always available (even to a key with zero resource scopes) so
+  // a connecting agent can see what it's working with. The SDK only wires
+  // up tools/list + tools/call the first time a tool is registered
+  // (confirmed directly against the SDK — an empty tool set otherwise
+  // answers tools/list with "Method not found", not `{ tools: [] }`), so
+  // this also guarantees there's always at least one tool.
   server.registerTool(
     "whoami",
     {
@@ -47,6 +51,8 @@ async function handleMcpRequest(request: Request): Promise<Response> {
       content: [{ type: "text", text: JSON.stringify({ orgId: auth.orgId, scopes: auth.scopes }) }],
     })
   );
+
+  registerResourceTools(server, request, auth.scopes);
 
   const transport = new WebStandardStreamableHTTPServerTransport({
     sessionIdGenerator: undefined,

@@ -30,18 +30,19 @@ export type ApiAuthResult =
   | { ok: true; orgId: string; keyId: string; scopes: string[] }
   | { ok: false; status: 401 | 403 | 429; error: string };
 
-/**
- * Resolves the bearer token on a request to its api_keys row and enforces
- * the key's per-minute rate limit via the increment_api_key_rate_limit RPC
- * (one row per key per calendar minute — see migration
- * 20260903000000_api_keys.sql), without checking any particular scope.
- * Used directly by the MCP server (src/app/api/mcp/route.ts), which
- * authenticates a key once per connection and then decides which tools to
- * expose from its `scopes`, rather than gating a single known endpoint.
- * authenticateApiRequest() below is the REST-route wrapper that also checks
- * a required scope.
- */
-export async function resolveApiKey(request: Request, db: AdminClient = adminClient()): Promise<ApiAuthResult> {
+type ApiKeyRow = {
+  id: string;
+  org_id: string;
+  scopes: string[] | null;
+  rate_limit_per_min: number;
+  revoked_at: string | null;
+};
+
+/** Parses the bearer token and looks up its api_keys row. No side effects (no rate-limit increment, no last_used_at update) — shared by resolveApiKey and peekApiKeyScopes below. */
+async function lookupApiKey(
+  request: Request,
+  db: AdminClient
+): Promise<{ ok: true; keyRow: ApiKeyRow } | { ok: false; status: 401; error: string }> {
   const authHeader = request.headers.get("Authorization") ?? "";
   const match = authHeader.match(/^Bearer (.+)$/);
   if (!match) {
@@ -62,7 +63,25 @@ export async function resolveApiKey(request: Request, db: AdminClient = adminCli
     return { ok: false, status: 401, error: "Invalid or revoked API key" };
   }
 
-  const scopes = (keyRow.scopes as string[]) ?? [];
+  return { ok: true, keyRow: keyRow as ApiKeyRow };
+}
+
+/**
+ * Resolves the bearer token on a request to its api_keys row and enforces
+ * the key's per-minute rate limit via the increment_api_key_rate_limit RPC
+ * (one row per key per calendar minute — see migration
+ * 20260903000000_api_keys.sql), without checking any particular scope.
+ * authenticateApiRequest() below is the REST-route wrapper that also checks
+ * a required scope. This is also what a reused REST handler ends up calling
+ * when invoked from an MCP tool (see src/app/api/mcp/tools.ts) — the actual
+ * rate-limit charge for an MCP tool call happens here, exactly once.
+ */
+export async function resolveApiKey(request: Request, db: AdminClient = adminClient()): Promise<ApiAuthResult> {
+  const looked = await lookupApiKey(request, db);
+  if (!looked.ok) return looked;
+  const { keyRow } = looked;
+
+  const scopes = keyRow.scopes ?? [];
 
   const windowStart = new Date();
   windowStart.setSeconds(0, 0);
@@ -73,13 +92,29 @@ export async function resolveApiKey(request: Request, db: AdminClient = adminCli
 
   if (rateLimitError) {
     log.error("rate limit check failed", { err: rateLimitError, keyId: keyRow.id });
-  } else if (typeof requestCount === "number" && requestCount > (keyRow.rate_limit_per_min as number)) {
+  } else if (typeof requestCount === "number" && requestCount > keyRow.rate_limit_per_min) {
     return { ok: false, status: 429, error: "Rate limit exceeded" };
   }
 
-  await db.from("api_keys").update({ last_used_at: new Date().toISOString() }).eq("id", keyRow.id as string);
+  await db.from("api_keys").update({ last_used_at: new Date().toISOString() }).eq("id", keyRow.id);
 
-  return { ok: true, orgId: keyRow.org_id as string, keyId: keyRow.id as string, scopes };
+  return { ok: true, orgId: keyRow.org_id, keyId: keyRow.id, scopes };
+}
+
+/**
+ * Checks a bearer token's validity and scopes with no side effects — no
+ * rate-limit increment, no last_used_at update. Used by the MCP server to
+ * gate a connection and decide which tools to expose from the key's scopes.
+ * The actual REST handler an MCP tool call delegates to (see
+ * src/app/api/mcp/tools.ts) still runs the real authenticateApiRequest()
+ * itself, so every MCP tool call is charged against the rate limit exactly
+ * once — the same as a direct REST call — rather than twice (once here,
+ * once in the handler) or not at all.
+ */
+export async function peekApiKeyScopes(request: Request, db: AdminClient = adminClient()): Promise<ApiAuthResult> {
+  const looked = await lookupApiKey(request, db);
+  if (!looked.ok) return looked;
+  return { ok: true, orgId: looked.keyRow.org_id, keyId: looked.keyRow.id, scopes: looked.keyRow.scopes ?? [] };
 }
 
 /**
