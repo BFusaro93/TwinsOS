@@ -7,11 +7,17 @@ name: Migration drift check
 # production's supabase_migrations.schema_migrations table and fails the
 # build on any drift beyond the documented baseline.
 #
-# Requires a repo secret SUPABASE_DB_URL: a direct (port 5432, not pooled)
-# Postgres connection string for the production project, e.g.
-#   postgresql://postgres:[DB_PASSWORD]@db.<project-ref>.supabase.co:5432/postgres
-# Get the password from Supabase dashboard > Project Settings > Database.
-# Add it at: Settings > Secrets and variables > Actions > New repository secret.
+# Requires a repo secret SUPABASE_DB_URL: a Postgres connection string for
+# the production project. Use the connection pooler, not the direct
+# db.<project-ref>.supabase.co:5432 host — that host is IPv6-only on many
+# projects, and GitHub-hosted runners have no IPv6 egress ("Network is
+# unreachable"). The pooler is IPv4-compatible:
+#   postgresql://postgres.<project-ref>:[DB_PASSWORD]@aws-0-<region>.pooler.supabase.com:6543/postgres
+# Note the username becomes postgres.<project-ref> (not just postgres) for
+# the pooler. Find <region> and the password at Supabase dashboard >
+# Project Settings > Database > Connection string (pick "Transaction" mode).
+# Add the secret at: repo Settings > Secrets and variables > Actions > New
+# repository secret.
 
 on:
   pull_request:
