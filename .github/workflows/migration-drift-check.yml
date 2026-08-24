@@ -1,0 +1,68 @@
+name: Migration drift check
+
+# Catches the exact failure mode from PR #68: a migration file committed
+# with a version that doesn't match what actually got applied to
+# production (or a schema change applied directly to prod with no
+# migration file at all). Compares supabase/migrations/ against
+# production's supabase_migrations.schema_migrations table and fails the
+# build on any drift beyond the documented baseline.
+#
+# Requires a repo secret SUPABASE_DB_URL: a direct (port 5432, not pooled)
+# Postgres connection string for the production project, e.g.
+#   postgresql://postgres:[DB_PASSWORD]@db.<project-ref>.supabase.co:5432/postgres
+# Get the password from Supabase dashboard > Project Settings > Database.
+# Add it at: Settings > Secrets and variables > Actions > New repository secret.
+
+on:
+  pull_request:
+    paths:
+      - "supabase/migrations/**"
+      - "supabase/.ci/migration-drift-baseline.json"
+      - ".github/workflows/migration-drift-check.yml"
+
+jobs:
+  check-drift:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compare local migrations against production history
+        env:
+          DATABASE_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${DATABASE_URL:-}" ]; then
+            echo "::error::SUPABASE_DB_URL repo secret is not set — see comment at top of this workflow file for how to add it. Skipping would let real drift through, so this check fails closed."
+            exit 1
+          fi
+
+          echo "== Local migration versions =="
+          local_versions=$(ls supabase/migrations | sed -E 's/^([0-9]+)_.*\.sql$/\1/' | sort -u)
+          echo "$local_versions" | wc -l
+
+          echo "== Production migration versions (supabase_migrations.schema_migrations) =="
+          remote_versions=$(psql "$DATABASE_URL" -t -A -c "select version from supabase_migrations.schema_migrations order by version;" | sed '/^$/d' | sort -u)
+          echo "$remote_versions" | wc -l
+
+          only_local_raw=$(comm -23 <(echo "$local_versions") <(echo "$remote_versions") || true)
+          only_remote_raw=$(comm -13 <(echo "$local_versions") <(echo "$remote_versions") || true)
+
+          baseline_local=$(python3 -c "import json,sys; print('\n'.join(json.load(open('supabase/.ci/migration-drift-baseline.json'))['knownLocalOnly']))")
+          baseline_remote=$(python3 -c "import json,sys; print('\n'.join(json.load(open('supabase/.ci/migration-drift-baseline.json'))['knownRemoteOnly']))")
+
+          only_local_new=$(comm -23 <(echo "$only_local_raw" | sed '/^$/d' | sort -u) <(echo "$baseline_local" | sort -u) || true)
+          only_remote_new=$(comm -23 <(echo "$only_remote_raw" | sed '/^$/d' | sort -u) <(echo "$baseline_remote" | sort -u) || true)
+
+          if [ -n "$only_local_new" ]; then
+            echo "::notice::Local migration(s) not yet applied to production (expected if this PR adds new migrations that haven't been pushed yet):"
+            echo "$only_local_new"
+          fi
+
+          if [ -n "$only_remote_new" ]; then
+            echo "::error::Production has applied migration version(s) with no matching local file — migration history has drifted. This means either a migration was hand-timestamped instead of using 'supabase migration new', or a schema change was applied directly to prod without committing a migration file. Reconcile before merging (see PR #68 for the recovery process):"
+            echo "$only_remote_new"
+            exit 1
+          fi
+
+          echo "No new drift detected beyond the documented baseline in supabase/.ci/migration-drift-baseline.json."
