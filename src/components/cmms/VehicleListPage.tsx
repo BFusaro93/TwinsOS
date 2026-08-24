@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import { toast } from "sonner";
 import { useStickyState } from "@/lib/hooks/use-sticky-state";
 import {
   ClipboardCheck,
@@ -167,7 +168,12 @@ export function VehicleListPage() {
     null;
 
   function handleBarcodeScan(raw: string) {
-    const q = raw.toLowerCase();
+    if (isLoading) {
+      toast.error("Vehicles are still loading — try scanning again in a moment.");
+      return;
+    }
+
+    const q = raw.trim().toLowerCase();
 
     // Search vehicles first
     const vehicleMatch = all.find(
@@ -190,7 +196,10 @@ export function VehicleListPage() {
     if (assetMatch) {
       setSelectedAssetId(assetMatch.id);
       router.push("/cmms/assets");
+      return;
     }
+
+    toast.error(`No asset or vehicle found for code "${raw}"`);
   }
 
   function handleFilterChange(key: string, value: string | string[]) {
