@@ -13,6 +13,18 @@ const TIER_COLORS: Record<string, string> = {
   "write:sensitive": "bg-red-100 text-red-700",
 };
 
+/** Derives the MCP tool name(s) a given OpenAPI path+method maps to — mirrors the naming in src/app/api/mcp/tools.ts. */
+function mcpToolNames(path: string, method: string, hasIdParam: boolean): string | null {
+  const resource = path
+    .replace(/\/\{id\}$/, "")
+    .replace(/^\//, "")
+    .replace(/-/g, "_");
+  if (method === "get") return hasIdParam ? `get_${resource}` : `list_${resource}`;
+  if (method === "post") return `create_${resource}`;
+  if (method === "patch") return `update_${resource}`;
+  return null;
+}
+
 export default function ApiDocsPage() {
   const doc = buildOpenApiDocument();
   const paths = doc.paths as Record<string, Record<string, Record<string, unknown>>>;
@@ -43,6 +55,29 @@ export default function ApiDocsPage() {
         </p>
       </section>
 
+      <section className="rounded-lg border bg-white p-6 shadow-sm">
+        <h2 className="mb-2 text-lg font-semibold text-slate-900">MCP (for AI agents)</h2>
+        <p className="text-sm leading-relaxed text-slate-600">
+          <code className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-xs">/api/mcp</code> exposes the same
+          API keys and scopes as an MCP server, so an AI agent (Claude, or any other MCP client) can be pointed at
+          your TwinsOS data directly. Connect with the same{" "}
+          <code className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-xs">
+            Authorization: Bearer &lt;your-api-key&gt;
+          </code>{" "}
+          header — no separate credential. A key only ever sees tools for the scopes it was granted; a key with no
+          scopes still gets a <code className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-xs">whoami</code>{" "}
+          tool so the agent can see which org/scopes it&apos;s connected as.
+        </p>
+        <p className="mt-3 text-sm leading-relaxed text-slate-600">
+          Every tool call is charged against the key&apos;s rate limit exactly once, the same as a direct REST call.
+          Each endpoint below shows the MCP tool name it maps to. Resources with no create/update endpoint here (
+          estimates, invoices, contracts, purchase orders) have no corresponding write tool either — an agent can
+          read but never create or edit them. See{" "}
+          <span className="font-mono text-xs">TASKS.md</span> for why estimate creation in particular stays
+          human-only for now.
+        </p>
+      </section>
+
       {Object.entries(paths).map(([path, methods]) => (
         <section key={path} className="rounded-lg border bg-white p-6 shadow-sm">
           <h2 className="mb-3 font-mono text-sm font-semibold text-slate-900">{path}</h2>
@@ -52,6 +87,8 @@ export default function ApiDocsPage() {
                 | { content?: { "application/json"?: { schema?: unknown } } }
                 | undefined;
               const schema = requestBody?.content?.["application/json"]?.schema;
+              const hasIdParam = path.endsWith("/{id}");
+              const toolName = mcpToolNames(path, method, hasIdParam);
               return (
                 <div key={method} className="rounded-md border border-slate-200 p-4">
                   <div className="flex flex-wrap items-center gap-2">
@@ -61,6 +98,11 @@ export default function ApiDocsPage() {
                       {method}
                     </span>
                     <span className="text-sm font-medium text-slate-800">{op.summary as string}</span>
+                    {toolName ? (
+                      <span className="rounded-full bg-purple-100 px-2 py-0.5 text-xs font-mono text-purple-700">
+                        mcp: {toolName}
+                      </span>
+                    ) : null}
                     <span className="ml-auto rounded-full bg-slate-100 px-2 py-0.5 text-xs font-mono text-slate-600">
                       scope: {op["x-required-scope"] as string}
                     </span>
