@@ -124,4 +124,53 @@ export const JOB_COSTING_REPORTS: PrebuiltReportDef[] = [
       sortDir: "asc",
     }),
   },
+  {
+    key: "wip-schedule",
+    section: "job_costing",
+    name: "WIP Report",
+    description:
+      "Work-in-progress schedule for Projects: percent complete by cost-to-cost, earned revenue, and whether each job is over- or under-billed.",
+    filters: [
+      {
+        key: "status",
+        label: "Status",
+        type: "select",
+        options: [
+          { value: "sold", label: "Sold" },
+          { value: "scheduled", label: "Scheduled" },
+          { value: "in_progress", label: "In Progress" },
+          { value: "complete", label: "Complete" },
+          { value: "on_hold", label: "On Hold" },
+          { value: "canceled", label: "Canceled" },
+        ],
+      },
+    ],
+    notes: [
+      "% Complete is cost-to-date ÷ EAC (estimated cost at completion) — not the manual progress field on the project.",
+      "Over/(Under) Billed is billed to date minus earned revenue. Positive means billings are ahead of the work (healthy); negative means the work is ahead of billing (you're financing the job).",
+      "EAC is seeded from the linked estimate when a job is converted, then re-forecastable on the project — projects with no EAC set show 0% complete.",
+    ],
+    analysis: (params) => ({
+      dataset: "rpt_projects_wip",
+      columns: [
+        "name",
+        "status",
+        "client_name",
+        "contract_cents",
+        "eac_cents",
+        "estimated_gp_pct",
+        "cost_to_date_cents",
+        "pct_complete",
+        "earned_revenue_cents",
+        "billed_cents",
+        "over_under_billed_cents",
+        "remaining_to_bill_cents",
+      ],
+      filters: [...eqFilter("status", params.status)],
+      groupBy: [],
+      aggregates: [],
+      sortColumn: "over_under_billed_cents",
+      sortDir: "asc",
+    }),
+  },
 ];

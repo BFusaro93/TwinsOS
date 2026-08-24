@@ -462,6 +462,30 @@ export const REPORT_DATASETS: ReportDataset[] = [
       { key: "notes", label: "Notes", type: "text" },
     ],
   },
+  {
+    key: "rpt_projects_wip",
+    label: "Projects — WIP Schedule",
+    description: "Work-in-progress schedule for Projects: contract value, EAC, percent complete, earned revenue, and over/under billing.",
+    defaultDateField: "created_at",
+    fields: [
+      { key: "name", label: "Project", type: "text" },
+      { key: "status", label: "Status", type: "text" },
+      { key: "client_name", label: "Client", type: "text" },
+      { key: "contract_cents", label: "Contract", type: "money" },
+      { key: "eac_cents", label: "EAC", type: "money" },
+      { key: "estimated_gp_cents", label: "Estimated GP", type: "money" },
+      { key: "estimated_gp_pct", label: "Estimated GP %", type: "percent", totalable: false },
+      { key: "cost_to_date_cents", label: "Cost to Date", type: "money" },
+      { key: "pct_complete", label: "% Complete", type: "percent", totalable: false },
+      { key: "earned_revenue_cents", label: "Earned Revenue", type: "money" },
+      { key: "billed_cents", label: "Billed to Date", type: "money" },
+      { key: "over_under_billed_cents", label: "Over / (Under) Billed", type: "money" },
+      { key: "remaining_to_bill_cents", label: "Remaining to Bill", type: "money" },
+      { key: "start_date", label: "Start Date", type: "date" },
+      { key: "end_date", label: "End Date", type: "date" },
+      { key: "created_at", label: "Created At", type: "datetime" },
+    ],
+  },
 ];
 
 export const DATASET_MAP: Record<string, ReportDataset> = Object.fromEntries(

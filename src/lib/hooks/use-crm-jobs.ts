@@ -1525,6 +1525,8 @@ export function useCreateJobsFromEstimate() {
       notesToCrew,
       services,
       materials,
+      projectId,
+      eacHintCents,
     }: {
       estimateId: string;
       clientId: string;
@@ -1535,6 +1537,10 @@ export function useCreateJobsFromEstimate() {
       notesToCrew: string | null;
       services: { serviceName: string; serviceId: string | null; qty: number; rateCents: number | null; totalCents: number; budgetedHours?: number; budgetMethod?: string }[];
       materials?: { productItemId: string; productName: string; qty: number; unitPriceCents: number | null }[];
+      /** Only meaningful when jobType === "project" — links the job to a Projects (PO cost-tracking) row. */
+      projectId?: string | null;
+      /** Estimate's all-in cost (revenue - net profit) — seeds the linked project's EAC if it's still unset. */
+      eacHintCents?: number;
     }) => {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
@@ -1547,6 +1553,7 @@ export function useCreateJobsFromEstimate() {
           client_id: clientId,
           estimate_id: estimateId,
           job_type: jobType,
+          project_id: jobType === "project" ? (projectId ?? null) : null,
           status: scheduledDate ? "scheduled" : "hold",
           scheduled_date: scheduledDate,
           crew_id: crewId,
@@ -1666,11 +1673,27 @@ export function useCreateJobsFromEstimate() {
         .update({ stage: "accepted" } as any)
         .eq("id", estimateId);
 
-      return { jobId, clientId, jobType };
+      // Seed the linked project's EAC (estimated cost at completion) from this
+      // estimate — but only if it's still unset (0), so we never clobber a PM's
+      // re-forecast. Best-effort: the job itself already exists either way.
+      if (projectId && jobType === "project" && eacHintCents && eacHintCents > 0) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (supabase as any)
+          .from("projects")
+          .update({ estimated_cost_cents: eacHintCents })
+          .eq("id", projectId)
+          .eq("estimated_cost_cents", 0);
+      }
+
+      return { jobId, clientId, jobType, projectId };
     },
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ["crm-jobs"] });
       qc.invalidateQueries({ queryKey: ["estimates"] });
+      if (data.projectId) {
+        qc.invalidateQueries({ queryKey: ["projects"] });
+        qc.invalidateQueries({ queryKey: ["client-projects"] });
+      }
       fireAutomationTrigger({ triggerType: "job_created", clientId: data.clientId, matchValues: [data.jobType] });
       if (data.jobType === "package") {
         // No packageId available in this convert-from-estimate flow — fires

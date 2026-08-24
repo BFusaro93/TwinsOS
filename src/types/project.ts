@@ -20,6 +20,7 @@ export interface Project extends BaseRecord {
   endDate: string | null;
   totalCost: number; // cents, derived
   contractPrice: number; // cents — what the customer is paying
+  estimatedCostCents: number; // cents — EAC, re-forecastable over the job's life (WIP report input)
   laborHours: number | null;
   budgetHours: number | null;
   laborRateCents: number | null;
