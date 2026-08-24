@@ -7,7 +7,6 @@ import { cn } from "@/lib/utils";
 import { useUIStore, useCurrentUserStore } from "@/stores";
 import { useSettingsStore } from "@/stores/settings-store";
 import { usePermissions } from "@/lib/hooks/use-permissions";
-import { LANDSCAPT_SETTINGS_ACCESS_KEYS } from "@/lib/permissions/settings-access";
 import type { LucideIcon } from "lucide-react";
 
 interface SettingsNavItem {
@@ -32,19 +31,19 @@ export function SettingsSidebar() {
   const { sidebarCollapsed } = useUIStore();
   const { logoDataUrl, orgName } = useSettingsStore();
   const { currentUser } = useCurrentUserStore();
-  const { can, isAdmin } = usePermissions();
+  const { isAdmin, roleId } = usePermissions();
 
   // Master Account is admin-only; Equipt Settings is admin/manager (must
   // match EQUIPT_SETTINGS_ROLES in EquiptSettingsTabs.tsx); Landscapt
-  // Settings needs any one of the 5 settings_access permissions (must match
-  // LandscaptSettingsTabs.tsx's own gate — admins always pass all three via
-  // usePermissions().can() — see the pages themselves for the actual
-  // enforcement, this just keeps the nav from advertising links that would
-  // immediately bounce to an access-denied screen).
+  // Settings just needs CRM access at all (roleId set, or admin) — every
+  // Landscapt user can reach at least the Notifications tab there
+  // regardless of their settings_access permissions (see
+  // LANDSCAPT_TAB_PERMISSIONS), so there's no settings-permission check to
+  // mirror here the way there is for the other two.
   const visibleNav = SETTINGS_NAV.filter((item) => {
     if (item.key === "master") return isAdmin || currentUser.role === "admin";
     if (item.key === "equipt") return currentUser.role === "admin" || currentUser.role === "manager";
-    if (item.key === "landscapt") return LANDSCAPT_SETTINGS_ACCESS_KEYS.some(can);
+    if (item.key === "landscapt") return isAdmin || roleId !== null;
     return true;
   });
 
