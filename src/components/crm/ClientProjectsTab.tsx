@@ -57,7 +57,7 @@ export function ClientProjectsTab({ clientId, clientName }: Props) {
   return (
     <>
       <div className="flex justify-end">{newProjectButton}</div>
-      <div className="overflow-hidden rounded-lg border bg-white shadow-sm">
+      <div className="overflow-x-auto rounded-lg border bg-white shadow-sm">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-400">

@@ -415,8 +415,12 @@ export function FormBuilder({ form, publicBaseUrl }: Props) {
 
   async function togglePublish() {
     const newStatus = form.status === "published" ? "draft" : "published";
-    await updateForm.mutateAsync({ status: newStatus });
-    toast.success(newStatus === "published" ? "Form published" : "Form unpublished");
+    try {
+      await updateForm.mutateAsync({ status: newStatus });
+      toast.success(newStatus === "published" ? "Form published" : "Form unpublished");
+    } catch {
+      toast.error("Failed to update form status");
+    }
   }
 
   const publicUrl = `${publicBaseUrl}/forms/${form.slug}`;
@@ -578,7 +582,12 @@ export function FormBuilder({ form, publicBaseUrl }: Props) {
 
       {/* ── SETTINGS tab ── */}
       {builderTab === "settings" && (
-        <SettingsPanel form={form} onUpdate={(patch) => { updateForm.mutateAsync(patch); }} />
+        <SettingsPanel
+          form={form}
+          onUpdate={(patch) => {
+            updateForm.mutateAsync(patch).catch(() => toast.error("Failed to save setting"));
+          }}
+        />
       )}
     </div>
   );
@@ -614,7 +623,7 @@ function FieldCard({
       )}
     >
       {/* Card header row */}
-      <div className="grid grid-cols-[180px_1fr_auto_auto_auto] gap-3 items-start p-4">
+      <div className="grid grid-cols-1 sm:grid-cols-[180px_1fr_auto_auto_auto] gap-3 items-start p-4">
         {/* Type selector */}
         <div className="space-y-1">
           <Label className="text-[10px] uppercase tracking-widest text-slate-400">Type</Label>
@@ -987,7 +996,7 @@ function FieldTypeConfig({
     const max = (field.config.max as number) ?? 5;
     return (
       <div className={baseClass}>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <Label className={labelClass}>Scale (max)</Label>
             <Select
@@ -1031,7 +1040,7 @@ function FieldTypeConfig({
     const max = (field.config.max as number) ?? 5;
     return (
       <div className={baseClass}>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <Label className={labelClass}>Max stars</Label>
             <Select
@@ -1071,7 +1080,7 @@ function FieldTypeConfig({
   if (field.fieldType === "number") {
     return (
       <div className={baseClass}>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <Label className={labelClass}>Starting value</Label>
             <Input
@@ -1150,7 +1159,7 @@ function FieldTypeConfig({
   if (PLACEHOLDER_TYPES.includes(field.fieldType) || field.fieldType === "checkbox" || field.fieldType === "date") {
     return (
       <div className={baseClass}>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {PLACEHOLDER_TYPES.includes(field.fieldType) && (
             <PlaceholderRow field={field} onUpdate={onUpdate} inputClass={inputClass} labelClass={labelClass} />
           )}

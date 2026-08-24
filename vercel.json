@@ -48,6 +48,14 @@
     {
       "path": "/api/cron/card-expiry-notify",
       "schedule": "0 8 * * *"
+    },
+    {
+      "path": "/api/cron/sync-seat-overage",
+      "schedule": "0 5 * * *"
+    },
+    {
+      "path": "/api/cron/bill-sms-overage",
+      "schedule": "0 5 * * *"
     }
   ]
 }

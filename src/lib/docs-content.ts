@@ -23,6 +23,8 @@ import {
   Snowflake,
   Receipt,
   Zap,
+  CreditCard,
+  Plug,
 } from "lucide-react";
 import type { ElementType } from "react";
 
@@ -31,6 +33,9 @@ import type { ElementType } from "react";
 export interface DocStep {
   step: string;
   detail: string;
+  /** Optional in-app link rendered under the detail text (e.g. to a full reference page). */
+  href?: string;
+  linkLabel?: string;
 }
 
 export interface DocArticle {
@@ -707,6 +712,59 @@ export const DOC_SECTIONS: DocSection[] = [
         ],
       },
       {
+        id: "online-payments-stripe",
+        title: "Online Payments (Stripe)",
+        summary: "Connect your Stripe account, then save cards/bank accounts on file and charge clients directly from an invoice.",
+        icon: CreditCard,
+        steps: [
+          {
+            step: "One-time setup: connect your Stripe account",
+            detail:
+              "CRM > Settings > Card Payments (Stripe). Click Connect and complete Stripe's onboarding — this creates a Standard connected Stripe account for your org, fully independent of Landscapt's own billing. Charges, payouts, and your Stripe dashboard login are entirely managed by Stripe; Landscapt only initiates charges and listens for the result.",
+          },
+          {
+            step: "Managing your Stripe account",
+            detail:
+              "Once connected, 'Manage on Stripe' opens dashboard.stripe.com directly — log in there with your own Stripe credentials to see payouts, statements, and update your bank details for deposits.",
+          },
+          {
+            step: "Turning on ACH / bank transfer payments",
+            detail:
+              "Stripe's own ACH toggle in their dashboard does not control whether Landscapt can accept bank transfers — it only affects Stripe's automatic payment-method detection. Enabling ACH here requires two things: ACH Direct Debit activated on your Stripe account, and the separate 'Enable ACH / bank transfer payments' checkbox in CRM > Settings > Card Payments (Stripe). Until both are on, only card payments are offered.",
+          },
+          {
+            step: "Processing fees",
+            detail:
+              "A processing fee is added automatically to card charges (not ACH) to cover the Stripe rate. Staff can waive the fee or override it to a custom amount on any single charge. Fees collected flow into the Profit & Loss report as 'Credit card processing fees' income, and the Credit Card Processing Fees report itemizes every fee by payment.",
+          },
+          {
+            step: "Saving a card or bank account on file",
+            detail:
+              "From a client's Details tab, use 'Payment Method on File' to save a card or ACH bank account — staff can enter the client's card themselves, without the client needing to do anything on their end. Saving a method defaults to enrolling the client in Autopay, but there's a checkbox to save the method without turning Autopay on, for clients who just want a card kept on file for you to charge manually.",
+          },
+          {
+            step: "Autopay vs. a saved method",
+            detail:
+              "A saved payment method and Autopay are independent settings, toggled separately in the client's Payment Method on File section. Autopay On means the client's saved method is eligible for the 'To Charge' / 'ACH To Charge' invoice tabs and bulk 'Charge All' action. Autopay Off still lets staff charge that saved method any time via 'Charge Saved' — it just won't be swept up automatically.",
+          },
+          {
+            step: "Charging an invoice",
+            detail:
+              "From an invoice, 'Charge Saved' uses the client's card/bank on file; the Card/Bank toggle lets staff key in a fresh card or account for a one-off charge instead. The Invoices list's 'To Charge' and 'ACH To Charge' tabs show every invoice eligible for its respective saved method, with a per-row Charge button and a bulk 'Charge All' in the Actions menu.",
+          },
+          {
+            step: "Charging across multiple invoices at once",
+            detail:
+              "In Add Payment, 'Charge a Card/Bank Instead' switches the same client + invoice allocation table used for recording a manual payment into a real Stripe charge — one card/bank charge for the combined total, split across however many invoices are checked, using the client's saved method or a freshly entered card/bank.",
+          },
+          {
+            step: "Where a payment shows up",
+            detail:
+              "A successful online charge posts automatically as a payment against the invoice(s) it was allocated to — no manual recording needed. It can take a few seconds after checkout to appear while Stripe's confirmation is processed; if it hasn't shown up after a minute, check the payment wasn't declined before assuming something's wrong.",
+          },
+        ],
+      },
+      {
         id: "communication-automations",
         title: "Communication & Automations",
         summary: "Trigger event-driven emails, texts, and alerts without manual follow-up.",
@@ -868,6 +926,51 @@ export const DOC_SECTIONS: DocSection[] = [
           },
         ],
       },
+      {
+        id: "zapier-integration",
+        title: "Connecting Zapier",
+        summary: "Trigger Zaps on Equipt and Landscapt events, or create records from a Zap.",
+        icon: Plug,
+        steps: [
+          {
+            step: "Generate your key",
+            detail:
+              "Go to Master Account Settings > Integrations (not Equipt Settings or Landscapt Settings — this connection is account-wide and works regardless of your plan). Click Generate Key and copy it — it's shown once, in full. Paste it into the API Key field when connecting the Equipt/Landscapt app in Zapier. A link to the full, detailed guide below sits right under the key on that page.",
+          },
+          {
+            step: "Landscapt triggers",
+            detail:
+              "New Client, New Lead, Lead Converted to Client, Client Cancelled, New Estimate, Estimate Won/Lost, New Job, New Ticket, Ticket Closed, New Invoice, Invoice Paid, Contract Signed, New Damage Case, and Visit Dispatched all fire instantly — the moment the event happens, not on a delay.",
+          },
+          {
+            step: "Equipt triggers",
+            detail:
+              "New Asset, New Work Order, New Requisition, New Purchase Order, PM Schedule Due, Part Low Stock, and New Vendor check every few minutes rather than firing instantly. Work Order Completed and PO Approved are instant. A delayed poll rarely matters for these — low stock and PM-due don't need a same-second alert.",
+          },
+          {
+            step: "Meter Threshold",
+            detail:
+              "This trigger is configured per-Zap rather than always meaning one fixed thing: pick a meter (or leave it blank to watch every meter), a threshold value, and a direction (at least / at most). Example: watch Truck #4's odometer and fire once it reaches 50,000 miles. This is separate from any meter-threshold automations already configured inside Equipt itself.",
+          },
+          {
+            step: "Actions",
+            detail:
+              "A Zap can create a Client, Job, or Ticket (or add a note to a client's activity timeline) in Landscapt, and a Work Order or Requisition in Equipt. Every vendor/client/asset/work-order ID a Zap passes in is checked against your org before anything is created.",
+          },
+          {
+            step: "Rotating the key",
+            detail:
+              "Clicking Regenerate immediately invalidates the old key — any Zaps still using it will need to be reconnected with the new one before they'll work again.",
+          },
+          {
+            step: "Full reference guide",
+            detail:
+              "Every trigger and action, with sample payloads and field-by-field explanations, lives on one dedicated page.",
+            href: "/settings/support/zapier-guide",
+            linkLabel: "Open the full Zapier guide",
+          },
+        ],
+      },
     ],
   },
 ];
@@ -1008,6 +1111,10 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       {
         q: "How do I connect the Samsara integration for vehicle odometers?",
         a: "Go to Settings > Integrations and enter your Samsara API key. Once connected, vehicle odometer readings sync automatically and update the corresponding vehicle meter, which can trigger mileage-based automations.",
+      },
+      {
+        q: "How do I connect Zapier?",
+        a: "Go to Master Account Settings > Integrations and click Generate Key — this is account-wide, not tied to Equipt or Landscapt specifically. Paste the key into Zapier's API Key field when connecting the app. Most Landscapt triggers fire instantly; most Equipt triggers check every few minutes instead. There's a full, detailed guide to every trigger and action linked right on that Integrations tab, under the API key.",
       },
     ],
   },

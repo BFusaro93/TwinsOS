@@ -10,15 +10,59 @@ import { SettingsLoader } from "@/components/shared/SettingsLoader";
 import { QuickAddOverlay } from "@/components/crm/QuickAddOverlay";
 import { useUIStore } from "@/stores";
 import { useCrmAccess } from "@/lib/hooks/use-permissions";
+import { useModuleAccess } from "@/lib/hooks/use-module-access";
+import { useTrialStatus } from "@/lib/hooks/use-trial-status";
+import { TrialBanner } from "@/components/shared/TrialBanner";
 
 export default function CRMLayout({ children }: { children: React.ReactNode }) {
   const { sidebarOpen, setSidebarOpen } = useUIStore();
   const pathname = usePathname();
   const { allowed, isLoading } = useCrmAccess(pathname);
+  const { allowed: planAllowed, isLoading: planLoading } = useModuleAccess("landscapt");
+  const { isExpired: trialExpired, isLoading: trialLoading } = useTrialStatus();
 
   useEffect(() => {
     setSidebarOpen(false);
   }, [pathname, setSidebarOpen]);
+
+  // Trial expiry takes priority over the per-user/module gates below — an
+  // org whose trial ran out is locked out regardless of role or module.
+  if (!trialLoading && trialExpired) {
+    return (
+      <div className="flex h-dvh items-center justify-center bg-slate-50 p-6">
+        <div className="max-w-md rounded-lg border bg-white p-6 text-center shadow-sm">
+          <h1 className="text-lg font-semibold text-slate-900">Your trial has ended</h1>
+          <p className="mt-2 text-sm text-slate-500">
+            Your 30-day trial is over. Subscribe to a plan to keep using Landscapt and Equipt — your data
+            is all still here.
+          </p>
+          <Link
+            href="/settings?tab=subscription"
+            className="mt-4 inline-block rounded-md bg-brand-500 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-600"
+          >
+            Choose a plan
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  if (!planLoading && !planAllowed) {
+    return (
+      <div className="flex h-dvh items-center justify-center bg-slate-50 p-6">
+        <div className="max-w-md rounded-lg border bg-white p-6 text-center shadow-sm">
+          <h1 className="text-lg font-semibold text-slate-900">Landscapt isn&apos;t on your plan</h1>
+          <p className="mt-2 text-sm text-slate-500">
+            Your current subscription doesn&apos;t include the Landscapt (CRM) module. Upgrade to Growth
+            or Enterprise, or contact us, to turn it on.
+          </p>
+          <Link href="/settings?tab=subscription" className="mt-4 inline-block text-sm font-medium text-brand-600 hover:text-brand-700">
+            Go to Subscription settings &rarr;
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   if (!isLoading && !allowed) {
     return (
@@ -61,6 +105,7 @@ export default function CRMLayout({ children }: { children: React.ReactNode }) {
       )}
 
       <div className="flex flex-1 flex-col overflow-hidden">
+        <TrialBanner />
         <TopBar />
         <QuickAddOverlay />
         <main className="flex-1 overflow-auto p-4 md:p-6">{children}</main>

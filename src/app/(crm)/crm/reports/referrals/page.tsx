@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { Fragment, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { cn, formatCurrency } from "@/lib/utils";
@@ -81,54 +81,56 @@ export default function ReferralsReportPage() {
             </p>
           </div>
         ) : (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-400">
-                <th className="px-4 py-3">Client</th>
-                <th className="px-4 py-3">Status</th>
-                <th className="px-4 py-3">Client Since</th>
-                <th className="px-4 py-3 text-right">Balance Due</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => (
-                <>
-                  <tr key={r.referrerId} className="border-b bg-slate-50/60">
-                    <td colSpan={4} className="px-4 py-2 text-sm font-semibold text-slate-800">
-                      <Link href={`/crm/clients/${r.referrerId}`} className="hover:text-brand-600 hover:underline">
-                        {r.referrerName}
-                      </Link>
-                      <span className="ml-2 text-xs font-normal text-slate-400">
-                        referred {r.referredClients.length} client{r.referredClients.length !== 1 ? "s" : ""}
-                      </span>
-                    </td>
-                  </tr>
-                  {r.referredClients.map((c) => (
-                    <tr key={c.id} className="border-b last:border-0 hover:bg-slate-50">
-                      <td className="px-4 py-2.5 pl-8">
-                        <Link href={`/crm/clients/${c.id}`} className="text-slate-700 hover:text-brand-600 hover:underline">
-                          {c.displayName}
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-400">
+                  <th className="px-4 py-3">Client</th>
+                  <th className="px-4 py-3">Status</th>
+                  <th className="px-4 py-3">Client Since</th>
+                  <th className="px-4 py-3 text-right">Balance Due</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r) => (
+                  <Fragment key={r.referrerId}>
+                    <tr className="border-b bg-slate-50/60">
+                      <td colSpan={4} className="px-4 py-2 text-sm font-semibold text-slate-800">
+                        <Link href={`/crm/clients/${r.referrerId}`} className="hover:text-brand-600 hover:underline">
+                          {r.referrerName}
                         </Link>
-                      </td>
-                      <td className="px-4 py-2.5">
-                        <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-medium capitalize", STATUS_COLOR[c.status] ?? "bg-slate-100 text-slate-500")}>
-                          {c.status}
+                        <span className="ml-2 text-xs font-normal text-slate-400">
+                          referred {r.referredClients.length} client{r.referredClients.length !== 1 ? "s" : ""}
                         </span>
                       </td>
-                      <td className="px-4 py-2.5 text-slate-500">
-                        {c.clientSince ? new Date(c.clientSince).toLocaleDateString() : "—"}
-                      </td>
-                      <td className="px-4 py-2.5 text-right">
-                        {c.balanceOutstandingCents > 0
-                          ? <span className="font-semibold text-red-600">{formatCurrency(c.balanceOutstandingCents)}</span>
-                          : <span className="text-slate-400">—</span>}
-                      </td>
                     </tr>
-                  ))}
-                </>
-              ))}
-            </tbody>
-          </table>
+                    {r.referredClients.map((c) => (
+                      <tr key={c.id} className="border-b last:border-0 hover:bg-slate-50">
+                        <td className="px-4 py-2.5 pl-8">
+                          <Link href={`/crm/clients/${c.id}`} className="text-slate-700 hover:text-brand-600 hover:underline">
+                            {c.displayName}
+                          </Link>
+                        </td>
+                        <td className="px-4 py-2.5">
+                          <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-medium capitalize", STATUS_COLOR[c.status] ?? "bg-slate-100 text-slate-500")}>
+                            {c.status}
+                          </span>
+                        </td>
+                        <td className="px-4 py-2.5 text-slate-500">
+                          {c.clientSince ? new Date(c.clientSince).toLocaleDateString() : "—"}
+                        </td>
+                        <td className="px-4 py-2.5 text-right">
+                          {c.balanceOutstandingCents > 0
+                            ? <span className="font-semibold text-red-600">{formatCurrency(c.balanceOutstandingCents)}</span>
+                            : <span className="text-slate-400">—</span>}
+                        </td>
+                      </tr>
+                    ))}
+                  </Fragment>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
     </div>

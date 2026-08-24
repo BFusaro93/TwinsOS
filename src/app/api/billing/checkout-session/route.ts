@@ -3,6 +3,7 @@ import { z } from "zod";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { getStripe, isStripeConfigured } from "@/lib/stripe/server";
 import { getPriceIdForPlan, isBillablePlan } from "@/lib/stripe/plans";
+import { chargeIdempotencyKey } from "@/lib/stripe/idempotency";
 
 const CheckoutSessionSchema = z.object({
   plan: z.string().refine(isBillablePlan, { message: "Unknown plan" }),
@@ -40,20 +41,30 @@ export async function POST(request: Request) {
 
   const { data: org } = await supabase
     .from("organizations")
-    .select("id, name, stripe_customer_id")
+    .select("id, name, stripe_customer_id, pending_plan")
     .eq("id", profile.org_id)
     .single();
   if (!org) return NextResponse.json({ error: "Organization not found" }, { status: 404 });
 
   const stripe = getStripe();
 
+  // Clear pending_plan (set at signup) as soon as checkout is actually
+  // acted on for this org, so the auto-subscribe prompt doesn't re-trigger
+  // on a future login regardless of which plan they end up choosing here.
+  if (org.pending_plan) {
+    await createServiceClient().from("organizations").update({ pending_plan: null }).eq("id", org.id);
+  }
+
   let stripeCustomerId = org.stripe_customer_id;
   if (!stripeCustomerId) {
-    const customer = await stripe.customers.create({
-      email: user.email,
-      name: org.name,
-      metadata: { org_id: org.id },
-    });
+    const customer = await stripe.customers.create(
+      {
+        email: user.email,
+        name: org.name,
+        metadata: { org_id: org.id },
+      },
+      { idempotencyKey: chargeIdempotencyKey(["org_stripe_customer", org.id]) }
+    );
     stripeCustomerId = customer.id;
 
     const serviceClient = createServiceClient();
@@ -97,15 +108,18 @@ export async function POST(request: Request) {
 
   const origin = new URL(request.url).origin;
 
-  const session = await stripe.checkout.sessions.create({
-    ui_mode: "embedded_page",
-    mode: "subscription",
-    customer: stripeCustomerId,
-    client_reference_id: org.id,
-    line_items: [{ price: priceId, quantity: 1 }],
-    subscription_data: { metadata: { org_id: org.id } },
-    return_url: `${origin}/settings?tab=subscription&checkout=return&session_id={CHECKOUT_SESSION_ID}`,
-  });
+  const session = await stripe.checkout.sessions.create(
+    {
+      ui_mode: "embedded_page",
+      mode: "subscription",
+      customer: stripeCustomerId,
+      client_reference_id: org.id,
+      line_items: [{ price: priceId, quantity: 1 }],
+      subscription_data: { metadata: { org_id: org.id } },
+      return_url: `${origin}/settings?tab=subscription&checkout=return&session_id={CHECKOUT_SESSION_ID}`,
+    },
+    { idempotencyKey: chargeIdempotencyKey(["checkout_session", org.id, priceId]) }
+  );
 
   return NextResponse.json({ clientSecret: session.client_secret });
 }

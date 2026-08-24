@@ -69,13 +69,15 @@ export function ServicesList({ onAdd, onEdit }: Props) {
 
   function handleDelete(s: CRMService) {
     if (!confirm(`Delete "${s.name}"? This cannot be undone.`)) return;
-    deleteService.mutate(s.id);
+    deleteService.mutate(s.id, {
+      onError: () => toast.error(`Failed to delete "${s.name}"`),
+    });
   }
 
   return (
     <div className="flex flex-col gap-4">
       {/* Toolbar */}
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3 gap-y-2">
         <div className="relative flex-1 max-w-xs">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
           <Input
@@ -136,7 +138,7 @@ export function ServicesList({ onAdd, onEdit }: Props) {
       </div>
 
       {/* Table */}
-      <div className="rounded-lg border bg-white shadow-sm overflow-hidden">
+      <div className="rounded-lg border bg-white shadow-sm overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b bg-slate-50 text-xs font-semibold text-slate-500 uppercase tracking-wide">

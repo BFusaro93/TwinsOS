@@ -54,7 +54,7 @@ export default function LeadsPage() {
         title="Leads"
         description="Prospective clients — convert to client once an estimate is accepted"
         action={
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             {viewToggle}
             <ImportExportMenu
               entityLabel="Leads"

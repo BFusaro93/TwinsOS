@@ -60,7 +60,7 @@ function TemplateEditPanel({ template, onClose }: { template: InvoicePDFTemplate
 
   return (
     <div className="space-y-3 rounded-md border bg-slate-50 p-3">
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
           <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-400">Layout</label>
           <Select value={layoutKey} onValueChange={(v) => setLayoutKey(v as InvoicePDFLayoutKey)}>

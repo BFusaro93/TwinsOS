@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { CreditCard, Download, CheckCircle2, Clock, AlertCircle } from "lucide-react";
 import { PayInvoiceDialog } from "@/components/portal/PayInvoiceDialog";
@@ -85,17 +86,15 @@ export default function PortalBillingPage({ invoices }: { invoices: Invoice[] })
 
         <div className="bg-white rounded-xl border border-slate-200 p-5">
           <p className="text-sm font-medium text-slate-600 mb-1">Payment Method</p>
-          <p className="text-sm text-slate-400 mt-2">No payment method on file.</p>
+          <p className="text-sm text-slate-400 mt-2">Manage your saved card or bank account from your Account page.</p>
           <div className="mt-4">
-            <button
-              disabled
-              title="Card management coming soon"
-              className="w-full h-10 rounded-lg border border-slate-200 text-slate-500 text-sm font-medium opacity-50 cursor-not-allowed flex items-center justify-center gap-2"
+            <Link
+              href="/portal/account"
+              className="w-full h-10 rounded-lg border border-slate-200 text-slate-600 text-sm font-medium hover:bg-slate-50 transition flex items-center justify-center gap-2"
             >
               <CreditCard className="h-4 w-4" />
-              Add / Update Card
-            </button>
-            <p className="text-center text-xs text-slate-400 mt-2">Card management coming soon</p>
+              Manage Payment Method
+            </Link>
           </div>
         </div>
       </div>

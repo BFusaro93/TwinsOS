@@ -761,7 +761,7 @@ function Shell({
           )}
           {children}
         </div>
-        <p className="mt-6 text-center text-xs text-slate-400">Powered by TwinsOS</p>
+        <p className="mt-6 text-center text-xs text-slate-400">Powered by Landscapt</p>
       </div>
     </div>
   );

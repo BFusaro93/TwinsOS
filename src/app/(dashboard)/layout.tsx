@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
+import Link from "next/link";
 import { AppSidebar } from "@/components/shared/AppSidebar";
 import { TopBar } from "@/components/shared/TopBar";
 import { RealtimeSync } from "@/components/shared/RealtimeSync";
@@ -9,6 +10,8 @@ import { SettingsLoader } from "@/components/shared/SettingsLoader";
 import { EquiptQuickAddOverlay } from "@/components/shared/EquiptQuickAddOverlay";
 import { useUIStore } from "@/stores";
 import { useIsCrewOnly } from "@/lib/hooks/use-permissions";
+import { useTrialStatus } from "@/lib/hooks/use-trial-status";
+import { TrialBanner } from "@/components/shared/TrialBanner";
 
 export default function DashboardLayout({
   children,
@@ -19,6 +22,7 @@ export default function DashboardLayout({
   const pathname = usePathname();
   const router = useRouter();
   const { isCrewOnly, isLoading } = useIsCrewOnly();
+  const { isExpired: trialExpired, isLoading: trialLoading } = useTrialStatus();
 
   // Auto-close mobile sidebar drawer on navigation
   useEffect(() => {
@@ -32,6 +36,28 @@ export default function DashboardLayout({
   }, [isLoading, isCrewOnly, router]);
 
   if (isCrewOnly) return null;
+
+  // Trial expiry takes priority over everything else in this shell — an org
+  // whose trial ran out is locked out of Equipt regardless of role.
+  if (!trialLoading && trialExpired) {
+    return (
+      <div className="flex h-dvh items-center justify-center bg-slate-50 p-6">
+        <div className="max-w-md rounded-lg border bg-white p-6 text-center shadow-sm">
+          <h1 className="text-lg font-semibold text-slate-900">Your trial has ended</h1>
+          <p className="mt-2 text-sm text-slate-500">
+            Your 30-day trial is over. Subscribe to a plan to keep using Landscapt and Equipt — your data
+            is all still here.
+          </p>
+          <Link
+            href="/settings?tab=subscription"
+            className="mt-4 inline-block rounded-md bg-brand-500 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-600"
+          >
+            Choose a plan
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-dvh overflow-hidden bg-slate-50">
@@ -60,6 +86,7 @@ export default function DashboardLayout({
       )}
 
       <div className="flex flex-1 flex-col overflow-hidden">
+        <TrialBanner />
         <TopBar />
         <main className="flex-1 overflow-auto p-4 md:p-6">{children}</main>
       </div>

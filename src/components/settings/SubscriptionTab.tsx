@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { loadStripe, type Stripe as StripeJs } from "@stripe/stripe-js";
 import { EmbeddedCheckoutProvider, EmbeddedCheckout } from "@stripe/react-stripe-js";
 import { CreditCard, Check, Loader2 } from "lucide-react";
@@ -12,8 +13,13 @@ import {
   usePlans,
   useCreateCheckoutSession,
   useCreatePortalSession,
+  useToggleAddon,
+  useSmsUsage,
 } from "@/lib/hooks/use-billing";
 import type { BillablePlan } from "@/lib/stripe/plans";
+import { getHighlightsForPlan } from "@/lib/stripe/plan-features";
+import { isBillablePlan } from "@/lib/stripe/plans";
+import { PlanComparisonTable } from "./PlanComparisonTable";
 
 const ACTIVE_STATUSES = new Set(["trialing", "active", "past_due"]);
 
@@ -35,14 +41,31 @@ function formatPrice(amountCents: number | null, currency: string | null, interv
 }
 
 export function SubscriptionTab() {
+  const searchParams = useSearchParams();
   const { data: billing, isLoading: billingLoading } = useBillingInfo();
   const { data: plansData, isLoading: plansLoading } = usePlans();
   const createCheckoutSession = useCreateCheckoutSession();
   const createPortalSession = useCreatePortalSession();
+  const toggleAddon = useToggleAddon();
   const [checkoutClientSecret, setCheckoutClientSecret] = useState<string | null>(null);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
+  const [addonError, setAddonError] = useState<string | null>(null);
+  const [showComparison, setShowComparison] = useState(false);
+  const autoSubscribeTriggered = useRef(false);
 
   const isActiveSubscriber = ACTIVE_STATUSES.has(billing?.stripeSubscriptionStatus ?? "");
+  const smsEnabled = billing?.enabledAddons.includes("sms") ?? false;
+  const { data: smsUsage } = useSmsUsage(smsEnabled);
+
+  async function handleToggleAddon(addon: string, enabled: boolean) {
+    setAddonError(null);
+    try {
+      await toggleAddon.mutateAsync({ addon, enabled });
+      toast.success(enabled ? "Add-on enabled" : "Add-on removed");
+    } catch (err) {
+      setAddonError(err instanceof Error ? err.message : "Failed to update add-on");
+    }
+  }
 
   async function handleSubscribe(plan: BillablePlan) {
     setCheckoutError(null);
@@ -64,6 +87,23 @@ export function SubscriptionTab() {
       setCheckoutError(err instanceof Error ? err.message : "Failed to start checkout");
     }
   }
+
+  // Landed here via the signup plan picker (organizations.pending_plan) —
+  // open checkout for the chosen plan automatically, once, as soon as the
+  // live plan catalog is loaded.
+  useEffect(() => {
+    const autoSubscribe = searchParams.get("autoSubscribe");
+    if (
+      !autoSubscribeTriggered.current &&
+      autoSubscribe &&
+      isBillablePlan(autoSubscribe) &&
+      plansData?.stripeEnabled
+    ) {
+      autoSubscribeTriggered.current = true;
+      handleSubscribe(autoSubscribe);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, plansData?.stripeEnabled]);
 
   async function handleManageBilling() {
     try {
@@ -117,6 +157,24 @@ export function SubscriptionTab() {
                 </span>
               </p>
             )}
+            {billing && (
+              <p className="mt-1 text-sm text-slate-500">
+                Seats: <span className="font-semibold text-slate-700">{billing.seatsUsed}</span> of{" "}
+                {billing.seatsIncluded} included
+                {billing.seatsUsed > billing.seatsIncluded && (
+                  <span className="ml-1 text-amber-600">
+                    (+{billing.seatsUsed - billing.seatsIncluded} over — billed at{" "}
+                    {(billing.seatOverageCents / 100).toLocaleString(undefined, { style: "currency", currency: "USD" })}
+                    /seat next cycle)
+                  </span>
+                )}
+              </p>
+            )}
+            {billing?.plan === "trial" && billing.trialEndsAt && (
+              <p className="mt-1 text-sm text-slate-500">
+                Trial ends <span className="font-semibold text-slate-700">{new Date(billing.trialEndsAt).toLocaleDateString()}</span>
+              </p>
+            )}
           </div>
           {billing?.hasStripeCustomer && (
             <Button variant="outline" onClick={handleManageBilling} disabled={createPortalSession.isPending}>
@@ -131,7 +189,7 @@ export function SubscriptionTab() {
       </div>
 
       {/* Plans */}
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
         {plansData.plans.map((p) => {
           const priceLabel = p.configured ? formatPrice(p.amountCents, p.currency, p.interval) ?? "Contact us" : "Not configured";
           const isCurrent = billing?.plan === p.plan && isActiveSubscriber;
@@ -139,6 +197,17 @@ export function SubscriptionTab() {
             <div key={p.plan} className="flex flex-col rounded-lg border bg-white p-5 shadow-sm">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{p.label}</p>
               <p className="mt-1 text-xl font-bold text-slate-900">{priceLabel}</p>
+              <ul className="mt-3 flex flex-col gap-1.5">
+                {getHighlightsForPlan(p.plan as BillablePlan).map((h) => (
+                  <li key={h} className="flex items-start gap-1.5 text-xs text-slate-600">
+                    <Check className="mt-0.5 h-3 w-3 shrink-0 text-brand-600" />
+                    {h}
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-2 text-xs text-slate-400">
+                +{(p.seatOverageCents / 100).toLocaleString(undefined, { style: "currency", currency: "USD" })}/seat after included seats
+              </p>
               <div className="mt-4 flex-1" />
               <Button
                 className="mt-2 bg-brand-500 hover:bg-brand-600"
@@ -162,6 +231,71 @@ export function SubscriptionTab() {
       </div>
 
       {checkoutError && <p className="text-sm text-red-600">{checkoutError}</p>}
+
+      <div>
+        <button
+          type="button"
+          onClick={() => setShowComparison((v) => !v)}
+          className="text-sm font-medium text-brand-600 hover:text-brand-700"
+        >
+          {showComparison ? "Hide full plan comparison" : "Compare all plans in detail →"}
+        </button>
+        {showComparison && (
+          <div className="mt-4">
+            <PlanComparisonTable />
+          </div>
+        )}
+      </div>
+
+      {/* Add-ons */}
+      <div className="rounded-lg border bg-white p-5 shadow-sm">
+        <p className="mb-4 text-xs font-semibold uppercase tracking-wide text-slate-400">Add-ons</p>
+        <div className="flex flex-col divide-y divide-slate-100">
+          {plansData.addons.map((a) => {
+            const currentPlan = plansData.plans.find((p) => p.plan === billing?.plan);
+            const bundled = currentPlan?.bundledAddons.includes(a.key) ?? false;
+            const enabled = bundled || (billing?.enabledAddons.includes(a.key) ?? false);
+            const priceLabel = a.configured ? formatPrice(a.amountCents, a.currency, a.interval) ?? "Contact us" : "Not configured";
+            return (
+              <div key={a.key} className="flex flex-col gap-2 py-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-slate-800">{a.label}</p>
+                  <p className="text-xs text-slate-500">
+                    {bundled ? "Included in your plan" : priceLabel}
+                    {a.metered && !bundled && " (500 messages included, then $10 per 250 over)"}
+                  </p>
+                  {a.key === "sms" && enabled && smsUsage && (
+                    <p className="mt-1 text-xs text-slate-400">
+                      {smsUsage.count.toLocaleString()} sent this period
+                      {smsUsage.overageBilledCents > 0 &&
+                        ` · ${(smsUsage.overageBilledCents / 100).toLocaleString(undefined, { style: "currency", currency: "USD" })} overage billed`}
+                    </p>
+                  )}
+                </div>
+                <Button
+                  variant={enabled ? "outline" : "default"}
+                  size="sm"
+                  disabled={bundled || !a.configured || toggleAddon.isPending}
+                  className={enabled ? "" : "bg-brand-500 hover:bg-brand-600"}
+                  onClick={() => handleToggleAddon(a.key, !enabled)}
+                >
+                  {bundled ? (
+                    <>
+                      <Check className="mr-1.5 h-3.5 w-3.5" />
+                      Included
+                    </>
+                  ) : enabled ? (
+                    "Remove"
+                  ) : (
+                    "Add"
+                  )}
+                </Button>
+              </div>
+            );
+          })}
+        </div>
+        {addonError && <p className="mt-3 text-sm text-red-600">{addonError}</p>}
+      </div>
 
       <Dialog open={checkoutClientSecret != null} onOpenChange={(open) => !open && setCheckoutClientSecret(null)}>
         <DialogContent className="max-w-2xl p-0">

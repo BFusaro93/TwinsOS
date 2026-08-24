@@ -86,6 +86,11 @@ export async function POST(request: Request) {
   }
 
   // ── fetch visits + job addresses ──────────────────────────────────────────
+  // This query runs on the service-role client (needed above to read the org's
+  // Google Maps key), which bypasses RLS entirely — so unlike the normal
+  // cookie-scoped client, we must filter by org_id ourselves here or a caller
+  // could pass visitIds belonging to another tenant and get their addresses
+  // back. org_id always comes from the authenticated session, never the request.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: visits } = await (sb as any)
     .from("crm_job_visits")

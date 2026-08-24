@@ -8,6 +8,7 @@ import {
   encodeAllocations,
   MAX_ALLOCATION_METADATA_LENGTH,
 } from "@/lib/stripe/crm-payments";
+import { chargeIdempotencyKey } from "@/lib/stripe/idempotency";
 import { logger } from "@/lib/logger";
 
 const log = logger.child("stripe multi-invoice charge");
@@ -126,7 +127,10 @@ export async function POST(request: Request) {
           fee_cents: String(feeCents),
         },
       },
-      { stripeAccount: org.stripe_connect_account_id }
+      {
+        stripeAccount: org.stripe_connect_account_id,
+        idempotencyKey: chargeIdempotencyKey(["crm_invoice_multi_autopay", clientId, encoded, totalChargeCents]),
+      }
     );
 
     return NextResponse.json({

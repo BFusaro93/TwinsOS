@@ -494,7 +494,9 @@ export async function submitFormResponse(
       Object.entries(formData).map(([k, v]) => `${k}: ${formatFormFieldValue(v)}`).join("\n"),
     ].filter(Boolean).join("\n");
 
-    const { data: ticket } = await db
+    // Note: crm_tickets has no "source" column (unlike clients) — don't
+    // include one here, it would make this insert fail.
+    const { data: ticket, error: ticketErr } = await db
       .from("crm_tickets")
       .insert({
         org_id: form.org_id,
@@ -505,10 +507,13 @@ export async function submitFormResponse(
         priority: "normal",
         category: form.name,
         type: "note",
-        source: "form",
       })
       .select("id, ticket_number")
       .single();
+
+    if (ticketErr) {
+      console.error("[submitFormResponse] failed to create ticket:", ticketErr.message);
+    }
 
     relatedTicketId = ticket?.id ?? null;
 

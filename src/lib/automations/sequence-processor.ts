@@ -280,9 +280,21 @@ export async function processDueEnrollment(
     }
 
     const message = (eventConfig.message as string) || "Automation alert";
+    // type/title/entity_id/entity_type are required for this row to actually
+    // surface in NotificationsBell — it queries `.in("type", [...])` against
+    // an explicit allowlist, so a row with no `type` (the bug this fixes)
+    // is inserted but never shown to anyone.
     const { error: notifErr } = await adminClient
       .from("notifications")
-      .insert(recipientIds.map((userId) => ({ org_id: orgId, user_id: userId, message })));
+      .insert(recipientIds.map((userId) => ({
+        org_id: orgId,
+        user_id: userId,
+        type: "automation_alert",
+        title: "Automation Alert",
+        message,
+        entity_id: client_id ?? null,
+        entity_type: client_id ? "client" : null,
+      })));
     if (notifErr) {
       return { skipped: { enrollmentId: enrollId, reason: `failed to insert notifications: ${notifErr.message}` } };
     }

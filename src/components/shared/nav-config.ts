@@ -76,10 +76,10 @@ export const NAV_SECTIONS: NavSection[] = [
   {
     label: "Administration",
     items: [
-      { label: "Users", href: "/settings/users", icon: Users, adminOnly: true, hideFromCrew: true },
-      { label: "Reports", href: "/settings/reports", icon: BarChart3, hideFromCrew: true },
-      { label: "Settings", href: "/settings", icon: Settings, exact: true, hideFromCrew: true },
-      { label: "Support", href: "/settings/support", icon: HelpCircle, hideFromCrew: true },
+      { label: "Users", href: "/settings?tab=users", icon: Users, adminOnly: true, hideFromCrew: true },
+      { label: "Reports", href: "/settings/equipt/reports", icon: BarChart3, hideFromCrew: true },
+      { label: "Settings", href: "/settings/equipt", icon: Settings, hideFromCrew: true },
+      { label: "Support", href: "/support", icon: HelpCircle, hideFromCrew: true },
       { label: "Docs", href: "/docs", icon: Library, hideFromCrew: true },
     ],
   },

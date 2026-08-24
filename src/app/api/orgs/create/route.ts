@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { isBillablePlan } from "@/lib/stripe/plans";
 
 /**
  * POST /api/orgs/create
@@ -9,9 +10,15 @@ import { createClient } from "@supabase/supabase-js";
  * The caller is then expected to call supabase.auth.signUp() on the client
  * side, passing org_id in user_metadata so the handle_new_user trigger
  * auto-creates an admin profile.
+ *
+ * An optional `plan` picked on the signup form is stored as `pending_plan` —
+ * the org itself always starts on plan="trial" (checkout requires an
+ * authenticated session, which doesn't exist until email is confirmed), and
+ * the app prompts the user straight into checkout for their chosen plan on
+ * first login. See (home)/home/page.tsx and SubscriptionTab's autoSubscribe.
  */
 export async function POST(request: Request) {
-  let body: { companyName?: string };
+  let body: { companyName?: string; plan?: string };
   try {
     body = await request.json();
   } catch {
@@ -22,6 +29,8 @@ export async function POST(request: Request) {
   if (!companyName) {
     return NextResponse.json({ error: "Company name is required" }, { status: 400 });
   }
+
+  const pendingPlan = body.plan && isBillablePlan(body.plan) ? body.plan : null;
 
   // Service role is required — the organizations table is RLS-protected and
   // anonymous users cannot insert rows directly.
@@ -40,7 +49,7 @@ export async function POST(request: Request) {
 
   const { data: org, error: orgErr } = await adminClient
     .from("organizations")
-    .insert({ name: companyName, slug })
+    .insert({ name: companyName, slug, pending_plan: pendingPlan })
     .select("id")
     .single();
 

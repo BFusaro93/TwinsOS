@@ -793,7 +793,7 @@ function EmployeeDetail({
             : null
         } />
         <DetailRow label="Hourly Rate" value={employee.hourlyRateCents > 0 ? formatCurrency(employee.hourlyRateCents) : null} />
-        <DetailRow label="Bill Rate" value={employee.overtimeRateCents > 0 ? formatCurrency(employee.overtimeRateCents) : null} />
+        <DetailRow label="Overtime Rate" value={employee.overtimeRateCents > 0 ? formatCurrency(employee.overtimeRateCents) : null} />
 
         {(employee.emergencyContact || employee.emergencyPhone) && (
           <>

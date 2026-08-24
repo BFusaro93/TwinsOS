@@ -44,6 +44,7 @@ import {
   Phone,
   BookOpen,
   FileImage,
+  ClipboardList,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -92,6 +93,7 @@ const CRM_NAV: NavSection[] = [
     items: [
       { label: "Invoices",        href: "/crm/accounting/invoices",        icon: Receipt },
       { label: "Payments",        href: "/crm/accounting/payments",        icon: CreditCard },
+      { label: "Requisitions",    href: "/crm/accounting/requisitions",    icon: ClipboardList },
       { label: "Purchase Orders", href: "/crm/accounting/purchase-orders", icon: ShoppingCart },
       { label: "Contracts",       href: "/crm/accounting/contracts",       icon: FileSignature },
       { label: "Snow Invoicing",  href: "/crm/accounting/snow-invoicing",  icon: FileText },

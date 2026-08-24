@@ -36,7 +36,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { formatCurrency } from "@/lib/utils";
-import { Plus, RotateCcw, Search, X, Loader2, Check } from "lucide-react";
+import { Plus, RotateCcw, Search, X, Loader2, Check, CreditCard } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { ClientCombobox } from "@/components/shared/ClientCombobox";
 import { ColumnChooser } from "@/components/shared/ColumnChooser";
@@ -425,8 +425,16 @@ export function AddPaymentDialog({
           resetForm();
         }
       }
-    } catch {
-      toast.error(isEdit ? "Failed to update" : isCreditMode ? "Failed to issue credit" : "Failed to record payment");
+    } catch (err) {
+      const detail =
+        err instanceof Error
+          ? err.message
+          : typeof err === "object" && err !== null && "message" in err
+            ? String((err as { message: unknown }).message)
+            : String(err);
+      toast.error(
+        `${isEdit ? "Failed to update" : isCreditMode ? "Failed to issue credit" : "Failed to record payment"}: ${detail}`
+      );
     }
   }
 
@@ -437,7 +445,7 @@ export function AddPaymentDialog({
   if (chargeSucceeded) {
     return (
       <Dialog open={open} onOpenChange={(o) => { if (!o) resetForm(); onOpenChange(o); }}>
-        <DialogContent className="max-w-sm">
+        <DialogContent className="max-w-3xl">
           <div className="flex flex-col items-center gap-2 py-6 text-center">
             <Check className="h-8 w-8 text-green-500" />
             <p className="text-sm font-medium text-slate-900">Payment submitted</p>
@@ -456,7 +464,7 @@ export function AddPaymentDialog({
   if (chargeIntent) {
     return (
       <Dialog open={open} onOpenChange={(o) => { if (!o) resetForm(); onOpenChange(o); }}>
-        <DialogContent className="max-w-sm">
+        <DialogContent className="max-w-3xl">
           <DialogHeader>
             <DialogTitle className="text-lg font-semibold">Charge Payment Method</DialogTitle>
           </DialogHeader>
@@ -493,13 +501,16 @@ export function AddPaymentDialog({
           <DialogTitle className="text-lg font-semibold flex items-center justify-between">
             <span>{isCreditMode ? (isEdit ? "Edit Account Credit" : "Issue Account Credit") : (isEdit ? "Edit Payment" : chargeMode ? "Charge Card / Bank" : "Add Payment")}</span>
             {canCharge && (
-              <button
+              <Button
                 type="button"
+                size="sm"
+                variant={chargeMode ? "outline" : "default"}
                 onClick={() => setChargeMode((v) => !v)}
-                className="text-xs font-normal text-brand-600 hover:underline"
+                className={chargeMode ? "" : "bg-brand-500 hover:bg-brand-600 text-white"}
               >
-                {chargeMode ? "Record a payment instead" : "Charge a card/bank instead"}
-              </button>
+                {!chargeMode && <CreditCard className="mr-1.5 h-3.5 w-3.5" />}
+                {chargeMode ? "Record a payment instead" : "Charge a Card/Bank Instead"}
+              </Button>
             )}
           </DialogTitle>
         </DialogHeader>
@@ -933,7 +944,7 @@ export function PaymentsList({ clientId }: Props) {
           title="Payments"
           description={!isLoading ? `${(payments ?? []).length} payments` : undefined}
           action={
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <ImportExportMenu
                 entityLabel="Payments"
                 templateColumns={PAYMENT_TEMPLATE_COLUMNS}
@@ -973,7 +984,7 @@ export function PaymentsList({ clientId }: Props) {
       {/* Filter bar */}
       <div className="flex items-center gap-1.5 border-b bg-white px-4 py-2">
         <span className="shrink-0 text-xs text-slate-500 font-medium mr-1">Select a Filter:</span>
-        <div className="flex items-center gap-1 overflow-x-auto">
+        <div className="flex min-w-0 items-center gap-1 overflow-x-auto">
           {(["reference", "date", "client", "address", "method"] as FilterField[]).map((key) => {
             const label = { reference: "Reference #", date: "Date", client: "Client", address: "Address", method: "Payment Method" }[key];
             return (
@@ -1016,15 +1027,15 @@ export function PaymentsList({ clientId }: Props) {
       </div>
 
       {/* Dark actions bar */}
-      <div className="flex items-center justify-between bg-[#4a4a4a] px-4 py-2">
-        <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-y-2 bg-[#4a4a4a] px-4 py-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-2 gap-y-1">
           <button
             onClick={() => refetch()}
             className="flex h-7 w-7 items-center justify-center rounded border border-[#6a6a6a] bg-[#5a5a5a] text-white hover:bg-[#6a6a6a]"
           >
             <RotateCcw className="h-3.5 w-3.5" />
           </button>
-          <div className="ml-2 flex items-center gap-1">
+          <div className="ml-2 flex min-w-0 items-center gap-1 overflow-x-auto">
             {(["last30", "deleted"] as Tab[]).map((tab) => (
               <button
                 key={tab}

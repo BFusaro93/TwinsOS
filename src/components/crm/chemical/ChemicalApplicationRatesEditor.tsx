@@ -12,6 +12,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Plus, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 import { formatCurrency } from "@/lib/utils";
 import {
   useChemicalApplicationRates,
@@ -154,7 +155,10 @@ export function ChemicalApplicationRatesEditor({ productId }: { productId: strin
           mixProductTotalUnitId: r.mixType === "product" ? r.mixProductTotalUnitId : null,
         })),
       },
-      { onSuccess: () => setDirty(false) }
+      {
+        onSuccess: () => setDirty(false),
+        onError: () => toast.error("Failed to save application rates"),
+      }
     );
   }
 

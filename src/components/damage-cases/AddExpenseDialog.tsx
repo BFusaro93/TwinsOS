@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,15 +29,20 @@ export function AddExpenseDialog({ damageCaseId, open, onOpenChange }: Props) {
     e.preventDefault();
     const dollars = parseFloat(amountStr) || 0;
     const selectedVendor = vendors.find((v) => v.id === vendorId);
-    await createExpense.mutateAsync({
-      damageCaseId,
-      expenseDate,
-      vendorId: vendorId !== "none" ? vendorId : null,
-      vendorName: selectedVendor?.name ?? (vendorName || null),
-      description,
-      amount: Math.round(dollars * 100),
-      purchaseOrderId: null,
-    });
+    try {
+      await createExpense.mutateAsync({
+        damageCaseId,
+        expenseDate,
+        vendorId: vendorId !== "none" ? vendorId : null,
+        vendorName: selectedVendor?.name ?? (vendorName || null),
+        description,
+        amount: Math.round(dollars * 100),
+        purchaseOrderId: null,
+      });
+    } catch {
+      toast.error("Failed to add expense");
+      return;
+    }
     onOpenChange(false);
     setExpenseDate("");
     setVendorId("none");

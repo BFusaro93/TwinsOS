@@ -44,6 +44,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { formatCurrency, cn } from "@/lib/utils";
 import { billingGroupKey } from "@/lib/hooks/use-snow-invoicing";
+import { useSnowRateTiersForJobs } from "@/lib/hooks/use-snow-rate-tiers";
+import { computeGroupAmountCents, splitGroupAmountByVisit } from "@/lib/snow-billing";
 import { toast } from "sonner";
 import {
   Snowflake, Plus, Printer, Users, ChevronDown, RefreshCw,
@@ -464,7 +466,7 @@ function SnowCrewAssignDialog({
                           className="rounded bg-slate-50 border px-2 py-1.5 group relative cursor-grab active:cursor-grabbing"
                         >
                           <p className="text-xs font-medium text-slate-700 truncate">{v.clientName ?? "—"}</p>
-                          <button onClick={() => reassign(v.id, null, v.jobId)} className="absolute top-1 right-1 hidden group-hover:flex text-[9px] text-slate-400 hover:text-red-500">✕</button>
+                          <button onClick={() => reassign(v.id, null, v.jobId)} className="absolute top-1 right-1 flex md:hidden md:group-hover:flex text-[9px] text-slate-400 hover:text-red-500">✕</button>
                         </div>
                       ))}
                     </div>
@@ -754,20 +756,39 @@ export function SnowDispatchBoard() {
     }
   }
 
-  // per_event/per_event_per_inch jobs bill once per storm, not per visit —
-  // summing every visit row here double-counted a job with a morning +
-  // afternoon push in the same storm. Collapse to one representative visit
-  // per billingGroupKey (matching what use-snow-invoicing.ts will actually
-  // invoice) before summing.
-  const billableVisits = useMemo(() => {
-    const seen = new Map<string, CRMJobVisit>();
+  // Preview amounts use the same per-invoice-type math (per_event,
+  // per_event_per_inch w/ rate tiers, per_push_per_inch, hourly) as the real
+  // invoice generation in use-snow-invoicing.ts/SnowInvoicing.tsx — a naive
+  // per-visit rateCents undercounted/overcounted every non-flat-rate job.
+  const perEventPerInchJobIds = useMemo(
+    () => visits.filter((v) => v.job?.invoiceType === "per_event_per_inch" && v.job?.id).map((v) => v.job!.id),
+    [visits]
+  );
+  const { data: tiersByJobId } = useSnowRateTiersForJobs(perEventPerInchJobIds);
+
+  const amountByVisitId = useMemo(() => {
+    const byGroup = new Map<string, CRMJobVisit[]>();
     for (const v of visits) {
       const key = billingGroupKey(v);
-      if (!seen.has(key)) seen.set(key, v);
+      if (!byGroup.has(key)) byGroup.set(key, []);
+      byGroup.get(key)!.push(v);
     }
-    return Array.from(seen.values());
-  }, [visits]);
-  const totalAmt = billableVisits.reduce((s, v) => s + (v.rateCents ?? v.job?.rateCents ?? 0), 0);
+    const result = new Map<string, number>();
+    for (const groupVisits of byGroup.values()) {
+      const total = computeGroupAmountCents(groupVisits, tiersByJobId);
+      for (const [visitId, amount] of splitGroupAmountByVisit(groupVisits, total)) {
+        result.set(visitId, amount);
+      }
+    }
+    return result;
+  }, [visits, tiersByJobId]);
+  // amountByVisitId's per-group split always sums back to the exact group
+  // total, so summing it here is equivalent to (and cheaper than) re-deriving
+  // one representative visit's group amount per billingGroupKey.
+  const totalAmt = useMemo(
+    () => Array.from(amountByVisitId.values()).reduce((s, a) => s + a, 0),
+    [amountByVisitId]
+  );
 
   return (
     <div className="flex h-full flex-col gap-4">
@@ -898,7 +919,7 @@ export function SnowDispatchBoard() {
                       <td className="px-2 py-2 text-right text-slate-500">{v.snowDepthInches != null ? `${v.snowDepthInches}"` : "—"}</td>
                       <td className="px-2 py-2 text-right text-slate-500">{v.temperature != null ? `${v.temperature}°` : "—"}</td>
                       <td className="px-2 py-2 text-right font-medium text-slate-700">
-                        {(v.rateCents ?? v.job?.rateCents) != null ? formatCurrency(v.rateCents ?? v.job?.rateCents ?? 0) : "—"}
+                        {amountByVisitId.has(v.id) ? formatCurrency(amountByVisitId.get(v.id) ?? 0) : "—"}
                       </td>
                     </tr>
                   ))}

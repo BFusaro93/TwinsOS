@@ -2,6 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
+import { toast } from "sonner";
 
 export interface TicketContributor {
   id: string;
@@ -52,6 +53,9 @@ export function useAddTicketContributor() {
     onSuccess: (_data, { ticketId }) => {
       qc.invalidateQueries({ queryKey: ["ticket-contributors", ticketId] });
     },
+    onError: () => {
+      toast.error("Failed to add contributor");
+    },
   });
 }
 
@@ -70,6 +74,9 @@ export function useRemoveTicketContributor() {
     },
     onSuccess: (_data, { ticketId }) => {
       qc.invalidateQueries({ queryKey: ["ticket-contributors", ticketId] });
+    },
+    onError: () => {
+      toast.error("Failed to remove contributor");
     },
   });
 }

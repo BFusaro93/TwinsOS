@@ -612,7 +612,7 @@ export function TicketDetailSheet({ ticket, onClose }: TicketDetailSheetProps) {
     <>
       <Sheet open={!!ticket} onOpenChange={(open) => { if (!open) { setEditing(false); onClose(); } }}>
         {/* Wider sheet so the header buttons don't wrap */}
-        <SheetContent className="w-[620px] sm:max-w-[620px] flex flex-col gap-0 p-0 overflow-hidden">
+        <SheetContent className="w-full sm:max-w-[620px] md:w-[620px] flex flex-col gap-0 p-0 overflow-hidden">
 
           {/* Header — title left, actions right, pr-10 clears the Sheet X button */}
           <div className="flex items-center justify-between border-b px-5 py-3 pr-10 shrink-0">

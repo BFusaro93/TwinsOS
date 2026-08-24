@@ -178,6 +178,17 @@ function LineItemRow({
   const { mutateAsync: upsert, isPending } = useUpsertInvoiceLineItem();
   const { mutateAsync: remove, isPending: removing } = useDeleteInvoiceLineItem();
 
+  // Re-sync local draft from the refetched prop when this row isn't mid-edit —
+  // otherwise an invalidation triggered by another row's save/delete (or a
+  // second tab editing the same invoice) leaves this row frozen on stale data
+  // forever, since there was previously no sync effect at all.
+  useEffect(() => {
+    if (!dirty) {
+      setRow(item);
+      setRateStr((item.rateCents / 100).toFixed(2));
+    }
+  }, [item, dirty]);
+
   function update<K extends keyof InvoiceLineItem>(k: K, v: InvoiceLineItem[K]) {
     setRow((p) => {
       const n = { ...p, [k]: v };
@@ -438,7 +449,7 @@ function RecordPaymentDialog({
               <Input value={amount} onChange={(e) => setAmount(e.target.value)} className="pl-6" />
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="flex flex-col gap-1.5">
               <Label>Date</Label>
               <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
@@ -477,7 +488,7 @@ function PaymentDetailDialog({ payment, open, onOpenChange }: {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-sm">
         <DialogHeader><DialogTitle>Payment Detail</DialogTitle></DialogHeader>
-        <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm py-2">
+        <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3 text-sm py-2">
           <dt className="text-slate-400">Amount</dt><dd className="font-semibold text-green-600">{formatCurrency(payment.amountCents)}</dd>
           <dt className="text-slate-400">Date</dt><dd>{new Date(payment.paymentDate + "T12:00:00").toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}</dd>
           <dt className="text-slate-400">Method</dt><dd className="capitalize">{payment.method}</dd>
@@ -965,7 +976,7 @@ export function InvoiceDetail({
           </div>
 
           {/* Header — two-column boxed layout */}
-          <div className="px-8 py-5 grid grid-cols-2 gap-5">
+          <div className="px-8 py-5 grid grid-cols-1 sm:grid-cols-2 gap-5">
             {/* Left: Bill To + Service Address */}
             <div className="rounded-lg border bg-white p-4 shadow-sm space-y-3">
               <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Bill To</p>
@@ -1172,7 +1183,7 @@ export function InvoiceDetail({
           </div>
 
           {/* Line items */}
-          <div className="mx-8 mb-5 rounded-lg border bg-white shadow-sm overflow-hidden">
+          <div className="mx-8 mb-5 rounded-lg border bg-white shadow-sm overflow-x-auto">
             <table className="w-full text-xs">
               <thead className="bg-brand-500 text-white">
                 <tr>
@@ -1319,7 +1330,7 @@ export function InvoiceDetail({
 
           {/* Payment history */}
           {payments.length > 0 && (
-            <div className="mx-8 mb-5 rounded-lg border bg-white shadow-sm overflow-hidden">
+            <div className="mx-8 mb-5 rounded-lg border bg-white shadow-sm overflow-x-auto">
               <div className="border-b bg-slate-50 px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-slate-400">
                 Payment History
               </div>

@@ -321,7 +321,10 @@ export function PhotoLightbox({
                 disabled={clearingAnnotation}
                 onClick={() => {
                   if (confirm("Remove annotation from this photo? The original photo is kept.")) {
-                    clearAnnotation(undefined, { onSuccess: () => toast.success("Annotation removed") });
+                    clearAnnotation(undefined, {
+                      onSuccess: () => toast.success("Annotation removed"),
+                      onError: () => toast.error("Failed to remove annotation"),
+                    });
                   }
                 }}
               >

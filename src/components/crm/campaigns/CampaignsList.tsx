@@ -235,7 +235,7 @@ function CampaignDialog({
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label>Type</Label>
               <Select
@@ -625,8 +625,8 @@ export function CampaignsList() {
       />
 
       {/* Toolbar — dark actions bar matching Estimates/Invoices */}
-      <div className="flex items-center justify-between bg-[#4a4a4a] px-4 py-2 shrink-0">
-        <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-y-2 bg-[#4a4a4a] px-4 py-2 shrink-0">
+        <div className="flex min-w-0 flex-wrap items-center gap-2 gap-y-1">
           <button
             onClick={() => refetchCampaigns()}
             className="flex h-7 w-7 items-center justify-center rounded border border-[#6a6a6a] bg-[#5a5a5a] text-white hover:bg-[#6a6a6a]"
@@ -634,7 +634,7 @@ export function CampaignsList() {
           >
             <RotateCcw className="h-3.5 w-3.5" />
           </button>
-          <div className="ml-1 flex items-center gap-1 overflow-x-auto">
+          <div className="ml-1 flex min-w-0 items-center gap-1 overflow-x-auto">
             {STATUS_TABS.map((t) => {
               const count =
                 t.key === "all"

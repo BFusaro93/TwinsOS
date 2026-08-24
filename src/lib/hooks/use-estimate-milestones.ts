@@ -167,7 +167,8 @@ export function useCreateInvoiceFromMilestone() {
 
       const { error: liErr } = await supabase.from("crm_invoice_line_items").insert({
         invoice_id: inv.id,
-        description: milestone.name,
+        name: milestone.name,
+        description: "",
         qty: 1,
         rate_cents: milestone.amountCents,
         total_cents: milestone.amountCents,

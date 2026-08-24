@@ -12,6 +12,7 @@ import {
 } from "@/lib/hooks/use-crm-automations";
 import type { CRMSequence, CRMSequenceEvent } from "@/types/crm-automations";
 import { EventCard } from "./EventCard";
+import { toast } from "sonner";
 
 interface Props {
   sequence: CRMSequence;
@@ -42,11 +43,14 @@ export function SequenceColumn({ sequence, isFocused, onFocus, onRulesClick, onE
           checked={sequence.isActive}
           onClick={(e) => e.stopPropagation()}
           onCheckedChange={(checked) =>
-            updateSequence.mutate({
-              id: sequence.id,
-              automationId: sequence.automationId,
-              updates: { isActive: checked },
-            })
+            updateSequence.mutate(
+              {
+                id: sequence.id,
+                automationId: sequence.automationId,
+                updates: { isActive: checked },
+              },
+              { onError: () => toast.error("Failed to update sequence") }
+            )
           }
         />
         <Button
@@ -78,7 +82,10 @@ export function SequenceColumn({ sequence, isFocused, onFocus, onRulesClick, onE
               event={ev}
               onClick={() => onEventClick(ev)}
               onDelete={() =>
-                deleteEvent.mutate({ id: ev.id, sequenceId: ev.sequenceId })
+                deleteEvent.mutate(
+                  { id: ev.id, sequenceId: ev.sequenceId },
+                  { onError: () => toast.error("Failed to delete event") }
+                )
               }
             />
           ))

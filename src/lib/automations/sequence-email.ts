@@ -37,11 +37,15 @@ export async function resolveEmailStepContent(
 ): Promise<ResolvedEmailContent | { error: string }> {
   const { data: client } = await supabase
     .from("clients")
-    .select("display_name, primary_email, billing_email, primary_phone, billing_address, billing_city, billing_state, billing_zip, account_number, sales_rep_id")
+    .select("display_name, primary_email, billing_email, primary_phone, billing_address, billing_city, billing_state, billing_zip, account_number, sales_rep_id, do_not_market")
     .eq("id", params.clientId)
     .single();
 
   if (!client) return { error: "client not found" };
+  // Same opt-out flag Sales Campaigns checks before sending — a client who
+  // used the unsubscribe link should stop getting automation emails too,
+  // not just campaign blasts.
+  if (client.do_not_market) return { error: "client has opted out of marketing emails (do_not_market)" };
 
   const toSelection = params.toSelection?.length ? params.toSelection : ["client_primary"];
   const toEmails = new Set<string>();
