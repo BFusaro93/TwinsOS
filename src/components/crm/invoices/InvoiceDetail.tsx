@@ -1366,8 +1366,17 @@ export function InvoiceDetail({
         open={chargeCardOpen}
         onOpenChange={setChargeCardOpen}
         onCharged={() => {
-          queryClient.invalidateQueries({ queryKey: ["crm-invoices"] });
-          setTimeout(() => queryClient.invalidateQueries({ queryKey: ["crm-invoices"] }), 4000);
+          const invalidate = () => {
+            queryClient.invalidateQueries({ queryKey: ["crm-invoices"] });
+            queryClient.invalidateQueries({ queryKey: ["clients", invoice.clientId] });
+            queryClient.invalidateQueries({ queryKey: ["clients"] });
+          };
+          invalidate();
+          // The card charge is confirmed client-side, but the invoice/balance
+          // update itself happens async in the Stripe Connect webhook
+          // (payment_intent.succeeded) — re-invalidate after it's had time to
+          // land so the balance doesn't stay stuck at its pre-payment value.
+          setTimeout(invalidate, 4000);
         }}
       />
       <PaymentDetailDialog

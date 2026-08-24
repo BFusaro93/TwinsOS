@@ -3,6 +3,7 @@
 import { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import { Elements, PaymentElement, useStripe, useElements } from "@stripe/react-stripe-js";
 import { usePayments, useRecordPayment, useUpdatePayment, useRefundPayment, useInvoices, usePaymentAllocations, useBulkImportPayments } from "@/lib/hooks/use-invoices";
 import { useClients } from "@/lib/hooks/use-clients";
@@ -145,6 +146,7 @@ export function AddPaymentDialog({
 }) {
   const isEdit = !!payment;
   const isCreditMode = mode === "credit" || (isEdit && !!payment?.isCredit);
+  const queryClient = useQueryClient();
   const { data: clients } = useClients();
   const { mutateAsync: record, isPending: isRecording } = useRecordPayment();
   const { mutateAsync: update, isPending: isUpdating } = useUpdatePayment();
@@ -355,6 +357,18 @@ export function AddPaymentDialog({
 
   function handleChargeSuccess() {
     setChargeSucceeded(true);
+    const invalidate = () => {
+      queryClient.invalidateQueries({ queryKey: ["crm-invoices"] });
+      queryClient.invalidateQueries({ queryKey: ["crm-payments"] });
+      queryClient.invalidateQueries({ queryKey: ["clients", clientId] });
+      queryClient.invalidateQueries({ queryKey: ["clients"] });
+    };
+    invalidate();
+    // The card charge is confirmed client-side, but the invoice/balance
+    // update itself happens async in the Stripe Connect webhook
+    // (payment_intent.succeeded) — re-invalidate after it's had time to land
+    // so the balance doesn't stay stuck at its pre-payment value.
+    setTimeout(invalidate, 4000);
   }
 
   async function submit(andNew: boolean) {
