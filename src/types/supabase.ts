@@ -1055,6 +1055,7 @@ export type Database = {
       client_portal_settings: {
         Row: {
           accent_color: string
+          allow_documents: boolean
           allow_estimates: boolean
           allow_tickets: boolean
           company_name: string | null
@@ -1070,6 +1071,7 @@ export type Database = {
         }
         Insert: {
           accent_color?: string
+          allow_documents?: boolean
           allow_estimates?: boolean
           allow_tickets?: boolean
           company_name?: string | null
@@ -1085,6 +1087,7 @@ export type Database = {
         }
         Update: {
           accent_color?: string
+          allow_documents?: boolean
           allow_estimates?: boolean
           allow_tickets?: boolean
           company_name?: string | null
@@ -9815,6 +9818,62 @@ export type Database = {
             columns: ["project_id"]
             isOneToOne: false
             referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      portal_documents: {
+        Row: {
+          category: string
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          description: string | null
+          file_name: string
+          id: string
+          mime_type: string | null
+          org_id: string
+          size_bytes: number | null
+          storage_path: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          category?: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          description?: string | null
+          file_name: string
+          id?: string
+          mime_type?: string | null
+          org_id: string
+          size_bytes?: number | null
+          storage_path: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          description?: string | null
+          file_name?: string
+          id?: string
+          mime_type?: string | null
+          org_id?: string
+          size_bytes?: number | null
+          storage_path?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "portal_documents_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
         ]
