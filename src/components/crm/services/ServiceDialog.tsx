@@ -190,6 +190,8 @@ function RateMatrixTab({ serviceId }: RateMatrixTabProps) {
         tail_every_qty: null,
         tail_over_qty: null,
       },
+    }, {
+      onError: () => toast.error("Failed to add rate matrix row"),
     });
   }
 
@@ -204,13 +206,17 @@ function RateMatrixTab({ serviceId }: RateMatrixTabProps) {
         value = parseInt(rawValue, 10) as 0 | 1;
       }
     }
-    upsert.mutate({ serviceId, row: { id: rowId, [field]: value } });
+    upsert.mutate({ serviceId, row: { id: rowId, [field]: value } }, {
+      onError: () => toast.error("Failed to save rate matrix row"),
+    });
   }
 
   function handleFieldChange(newFieldId: string) {
     setSelectedFieldId(newFieldId);
     for (const row of rows) {
-      upsert.mutate({ serviceId, row: { id: row.id, custom_field_id: newFieldId || null } });
+      upsert.mutate({ serviceId, row: { id: row.id, custom_field_id: newFieldId || null } }, {
+        onError: () => toast.error("Failed to update lookup field"),
+      });
     }
   }
 
@@ -236,7 +242,7 @@ function RateMatrixTab({ serviceId }: RateMatrixTabProps) {
         </Select>
       </Field>
 
-      <div className="rounded-lg border overflow-hidden">
+      <div className="rounded-lg border overflow-x-auto">
         <table className="w-full text-xs">
           <thead>
             <tr className="bg-slate-50 border-b font-semibold text-slate-500 uppercase tracking-wide">
@@ -293,7 +299,9 @@ function RateMatrixTab({ serviceId }: RateMatrixTabProps) {
                     onCheckedChange={(v) => saveField(row.id, "is_tail_row", !!v)} />
                 </td>
                 <td className="px-2 py-1.5 text-center">
-                  <button onClick={() => deleteRow.mutate({ id: row.id, serviceId })}
+                  <button onClick={() => deleteRow.mutate({ id: row.id, serviceId }, {
+                      onError: () => toast.error("Failed to delete rate matrix row"),
+                    })}
                     className="rounded p-0.5 hover:bg-red-50">
                     <Trash2 className="h-3.5 w-3.5 text-red-400" />
                   </button>
@@ -351,32 +359,44 @@ function SubServicesTab({ parentService }: SubServicesTabProps) {
 
   async function handleAddNew() {
     if (!newName.trim()) return;
-    await createService.mutateAsync({
-      name: newName.trim(),
-      category: parentService.category,
-      unit: parentService.unit,
-      service_mode: parentService.serviceMode,
-      parent_service_id: parentService.id,
-      is_active: true,
-      show_in_snow_dispatch: false,
-      only_for_estimates: false,
-      track_chemicals: false,
-      task_color: parentService.taskColor,
-      rate_matrix_calc: "qty_x_rate_x_visits",
-    } as Parameters<typeof createService.mutateAsync>[0]);
-    setNewName("");
-    setAddMode(null);
+    try {
+      await createService.mutateAsync({
+        name: newName.trim(),
+        category: parentService.category,
+        unit: parentService.unit,
+        service_mode: parentService.serviceMode,
+        parent_service_id: parentService.id,
+        is_active: true,
+        show_in_snow_dispatch: false,
+        only_for_estimates: false,
+        track_chemicals: false,
+        task_color: parentService.taskColor,
+        rate_matrix_calc: "qty_x_rate_x_visits",
+      } as Parameters<typeof createService.mutateAsync>[0]);
+      setNewName("");
+      setAddMode(null);
+    } catch {
+      toast.error("Failed to create sub-service");
+    }
   }
 
   async function handleLink() {
     if (!linkId) return;
-    await updateService.mutateAsync({ id: linkId, patch: { parent_service_id: parentService.id } });
-    setLinkId("");
-    setAddMode(null);
+    try {
+      await updateService.mutateAsync({ id: linkId, patch: { parent_service_id: parentService.id } });
+      setLinkId("");
+      setAddMode(null);
+    } catch {
+      toast.error("Failed to link sub-service");
+    }
   }
 
   async function handleRemove(s: CRMService) {
-    await updateService.mutateAsync({ id: s.id, patch: { parent_service_id: null } });
+    try {
+      await updateService.mutateAsync({ id: s.id, patch: { parent_service_id: null } });
+    } catch {
+      toast.error("Failed to remove sub-service");
+    }
   }
 
   return (
@@ -385,7 +405,7 @@ function SubServicesTab({ parentService }: SubServicesTabProps) {
         Sub-services appear as nested line items under <strong>{parentService.name}</strong> on estimates and jobs.
       </p>
 
-      <div className="rounded-lg border overflow-hidden">
+      <div className="rounded-lg border overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-slate-50 border-b font-medium text-slate-500 text-xs uppercase tracking-wide">
@@ -509,7 +529,9 @@ function ChemicalsTab({ serviceId }: ChemicalsTabProps) {
   const [addingProductId, setAddingProductId] = useState("");
 
   function persist(next: { productId: string; startDate: string | null; endDate: string | null }[]) {
-    saveChemicals.mutate({ serviceId, chemicals: next });
+    saveChemicals.mutate({ serviceId, chemicals: next }, {
+      onError: () => toast.error("Failed to save chemical products"),
+    });
   }
 
   function handleAdd() {
@@ -546,7 +568,7 @@ function ChemicalsTab({ serviceId }: ChemicalsTabProps) {
         don&apos;t need to re-select them each time. Optional Start/End dates support seasonal rotation.
       </p>
 
-      <div className="rounded-lg border overflow-hidden">
+      <div className="rounded-lg border overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-slate-50 border-b font-medium text-slate-500 text-xs uppercase tracking-wide">
@@ -746,7 +768,7 @@ export function ServiceDialog({ open, service, onClose }: Props) {
         {tab === "details" && (
           <div className="flex flex-col gap-4 py-2">
             {/* Basic info */}
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Field label="Service Name *">
                 <Input
                   value={form.name}
@@ -870,7 +892,7 @@ export function ServiceDialog({ open, service, onClose }: Props) {
                 </p>
               </Field>
 
-              <div className="mt-3 grid grid-cols-3 gap-3">
+              <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <Field label="Default Rate ($)">
                   <Input
                     type="number"
@@ -937,7 +959,7 @@ export function ServiceDialog({ open, service, onClose }: Props) {
             </div>
 
             {/* Checkboxes */}
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               {([
                 { key: "isActive",           label: "Active" },
                 { key: "showInSnowDispatch", label: "Show in Snow Dispatch" },

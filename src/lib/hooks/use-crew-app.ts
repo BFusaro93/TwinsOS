@@ -1,6 +1,7 @@
 "use client";
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import { groupVisitsIntoStops, type Stop } from "@/lib/utils/visit-stops";
 import type { CRMJob, CRMJobVisit, VisitPhoto, CrewMemberTime } from "@/types/crm-jobs";
@@ -391,6 +392,7 @@ export function useClockIn() {
       qc.invalidateQueries({ queryKey: ["crew-app-visits"] });
       qc.invalidateQueries({ queryKey: ["crm-job-visits"] });
     },
+    onError: () => toast.error("Failed to clock in — check your connection and try again"),
   });
 }
 
@@ -412,6 +414,7 @@ export function useClockOut() {
       qc.invalidateQueries({ queryKey: ["crew-app-visits"] });
       qc.invalidateQueries({ queryKey: ["crm-job-visits"] });
     },
+    onError: () => toast.error("Failed to clock out — check your connection and try again"),
   });
 }
 
@@ -434,6 +437,7 @@ export function useStopClockIn() {
       qc.invalidateQueries({ queryKey: ["crew-app-visits"] });
       qc.invalidateQueries({ queryKey: ["crm-job-visits"] });
     },
+    onError: () => toast.error("Failed to start job — check your connection and try again"),
   });
 }
 
@@ -457,6 +461,7 @@ export function useStopClockOut() {
       qc.invalidateQueries({ queryKey: ["crm-jobs"] });
       qc.invalidateQueries({ queryKey: ["crm-job-visits"] });
     },
+    onError: () => toast.error("Failed to stop job — check your connection and try again"),
   });
 }
 
@@ -478,6 +483,7 @@ export function useSkipVisit() {
       qc.invalidateQueries({ queryKey: ["crew-app-stop"] });
       qc.invalidateQueries({ queryKey: ["crm-job-visits"] });
     },
+    onError: () => toast.error("Failed to skip service — check your connection and try again"),
   });
 }
 
@@ -493,6 +499,7 @@ export function useAcknowledgeNotes() {
       qc.invalidateQueries({ queryKey: ["crew-app-visit", visitId] });
       qc.invalidateQueries({ queryKey: ["crew-app-stop"] });
     },
+    onError: () => toast.error("Failed to acknowledge notes — check your connection and try again"),
   });
 }
 
@@ -513,6 +520,7 @@ export function useAddCrewNote() {
       qc.invalidateQueries({ queryKey: ["crew-app-stop"] });
       qc.invalidateQueries({ queryKey: ["crm-job-visits"] });
     },
+    onError: () => toast.error("Failed to send note — check your connection and try again"),
   });
 }
 
@@ -533,6 +541,7 @@ export function useUploadVisitPhoto() {
     onSuccess: (_data, { visitId }) => {
       qc.invalidateQueries({ queryKey: ["crew-app-photos", visitId] });
     },
+    onError: () => toast.error("Failed to upload photo — check your connection and try again"),
   });
 }
 
@@ -561,6 +570,7 @@ export function useUpsertCrewMemberTime() {
     onSuccess: (_data, { visitId }) => {
       qc.invalidateQueries({ queryKey: ["crew-member-times", visitId] });
     },
+    onError: () => toast.error("Failed to save crew member time"),
   });
 }
 
@@ -579,5 +589,6 @@ export function useDeleteCrewMemberTime() {
     onSuccess: (_data, { visitId }) => {
       qc.invalidateQueries({ queryKey: ["crew-member-times", visitId] });
     },
+    onError: () => toast.error("Failed to remove crew member time"),
   });
 }

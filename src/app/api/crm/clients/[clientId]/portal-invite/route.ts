@@ -100,6 +100,20 @@ export async function POST(
     });
   }
 
+  // Log to the client's activity timeline, matching every other client-facing
+  // send-email route (estimates, invoices, chemical applications).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await (supabase as any).from("client_activity").insert({
+    org_id: profile.org_id,
+    client_id: clientId,
+    activity_type: "email",
+    subject: `Client portal invite sent`,
+    body: `Sent to ${email}`,
+    sent_to: email,
+    created_by: user.id,
+    occurred_at: new Date().toISOString(),
+  });
+
   return NextResponse.json({ success: true, inviteUrl: portalUrl, emailSent: true });
 }
 

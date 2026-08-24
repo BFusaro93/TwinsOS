@@ -46,6 +46,7 @@ import type { FieldRequirement } from "@/stores/settings-store";
 import type { Part } from "@/types/cmms";
 import { type CostMethod } from "@/lib/cost-methods";
 import { useOrgSettings, useUpdateOrgSettings } from "@/lib/hooks/use-org-settings";
+import { useModuleAccess } from "@/lib/hooks/use-module-access";
 import { useIntegration, useUpsertIntegration } from "@/lib/hooks/use-integrations";
 import { useWorkOrders, useBulkImportWorkOrders } from "@/lib/hooks/use-work-orders";
 import { useAssets, useBulkImportAssets } from "@/lib/hooks/use-assets";
@@ -487,7 +488,7 @@ function CustomPartCategoriesCleanup({
 
 // ── CustomizationsTab ─────────────────────────────────────────────────────────
 
-function CustomizationsTab() {
+function CustomizationsTab({ hasEquipt }: { hasEquipt: boolean }) {
   const {
     locations,
     setLocationEnabled,
@@ -618,69 +619,73 @@ function CustomizationsTab() {
         )}
       </div>
 
-      <AccordionSection title="Locations" count={locations.length} defaultOpen={true}>
-        <CategoryListEditor
-          items={locations}
-          onToggle={act(setLocationEnabled)}
-          onRename={act(setLocationLabel)}
-          onAdd={act(addLocation)}
-          onRemove={act(removeLocation)}
-          addPlaceholder="e.g. New York, NJ"
-        />
-      </AccordionSection>
+      {hasEquipt && (
+        <>
+          <AccordionSection title="Locations" count={locations.length} defaultOpen={true}>
+            <CategoryListEditor
+              items={locations}
+              onToggle={act(setLocationEnabled)}
+              onRename={act(setLocationLabel)}
+              onAdd={act(addLocation)}
+              onRemove={act(removeLocation)}
+              addPlaceholder="e.g. New York, NJ"
+            />
+          </AccordionSection>
 
-      <AccordionSection title="Part Categories" count={partCategories.length}>
-        <CategoryListEditor
-          items={partCategories}
-          onToggle={act(setPartCategoryEnabled)}
-          onRename={renamePartCategory}
-          onAdd={act(addPartCategory)}
-          onRemove={act(removePartCategory)}
-          addPlaceholder="e.g. Seals & Gaskets"
-        />
-        <CustomPartCategoriesCleanup
-          parts={parts}
-          savedLabels={partCategories.map((c) => c.label)}
-          onMerge={(from, to) => mergePartCategory({ from, to })}
-          onPromote={act(addPartCategory)}
-          isMerging={isMergingPartCategory}
-        />
-      </AccordionSection>
+          <AccordionSection title="Part Categories" count={partCategories.length}>
+            <CategoryListEditor
+              items={partCategories}
+              onToggle={act(setPartCategoryEnabled)}
+              onRename={renamePartCategory}
+              onAdd={act(addPartCategory)}
+              onRemove={act(removePartCategory)}
+              addPlaceholder="e.g. Seals & Gaskets"
+            />
+            <CustomPartCategoriesCleanup
+              parts={parts}
+              savedLabels={partCategories.map((c) => c.label)}
+              onMerge={(from, to) => mergePartCategory({ from, to })}
+              onPromote={act(addPartCategory)}
+              isMerging={isMergingPartCategory}
+            />
+          </AccordionSection>
 
-      <AccordionSection title="Work Order Categories" count={woCategories.length}>
-        <CategoryListEditor
-          items={woCategories}
-          onToggle={act(setWOCategoryEnabled)}
-          onRename={act(setWOCategoryLabel)}
-          onAdd={act(addWOCategory)}
-          onRemove={act(removeWOCategory)}
-          addPlaceholder="e.g. Welding"
-        />
-      </AccordionSection>
+          <AccordionSection title="Work Order Categories" count={woCategories.length}>
+            <CategoryListEditor
+              items={woCategories}
+              onToggle={act(setWOCategoryEnabled)}
+              onRename={act(setWOCategoryLabel)}
+              onAdd={act(addWOCategory)}
+              onRemove={act(removeWOCategory)}
+              addPlaceholder="e.g. Welding"
+            />
+          </AccordionSection>
 
-      <AccordionSection title="Asset Types" count={assetTypes.length}>
-        <CategoryListEditor
-          items={assetTypes}
-          onToggle={act(setAssetTypeEnabled)}
-          onRename={act(setAssetTypeLabel)}
-          onAdd={act(addAssetType)}
-          onRemove={act(removeAssetType)}
-          addPlaceholder="e.g. Chainsaw"
-        />
-      </AccordionSection>
+          <AccordionSection title="Asset Types" count={assetTypes.length}>
+            <CategoryListEditor
+              items={assetTypes}
+              onToggle={act(setAssetTypeEnabled)}
+              onRename={act(setAssetTypeLabel)}
+              onAdd={act(addAssetType)}
+              onRemove={act(removeAssetType)}
+              addPlaceholder="e.g. Chainsaw"
+            />
+          </AccordionSection>
 
-      <AccordionSection title="Fuel Types" count={fuelTypes.length}>
-        <CategoryListEditor
-          items={fuelTypes}
-          onToggle={act(setFuelTypeEnabled)}
-          onRename={act(setFuelTypeLabel)}
-          onAdd={act(addFuelType)}
-          onRemove={act(removeFuelType)}
-          addPlaceholder="e.g. Propane"
-        />
-      </AccordionSection>
+          <AccordionSection title="Fuel Types" count={fuelTypes.length}>
+            <CategoryListEditor
+              items={fuelTypes}
+              onToggle={act(setFuelTypeEnabled)}
+              onRename={act(setFuelTypeLabel)}
+              onAdd={act(addFuelType)}
+              onRemove={act(removeFuelType)}
+              addPlaceholder="e.g. Propane"
+            />
+          </AccordionSection>
+        </>
+      )}
 
-      <AccordionSection title="Vendor Types" count={vendorTypes.length}>
+      <AccordionSection title="Vendor Types" count={vendorTypes.length} defaultOpen={!hasEquipt}>
         <CategoryListEditor
           items={vendorTypes}
           onToggle={act(setVendorTypeEnabled)}
@@ -691,31 +696,33 @@ function CustomizationsTab() {
         />
       </AccordionSection>
 
-      <AccordionSection title="Quick Reference Part # Fields" count={filterFields.length}>
-        <CategoryListEditor
-          items={filterFields}
-          onToggle={act(setFilterFieldEnabled)}
-          onRename={act(setFilterFieldLabel)}
-          onAdd={act(addFilterField)}
-          onRemove={act(removeFilterField)}
-          addPlaceholder="e.g. Hydraulic Filter"
-        />
-      </AccordionSection>
+      {hasEquipt && (
+        <AccordionSection title="Quick Reference Part # Fields" count={filterFields.length}>
+          <CategoryListEditor
+            items={filterFields}
+            onToggle={act(setFilterFieldEnabled)}
+            onRename={act(setFilterFieldLabel)}
+            onAdd={act(addFilterField)}
+            onRemove={act(removeFilterField)}
+            addPlaceholder="e.g. Hydraulic Filter"
+          />
+        </AccordionSection>
+      )}
     </div>
   );
 }
 
 // ── RequiredFieldsTab ─────────────────────────────────────────────────────────
 
-const ENTITY_DISPLAY: { key: string; name: string }[] = [
+const ENTITY_DISPLAY: { key: string; name: string; equiptOnly?: boolean }[] = [
   { key: "purchase_order", name: "Purchase Orders" },
   { key: "requisition",    name: "Requisitions" },
-  { key: "work_order",     name: "Work Orders" },
-  { key: "asset",          name: "Assets" },
-  { key: "vehicle",        name: "Vehicles" },
+  { key: "work_order",     name: "Work Orders", equiptOnly: true },
+  { key: "asset",          name: "Assets", equiptOnly: true },
+  { key: "vehicle",        name: "Vehicles", equiptOnly: true },
 ];
 
-function RequiredFieldsTab() {
+function RequiredFieldsTab({ hasEquipt }: { hasEquipt: boolean }) {
   const { requiredFields, setFieldRequirement } = useSettingsStore();
   const { mutate: updateOrgSettings, isPending: saving } = useUpdateOrgSettings();
 
@@ -723,9 +730,11 @@ function RequiredFieldsTab() {
     setFieldRequirement(entity, field, requirement);
   }
 
+  const entities = hasEquipt ? ENTITY_DISPLAY : ENTITY_DISPLAY.filter((e) => !e.equiptOnly);
+
   return (
     <div className="flex flex-col gap-6">
-      {ENTITY_DISPLAY.map(({ key, name }) => {
+      {entities.map(({ key, name }) => {
         const fields = requiredFields[key] ?? [];
         return (
           <div key={key} className="rounded-lg border bg-white shadow-sm">
@@ -939,7 +948,7 @@ function ImportTile({
 
 // ── ImportExportTab ───────────────────────────────────────────────────────────
 
-function ImportExportTab() {
+function ImportExportTab({ hasEquipt }: { hasEquipt: boolean }) {
   const [importStatus, setImportStatus] = useState<{ type: "success" | "error"; message: string } | null>(null);
 
   // Data hooks for exports
@@ -1018,16 +1027,16 @@ function ImportExportTab() {
     }
   }
 
-  const EXPORT_TILES: { label: string; icon: React.ReactNode }[] = [
-    { label: "Work Orders",     icon: <ClipboardCheck className="h-6 w-6" /> },
-    { label: "Assets",          icon: <Cog className="h-6 w-6" /> },
-    { label: "Vehicles",        icon: <Truck className="h-6 w-6" /> },
-    { label: "Parts",           icon: <Cog className="h-6 w-6" /> },
+  const EXPORT_TILES: { label: string; icon: React.ReactNode; equiptOnly?: boolean }[] = [
+    { label: "Work Orders",     icon: <ClipboardCheck className="h-6 w-6" />, equiptOnly: true },
+    { label: "Assets",          icon: <Cog className="h-6 w-6" />, equiptOnly: true },
+    { label: "Vehicles",        icon: <Truck className="h-6 w-6" />, equiptOnly: true },
+    { label: "Parts",           icon: <Cog className="h-6 w-6" />, equiptOnly: true },
     { label: "Vendors",         icon: <Building2 className="h-6 w-6" /> },
     { label: "Requisitions",    icon: <FileText className="h-6 w-6" /> },
     { label: "Products",        icon: <BookOpen className="h-6 w-6" /> },
     { label: "Purchase Orders", icon: <ShoppingCart className="h-6 w-6" /> },
-  ];
+  ].filter((t) => hasEquipt || !t.equiptOnly);
 
   return (
     <div className="flex flex-col gap-6">
@@ -1078,15 +1087,15 @@ function ImportExportTab() {
         <div className="p-6">
           <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
             {[
-              { label: "Work Orders",  icon: <ClipboardCheck className="h-6 w-6" />, onImport: (r: Record<string, string>[]) => bulkImportWorkOrders(r), templateColumns: ["workOrderNumber", "title", "description", "priority", "status", "category", "assetName", "assignedToName", "dueDate", "createdAt"], required: ["title"] },
-              { label: "Assets",       icon: <Cog className="h-6 w-6" />,           onImport: (r: Record<string, string>[]) => bulkImportAssets(r),     templateColumns: ["name", "assetTag", "equipmentNumber", "assetType", "make", "model", "year", "serialNumber", "location", "status", "purchaseVendorName", "purchaseDate", "purchasePrice", "paymentMethod", "financeInstitution"], required: ["name", "assetTag"] },
-              { label: "Vehicles",     icon: <Truck className="h-6 w-6" />,         onImport: (r: Record<string, string>[]) => bulkImportVehicles(r),   templateColumns: ["name", "assetTag", "make", "model", "year", "licensePlate", "vin", "fuelType", "status", "assignedCrew", "purchaseVendorName", "purchaseDate", "purchasePrice", "paymentMethod", "financeInstitution"], required: ["name", "assetTag"] },
-              { label: "Parts",        icon: <Cog className="h-6 w-6" />,            onImport: (r: Record<string, string>[]) => bulkImportParts(r),      templateColumns: ["name", "partNumber", "description", "category", "unitCost", "quantityOnHand", "minimumStock", "vendorName", "location"], required: ["name", "partNumber"] },
+              { label: "Work Orders",  icon: <ClipboardCheck className="h-6 w-6" />, onImport: (r: Record<string, string>[]) => bulkImportWorkOrders(r), templateColumns: ["workOrderNumber", "title", "description", "priority", "status", "category", "assetName", "assignedToName", "dueDate", "createdAt"], required: ["title"], equiptOnly: true },
+              { label: "Assets",       icon: <Cog className="h-6 w-6" />,           onImport: (r: Record<string, string>[]) => bulkImportAssets(r),     templateColumns: ["name", "assetTag", "equipmentNumber", "assetType", "make", "model", "year", "serialNumber", "location", "status", "purchaseVendorName", "purchaseDate", "purchasePrice", "paymentMethod", "financeInstitution"], required: ["name", "assetTag"], equiptOnly: true },
+              { label: "Vehicles",     icon: <Truck className="h-6 w-6" />,         onImport: (r: Record<string, string>[]) => bulkImportVehicles(r),   templateColumns: ["name", "assetTag", "make", "model", "year", "licensePlate", "vin", "fuelType", "status", "assignedCrew", "purchaseVendorName", "purchaseDate", "purchasePrice", "paymentMethod", "financeInstitution"], required: ["name", "assetTag"], equiptOnly: true },
+              { label: "Parts",        icon: <Cog className="h-6 w-6" />,            onImport: (r: Record<string, string>[]) => bulkImportParts(r),      templateColumns: ["name", "partNumber", "description", "category", "unitCost", "quantityOnHand", "minimumStock", "vendorName", "location"], required: ["name", "partNumber"], equiptOnly: true },
               { label: "Vendors",      icon: <Building2 className="h-6 w-6" />,     onImport: (r: Record<string, string>[]) => bulkImportVendors(r),    templateColumns: ["name", "contactName", "email", "phone", "address", "vendorType", "website", "notes"], required: ["name"] },
               { label: "Requisitions",    icon: <FileText className="h-6 w-6" />,      onImport: (r: Record<string, string>[]) => bulkImportRequisitions(r), templateColumns: ["title", "vendorName", "notes"], required: ["title"] },
               { label: "Products",        icon: <BookOpen className="h-6 w-6" />,     onImport: (r: Record<string, string>[]) => bulkImportProducts(r), templateColumns: ["name", "partNumber", "description", "category", "unitCost", "price", "quantityOnHand", "vendorName", "isInventory"], required: ["name", "partNumber", "category"] },
               { label: "Purchase Orders", icon: <ShoppingCart className="h-6 w-6" />,  onImport: (r: Record<string, string>[]) => bulkImportPurchaseOrders(r), templateColumns: ["Purchase Order #", "Vendor", "Status", "Created On", "Approved On", "Completed On", "Due Date", "Line Type", "Line Name", "Part Number", "Unit Cost", "Ordered Quantity", "Ordered Cost"], required: [] as string[] },
-            ].map((tile) => (
+            ].filter((tile) => hasEquipt || !tile.equiptOnly).map((tile) => (
               <ImportTile
                 key={tile.label}
                 label={tile.label}
@@ -1337,6 +1346,13 @@ const EQUIPT_SETTINGS_ROLES = new Set(["admin", "manager"]);
 
 export function EquiptSettingsTabs() {
   const { currentUser, currentUserLoaded } = useCurrentUserStore();
+  // Requisitions/POs, Vendors, and Products are shared with Landscapt-only
+  // orgs (no Equipt module) — this whole page is still reachable to them
+  // (nothing here is module-gated), but "Equipt Settings" reads as "not for
+  // me" and makes the approval-flow/costing tabs they DO need look hidden.
+  // Called unconditionally, before the role check below, so hook order stays
+  // stable across renders regardless of which branch returns.
+  const { allowed: hasEquipt } = useModuleAccess("equipt");
 
   if (currentUserLoaded && !EQUIPT_SETTINGS_ROLES.has(currentUser.role)) {
     return (
@@ -1349,16 +1365,29 @@ export function EquiptSettingsTabs() {
     );
   }
 
+  // Integrations (Samsara vehicle sync) and the Maintenance Request Portal are
+  // entirely CMMS-only — hide them outright rather than showing an empty/dead
+  // feature to an org that has no vehicles or work orders.
+  const visibleTabs = hasEquipt
+    ? TAB_KEYS
+    : TAB_KEYS.filter((t) => t !== "integrations" && t !== "request_portal");
+
   return (
     <div className="flex flex-col gap-0">
       <div className="px-4 pt-4 pb-0 md:px-6 md:pt-6">
-        <h1 className="text-xl font-semibold text-slate-900">Equipt Settings</h1>
-        <p className="mt-1 text-sm text-slate-500">CMMS &amp; purchasing configuration</p>
+        <h1 className="text-xl font-semibold text-slate-900">
+          {hasEquipt ? "Equipt Settings" : "Purchasing Settings"}
+        </h1>
+        <p className="mt-1 text-sm text-slate-500">
+          {hasEquipt
+            ? "CMMS & purchasing configuration"
+            : "Vendors, requisition & PO approval flows, and inventory costing"}
+        </p>
       </div>
       <Tabs defaultValue="customizations" className="mt-4">
         <div className="border-b px-4 md:px-6">
           <TabsList className="h-auto flex-wrap gap-0 rounded-none bg-transparent p-0">
-            {TAB_KEYS.map((tab) => (
+            {visibleTabs.map((tab) => (
               <TabsTrigger
                 key={tab}
                 value={tab}
@@ -1371,11 +1400,11 @@ export function EquiptSettingsTabs() {
         </div>
         <div className="p-4 md:p-6">
           <TabsContent value="customizations" className="mt-0">
-            <CustomizationsTab />
+            <CustomizationsTab hasEquipt={hasEquipt} />
           </TabsContent>
 
           <TabsContent value="required_fields" className="mt-0">
-            <RequiredFieldsTab />
+            <RequiredFieldsTab hasEquipt={hasEquipt} />
           </TabsContent>
 
           <TabsContent value="approval_flows" className="mt-0">
@@ -1387,20 +1416,24 @@ export function EquiptSettingsTabs() {
           </TabsContent>
 
           <TabsContent value="import_export" className="mt-0">
-            <ImportExportTab />
+            <ImportExportTab hasEquipt={hasEquipt} />
           </TabsContent>
 
           <TabsContent value="notifications" className="mt-0">
             <NotificationsPage hideHeader />
           </TabsContent>
 
-          <TabsContent value="integrations" className="mt-0">
-            <IntegrationsTab />
-          </TabsContent>
+          {hasEquipt && (
+            <TabsContent value="integrations" className="mt-0">
+              <IntegrationsTab />
+            </TabsContent>
+          )}
 
-          <TabsContent value="request_portal" className="mt-0">
-            <RequestPortalTab />
-          </TabsContent>
+          {hasEquipt && (
+            <TabsContent value="request_portal" className="mt-0">
+              <RequestPortalTab />
+            </TabsContent>
+          )}
         </div>
       </Tabs>
     </div>

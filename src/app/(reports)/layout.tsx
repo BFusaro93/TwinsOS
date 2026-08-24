@@ -6,7 +6,10 @@ import { ReportsSidebar } from "@/components/shared/ReportsSidebar";
 import { TopBar } from "@/components/shared/TopBar";
 import { RealtimeSync } from "@/components/shared/RealtimeSync";
 import { SettingsLoader } from "@/components/shared/SettingsLoader";
+import { InternalOnlyGuard } from "@/components/shared/InternalOnlyGuard";
 import { useUIStore } from "@/stores";
+
+const INTERNAL_ONLY_PATHS = ["/dashboards/financials", "/dashboards/avb", "/dashboards/safety", "/dashboards/crm"];
 
 export default function ReportsLayout({
   children,
@@ -46,7 +49,9 @@ export default function ReportsLayout({
 
       <div className="flex flex-1 flex-col overflow-hidden">
         <TopBar />
-        <main className="flex-1 overflow-auto p-4 md:p-6">{children}</main>
+        <main className="flex-1 overflow-auto p-4 md:p-6">
+          <InternalOnlyGuard restrictedPaths={INTERNAL_ONLY_PATHS}>{children}</InternalOnlyGuard>
+        </main>
       </div>
     </div>
   );

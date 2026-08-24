@@ -15,6 +15,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { formatDate } from "@/lib/utils";
 import { useJobPhotos, useDeletePhoto, useBulkUpdatePhotos } from "../hooks/useJobPhotos";
@@ -96,7 +97,10 @@ export function PhotoGallery({ projectId }: PhotoGalleryProps) {
 
   function handleBulkTag(flag: BeforeAfterFlag) {
     if (selected.size === 0) return;
-    bulkUpdate({ ids: Array.from(selected), beforeAfter: flag }, { onSuccess: exitSelectMode });
+    bulkUpdate(
+      { ids: Array.from(selected), beforeAfter: flag },
+      { onSuccess: exitSelectMode, onError: () => toast.error("Failed to update photos") },
+    );
   }
 
   function openPairDialog() {
@@ -303,7 +307,7 @@ export function PhotoGallery({ projectId }: PhotoGalleryProps) {
                         {c.label || "Comparison"}
                       </span>
                       <button
-                        onClick={() => deleteComparison(c.id)}
+                        onClick={() => deleteComparison(c.id, { onError: () => toast.error("Failed to delete comparison") })}
                         className="shrink-0 text-slate-300 hover:text-red-500"
                         title="Delete comparison"
                       >
@@ -449,7 +453,7 @@ export function PhotoGallery({ projectId }: PhotoGalleryProps) {
           onNavigate={setLightboxPhoto}
           canAnnotate={canAnnotate}
           onAnnotate={handleAnnotate}
-          onDelete={(id) => { deletePhoto(id); setLightboxPhoto(null); }}
+          onDelete={(id) => { deletePhoto(id, { onError: () => toast.error("Failed to delete photo") }); setLightboxPhoto(null); }}
         />
       )}
     </div>

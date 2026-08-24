@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { useUIStore, useCurrentUserStore } from "@/stores";
 import { useSettingsStore } from "@/stores/settings-store";
 import { usePermissions } from "@/lib/hooks/use-permissions";
+import { useModuleAccess } from "@/lib/hooks/use-module-access";
 import type { LucideIcon } from "lucide-react";
 
 interface SettingsNavItem {
@@ -18,20 +19,28 @@ interface SettingsNavItem {
   description: string;
 }
 
-const SETTINGS_NAV: SettingsNavItem[] = [
-  { key: "master",    label: "Master Account", href: "/settings", icon: UserCog, exact: true, description: "Users, organization, branding & billing" },
-  { key: "equipt",    label: "Equipt Settings", href: "/settings/equipt", icon: Wrench, description: "CMMS & purchasing configuration" },
-  { key: "landscapt", label: "Landscapt Settings", href: "/settings/landscapt", icon: Sprout, description: "CRM & field service configuration" },
-  { key: "support",   label: "Support", href: "/settings/support", icon: HelpCircle, description: "Guides, FAQ, and contact" },
-  { key: "docs",      label: "Docs", href: "/settings/docs", icon: Library, description: "Step-by-step guides for every part of the platform" },
-];
-
 export function SettingsSidebar() {
   const pathname = usePathname();
   const { sidebarCollapsed } = useUIStore();
   const { logoDataUrl, orgName } = useSettingsStore();
   const { currentUser } = useCurrentUserStore();
   const { isAdmin, roleId } = usePermissions();
+
+  // Requisitions/POs, Vendors, and Products are shared with Landscapt-only
+  // orgs (no Equipt module) — this page is still fully reachable to them
+  // (nothing here is module-gated), but "Equipt Settings" reads as "not for
+  // me" and buries the approval-flow/costing config they DO need.
+  const { allowed: hasEquipt } = useModuleAccess("equipt");
+
+  const SETTINGS_NAV: SettingsNavItem[] = [
+    { key: "master",    label: "Master Account", href: "/settings", icon: UserCog, exact: true, description: "Users, organization, branding & billing" },
+    hasEquipt
+      ? { key: "equipt", label: "Equipt Settings", href: "/settings/equipt", icon: Wrench, description: "CMMS & purchasing configuration" }
+      : { key: "equipt", label: "Purchasing Settings", href: "/settings/equipt", icon: Wrench, description: "Vendors, requisition & PO approval flows, and inventory costing" },
+    { key: "landscapt", label: "Landscapt Settings", href: "/settings/landscapt", icon: Sprout, description: "CRM & field service configuration" },
+    { key: "support",   label: "Support", href: "/settings/support", icon: HelpCircle, description: "Guides, FAQ, and contact" },
+    { key: "docs",      label: "Docs", href: "/settings/docs", icon: Library, description: "Step-by-step guides for every part of the platform" },
+  ];
 
   // Master Account is admin-only; Equipt Settings is admin/manager (must
   // match EQUIPT_SETTINGS_ROLES in EquiptSettingsTabs.tsx); Landscapt

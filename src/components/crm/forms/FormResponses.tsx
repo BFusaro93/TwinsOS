@@ -65,7 +65,7 @@ const QUICK_FILTERS: { key: QuickFilter; label: string }[] = [
 function ResponseDetailPanel({ response, onClose }: { response: CRMFormResponse; onClose: () => void }) {
   const router = useRouter();
   return (
-    <div className="fixed inset-y-0 right-0 z-50 w-[420px] border-l bg-white shadow-xl flex flex-col">
+    <div className="fixed inset-y-0 right-0 z-50 w-full sm:max-w-[420px] md:w-[420px] border-l bg-white shadow-xl flex flex-col">
       <div className="flex items-center justify-between border-b px-5 py-4">
         <div>
           <p className="font-semibold text-slate-800">{response.submittedByName ?? "Anonymous"}</p>

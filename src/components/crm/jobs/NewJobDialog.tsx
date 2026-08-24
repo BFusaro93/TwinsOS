@@ -568,9 +568,10 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
                 </Button>
               </div>
               <div className="rounded border overflow-hidden">
+                <div className="overflow-x-auto">
                 {/* Header — uses org brand color. Recurring jobs: no per-row Start Date (use header "Start Recurring") */}
                 <div
-                  className="grid text-white text-xs font-medium px-3 py-2"
+                  className="grid min-w-[640px] text-white text-xs font-medium px-3 py-2"
                   style={{
                     gridTemplateColumns: showServiceDate
                       ? "1.5fr 1.5fr 1.5fr 0.9fr 0.8fr 0.7fr 1.1fr 28px"
@@ -590,7 +591,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
                 {services.map((svc, i) => (
                   <div
                     key={i}
-                    className="grid items-center gap-1.5 border-b last:border-0 bg-white px-3 py-2"
+                    className="grid min-w-[640px] items-center gap-1.5 border-b last:border-0 bg-white px-3 py-2"
                     style={{
                       gridTemplateColumns: showServiceDate
                         ? "1.5fr 1.5fr 1.5fr 0.9fr 0.8fr 0.7fr 1.1fr 28px"
@@ -638,6 +639,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
                     </button>
                   </div>
                 ))}
+                </div>
                 <div className="flex items-center justify-between border-t bg-slate-50 px-3 py-2 text-xs font-medium text-slate-700">
                   <span>Service Total</span>
                   <span>{formatCurrency(serviceTotalCents)}</span>

@@ -61,7 +61,7 @@ export default function ClientsPage() {
         title="Clients"
         description="Manage customer accounts, properties, and activity"
         action={
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             {viewToggle}
             <ImportExportMenu
               entityLabel="Clients"

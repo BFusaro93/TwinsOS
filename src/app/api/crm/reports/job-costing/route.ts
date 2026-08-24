@@ -40,23 +40,30 @@ export async function GET(request: Request) {
   const to = searchParams.get("to");
   const serviceId = searchParams.get("service_id");
 
-  // crm_jobs has no clocked_out_at column of its own — filtering the jobs
-  // query directly on it (as this route previously did) errored on every
-  // request. A job's completion date here is whichever of its visits was
-  // actually clocked out, matching the men_count/rate_cents lookup below
-  // which already keys off crm_job_visits.clocked_out_at.
+  // clocked_out_at lives on crm_job_visits, not crm_jobs — filter visits first,
+  // then look up the jobs those visits belong to (see visitMap dedupe below).
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let vq = (supabase as any)
+  let visitQ = (supabase as any)
     .from("crm_job_visits")
-    .select("job_id")
-    .not("clocked_out_at", "is", null);
-  if (from) vq = vq.gte("clocked_out_at", from);
-  if (to) vq = vq.lte("clocked_out_at", to);
-  const { data: qualifyingVisits, error: vErr } = await vq;
-  if (vErr) return NextResponse.json({ error: vErr.message }, { status: 500 });
-  const qualifyingJobIds = Array.from(
-    new Set((qualifyingVisits ?? []).map((v: { job_id: string }) => v.job_id))
-  );
+    .select("job_id, men_count, rate_cents, clocked_out_at")
+    .not("clocked_out_at", "is", null)
+    .order("clocked_out_at", { ascending: false });
+
+  if (from) visitQ = visitQ.gte("clocked_out_at", from);
+  if (to) visitQ = visitQ.lte("clocked_out_at", to);
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: visits, error: visitsError } = await (visitQ as any);
+  if (visitsError) return NextResponse.json({ error: visitsError.message }, { status: 500 });
+
+  // Build a map: jobId → most recent visit within range
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const visitMap = new Map<string, { men_count: number; rate_cents: number; clocked_out_at: string }>();
+  for (const v of (visits ?? [])) {
+    if (!visitMap.has(v.job_id)) visitMap.set(v.job_id, v);
+  }
+
+  const jobIds: string[] = [...visitMap.keys()];
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let q = (supabase as any)
@@ -73,31 +80,13 @@ export async function GET(request: Request) {
       estimates:estimate_id ( total_cents, total_budgeted_hours )
     `)
     .is("deleted_at", null)
-    .in("id", qualifyingJobIds.length > 0 ? qualifyingJobIds : ["00000000-0000-0000-0000-000000000000"]);
+    .in("id", jobIds.length > 0 ? jobIds : ["00000000-0000-0000-0000-000000000000"]);
 
   if (serviceId) q = q.eq("service_id", serviceId);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: jobs, error } = await (q as any);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-
-  // For each job, get the most recent completed visit men_count + rate_cents + clocked_out_at
-  const jobIds: string[] = (jobs ?? []).map((j: { id: string }) => j.id);
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: visits } = await (supabase as any)
-    .from("crm_job_visits")
-    .select("job_id, men_count, rate_cents, clocked_out_at")
-    .in("job_id", jobIds.length > 0 ? jobIds : ["00000000-0000-0000-0000-000000000000"])
-    .not("clocked_out_at", "is", null)
-    .order("clocked_out_at", { ascending: false });
-
-  // Build a map: jobId → most recent visit
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const visitMap = new Map<string, { men_count: number; rate_cents: number; clocked_out_at: string }>();
-  for (const v of (visits ?? [])) {
-    if (!visitMap.has(v.job_id)) visitMap.set(v.job_id, v);
-  }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const rows: JobCostingReportRow[] = (jobs ?? []).map((job: any): JobCostingReportRow => {

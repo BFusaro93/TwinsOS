@@ -118,7 +118,7 @@ function Section({ label, children, className }: { label: string; children: Reac
 
 function FieldRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="mb-3 grid grid-cols-[160px_1fr] items-start gap-3">
+    <div className="mb-3 grid grid-cols-1 sm:grid-cols-[160px_1fr] items-start gap-3">
       <span className="pt-2 text-sm text-slate-700">{label}</span>
       <div>{children}</div>
     </div>
@@ -502,24 +502,26 @@ function JobsUnderContractTab({ contractId }: { contractId?: string }) {
   }
   return (
     <Section label="Scheduled Services">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b text-left text-xs font-semibold text-slate-500">
-            <th className="py-2 pr-3">Jobs Under Contract</th>
-            <th className="py-2 pr-3">Rate</th>
-            <th className="py-2 pr-3">Schedule / Type</th>
-            <th className="py-2 pr-3">Quantity</th>
-            <th className="py-2">Contracted Hours</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td colSpan={5} className="py-4 text-sm text-slate-400">
-              No scheduled services on this contract yet.
-            </td>
-          </tr>
-        </tbody>
-      </table>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b text-left text-xs font-semibold text-slate-500">
+              <th className="py-2 pr-3">Jobs Under Contract</th>
+              <th className="py-2 pr-3">Rate</th>
+              <th className="py-2 pr-3">Schedule / Type</th>
+              <th className="py-2 pr-3">Quantity</th>
+              <th className="py-2">Contracted Hours</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td colSpan={5} className="py-4 text-sm text-slate-400">
+                No scheduled services on this contract yet.
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </Section>
   );
 }
@@ -556,33 +558,35 @@ function ContractNotesTab({ contractId }: { contractId?: string }) {
         ) : (notes ?? []).length === 0 ? (
           <p className="text-sm text-slate-400">No notes yet.</p>
         ) : (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b text-left text-xs font-semibold text-slate-500">
-                <th className="pb-1 pr-4">Internal Note</th>
-                <th className="pb-1 pr-4">Created</th>
-                <th className="pb-1">Modified</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {(notes ?? []).map((n) => (
-                <tr key={n.id} className="group border-b last:border-0">
-                  <td className="py-1.5 pr-4 text-slate-700">{n.body}</td>
-                  <td className="py-1.5 pr-4 text-xs text-slate-400">{fmtDate(n.createdAt.slice(0, 10))}</td>
-                  <td className="py-1.5 text-xs text-slate-400">{fmtDate(n.updatedAt.slice(0, 10))}</td>
-                  <td className="py-1.5">
-                    <button
-                      onClick={() => delNote({ id: n.id, contractId: contractId! })}
-                      className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-500"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                  </td>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b text-left text-xs font-semibold text-slate-500">
+                  <th className="pb-1 pr-4">Internal Note</th>
+                  <th className="pb-1 pr-4">Created</th>
+                  <th className="pb-1">Modified</th>
+                  <th />
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {(notes ?? []).map((n) => (
+                  <tr key={n.id} className="group border-b last:border-0">
+                    <td className="py-1.5 pr-4 text-slate-700">{n.body}</td>
+                    <td className="py-1.5 pr-4 text-xs text-slate-400">{fmtDate(n.createdAt.slice(0, 10))}</td>
+                    <td className="py-1.5 text-xs text-slate-400">{fmtDate(n.updatedAt.slice(0, 10))}</td>
+                    <td className="py-1.5">
+                      <button
+                        onClick={() => delNote({ id: n.id, contractId: contractId! })}
+                        className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-500"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
       <div className="flex gap-2">

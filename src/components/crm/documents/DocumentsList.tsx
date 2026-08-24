@@ -165,7 +165,7 @@ export function DocumentsList() {
   return (
     <div className="flex flex-col gap-4">
       {/* Toolbar */}
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3 gap-y-2">
         <div className="relative max-w-xs flex-1">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
           <Input
@@ -210,7 +210,7 @@ export function DocumentsList() {
       </div>
 
       {/* Table */}
-      <div className="overflow-hidden rounded-lg border bg-white shadow-sm">
+      <div className="overflow-x-auto rounded-lg border bg-white shadow-sm">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">

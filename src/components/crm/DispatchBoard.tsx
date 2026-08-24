@@ -514,7 +514,7 @@ function JobDetailSheet({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side="right"
-        className="w-[680px] sm:max-w-[680px] p-0 flex flex-col gap-0"
+        className="w-full sm:max-w-[680px] md:w-[680px] p-0 flex flex-col gap-0"
       >
         {/* Header — light gray, CMMS-style */}
         <SheetHeader className="shrink-0 border-b bg-slate-50 px-5 py-4 pr-14">
@@ -1360,7 +1360,7 @@ function TeamAssignDialog({
                           <VisitStatusIcon status={v.status} />
                           <button
                             onClick={() => reassign(v.id, null, v.jobId)}
-                            className="absolute top-1 right-1 hidden group-hover:flex text-[9px] text-slate-400 hover:text-red-500"
+                            className="absolute top-1 right-1 flex md:hidden md:group-hover:flex text-[9px] text-slate-400 hover:text-red-500"
                           >
                             ✕
                           </button>
@@ -2712,6 +2712,10 @@ export function DispatchBoard() {
     // until something else happened to trigger a refetch.
     await qc.invalidateQueries({ queryKey: ["crm-job-visits"] });
     setManualOrder(null);
+    // An optimized-but-not-dragged order is saved via this same button (see
+    // the banner below) — clear it too so the stale "Route optimized"
+    // banner/highlight don't linger once the order is actually persisted.
+    clearOptimization();
     toast.success("Route order saved");
   }
 
@@ -2831,10 +2835,10 @@ export function DispatchBoard() {
       />
 
       {/* Week strip + date range + actions */}
-      <div className="flex items-center gap-3 px-4 shrink-0">
+      <div className="flex items-center gap-3 px-4 shrink-0 overflow-x-auto flex-nowrap">
         <WeekStrip selectedDate={selectedDate} onDateChange={(d) => { setSelectedDate(d); clearOptimization(); }} />
 
-        <div className="flex items-center gap-2 text-xs text-slate-500 ml-2">
+        <div className="flex items-center gap-2 text-xs text-slate-500 ml-2 shrink-0">
           <span className="font-medium">From</span>
           <Input
             type="date"
@@ -2860,7 +2864,7 @@ export function DispatchBoard() {
           )}
         </div>
 
-        <div className="ml-auto flex items-center gap-2">
+        <div className="ml-auto flex items-center gap-2 shrink-0">
           <Button size="sm" variant="outline" className="h-9 text-sm gap-1.5 px-3"
             onClick={() => setTeamAssignOpen(true)}
           >
@@ -2885,18 +2889,16 @@ export function DispatchBoard() {
       </div>
 
       {/* Save/Clear Order — its own full-width row so it's never pushed off
-          screen by the toolbar above (which can overflow horizontally). */}
+          screen by the toolbar above. */}
       {(optimizedOrder || manualOrder) && (
         <div className="flex items-center justify-between gap-3 border-y border-brand-200 bg-brand-50 px-4 py-2 shrink-0">
           <p className="text-xs font-medium text-brand-700">
-            {manualOrder ? "Order changed — not yet saved." : "Route optimized."}
+            {manualOrder ? "Order changed — not yet saved." : "Route optimized — not yet saved."}
           </p>
           <div className="flex items-center gap-2">
-            {manualOrder && (
-              <Button size="sm" className="h-7 gap-1.5 px-3 text-xs bg-brand-500 hover:bg-brand-600 text-white" onClick={handleSaveOrder}>
-                Save Order
-              </Button>
-            )}
+            <Button size="sm" className="h-7 gap-1.5 px-3 text-xs bg-brand-500 hover:bg-brand-600 text-white" onClick={handleSaveOrder}>
+              Save Order
+            </Button>
             <Button size="sm" variant="outline"
               className="h-7 gap-1.5 px-3 text-xs text-red-500 border-red-200"
               onClick={() => { clearOptimization(); setManualOrder(null); }}
@@ -3180,28 +3182,34 @@ export function DispatchBoard() {
                       className="text-xs"
                       onSelect={async () => {
                         const ids = [...selectedIds];
-                        if (opt.value === "completed") {
-                          // Use the complete route so the parent job status is also updated
-                          await Promise.all(
-                            ids.map((id) =>
-                              fetch(`/api/crm/visits/${id}/complete`, { method: "POST" })
-                            )
-                          );
-                        } else {
-                          await Promise.all(
-                            ids.map((id) =>
-                              fetch(`/api/crm/visits/${id}`, {
-                                method: "PATCH",
-                                headers: { "Content-Type": "application/json" },
-                                body: JSON.stringify({ status: opt.value }),
-                              })
-                            )
-                          );
+                        try {
+                          let results: Response[];
+                          if (opt.value === "completed") {
+                            // Use the complete route so the parent job status is also updated
+                            results = await Promise.all(
+                              ids.map((id) =>
+                                fetch(`/api/crm/visits/${id}/complete`, { method: "POST" })
+                              )
+                            );
+                          } else {
+                            results = await Promise.all(
+                              ids.map((id) =>
+                                fetch(`/api/crm/visits/${id}`, {
+                                  method: "PATCH",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({ status: opt.value }),
+                                })
+                              )
+                            );
+                          }
+                          if (results.some((r) => !r.ok)) throw new Error("One or more updates failed");
+                          await qc.invalidateQueries({ queryKey: ["crm-job-visits"] });
+                          await qc.invalidateQueries({ queryKey: ["crm-jobs"] });
+                          setSelectedIds(new Set());
+                          toast.success(`Updated ${ids.length} visit${ids.length > 1 ? "s" : ""} to ${opt.label}`);
+                        } catch {
+                          toast.error("Failed to update one or more visits");
                         }
-                        await qc.invalidateQueries({ queryKey: ["crm-job-visits"] });
-                        await qc.invalidateQueries({ queryKey: ["crm-jobs"] });
-                        setSelectedIds(new Set());
-                        toast.success(`Updated ${ids.length} visit${ids.length > 1 ? "s" : ""} to ${opt.label}`);
                       }}
                     >
                       {opt.label}
@@ -3221,18 +3229,23 @@ export function DispatchBoard() {
                     className="text-xs"
                     onSelect={async () => {
                       const ids = [...selectedIds];
-                      await Promise.all(
-                        ids.map((id) =>
-                          fetch(`/api/crm/visits/${id}`, {
-                            method: "PATCH",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ crew_id: null }),
-                          })
-                        )
-                      );
-                      await qc.invalidateQueries({ queryKey: ["crm-job-visits"] });
-                      setSelectedIds(new Set());
-                      toast.success(`Unassigned ${ids.length} visit${ids.length > 1 ? "s" : ""}`);
+                      try {
+                        const results = await Promise.all(
+                          ids.map((id) =>
+                            fetch(`/api/crm/visits/${id}`, {
+                              method: "PATCH",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ crew_id: null }),
+                            })
+                          )
+                        );
+                        if (results.some((r) => !r.ok)) throw new Error("One or more updates failed");
+                        await qc.invalidateQueries({ queryKey: ["crm-job-visits"] });
+                        setSelectedIds(new Set());
+                        toast.success(`Unassigned ${ids.length} visit${ids.length > 1 ? "s" : ""}`);
+                      } catch {
+                        toast.error("Failed to unassign one or more visits");
+                      }
                     }}
                   >
                     Unassigned
@@ -3243,18 +3256,23 @@ export function DispatchBoard() {
                       className="text-xs"
                       onSelect={async () => {
                         const ids = [...selectedIds];
-                        await Promise.all(
-                          ids.map((id) =>
-                            fetch(`/api/crm/visits/${id}`, {
-                              method: "PATCH",
-                              headers: { "Content-Type": "application/json" },
-                              body: JSON.stringify({ crew_id: c.id }),
-                            })
-                          )
-                        );
-                        await qc.invalidateQueries({ queryKey: ["crm-job-visits"] });
-                        setSelectedIds(new Set());
-                        toast.success(`Assigned ${ids.length} visit${ids.length > 1 ? "s" : ""} to ${c.name}`);
+                        try {
+                          const results = await Promise.all(
+                            ids.map((id) =>
+                              fetch(`/api/crm/visits/${id}`, {
+                                method: "PATCH",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ crew_id: c.id }),
+                              })
+                            )
+                          );
+                          if (results.some((r) => !r.ok)) throw new Error("One or more updates failed");
+                          await qc.invalidateQueries({ queryKey: ["crm-job-visits"] });
+                          setSelectedIds(new Set());
+                          toast.success(`Assigned ${ids.length} visit${ids.length > 1 ? "s" : ""} to ${c.name}`);
+                        } catch {
+                          toast.error("Failed to reassign one or more visits");
+                        }
                       }}
                     >
                       {c.name}

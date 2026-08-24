@@ -154,15 +154,17 @@ export async function notifyStaffOfNewTicket(
   });
 }
 
-/** Ticket assigned — notifies only the newly-resolved assignee. */
+/** Ticket assigned — notifies only the newly-resolved assignee (unless they
+ *  assigned the ticket to themselves — never notify the actor for their own
+ *  action, same rule enforced on every other notification trigger point). */
 export async function notifyTicketAssigned(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   supabase: any,
-  params: NotifyBase & { assignedToId?: string | null; assignedToName: string | null }
+  params: NotifyBase & { assignedToId?: string | null; assignedToName: string | null; assignedByUserId?: string | null }
 ) {
-  const { orgId, ticketId, ticketNumber, subject, assignedToId, assignedToName } = params;
+  const { orgId, ticketId, ticketNumber, subject, assignedToId, assignedToName, assignedByUserId } = params;
   const assigneeId = await resolveAssigneeId(supabase, orgId, assignedToId ?? null, assignedToName);
-  if (!assigneeId) return;
+  if (!assigneeId || assigneeId === assignedByUserId) return;
 
   const { data: assignee } = await supabase
     .from("profiles")

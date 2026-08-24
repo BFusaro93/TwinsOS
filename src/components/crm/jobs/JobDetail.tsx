@@ -77,8 +77,11 @@ import {
   MessageSquareText,
   Send,
   ChevronDown,
+  FolderKanban,
 } from "lucide-react";
 import { ChemicalApplicationPanel } from "@/components/crm/chemical/ChemicalApplicationPanel";
+import { useProject } from "@/lib/hooks/use-projects";
+import { ProjectDetailSheet } from "@/components/po/ProjectDetailSheet";
 import { computeJobServiceBudgetedHours } from "@/lib/estimate-calc";
 import type { CRMJobVisit, CRMJobService } from "@/types/crm-jobs";
 import { JobCostingTab } from "@/components/crm/jobs/JobCostingTab";
@@ -222,6 +225,8 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
   const router = useRouter();
   const { data: job, isLoading, error: jobError } = useJobDetail(jobId);
   const { data: visits = [], isLoading: visitsLoading } = useJobVisits(jobId);
+  const { data: linkedProject } = useProject(job?.projectId ?? "");
+  const [projectSheetOpen, setProjectSheetOpen] = useState(false);
   const { data: crews = [] } = useCRMCrews();
   const updateJob = useUpdateJob();
   const createVisit = useCreateVisit();
@@ -773,13 +778,13 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
       </div>
 
       {/* ── body ── */}
-      <div className="flex flex-1 gap-4 overflow-auto p-6">
+      <div className="flex flex-1 flex-col gap-4 overflow-auto p-6 md:flex-row">
 
         {/* ── left column ── */}
         <div className="flex flex-1 flex-col gap-4 min-w-0">
 
           {tab === "overview" && (
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               {/* Client card */}
               <div className="rounded-lg border bg-white p-4 shadow-sm">
                 <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-2">Client</p>
@@ -860,7 +865,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                       </Select>
                     </div>
                     {job.jobType === "waiting_list" && (
-                      <div className="grid grid-cols-2 gap-2">
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                         <div className="flex flex-col gap-1">
                           <Label className="text-xs text-slate-500">Available From</Label>
                           <Input
@@ -922,7 +927,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                         {creatingSchedule && (
                           <div className="mt-1 rounded-md border bg-slate-50 p-3 flex flex-col gap-2">
                             <p className="text-[11px] font-semibold text-slate-600">New Schedule</p>
-                            <div className="grid grid-cols-2 gap-2">
+                            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                               <div className="flex flex-col gap-1">
                                 <Label className="text-[10px] text-slate-500">Frequency</Label>
                                 <Select value={newSchedFreq} onValueChange={(v) => setNewSchedFreq(v as "weekly" | "bi_weekly")}>
@@ -985,7 +990,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                     )}
                     {job.jobType === "snow" && (
                       <>
-                        <div className="grid grid-cols-2 gap-2">
+                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                           <div className="flex flex-col gap-1">
                             <Label className="text-xs text-slate-500"># Inch Trigger</Label>
                             <Input
@@ -1224,7 +1229,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
               {/* Revenue summary */}
               <div className="rounded-lg border bg-white p-4 shadow-sm col-span-2">
                 <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-2">Revenue</p>
-                <div className="flex items-center gap-8 text-sm">
+                <div className="flex flex-wrap items-center gap-4 sm:gap-8 text-sm">
                   <div>
                     <p className="text-xs text-slate-400">Job Value</p>
                     <p className="text-xl font-bold text-slate-800">{formatCurrency(jobValueCents)}</p>
@@ -1976,7 +1981,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
              with this column — drop it there so the table has room to breathe
              instead of clipping its rightmost action buttons. */}
         {!(onClose && tab === "visits") && (
-          <div className="w-64 shrink-0 flex flex-col gap-3">
+          <div className="w-full md:w-64 md:shrink-0 flex flex-col gap-3">
             <div className="rounded-lg border bg-white p-4 shadow-sm text-xs flex flex-col gap-2">
               <p className="font-semibold text-slate-500 text-[10px] uppercase tracking-wide">Job Info</p>
               <InfoRow icon={<CalendarDays className="h-3.5 w-3.5" />} label="Type" value={(JOB_TYPE_LABEL[job.jobType] ?? job.jobType) + (waitingListScheduled ? " · Scheduled" : "")} />
@@ -1984,10 +1989,29 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
               <InfoRow icon={<Clock className="h-3.5 w-3.5" />} label="Budgeted" value={job.budgetedHours ? `${job.budgetedHours}h` : "—"} />
               <InfoRow icon={<Receipt className="h-3.5 w-3.5" />} label="Revenue" value={formatCurrency(jobValueCents)} />
               {job.source && <InfoRow icon={<User className="h-3.5 w-3.5" />} label="Source" value={job.source} />}
+              {job.projectId && (
+                <button
+                  type="button"
+                  onClick={() => setProjectSheetOpen(true)}
+                  className="flex items-center gap-2 text-left text-slate-600 hover:text-brand-600"
+                  title="Open linked Project — request materials or view cost tracking"
+                >
+                  <span className="text-slate-400"><FolderKanban className="h-3.5 w-3.5" /></span>
+                  <span className="text-slate-400 w-16 shrink-0">Project</span>
+                  <span className="font-medium truncate underline decoration-dotted">
+                    {linkedProject?.name ?? "View project"}
+                  </span>
+                </button>
+              )}
             </div>
           </div>
         )}
       </div>
+      <ProjectDetailSheet
+        project={linkedProject ?? null}
+        open={projectSheetOpen}
+        onOpenChange={setProjectSheetOpen}
+      />
     </div>
   );
 }

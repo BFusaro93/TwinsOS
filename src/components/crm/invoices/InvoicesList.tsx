@@ -405,7 +405,7 @@ export function InvoicesList({ clientId }: Props) {
           description={!isLoading ? `${allInvoices.length} invoices` : undefined}
           action={
             <PermissionGate permission="acct_add_modify_invoices">
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <ImportExportMenu
                   entityLabel="Invoices"
                   templateColumns={INVOICE_TEMPLATE_COLUMNS}
@@ -456,7 +456,7 @@ export function InvoicesList({ clientId }: Props) {
       {/* ── FilterBar row ── */}
       <div className="flex items-center gap-1.5 border-b bg-white px-4 py-2">
         <span className="shrink-0 text-xs text-slate-500 font-medium mr-1">Select a Filter:</span>
-        <div className="flex items-center gap-1 overflow-x-auto">
+        <div className="flex min-w-0 items-center gap-1 overflow-x-auto">
           {FILTER_BUTTONS.map(({ key, label }) => (
             <button
               key={key}
@@ -501,8 +501,8 @@ export function InvoicesList({ clientId }: Props) {
       </div>
 
       {/* ── Dark actions bar with quick-filter tabs (matches Payments dark bar) ── */}
-      <div className="flex items-center justify-between bg-[#4a4a4a] px-4 py-2">
-        <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-y-2 bg-[#4a4a4a] px-4 py-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-2 gap-y-1">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
@@ -581,7 +581,7 @@ export function InvoicesList({ clientId }: Props) {
             <RotateCcw className="h-3.5 w-3.5" />
           </button>
           {/* Quick-filter tabs in dark bar */}
-          <div className="ml-2 flex items-center gap-1 overflow-x-auto">
+          <div className="ml-2 flex min-w-0 items-center gap-1 overflow-x-auto">
             {QUICK_FILTERS.map(({ key, label }) => {
               const count = counts[key];
               return (

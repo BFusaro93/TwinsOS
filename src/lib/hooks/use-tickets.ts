@@ -3,6 +3,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 import { fireAutomationTrigger } from "@/lib/automations/fire-trigger-client";
+import { toast } from "sonner";
 import type { CRMTicket, NewTicketFormValues, TicketStatus } from "@/types/crm-tickets";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -244,6 +245,9 @@ export function useUpdateTicket() {
         });
       }
     },
+    onError: () => {
+      toast.error("Failed to update ticket");
+    },
   });
 }
 
@@ -306,6 +310,9 @@ export function useAddTicketLink() {
     onSuccess: (_data, { ticketId }) => {
       qc.invalidateQueries({ queryKey: ["crm-ticket-links", ticketId] });
     },
+    onError: () => {
+      toast.error("Failed to add link");
+    },
   });
 }
 
@@ -322,6 +329,9 @@ export function useRemoveTicketLink() {
     },
     onSuccess: (_data, { ticketId }) => {
       qc.invalidateQueries({ queryKey: ["crm-ticket-links", ticketId] });
+    },
+    onError: () => {
+      toast.error("Failed to remove link");
     },
   });
 }
@@ -340,6 +350,9 @@ export function useDeleteTicket() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["crm-tickets"] });
+    },
+    onError: () => {
+      toast.error("Failed to delete ticket");
     },
   });
 }
@@ -369,6 +382,9 @@ export function useCloseTicket() {
           matchValues: data.category ? [data.category] : undefined,
         });
       }
+    },
+    onError: () => {
+      toast.error("Failed to close ticket");
     },
   });
 }

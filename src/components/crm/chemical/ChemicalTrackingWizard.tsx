@@ -38,7 +38,11 @@ export function ChemicalTrackingWizard({ open, onOpenChange, date, visits }: Pro
     if (open) setIndex(0);
   }, [open, date]);
 
-  const current = chemicalVisits[index];
+  // Clamp defensively: chemicalVisits can shrink out from under an open wizard
+  // (e.g. a background refetch after another user reassigns/skips a visit),
+  // which would otherwise leave `index` pointing past the end of the array.
+  const safeIndex = Math.min(index, Math.max(chemicalVisits.length - 1, 0));
+  const current = chemicalVisits[safeIndex];
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -70,7 +74,7 @@ export function ChemicalTrackingWizard({ open, onOpenChange, date, visits }: Pro
                 </p>
               </div>
               <span className="shrink-0 text-xs font-medium text-slate-500">
-                {index + 1} of {chemicalVisits.length}
+                {safeIndex + 1} of {chemicalVisits.length}
               </span>
             </div>
 
@@ -85,7 +89,7 @@ export function ChemicalTrackingWizard({ open, onOpenChange, date, visits }: Pro
                 variant="outline"
                 size="sm"
                 onClick={() => setIndex((i) => Math.max(0, i - 1))}
-                disabled={index === 0}
+                disabled={safeIndex === 0}
               >
                 <ChevronLeft className="mr-1 h-3.5 w-3.5" /> Previous
               </Button>
@@ -95,7 +99,7 @@ export function ChemicalTrackingWizard({ open, onOpenChange, date, visits }: Pro
               <Button
                 size="sm"
                 onClick={() => setIndex((i) => Math.min(chemicalVisits.length - 1, i + 1))}
-                disabled={index === chemicalVisits.length - 1}
+                disabled={safeIndex === chemicalVisits.length - 1}
               >
                 Next <ChevronRight className="ml-1 h-3.5 w-3.5" />
               </Button>

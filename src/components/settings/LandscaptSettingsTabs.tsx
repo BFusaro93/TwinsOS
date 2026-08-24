@@ -570,7 +570,7 @@ function ClientDefaultsSection() {
       <div>
         <p className="text-sm font-medium text-slate-800">Starting Account Number</p>
         <p className="text-xs text-slate-400">Auto-assigned to every new client. Next client will be: <span className="font-mono text-slate-600">{preview}</span></p>
-        <div className="mt-2 grid grid-cols-3 gap-3">
+        <div className="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-3">
           <div className="flex flex-col gap-1.5">
             <Label>Prefix</Label>
             <Input value={prefix} onChange={(e) => setPrefix(e.target.value)} placeholder="e.g. C-" />
@@ -591,7 +591,7 @@ function ClientDefaultsSection() {
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <div className="flex flex-col gap-1.5">
           <Label>Default Billing Terms</Label>
           <UISelect value={billingTerms} onValueChange={setBillingTerms}>

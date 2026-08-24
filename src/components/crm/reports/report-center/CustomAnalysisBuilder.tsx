@@ -289,17 +289,17 @@ export function CustomAnalysisBuilder({ reportId }: { reportId?: string }) {
             <Input
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="h-9 w-80 text-base font-semibold"
+              className="h-9 w-full sm:w-80 text-base font-semibold"
               placeholder="Untitled Analysis"
             />
             <Input
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              className="h-8 w-80 text-sm"
+              className="h-8 w-full sm:w-80 text-sm"
               placeholder="Description (optional)"
             />
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Button
               variant="outline"
               size="sm"

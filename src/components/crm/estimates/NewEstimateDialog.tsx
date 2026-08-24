@@ -27,6 +27,7 @@ import { useCreateEstimate, useUpsertLineItem } from "@/lib/hooks/use-estimates"
 import { useEstimateTemplates } from "@/lib/hooks/use-estimate-templates";
 import { useClients } from "@/lib/hooks/use-clients";
 import { useSelectableEmployees } from "@/lib/hooks/use-employees";
+import { useCRMServices } from "@/lib/hooks/use-crm-jobs";
 import { computeLineItem, getBreakevenRateCents } from "@/lib/estimate-calc";
 import { useOrgSettings } from "@/lib/hooks/use-org-settings";
 import { getOrgDefaultDisplaySettings } from "@/lib/estimate-display-settings";
@@ -78,6 +79,7 @@ export function NewEstimateDialog({ open, onOpenChange, defaultClientId, onCreat
   const { mutateAsync: upsertLineItem }             = useUpsertLineItem();
   const { data: orgSettings } = useOrgSettings();
   const breakevenRateCents = getBreakevenRateCents(orgSettings?.customizations);
+  const { data: crmServices } = useCRMServices();
 
   const selectableClients = (clients ?? [])
     .filter((c) => c.status !== "inactive" && c.status !== "cancelled")
@@ -140,6 +142,15 @@ export function NewEstimateDialog({ open, onOpenChange, defaultClientId, onCreat
       if (tpl?.items?.length) {
         await Promise.all(
           tpl.items.map((item, idx) => {
+            // Carry over the matched service's budget method / production rate
+            // (same as EstimateLineItemsGrid's addService) so a production_rate
+            // service applied via template doesn't silently fall back to manual
+            // budgeting with 0 budgeted hours.
+            const matchedService = item.serviceId
+              ? (crmServices ?? []).find((s) => s.id === item.serviceId)
+              : undefined;
+            const budgetMethod = matchedService?.budgetMethod ?? "manual";
+            const productionRate = matchedService?.productionRateSqftPerHr ?? null;
             const computed = computeLineItem({
               calcType:      item.calcType,
               qty:           item.qty,

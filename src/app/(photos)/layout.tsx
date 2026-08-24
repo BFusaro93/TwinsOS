@@ -6,7 +6,10 @@ import { PhotosSidebar } from "@/components/photo-docs/PhotosSidebar";
 import { TopBar } from "@/components/shared/TopBar";
 import { RealtimeSync } from "@/components/shared/RealtimeSync";
 import { SettingsLoader } from "@/components/shared/SettingsLoader";
+import { InternalOnlyGuard } from "@/components/shared/InternalOnlyGuard";
 import { useUIStore } from "@/stores";
+
+const INTERNAL_ONLY_PATHS = ["/photos/field/crew-checklist", "/photos/field/time-off"];
 
 export default function PhotosLayout({ children }: { children: React.ReactNode }) {
   const { sidebarOpen, setSidebarOpen } = useUIStore();
@@ -38,7 +41,9 @@ export default function PhotosLayout({ children }: { children: React.ReactNode }
 
       <div className="flex flex-1 flex-col overflow-hidden">
         <TopBar />
-        <main className="flex-1 overflow-auto p-4 md:p-6">{children}</main>
+        <main className="flex-1 overflow-auto p-4 md:p-6">
+          <InternalOnlyGuard restrictedPaths={INTERNAL_ONLY_PATHS}>{children}</InternalOnlyGuard>
+        </main>
       </div>
     </div>
   );
