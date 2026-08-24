@@ -64,8 +64,10 @@ export function useChargeMultiSaved() {
       if (!res.ok) throw new Error(body.error ?? "Failed to charge saved payment method");
       return body as ChargeMultiResult;
     },
-    onSuccess: () => {
+    onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: ["crm-invoices"] });
+      qc.invalidateQueries({ queryKey: ["clients", vars.clientId] });
+      qc.invalidateQueries({ queryKey: ["clients"] });
     },
   });
 }

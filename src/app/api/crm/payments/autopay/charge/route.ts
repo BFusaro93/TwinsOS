@@ -118,6 +118,7 @@ export async function POST(request: Request) {
       balanceCents: invoice.balance_cents,
       feeCents,
       totalChargeCents,
+      clientId: invoice.client_id,
     });
   } catch (err) {
     if (err instanceof Stripe.errors.StripeCardError) {

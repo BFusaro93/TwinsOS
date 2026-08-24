@@ -1,7 +1,8 @@
 import { resolveEmailStepContent, sendResolvedSequenceEmail, advanceEnrollmentPastStep } from "./sequence-email";
 import { resolveSmsStepContent, sendResolvedSequenceSms } from "./sequence-sms";
 import { notifyStaffOfNewTicket, notifyTicketAssigned } from "@/lib/ticket-notify";
-import { shouldStopSequence, logSequenceExecution } from "./sequence-enrollment";
+import { shouldStopSequence, logSequenceExecution, evaluateConditionSet } from "./sequence-enrollment";
+import type { ConditionField, ConditionOperator } from "@/types/crm-automations";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = any;
@@ -24,7 +25,7 @@ export type ProcessOutcome =
 /**
  * Processes exactly one due step for one enrollment: evaluates stop
  * conditions, dispatches on the current event's type (wait/email/text_message/
- * alert/ticket/update/note/tags), and advances (or completes/stops) the
+ * alert/ticket/update/note/tags/if_branch), and advances (or completes/stops) the
  * enrollment. Shared by the daily cron sweep (`/api/automations/run`) and by
  * the immediate-send path fired right when a client is enrolled — this is the
  * single source of truth for "what happens when a sequence step comes due" so
@@ -476,6 +477,43 @@ export async function processDueEnrollment(
       eventId: currentEvent.id, eventType: "tags", action: "tags_updated", detail,
     });
     return { fired: { enrollmentId: enrollId, action: `tags updated → ${action}` } };
+  }
+
+  if (currentEvent.event_type === "if_branch") {
+    const conditions = (Array.isArray(eventConfig.conditions) ? eventConfig.conditions : []) as
+      { field: ConditionField; operator: ConditionOperator; value: string | null }[];
+    const conditionsMet = await evaluateConditionSet(
+      adminClient, conditions, "AND", client_id, estimate_id, ticket_id, invoice_id
+    );
+
+    const future = (events ?? [])
+      .filter((e: { position: number }) => e.position > next_event_position)
+      .sort((a: { position: number }, b: { position: number }) => a.position - b.position);
+
+    // crm_sequence_events is a flat, position-ordered list — there's no
+    // parent/end-marker to represent a real nested block, even though the IF
+    // Branch dialog's copy describes "events nested under this IF block".
+    // So the guarded body is exactly the single event immediately following
+    // this one: conditions met → continue into it normally; conditions not
+    // met → skip past it straight to whatever comes after. A true multi-step
+    // block needs a schema change (e.g. an explicit block/end marker) to do
+    // properly — this is the best approximation the current data model
+    // supports, and it's the only one that keeps single-event bodies (the
+    // common case) actually branching correctly.
+    const skipToPosition = conditionsMet ? next_event_position : (future[0]?.position ?? next_event_position);
+
+    const action = await advanceEnrollmentPastStep(adminClient, {
+      enrollmentId: enrollId,
+      events: events ?? [],
+      completedPosition: skipToPosition,
+      nowIso,
+    });
+    await logSequenceExecution(adminClient, {
+      orgId, enrollmentId: enrollId, sequenceId: sequence_id, clientId: client_id,
+      eventId: currentEvent.id, eventType: "if_branch", action: conditionsMet ? "branch_true" : "branch_false",
+      detail: conditionsMet ? "conditions met — continuing into branch" : "conditions not met — branch skipped",
+    });
+    return { fired: { enrollmentId: enrollId, action: `if_branch ${conditionsMet ? "true" : "false"} → ${action}` } };
   }
 
   await logSequenceExecution(adminClient, {

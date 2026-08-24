@@ -5,6 +5,7 @@ export interface ChargeAutopayInvoiceResult {
   balanceCents: number;
   feeCents: number;
   totalChargeCents: number;
+  clientId: string;
 }
 
 /** Charges an invoice's balance against its client's saved payment method (card or
@@ -23,8 +24,10 @@ export function useChargeAutopayInvoice() {
       if (!res.ok) throw new Error(body.error ?? "Failed to charge invoice");
       return body as ChargeAutopayInvoiceResult;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ["crm-invoices"] });
+      qc.invalidateQueries({ queryKey: ["clients", data.clientId] });
+      qc.invalidateQueries({ queryKey: ["clients"] });
     },
   });
 }
