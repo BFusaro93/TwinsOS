@@ -93,6 +93,8 @@ import { useTickets, useBulkImportTickets } from "@/lib/hooks/use-tickets";
 import { useEmployees, useBulkImportEmployees } from "@/lib/hooks/use-employees";
 import { NotificationsPage } from "@/components/settings/NotificationsPage";
 import { useConnectStatus, useStartConnectOnboarding, type ConnectStatus } from "@/lib/hooks/use-crm-card-payments";
+import { usePermissions } from "@/lib/hooks/use-permissions";
+import { LANDSCAPT_TAB_PERMISSIONS } from "@/lib/permissions/settings-access";
 
 // ── AccordionSection ──────────────────────────────────────────────────────────
 
@@ -2040,17 +2042,49 @@ function tabLabel(tab: TabKey): string {
   }
 }
 
+function renderTabContent(tab: TabKey) {
+  switch (tab) {
+    case "general":           return <GeneralTab />;
+    case "users":              return <UsersTab />;
+    case "crm":                return <CRMTab />;
+    case "estimates":          return <EstimatesTab />;
+    case "notifications":     return <NotificationsPage hideHeader scope="crm" />;
+    case "services":           return <ServicesTab />;
+    case "accounting":         return <AccountingTab />;
+    case "chemical_tracking": return <ChemicalTrackingTab />;
+    case "required_fields":   return <CRMRequiredFieldsTab />;
+    case "import_export":     return <ImportExportTab />;
+    case "integrations":      return <IntegrationsTab />;
+    case "client_portal":     return <ClientPortalTab />;
+  }
+}
+
 export function LandscaptSettingsTabs() {
+  const { can, isLoading } = usePermissions();
+
+  if (isLoading) return null;
+
+  // Each tab that touches org-wide configuration is gated by the settings
+  // permission product decided fits it (see LANDSCAPT_TAB_PERMISSIONS) — a
+  // tab absent from that map (Notifications, Roles) has no permission
+  // requirement, so it's always visible. Filtering here, rather than
+  // blocking the whole page, is what lets every Landscapt user still reach
+  // their own Notifications preferences regardless of role.
+  const visibleTabs = TAB_KEYS.filter((tab) => {
+    const requiredKey = LANDSCAPT_TAB_PERMISSIONS[tab];
+    return !requiredKey || can(requiredKey);
+  });
+
   return (
     <div className="flex flex-col gap-0">
       <div className="px-4 pt-4 pb-0 md:px-6 md:pt-6">
         <h1 className="text-xl font-semibold text-slate-900">Settings</h1>
         <p className="mt-1 text-sm text-slate-500">Manage your CRM configuration</p>
       </div>
-      <Tabs defaultValue="general" className="mt-4">
+      <Tabs defaultValue={visibleTabs[0]} className="mt-4">
         <div className="border-b px-4 md:px-6">
           <TabsList className="h-auto flex-wrap gap-0 rounded-none bg-transparent p-0">
-            {TAB_KEYS.map((tab) => (
+            {visibleTabs.map((tab) => (
               <TabsTrigger
                 key={tab}
                 value={tab}
@@ -2062,42 +2096,11 @@ export function LandscaptSettingsTabs() {
           </TabsList>
         </div>
         <div className="p-4 md:p-6">
-          <TabsContent value="general" className="mt-0">
-            <GeneralTab />
-          </TabsContent>
-          <TabsContent value="users" className="mt-0">
-            <UsersTab />
-          </TabsContent>
-          <TabsContent value="crm" className="mt-0">
-            <CRMTab />
-          </TabsContent>
-          <TabsContent value="estimates" className="mt-0">
-            <EstimatesTab />
-          </TabsContent>
-          <TabsContent value="notifications" className="mt-0">
-            <NotificationsPage hideHeader scope="crm" />
-          </TabsContent>
-          <TabsContent value="services" className="mt-0">
-            <ServicesTab />
-          </TabsContent>
-          <TabsContent value="accounting" className="mt-0">
-            <AccountingTab />
-          </TabsContent>
-          <TabsContent value="chemical_tracking" className="mt-0">
-            <ChemicalTrackingTab />
-          </TabsContent>
-          <TabsContent value="required_fields" className="mt-0">
-            <CRMRequiredFieldsTab />
-          </TabsContent>
-          <TabsContent value="import_export" className="mt-0">
-            <ImportExportTab />
-          </TabsContent>
-          <TabsContent value="integrations" className="mt-0">
-            <IntegrationsTab />
-          </TabsContent>
-          <TabsContent value="client_portal" className="mt-0">
-            <ClientPortalTab />
-          </TabsContent>
+          {visibleTabs.map((tab) => (
+            <TabsContent key={tab} value={tab} className="mt-0">
+              {renderTabContent(tab)}
+            </TabsContent>
+          ))}
         </div>
       </Tabs>
     </div>

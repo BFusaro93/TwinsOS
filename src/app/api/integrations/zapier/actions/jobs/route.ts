@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { adminClient, authenticateZapierRequest } from "@/lib/integrations/zapier";
+import { adminClient, authenticateZapierRequest, checkZapierRateLimit } from "@/lib/integrations/zapier";
 
 const createJobSchema = z.object({
   clientId: z.string().uuid(),
@@ -19,6 +19,9 @@ export async function POST(request: Request) {
   const auth = await authenticateZapierRequest(request, db);
   if (!auth) {
     return NextResponse.json({ error: "Invalid or missing API key" }, { status: 401 });
+  }
+  if (!(await checkZapierRateLimit(db, auth.integrationId))) {
+    return NextResponse.json({ error: "Rate limit exceeded — slow down" }, { status: 429 });
   }
 
   const parsed = createJobSchema.safeParse(await request.json().catch(() => ({})));

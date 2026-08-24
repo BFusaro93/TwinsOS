@@ -2,8 +2,10 @@ import { NextResponse } from "next/server";
 import {
   adminClient,
   authenticateZapierRequest,
+  checkZapierRateLimit,
   isZapierTriggerType,
 } from "@/lib/integrations/zapier";
+import { assertPublicHttpsUrl } from "@/lib/net/ssrf-guard";
 
 /**
  * POST /api/integrations/zapier/hooks — Zapier's REST Hook "subscribe" call,
@@ -16,6 +18,9 @@ export async function POST(request: Request) {
   if (!auth) {
     return NextResponse.json({ error: "Invalid or missing API key" }, { status: 401 });
   }
+  if (!(await checkZapierRateLimit(db, auth.integrationId))) {
+    return NextResponse.json({ error: "Rate limit exceeded — slow down" }, { status: 429 });
+  }
 
   const body = (await request.json().catch(() => ({}))) as {
     event?: string;
@@ -27,6 +32,10 @@ export async function POST(request: Request) {
   }
   if (!body.targetUrl || typeof body.targetUrl !== "string") {
     return NextResponse.json({ error: "targetUrl is required" }, { status: 400 });
+  }
+  const urlSafety = await assertPublicHttpsUrl(body.targetUrl);
+  if (!urlSafety.ok) {
+    return NextResponse.json({ error: urlSafety.error }, { status: 400 });
   }
 
   const { data, error } = await db
@@ -48,6 +57,9 @@ export async function GET(request: Request) {
   const auth = await authenticateZapierRequest(request, db);
   if (!auth) {
     return NextResponse.json({ error: "Invalid or missing API key" }, { status: 401 });
+  }
+  if (!(await checkZapierRateLimit(db, auth.integrationId))) {
+    return NextResponse.json({ error: "Rate limit exceeded — slow down" }, { status: 429 });
   }
 
   const { data, error } = await db

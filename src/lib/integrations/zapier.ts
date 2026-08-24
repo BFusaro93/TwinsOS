@@ -1,6 +1,7 @@
 import { randomBytes } from "crypto";
 import { createClient } from "@supabase/supabase-js";
 import { logger } from "@/lib/logger";
+import { assertPublicHttpsUrl } from "@/lib/net/ssrf-guard";
 import type { TriggerType } from "@/types/crm-automations";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -106,6 +107,28 @@ export async function authenticateZapierRequest(
   return { orgId: data.org_id as string, integrationId: data.id as string };
 }
 
+// A leaked or self-issued key otherwise had no limit on how many times it
+// could hit any Zapier route per minute — mass-create loops, hammering the
+// polling endpoints, etc. Fixed 60s window, enforced atomically in Postgres
+// (see 20260902000002_zapier_rate_limit.sql) so concurrent requests in the
+// same window can't race past the limit.
+const ZAPIER_RATE_LIMIT_PER_MINUTE = 120;
+
+/** Call once per request, right after authenticateZapierRequest() succeeds. */
+export async function checkZapierRateLimit(db: AdminClient, integrationId: string): Promise<boolean> {
+  const windowStart = new Date(Math.floor(Date.now() / 60_000) * 60_000).toISOString();
+  const { data, error } = await db.rpc("zapier_rate_limit_hit", {
+    p_integration_id: integrationId,
+    p_window_start: windowStart,
+    p_limit: ZAPIER_RATE_LIMIT_PER_MINUTE,
+  });
+  if (error) {
+    log.error("rate limit check failed — failing open", { error, integrationId });
+    return true; // don't take the whole integration down if the limiter itself breaks
+  }
+  return data === true;
+}
+
 /**
  * Delivers a trigger event to every Zapier subscription this org has
  * registered for that trigger type. Best-effort / fire-and-forget from the
@@ -132,6 +155,20 @@ export async function notifyZapierSubscribers(
   await Promise.all(
     subscriptions.map(async (sub: { id: string; target_url: string }) => {
       try {
+        // Re-validated at delivery time (not just at subscribe time in
+        // hooks/route.ts) — cheap insurance against a target that was safe
+        // when registered but has since been repointed at an internal
+        // address (DNS rebinding).
+        const safety = await assertPublicHttpsUrl(sub.target_url);
+        if (!safety.ok) {
+          log.warn("subscriber webhook target rejected", {
+            subscriptionId: sub.id,
+            triggerType,
+            reason: safety.error,
+          });
+          return;
+        }
+
         const res = await fetch(sub.target_url as string, {
           method: "POST",
           headers: { "Content-Type": "application/json" },

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { adminClient, authenticateZapierRequest } from "@/lib/integrations/zapier";
+import { adminClient, authenticateZapierRequest, checkZapierRateLimit } from "@/lib/integrations/zapier";
 
 const createRequisitionSchema = z.object({
   title: z.string().min(1),
@@ -20,6 +20,9 @@ export async function POST(request: Request) {
   const auth = await authenticateZapierRequest(request, db);
   if (!auth) {
     return NextResponse.json({ error: "Invalid or missing API key" }, { status: 401 });
+  }
+  if (!(await checkZapierRateLimit(db, auth.integrationId))) {
+    return NextResponse.json({ error: "Rate limit exceeded — slow down" }, { status: 429 });
   }
 
   const parsed = createRequisitionSchema.safeParse(await request.json().catch(() => ({})));
