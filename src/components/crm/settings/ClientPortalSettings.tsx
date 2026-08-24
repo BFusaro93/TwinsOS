@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { PhoneInput } from "@/components/shared/PhoneInput";
 import { useOrgList } from "@/lib/hooks/use-org-lists";
+import { PortalDocumentLibrary } from "@/components/crm/settings/PortalDocumentLibrary";
 
 interface PortalSettings {
   company_name: string;
@@ -18,6 +19,7 @@ interface PortalSettings {
   support_phone: string;
   allow_tickets: boolean;
   allow_estimates: boolean;
+  allow_documents: boolean;
   welcome_message: string;
   portal_ticket_categories: string[];
 }
@@ -30,6 +32,7 @@ const DEFAULTS: PortalSettings = {
   support_phone: "",
   allow_tickets: true,
   allow_estimates: true,
+  allow_documents: true,
   welcome_message: "",
   portal_ticket_categories: [],
 };
@@ -212,8 +215,21 @@ export function ClientPortalTab() {
               onCheckedChange={(v) => patch("allow_tickets", v)}
             />
           </div>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-slate-700">Document Library</p>
+              <p className="text-xs text-slate-400 mt-0.5">Clients can browse and download shared company documents</p>
+            </div>
+            <Switch
+              checked={form.allow_documents}
+              onCheckedChange={(v) => patch("allow_documents", v)}
+            />
+          </div>
         </div>
       </section>
+
+      {/* Document library */}
+      <PortalDocumentLibrary />
 
       {/* Ticket categories */}
       <section className="rounded-xl border border-slate-200 bg-white">
