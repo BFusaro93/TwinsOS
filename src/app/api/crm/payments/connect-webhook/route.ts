@@ -4,6 +4,7 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { getStripe, isStripeConfigured } from "@/lib/stripe/server";
 import { methodForPaymentIntent, decodeAllocations } from "@/lib/stripe/crm-payments";
 import { statusForAccount } from "@/lib/stripe/connect";
+import { summarizePaymentMethod } from "@/lib/stripe/saved-payment-methods";
 import { fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
 import { logger } from "@/lib/logger";
 
@@ -120,6 +121,36 @@ export async function POST(request: Request) {
           : await applyCrmInvoicePayment(stripe, db, supabase, event);
       if (result === "error") {
         return NextResponse.json({ error: "Failed to apply payment to invoice" }, { status: 500 });
+      }
+      break;
+    }
+
+    // Fires when a saved card's details change — most commonly Stripe's Account
+    // Updater silently refreshing an expiring card's new number/exp date behind
+    // the scenes, but also any explicit update. Matched by payment method id
+    // rather than customer id since that's the identifier we actually store
+    // on the client row (src/app/api/crm/payments/connect/setup-intent/route.ts).
+    case "payment_method.updated": {
+      const pm = event.data.object as Stripe.PaymentMethod;
+      if (!event.account) break;
+
+      const { data: matchedClient } = await db
+        .from("clients")
+        .select("id, org_id")
+        .eq("saved_payment_method_id", pm.id)
+        .is("deleted_at", null)
+        .maybeSingle();
+
+      if (matchedClient && (await eventAccountOwnedByOrg(db, matchedClient.org_id, event.account))) {
+        await db
+          .from("clients")
+          .update({ saved_payment_method_summary: summarizePaymentMethod(pm) })
+          .eq("id", matchedClient.id);
+        await fireSimpleTrigger(supabase, {
+          orgId: matchedClient.org_id,
+          clientId: matchedClient.id,
+          triggerType: "credit_card_updated",
+        });
       }
       break;
     }
