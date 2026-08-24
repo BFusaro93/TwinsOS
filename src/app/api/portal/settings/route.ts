@@ -40,6 +40,7 @@ export async function PUT(req: Request) {
     support_phone: body.support_phone || null,
     allow_tickets: body.allow_tickets ?? true,
     allow_estimates: body.allow_estimates ?? true,
+    allow_documents: body.allow_documents ?? true,
     welcome_message: body.welcome_message || null,
     portal_ticket_categories: body.portal_ticket_categories ?? [],
     updated_at: new Date().toISOString(),
