@@ -33,11 +33,6 @@ Identified 2026-08-19 comparing TwinsOS's plan/feature matrix against homeworks.
 - [ ] Unscheduled work — a dedicated queue of accepted-estimate jobs not yet scheduled, for bulk scheduling
 - [ ] Multi-location support — one login spanning multiple org/business accounts (current model is strictly one org per user)
 
-## Committed — features already listed as included on the pricing page
-Marked `true` in [plan-features.ts](src/lib/stripe/plan-features.ts) for every plan ahead of being built, per an explicit product decision (not an oversight) — build before this is publicly marketing-facing, since the pricing page currently claims it's live.
-
-- [ ] Zapier integration — decided 2026-08-19 to include on all 4 plans, no add-on. Not built yet; no code, no design.
-
 ## Deferred — public API / MCP: estimate creation stays read-only
 Decided 2026-08-24 while scoping the MCP connector (built on top of the public REST API). Competing field-service CRMs (e.g. Homeworks) expose estimate creation to their MCP/API, letting an agent do things like "find every mowing customer without core aeration scheduled and send them an estimate" end-to-end. TwinsOS deliberately does not: `estimates` is read-only in both `/api/v1/estimates` and the MCP tool set, because estimate creation runs through the Aspire-style budget engine (production rates, labor burden, margin sliders — see [openapi.ts](src/lib/api/openapi.ts) and [estimates/route.ts](src/app/api/v1/estimates/route.ts)) and a direct-insert endpoint would bypass that math.
 

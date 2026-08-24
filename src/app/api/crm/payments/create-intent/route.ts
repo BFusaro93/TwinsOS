@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getStripe, isStripeConfigured } from "@/lib/stripe/server";
 import { computeProcessingFee } from "@/lib/stripe/crm-payments";
 import { achEnabledForAccount } from "@/lib/stripe/connect";
+import { chargeIdempotencyKey } from "@/lib/stripe/idempotency";
 
 const CreateIntentSchema = z.object({
   invoiceId: z.string().uuid(),
@@ -108,7 +109,10 @@ export async function POST(request: Request) {
         fee_cents: String(feeCents),
       },
     },
-    { stripeAccount: org.stripe_connect_account_id }
+    {
+      stripeAccount: org.stripe_connect_account_id,
+      idempotencyKey: chargeIdempotencyKey(["crm_invoice", invoice.id, totalChargeCents, paymentMethod]),
+    }
   );
 
   return NextResponse.json({

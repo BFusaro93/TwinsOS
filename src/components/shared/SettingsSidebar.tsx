@@ -6,10 +6,12 @@ import { ArrowLeft, Leaf, UserCog, Wrench, Sprout, HelpCircle, Library } from "l
 import { cn } from "@/lib/utils";
 import { useUIStore, useCurrentUserStore } from "@/stores";
 import { useSettingsStore } from "@/stores/settings-store";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 import { useModuleAccess } from "@/lib/hooks/use-module-access";
 import type { LucideIcon } from "lucide-react";
 
 interface SettingsNavItem {
+  key: "master" | "equipt" | "landscapt" | "support" | "docs";
   label: string;
   href: string;
   icon: LucideIcon;
@@ -22,6 +24,8 @@ export function SettingsSidebar() {
   const { sidebarCollapsed } = useUIStore();
   const { logoDataUrl, orgName } = useSettingsStore();
   const { currentUser } = useCurrentUserStore();
+  const { isAdmin, roleId } = usePermissions();
+
   // Requisitions/POs, Vendors, and Products are shared with Landscapt-only
   // orgs (no Equipt module) — this page is still fully reachable to them
   // (nothing here is module-gated), but "Equipt Settings" reads as "not for
@@ -29,14 +33,28 @@ export function SettingsSidebar() {
   const { allowed: hasEquipt } = useModuleAccess("equipt");
 
   const SETTINGS_NAV: SettingsNavItem[] = [
-    { label: "Master Account", href: "/settings", icon: UserCog, exact: true, description: "Users, organization, branding & billing" },
+    { key: "master",    label: "Master Account", href: "/settings", icon: UserCog, exact: true, description: "Users, organization, branding & billing" },
     hasEquipt
-      ? { label: "Equipt Settings", href: "/settings/equipt", icon: Wrench, description: "CMMS & purchasing configuration" }
-      : { label: "Purchasing Settings", href: "/settings/equipt", icon: Wrench, description: "Vendors, requisition & PO approval flows, and inventory costing" },
-    { label: "Landscapt Settings", href: "/settings/landscapt", icon: Sprout, description: "CRM & field service configuration" },
-    { label: "Support", href: "/settings/support", icon: HelpCircle, description: "Guides, FAQ, and contact" },
-    { label: "Docs", href: "/settings/docs", icon: Library, description: "Step-by-step guides for every part of the platform" },
+      ? { key: "equipt", label: "Equipt Settings", href: "/settings/equipt", icon: Wrench, description: "CMMS & purchasing configuration" }
+      : { key: "equipt", label: "Purchasing Settings", href: "/settings/equipt", icon: Wrench, description: "Vendors, requisition & PO approval flows, and inventory costing" },
+    { key: "landscapt", label: "Landscapt Settings", href: "/settings/landscapt", icon: Sprout, description: "CRM & field service configuration" },
+    { key: "support",   label: "Support", href: "/settings/support", icon: HelpCircle, description: "Guides, FAQ, and contact" },
+    { key: "docs",      label: "Docs", href: "/settings/docs", icon: Library, description: "Step-by-step guides for every part of the platform" },
   ];
+
+  // Master Account is admin-only; Equipt Settings is admin/manager (must
+  // match EQUIPT_SETTINGS_ROLES in EquiptSettingsTabs.tsx); Landscapt
+  // Settings just needs CRM access at all (roleId set, or admin) — every
+  // Landscapt user can reach at least the Notifications tab there
+  // regardless of their settings_access permissions (see
+  // LANDSCAPT_TAB_PERMISSIONS), so there's no settings-permission check to
+  // mirror here the way there is for the other two.
+  const visibleNav = SETTINGS_NAV.filter((item) => {
+    if (item.key === "master") return isAdmin || currentUser.role === "admin";
+    if (item.key === "equipt") return currentUser.role === "admin" || currentUser.role === "manager";
+    if (item.key === "landscapt") return isAdmin || roleId !== null;
+    return true;
+  });
 
   return (
     <aside
@@ -72,7 +90,7 @@ export function SettingsSidebar() {
             Settings
           </p>
         )}
-        {SETTINGS_NAV.map((item) => {
+        {visibleNav.map((item) => {
           const isActive = item.exact
             ? pathname === item.href
             : pathname === item.href || pathname.startsWith(item.href + "/");

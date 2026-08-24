@@ -45,6 +45,26 @@ export async function POST(
     return NextResponse.json({ error: "prompt is required" }, { status: 400 });
   }
 
+  // Cap AI drafting at 50 requests/org/day so no single tenant can run up
+  // the shared ANTHROPIC_API_KEY bill. Atomic RPC avoids a check-then-write race.
+  const today = new Date().toISOString().slice(0, 10);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: withinLimit, error: usageError } = await (supabase as any).rpc(
+    "try_increment_ai_draft_usage",
+    { p_org_id: orgId, p_day: today, p_limit: 50 }
+  );
+
+  if (usageError) {
+    return NextResponse.json({ error: "Failed to check AI draft usage" }, { status: 500 });
+  }
+
+  if (!withinLimit) {
+    return NextResponse.json(
+      { error: "Daily AI draft limit reached (50 per organization). Try again tomorrow." },
+      { status: 429 }
+    );
+  }
+
   // Fetch context: top 20 services
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: services } = await (supabase as any)

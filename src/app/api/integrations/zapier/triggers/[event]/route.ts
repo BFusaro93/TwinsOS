@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { adminClient, authenticateZapierRequest, isZapierTriggerType } from "@/lib/integrations/zapier";
+import { adminClient, authenticateZapierRequest, checkZapierRateLimit, isZapierTriggerType } from "@/lib/integrations/zapier";
 import { POLLING_TRIGGERS } from "@/lib/integrations/zapier-triggers";
 
 /**
@@ -22,6 +22,9 @@ export async function GET(
   const auth = await authenticateZapierRequest(request, db);
   if (!auth) {
     return NextResponse.json({ error: "Invalid or missing API key" }, { status: 401 });
+  }
+  if (!(await checkZapierRateLimit(db, auth.integrationId))) {
+    return NextResponse.json({ error: "Rate limit exceeded — slow down" }, { status: 429 });
   }
 
   const config = POLLING_TRIGGERS[event];

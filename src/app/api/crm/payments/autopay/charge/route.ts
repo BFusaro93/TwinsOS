@@ -4,6 +4,7 @@ import Stripe from "stripe";
 import { createClient } from "@/lib/supabase/server";
 import { getStripe, isStripeConfigured } from "@/lib/stripe/server";
 import { computeProcessingFee } from "@/lib/stripe/crm-payments";
+import { chargeIdempotencyKey } from "@/lib/stripe/idempotency";
 import { logger } from "@/lib/logger";
 
 const log = logger.child("stripe autopay charge");
@@ -106,7 +107,10 @@ export async function POST(request: Request) {
           fee_cents: String(feeCents),
         },
       },
-      { stripeAccount: org.stripe_connect_account_id }
+      {
+        stripeAccount: org.stripe_connect_account_id,
+        idempotencyKey: chargeIdempotencyKey(["crm_invoice_autopay", invoice.id, totalChargeCents, paymentMethod]),
+      }
     );
 
     return NextResponse.json({

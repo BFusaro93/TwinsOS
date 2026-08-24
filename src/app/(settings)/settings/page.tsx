@@ -10,6 +10,8 @@ import { SubscriptionTab } from "@/components/settings/SubscriptionTab";
 import { ZapierIntegrationCard } from "@/components/settings/ZapierIntegrationCard";
 import { ApiKeysCard } from "@/components/settings/ApiKeysCard";
 import { HomeShortcutsCard } from "@/components/settings/HomeShortcutsCard";
+import { AccessDenied } from "@/components/shared/AccessDenied";
+import { useCurrentUserStore } from "@/stores";
 
 const TAB_KEYS = ["organization", "branding", "users", "subscription", "integrations"] as const;
 type TabKey = (typeof TAB_KEYS)[number];
@@ -87,6 +89,23 @@ function MasterAccountSettings() {
 }
 
 export default function MasterAccountSettingsPage() {
+  const { currentUser, currentUserLoaded } = useCurrentUserStore();
+
+  // Master Account Settings covers org info, branding, user management,
+  // subscription/billing, and the Zapier integration key — all account-wide,
+  // sensitive, and not something every role should see or change. Unlike
+  // Landscapt Settings (gated by the crm_settings permission — see
+  // LandscaptSettingsTabs), there's no finer-grained permission to check
+  // here, so this is admin-only.
+  if (currentUserLoaded && currentUser.role !== "admin") {
+    return (
+      <AccessDenied
+        title="Admins only"
+        message="Master Account Settings — organization info, users, branding, billing, and integrations — is only available to admins. Ask an admin if you need something changed here."
+      />
+    );
+  }
+
   return (
     <Suspense>
       <MasterAccountSettings />

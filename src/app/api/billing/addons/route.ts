@@ -4,6 +4,7 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { getStripe, isStripeConfigured } from "@/lib/stripe/server";
 import { isAddonKey, getPriceIdForAddon } from "@/lib/stripe/addons";
 import { planIncludesAddon, type BundledAddonKey } from "@/lib/stripe/plans";
+import { chargeIdempotencyKey } from "@/lib/stripe/idempotency";
 
 const ToggleAddonSchema = z.object({
   addon: z.string().refine(isAddonKey, { message: "Unknown addon" }),
@@ -74,11 +75,14 @@ export async function POST(request: Request) {
 
   if (enabled) {
     if (!existingItem) {
-      const item = await stripe.subscriptionItems.create({
-        subscription: subscription.id,
-        price: priceId,
-        proration_behavior: "create_prorations",
-      });
+      const item = await stripe.subscriptionItems.create(
+        {
+          subscription: subscription.id,
+          price: priceId,
+          proration_behavior: "create_prorations",
+        },
+        { idempotencyKey: chargeIdempotencyKey(["addon_item", org.id, addon]) }
+      );
       const { error: upsertErr } = await serviceClient
         .from("organization_addons")
         .upsert(

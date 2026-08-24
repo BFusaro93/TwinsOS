@@ -9007,6 +9007,41 @@ export type Database = {
           },
         ]
       }
+      organization_ai_draft_usage: {
+        Row: {
+          count: number
+          created_at: string
+          id: string
+          org_id: string
+          updated_at: string
+          usage_date: string
+        }
+        Insert: {
+          count?: number
+          created_at?: string
+          id?: string
+          org_id?: string
+          updated_at?: string
+          usage_date: string
+        }
+        Update: {
+          count?: number
+          created_at?: string
+          id?: string
+          org_id?: string
+          updated_at?: string
+          usage_date?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "organization_ai_draft_usage_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       organization_sms_usage: {
         Row: {
           count: number
@@ -12059,6 +12094,10 @@ export type Database = {
         Returns: undefined
       }
       sync_client_balance: { Args: { p_client_id: string }; Returns: undefined }
+      try_increment_ai_draft_usage: {
+        Args: { p_day: string; p_limit: number; p_org_id: string }
+        Returns: boolean
+      }
     }
     Enums: {
       [_ in never]: never
