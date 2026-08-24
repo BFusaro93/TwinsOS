@@ -1,0 +1,38 @@
+{
+  "_comment": "Known, already-reconciled migration history gaps between supabase/migrations/ and production as of 2026-08-24 (see PR #68). The drift-check workflow ignores exactly these versions so CI stays green without requiring us to reverse-engineer decades-old ad-hoc schema changes. Any NEW drift beyond this baseline fails the build. Do not add to this list to silence a check on migrations you're actively adding — that's what the check is for. Only add here if you've done the same live-schema verification PR #68 did and are documenting a deliberately-accepted historical gap.",
+  "knownRemoteOnly": [
+    "20260623024109",
+    "20260623025056",
+    "20260623234104",
+    "20260703025638",
+    "20260703030657",
+    "20260703035432",
+    "20260704131218",
+    "20260707175052",
+    "20260707181533",
+    "20260707181814",
+    "20260707183237",
+    "20260707233837",
+    "20260710142642",
+    "20260710151415",
+    "20260710152106",
+    "20260710161703",
+    "20260710172412",
+    "20260717214614",
+    "20260723033706",
+    "20260723033716",
+    "20260727023621",
+    "20260727023714",
+    "20260727174353",
+    "20260730150624",
+    "20260731024906",
+    "20260731030632",
+    "20260731133918",
+    "20260731141056",
+    "20260805151519"
+  ],
+  "knownLocalOnly": [
+    "20260619000010",
+    "20260710000005"
+  ]
+}
