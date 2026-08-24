@@ -1,6 +1,44 @@
 -- Add photo_jobs to fn_audit_log and attach trigger.
 -- photo_jobs was created outside the migration system so we update the function
 -- and attach the trigger here.
+--
+-- Bootstrap the table itself for reproducibility (e.g. Supabase preview
+-- branches, which replay every migration from scratch): this table already
+-- exists in production, so everything below is a guarded no-op there.
+
+CREATE TABLE IF NOT EXISTS public.photo_jobs (
+  id            uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+  org_id        uuid        NOT NULL REFERENCES public.organizations(id),
+  name          text        NOT NULL,
+  customer_name text        NOT NULL DEFAULT '',
+  address       text        NOT NULL DEFAULT '',
+  city          text        NOT NULL DEFAULT '',
+  state         text        NOT NULL DEFAULT '',
+  zip           text        NOT NULL DEFAULT '',
+  notes         text,
+  status        text        NOT NULL DEFAULT 'active',
+  is_archived   boolean     NOT NULL DEFAULT false,
+  project_id    uuid        REFERENCES public.projects(id),
+  created_by    uuid        REFERENCES public.profiles(id),
+  created_at    timestamptz NOT NULL DEFAULT now(),
+  updated_at    timestamptz NOT NULL DEFAULT now(),
+  deleted_at    timestamptz
+);
+
+ALTER TABLE public.photo_jobs ENABLE ROW LEVEL SECURITY;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'photo_jobs' AND policyname = 'photo_jobs_org_access'
+  ) THEN
+    CREATE POLICY "photo_jobs_org_access" ON public.photo_jobs
+      FOR ALL
+      USING (org_id = (SELECT profiles.org_id FROM public.profiles WHERE profiles.id = auth.uid()));
+  END IF;
+END $$;
+
+CREATE INDEX IF NOT EXISTS photo_jobs_org_id_idx ON public.photo_jobs (org_id) WHERE deleted_at IS NULL;
 
 CREATE OR REPLACE FUNCTION public.fn_audit_log()
 RETURNS trigger

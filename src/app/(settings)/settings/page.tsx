@@ -8,6 +8,7 @@ import { OrganizationTab } from "@/components/settings/OrganizationTab";
 import { BrandingTab } from "@/components/settings/BrandingTab";
 import { SubscriptionTab } from "@/components/settings/SubscriptionTab";
 import { ZapierIntegrationCard } from "@/components/settings/ZapierIntegrationCard";
+import { ApiKeysCard } from "@/components/settings/ApiKeysCard";
 import { HomeShortcutsCard } from "@/components/settings/HomeShortcutsCard";
 import { AccessDenied } from "@/components/shared/AccessDenied";
 import { useCurrentUserStore } from "@/stores";
@@ -77,6 +78,7 @@ function MasterAccountSettings() {
           <TabsContent value="integrations" className="mt-0">
             <div className="flex max-w-2xl flex-col gap-6">
               <ZapierIntegrationCard />
+              <ApiKeysCard />
               <HomeShortcutsCard />
             </div>
           </TabsContent>
