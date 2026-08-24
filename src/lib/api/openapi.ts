@@ -9,6 +9,7 @@ import { createProjectSchema, updateProjectSchema } from "@/app/api/v1/projects/
 import { createPmScheduleSchema, updatePmScheduleSchema } from "@/app/api/v1/pm-schedules/validation";
 import { createPartSchema, updatePartSchema } from "@/app/api/v1/parts/validation";
 import { createRequisitionSchema } from "@/app/api/v1/requisitions/validation";
+import { createJobSchema, updateJobSchema } from "@/app/api/v1/jobs/validation";
 import type { ApiScopeTier } from "@/lib/api/scopes";
 
 /**
@@ -291,6 +292,69 @@ const ENDPOINTS: EndpointDef[] = [
     path: "/purchase-orders/{id}",
     summary: "Get a purchase order with its line items",
     scope: "purchase_orders:read",
+    agentTier: "read",
+    hasIdParam: true,
+  },
+
+  { method: "get", path: "/jobs", summary: "List Landscapt jobs", scope: "jobs:read", agentTier: "read" },
+  {
+    method: "post",
+    path: "/jobs",
+    summary: "Create a job",
+    scope: "jobs:write:safe",
+    agentTier: "write:safe",
+    requestSchema: createJobSchema,
+  },
+  {
+    method: "get",
+    path: "/jobs/{id}",
+    summary: "Get a job",
+    scope: "jobs:read",
+    agentTier: "read",
+    hasIdParam: true,
+  },
+  {
+    method: "patch",
+    path: "/jobs/{id}",
+    summary: "Update a job",
+    scope: "jobs:write:safe",
+    agentTier: "write:safe",
+    requestSchema: updateJobSchema,
+    hasIdParam: true,
+  },
+
+  {
+    method: "get",
+    path: "/estimates",
+    summary: "List estimates",
+    scope: "estimates:read",
+    agentTier: "read",
+  },
+  {
+    method: "get",
+    path: "/estimates/{id}",
+    summary: "Get an estimate with its line items",
+    scope: "estimates:read",
+    agentTier: "read",
+    hasIdParam: true,
+  },
+
+  { method: "get", path: "/invoices", summary: "List invoices", scope: "invoices:read", agentTier: "read" },
+  {
+    method: "get",
+    path: "/invoices/{id}",
+    summary: "Get an invoice with its line items",
+    scope: "invoices:read",
+    agentTier: "read",
+    hasIdParam: true,
+  },
+
+  { method: "get", path: "/contracts", summary: "List contracts", scope: "contracts:read", agentTier: "read" },
+  {
+    method: "get",
+    path: "/contracts/{id}",
+    summary: "Get a contract",
+    scope: "contracts:read",
     agentTier: "read",
     hasIdParam: true,
   },
