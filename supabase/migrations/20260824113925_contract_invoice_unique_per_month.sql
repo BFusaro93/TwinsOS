@@ -11,6 +11,10 @@
 -- fail instead of silently succeeding; the application code below catches
 -- the unique-violation and reports it the same way as the pre-existing
 -- "already billed" skip path.
+--
+-- date_trunc(text, date) isn't IMMUTABLE, so it can't be used in an index
+-- expression directly — extract(year/month from date) is immutable and
+-- equivalent for this purpose.
 create unique index if not exists crm_invoices_one_per_contract_month
-  on public.crm_invoices (contract_id, (date_trunc('month', invoice_date)))
+  on public.crm_invoices (contract_id, (extract(year from invoice_date)), (extract(month from invoice_date)))
   where deleted_at is null and contract_id is not null;
