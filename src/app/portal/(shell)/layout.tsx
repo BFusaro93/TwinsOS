@@ -20,9 +20,9 @@ export default async function PortalShellLayout({ children }: { children: React.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (supabase as any)
       .from("client_portal_settings")
-      .select("company_name, logo_url, accent_color, support_email, support_phone, allow_tickets, allow_estimates")
+      .select("company_name, logo_url, accent_color, support_email, support_phone, allow_tickets, allow_estimates, allow_documents")
       .eq("org_id", ctx.orgId)
-      .single() as Promise<{ data: Pick<PortalSettingsRow, "company_name" | "logo_url" | "accent_color" | "support_email" | "support_phone" | "allow_tickets" | "allow_estimates"> | null }>,
+      .single() as Promise<{ data: Pick<PortalSettingsRow, "company_name" | "logo_url" | "accent_color" | "support_email" | "support_phone" | "allow_tickets" | "allow_estimates" | "allow_documents"> | null }>,
 
     supabase
       .from("organizations")
@@ -42,6 +42,7 @@ export default async function PortalShellLayout({ children }: { children: React.
     supportPhone: settings?.support_phone ?? null,
     allowTickets: settings?.allow_tickets !== false,
     allowEstimates: settings?.allow_estimates !== false,
+    allowDocuments: settings?.allow_documents !== false,
   };
 
   const clientName = client?.first_name ?? client?.display_name ?? "there";

@@ -122,7 +122,7 @@ export function useCreateProject() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (
-      input: Omit<Project, "id" | "orgId" | "createdBy" | "createdAt" | "updatedAt" | "deletedAt" | "totalCost" | "isArchived" | "progressPct" | "clientId" | "clientName"> & { clientId?: string | null; progressPct?: number }
+      input: Omit<Project, "id" | "orgId" | "createdBy" | "createdAt" | "updatedAt" | "deletedAt" | "totalCost" | "isArchived" | "progressPct" | "clientId" | "clientName" | "estimatedCostCents"> & { clientId?: string | null; progressPct?: number; estimatedCostCents?: number }
     ) => {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
@@ -143,6 +143,7 @@ export function useCreateProject() {
           start_date: input.startDate || null,
           end_date: input.endDate,
           contract_price: input.contractPrice ?? 0,
+          estimated_cost_cents: input.estimatedCostCents ?? 0,
           labor_hours: input.laborHours ?? null,
           budget_hours: input.budgetHours ?? null,
           labor_rate_cents: input.laborRateCents ?? null,
@@ -184,6 +185,7 @@ export function useUpdateProject() {
           ...(input.startDate !== undefined && { start_date: input.startDate || null }),
           ...(input.endDate !== undefined && { end_date: input.endDate }),
           ...(input.contractPrice !== undefined && { contract_price: input.contractPrice }),
+          ...(input.estimatedCostCents !== undefined && { estimated_cost_cents: input.estimatedCostCents }),
           ...(input.laborHours !== undefined && { labor_hours: input.laborHours }),
           ...(input.budgetHours !== undefined && { budget_hours: input.budgetHours }),
           ...(input.laborRateCents !== undefined && { labor_rate_cents: input.laborRateCents }),
@@ -197,7 +199,7 @@ export function useUpdateProject() {
       if (error) throw error;
       return mapProject(data);
     },
-    onMutate: async ({ id, status, name, customerName, address, startDate, endDate, contractPrice, laborHours, budgetHours, laborRateCents, burdenedRateCents, notes, clientId }) => {
+    onMutate: async ({ id, status, name, customerName, address, startDate, endDate, contractPrice, estimatedCostCents, laborHours, budgetHours, laborRateCents, burdenedRateCents, notes, clientId }) => {
       await queryClient.cancelQueries({ queryKey: ["projects"] });
       const previous = queryClient.getQueryData<Project[]>(["projects"]);
       const patch: Partial<Project> = {};
@@ -208,6 +210,7 @@ export function useUpdateProject() {
       if (startDate !== undefined) patch.startDate = startDate ?? null;
       if (endDate !== undefined) patch.endDate = endDate;
       if (contractPrice !== undefined) patch.contractPrice = contractPrice;
+      if (estimatedCostCents !== undefined) patch.estimatedCostCents = estimatedCostCents;
       if (laborHours !== undefined) patch.laborHours = laborHours;
       if (budgetHours !== undefined) patch.budgetHours = budgetHours;
       if (laborRateCents !== undefined) patch.laborRateCents = laborRateCents;

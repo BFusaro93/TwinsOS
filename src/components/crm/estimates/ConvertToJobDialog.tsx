@@ -20,10 +20,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { CalendarDays, Briefcase } from "lucide-react";
+import { CalendarDays, Briefcase, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { formatCurrency } from "@/lib/utils";
 import { useCreateJobsFromEstimate, useCRMCrews, useCRMSchedules } from "@/lib/hooks/use-crm-jobs";
+import { useClientProjects } from "@/lib/hooks/use-client-cmms";
+import { NewProjectDialog } from "@/components/po/NewProjectDialog";
 import { budgetedHoursFromLineItem } from "@/lib/estimate-calc";
 import type { Estimate, EstimateLineItem, EstimateDirectCost } from "@/types/crm-estimates";
 
@@ -67,10 +69,16 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
   const [notesToCrew,   setNotesToCrew]   = useState(() =>
     lineItems.map((li) => li.jobNote).filter(Boolean).join("\n").trim()
   );
+  const [projectId,     setProjectId]     = useState<string | null>(null);
+  const [newProjectOpen, setNewProjectOpen] = useState(false);
 
   const { data: crews = [] } = useCRMCrews();
   const { data: crmSchedules = [] } = useCRMSchedules();
+  const { data: clientProjects } = useClientProjects(estimate.clientId, estimate.clientName ?? "");
   const createJobs = useCreateJobsFromEstimate();
+  // All-in estimated cost (revenue - net profit) — seeds a linked project's EAC
+  // if it's still unset. See rpt_projects_wip / the WIP report this feeds.
+  const eacHintCents = estimate.revenueCents - estimate.netProfitCents;
 
   function toggleAll(checked: boolean) {
     setSelected(checked ? new Set(lineItems.map((li) => li.id)) : new Set());
@@ -119,6 +127,8 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
         crewId: crewId || null,
         schedule: jobType === "recurring" ? schedule : null,
         notesToCrew: notesToCrew || null,
+        projectId: jobType === "project" ? projectId : null,
+        eacHintCents,
         services: selectedItems.map((li) => ({
           serviceName:   li.serviceName ?? "Service",
           serviceId:     li.serviceId ?? null,
@@ -154,6 +164,7 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
   const allSelected = lineItems.length > 0 && selected.size === lineItems.length;
 
   return (
+    <>
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
@@ -300,6 +311,29 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
             />
           </div>
 
+          {jobType === "project" && (
+            <div className="flex flex-col gap-1">
+              <Label className="text-xs font-medium text-slate-600">Project</Label>
+              <div className="flex gap-2">
+                <Select value={projectId ?? "none"} onValueChange={(v) => setProjectId(v === "none" ? null : v)}>
+                  <SelectTrigger className="text-sm"><SelectValue placeholder="Link a project…" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No project linked</SelectItem>
+                    {(clientProjects ?? []).map((p) => (
+                      <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button type="button" variant="outline" size="sm" onClick={() => setNewProjectOpen(true)}>
+                  <Plus className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+              <p className="text-[11px] text-slate-400">
+                Links this job to a Projects (PO cost-tracking) record for job costing and the WIP report.
+              </p>
+            </div>
+          )}
+
           {jobType === "recurring" && (
             <div className="flex flex-col gap-1">
               <Label className="text-xs font-medium text-slate-600">Schedule *</Label>
@@ -364,6 +398,15 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
         </DialogFooter>
       </DialogContent>
     </Dialog>
+    {jobType === "project" && (
+      <NewProjectDialog
+        open={newProjectOpen}
+        onOpenChange={setNewProjectOpen}
+        defaultClientId={estimate.clientId}
+        onCreated={(project) => setProjectId(project.id)}
+      />
+    )}
+    </>
   );
 }
 
