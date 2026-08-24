@@ -12,10 +12,13 @@ name: Migration drift check
 # db.<project-ref>.supabase.co:5432 host — that host is IPv6-only on many
 # projects, and GitHub-hosted runners have no IPv6 egress ("Network is
 # unreachable"). The pooler is IPv4-compatible:
-#   postgresql://postgres.<project-ref>:[DB_PASSWORD]@aws-0-<region>.pooler.supabase.com:6543/postgres
+#   postgresql://postgres.mhphatxiqxbscivffejl:[DB_PASSWORD]@aws-1-us-east-1.pooler.supabase.com:6543/postgres
 # Note the username becomes postgres.<project-ref> (not just postgres) for
-# the pooler. Find <region> and the password at Supabase dashboard >
-# Project Settings > Database > Connection string (pick "Transaction" mode).
+# the pooler, and the cluster number (aws-1 here) is assigned per-project —
+# it is NOT derivable from the region alone, so don't guess it for a
+# different project. Get the exact value from the Supabase dashboard's
+# "Connect" button (top of the project page) > ORM tab > Prisma, which
+# shows the real DATABASE_URL/DIRECT_URL pooler hosts for this project.
 # Add the secret at: repo Settings > Secrets and variables > Actions > New
 # repository secret.
 
