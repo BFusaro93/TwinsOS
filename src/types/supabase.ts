@@ -4218,6 +4218,8 @@ export type Database = {
           po_number: string | null
           preferred_payment_method: string | null
           qbo_invoice_id: string | null
+          qbo_sync_attempted_at: string | null
+          qbo_sync_error: string | null
           sales_rep_id: string | null
           service_address: string | null
           status: string
@@ -4255,6 +4257,8 @@ export type Database = {
           po_number?: string | null
           preferred_payment_method?: string | null
           qbo_invoice_id?: string | null
+          qbo_sync_attempted_at?: string | null
+          qbo_sync_error?: string | null
           sales_rep_id?: string | null
           service_address?: string | null
           status?: string
@@ -4292,6 +4296,8 @@ export type Database = {
           po_number?: string | null
           preferred_payment_method?: string | null
           qbo_invoice_id?: string | null
+          qbo_sync_attempted_at?: string | null
+          qbo_sync_error?: string | null
           sales_rep_id?: string | null
           service_address?: string | null
           status?: string
@@ -5463,6 +5469,8 @@ export type Database = {
           org_id: string
           payment_id: string
           qbo_payment_id: string | null
+          qbo_sync_attempted_at: string | null
+          qbo_sync_error: string | null
         }
         Insert: {
           amount_cents: number
@@ -5472,6 +5480,8 @@ export type Database = {
           org_id?: string
           payment_id: string
           qbo_payment_id?: string | null
+          qbo_sync_attempted_at?: string | null
+          qbo_sync_error?: string | null
         }
         Update: {
           amount_cents?: number
@@ -5481,6 +5491,8 @@ export type Database = {
           org_id?: string
           payment_id?: string
           qbo_payment_id?: string | null
+          qbo_sync_attempted_at?: string | null
+          qbo_sync_error?: string | null
         }
         Relationships: [
           {
@@ -6555,6 +6567,7 @@ export type Database = {
           org_id: string
           parent_service_id: string | null
           production_rate_sqft_per_hr: number | null
+          qbo_item_id: string | null
           rate_matrix_calc: string | null
           rate_matrix_field: string | null
           service_mode: string
@@ -6594,6 +6607,7 @@ export type Database = {
           org_id?: string
           parent_service_id?: string | null
           production_rate_sqft_per_hr?: number | null
+          qbo_item_id?: string | null
           rate_matrix_calc?: string | null
           rate_matrix_field?: string | null
           service_mode?: string
@@ -6633,6 +6647,7 @@ export type Database = {
           org_id?: string
           parent_service_id?: string | null
           production_rate_sqft_per_hr?: number | null
+          qbo_item_id?: string | null
           rate_matrix_calc?: string | null
           rate_matrix_field?: string | null
           service_mode?: string

@@ -89,6 +89,13 @@ import { useEstimates, useBulkImportEstimates } from "@/lib/hooks/use-estimates"
 import { useEstimateStages } from "@/lib/hooks/use-estimate-stages";
 import { useApprovalFlows } from "@/lib/hooks/use-approval-flows";
 import { useInvoices, usePayments, useBulkImportInvoices, useBulkImportPayments } from "@/lib/hooks/use-invoices";
+import {
+  useQuickBooksStatus,
+  useDisconnectQuickBooks,
+  useQuickBooksSyncStatus,
+  useRetryQuickBooksInvoiceSync,
+  useRetryQuickBooksPaymentSync,
+} from "@/lib/hooks/use-quickbooks";
 import { useTickets, useBulkImportTickets } from "@/lib/hooks/use-tickets";
 import { useEmployees, useBulkImportEmployees } from "@/lib/hooks/use-employees";
 import { NotificationsPage } from "@/components/settings/NotificationsPage";
@@ -1201,6 +1208,143 @@ function ConnectAccountSection() {
   );
 }
 
+function QuickBooksConnectSection() {
+  const { data: status, isLoading } = useQuickBooksStatus();
+  const { mutateAsync: disconnect, isPending: disconnecting } = useDisconnectQuickBooks();
+
+  if (isLoading) {
+    return <p className="p-4 text-sm text-slate-400">Loading…</p>;
+  }
+
+  if (!status?.configured) {
+    return <p className="p-4 text-sm text-slate-400">QuickBooks isn&apos;t configured for this environment yet.</p>;
+  }
+
+  async function handleDisconnect() {
+    try {
+      await disconnect();
+      toast.success("QuickBooks disconnected");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to disconnect QuickBooks");
+    }
+  }
+
+  return (
+    <div className="space-y-4 p-4">
+      <div className="flex items-center gap-2">
+        <span
+          className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${
+            status.connected ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-600"
+          }`}
+        >
+          {status.connected ? `Connected — ${status.companyName}` : "Not connected"}
+        </span>
+      </div>
+      <p className="text-sm text-slate-600">
+        Connect QuickBooks Online to push invoices and payments over automatically. This is a one-way sync — nothing
+        is ever pulled back from QuickBooks or written from it into Landscapt.
+      </p>
+      {status.connected ? (
+        <Button size="sm" variant="outline" onClick={() => void handleDisconnect()} disabled={disconnecting}>
+          {disconnecting ? "Disconnecting…" : "Disconnect"}
+        </Button>
+      ) : (
+        <Button size="sm" asChild>
+          <a href="/api/integrations/quickbooks/connect">Connect QuickBooks</a>
+        </Button>
+      )}
+    </div>
+  );
+}
+
+function QuickBooksSyncStatusSection() {
+  const { data, isLoading } = useQuickBooksSyncStatus();
+  const { mutateAsync: retryInvoice, isPending: retryingInvoice, variables: retryingInvoiceId } = useRetryQuickBooksInvoiceSync();
+  const { mutateAsync: retryPayment, isPending: retryingPayment, variables: retryingPaymentId } = useRetryQuickBooksPaymentSync();
+
+  if (isLoading || !data?.connected) return null;
+
+  const hasFailures = data.failedInvoices.length > 0 || data.failedPayments.length > 0;
+
+  async function handleRetryInvoice(id: string) {
+    try {
+      const result = await retryInvoice(id);
+      if (result.status === "pushed") toast.success("Invoice synced to QuickBooks");
+      else if (result.status === "already_synced") toast.success("Already synced");
+      else toast.error(result.reason === "ambiguous_client_match" ? "Client match is still ambiguous" : "Sync failed again");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to retry sync");
+    }
+  }
+
+  async function handleRetryPayment(paymentId: string) {
+    try {
+      const result = await retryPayment(paymentId);
+      if (result.pushedAllocations > 0) toast.success("Payment synced to QuickBooks");
+      else toast.error("Sync failed again");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to retry sync");
+    }
+  }
+
+  return (
+    <div className="space-y-4 border-t border-slate-100 p-4">
+      <div className="flex items-center justify-between">
+        <h4 className="text-sm font-medium text-slate-700">Sync Status</h4>
+        {data.lastSyncAt && (
+          <span className="text-xs text-slate-400">
+            Last activity {new Date(data.lastSyncAt).toLocaleString()}
+          </span>
+        )}
+      </div>
+      {!hasFailures ? (
+        <p className="text-sm text-slate-400">No failed pushes — everything that&apos;s been sent is synced.</p>
+      ) : (
+        <div className="space-y-3">
+          {data.failedInvoices.map((inv) => (
+            <div key={inv.id} className="flex items-start justify-between gap-3 rounded-lg border border-red-100 bg-red-50 p-3">
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-slate-800">
+                  Invoice #{inv.invoiceNumber ?? "—"} {inv.clientName ? `— ${inv.clientName}` : ""}
+                </p>
+                <p className="mt-0.5 truncate text-xs text-red-700">{inv.error}</p>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={retryingInvoice && retryingInvoiceId === inv.id}
+                onClick={() => void handleRetryInvoice(inv.id)}
+              >
+                {retryingInvoice && retryingInvoiceId === inv.id ? "Retrying…" : "Retry"}
+              </Button>
+            </div>
+          ))}
+          {data.failedPayments.map((pmt) => (
+            <div key={pmt.allocationId} className="flex items-start justify-between gap-3 rounded-lg border border-red-100 bg-red-50 p-3">
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-slate-800">
+                  Payment {formatCurrency(pmt.amountCents)}
+                  {pmt.invoiceNumber ? ` for Invoice #${pmt.invoiceNumber}` : ""}
+                  {pmt.clientName ? ` — ${pmt.clientName}` : ""}
+                </p>
+                <p className="mt-0.5 truncate text-xs text-red-700">{pmt.error}</p>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={retryingPayment && retryingPaymentId === pmt.paymentId}
+                onClick={() => void handleRetryPayment(pmt.paymentId)}
+              >
+                {retryingPayment && retryingPaymentId === pmt.paymentId ? "Retrying…" : "Retry"}
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── AccountingTab ─────────────────────────────────────────────────────────────
 
 function AccountingTab() {
@@ -1328,6 +1472,14 @@ function AccountingTab() {
           (client detail, invoices, portal). This is Landscapt&apos;s own switch, separate from any payment-method
           toggle in your Stripe dashboard.
         </p>
+      </AccordionSection>
+      <AccordionSection
+        title="QuickBooks"
+        count={0}
+        description="Push invoices and payments to QuickBooks Online automatically — one-way sync, nothing is pulled back."
+      >
+        <QuickBooksConnectSection />
+        <QuickBooksSyncStatusSection />
       </AccordionSection>
       <AccordionSection
         title="Credit Card Processing Fee"
