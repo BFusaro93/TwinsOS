@@ -56,8 +56,13 @@ export async function updateSession(request: NextRequest) {
 
   if (!user && !isPublicRoute) {
     const loginUrl = request.nextUrl.clone();
+    // Preserve the query string (e.g. `?open=<ticketId>` on an emailed link)
+    // — using `pathname` alone here used to drop it, sending a signed-out
+    // user who clicked a deep link straight past their destination.
+    const target = pathname + request.nextUrl.search;
     loginUrl.pathname = "/login";
-    loginUrl.searchParams.set("redirectTo", pathname);
+    loginUrl.search = "";
+    loginUrl.searchParams.set("redirectTo", target);
     return NextResponse.redirect(loginUrl);
   }
 

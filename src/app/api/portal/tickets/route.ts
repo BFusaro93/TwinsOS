@@ -3,7 +3,7 @@ import { Resend } from "resend";
 import { getPortalContext } from "@/lib/portal/get-portal-context";
 import { createServiceClient } from "@/lib/supabase/server";
 import { getEffectiveTicketCategories } from "@/lib/portal/ticket-categories";
-import { notifyStaffOfNewTicket } from "@/lib/ticket-notify";
+import { notifyStaffOfNewTicket, ticketLink } from "@/lib/ticket-notify";
 import type { PortalSettingsRow } from "@/lib/portal/portal-db";
 
 const FROM = "Twins Lawn Service <noreply@twinslawnservice.com>";
@@ -164,7 +164,11 @@ export async function POST(req: Request) {
   if (notifyEmail) {
     const clientName = client?.display_name ?? "A client";
     const orgName = settings?.company_name ?? "Your company";
-    const ticketUrl = `${process.env.NEXT_PUBLIC_APP_URL ?? ""}/crm/tickets`;
+    // Was `/crm/tickets` with no `?open=` param (and a different env var than
+    // the rest of the app's ticket links use) — always landed on the plain
+    // list instead of the ticket. Reuse the shared builder so this link
+    // opens the ticket, not just the list.
+    const ticketUrl = ticketLink(ticket.id);
     const resend = new Resend(process.env.RESEND_API_KEY!);
 
     // Best-effort — don't fail the ticket if email errors

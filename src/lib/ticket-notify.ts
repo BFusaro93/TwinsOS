@@ -100,7 +100,7 @@ async function sendToRecipients(
   }
 }
 
-function ticketLink(ticketId: string): string {
+export function ticketLink(ticketId: string): string {
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://twins-os.vercel.app";
   return `${siteUrl}/crm/tickets?open=${ticketId}`;
 }

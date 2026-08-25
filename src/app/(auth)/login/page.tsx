@@ -1,15 +1,34 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Leaf } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createClient } from "@/lib/supabase/client";
 
+/** Only ever follow `redirectTo` back into our own app — a same-origin
+ *  relative path set by middleware.ts. Rejects absolute/protocol-relative
+ *  URLs so a crafted `?redirectTo=` can't be used as an open redirect. */
+function safeRedirectTarget(redirectTo: string | null): string {
+  if (redirectTo && redirectTo.startsWith("/") && !redirectTo.startsWith("//")) {
+    return redirectTo;
+  }
+  return "/home";
+}
+
 export default function LoginPage() {
+  return (
+    <Suspense>
+      <LoginForm />
+    </Suspense>
+  );
+}
+
+function LoginForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -32,7 +51,7 @@ export default function LoginPage() {
       return;
     }
 
-    router.push("/home");
+    router.push(safeRedirectTarget(searchParams.get("redirectTo")));
     router.refresh();
   }
 
