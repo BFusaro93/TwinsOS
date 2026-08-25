@@ -699,7 +699,7 @@ export function InvoicesList({ clientId }: Props) {
                       case "number":
                         return (
                           <td key={col.key} className="px-4 py-3 font-mono text-xs text-slate-400">
-                            #{inv.invoiceNumber}
+                            {inv.invoiceNumber != null ? `#${inv.invoiceNumber}` : "—"}
                           </td>
                         );
                       case "client":

@@ -2964,7 +2964,7 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
     <div className="flex h-full flex-col overflow-y-auto">
       {/* Header */}
       <div className="border-b px-6 py-3">
-        <div className="flex flex-col gap-4 md:flex-row md:items-stretch md:justify-between">
+        <div className={`flex flex-col gap-4 ${expanded ? "md:flex-row md:items-stretch md:justify-between" : ""}`}>
           {/* Left column — stretches to match balance card height */}
           <div className="min-w-0 flex-1 flex flex-col">
             {/* Name + status row */}
@@ -3060,7 +3060,7 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
             </div>
           </div>
 
-          <div className="flex flex-col items-start gap-2 shrink-0 md:items-end">
+          <div className={`flex flex-col items-start gap-2 shrink-0 ${expanded ? "md:items-end" : ""}`}>
             {/* Action buttons row */}
             <div className="flex flex-wrap items-center gap-1.5">
               {onExpandChange && (
