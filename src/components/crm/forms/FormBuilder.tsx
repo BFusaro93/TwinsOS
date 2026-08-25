@@ -254,11 +254,24 @@ export function FormBuilder({ form, publicBaseUrl }: Props) {
   }
 
   function changeType(key: string, type: FormFieldType) {
+    const current = fields.find((f) => f._key === key);
+    // A2P 10DLC carrier review rejects bundled/implied consent (e.g. "By
+    // clicking Submit, you agree...") — this checkbox must stand alone with
+    // explicit SMS-specific language. Pre-fill compliant boilerplate so a
+    // blank/generic label isn't shipped by default; staff can still edit it,
+    // but they start from language that passes review.
+    const isSmsOptIn = type === "sms_optin";
     update(key, {
       fieldType: type,
       config: defaultConfig(type),
-      options: OPTIONS_TYPES.includes(type) ? (fields.find((f) => f._key === key)?.options ?? []) : null,
-      required: DISPLAY_TYPES.includes(type) ? false : fields.find((f) => f._key === key)?.required ?? false,
+      options: OPTIONS_TYPES.includes(type) ? (current?.options ?? []) : null,
+      required: DISPLAY_TYPES.includes(type) ? false : current?.required ?? false,
+      label: isSmsOptIn && !current?.label
+        ? "I agree to receive text messages from this business about my service appointments and account"
+        : current?.label ?? "",
+      description: isSmsOptIn && !current?.description
+        ? "Message frequency varies. Message and data rates may apply. Reply STOP to opt out, HELP for help."
+        : current?.description ?? null,
     });
   }
 
@@ -714,8 +727,9 @@ function FieldCard({
         </button>
       </div>
 
-      {/* Field mapping */}
-      {!isDisplay && (
+      {/* Field mapping — sms_optin is detected by field type, not a mapping,
+          so it gets its own note below (in FieldTypeConfig) instead. */}
+      {!isDisplay && field.fieldType !== "sms_optin" && (
         <div className="border-t border-slate-100 px-4 py-2.5 flex items-center gap-3">
           <Label className="text-[10px] uppercase tracking-widest text-slate-400 shrink-0 w-24">
             Map to field
@@ -1134,6 +1148,12 @@ function FieldTypeConfig({
   if (field.fieldType === "sms_optin") {
     return (
       <div className={baseClass}>
+        <p className="text-[11px] text-slate-400">
+          No mapping needed — a checked box on submit automatically records SMS
+          consent on the matched/created client. Keep the label/consent text a
+          standalone, explicit statement rather than folding it into general
+          terms-acceptance language, or carrier review will reject it.
+        </p>
         <div>
           <Label className={labelClass}>Consent text</Label>
           <Input
