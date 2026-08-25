@@ -6567,6 +6567,7 @@ export type Database = {
           org_id: string
           parent_service_id: string | null
           production_rate_sqft_per_hr: number | null
+          qbo_item_id: string | null
           rate_matrix_calc: string | null
           rate_matrix_field: string | null
           service_mode: string
@@ -6606,6 +6607,7 @@ export type Database = {
           org_id?: string
           parent_service_id?: string | null
           production_rate_sqft_per_hr?: number | null
+          qbo_item_id?: string | null
           rate_matrix_calc?: string | null
           rate_matrix_field?: string | null
           service_mode?: string
@@ -6645,6 +6647,7 @@ export type Database = {
           org_id?: string
           parent_service_id?: string | null
           production_rate_sqft_per_hr?: number | null
+          qbo_item_id?: string | null
           rate_matrix_calc?: string | null
           rate_matrix_field?: string | null
           service_mode?: string

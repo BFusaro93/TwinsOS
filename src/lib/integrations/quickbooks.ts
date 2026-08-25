@@ -274,26 +274,23 @@ function centsToDollars(cents: number): number {
 }
 
 /**
- * Every invoice line pushes under one catchall QBO Service item (decided
- * with the user — no per-service QBO item mapping yet, so QBO-side
- * reporting won't break down by service type). Created once per org on
- * first use; QBO enforces Item name uniqueness the same way it does
- * DisplayName, so this query can only ever return 0 or 1 row.
+ * A line whose name doesn't match any of the org's crm_services falls back
+ * to this catchall QBO Service item, so ad-hoc/free-text lines never block
+ * a push. Created once per org on first use; QBO enforces Item name
+ * uniqueness the same way it does DisplayName, so this query can only ever
+ * return 0 or 1 row.
  */
 const DEFAULT_ITEM_NAME = "Services";
 
 async function getIncomeAccountId(conn: QuickBooksConnection): Promise<string> {
   const accounts = await qboQuery(conn, "SELECT Id FROM Account WHERE AccountType = 'Income' MAXRESULTS 1", "Account");
   if (accounts.length === 0) {
-    throw new Error("No QuickBooks Income account found — cannot create the default Service item");
+    throw new Error("No QuickBooks Income account found — cannot create a Service item");
   }
   return accounts[0].Id;
 }
 
-export async function getOrCreateDefaultServiceItem(conn: QuickBooksConnection): Promise<string> {
-  const existing = await qboQuery(conn, `SELECT Id FROM Item WHERE Name = '${DEFAULT_ITEM_NAME}'`, "Item");
-  if (existing.length > 0) return existing[0].Id;
-
+async function createServiceItem(conn: QuickBooksConnection, name: string): Promise<string> {
   const incomeAccountId = await getIncomeAccountId(conn);
   const res = await fetch(`${conn.baseUrl}/v3/company/${conn.realmId}/item`, {
     method: "POST",
@@ -302,7 +299,7 @@ export async function getOrCreateDefaultServiceItem(conn: QuickBooksConnection):
       "Content-Type": "application/json",
       Accept: "application/json",
     },
-    body: JSON.stringify({ Name: DEFAULT_ITEM_NAME, Type: "Service", IncomeAccountRef: { value: incomeAccountId } }),
+    body: JSON.stringify({ Name: name, Type: "Service", IncomeAccountRef: { value: incomeAccountId } }),
   });
   if (!res.ok) {
     const text = await res.text().catch(() => "");
@@ -312,34 +309,110 @@ export async function getOrCreateDefaultServiceItem(conn: QuickBooksConnection):
   return data.Item.Id as string;
 }
 
+async function getOrCreateItemByName(conn: QuickBooksConnection, name: string): Promise<string> {
+  const existing = await qboQuery(conn, `SELECT Id FROM Item WHERE Name = '${escapeQboString(name)}'`, "Item");
+  if (existing.length > 0) return existing[0].Id;
+  return createServiceItem(conn, name);
+}
+
+export async function getOrCreateDefaultServiceItem(conn: QuickBooksConnection): Promise<string> {
+  return getOrCreateItemByName(conn, DEFAULT_ITEM_NAME);
+}
+
+/**
+ * Resolves each invoice line to its own QBO Item: a line whose name
+ * exactly matches (case-insensitive) one of the org's crm_services gets
+ * that service's dedicated QBO item — created and cached on
+ * crm_services.qbo_item_id on first use — so QuickBooks-side reporting can
+ * break down by service type. A line with no matching service (ad-hoc or
+ * free-text) falls back to the shared catchall item. Loads the org's
+ * services once and reuses it across all lines in one push.
+ */
+async function buildServiceItemResolver(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  db: any,
+  conn: QuickBooksConnection,
+  orgId: string
+): Promise<(lineName: string | null | undefined) => Promise<string>> {
+  const { data: services } = await db
+    .from("crm_services")
+    .select("id, name, qbo_item_id")
+    .eq("org_id", orgId)
+    .is("deleted_at", null);
+
+  const byName = new Map<string, { id: string; qbo_item_id: string | null }>(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (services ?? []).map((s: any) => [String(s.name).toLowerCase().trim(), s])
+  );
+  let defaultItemId: string | null = null;
+
+  return async (lineName: string | null | undefined): Promise<string> => {
+    const key = lineName?.toLowerCase().trim();
+    const service = key ? byName.get(key) : undefined;
+    if (service) {
+      if (service.qbo_item_id) return service.qbo_item_id;
+      const itemId = await getOrCreateItemByName(conn, lineName!);
+      await db.from("crm_services").update({ qbo_item_id: itemId }).eq("id", service.id);
+      service.qbo_item_id = itemId;
+      return itemId;
+    }
+    if (!defaultItemId) defaultItemId = await getOrCreateDefaultServiceItem(conn);
+    return defaultItemId;
+  };
+}
+
 export interface QboInvoiceLineInput {
   description: string;
   qty: number;
   amountCents: number;
+  itemId: string;
 }
 
 export interface CreateInvoiceInput {
   customerId: string;
-  itemId: string;
   invoiceDate: string;
   dueDate?: string | null;
   docNumber?: string | null;
   lines: QboInvoiceLineInput[];
+  /** Pushed as a single DiscountLineDetail line — QBO applies it against the default discount account. */
+  discountCents?: number;
+  /**
+   * Pushed as a manual TxnTaxDetail.TotalTax. NOTE: a QBO company with
+   * Automated Sales Tax enabled computes tax itself from each line's
+   * TaxCodeRef and typically rejects a manually-set total — unverified
+   * against a real QuickBooks company (see TASKS.md). A rejection here
+   * isn't silent: it surfaces through the normal error path into the
+   * Phase 4 reconciliation panel with QuickBooks' own error text.
+   */
+  taxCents?: number;
 }
 
 export async function createInvoice(conn: QuickBooksConnection, input: CreateInvoiceInput): Promise<string> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const lines: Record<string, unknown>[] = input.lines.map((l) => ({
+    DetailType: "SalesItemLineDetail",
+    Amount: centsToDollars(l.amountCents),
+    Description: l.description,
+    SalesItemLineDetail: { ItemRef: { value: l.itemId }, Qty: l.qty },
+  }));
+  if (input.discountCents && input.discountCents > 0) {
+    lines.push({
+      DetailType: "DiscountLineDetail",
+      Amount: centsToDollars(input.discountCents),
+      DiscountLineDetail: { PercentBased: false },
+    });
+  }
+
   const body: Record<string, unknown> = {
     CustomerRef: { value: input.customerId },
     TxnDate: input.invoiceDate,
-    Line: input.lines.map((l) => ({
-      DetailType: "SalesItemLineDetail",
-      Amount: centsToDollars(l.amountCents),
-      Description: l.description,
-      SalesItemLineDetail: { ItemRef: { value: input.itemId }, Qty: l.qty },
-    })),
+    Line: lines,
   };
   if (input.dueDate) body.DueDate = input.dueDate;
   if (input.docNumber) body.DocNumber = input.docNumber;
+  if (input.taxCents && input.taxCents > 0) {
+    body.TxnTaxDetail = { TotalTax: centsToDollars(input.taxCents) };
+  }
 
   const res = await fetch(`${conn.baseUrl}/v3/company/${conn.realmId}/invoice`, {
     method: "POST",
@@ -455,7 +528,7 @@ export async function pushInvoiceToQuickBooks(
   const { data: invoice } = await db
     .from("crm_invoices")
     .select(`
-      id, client_id, invoice_number, invoice_date, due_date, description, qbo_invoice_id,
+      id, client_id, invoice_number, invoice_date, due_date, description, qbo_invoice_id, discount_cents, tax_cents,
       clients (id, display_name, primary_email, primary_phone, billing_address, billing_city, billing_state, billing_zip, qbo_customer_id),
       crm_invoice_line_items (name, description, qty, total_cents, sort_order)
     `)
@@ -485,28 +558,32 @@ export async function pushInvoiceToQuickBooks(
       return { status: "error", reason: "ambiguous_client_match" };
     }
 
-    const itemId = await getOrCreateDefaultServiceItem(conn);
+    const resolveItemId = await buildServiceItemResolver(db, conn, orgId);
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const lineItems = (invoice.crm_invoice_line_items ?? []).sort((a: any, b: any) => a.sort_order - b.sort_order);
     const lines: QboInvoiceLineInput[] = lineItems.length > 0
-      ? lineItems.map(
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (li: any) => ({
-            description: li.name ? `${li.name}${li.description ? ` — ${li.description}` : ""}` : (li.description ?? "Service"),
-            qty: Number(li.qty) || 1,
-            amountCents: li.total_cents ?? 0,
-          })
+      ? await Promise.all(
+          lineItems.map(
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            async (li: any) => ({
+              description: li.name ? `${li.name}${li.description ? ` — ${li.description}` : ""}` : (li.description ?? "Service"),
+              qty: Number(li.qty) || 1,
+              amountCents: li.total_cents ?? 0,
+              itemId: await resolveItemId(li.name),
+            })
+          )
         )
-      : [{ description: invoice.description || "Service", qty: 1, amountCents: 0 }];
+      : [{ description: invoice.description || "Service", qty: 1, amountCents: 0, itemId: await resolveItemId(null) }];
 
     const qboInvoiceId = await createInvoice(conn, {
       customerId: resolved.customerId,
-      itemId,
       invoiceDate: invoice.invoice_date,
       dueDate: invoice.due_date,
       docNumber: invoice.invoice_number != null ? String(invoice.invoice_number) : null,
       lines,
+      discountCents: invoice.discount_cents ?? 0,
+      taxCents: invoice.tax_cents ?? 0,
     });
 
     await db
