@@ -48,7 +48,7 @@ function mapContract(row: any): CRMContract {
     clientName: row.clients?.display_name ?? null,
     clientEmail: row.clients?.primary_email ?? null,
     clientPhone: row.clients?.primary_phone ?? null,
-    salesRepName: row.profiles?.name ?? null,
+    salesRepName: row.sales_rep ? `${row.sales_rep.first_name ?? ""} ${row.sales_rep.last_name ?? ""}`.trim() || null : null,
   };
 }
 
@@ -74,7 +74,7 @@ export function useContracts(clientId?: string, activeOnly?: boolean) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let q = (supabase as any)
         .from("crm_contracts")
-        .select("*, clients(display_name, primary_email, primary_phone), profiles!crm_contracts_sales_rep_id_fkey(name)")
+        .select("*, clients(display_name, primary_email, primary_phone), sales_rep:crm_employees!crm_contracts_sales_rep_id_fkey(first_name,last_name)")
         .is("deleted_at", null)
         .order("created_at", { ascending: false });
       if (clientId) q = q.eq("client_id", clientId);
@@ -95,7 +95,7 @@ export function useContract(id: string) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
         .from("crm_contracts")
-        .select("*, clients(display_name, primary_email, primary_phone), profiles!crm_contracts_sales_rep_id_fkey(name)")
+        .select("*, clients(display_name, primary_email, primary_phone), sales_rep:crm_employees!crm_contracts_sales_rep_id_fkey(first_name,last_name)")
         .eq("id", id)
         .is("deleted_at", null)
         .single();
@@ -156,7 +156,7 @@ export function useCreateContract() {
           default_service: values.defaultService ?? null,
           status: "draft",
         })
-        .select("*, clients(display_name, primary_email, primary_phone), profiles!crm_contracts_sales_rep_id_fkey(name)")
+        .select("*, clients(display_name, primary_email, primary_phone), sales_rep:crm_employees!crm_contracts_sales_rep_id_fkey(first_name,last_name)")
         .single();
       if (error) throw error;
       return mapContract(data);

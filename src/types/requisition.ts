@@ -32,6 +32,7 @@ export interface Requisition extends BaseRecord {
   grandTotal: number; // cents
   notes: string | null;
   workOrderId: string | null;
+  crmJobId: string | null;
   /** Set when this requisition has been converted to a Purchase Order. */
   convertedPoId: string | null;
 }

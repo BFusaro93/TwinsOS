@@ -1679,7 +1679,14 @@ export type Database = {
             foreignKeyName: "clients_sales_rep_id_fkey"
             columns: ["sales_rep_id"]
             isOneToOne: false
-            referencedRelation: "profiles"
+            referencedRelation: "crm_employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "clients_sales_rep_id_fkey"
+            columns: ["sales_rep_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_employees"
             referencedColumns: ["id"]
           },
         ]
@@ -2711,7 +2718,14 @@ export type Database = {
             foreignKeyName: "crm_contracts_sales_rep_id_fkey"
             columns: ["sales_rep_id"]
             isOneToOne: false
-            referencedRelation: "profiles"
+            referencedRelation: "crm_employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_contracts_sales_rep_id_fkey"
+            columns: ["sales_rep_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_employees"
             referencedColumns: ["id"]
           },
         ]
@@ -4371,7 +4385,14 @@ export type Database = {
             foreignKeyName: "crm_invoices_sales_rep_id_fkey"
             columns: ["sales_rep_id"]
             isOneToOne: false
-            referencedRelation: "profiles"
+            referencedRelation: "crm_employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_invoices_sales_rep_id_fkey"
+            columns: ["sales_rep_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_employees"
             referencedColumns: ["id"]
           },
         ]
@@ -5190,7 +5211,14 @@ export type Database = {
             foreignKeyName: "crm_jobs_sales_rep_id_fkey"
             columns: ["sales_rep_id"]
             isOneToOne: false
-            referencedRelation: "profiles"
+            referencedRelation: "crm_employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_jobs_sales_rep_id_fkey"
+            columns: ["sales_rep_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_employees"
             referencedColumns: ["id"]
           },
         ]
@@ -6929,7 +6957,6 @@ export type Database = {
           ticket_number: number
           type: string
           updated_at: string
-          visible_to_client: boolean
         }
         Insert: {
           assigned_to?: string | null
@@ -6950,7 +6977,6 @@ export type Database = {
           ticket_number?: number
           type?: string
           updated_at?: string
-          visible_to_client?: boolean
         }
         Update: {
           assigned_to?: string | null
@@ -6971,14 +6997,20 @@ export type Database = {
           ticket_number?: number
           type?: string
           updated_at?: string
-          visible_to_client?: boolean
         }
         Relationships: [
           {
             foreignKeyName: "crm_tickets_assigned_to_id_fkey"
             columns: ["assigned_to_id"]
             isOneToOne: false
-            referencedRelation: "profiles"
+            referencedRelation: "crm_employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_tickets_assigned_to_id_fkey"
+            columns: ["assigned_to_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_employees"
             referencedColumns: ["id"]
           },
           {
@@ -8359,7 +8391,14 @@ export type Database = {
             foreignKeyName: "estimates_sales_rep_id_fkey"
             columns: ["sales_rep_id"]
             isOneToOne: false
-            referencedRelation: "profiles"
+            referencedRelation: "crm_employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estimates_sales_rep_id_fkey"
+            columns: ["sales_rep_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_employees"
             referencedColumns: ["id"]
           },
           {
@@ -10844,6 +10883,7 @@ export type Database = {
           converted_po_id: string | null
           created_at: string
           created_by: string | null
+          crm_job_id: string | null
           deleted_at: string | null
           discount_cost: number
           grand_total: number
@@ -10868,6 +10908,7 @@ export type Database = {
           converted_po_id?: string | null
           created_at?: string
           created_by?: string | null
+          crm_job_id?: string | null
           deleted_at?: string | null
           discount_cost?: number
           grand_total?: number
@@ -10892,6 +10933,7 @@ export type Database = {
           converted_po_id?: string | null
           created_at?: string
           created_by?: string | null
+          crm_job_id?: string | null
           deleted_at?: string | null
           discount_cost?: number
           grand_total?: number
@@ -10925,6 +10967,20 @@ export type Database = {
             columns: ["created_by"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "requisitions_crm_job_id_fkey"
+            columns: ["crm_job_id"]
+            isOneToOne: false
+            referencedRelation: "crm_jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "requisitions_crm_job_id_fkey"
+            columns: ["crm_job_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_jobs"
             referencedColumns: ["id"]
           },
           {
@@ -11603,7 +11659,14 @@ export type Database = {
             foreignKeyName: "work_orders_assigned_to_id_fkey"
             columns: ["assigned_to_id"]
             isOneToOne: false
-            referencedRelation: "profiles"
+            referencedRelation: "crm_employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_orders_assigned_to_id_fkey"
+            columns: ["assigned_to_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_employees"
             referencedColumns: ["id"]
           },
           {
@@ -12362,6 +12425,10 @@ export type Database = {
       delete_job_product: {
         Args: { p_job_product_id: string }
         Returns: undefined
+      }
+      increment_api_key_rate_limit: {
+        Args: { p_api_key_id: string; p_window_start: string }
+        Returns: number
       }
       increment_invoice_totals: {
         Args: { p_delta_cents: number; p_invoice_id: string }

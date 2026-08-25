@@ -11,7 +11,7 @@ import {
 } from "@/lib/hooks/use-tickets";
 import { useClients } from "@/lib/hooks/use-clients";
 import { useRequiredFields } from "@/lib/hooks/use-required-fields";
-import { useUsers } from "@/lib/hooks/use-users";
+import { useSelectableEmployees } from "@/lib/hooks/use-employees";
 import { TicketDetailSheet } from "./TicketDetailSheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
@@ -131,7 +131,8 @@ interface NewTicketDialogProps {
 
 export function NewTicketDialog({ open, onOpenChange, defaultClientId, defaultType = "note" }: NewTicketDialogProps) {
   const { data: clients } = useClients();
-  const { data: users } = useUsers();
+  const { data: employees } = useSelectableEmployees();
+  const users = (employees ?? []).map((e) => ({ id: e.id, name: `${e.firstName} ${e.lastName}`.trim() }));
   const createTicket = useCreateTicket();
   const rf = useRequiredFields("ticket");
   const { data: categoryOptions } = useOrgList("ticket_categories");
@@ -466,7 +467,8 @@ function TicketsListInner({ clientId, typeFilter, title = "Tickets", description
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [reassignOpen, setReassignOpen] = useState(false);
   const [reassignId, setReassignId] = useState("");
-  const { data: users } = useUsers();
+  const { data: employees } = useSelectableEmployees();
+  const users = (employees ?? []).map((e) => ({ id: e.id, name: `${e.firstName} ${e.lastName}`.trim() }));
 
   const { data: tickets, isLoading, refetch } = useTickets({ clientId });
   const updateTicket = useUpdateTicket();

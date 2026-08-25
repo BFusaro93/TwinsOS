@@ -178,15 +178,21 @@ export function useReportFilterOptions(source?: ReportFilterOptionsSource) {
           .map((r) => ({ value: r.name, label: r.name }));
       }
       if (source === "salesReps") {
-        // profiles columns drift from the generated Database types
+        // The rpt_* views' "sales_rep" text column is the rep's
+        // first+last name from crm_employees (see
+        // 20260903030000_report_views_sales_rep_target_employees.sql), so
+        // these filter options must be drawn from the same table/columns
+        // to actually match.
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data, error } = await (supabase as any)
-          .from("profiles")
-          .select("name")
-          .order("name");
+          .from("crm_employees")
+          .select("first_name, last_name")
+          .eq("is_sales_rep", true)
+          .is("deleted_at", null)
+          .order("first_name");
         if (error) throw new Error(error.message);
-        const names = ((data ?? []) as { name: string | null }[])
-          .map((r) => r.name)
+        const names = ((data ?? []) as { first_name: string | null; last_name: string | null }[])
+          .map((r) => `${r.first_name ?? ""} ${r.last_name ?? ""}`.trim())
           .filter((n): n is string => !!n);
         return [...new Set(names)].map((n) => ({ value: n, label: n }));
       }
