@@ -455,7 +455,7 @@ function OtherDetailsTab({
   onChange: (patch: { source?: string; salesRepId?: string }) => void;
 }) {
   const { data: employees } = useSelectableEmployees();
-  const salesReps = (employees ?? []).filter((e) => e.isSalesRep && e.userId);
+  const salesReps = (employees ?? []).filter((e) => e.isSalesRep);
 
   return (
     <div>
@@ -475,11 +475,11 @@ function OtherDetailsTab({
             <SelectTrigger className="h-8 w-64 text-sm"><SelectValue placeholder="Assign sales rep…" /></SelectTrigger>
             <SelectContent>
               {salesReps.map((e) => (
-                <SelectItem key={e.userId as string} value={e.userId as string}>
+                <SelectItem key={e.id} value={e.id}>
                   {e.firstName} {e.lastName}
                 </SelectItem>
               ))}
-              {salesRepId && !salesReps.some((e) => e.userId === salesRepId) && (
+              {salesRepId && !salesReps.some((e) => e.id === salesRepId) && (
                 <SelectItem value={salesRepId}>{salesRepName ?? "Unknown"}</SelectItem>
               )}
             </SelectContent>

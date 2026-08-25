@@ -528,7 +528,7 @@ export function InvoiceDetail({
   const { data: savedServices } = useCRMServices();
   const { data: orgSettings } = useOrgSettings();
   const { data: employees } = useSelectableEmployees();
-  const salesReps = (employees ?? []).filter((e) => e.isSalesRep && e.userId);
+  const salesReps = (employees ?? []).filter((e) => e.isSalesRep);
   const { data: discounts = [] } = useDiscounts();
   const activeDiscounts = discounts.filter((d) => d.isActive);
   const { data: connectStatus } = useConnectStatus();
@@ -1132,11 +1132,11 @@ export function InvoiceDetail({
                         </SelectTrigger>
                         <SelectContent>
                           {salesReps.map((e) => (
-                            <SelectItem key={e.userId as string} value={e.userId as string}>
+                            <SelectItem key={e.id} value={e.id}>
                               {e.firstName} {e.lastName}
                             </SelectItem>
                           ))}
-                          {invoice.salesRepId && !salesReps.some((e) => e.userId === invoice.salesRepId) && (
+                          {invoice.salesRepId && !salesReps.some((e) => e.id === invoice.salesRepId) && (
                             <SelectItem value={invoice.salesRepId}>
                               {invoice.salesRepName ?? "Unknown"}
                             </SelectItem>

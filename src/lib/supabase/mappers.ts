@@ -234,6 +234,8 @@ export function mapRequisition(
     grandTotal: row.grand_total,
     notes: row.notes,
     workOrderId: row.work_order_id,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    crmJobId: (row as any).crm_job_id ?? null,
     convertedPoId: row.converted_po_id,
   };
 }

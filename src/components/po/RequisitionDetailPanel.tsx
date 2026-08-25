@@ -287,6 +287,16 @@ function DetailsTab({
             }
           />
         )}
+        {req.crmJobId && (
+          <MetaRow
+            label="CRM Job"
+            value={
+              <Badge variant="outline" className="border-brand-200 bg-brand-50 text-brand-700">
+                {req.crmJobId}
+              </Badge>
+            }
+          />
+        )}
         <MetaRow label="Created" value={formatDate(req.createdAt)} />
         <MetaRow label="Updated" value={formatDate(req.updatedAt)} />
         {req.notes && <MetaRow label="Notes" value={req.notes} />}

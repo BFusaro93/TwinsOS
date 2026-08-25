@@ -342,7 +342,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
   const { data: templates } = useEstimateTemplates();
   const { data: clients }   = useClients();
   const { data: employees } = useSelectableEmployees();
-  const salesReps = (employees ?? []).filter((e) => e.isSalesRep && e.userId);
+  const salesReps = (employees ?? []).filter((e) => e.isSalesRep);
   const { mutateAsync: updateEstimate } = useUpdateEstimate();
   const { mutateAsync: updateStage } = useUpdateEstimateStage();
   const { mutateAsync: saveFinancials } = useSaveEstimateFinancials();
@@ -981,11 +981,11 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                             </SelectTrigger>
                             <SelectContent>
                               {salesReps.map((e) => (
-                                <SelectItem key={e.userId as string} value={e.userId as string}>
+                                <SelectItem key={e.id} value={e.id}>
                                   {e.firstName} {e.lastName}
                                 </SelectItem>
                               ))}
-                              {estimate.salesRepId && !salesReps.some((e) => e.userId === estimate.salesRepId) && (
+                              {estimate.salesRepId && !salesReps.some((e) => e.id === estimate.salesRepId) && (
                                 <SelectItem value={estimate.salesRepId}>
                                   {estimate.salesRepName ?? "Unknown"}
                                 </SelectItem>

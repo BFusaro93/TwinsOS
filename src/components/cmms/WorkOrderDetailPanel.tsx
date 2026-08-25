@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { cn, formatDate, getInitials } from "@/lib/utils";
 import { StatusBadge } from "@/components/shared/StatusBadge";
@@ -20,7 +20,7 @@ import { WO_STATUS_LABELS, WO_PRIORITY_LABELS, ASSET_STATUS_LABELS, ASSET_STATUS
 import { useAssets, useUpdateAssetStatus } from "@/lib/hooks/use-assets";
 import { useVehicles, useUpdateVehicleStatus } from "@/lib/hooks/use-vehicles";
 import { useWorkOrders, useUpdateWorkOrder, useUpdateWorkOrderStatus, useDeleteWorkOrder } from "@/lib/hooks/use-work-orders";
-import { useUsers } from "@/lib/hooks/use-users";
+import { useSelectableEmployees } from "@/lib/hooks/use-employees";
 import { useCMMSStore, useSettingsStore } from "@/stores";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -676,7 +676,11 @@ export function WorkOrderDetailPanel({ workOrder }: WorkOrderDetailPanelProps) {
   const { data: allWorkOrders = [] } = useWorkOrders();
   const { setSelectedWorkOrderId } = useCMMSStore();
   const { mutate: deleteWO, isPending: deleting } = useDeleteWorkOrder();
-  const { data: users = [] } = useUsers();
+  const { data: employees } = useSelectableEmployees();
+  const users = useMemo(
+    () => (employees ?? []).map((e) => ({ id: e.id, name: `${e.firstName} ${e.lastName}`.trim() })),
+    [employees]
+  );
   const { data: woParts = [] } = useWOParts(workOrder.id);
   const { data: woLabor = [] } = useWOLabor(workOrder.id);
   const { data: woVendorCharges = [] } = useWOVendorCharges(workOrder.id);

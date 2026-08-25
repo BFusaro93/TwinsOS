@@ -137,7 +137,7 @@ function mapEstimate(row: any): Estimate {
     clientPhone: row.clients?.primary_phone ?? null,
     clientEmail: row.clients?.primary_email ?? null,
     clientSince: row.clients?.client_since ?? null,
-    salesRepName: row.profiles?.name ?? null,
+    salesRepName: (row.sales_rep ? `${row.sales_rep.first_name ?? ""} ${row.sales_rep.last_name ?? ""}`.trim() || undefined : undefined),
     lineItems: (row.estimate_line_items ?? []).map(mapLineItem),
     directCosts: (row.estimate_direct_costs ?? []).map(mapDirectCost),
   };
@@ -166,7 +166,7 @@ export function useEstimates(clientId?: string) {
       const supabase = createClient() as any;
       let q = supabase
         .from("estimates")
-        .select("*, clients(display_name, billing_address, billing_city, billing_state, billing_zip, primary_phone, primary_email, client_since), profiles!estimates_sales_rep_id_fkey(name)")
+        .select("*, clients(display_name, billing_address, billing_city, billing_state, billing_zip, primary_phone, primary_email, client_since), sales_rep:crm_employees!estimates_sales_rep_id_fkey(first_name,last_name)")
         .is("deleted_at", null)
         .order("created_at", { ascending: false });
       if (clientId) q = q.eq("client_id", clientId);
@@ -190,7 +190,7 @@ export function useEstimate(id: string) {
         .select(`
           *,
           clients(display_name, billing_address, billing_city, billing_state, billing_zip, primary_phone, primary_email, client_since),
-          profiles!estimates_sales_rep_id_fkey(name),
+          sales_rep:crm_employees!estimates_sales_rep_id_fkey(first_name,last_name),
           estimate_line_items(*),
           estimate_direct_costs(*)
         `)

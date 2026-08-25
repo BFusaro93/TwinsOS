@@ -97,6 +97,7 @@ export function useCreateRequisition() {
       grandTotal: number;
       notes?: string | null;
       workOrderId?: string | null;
+      crmJobId?: string | null;
     }) => {
       const supabase = createClient();
 
@@ -125,6 +126,7 @@ export function useCreateRequisition() {
           grand_total: input.grandTotal,
           notes: input.notes ?? null,
           work_order_id: input.workOrderId ?? null,
+          crm_job_id: input.crmJobId ?? null,
         })
         .select()
         .single();

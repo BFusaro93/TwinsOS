@@ -13,7 +13,6 @@ import { useEstimates } from "@/lib/hooks/use-estimates";
 import { useInvoices } from "@/lib/hooks/use-invoices";
 import { useJobsList } from "@/lib/hooks/use-crm-jobs";
 import { useSelectableEmployees } from "@/lib/hooks/use-employees";
-import { useUsers } from "@/lib/hooks/use-users";
 import { useClients } from "@/lib/hooks/use-clients";
 import { useOrgList } from "@/lib/hooks/use-org-lists";
 import {
@@ -150,7 +149,8 @@ interface EditFormProps {
 function EditForm({ ticket, onCancel, onSaved }: EditFormProps) {
   const updateTicket = useUpdateTicket();
   const { data: clients } = useClients();
-  const { data: users } = useUsers();
+  const { data: employees } = useSelectableEmployees();
+  const users = (employees ?? []).map((e) => ({ id: e.id, name: `${e.firstName} ${e.lastName}`.trim() }));
   const { data: categoryOptions } = useOrgList("ticket_categories");
   const categories = categoryOptions && categoryOptions.length > 0
     ? categoryOptions.map((o) => o.value)

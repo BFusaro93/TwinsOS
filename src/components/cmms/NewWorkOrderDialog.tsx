@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   Dialog,
   DialogContent,
@@ -22,7 +22,7 @@ import {
 } from "@/components/ui/select";
 import { useAssets, useUpdateAssetStatus } from "@/lib/hooks/use-assets";
 import { useVehicles, useUpdateVehicleStatus } from "@/lib/hooks/use-vehicles";
-import { useUsers } from "@/lib/hooks/use-users";
+import { useSelectableEmployees } from "@/lib/hooks/use-employees";
 import { useCreateWorkOrder, useUpdateWorkOrder } from "@/lib/hooks/use-work-orders";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -85,7 +85,11 @@ export function NewWorkOrderDialog({ open, onOpenChange, initialData, onCreated,
 
   const { data: assets } = useAssets();
   const { data: vehicles } = useVehicles();
-  const { data: users } = useUsers();
+  const { data: employees } = useSelectableEmployees();
+  const users = useMemo(
+    () => (employees ?? []).map((e) => ({ id: e.id, name: `${e.firstName} ${e.lastName}`.trim() })),
+    [employees]
+  );
   const { woCategories } = useSettingsStore();
   const enabledCategories = woCategories.filter((c) => c.enabled);
   const rf = useRequiredFields("work_order");

@@ -232,7 +232,7 @@ export function SequenceRulesDialog({ open, onOpenChange, sequenceId, automation
   const orgTags = useOrgTags();
   const { data: packages } = usePackages();
   const { data: employees } = useSelectableEmployees();
-  const salesReps = (employees ?? []).filter((e) => e.isSalesRep && e.userId);
+  const salesReps = (employees ?? []).filter((e) => e.isSalesRep);
 
   const FILTER_OPTIONS: Record<FilterKind, { value: string; label: string }[]> = {
     service: (services ?? []).map((s) => ({ value: s.id, label: s.name })),
@@ -241,7 +241,7 @@ export function SequenceRulesDialog({ open, onOpenChange, sequenceId, automation
     job_type: JOB_TYPE_OPTIONS,
     package: (packages ?? []).map((p) => ({ value: p.id, label: p.name })),
     tag: orgTags.map((t) => ({ value: t, label: t })),
-    sales_rep: salesReps.map((e) => ({ value: e.userId as string, label: `${e.firstName} ${e.lastName}` })),
+    sales_rep: salesReps.map((e) => ({ value: e.id, label: `${e.firstName} ${e.lastName}` })),
     case_type: CASE_TYPE_OPTIONS,
     payment_method: PAYMENT_METHOD_OPTIONS,
   };

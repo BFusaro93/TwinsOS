@@ -74,7 +74,7 @@ export function NewEstimateDialog({ open, onOpenChange, defaultClientId, onCreat
   const { data: clients }   = useClients();
   const { data: templates } = useEstimateTemplates();
   const { data: employees } = useSelectableEmployees();
-  const salesReps = (employees ?? []).filter((e) => e.isSalesRep && e.userId);
+  const salesReps = (employees ?? []).filter((e) => e.isSalesRep);
   const { mutateAsync: createEstimate, isPending } = useCreateEstimate();
   const { mutateAsync: upsertLineItem }             = useUpsertLineItem();
   const { data: orgSettings } = useOrgSettings();
@@ -284,7 +284,7 @@ export function NewEstimateDialog({ open, onOpenChange, defaultClientId, onCreat
                 <SelectContent>
                   <SelectItem value="none">None</SelectItem>
                   {salesReps.map((e) => (
-                    <SelectItem key={e.userId as string} value={e.userId as string}>
+                    <SelectItem key={e.id} value={e.id}>
                       {e.firstName} {e.lastName}
                     </SelectItem>
                   ))}

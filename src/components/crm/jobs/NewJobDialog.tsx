@@ -96,7 +96,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
   const { data: crmPackages } = usePackages(false);
   const { data: employees } = useSelectableEmployees();
   const { data: crews } = useCRMCrews();
-  const salesReps = (employees ?? []).filter((e) => e.isSalesRep && e.userId);
+  const salesReps = (employees ?? []).filter((e) => e.isSalesRep);
 
   const [selectedClientId, setSelectedClientId] = useState(defaultClientId ?? "");
   const [jobType, setJobType] = useState<JobType>(initialJobType ?? "one_time");
@@ -369,7 +369,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
                   <SelectContent>
                     <SelectItem value="none">Unassigned</SelectItem>
                     {salesReps.map((e) => (
-                      <SelectItem key={e.userId as string} value={e.userId as string}>
+                      <SelectItem key={e.id} value={e.id}>
                         {e.firstName} {e.lastName}
                       </SelectItem>
                     ))}

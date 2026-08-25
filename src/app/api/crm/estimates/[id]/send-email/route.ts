@@ -73,7 +73,7 @@ export async function POST(
     .select(`
       *,
       clients(display_name, primary_email, billing_address, billing_city, billing_state, billing_zip),
-      profiles!estimates_sales_rep_id_fkey(name),
+      sales_rep:crm_employees!estimates_sales_rep_id_fkey(first_name,last_name),
       estimate_line_items(*),
       estimate_milestones(name, amount_cents, sort_order, deleted_at)
     `)
@@ -129,7 +129,8 @@ export async function POST(
   const clientDisplayName = (est.clients?.display_name as string) ?? "";
   const firstName = clientDisplayName.split(" ")[0] ?? clientDisplayName;
   const lastName = clientDisplayName.split(" ").slice(1).join(" ") ?? "";
-  const salesRepName = (est.profiles?.name as string) ?? orgName;
+  const salesRep = est.sales_rep as { first_name?: string; last_name?: string } | null;
+  const salesRepName = salesRep ? `${salesRep.first_name ?? ""} ${salesRep.last_name ?? ""}`.trim() || orgName : orgName;
   const total = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" })
     .format((est.total_cents ?? 0) / 100);
   const quoteDate = new Date(est.created_at).toLocaleDateString("en-US", {
