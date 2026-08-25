@@ -324,6 +324,22 @@ async function handleRun(request: Request) {
         purchaseOrderId?: string | null;
       };
 
+      // assetId is a caller-supplied foreign key written directly onto the new
+      // work_orders/maintenance_requests row's asset_id column — verify it
+      // actually belongs to the caller's org before trusting it, same as
+      // workOrderId/purchaseOrderId below, so a crafted request can't link a
+      // newly created row to another org's asset.
+      let verifiedAssetId: string | null = null;
+      if (assetId) {
+        const { data: asset } = await (adminClient as AdminClient)
+          .from("assets")
+          .select("id")
+          .eq("id", assetId)
+          .eq("org_id", callerOrgId)
+          .maybeSingle();
+        verifiedAssetId = asset ? assetId : null;
+      }
+
       // Fan out to any Zapier REST Hook subscriptions for the CMMS trigger
       // types that piggyback on this same event round-trip — best-effort,
       // independent of whether any internal automation matched below.
@@ -373,8 +389,8 @@ async function handleRun(request: Request) {
 
         const outcome = await executeAction(adminClient as AdminClient, auto, {
           orgId: callerOrgId,
-          assetId: assetId ?? null,
-          assetName: assetName ?? null,
+          assetId: verifiedAssetId,
+          assetName: verifiedAssetId ? (assetName ?? null) : null,
         });
         if ("skipReason" in outcome) {
           skipped.push({ automationId: auto.id, reason: outcome.skipReason });
