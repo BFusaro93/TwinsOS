@@ -403,6 +403,10 @@ async function recordSyncResult(
     .eq("provider", "quickbooks");
 }
 
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
 async function resolveCustomerId(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   db: any,
@@ -468,10 +472,16 @@ export async function pushInvoiceToQuickBooks(
   const client = invoice.clients;
   if (!client) return { status: "error", reason: "client_not_found" };
 
+  const attemptedAt = new Date().toISOString();
+
   try {
     const resolved = await resolveCustomerId(db, conn, client);
     if ("ambiguous" in resolved) {
       await recordSyncResult(db, orgId, "error");
+      await db
+        .from("crm_invoices")
+        .update({ qbo_sync_error: "Client match is ambiguous — resolve it from the client's QuickBooks section.", qbo_sync_attempted_at: attemptedAt })
+        .eq("id", invoiceId);
       return { status: "error", reason: "ambiguous_client_match" };
     }
 
@@ -499,12 +509,19 @@ export async function pushInvoiceToQuickBooks(
       lines,
     });
 
-    await db.from("crm_invoices").update({ qbo_invoice_id: qboInvoiceId }).eq("id", invoiceId);
+    await db
+      .from("crm_invoices")
+      .update({ qbo_invoice_id: qboInvoiceId, qbo_sync_error: null, qbo_sync_attempted_at: attemptedAt })
+      .eq("id", invoiceId);
     await recordSyncResult(db, orgId, "ok");
     return { status: "pushed", qboInvoiceId };
   } catch (err) {
     log.error("QuickBooks invoice push failed", { err, invoiceId, orgId });
     await recordSyncResult(db, orgId, "error");
+    await db
+      .from("crm_invoices")
+      .update({ qbo_sync_error: errorMessage(err), qbo_sync_attempted_at: attemptedAt })
+      .eq("id", invoiceId);
     return { status: "error", reason: "quickbooks_api_error" };
   }
 }
@@ -554,39 +571,62 @@ export async function pushPaymentToQuickBooks(
   const client = payment.clients;
   if (!client) return { status: "error", reason: "client_not_found" };
 
+  const attemptedAt = new Date().toISOString();
+  let resolved: Awaited<ReturnType<typeof resolveCustomerId>>;
   try {
-    const resolved = await resolveCustomerId(db, conn, client);
-    if ("ambiguous" in resolved) {
-      await recordSyncResult(db, orgId, "error");
-      return { status: "error", reason: "ambiguous_client_match" };
+    resolved = await resolveCustomerId(db, conn, client);
+  } catch (err) {
+    log.error("QuickBooks payment push failed resolving customer", { err, paymentId, orgId });
+    await recordSyncResult(db, orgId, "error");
+    return { status: "error", reason: "quickbooks_api_error" };
+  }
+  if ("ambiguous" in resolved) {
+    await recordSyncResult(db, orgId, "error");
+    return { status: "error", reason: "ambiguous_client_match" };
+  }
+
+  let pushed = 0;
+  let skipped = 0;
+  let anyError = false;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  for (const alloc of allocations as any[]) {
+    if (alloc.qbo_payment_id) continue;
+    const qboInvoiceId = alloc.crm_invoices?.qbo_invoice_id;
+    if (!qboInvoiceId) {
+      skipped++;
+      await db
+        .from("crm_payment_allocations")
+        .update({ qbo_sync_error: "This payment's invoice hasn't been pushed to QuickBooks yet.", qbo_sync_attempted_at: attemptedAt })
+        .eq("id", alloc.id);
+      continue;
     }
 
-    let pushed = 0;
-    let skipped = 0;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    for (const alloc of allocations as any[]) {
-      if (alloc.qbo_payment_id) continue;
-      const qboInvoiceId = alloc.crm_invoices?.qbo_invoice_id;
-      if (!qboInvoiceId) {
-        skipped++;
-        continue;
-      }
-
+    try {
       const qboPaymentId = await createPayment(conn, {
         customerId: resolved.customerId,
         qboInvoiceId,
         amountCents: alloc.amount_cents,
         paymentDate: payment.payment_date,
       });
-      await db.from("crm_payment_allocations").update({ qbo_payment_id: qboPaymentId }).eq("id", alloc.id);
+      await db
+        .from("crm_payment_allocations")
+        .update({ qbo_payment_id: qboPaymentId, qbo_sync_error: null, qbo_sync_attempted_at: attemptedAt })
+        .eq("id", alloc.id);
       pushed++;
+    } catch (err) {
+      log.error("QuickBooks payment push failed", { err, paymentId, allocationId: alloc.id, orgId });
+      anyError = true;
+      await db
+        .from("crm_payment_allocations")
+        .update({ qbo_sync_error: errorMessage(err), qbo_sync_attempted_at: attemptedAt })
+        .eq("id", alloc.id);
     }
-
-    await recordSyncResult(db, orgId, "ok");
-    return { status: pushed > 0 ? "pushed" : "skipped", pushedAllocations: pushed, skippedAllocations: skipped };
-  } catch (err) {
-    log.error("QuickBooks payment push failed", { err, paymentId, orgId });
-    await recordSyncResult(db, orgId, "error");
-    return { status: "error", reason: "quickbooks_api_error" };
   }
+
+  await recordSyncResult(db, orgId, anyError ? "error" : "ok");
+  return {
+    status: anyError ? "error" : pushed > 0 ? "pushed" : "skipped",
+    pushedAllocations: pushed,
+    skippedAllocations: skipped,
+  };
 }
