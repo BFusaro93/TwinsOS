@@ -14,11 +14,9 @@ export async function POST(req: Request) {
 
   // Validate the invite — cast because tables not yet in generated types
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: invite, error: inviteErr } = await (supabase as any)
-    .from("client_portal_invites")
-    .select("id, email, client_id, org_id, accepted_at, expires_at")
-    .eq("token", token)
-    .single() as { data: PortalInviteRow | null; error: unknown };
+  const { data: inviteRows, error: inviteErr } = await (supabase as any)
+    .rpc("get_portal_invite_by_token", { p_token: token }) as { data: PortalInviteRow[] | null; error: unknown };
+  const invite = inviteRows?.[0] ?? null;
 
   if (inviteErr || !invite) {
     return NextResponse.json({ error: "Invalid invite" }, { status: 404 });
