@@ -46,26 +46,51 @@ export async function POST(req: Request) {
     },
   });
 
+  let userId: string;
+  let linkedExisting = false;
+
   if (authErr || !authData.user) {
+    // Supabase Auth users are global by email — a person who is already a
+    // portal (or staff) user under a different org with the SAME email hits
+    // this every time, not just on a rare collision. Rather than dead-end
+    // registration, link this invite's org to their existing auth user
+    // instead of creating a second one. client_portal_users now allows one
+    // row per (user_id, org_id) — see 20260825000000_client_portal_multi_org.
     if (authErr?.message?.includes("already registered")) {
-      return NextResponse.json({ error: "An account with this email already exists" }, { status: 409 });
+      const { data: existingUserId } = await adminClient.rpc("get_auth_user_id_by_email", { p_email: invite.email });
+      if (!existingUserId) {
+        return NextResponse.json({ error: "An account with this email already exists" }, { status: 409 });
+      }
+      userId = existingUserId as string;
+      linkedExisting = true;
+    } else {
+      return NextResponse.json({ error: authErr?.message ?? "Registration failed" }, { status: 500 });
     }
-    return NextResponse.json({ error: authErr?.message ?? "Registration failed" }, { status: 500 });
+  } else {
+    userId = authData.user.id;
   }
 
-  // Create portal user record and mark invite accepted — both in parallel
+  // Create/attach the portal user record and mark invite accepted — both in parallel
   await Promise.all([
-    adminClient.from("client_portal_users").insert({
-      org_id: invite.org_id,
-      client_id: invite.client_id,
-      user_id: authData.user.id,
-      email: invite.email,
-    }),
+    adminClient
+      .from("client_portal_users")
+      .upsert(
+        // deleted_at: null covers re-registering after a previously-revoked
+        // portal account for this same org — otherwise the upsert's ON
+        // CONFLICT branch would update the other fields but leave the row
+        // soft-deleted, silently failing to restore access.
+        { org_id: invite.org_id, client_id: invite.client_id, user_id: userId, email: invite.email, deleted_at: null },
+        { onConflict: "user_id,org_id" }
+      ),
     adminClient
       .from("client_portal_invites")
       .update({ accepted_at: new Date().toISOString() })
       .eq("id", invite.id),
   ]);
 
-  return NextResponse.json({ success: true });
+  // linkedExisting: the password submitted on this form was never set on
+  // the account — the person needs to sign in with whatever password their
+  // FIRST org's portal account already uses. The frontend must not attempt
+  // an auto sign-in with the just-typed password in this case.
+  return NextResponse.json({ success: true, linkedExisting });
 }
