@@ -64,10 +64,14 @@ export async function GET(
 
     if (campaignId) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      // campaignId is caller-supplied via the query string — scope to this
+      // client's own org so it can't be used to increment another org's
+      // campaign counter.
       const { data: campaign } = await (admin as any)
         .from("crm_campaigns")
         .select("unsubscribed_count")
         .eq("id", campaignId)
+        .eq("org_id", client.org_id)
         .single();
       if (campaign) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any

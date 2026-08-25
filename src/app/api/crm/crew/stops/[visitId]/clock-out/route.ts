@@ -126,7 +126,13 @@ export async function POST(
   } else if (anchor.start_time && localTime) {
     const [sh, sm] = anchor.start_time.split(":").map(Number);
     const [eh, em] = localTime.split(":").map(Number);
-    if (![sh, sm, eh, em].some(Number.isNaN)) durationHours = (eh * 60 + em - (sh * 60 + sm)) / 60;
+    if (![sh, sm, eh, em].some(Number.isNaN)) {
+      // Snow/storm shifts routinely cross midnight — a local clock-out time
+      // strictly before the start time means it's the next day.
+      let diffMinutes = eh * 60 + em - (sh * 60 + sm);
+      if (diffMinutes < 0) diffMinutes += 24 * 60;
+      durationHours = diffMinutes / 60;
+    }
   }
 
   const allocation = durationHours != null && durationHours > 0

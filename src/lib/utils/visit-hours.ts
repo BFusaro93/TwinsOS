@@ -24,8 +24,14 @@ export function computeActualHours(visit: VisitHoursInput): number | null {
   const [sh, sm] = visit.startTime.split(":").map(Number);
   const [eh, em] = visit.endTime.split(":").map(Number);
   if ([sh, sm, eh, em].some((n) => Number.isNaN(n))) return null;
-  const diffHours = (eh * 60 + em - (sh * 60 + sm)) / 60;
-  if (diffHours <= 0) return null;
+  // Snow/storm visits routinely cross midnight (e.g. 23:00 -> 01:00) — an
+  // end time strictly before the start time means it's the next day, not a
+  // negative-duration shift. An end EQUAL to start is still treated as
+  // no duration (likely unset fields), not a full 24 hours.
+  let diffMinutes = eh * 60 + em - (sh * 60 + sm);
+  if (diffMinutes < 0) diffMinutes += 24 * 60;
+  if (diffMinutes <= 0) return null;
+  const diffHours = diffMinutes / 60;
   return diffHours * (visit.menCount || 1);
 }
 

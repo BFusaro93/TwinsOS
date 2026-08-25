@@ -38,7 +38,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
   // let an anonymous caller add/remove arbitrary client tags; tag rules are
   // evaluated server-side elsewhere.
   const result = await submitFormResponse(createServiceClient(), form, formData, body.referer);
-  if (!result.ok) return NextResponse.json({ error: result.error }, { status: 500 });
+  if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status ?? 500 });
 
   return NextResponse.json({ ok: true, result: result.result });
 }

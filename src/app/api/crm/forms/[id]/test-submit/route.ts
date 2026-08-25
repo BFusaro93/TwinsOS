@@ -40,7 +40,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const { data: formData = {} } = body;
 
   const result = await submitFormResponse(db, form, formData, "Internal Test");
-  if (!result.ok) return NextResponse.json({ error: result.error }, { status: 500 });
+  if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status ?? 500 });
 
   return NextResponse.json({ ok: true, result: result.result });
 }

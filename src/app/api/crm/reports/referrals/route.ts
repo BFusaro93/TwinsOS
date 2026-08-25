@@ -38,7 +38,7 @@ export async function GET() {
       created_at,
       balance_outstanding_cents,
       referred_by_client_id,
-      referrer:referred_by_client_id ( id, display_name )
+      referrer:referred_by_client_id ( id, display_name, deleted_at )
     `)
     .is("deleted_at", null)
     .not("referred_by_client_id", "is", null)
@@ -51,9 +51,12 @@ export async function GET() {
   for (const row of (data ?? []) as any[]) {
     const referrerId = row.referred_by_client_id as string;
     if (!byReferrer.has(referrerId)) {
+      // A soft-deleted referrer still exists as the FK target — attribute
+      // the referred clients to it, but don't surface its (deleted) name.
+      const referrerDeleted = Boolean(row.referrer?.deleted_at);
       byReferrer.set(referrerId, {
         referrerId,
-        referrerName: row.referrer?.display_name ?? "Unknown client",
+        referrerName: !referrerDeleted && row.referrer?.display_name ? row.referrer.display_name : "Unknown client",
         referredClients: [],
       });
     }
