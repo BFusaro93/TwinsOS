@@ -45,6 +45,15 @@ export function ApiKeysCard() {
   const [newKey, setNewKey] = useState<{ name: string; apiKey: string } | null>(null);
   const [revokeTarget, setRevokeTarget] = useState<{ id: string; name: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState<string | null>(null);
+
+  const mcpUrl = typeof window !== "undefined" ? `${window.location.origin}/api/mcp` : "/api/mcp";
+
+  function copyToClipboard(text: string) {
+    navigator.clipboard.writeText(text);
+    setCopied(text);
+    setTimeout(() => setCopied((c) => (c === text ? null : c)), 2000);
+  }
 
   function toggleScope(scope: string) {
     setSelectedScopes((prev) => {
@@ -96,9 +105,25 @@ export function ApiKeysCard() {
           href="/settings/support/api-docs"
           className="inline-flex items-center gap-1 text-xs font-medium text-brand-600 hover:text-brand-700"
         >
-          View the public API docs — every endpoint, scope, and request shape
+          View the public API + MCP docs — every endpoint, tool, scope, and request shape
           <ArrowRight className="h-3 w-3" />
         </Link>
+      </div>
+
+      <div className="border-b px-6 py-4">
+        <p className="text-sm font-semibold text-slate-900">Connect an AI agent (MCP)</p>
+        <p className="mt-1 text-xs text-slate-500">
+          Any API key above also works as an MCP server connection — same key, same scopes. Point Claude (or any
+          MCP client) at:
+        </p>
+        <div className="mt-2 flex items-center gap-2">
+          <code className="flex-1 truncate rounded bg-slate-100 px-2 py-1.5 font-mono text-xs text-slate-700">
+            {mcpUrl}
+          </code>
+          <Button size="sm" variant="outline" onClick={() => copyToClipboard(mcpUrl)}>
+            {copied === mcpUrl ? "Copied" : "Copy"}
+          </Button>
+        </div>
       </div>
 
       <div className="px-6 py-5">
@@ -224,6 +249,50 @@ export function ApiKeysCard() {
             </DialogDescription>
           </DialogHeader>
           <Input readOnly value={newKey?.apiKey ?? ""} className="font-mono text-sm" />
+
+          {newKey && (
+            <div className="space-y-1.5">
+              <Label>Connect this key as an MCP server</Label>
+              <div className="relative">
+                <pre className="overflow-x-auto rounded bg-slate-900 p-3 text-xs text-slate-100">
+                  {JSON.stringify(
+                    {
+                      mcpServers: {
+                        twinsos: { url: mcpUrl, headers: { Authorization: `Bearer ${newKey.apiKey}` } },
+                      },
+                    },
+                    null,
+                    2
+                  )}
+                </pre>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="absolute right-2 top-2 bg-white"
+                  onClick={() =>
+                    copyToClipboard(
+                      JSON.stringify(
+                        {
+                          mcpServers: {
+                            twinsos: { url: mcpUrl, headers: { Authorization: `Bearer ${newKey.apiKey}` } },
+                          },
+                        },
+                        null,
+                        2
+                      )
+                    )
+                  }
+                >
+                  Copy
+                </Button>
+              </div>
+              <p className="text-xs text-slate-500">
+                Paste into your MCP client&apos;s config (e.g. Claude Desktop/Code). The key only sees tools for the
+                scopes you just granted it.
+              </p>
+            </div>
+          )}
+
           <DialogFooter>
             <Button onClick={() => setNewKey(null)}>Done</Button>
           </DialogFooter>
