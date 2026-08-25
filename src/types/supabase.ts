@@ -1465,6 +1465,7 @@ export type Database = {
           primary_email: string | null
           primary_phone: string | null
           priority: string | null
+          qbo_customer_id: string | null
           referred_by: string | null
           referred_by_client_id: string | null
           revenue_potential_cents: number
@@ -1537,6 +1538,7 @@ export type Database = {
           primary_email?: string | null
           primary_phone?: string | null
           priority?: string | null
+          qbo_customer_id?: string | null
           referred_by?: string | null
           referred_by_client_id?: string | null
           revenue_potential_cents?: number
@@ -1609,6 +1611,7 @@ export type Database = {
           primary_email?: string | null
           primary_phone?: string | null
           priority?: string | null
+          qbo_customer_id?: string | null
           referred_by?: string | null
           referred_by_client_id?: string | null
           revenue_potential_cents?: number
@@ -4214,6 +4217,7 @@ export type Database = {
           pdf_template_id: string | null
           po_number: string | null
           preferred_payment_method: string | null
+          qbo_invoice_id: string | null
           sales_rep_id: string | null
           service_address: string | null
           status: string
@@ -4250,6 +4254,7 @@ export type Database = {
           pdf_template_id?: string | null
           po_number?: string | null
           preferred_payment_method?: string | null
+          qbo_invoice_id?: string | null
           sales_rep_id?: string | null
           service_address?: string | null
           status?: string
@@ -4286,6 +4291,7 @@ export type Database = {
           pdf_template_id?: string | null
           po_number?: string | null
           preferred_payment_method?: string | null
+          qbo_invoice_id?: string | null
           sales_rep_id?: string | null
           service_address?: string | null
           status?: string
@@ -5456,6 +5462,7 @@ export type Database = {
           invoice_id: string
           org_id: string
           payment_id: string
+          qbo_payment_id: string | null
         }
         Insert: {
           amount_cents: number
@@ -5464,6 +5471,7 @@ export type Database = {
           invoice_id: string
           org_id?: string
           payment_id: string
+          qbo_payment_id?: string | null
         }
         Update: {
           amount_cents?: number
@@ -5472,6 +5480,7 @@ export type Database = {
           invoice_id?: string
           org_id?: string
           payment_id?: string
+          qbo_payment_id?: string | null
         }
         Relationships: [
           {
@@ -6952,6 +6961,7 @@ export type Database = {
           id: string
           org_id: string
           priority: string
+          sms_consent_pending_phone: boolean
           status: string
           subject: string | null
           ticket_number: number
@@ -6972,6 +6982,7 @@ export type Database = {
           id?: string
           org_id?: string
           priority?: string
+          sms_consent_pending_phone?: boolean
           status?: string
           subject?: string | null
           ticket_number?: number
@@ -6992,6 +7003,7 @@ export type Database = {
           id?: string
           org_id?: string
           priority?: string
+          sms_consent_pending_phone?: boolean
           status?: string
           subject?: string | null
           ticket_number?: number

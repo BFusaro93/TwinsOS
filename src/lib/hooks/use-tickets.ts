@@ -27,6 +27,7 @@ function mapTicket(row: any): CRMTicket {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     deletedAt: row.deleted_at,
+    smsConsentPendingPhone: row.sms_consent_pending_phone ?? false,
   };
 }
 
@@ -353,6 +354,27 @@ export function useDeleteTicket() {
     },
     onError: () => {
       toast.error("Failed to delete ticket");
+    },
+  });
+}
+
+export function useClearSmsConsentPendingPhone() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase as any)
+        .from("crm_tickets")
+        .update({ sms_consent_pending_phone: false })
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["crm-tickets"] });
+    },
+    onError: () => {
+      toast.error("Failed to dismiss warning");
     },
   });
 }

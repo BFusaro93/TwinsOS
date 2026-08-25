@@ -24,6 +24,10 @@ export interface CRMTicket {
   createdAt: string;
   updatedAt: string;
   deletedAt: string | null;
+  /** True when this ticket's form submission checked SMS consent but no
+   *  phone number was captured — consent can't be attached to a client's
+   *  record until a phone is collected. */
+  smsConsentPendingPhone: boolean;
 }
 
 export interface NewTicketFormValues {

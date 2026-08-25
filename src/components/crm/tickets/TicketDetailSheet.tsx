@@ -8,12 +8,14 @@ import {
   useAddTicketLink,
   useRemoveTicketLink,
   useDeleteTicket,
+  useClearSmsConsentPendingPhone,
 } from "@/lib/hooks/use-tickets";
 import { useEstimates } from "@/lib/hooks/use-estimates";
 import { useInvoices } from "@/lib/hooks/use-invoices";
 import { useJobsList } from "@/lib/hooks/use-crm-jobs";
 import { useSelectableEmployees } from "@/lib/hooks/use-employees";
 import { useClients } from "@/lib/hooks/use-clients";
+import { NewClientDialog } from "@/components/crm/NewClientDialog";
 import { useOrgList } from "@/lib/hooks/use-org-lists";
 import {
   useTicketContributors,
@@ -45,7 +47,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
-import { Download, Trash2, UserPlus, X } from "lucide-react";
+import { AlertTriangle, Download, Trash2, UserPlus, X } from "lucide-react";
 import { toast } from "sonner";
 import type { CRMTicket, TicketStatus, TicketPriority, TicketType, NewTicketFormValues } from "@/types/crm-tickets";
 
@@ -149,6 +151,7 @@ interface EditFormProps {
 function EditForm({ ticket, onCancel, onSaved }: EditFormProps) {
   const updateTicket = useUpdateTicket();
   const { data: clients } = useClients();
+  const [newClientOpen, setNewClientOpen] = useState(false);
   const { data: employees } = useSelectableEmployees();
   const users = (employees ?? []).map((e) => ({ id: e.id, name: `${e.firstName} ${e.lastName}`.trim() }));
   const { data: categoryOptions } = useOrgList("ticket_categories");
@@ -263,15 +266,35 @@ function EditForm({ ticket, onCancel, onSaved }: EditFormProps) {
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-1.5">
           <Label className="text-xs">Client</Label>
-          <Select value={form.clientId ?? "none"} onValueChange={(v) => set("clientId", v === "none" ? null : v)}>
-            <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Select client…" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="none">No client</SelectItem>
-              {(clients ?? []).map((c) => (
-                <SelectItem key={c.id} value={c.id}>{c.displayName}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <div className="flex gap-1.5">
+            <Select value={form.clientId ?? "none"} onValueChange={(v) => set("clientId", v === "none" ? null : v)}>
+              <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Select client…" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">No client</SelectItem>
+                {(clients ?? []).map((c) => (
+                  <SelectItem key={c.id} value={c.id}>{c.displayName}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-9 shrink-0 px-2.5"
+              onClick={() => setNewClientOpen(true)}
+              title="Create a new client and link it to this ticket"
+            >
+              <UserPlus className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+          <NewClientDialog
+            open={newClientOpen}
+            onOpenChange={setNewClientOpen}
+            onCreated={(client) => {
+              set("clientId", client.id);
+              toast.success(`${client.displayName} created and linked to this ticket`);
+            }}
+          />
         </div>
         <div className="space-y-1.5">
           <Label className="text-xs">Assigned To</Label>
@@ -411,8 +434,31 @@ function DetailsTab({ ticket, onStatusChange, isUpdating }: {
     { status: "closed",  label: "Close Ticket", className: "text-green-700 border-green-300 hover:bg-green-50" },
   ];
 
+  const clearSmsWarning = useClearSmsConsentPendingPhone();
+
   return (
     <div className="p-6 space-y-6">
+      {ticket.smsConsentPendingPhone && (
+        <div className="flex items-start gap-2.5 rounded-md border border-amber-300 bg-amber-50 px-3 py-2.5 text-sm text-amber-800">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+          <div className="flex-1">
+            <p className="font-medium">SMS consent given, but no phone number</p>
+            <p className="mt-0.5 text-xs text-amber-700">
+              This submission checked the text-message consent box, but no phone number was captured — consent couldn&apos;t
+              be recorded on the client. Collect a phone number from them before texting.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => clearSmsWarning.mutate(ticket.id)}
+            disabled={clearSmsWarning.isPending}
+            className="shrink-0 text-xs font-medium text-amber-700 hover:text-amber-900 hover:underline"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
       {/* Status flow */}
       <div>
         <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">Status</p>
