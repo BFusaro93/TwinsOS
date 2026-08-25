@@ -9,8 +9,14 @@ import { sendCampaignEmails } from "@/lib/campaigns/send-campaign";
  * A campaign's "Schedule Send" datetime was captured and displayed but
  * nothing ever acted on it — the only way a campaign was ever sent was the
  * manual "Send Now" button. This finds every email campaign whose
- * scheduled_at has passed and is still draft/scheduled (not yet sent) and
+ * scheduled_at has passed and is status="scheduled" (not yet sent) and
  * sends it via the same sendCampaignEmails() the interactive route uses.
+ *
+ * Deliberately excludes status="draft" even if scheduled_at is set and in
+ * the past: picking a send date on the create/edit form doesn't commit to
+ * sending it — only the explicit "Mark Scheduled" action does (status ->
+ * "scheduled"). A campaign left in draft with a stale scheduled_at while
+ * someone is still editing its subject/body must never auto-send.
  *
  * Security: Vercel passes Authorization: Bearer {CRON_SECRET}. Reject anything else.
  */
@@ -35,7 +41,7 @@ export async function GET(request: Request) {
     .from("crm_campaigns")
     .select("*")
     .eq("type", "email")
-    .in("status", ["draft", "scheduled"])
+    .eq("status", "scheduled")
     .not("scheduled_at", "is", null)
     .lte("scheduled_at", new Date().toISOString())
     .is("deleted_at", null);

@@ -38,8 +38,9 @@ export async function POST(request: Request) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: invoices, error: fetchErr } = await (supabase as any)
     .from("crm_invoices")
-    .select("id, client_id, status, tax_rate_bps, invoice_number, amount_paid_cents")
+    .select("id, client_id, status, tax_rate_bps, invoice_number, amount_paid_cents, discount_cents")
     .in("id", allIds)
+    .eq("org_id", orgId)
     .is("deleted_at", null);
 
   if (fetchErr || !invoices || invoices.length !== allIds.length) {
@@ -63,8 +64,9 @@ export async function POST(request: Request) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: allItems, error: itemsFetchErr } = await (supabase as any)
     .from("crm_invoice_line_items")
-    .select("total_cents, is_taxable")
-    .in("invoice_id", allIds);
+    .select("total_cents, discount_cents, is_taxable")
+    .in("invoice_id", allIds)
+    .eq("org_id", orgId);
 
   if (itemsFetchErr) return NextResponse.json({ error: `Line item fetch failed: ${itemsFetchErr.message}` }, { status: 500 });
 
@@ -73,7 +75,8 @@ export async function POST(request: Request) {
   const { error: liErr } = await (supabase as any)
     .from("crm_invoice_line_items")
     .update({ invoice_id: parentId })
-    .in("invoice_id", childIds);
+    .in("invoice_id", childIds)
+    .eq("org_id", orgId);
 
   if (liErr) return NextResponse.json({ error: liErr.message }, { status: 500 });
 
@@ -84,7 +87,8 @@ export async function POST(request: Request) {
   const { error: allocErr } = await (supabase as any)
     .from("crm_payment_allocations")
     .update({ invoice_id: parentId })
-    .in("invoice_id", childIds);
+    .in("invoice_id", childIds)
+    .eq("org_id", orgId);
   if (allocErr) return NextResponse.json({ error: allocErr.message }, { status: 500 });
 
   // Legacy payments predating crm_payment_allocations link directly via
@@ -93,17 +97,24 @@ export async function POST(request: Request) {
   const { error: legacyPmtErr } = await (supabase as any)
     .from("crm_payments")
     .update({ invoice_id: parentId })
-    .in("invoice_id", childIds);
+    .in("invoice_id", childIds)
+    .eq("org_id", orgId);
   if (legacyPmtErr) return NextResponse.json({ error: legacyPmtErr.message }, { status: 500 });
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const items = (allItems ?? []) as { total_cents: number; is_taxable: boolean }[];
-  const subtotal = items.reduce((s, li) => s + li.total_cents, 0);
+  const items = (allItems ?? []) as { total_cents: number; discount_cents: number | null; is_taxable: boolean }[];
+  const netLineCents = (li: { total_cents: number; discount_cents: number | null }) => li.total_cents - (li.discount_cents ?? 0);
+  const subtotal = items.reduce((s, li) => s + netLineCents(li), 0);
   const parentInv = inv.find((i) => i.id === parentId);
   const taxRateBps: number = parentInv?.tax_rate_bps ?? 0;
-  const taxableBase = items.filter((li) => li.is_taxable).reduce((s, li) => s + li.total_cents, 0);
+  // Combine every merged invoice's own document-level discount — otherwise a
+  // child's (or the parent's) discount is silently dropped and the client
+  // ends up owing the discounted amount back.
+  const combinedDiscountCents: number = inv.reduce((s, i) => s + (i.discount_cents ?? 0), 0);
+  const afterDiscount = subtotal - combinedDiscountCents;
+  const taxableBase = items.filter((li) => li.is_taxable).reduce((s, li) => s + netLineCents(li), 0);
   const taxCents = Math.round((taxableBase * taxRateBps) / 10000);
-  const total = subtotal + taxCents;
+  const total = afterDiscount + taxCents;
 
   // Sum paid amounts across ALL merged invoices, not just the parent's own —
   // a child invoice that was already paid off would otherwise have that
@@ -115,8 +126,16 @@ export async function POST(request: Request) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { error: parentErr } = await (supabase as any)
     .from("crm_invoices")
-    .update({ subtotal_cents: subtotal, tax_cents: taxCents, total_cents: total, balance_cents: newBalance, amount_paid_cents: alreadyPaid })
-    .eq("id", parentId);
+    .update({
+      subtotal_cents: subtotal,
+      discount_cents: combinedDiscountCents,
+      tax_cents: taxCents,
+      total_cents: total,
+      balance_cents: newBalance,
+      amount_paid_cents: alreadyPaid,
+    })
+    .eq("id", parentId)
+    .eq("org_id", orgId);
 
   if (parentErr) return NextResponse.json({ error: parentErr.message }, { status: 500 });
 
@@ -125,7 +144,8 @@ export async function POST(request: Request) {
   const { error: deleteErr } = await (supabase as any)
     .from("crm_invoices")
     .update({ deleted_at: new Date().toISOString(), status: "void" })
-    .in("id", childIds);
+    .in("id", childIds)
+    .eq("org_id", orgId);
 
   if (deleteErr) return NextResponse.json({ error: deleteErr.message }, { status: 500 });
 

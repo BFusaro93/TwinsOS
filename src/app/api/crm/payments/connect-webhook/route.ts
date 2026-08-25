@@ -160,6 +160,86 @@ export async function POST(request: Request) {
       break;
     }
 
+    // Fires when a charge is refunded — including an ACH debit that
+    // initially succeeded but was later returned by the client's bank
+    // (NSF, closed account, unauthorized) days after payment_intent.succeeded
+    // already marked the invoice paid. Also fires for a refund WE initiated
+    // via /api/crm/payments/[id]/refund, so this must be idempotent against
+    // that: reconcile against Stripe's own amount_refunded rather than
+    // blindly applying charge.amount_refunded as a fresh delta, or a
+    // staff-initiated refund would get double-counted here.
+    case "charge.refunded": {
+      const charge = event.data.object as Stripe.Charge;
+      const paymentIntentId = typeof charge.payment_intent === "string" ? charge.payment_intent : charge.payment_intent?.id;
+      if (!paymentIntentId || !event.account) break;
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: payment } = await (db as any)
+        .from("crm_payments")
+        .select("id, org_id, client_id, invoice_id, refunded_amount_cents")
+        .eq("stripe_payment_intent_id", paymentIntentId)
+        .maybeSingle();
+      if (!payment || !(await eventAccountOwnedByOrg(db, payment.org_id, event.account))) break;
+
+      const alreadyRecordedCents = payment.refunded_amount_cents ?? 0;
+      const deltaCents = charge.amount_refunded - alreadyRecordedCents;
+      if (deltaCents <= 0) break; // already reconciled (e.g. our own refund route already applied this)
+
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error: refundErr } = await (db.rpc as any)("refund_payment", {
+          p_payment_id: payment.id,
+          p_refund_amount_cents: deltaCents,
+        });
+        if (refundErr) throw refundErr;
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: allocations } = await (db as any)
+          .from("crm_payment_allocations")
+          .select("invoice_id, amount_cents")
+          .eq("payment_id", payment.id);
+
+        if (allocations && allocations.length > 0) {
+          const totalAllocated = allocations.reduce((s: number, a: { amount_cents: number }) => s + a.amount_cents, 0);
+          let remaining = deltaCents;
+          for (let i = 0; i < allocations.length; i++) {
+            const a = allocations[i];
+            const share = i === allocations.length - 1 ? remaining : Math.round((deltaCents * a.amount_cents) / totalAllocated);
+            remaining -= share;
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            if (share > 0) await (db.rpc as any)("apply_payment_to_invoice", { p_invoice_id: a.invoice_id, p_delta_cents: -share });
+          }
+        } else if (payment.invoice_id) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          await (db.rpc as any)("apply_payment_to_invoice", { p_invoice_id: payment.invoice_id, p_delta_cents: -deltaCents });
+        }
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (db.rpc as any)("sync_client_balance", { p_client_id: payment.client_id });
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (db as any).from("client_activity").insert({
+          org_id: payment.org_id,
+          client_id: payment.client_id,
+          activity_type: "payment",
+          subject: `Payment reversed: $${(deltaCents / 100).toFixed(2)} (returned by bank/card issuer)`,
+          ref_id: payment.id,
+          ref_table: "crm_payments",
+          amount_cents: -deltaCents,
+        });
+
+        await fireSimpleTrigger(supabase, {
+          orgId: payment.org_id,
+          clientId: payment.client_id,
+          triggerType: "credit_card_charge_failed",
+        });
+      } catch (err) {
+        log.error("failed to reconcile charge.refunded", { error: err, paymentId: payment.id });
+        return NextResponse.json({ error: "Webhook handler failed" }, { status: 500 });
+      }
+      break;
+    }
+
     default:
       break;
   }
@@ -220,6 +300,30 @@ async function applyCrmInvoicePayment(
   }
   const method = methodForPaymentIntent(paymentIntent.payment_method_types, cardBrand);
 
+  // `balanceCents` is the balance the intent was created against, captured at
+  // create-intent time — if a second PaymentIntent for the same invoice was
+  // created before the first settled (e.g. the customer opened the pay link
+  // on two devices), both can genuinely succeed as real charges, each
+  // quoting the FULL balance owed at creation time. Re-check the invoice's
+  // actual remaining balance right before applying this payment and clamp to
+  // it, crediting any excess as unused/prepayment credit — same pattern as
+  // the legacy platform-account webhook this one supersedes
+  // (src/app/api/crm/payments/webhook/route.ts).
+  const { data: invoiceBefore, error: invoiceBeforeErr } = await db
+    .from("crm_invoices")
+    .select("total_cents, amount_paid_cents, status")
+    .eq("id", invoiceId)
+    .eq("org_id", orgId)
+    .single();
+  if (invoiceBeforeErr) {
+    log.error("failed to load invoice before applying payment", { error: invoiceBeforeErr, paymentIntentId: paymentIntent.id });
+    return "error";
+  }
+
+  const currentBalanceCents = Math.max(0, invoiceBefore.total_cents - invoiceBefore.amount_paid_cents);
+  const appliedCents = Math.min(balanceCents, currentBalanceCents);
+  const overpaidCents = balanceCents - appliedCents;
+
   const { data: inserted, error: insertErr } = await db
     .from("crm_payments")
     .insert({
@@ -227,10 +331,12 @@ async function applyCrmInvoicePayment(
       invoice_id: invoiceId,
       client_id: clientId,
       amount_cents: balanceCents,
-      unused_amount_cents: 0,
+      unused_amount_cents: overpaidCents,
       payment_date: new Date().toISOString().slice(0, 10),
       method,
-      memo: isAch ? "Paid online via bank transfer" : "Paid online via card",
+      memo: overpaidCents > 0
+        ? `Paid online via ${isAch ? "bank transfer" : "card"} (exceeds invoice balance — excess credited to account)`
+        : `Paid online via ${isAch ? "bank transfer" : "card"}`,
       is_prepayment: false,
       processing_fee_cents: feeCents,
       stripe_payment_intent_id: paymentIntent.id,
@@ -248,19 +354,11 @@ async function applyCrmInvoicePayment(
   }
 
   try {
-    const { data: invoice, error: invoiceErr } = await db
-      .from("crm_invoices")
-      .select("total_cents, amount_paid_cents, status")
-      .eq("id", invoiceId)
-      .eq("org_id", orgId)
-      .single();
-    if (invoiceErr) throw invoiceErr;
-
-    const newPaid = Math.max(0, invoice.amount_paid_cents + balanceCents);
-    const newBalance = Math.max(0, invoice.total_cents - newPaid);
-    const openStatus = invoice.status === "printed" ? "printed" : "sent";
+    const newPaid = invoiceBefore.amount_paid_cents + appliedCents;
+    const newBalance = Math.max(0, invoiceBefore.total_cents - newPaid);
+    const openStatus = invoiceBefore.status === "printed" ? "printed" : "sent";
     const newStatus = newBalance <= 0 ? "paid" : newPaid > 0 ? "partial" : openStatus;
-    const wasNewlyPaid = newStatus === "paid" && invoice.status !== "paid";
+    const wasNewlyPaid = newStatus === "paid" && invoiceBefore.status !== "paid";
 
     const { error: updateErr } = await db
       .from("crm_invoices")
@@ -273,10 +371,12 @@ async function applyCrmInvoicePayment(
       await fireSimpleTrigger(supabase, { orgId, clientId, invoiceId, triggerType: "invoice_paid" });
     }
 
-    const { error: allocErr } = await db
-      .from("crm_payment_allocations")
-      .insert({ org_id: orgId, payment_id: inserted.id, invoice_id: invoiceId, amount_cents: balanceCents });
-    if (allocErr) throw allocErr;
+    if (appliedCents > 0) {
+      const { error: allocErr } = await db
+        .from("crm_payment_allocations")
+        .insert({ org_id: orgId, payment_id: inserted.id, invoice_id: invoiceId, amount_cents: appliedCents });
+      if (allocErr) throw allocErr;
+    }
 
     await db.rpc("sync_client_balance", { p_client_id: clientId });
 
@@ -284,7 +384,7 @@ async function applyCrmInvoicePayment(
       org_id: orgId,
       client_id: clientId,
       activity_type: "payment",
-      subject: `Payment received: ${method} (online)`,
+      subject: `Payment received: ${method} (online)${overpaidCents > 0 ? " — partly credited to account" : ""}`,
       amount_cents: balanceCents,
       ref_id: inserted.id,
       ref_table: "crm_payments",
@@ -351,6 +451,36 @@ async function applyCrmInvoiceMultiPayment(
   }
   const method = methodForPaymentIntent(paymentIntent.payment_method_types, cardBrand);
 
+  // Re-check each allocated invoice's actual remaining balance right before
+  // applying this payment and clamp each allocation to it, crediting any
+  // excess as unused/prepayment credit — same race and same fix as
+  // applyCrmInvoicePayment above (e.g. the customer opened the pay link on
+  // two devices and both multi-invoice charges settled).
+  const clampedAllocations: { invoiceId: string; amountCents: number }[] = [];
+  let overpaidCents = 0;
+  for (const alloc of allocations) {
+    // Scoped by client_id as well as org_id/id: metadata.client_id and the encoded
+    // allocation list are two independently-editable metadata keys on a PaymentIntent
+    // a connected account's own owner can forge — this stops a same-org mismatch
+    // between the two from applying one client's charge to another client's invoice.
+    const { data: invoice, error: invoiceErr } = await db
+      .from("crm_invoices")
+      .select("total_cents, amount_paid_cents")
+      .eq("id", alloc.invoiceId)
+      .eq("org_id", orgId)
+      .eq("client_id", clientId)
+      .single();
+    if (invoiceErr) {
+      log.error("failed to load invoice before applying multi-invoice payment", { error: invoiceErr, paymentIntentId: paymentIntent.id });
+      return "error";
+    }
+
+    const currentBalanceCents = Math.max(0, invoice.total_cents - invoice.amount_paid_cents);
+    const appliedCents = Math.min(alloc.amountCents, currentBalanceCents);
+    clampedAllocations.push({ invoiceId: alloc.invoiceId, amountCents: appliedCents });
+    overpaidCents += alloc.amountCents - appliedCents;
+  }
+
   const { data: inserted, error: insertErr } = await db
     .from("crm_payments")
     .insert({
@@ -358,10 +488,12 @@ async function applyCrmInvoiceMultiPayment(
       invoice_id: allocations.length === 1 ? allocations[0].invoiceId : null,
       client_id: clientId,
       amount_cents: totalCents,
-      unused_amount_cents: 0,
+      unused_amount_cents: overpaidCents,
       payment_date: new Date().toISOString().slice(0, 10),
       method,
-      memo: isAch ? "Paid online via bank transfer" : "Paid online via card",
+      memo: overpaidCents > 0
+        ? `Paid online via ${isAch ? "bank transfer" : "card"} (exceeds invoice balance — excess credited to account)`
+        : `Paid online via ${isAch ? "bank transfer" : "card"}`,
       is_prepayment: false,
       processing_fee_cents: feeCents,
       stripe_payment_intent_id: paymentIntent.id,
@@ -381,11 +513,7 @@ async function applyCrmInvoiceMultiPayment(
   try {
     const newlyPaidInvoiceIds: string[] = [];
 
-    for (const alloc of allocations) {
-      // Scoped by client_id as well as org_id/id: metadata.client_id and the encoded
-      // allocation list are two independently-editable metadata keys on a PaymentIntent
-      // a connected account's own owner can forge — this stops a same-org mismatch
-      // between the two from applying one client's charge to another client's invoice.
+    for (const alloc of clampedAllocations) {
       const { data: invoice, error: invoiceErr } = await db
         .from("crm_invoices")
         .select("total_cents, amount_paid_cents, status")
@@ -395,7 +523,7 @@ async function applyCrmInvoiceMultiPayment(
         .single();
       if (invoiceErr) throw invoiceErr;
 
-      const newPaid = Math.max(0, invoice.amount_paid_cents + alloc.amountCents);
+      const newPaid = invoice.amount_paid_cents + alloc.amountCents;
       const newBalance = Math.max(0, invoice.total_cents - newPaid);
       const openStatus = invoice.status === "printed" ? "printed" : "sent";
       const newStatus = newBalance <= 0 ? "paid" : newPaid > 0 ? "partial" : openStatus;
@@ -411,10 +539,12 @@ async function applyCrmInvoiceMultiPayment(
 
       if (wasNewlyPaid) newlyPaidInvoiceIds.push(alloc.invoiceId);
 
-      const { error: allocErr } = await db
-        .from("crm_payment_allocations")
-        .insert({ org_id: orgId, payment_id: inserted.id, invoice_id: alloc.invoiceId, amount_cents: alloc.amountCents });
-      if (allocErr) throw allocErr;
+      if (alloc.amountCents > 0) {
+        const { error: allocErr } = await db
+          .from("crm_payment_allocations")
+          .insert({ org_id: orgId, payment_id: inserted.id, invoice_id: alloc.invoiceId, amount_cents: alloc.amountCents });
+        if (allocErr) throw allocErr;
+      }
     }
 
     for (const invoiceId of newlyPaidInvoiceIds) {
@@ -427,7 +557,7 @@ async function applyCrmInvoiceMultiPayment(
       org_id: orgId,
       client_id: clientId,
       activity_type: "payment",
-      subject: `Payment received: ${method} (online) — ${allocations.length} invoices`,
+      subject: `Payment received: ${method} (online) — ${allocations.length} invoices${overpaidCents > 0 ? ", partly credited to account" : ""}`,
       amount_cents: totalCents,
       ref_id: inserted.id,
       ref_table: "crm_payments",

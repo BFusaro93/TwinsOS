@@ -592,7 +592,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
               service_id: item.serviceId ?? null,
               service_name: item.serviceName,
               estimate_desc: item.estimateDesc || null,
-              status: "draft",
+              status: "quote",
               calc_type: 1,
               qty: item.qty,
               rate_cents: item.rateCents,
@@ -1244,7 +1244,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                             item: {
                               service_id: item.serviceId,
                               service_name: item.serviceName,
-                              status: "draft",
+                              status: "quote",
                               calc_type: item.calcType,
                               qty: item.qty,
                               unit_type: item.unitType,

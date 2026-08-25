@@ -50,9 +50,12 @@ export async function GET(request: Request) {
     let vq = (supabase as any)
       .from("crm_job_visits")
       .select("job_id")
-      .not("completed_at", "is", null);
+      .not("completed_at", "is", null)
+      .is("deleted_at", null);
     if (from) vq = vq.gte("completed_at", from);
-    if (to) vq = vq.lte("completed_at", to);
+    // completed_at is a timestamptz — a bare date string casts to midnight
+    // UTC, which in any US timezone excludes almost the entire `to` day.
+    if (to) vq = vq.lte("completed_at", `${to} 23:59:59.999`);
     const { data: qualifyingVisits, error: vErr } = await vq;
     if (vErr) return NextResponse.json({ error: vErr.message }, { status: 500 });
     qualifyingJobIds = Array.from(
@@ -93,6 +96,7 @@ export async function GET(request: Request) {
     .select("job_id, men_count, rate_cents, clocked_out_at")
     .in("job_id", jobIds.length > 0 ? jobIds : ["00000000-0000-0000-0000-000000000000"])
     .not("clocked_out_at", "is", null)
+    .is("deleted_at", null)
     .order("clocked_out_at", { ascending: false });
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

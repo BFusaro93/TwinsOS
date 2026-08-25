@@ -33,6 +33,15 @@ export async function POST(request: Request) {
   if (!parsed.success) return jsonError(parsed.error.issues[0]?.message ?? "Invalid input", 400);
   const body = parsed.data;
 
+  if (body.parentClientId) {
+    const { data: parent } = await db
+      .from("clients")
+      .select("org_id")
+      .eq("id", body.parentClientId)
+      .maybeSingle();
+    if (!parent || parent.org_id !== auth.orgId) return jsonError("Parent client not found", 404);
+  }
+
   const { data, error } = await db
     .from("clients")
     .insert({

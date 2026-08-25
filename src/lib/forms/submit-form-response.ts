@@ -37,6 +37,84 @@ interface FormEmailNotification {
   sendCopy?: boolean; // append the full raw submission (all fields) below the body
 }
 
+// Mirrors src/app/forms/[slug]/page.tsx's DISPLAY_TYPES/MULTI_VALUE_TYPES and
+// ruleConditionMatches() — kept in sync deliberately since this is the
+// server-side re-check of exactly what that client-side validation does.
+const DISPLAY_TYPES = new Set(["header", "paragraph", "divider", "hidden"]);
+const MULTI_VALUE_TYPES = new Set(["checklist"]);
+
+function ruleConditionMatches(value: string, operator: string, operand: string | null): boolean {
+  const v = value ?? "";
+  const op = operand ?? "";
+  switch (operator) {
+    case "equals": return v === op;
+    case "not_equals": return v !== op;
+    case "greater_than": return parseFloat(v) > parseFloat(op);
+    case "less_than": return parseFloat(v) < parseFloat(op);
+    case "contains": return v.toLowerCase().includes(op.toLowerCase());
+    case "is_empty": return v.trim() === "";
+    case "is_not_empty": return v.trim() !== "";
+    default: return false;
+  }
+}
+
+interface FormFieldRow {
+  id: string;
+  label: string;
+  field_type: string;
+  required: boolean | null;
+}
+
+/** Returns the labels of every required, rule-visible field with no value
+ *  in formData — empty when the submission is valid. */
+async function findMissingRequiredFields(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  db: any,
+  formId: string,
+  formFields: FormFieldRow[],
+  formData: Record<string, unknown>
+): Promise<string[]> {
+  const { data: formRules } = await db
+    .from("crm_form_rules")
+    .select("source_field_id, operator, operand, action, action_value")
+    .eq("form_id", formId);
+
+  const fieldById = new Map(formFields.map((f) => [f.id, f]));
+  const hidden = new Set<string>();
+  for (const rule of (formRules ?? []) as {
+    source_field_id: string | null;
+    operator: string;
+    operand: string | null;
+    action: string;
+    action_value: string | null;
+  }[]) {
+    if (!rule.source_field_id) continue;
+    const sourceField = fieldById.get(rule.source_field_id);
+    if (!sourceField) continue;
+    const sourceValue = formData[sourceField.label];
+    const raw = Array.isArray(sourceValue) ? sourceValue.join(",") : sourceValue != null ? String(sourceValue) : "";
+    if (!ruleConditionMatches(raw, rule.operator, rule.operand)) continue;
+    if (rule.action === "hide_field" && rule.action_value) hidden.add(rule.action_value);
+    if (rule.action === "show_field" && rule.action_value) hidden.delete(rule.action_value);
+  }
+
+  const missing: string[] = [];
+  for (const field of formFields) {
+    if (DISPLAY_TYPES.has(field.field_type)) continue;
+    if (!field.required) continue;
+    if (hidden.has(field.id)) continue;
+
+    const value = formData[field.label];
+    const isEmpty = field.field_type === "attachment"
+      ? !value
+      : MULTI_VALUE_TYPES.has(field.field_type)
+        ? !Array.isArray(value) || value.length === 0
+        : value == null || String(value).trim() === "";
+    if (isEmpty) missing.push(field.label || "This field");
+  }
+  return missing;
+}
+
 interface FormRow {
   id: string;
   org_id: string;
@@ -66,12 +144,29 @@ export async function submitFormResponse(
    *  against the submitted answers — merged with the form's own static
    *  settings.tagsOnSubmit configuration below. */
   ruleTags?: { add?: string[]; remove?: string[] }
-): Promise<{ ok: true; result: string } | { ok: false; error: string }> {
+): Promise<{ ok: true; result: string } | { ok: false; error: string; status?: number }> {
   const { data: formFields } = await db
     .from("crm_form_fields")
-    .select("id, label, mapped_field, field_type")
+    .select("id, label, mapped_field, field_type, required")
     .eq("form_id", form.id)
     .is("deleted_at", null);
+
+  // ── Server-side required-field validation ─────────────────────────────────
+  // validatePage() in src/app/forms/[slug]/page.tsx only runs in the
+  // browser — a direct POST to the public submit endpoint bypassed every
+  // required-field/conditional-rule check entirely. Recompute which fields
+  // are rule-hidden the same way the client does (evaluateRules), then
+  // require every required, non-hidden field to actually have a value.
+  if (formFields?.length) {
+    const missing = await findMissingRequiredFields(db, form.id, formFields, formData);
+    if (missing.length > 0) {
+      return {
+        ok: false,
+        error: `Missing required field${missing.length > 1 ? "s" : ""}: ${missing.join(", ")}`,
+        status: 422,
+      };
+    }
+  }
 
   // ── Build mapped data from field labels → mapped CRM fields ──────────────────
   const mappedData: Record<string, string> = {};

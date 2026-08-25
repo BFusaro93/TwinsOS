@@ -168,6 +168,17 @@ export function useCreateContract() {
   });
 }
 
+// Fields that change what the client actually agreed to when they signed —
+// editing any of these on an already-signed contract must not leave the
+// original signature/status silently attached to the new terms.
+const CONTRACT_FINANCIAL_FIELDS = [
+  "monthly_amount_cents",
+  "monthly_amounts",
+  "invoice_line_items",
+  "start_date",
+  "end_date",
+] as const;
+
 export function useUpdateContract() {
   const qc = useQueryClient();
   return useMutation({
@@ -180,10 +191,29 @@ export function useUpdateContract() {
       updates: Record<string, any>;
     }) => {
       const supabase = createClient();
+
+      const touchesFinancials = CONTRACT_FINANCIAL_FIELDS.some((f) => f in updates);
+      let finalUpdates = updates;
+      if (touchesFinancials && !("status" in updates)) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: current } = await (supabase as any)
+          .from("crm_contracts")
+          .select("status")
+          .eq("id", id)
+          .single();
+        if (current?.status === "signed") {
+          // Revert to "sent" and clear the signature — the daily
+          // contract-invoices cron bills off these same fields, so a
+          // signed contract's price/dates must never change without the
+          // client re-agreeing to the new terms first.
+          finalUpdates = { ...updates, status: "sent", signed_at: null, signed_by: null };
+        }
+      }
+
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any)
         .from("crm_contracts")
-        .update(updates)
+        .update(finalUpdates)
         .eq("id", id);
       if (error) throw error;
     },

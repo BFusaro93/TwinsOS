@@ -771,72 +771,28 @@ export function useRefundPayment() {
   return useMutation({
     mutationFn: async ({
       id,
-      clientId,
       refundAmountCents,
-      invoiceId,
     }: {
       id: string;
       clientId: string;
       refundAmountCents: number;
       invoiceId?: string | null;
     }) => {
-      const supabase = createClient();
-
-      // refund_payment() reads + clamps + writes refunded_amount_cents
-      // atomically under a row lock, and rejects a refund that would exceed
-      // the payment's original amount — see the RPC migration for why a
-      // plain read-then-update here was unsafe under concurrent refunds.
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error } = await (supabase.rpc as any)("refund_payment", {
-        p_payment_id: id,
-        p_refund_amount_cents: refundAmountCents,
+      // Routed through a server API instead of writing directly from the
+      // browser: a card/ACH payment's refund has to call Stripe (which
+      // needs the secret key) before the books can say "refunded" — see
+      // src/app/api/crm/payments/[id]/refund/route.ts. A cash/check payment
+      // with no stripe_payment_intent_id skips Stripe there and is
+      // bookkeeping-only, same as this used to be for every payment.
+      const res = await fetch(`/api/crm/payments/${id}/refund`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refundAmountCents }),
       });
-      if (error) throw error;
-
-      // Reverse the refund across every invoice this payment was actually
-      // allocated to, proportionally — a payment split across multiple
-      // invoices has no single `invoiceId` (that field is only ever set for
-      // single-invoice payments), so reversing just `invoiceId` silently
-      // skipped every invoice for a split payment.
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: allocations } = await (supabase as any)
-        .from("crm_payment_allocations")
-        .select("invoice_id, amount_cents")
-        .eq("payment_id", id);
-
-      if (allocations && allocations.length > 0) {
-        const totalAllocated = allocations.reduce((s: number, a: { amount_cents: number }) => s + a.amount_cents, 0);
-        let remaining = refundAmountCents;
-        for (let i = 0; i < allocations.length; i++) {
-          const a = allocations[i];
-          // Last row absorbs the rounding remainder so the sum always equals refundAmountCents exactly.
-          const share = i === allocations.length - 1
-            ? remaining
-            : Math.round((refundAmountCents * a.amount_cents) / totalAllocated);
-          remaining -= share;
-          if (share > 0) {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            await applyPaymentToInvoice(supabase as any, a.invoice_id, -share);
-          }
-        }
-      } else if (invoiceId) {
-        // Legacy payment predating crm_payment_allocations.
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await applyPaymentToInvoice(supabase as any, invoiceId, -refundAmountCents);
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({})) as { error?: string };
+        throw new Error(body.error ?? "Failed to issue refund");
       }
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (supabase.rpc as any)("sync_client_balance", { p_client_id: clientId });
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (supabase as any).from("client_activity").insert({
-        client_id: clientId,
-        activity_type: "payment",
-        subject: `Refund issued: ${formatCents(refundAmountCents)}`,
-        ref_id: id,
-        ref_table: "crm_payments",
-        amount_cents: -refundAmountCents,
-      });
     },
     onSuccess: (_d, vars) => {
       qc.invalidateQueries({ queryKey: ["crm-payments"] });
@@ -846,10 +802,6 @@ export function useRefundPayment() {
       qc.invalidateQueries({ queryKey: ["clients", vars.clientId, "activity"] });
     },
   });
-}
-
-function formatCents(cents: number) {
-  return `$${(cents / 100).toFixed(2)}`;
 }
 
 // ── upsert line item ──────────────────────────────────────────────────────────

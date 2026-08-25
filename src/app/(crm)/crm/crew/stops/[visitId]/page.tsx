@@ -105,8 +105,8 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
     const file = e.target.files?.[0];
     if (!file) return;
     const result = await uploadPhoto.mutateAsync({ visitId: anchorVisitId, file });
-    if (result?.signed_url) {
-      setPhotoUrls(prev => ({ ...prev, [result.id]: result.signed_url }));
+    if (result?.signedUrl) {
+      setPhotoUrls(prev => ({ ...prev, [result.id]: result.signedUrl }));
     }
     e.target.value = "";
   }

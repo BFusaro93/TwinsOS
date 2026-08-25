@@ -1,12 +1,19 @@
 import { redirect } from "next/navigation";
-import { getPortalContext } from "@/lib/portal/get-portal-context";
+import { getPortalContext, getPortalOrgChoices } from "@/lib/portal/get-portal-context";
 import { createServiceClient } from "@/lib/supabase/server";
 import PortalShell from "@/components/portal/PortalShell";
 import type { PortalSettingsRow } from "@/lib/portal/portal-db";
 
 export default async function PortalShellLayout({ children }: { children: React.ReactNode }) {
   const ctx = await getPortalContext();
-  if (!ctx) redirect("/portal/login");
+  if (!ctx) {
+    // null means either "not a portal user at all" or "portal user with
+    // more than one org and no active-org cookie yet" — tell those apart
+    // so someone who's a client of two Landscapt orgs gets sent to pick
+    // one instead of bouncing to a login screen they're already past.
+    const choices = await getPortalOrgChoices();
+    redirect(choices.length > 1 ? "/portal/select-org" : "/portal/login");
+  }
 
   const supabase = createServiceClient();
 

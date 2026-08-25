@@ -47,10 +47,13 @@ export async function GET(request: Request) {
     .from("crm_job_visits")
     .select("job_id, men_count, rate_cents, clocked_out_at")
     .not("clocked_out_at", "is", null)
+    .is("deleted_at", null)
     .order("clocked_out_at", { ascending: false });
 
   if (from) visitQ = visitQ.gte("clocked_out_at", from);
-  if (to) visitQ = visitQ.lte("clocked_out_at", to);
+  // clocked_out_at is a timestamptz — a bare date string casts to midnight
+  // UTC, which in any US timezone excludes almost the entire `to` day.
+  if (to) visitQ = visitQ.lte("clocked_out_at", `${to} 23:59:59.999`);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: visits, error: visitsError } = await (visitQ as any);

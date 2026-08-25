@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { CheckCircle2, Loader2, XCircle } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
-type Step = "loading" | "invalid" | "setup" | "submitting" | "done";
+type Step = "loading" | "invalid" | "setup" | "submitting" | "done" | "linked";
 
 const PASSWORD_RULES = [
   { label: "At least 8 characters", test: (p: string) => p.length >= 8 },
@@ -66,6 +66,15 @@ export default function PortalRegisterPage() {
       return;
     }
 
+    if (data.linkedExisting) {
+      // This email already has a portal account (from a different company) —
+      // the password just typed here was never set on it. Send them to sign
+      // in with that account's existing password instead of attempting a
+      // sign-in that would fail.
+      setStep("linked");
+      return;
+    }
+
     // Auto sign-in after registration
     const supabase = createClient();
     await supabase.auth.signInWithPassword({ email, password });
@@ -89,6 +98,24 @@ export default function PortalRegisterPage() {
           <XCircle className="h-10 w-10 text-red-400 mx-auto mb-3" />
           <h2 className="text-lg font-semibold text-slate-900 mb-1">Invite Invalid</h2>
           <p className="text-sm text-slate-500">{invalidReason}</p>
+          <a href="/portal/login" className="mt-4 inline-block text-sm text-brand-600 hover:underline">
+            Go to login
+          </a>
+        </div>
+      </div>
+    );
+  }
+
+  if (step === "linked") {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center px-4">
+        <div className="w-full max-w-sm bg-white rounded-xl border border-slate-200 shadow-sm p-6 text-center">
+          <CheckCircle2 className="h-10 w-10 text-brand-500 mx-auto mb-3" />
+          <h2 className="text-lg font-semibold text-slate-900 mb-1">This Company Was Added</h2>
+          <p className="text-sm text-slate-500">
+            You already have a portal account with {email} — we&apos;ve added this company to it.
+            Sign in with your existing password, then pick which company to view.
+          </p>
           <a href="/portal/login" className="mt-4 inline-block text-sm text-brand-600 hover:underline">
             Go to login
           </a>

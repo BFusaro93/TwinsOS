@@ -39,7 +39,8 @@ export async function GET(req: NextRequest) {
     .gte("valid_until", todayStr)
     .lte("valid_until", windowEndStr)
     .in("stage", ["sent", "quote"])
-    .is("deleted_at", null);
+    .is("deleted_at", null)
+    .is("expiry_notified_at", null);
 
   if (!expiring?.length) {
     return NextResponse.json({ notified: 0 });
@@ -92,6 +93,10 @@ export async function GET(req: NextRequest) {
         html,
       });
       notified++;
+      await (supabase as any)
+        .from("estimates")
+        .update({ expiry_notified_at: new Date().toISOString() })
+        .eq("id", est.id as string);
     } catch {
       // continue to next estimate if one email fails
     }

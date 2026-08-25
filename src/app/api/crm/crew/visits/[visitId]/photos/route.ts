@@ -64,7 +64,13 @@ export async function POST(
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json(data, { status: 201 });
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: signed } = await (supabase as any).storage
+    .from("attachments")
+    .createSignedUrl(storagePath, 3600);
+
+  return NextResponse.json({ ...data, signedUrl: signed?.signedUrl ?? null }, { status: 201 });
 }
 
 export async function GET(

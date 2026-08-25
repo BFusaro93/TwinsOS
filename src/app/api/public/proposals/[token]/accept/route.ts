@@ -47,6 +47,7 @@ export async function POST(
     .from("estimate_share_tokens")
     .select("*")
     .eq("token", token)
+    .is("deleted_at", null)
     .single();
 
   if (tokenErr || !shareToken) {

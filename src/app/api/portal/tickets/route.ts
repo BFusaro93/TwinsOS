@@ -39,6 +39,7 @@ export async function GET() {
     .select("id, ticket_number, subject, category, status, priority, created_at, body")
     .eq("client_id", ctx.clientId)
     .eq("org_id", ctx.orgId)
+    .eq("visible_to_client", true)
     .is("deleted_at", null)
     .order("created_at", { ascending: false })
     .limit(50);
@@ -104,6 +105,7 @@ export async function POST(req: Request) {
       type: "note",
       status: "open",
       priority: "normal",
+      visible_to_client: true,
     })
     .select("id, ticket_number")
     .single();

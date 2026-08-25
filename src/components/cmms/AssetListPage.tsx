@@ -60,7 +60,7 @@ const ASSET_COLUMNS: ColumnDef[] = [
 export function AssetListPage() {
   const { data: assets, isLoading } = useAssets();
   const { mutateAsync: bulkImportAssets } = useBulkImportAssets();
-  const { data: vehicles } = useVehicles();
+  const { data: vehicles, isLoading: isVehiclesLoading } = useVehicles();
   const { selectedAssetId, setSelectedAssetId, setSelectedVehicleId } = useCMMSStore();
   const router = useRouter();
   const [search, setSearch] = useState("");
@@ -134,7 +134,7 @@ export function AssetListPage() {
     null;
 
   function handleBarcodeScan(raw: string) {
-    if (isLoading) {
+    if (isLoading || isVehiclesLoading) {
       toast.error("Assets are still loading — try scanning again in a moment.");
       return;
     }

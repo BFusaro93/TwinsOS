@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
+import { recalcEstimateTotals } from "@/lib/estimate-calc";
 
 export async function POST(
   request: Request,
@@ -136,6 +137,13 @@ export async function POST(
     const { error: dcErr } = await supabase.from("estimate_direct_costs").insert(newDCs);
     if (dcErr) return NextResponse.json({ error: dcErr.message }, { status: 500 });
   }
+
+  // The new estimate row was inserted with all financial aggregates zeroed
+  // out (see comment above) on the assumption they'd "recalculate fresh" —
+  // but nothing actually recalculates them without this call, so a
+  // duplicated estimate was left showing $0 everywhere until some unrelated
+  // future edit happened to trigger a recalc.
+  await recalcEstimateTotals(supabase, newEst.id);
 
   return NextResponse.json({ id: newEst.id });
 }

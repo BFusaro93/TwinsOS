@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { getPortalContext } from "@/lib/portal/get-portal-context";
+import { getPortalContext, getPortalOrgChoices } from "@/lib/portal/get-portal-context";
 import { createServiceClient } from "@/lib/supabase/server";
 import PortalAccountPage from "@/components/portal/PortalAccountPage";
 
@@ -9,7 +9,7 @@ export default async function AccountPage() {
 
   const supabase = createServiceClient();
 
-  const [clientRes, contactsRes] = await Promise.all([
+  const [clientRes, contactsRes, orgChoices] = await Promise.all([
     supabase
       .from("clients")
       .select(
@@ -25,6 +25,8 @@ export default async function AccountPage() {
       .eq("org_id", ctx.orgId)
       .is("deleted_at", null)
       .order("created_at", { ascending: true }),
+
+    getPortalOrgChoices(),
   ]);
 
   return (
@@ -32,6 +34,7 @@ export default async function AccountPage() {
       client={clientRes.data}
       email={ctx.email}
       contacts={contactsRes.data ?? []}
+      hasMultipleCompanies={orgChoices.length > 1}
     />
   );
 }

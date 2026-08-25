@@ -79,12 +79,26 @@ export async function POST(request: Request) {
 
   // Only set on first occurrence — a recipient opening/clicking an email
   // multiple times shouldn't keep moving the recorded timestamp forward.
-  const { error } = await supabase
+  const { data: updated, error } = await supabase
     .from("client_activity")
     .update({ [column]: event.data.created_at ?? new Date().toISOString() })
     .eq("resend_message_id", messageId)
-    .is(column, null);
+    .is(column, null)
+    .select("client_id")
+    .maybeSingle();
   if (error) console.error(`[resend webhook] failed to update ${column}:`, error);
+
+  // A bounce was logged but nothing ever stopped future sends to that
+  // address — campaigns and automation emails only check do_not_market, so
+  // the same bounced address kept getting re-sent to indefinitely. Suppress
+  // future marketing sends the same way an explicit unsubscribe does.
+  if (event.type === "email.bounced" && updated?.client_id) {
+    const { error: suppressErr } = await supabase
+      .from("clients")
+      .update({ do_not_market: true })
+      .eq("id", updated.client_id);
+    if (suppressErr) console.error("[resend webhook] failed to suppress bounced client:", suppressErr);
+  }
 
   return NextResponse.json({ received: true });
 }
