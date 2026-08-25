@@ -160,3 +160,109 @@ export async function fetchCompanyInfo(conn: QuickBooksConnection): Promise<{ co
   const data = await res.json();
   return { companyName: data.CompanyInfo?.CompanyName ?? "Connected company" };
 }
+
+// ── Phase 2: customer matching ──────────────────────────────────────────────
+
+/** QBO's query language escapes a literal single quote by doubling it. */
+function escapeQboString(value: string): string {
+  return value.replace(/'/g, "''");
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function qboQuery(conn: QuickBooksConnection, query: string): Promise<any[]> {
+  const url = `${conn.baseUrl}/v3/company/${conn.realmId}/query?query=${encodeURIComponent(query)}`;
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${conn.accessToken}`, Accept: "application/json" },
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`QuickBooks query failed (${res.status}): ${text}`);
+  }
+  const data = await res.json();
+  return data.QueryResponse?.Customer ?? [];
+}
+
+export interface QboCustomerCandidate {
+  id: string;
+  displayName: string;
+}
+
+export interface CreateCustomerInput {
+  displayName: string;
+  email?: string | null;
+  phone?: string | null;
+  billingAddressLine1?: string | null;
+  billingCity?: string | null;
+  billingState?: string | null;
+  billingZip?: string | null;
+}
+
+export async function createCustomer(conn: QuickBooksConnection, input: CreateCustomerInput): Promise<string> {
+  const body: Record<string, unknown> = { DisplayName: input.displayName };
+  if (input.email) body.PrimaryEmailAddr = { Address: input.email };
+  if (input.phone) body.PrimaryPhone = { FreeFormNumber: input.phone };
+  if (input.billingAddressLine1 || input.billingCity) {
+    body.BillAddr = {
+      ...(input.billingAddressLine1 && { Line1: input.billingAddressLine1 }),
+      ...(input.billingCity && { City: input.billingCity }),
+      ...(input.billingState && { CountrySubDivisionCode: input.billingState }),
+      ...(input.billingZip && { PostalCode: input.billingZip }),
+    };
+  }
+
+  const res = await fetch(`${conn.baseUrl}/v3/company/${conn.realmId}/customer`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${conn.accessToken}`,
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`QuickBooks customer creation failed (${res.status}): ${text}`);
+  }
+  const data = await res.json();
+  return data.Customer.Id as string;
+}
+
+export interface FindOrCreateResult {
+  status: "matched" | "created" | "ambiguous";
+  customerId?: string;
+  candidates?: QboCustomerCandidate[];
+}
+
+/**
+ * Matching policy (see TASKS.md for the fuller reasoning): QuickBooks
+ * enforces DisplayName uniqueness across all customers/vendors/employees,
+ * so an exact DisplayName match can only ever return 0 or 1 row — when it
+ * returns exactly 1, that's a safe auto-link. Otherwise falls back to a
+ * fuzzy LIKE search: zero results auto-creates a new customer, but ANY
+ * fuzzy-only result (even a single one — e.g. "John Smith" vs. "John Smith
+ * Jr.") is surfaced for a human to confirm rather than guessed. Silently
+ * linking the wrong customer is worse than one extra click.
+ */
+export async function findOrCreateCustomer(
+  conn: QuickBooksConnection,
+  input: CreateCustomerInput
+): Promise<FindOrCreateResult> {
+  const escaped = escapeQboString(input.displayName);
+
+  const exact = await qboQuery(conn, `SELECT Id, DisplayName FROM Customer WHERE DisplayName = '${escaped}'`);
+  if (exact.length === 1) {
+    return { status: "matched", customerId: exact[0].Id };
+  }
+
+  const fuzzy = await qboQuery(conn, `SELECT Id, DisplayName FROM Customer WHERE DisplayName LIKE '%${escaped}%'`);
+  if (fuzzy.length === 0) {
+    const customerId = await createCustomer(conn, input);
+    return { status: "created", customerId };
+  }
+
+  return {
+    status: "ambiguous",
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    candidates: fuzzy.map((c: any) => ({ id: c.Id, displayName: c.DisplayName })),
+  };
+}

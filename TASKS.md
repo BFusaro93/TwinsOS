@@ -38,5 +38,12 @@ Decided 2026-08-24, built 2026-08-25. `estimates` was read-only in both `/api/v1
 
 Still out of scope, not built: multi-line estimates in one call, discounts, tiers, milestones, and payment plans — those still require the app itself.
 
+## In progress — QuickBooks one-way sync
+Decided 2026-08-25, scoped in phases. Phase 1 (OAuth2 connection, `src/lib/integrations/quickbooks.ts` + `/api/integrations/quickbooks/*`) and Phase 2 (client ↔ QBO customer matching, `/api/crm/clients/[clientId]/quickbooks-sync`) are built. Matching policy, decided with the user: an exact `DisplayName` match auto-links (safe — QuickBooks enforces DisplayName uniqueness, so an exact match can only ever be 0 or 1 row); zero matches at all auto-creates a new QBO customer; any fuzzy-only match (even a single one) is surfaced for a human to pick rather than guessed. Every client gets its own top-level QBO customer — no sub-customer hierarchy for commercial parent/child clients (deliberately skipped, not in real use yet). No periodic re-verification that a link is still valid — a broken link surfaces the next time a sync against it fails.
+
+- [ ] Phase 3: push invoices/payments to the matched QBO customer, storing the returned QBO ID back on `crm_invoices`/`crm_payments` for idempotency.
+- [ ] Phase 4: reconciliation + error surface UI — a "Sync Status" panel (`integrations.last_sync_status`/`last_sync_at` already exist) showing failed pushes with the reason, plus manual retry. No auto-retry-forever.
+- [ ] Not yet tested against a real Intuit sandbox app — no sandbox credentials available in this dev environment. Needs verification with real QuickBooks credentials before this ships to any customer.
+
 ## Cleanup — dead ConditionField union members
 - [ ] `client_type`, `client_status`, `job_type` (as a condition field), `job_status`, `tag` (as a condition field), `property_city`, `revenue_ytd`, `last_job_date` in [crm-automations.ts](src/types/crm-automations.ts)'s `ConditionField` type are leftover "Legacy" entries — not in the `CONDITION_GROUPS` picklist (unselectable in the UI) and not referenced anywhere in the evaluator. Harmless but dead; safe to delete next time this file is touched.

@@ -68,6 +68,11 @@ import { AerialMeasurementDialog } from "./AerialMeasurementDialog";
 import { SavedPaymentMethodDialog } from "./clients/SavedPaymentMethodDialog";
 import { useRemoveSavedPaymentMethod, useSetAutopayEnabled } from "@/lib/hooks/use-saved-payment-methods";
 import {
+  useQuickBooksClientLink,
+  useSyncClientToQuickBooks,
+  type QboCustomerCandidate,
+} from "@/lib/hooks/use-quickbooks-client-sync";
+import {
   useCustomFieldDefs,
   useClientCustomFieldValues,
   useUpsertClientCustomFieldValue,
@@ -301,6 +306,98 @@ function SavedPaymentMethodSection({ client }: { client: Client }) {
         onOpenChange={setDialogOpen}
         onSaved={() => toast.success("Payment method saved")}
       />
+    </div>
+  );
+}
+
+// ── QuickBooksClientSyncSection ────────────────────────────────────────────────
+// Links this client to a QuickBooks customer (Phase 2 of the one-way sync —
+// see TASKS.md). Exact-name matches auto-link; a genuinely fuzzy or
+// no-match case creates a new QBO customer or, if there are ambiguous
+// candidates, asks the user to pick one rather than guessing.
+
+function QuickBooksClientSyncSection({ client }: { client: Client }) {
+  const { data: link, isLoading } = useQuickBooksClientLink(client.id);
+  const sync = useSyncClientToQuickBooks(client.id);
+  const [candidates, setCandidates] = useState<QboCustomerCandidate[] | null>(null);
+
+  async function handleSync(opts?: { qboCustomerId?: string; forceCreate?: boolean }) {
+    try {
+      const result = await sync.mutateAsync(opts);
+      if (result.status === "ambiguous") {
+        setCandidates(result.candidates);
+      } else {
+        setCandidates(null);
+        toast.success("Linked to QuickBooks");
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to sync with QuickBooks");
+    }
+  }
+
+  if (isLoading) return <p className="text-sm text-slate-400">Loading…</p>;
+
+  return (
+    <div className="space-y-2">
+      {link?.qboCustomerId ? (
+        <div className="flex items-center gap-2 text-sm">
+          <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
+            Linked
+          </span>
+          <span className="text-slate-500">QBO customer {link.qboCustomerId}</span>
+        </div>
+      ) : (
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-slate-400">Not linked</span>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-6 text-xs"
+            onClick={() => void handleSync()}
+            disabled={sync.isPending}
+          >
+            {sync.isPending ? "Syncing…" : "Sync to QuickBooks"}
+          </Button>
+        </div>
+      )}
+
+      <Dialog open={candidates !== null} onOpenChange={(open) => !open && setCandidates(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Multiple possible matches</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-slate-600">
+            QuickBooks has more than one customer that could match &quot;{client.displayName}&quot;. Pick the right
+            one, or create a new customer instead.
+          </p>
+          <div className="max-h-64 space-y-1 overflow-y-auto">
+            {(candidates ?? []).map((c) => (
+              <Button
+                key={c.id}
+                variant="outline"
+                size="sm"
+                className="w-full justify-start text-xs"
+                onClick={() => void handleSync({ qboCustomerId: c.id })}
+                disabled={sync.isPending}
+              >
+                {c.displayName}
+              </Button>
+            ))}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setCandidates(null)}>
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => void handleSync({ forceCreate: true })}
+              disabled={sync.isPending}
+            >
+              None of these — create new
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -3505,6 +3602,10 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
                 Payment Method on File
               </h3>
               <SavedPaymentMethodSection client={client} />
+              <h3 className="mb-3 mt-6 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                QuickBooks
+              </h3>
+              <QuickBooksClientSyncSection client={client} />
             </div>
             <div>
               <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">

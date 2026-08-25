@@ -1465,6 +1465,7 @@ export type Database = {
           primary_email: string | null
           primary_phone: string | null
           priority: string | null
+          qbo_customer_id: string | null
           referred_by: string | null
           referred_by_client_id: string | null
           revenue_potential_cents: number
@@ -1537,6 +1538,7 @@ export type Database = {
           primary_email?: string | null
           primary_phone?: string | null
           priority?: string | null
+          qbo_customer_id?: string | null
           referred_by?: string | null
           referred_by_client_id?: string | null
           revenue_potential_cents?: number
@@ -1609,6 +1611,7 @@ export type Database = {
           primary_email?: string | null
           primary_phone?: string | null
           priority?: string | null
+          qbo_customer_id?: string | null
           referred_by?: string | null
           referred_by_client_id?: string | null
           revenue_potential_cents?: number
