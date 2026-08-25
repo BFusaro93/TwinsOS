@@ -526,17 +526,29 @@ export async function submitFormResponse(
   // A checked sms_optin field is affirmative, TCPA-required consent — only ever
   // sets consent true, never clears it (an unchecked/absent box just means this
   // particular form didn't ask, not that the client revoked prior consent).
-  if (relatedClientId && formFields) {
+  // Consent has to be tied to the number it applies to — if the submitter
+  // checked the box but the form didn't collect (or they didn't fill in) a
+  // phone number, we can't record real consent to text anyone. Skip the
+  // write and flag the ticket instead of silently dropping it or attaching
+  // consent to a phone-less client record.
+  let smsConsentPendingPhone = false;
+  if (formFields) {
     const optInField = formFields.find((f: { field_type?: string }) => f.field_type === "sms_optin");
     if (optInField && formData[optInField.label] === "true") {
-      await db
-        .from("clients")
-        .update({
-          sms_opt_in: true,
-          sms_opt_in_at: new Date().toISOString(),
-          sms_opt_in_source: "form",
-        })
-        .eq("id", relatedClientId);
+      if (submittedPhone) {
+        if (relatedClientId) {
+          await db
+            .from("clients")
+            .update({
+              sms_opt_in: true,
+              sms_opt_in_at: new Date().toISOString(),
+              sms_opt_in_source: "form",
+            })
+            .eq("id", relatedClientId);
+        }
+      } else {
+        smsConsentPendingPhone = true;
+      }
     }
   }
 
@@ -602,6 +614,7 @@ export async function submitFormResponse(
         priority: "normal",
         category: form.name,
         type: "note",
+        sms_consent_pending_phone: smsConsentPendingPhone,
       })
       .select("id, ticket_number")
       .single();

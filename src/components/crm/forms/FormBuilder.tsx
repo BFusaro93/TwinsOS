@@ -370,11 +370,31 @@ export function FormBuilder({ form, publicBaseUrl }: Props) {
       });
       return;
     }
+
+    // SMS consent has to be tied to a phone number — a form that requires
+    // the opt-in checkbox but not a phone field can collect "yes, text me"
+    // with nothing to text. If the form has no phone field at all, block
+    // the save; if it does, silently promote it to required rather than
+    // making staff notice and fix it themselves.
+    let fieldsToSave = fields;
+    if (fields.some((f) => f.fieldType === "sms_optin" && f.required)) {
+      const phoneField = fields.find((f) => f.fieldType === "phone");
+      if (!phoneField) {
+        toast.error("The SMS opt-in field is required, but this form has no Phone field — add one so consent has a number to attach to.", { duration: 7000 });
+        return;
+      }
+      if (!phoneField.required) {
+        fieldsToSave = fields.map((f) => f._key === phoneField._key ? { ...f, required: true } : f);
+        setFields(fieldsToSave);
+        toast.message("Phone is now required, since the SMS opt-in field is required.");
+      }
+    }
+
     setInvalidFieldKey(null);
     setSaving(true);
     try {
       const savedFieldData = await saveFields.mutateAsync(
-        fields.map((f, i) => ({
+        fieldsToSave.map((f, i) => ({
           fieldType: f.fieldType,
           label: f.label.trim(),
           placeholder: f.placeholder || null,
@@ -392,7 +412,7 @@ export function FormBuilder({ form, publicBaseUrl }: Props) {
       const newFieldMap = new Map<string, string>(); // _key → new id
       const savedFields = (savedFieldData?.fields ?? []) as CRMFormField[];
       savedFields.forEach((saved, i) => {
-        const draft = fields[i];
+        const draft = fieldsToSave[i];
         if (draft) newFieldMap.set(draft._key, saved.id);
       });
 
@@ -564,6 +584,7 @@ export function FormBuilder({ form, publicBaseUrl }: Props) {
                 idx={idx}
                 totalFields={pageFields.length}
                 hasError={field._key === invalidFieldKey}
+                lockRequired={field.fieldType === "phone" && fields.some((f) => f.fieldType === "sms_optin" && f.required)}
                 onUpdate={(patch) => update(field._key, patch)}
                 onUpdateConfig={(patch) => updateConfig(field._key, patch)}
                 onChangeType={(type) => changeType(field._key, type)}
@@ -613,6 +634,11 @@ interface FieldCardProps {
   idx: number;
   totalFields: number;
   hasError?: boolean;
+  /** True when this is the form's phone field and a required sms_optin
+   *  field exists — consent needs a number to attach to, so this can't be
+   *  turned back off from here (see handleSave, which enforces the same
+   *  rule server-side by promoting it before save). */
+  lockRequired?: boolean;
   onUpdate: (patch: Partial<DraftField>) => void;
   onUpdateConfig: (patch: Record<string, unknown>) => void;
   onChangeType: (type: FormFieldType) => void;
@@ -622,7 +648,7 @@ interface FieldCardProps {
 }
 
 function FieldCard({
-  field, idx, totalFields, hasError,
+  field, idx, totalFields, hasError, lockRequired,
   onUpdate, onUpdateConfig, onChangeType, onMoveUp, onMoveDown, onRemove,
 }: FieldCardProps) {
   const isDisplay = DISPLAY_TYPES.includes(field.fieldType);
@@ -693,8 +719,9 @@ function FieldCard({
         <div className="space-y-1 flex flex-col items-center pt-0.5">
           <Label className="text-[10px] uppercase tracking-widest text-slate-400">Req.</Label>
           <Checkbox
-            checked={field.required}
-            disabled={isDisplay}
+            checked={lockRequired ? true : field.required}
+            disabled={isDisplay || lockRequired}
+            title={lockRequired ? "Required because the SMS opt-in field on this form is required" : undefined}
             onCheckedChange={(v) => onUpdate({ required: !!v })}
             className="mt-1.5"
           />

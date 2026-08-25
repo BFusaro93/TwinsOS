@@ -102,7 +102,7 @@ async function sendToRecipients(
 
 function ticketLink(ticketId: string): string {
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://twins-os.vercel.app";
-  return `${siteUrl}/crm/tickets?id=${ticketId}`;
+  return `${siteUrl}/crm/tickets?open=${ticketId}`;
 }
 
 function emailShell(heading: string, name: string | null, bodyHtml: string, ticketId: string): string {
