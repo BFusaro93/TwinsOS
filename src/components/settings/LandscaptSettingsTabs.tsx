@@ -89,6 +89,7 @@ import { useEstimates, useBulkImportEstimates } from "@/lib/hooks/use-estimates"
 import { useEstimateStages } from "@/lib/hooks/use-estimate-stages";
 import { useApprovalFlows } from "@/lib/hooks/use-approval-flows";
 import { useInvoices, usePayments, useBulkImportInvoices, useBulkImportPayments } from "@/lib/hooks/use-invoices";
+import { useQuickBooksStatus, useDisconnectQuickBooks } from "@/lib/hooks/use-quickbooks";
 import { useTickets, useBulkImportTickets } from "@/lib/hooks/use-tickets";
 import { useEmployees, useBulkImportEmployees } from "@/lib/hooks/use-employees";
 import { NotificationsPage } from "@/components/settings/NotificationsPage";
@@ -1201,6 +1202,55 @@ function ConnectAccountSection() {
   );
 }
 
+function QuickBooksConnectSection() {
+  const { data: status, isLoading } = useQuickBooksStatus();
+  const { mutateAsync: disconnect, isPending: disconnecting } = useDisconnectQuickBooks();
+
+  if (isLoading) {
+    return <p className="p-4 text-sm text-slate-400">Loading…</p>;
+  }
+
+  if (!status?.configured) {
+    return <p className="p-4 text-sm text-slate-400">QuickBooks isn&apos;t configured for this environment yet.</p>;
+  }
+
+  async function handleDisconnect() {
+    try {
+      await disconnect();
+      toast.success("QuickBooks disconnected");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to disconnect QuickBooks");
+    }
+  }
+
+  return (
+    <div className="space-y-4 p-4">
+      <div className="flex items-center gap-2">
+        <span
+          className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${
+            status.connected ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-600"
+          }`}
+        >
+          {status.connected ? `Connected — ${status.companyName}` : "Not connected"}
+        </span>
+      </div>
+      <p className="text-sm text-slate-600">
+        Connect QuickBooks Online to push invoices and payments over automatically. This is a one-way sync — nothing
+        is ever pulled back from QuickBooks or written from it into Landscapt.
+      </p>
+      {status.connected ? (
+        <Button size="sm" variant="outline" onClick={() => void handleDisconnect()} disabled={disconnecting}>
+          {disconnecting ? "Disconnecting…" : "Disconnect"}
+        </Button>
+      ) : (
+        <Button size="sm" asChild>
+          <a href="/api/integrations/quickbooks/connect">Connect QuickBooks</a>
+        </Button>
+      )}
+    </div>
+  );
+}
+
 // ── AccountingTab ─────────────────────────────────────────────────────────────
 
 function AccountingTab() {
@@ -1328,6 +1378,13 @@ function AccountingTab() {
           (client detail, invoices, portal). This is Landscapt&apos;s own switch, separate from any payment-method
           toggle in your Stripe dashboard.
         </p>
+      </AccordionSection>
+      <AccordionSection
+        title="QuickBooks"
+        count={0}
+        description="Push invoices and payments to QuickBooks Online automatically — one-way sync, nothing is pulled back."
+      >
+        <QuickBooksConnectSection />
       </AccordionSection>
       <AccordionSection
         title="Credit Card Processing Fee"
