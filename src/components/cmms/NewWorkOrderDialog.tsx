@@ -32,6 +32,7 @@ import { ASSET_STATUS_LABELS } from "@/lib/constants";
 import { EntityCombobox } from "@/components/shared/EntityCombobox";
 import { MultiEntityCombobox } from "@/components/shared/MultiEntityCombobox";
 import { Info } from "lucide-react";
+import { toast } from "sonner";
 import type { WorkOrder } from "@/types";
 
 interface NewWorkOrderDialogProps {
@@ -151,10 +152,22 @@ export function NewWorkOrderDialog({ open, onOpenChange, initialData, onCreated,
     }
   }, [open, initialData, users]);
 
-  const isValid = title.trim() && priority
-    && (!rf.isRequired("category") || categoryIds.length > 0)
-    && (!rf.isRequired("assigned_to") || assignedToIds.length > 0)
-    && (!rf.isRequired("due_date") || dueDate !== "");
+  const missingFields: string[] = [
+    ...(title.trim() ? [] : ["Work Order Title"]),
+    ...(priority ? [] : ["Priority"]),
+    ...(rf.isRequired("category") && categoryIds.length === 0 ? ["Category"] : []),
+    ...(rf.isRequired("assigned_to") && assignedToIds.length === 0 ? ["Assigned To"] : []),
+    ...(rf.isRequired("due_date") && dueDate === "" ? ["Due Date"] : []),
+  ];
+  const isValid = missingFields.length === 0;
+
+  function toastMutationError(action: "create" | "update") {
+    return (err: unknown) => {
+      toast.error(`Failed to ${action} work order`, {
+        description: err instanceof Error ? err.message : "Please try again.",
+      });
+    };
+  }
 
   function handleClose() {
     onOpenChange(false);
@@ -233,6 +246,7 @@ export function NewWorkOrderDialog({ open, onOpenChange, initialData, onCreated,
             }
             handleClose();
           },
+          onError: toastMutationError("update"),
         }
       );
     } else if (entityKeys.length > 1) {
@@ -260,13 +274,14 @@ export function NewWorkOrderDialog({ open, onOpenChange, initialData, onCreated,
                     parentWorkOrderId: parent.id,
                     ...buildEntityFields(key),
                   },
-                  { onSuccess: () => resolve(), onError: () => resolve() }
+                  { onSuccess: () => resolve(), onError: (err) => { toastMutationError("create")(err); resolve(); } }
                 );
               });
             }
             handleClose();
             onCreated?.(parent);
           },
+          onError: toastMutationError("create"),
         }
       );
     } else {
@@ -290,6 +305,7 @@ export function NewWorkOrderDialog({ open, onOpenChange, initialData, onCreated,
             handleClose();
             onCreated?.(created);
           },
+          onError: toastMutationError("create"),
         }
       );
     }
@@ -554,7 +570,12 @@ export function NewWorkOrderDialog({ open, onOpenChange, initialData, onCreated,
             </div>
           </div>
 
-          <DialogFooter className="mt-4 pt-2">
+          {!isValid && missingFields.length > 0 && (
+            <p className="mt-2 text-right text-xs text-red-500">
+              Missing required field{missingFields.length > 1 ? "s" : ""}: {missingFields.join(", ")}
+            </p>
+          )}
+          <DialogFooter className="mt-2 pt-2">
             <Button type="button" variant="outline" onClick={handleClose}>
               Cancel
             </Button>
