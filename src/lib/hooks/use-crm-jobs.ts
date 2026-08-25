@@ -952,11 +952,14 @@ export function useUpdateVisit() {
         clientId = body.clientId;
       }
 
-      // Cascade crew assignment to parent job so it shows everywhere
-      if ('crew_id' in updates && jobId) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await (supabase as any).from('crm_jobs').update({ crew_id: updates.crew_id }).eq('id', jobId);
-      }
+      // Deliberately NOT cascading crew_id to the parent job here: this
+      // updates a single visit (e.g. covering one day for a sick crew), and
+      // crm_jobs.crew_id is what generate-visits uses as the default crew
+      // for every future auto-generated visit — cascading a one-off swap
+      // would silently make it permanent. Making a crew the new ongoing
+      // default is the explicit propagate-crew flow (JobDetail.tsx ->
+      // /api/crm/jobs/[jobId]/propagate-crew), not a side effect of fixing
+      // one visit.
 
       return { clientId, dateChanged, dateChangeClientId, dateChangeServiceIds };
     },

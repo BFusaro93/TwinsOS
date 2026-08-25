@@ -824,7 +824,7 @@ export function EstimateLineItemsGrid({ estimateId, items, selectedIds = [], onS
         item: {
           service_id: svc.id ?? null,
           service_name: svc.name,
-          status: "draft",
+          status: "quote",
           calc_type: 1,
           qty: 1,
           unit_type: unit,

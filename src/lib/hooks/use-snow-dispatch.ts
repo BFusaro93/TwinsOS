@@ -355,7 +355,23 @@ export function useAddJobsToStormEvent() {
       jobs: { jobId: string; clientId: string; crewId?: string | null }[];
     }) => {
       const supabase = createClient();
-      const rows = jobs.map((j, i) => ({
+
+      // Exclude jobs already on this storm event — re-opening "Add Jobs to
+      // Dispatch" after a forecast revision and resubmitting an overlapping
+      // selection must not create a second visit for the same job on the
+      // same storm (double dispatch/double billing). The DB also enforces
+      // this via a unique index as the authoritative guard.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: existing } = await (supabase as any)
+        .from("crm_job_visits")
+        .select("job_id")
+        .eq("storm_event_id", stormEventId)
+        .is("deleted_at", null)
+        .in("job_id", jobs.map((j) => j.jobId));
+      const alreadyAdded = new Set((existing ?? []).map((r: { job_id: string }) => r.job_id));
+      const newJobs = jobs.filter((j) => !alreadyAdded.has(j.jobId));
+
+      const rows = newJobs.map((j, i) => ({
         job_id: j.jobId,
         client_id: j.clientId,
         scheduled_date: date,
@@ -364,6 +380,7 @@ export function useAddJobsToStormEvent() {
         order_num: i,
         status: "scheduled",
       }));
+      if (rows.length === 0) return 0;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any).from("crm_job_visits").insert(rows);
       if (error) throw error;

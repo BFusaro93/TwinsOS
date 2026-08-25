@@ -160,6 +160,86 @@ export async function POST(request: Request) {
       break;
     }
 
+    // Fires when a charge is refunded — including an ACH debit that
+    // initially succeeded but was later returned by the client's bank
+    // (NSF, closed account, unauthorized) days after payment_intent.succeeded
+    // already marked the invoice paid. Also fires for a refund WE initiated
+    // via /api/crm/payments/[id]/refund, so this must be idempotent against
+    // that: reconcile against Stripe's own amount_refunded rather than
+    // blindly applying charge.amount_refunded as a fresh delta, or a
+    // staff-initiated refund would get double-counted here.
+    case "charge.refunded": {
+      const charge = event.data.object as Stripe.Charge;
+      const paymentIntentId = typeof charge.payment_intent === "string" ? charge.payment_intent : charge.payment_intent?.id;
+      if (!paymentIntentId || !event.account) break;
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: payment } = await (db as any)
+        .from("crm_payments")
+        .select("id, org_id, client_id, invoice_id, refunded_amount_cents")
+        .eq("stripe_payment_intent_id", paymentIntentId)
+        .maybeSingle();
+      if (!payment || !(await eventAccountOwnedByOrg(db, payment.org_id, event.account))) break;
+
+      const alreadyRecordedCents = payment.refunded_amount_cents ?? 0;
+      const deltaCents = charge.amount_refunded - alreadyRecordedCents;
+      if (deltaCents <= 0) break; // already reconciled (e.g. our own refund route already applied this)
+
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error: refundErr } = await (db.rpc as any)("refund_payment", {
+          p_payment_id: payment.id,
+          p_refund_amount_cents: deltaCents,
+        });
+        if (refundErr) throw refundErr;
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: allocations } = await (db as any)
+          .from("crm_payment_allocations")
+          .select("invoice_id, amount_cents")
+          .eq("payment_id", payment.id);
+
+        if (allocations && allocations.length > 0) {
+          const totalAllocated = allocations.reduce((s: number, a: { amount_cents: number }) => s + a.amount_cents, 0);
+          let remaining = deltaCents;
+          for (let i = 0; i < allocations.length; i++) {
+            const a = allocations[i];
+            const share = i === allocations.length - 1 ? remaining : Math.round((deltaCents * a.amount_cents) / totalAllocated);
+            remaining -= share;
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            if (share > 0) await (db.rpc as any)("apply_payment_to_invoice", { p_invoice_id: a.invoice_id, p_delta_cents: -share });
+          }
+        } else if (payment.invoice_id) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          await (db.rpc as any)("apply_payment_to_invoice", { p_invoice_id: payment.invoice_id, p_delta_cents: -deltaCents });
+        }
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (db.rpc as any)("sync_client_balance", { p_client_id: payment.client_id });
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (db as any).from("client_activity").insert({
+          org_id: payment.org_id,
+          client_id: payment.client_id,
+          activity_type: "payment",
+          subject: `Payment reversed: $${(deltaCents / 100).toFixed(2)} (returned by bank/card issuer)`,
+          ref_id: payment.id,
+          ref_table: "crm_payments",
+          amount_cents: -deltaCents,
+        });
+
+        await fireSimpleTrigger(supabase, {
+          orgId: payment.org_id,
+          clientId: payment.client_id,
+          triggerType: "credit_card_charge_failed",
+        });
+      } catch (err) {
+        log.error("failed to reconcile charge.refunded", { error: err, paymentId: payment.id });
+        return NextResponse.json({ error: "Webhook handler failed" }, { status: 500 });
+      }
+      break;
+    }
+
     default:
       break;
   }
