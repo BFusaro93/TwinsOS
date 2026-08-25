@@ -47,6 +47,11 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     .eq("form_id", formId)
     .eq("org_id", profile.org_id);
 
+  // Editing fields only ever touched crm_form_fields — the parent form's
+  // updated_at (what the Forms list's "Date Modified" column reads) never
+  // moved, so a field-only edit looked like it never happened.
+  await db.from("crm_forms").update({ updated_at: new Date().toISOString() }).eq("id", formId);
+
   if (fields.length === 0) return NextResponse.json({ ok: true, fields: [] });
 
   const rows = fields.map((f, i) => ({

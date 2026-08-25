@@ -681,6 +681,20 @@ function FieldRenderer({
             {field.description && (
               <p className="text-xs text-slate-500 mt-0.5">{field.description}</p>
             )}
+            {/* target="_blank" — this form is commonly embedded in an
+                iframe (e.g. on a WordPress contact page), so a same-tab
+                link here would navigate the iframe away from the form. */}
+            <p className="text-xs text-slate-500 mt-0.5">
+              See our{" "}
+              <a href="/legal/privacy-policy" target="_blank" rel="noopener noreferrer" className="underline">
+                Privacy Policy
+              </a>{" "}
+              and{" "}
+              <a href="/legal/sms-terms" target="_blank" rel="noopener noreferrer" className="underline">
+                SMS Terms &amp; Conditions
+              </a>
+              .
+            </p>
           </div>
         </div>
         {error && <p className="mt-1 text-xs text-red-600">{error}</p>}

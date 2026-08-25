@@ -96,5 +96,9 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
+  // Same gap as the fields route — rule edits only ever touched
+  // crm_form_rules, never the parent form's updated_at.
+  await db.from("crm_forms").update({ updated_at: new Date().toISOString() }).eq("id", id);
+
   return NextResponse.json({ ok: true });
 }

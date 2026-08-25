@@ -267,10 +267,10 @@ export function FormBuilder({ form, publicBaseUrl }: Props) {
       options: OPTIONS_TYPES.includes(type) ? (current?.options ?? []) : null,
       required: DISPLAY_TYPES.includes(type) ? false : current?.required ?? false,
       label: isSmsOptIn && !current?.label
-        ? "I agree to receive text messages from this business about my service appointments and account"
+        ? "I agree to receive text messages from this business about my service appointments and account, including appointment reminders, crew arrival notices, and job status updates."
         : current?.label ?? "",
       description: isSmsOptIn && !current?.description
-        ? "Message frequency varies. Message and data rates may apply. Reply STOP to opt out, HELP for help."
+        ? "Message frequency varies. Message and data rates may apply. Reply STOP to opt out at any time, HELP for help."
         : current?.description ?? null,
     });
   }
@@ -1152,7 +1152,9 @@ function FieldTypeConfig({
           No mapping needed — a checked box on submit automatically records SMS
           consent on the matched/created client. Keep the label/consent text a
           standalone, explicit statement rather than folding it into general
-          terms-acceptance language, or carrier review will reject it.
+          terms-acceptance language, or carrier review will reject it. Links to
+          the Privacy Policy and SMS Terms &amp; Conditions render automatically
+          below this field — no need to add them to the text here.
         </p>
         <div>
           <Label className={labelClass}>Consent text</Label>
