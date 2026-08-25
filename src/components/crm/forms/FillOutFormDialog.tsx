@@ -23,13 +23,20 @@ interface AttachmentValue {
 const MAX_ATTACHMENT_BYTES = 15 * 1024 * 1024;
 const ALLOWED_ATTACHMENT_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif", "application/pdf"]);
 
+// Mirrors src/app/forms/[slug]/page.tsx's DISPLAY_TYPES/MULTI_VALUE_TYPES —
+// kept in sync deliberately since this dialog previews the same form.
+const DISPLAY_TYPES = new Set(["header", "paragraph", "divider", "hidden"]);
+const MULTI_VALUE_TYPES = new Set(["checklist"]);
+
 // ── Field renderer (mirrors public form, inline in app) ───────────────────────
 
 function FieldRenderer({
   field,
   value,
+  multiValue,
   error,
   onChange,
+  onToggleMulti,
   attachment,
   attachmentUploading,
   attachmentError,
@@ -37,8 +44,10 @@ function FieldRenderer({
 }: {
   field: CRMFormField;
   value: string;
+  multiValue: string[];
   error?: string;
   onChange: (v: string) => void;
+  onToggleMulti: (opt: string) => void;
   attachment?: AttachmentValue;
   attachmentUploading?: boolean;
   attachmentError?: string;
@@ -47,6 +56,187 @@ function FieldRenderer({
   const base =
     "mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 placeholder-slate-400";
   const errCls = "border-red-400 focus:ring-red-400 focus:border-red-400";
+
+  if (field.fieldType === "header") {
+    return (
+      <div>
+        <h2 className="text-lg font-bold text-slate-800">{field.label}</h2>
+        {field.description && <p className="mt-0.5 text-sm text-slate-500">{field.description}</p>}
+      </div>
+    );
+  }
+
+  if (field.fieldType === "paragraph") {
+    return (
+      <div>
+        {field.label && <p className="text-sm font-medium text-slate-700 mb-0.5">{field.label}</p>}
+        <p className="text-sm text-slate-600">{field.description ?? ""}</p>
+      </div>
+    );
+  }
+
+  if (field.fieldType === "divider") {
+    return <hr className="border-slate-200" />;
+  }
+
+  if (field.fieldType === "hidden") {
+    return null;
+  }
+
+  if (field.fieldType === "multiple_choice") {
+    return (
+      <div>
+        <label className="block text-sm font-medium text-slate-700">
+          {field.label}
+          {field.required && <span className="ml-0.5 text-red-500">*</span>}
+        </label>
+        <div className="mt-2 space-y-2">
+          {(field.options ?? []).map((opt) => (
+            <label key={opt} className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="radio"
+                name={field.id}
+                value={opt}
+                checked={value === opt}
+                onChange={() => onChange(opt)}
+                className="h-4 w-4 border-slate-300 text-brand-600 focus:ring-brand-500"
+              />
+              <span className="text-sm text-slate-700">{opt}</span>
+            </label>
+          ))}
+        </div>
+        {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
+      </div>
+    );
+  }
+
+  if (field.fieldType === "checklist") {
+    return (
+      <div>
+        <label className="block text-sm font-medium text-slate-700">
+          {field.label}
+          {field.required && <span className="ml-0.5 text-red-500">*</span>}
+        </label>
+        <div className="mt-2 space-y-2">
+          {(field.options ?? []).map((opt) => (
+            <label key={opt} className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={multiValue.includes(opt)}
+                onChange={() => onToggleMulti(opt)}
+                className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+              />
+              <span className="text-sm text-slate-700">{opt}</span>
+            </label>
+          ))}
+        </div>
+        {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
+      </div>
+    );
+  }
+
+  if (field.fieldType === "rating") {
+    const max = (field.config.max as number) ?? 5;
+    const labelMin = (field.config.labelMin as string) ?? "0 = Worst";
+    const labelMax = (field.config.labelMax as string) ?? `${max} = Best`;
+    const selected = value !== "" ? Number(value) : null;
+    return (
+      <div>
+        <label className="block text-sm font-medium text-slate-700">
+          {field.label}
+          {field.required && <span className="ml-0.5 text-red-500">*</span>}
+        </label>
+        <div className="mt-2">
+          <div className="flex flex-wrap gap-1">
+            {Array.from({ length: max + 1 }).map((_, i) => (
+              <button
+                key={i}
+                type="button"
+                onClick={() => onChange(String(i))}
+                className={`flex h-9 w-9 items-center justify-center rounded border text-sm font-semibold transition-colors ${
+                  selected === i
+                    ? "border-brand-600 bg-brand-600 text-white"
+                    : "border-slate-300 bg-white text-slate-700 hover:border-brand-400"
+                }`}
+              >
+                {i}
+              </button>
+            ))}
+          </div>
+          <div className="mt-1 flex justify-between text-[10px] text-slate-400">
+            <span>{labelMin}</span>
+            <span>{labelMax}</span>
+          </div>
+        </div>
+        {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
+      </div>
+    );
+  }
+
+  if (field.fieldType === "review") {
+    const max = (field.config.max as number) ?? 5;
+    const selected = value !== "" ? Number(value) : 0;
+    return (
+      <div>
+        <label className="block text-sm font-medium text-slate-700">
+          {field.label}
+          {field.required && <span className="ml-0.5 text-red-500">*</span>}
+        </label>
+        <div className="mt-2 flex gap-1">
+          {Array.from({ length: max }).map((_, i) => {
+            const starNum = i + 1;
+            return (
+              <button
+                key={starNum}
+                type="button"
+                onClick={() => onChange(String(starNum))}
+                className="text-2xl transition-colors focus:outline-none"
+              >
+                <span className={starNum <= selected ? "text-amber-400" : "text-slate-300"}>★</span>
+              </button>
+            );
+          })}
+        </div>
+        {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
+      </div>
+    );
+  }
+
+  if (field.fieldType === "sms_optin") {
+    return (
+      <div>
+        <div className="flex items-start gap-2">
+          <input
+            type="checkbox"
+            checked={value === "true"}
+            onChange={(e) => onChange(e.target.checked ? "true" : "false")}
+            className="mt-0.5 h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+          />
+          <div>
+            <label className="text-sm font-medium text-slate-700">
+              {field.label || "SMS Opt-in"}
+              {field.required && <span className="ml-0.5 text-red-500">*</span>}
+            </label>
+            {field.description && (
+              <p className="text-xs text-slate-500 mt-0.5">{field.description}</p>
+            )}
+            <p className="text-xs text-slate-500 mt-0.5">
+              See our{" "}
+              <a href="/legal/privacy-policy" target="_blank" rel="noopener noreferrer" className="underline">
+                Privacy Policy
+              </a>{" "}
+              and{" "}
+              <a href="/legal/sms-terms" target="_blank" rel="noopener noreferrer" className="underline">
+                SMS Terms &amp; Conditions
+              </a>
+              .
+            </p>
+          </div>
+        </div>
+        {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -133,6 +323,7 @@ type State = "idle" | "submitting" | "success";
 
 export function FillOutFormDialog({ form, open, onOpenChange }: Props) {
   const [values, setValues] = useState<Record<string, string>>({});
+  const [multiValues, setMultiValues] = useState<Record<string, string[]>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [attachments, setAttachments] = useState<Record<string, AttachmentValue>>({});
   const [attachmentUploading, setAttachmentUploading] = useState<Record<string, boolean>>({});
@@ -141,6 +332,15 @@ export function FillOutFormDialog({ form, open, onOpenChange }: Props) {
 
   function setValue(label: string, value: string) {
     setValues((prev) => ({ ...prev, [label]: value }));
+    if (errors[label]) setErrors((prev) => { const e = { ...prev }; delete e[label]; return e; });
+  }
+
+  function toggleMultiValue(label: string, option: string) {
+    setMultiValues((prev) => {
+      const current = prev[label] ?? [];
+      const next = current.includes(option) ? current.filter((o) => o !== option) : [...current, option];
+      return { ...prev, [label]: next };
+    });
     if (errors[label]) setErrors((prev) => { const e = { ...prev }; delete e[label]; return e; });
   }
 
@@ -175,9 +375,13 @@ export function FillOutFormDialog({ form, open, onOpenChange }: Props) {
   function validate(): boolean {
     const errs: Record<string, string> = {};
     for (const field of form.fields) {
+      if (DISPLAY_TYPES.has(field.fieldType)) continue;
+
       if (field.required) {
         if (field.fieldType === "attachment") {
           if (!attachments[field.label]) errs[field.label] = `${field.label} is required`;
+        } else if (MULTI_VALUE_TYPES.has(field.fieldType)) {
+          if ((multiValues[field.label] ?? []).length === 0) errs[field.label] = `${field.label} is required`;
         } else if (!values[field.label]?.trim()) {
           errs[field.label] = `${field.label} is required`;
         }
@@ -201,6 +405,8 @@ export function FillOutFormDialog({ form, open, onOpenChange }: Props) {
     for (const field of form.fields) {
       if (field.fieldType === "attachment") {
         data[field.label] = attachments[field.label] ?? null;
+      } else if (MULTI_VALUE_TYPES.has(field.fieldType)) {
+        data[field.label] = multiValues[field.label] ?? [];
       }
     }
 
@@ -230,6 +436,7 @@ export function FillOutFormDialog({ form, open, onOpenChange }: Props) {
   function handleClose() {
     // Reset on close
     setValues({});
+    setMultiValues({});
     setErrors({});
     setAttachments({});
     setAttachmentUploading({});
@@ -257,7 +464,7 @@ export function FillOutFormDialog({ form, open, onOpenChange }: Props) {
             </div>
             <p className="font-semibold text-slate-800">Submitted!</p>
             <p className="mt-1 text-sm text-slate-500">Response recorded successfully.</p>
-            <Button size="sm" className="mt-4" onClick={() => { setValues({}); setErrors({}); setState("idle"); }}>
+            <Button size="sm" className="mt-4" onClick={() => { setValues({}); setMultiValues({}); setErrors({}); setState("idle"); }}>
               Fill Out Again
             </Button>
           </div>
@@ -273,8 +480,10 @@ export function FillOutFormDialog({ form, open, onOpenChange }: Props) {
                   key={field.id}
                   field={field}
                   value={values[field.label] ?? ""}
+                  multiValue={multiValues[field.label] ?? []}
                   error={errors[field.label]}
                   onChange={(v) => setValue(field.label, v)}
+                  onToggleMulti={(opt) => toggleMultiValue(field.label, opt)}
                   attachment={attachments[field.label]}
                   attachmentUploading={attachmentUploading[field.label] ?? false}
                   attachmentError={attachmentErrors[field.label]}
