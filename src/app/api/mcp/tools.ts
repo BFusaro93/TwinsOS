@@ -45,8 +45,9 @@ import { GET as listJobs, POST as createJob } from "@/app/api/v1/jobs/route";
 import { GET as getJob, PATCH as updateJob } from "@/app/api/v1/jobs/[id]/route";
 import { createJobSchema, updateJobSchema } from "@/app/api/v1/jobs/validation";
 
-import { GET as listEstimates } from "@/app/api/v1/estimates/route";
+import { GET as listEstimates, POST as createEstimate } from "@/app/api/v1/estimates/route";
 import { GET as getEstimate } from "@/app/api/v1/estimates/[id]/route";
+import { createEstimateSchema } from "@/app/api/v1/estimates/validation";
 
 import { GET as listInvoices } from "@/app/api/v1/invoices/route";
 import { GET as getInvoice } from "@/app/api/v1/invoices/[id]/route";
@@ -66,11 +67,17 @@ import { GET as getContract } from "@/app/api/v1/contracts/[id]/route";
  * the call actually happens (see peekApiKeyScopes in src/lib/api/auth.ts for
  * why the MCP route's own connection-level auth doesn't also charge it).
  *
- * Per src/lib/api/scopes.ts's write:sensitive tier and the estimates-write
- * decision in TASKS.md, no tool here ever performs a create/update that the
- * REST API itself doesn't expose — estimates, invoices, contracts, and
- * purchase orders are read-only, and requisitions have no update tool
- * (status transitions go through the app's approval flow only).
+ * Per src/lib/api/scopes.ts's write:sensitive tier, no tool here ever
+ * performs a create/update that the REST API itself doesn't expose —
+ * invoices, contracts, and purchase orders are read-only, and requisitions
+ * have no update tool (status transitions go through the app's approval
+ * flow only). estimates is the one exception: create_estimates exists, but
+ * only as the narrow one-line-from-a-catalog-service path in
+ * src/app/api/v1/estimates/route.ts — every dollar figure is still computed
+ * by the app's own budget-engine functions, never caller-supplied. See the
+ * "public API / MCP: estimate creation stays read-only" entry in TASKS.md
+ * for the fuller reasoning and what's still out of scope (multi-line
+ * estimates, discounts, tiers, milestones).
  */
 
 type ListHandler = (request: Request) => Promise<Response>;
@@ -231,6 +238,9 @@ const RESOURCE_TOOLS: ResourceToolDef[] = [
     listScope: "estimates:read",
     get: getEstimate,
     getScope: "estimates:read",
+    create: createEstimate,
+    createScope: "estimates:write:safe",
+    createSchema: createEstimateSchema,
   },
   {
     resource: "invoices",

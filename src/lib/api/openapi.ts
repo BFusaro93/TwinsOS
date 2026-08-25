@@ -10,6 +10,7 @@ import { createPmScheduleSchema, updatePmScheduleSchema } from "@/app/api/v1/pm-
 import { createPartSchema, updatePartSchema } from "@/app/api/v1/parts/validation";
 import { createRequisitionSchema } from "@/app/api/v1/requisitions/validation";
 import { createJobSchema, updateJobSchema } from "@/app/api/v1/jobs/validation";
+import { createEstimateSchema } from "@/app/api/v1/estimates/validation";
 import type { ApiScopeTier } from "@/lib/api/scopes";
 
 /**
@@ -337,6 +338,14 @@ const ENDPOINTS: EndpointDef[] = [
     scope: "estimates:read",
     agentTier: "read",
     hasIdParam: true,
+  },
+  {
+    method: "post",
+    path: "/estimates",
+    summary: "Create a one-line estimate for a client + catalog service (rate/totals always app-computed, never caller-supplied)",
+    scope: "estimates:write:safe",
+    agentTier: "write:safe",
+    requestSchema: createEstimateSchema,
   },
 
   { method: "get", path: "/invoices", summary: "List invoices", scope: "invoices:read", agentTier: "read" },
