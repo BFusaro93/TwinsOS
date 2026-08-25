@@ -4217,6 +4217,7 @@ export type Database = {
           pdf_template_id: string | null
           po_number: string | null
           preferred_payment_method: string | null
+          qbo_invoice_id: string | null
           sales_rep_id: string | null
           service_address: string | null
           status: string
@@ -4253,6 +4254,7 @@ export type Database = {
           pdf_template_id?: string | null
           po_number?: string | null
           preferred_payment_method?: string | null
+          qbo_invoice_id?: string | null
           sales_rep_id?: string | null
           service_address?: string | null
           status?: string
@@ -4289,6 +4291,7 @@ export type Database = {
           pdf_template_id?: string | null
           po_number?: string | null
           preferred_payment_method?: string | null
+          qbo_invoice_id?: string | null
           sales_rep_id?: string | null
           service_address?: string | null
           status?: string
@@ -5459,6 +5462,7 @@ export type Database = {
           invoice_id: string
           org_id: string
           payment_id: string
+          qbo_payment_id: string | null
         }
         Insert: {
           amount_cents: number
@@ -5467,6 +5471,7 @@ export type Database = {
           invoice_id: string
           org_id?: string
           payment_id: string
+          qbo_payment_id?: string | null
         }
         Update: {
           amount_cents?: number
@@ -5475,6 +5480,7 @@ export type Database = {
           invoice_id?: string
           org_id?: string
           payment_id?: string
+          qbo_payment_id?: string | null
         }
         Relationships: [
           {

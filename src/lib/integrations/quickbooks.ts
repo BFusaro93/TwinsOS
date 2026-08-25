@@ -169,7 +169,7 @@ function escapeQboString(value: string): string {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function qboQuery(conn: QuickBooksConnection, query: string): Promise<any[]> {
+async function qboQuery(conn: QuickBooksConnection, query: string, entity: string): Promise<any[]> {
   const url = `${conn.baseUrl}/v3/company/${conn.realmId}/query?query=${encodeURIComponent(query)}`;
   const res = await fetch(url, {
     headers: { Authorization: `Bearer ${conn.accessToken}`, Accept: "application/json" },
@@ -179,7 +179,7 @@ async function qboQuery(conn: QuickBooksConnection, query: string): Promise<any[
     throw new Error(`QuickBooks query failed (${res.status}): ${text}`);
   }
   const data = await res.json();
-  return data.QueryResponse?.Customer ?? [];
+  return data.QueryResponse?.[entity] ?? [];
 }
 
 export interface QboCustomerCandidate {
@@ -249,12 +249,12 @@ export async function findOrCreateCustomer(
 ): Promise<FindOrCreateResult> {
   const escaped = escapeQboString(input.displayName);
 
-  const exact = await qboQuery(conn, `SELECT Id, DisplayName FROM Customer WHERE DisplayName = '${escaped}'`);
+  const exact = await qboQuery(conn, `SELECT Id, DisplayName FROM Customer WHERE DisplayName = '${escaped}'`, "Customer");
   if (exact.length === 1) {
     return { status: "matched", customerId: exact[0].Id };
   }
 
-  const fuzzy = await qboQuery(conn, `SELECT Id, DisplayName FROM Customer WHERE DisplayName LIKE '%${escaped}%'`);
+  const fuzzy = await qboQuery(conn, `SELECT Id, DisplayName FROM Customer WHERE DisplayName LIKE '%${escaped}%'`, "Customer");
   if (fuzzy.length === 0) {
     const customerId = await createCustomer(conn, input);
     return { status: "created", customerId };
@@ -265,4 +265,328 @@ export async function findOrCreateCustomer(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     candidates: fuzzy.map((c: any) => ({ id: c.Id, displayName: c.DisplayName })),
   };
+}
+
+// ── Phase 3: invoice + payment push ─────────────────────────────────────────
+
+function centsToDollars(cents: number): number {
+  return Math.round(cents) / 100;
+}
+
+/**
+ * Every invoice line pushes under one catchall QBO Service item (decided
+ * with the user — no per-service QBO item mapping yet, so QBO-side
+ * reporting won't break down by service type). Created once per org on
+ * first use; QBO enforces Item name uniqueness the same way it does
+ * DisplayName, so this query can only ever return 0 or 1 row.
+ */
+const DEFAULT_ITEM_NAME = "Services";
+
+async function getIncomeAccountId(conn: QuickBooksConnection): Promise<string> {
+  const accounts = await qboQuery(conn, "SELECT Id FROM Account WHERE AccountType = 'Income' MAXRESULTS 1", "Account");
+  if (accounts.length === 0) {
+    throw new Error("No QuickBooks Income account found — cannot create the default Service item");
+  }
+  return accounts[0].Id;
+}
+
+export async function getOrCreateDefaultServiceItem(conn: QuickBooksConnection): Promise<string> {
+  const existing = await qboQuery(conn, `SELECT Id FROM Item WHERE Name = '${DEFAULT_ITEM_NAME}'`, "Item");
+  if (existing.length > 0) return existing[0].Id;
+
+  const incomeAccountId = await getIncomeAccountId(conn);
+  const res = await fetch(`${conn.baseUrl}/v3/company/${conn.realmId}/item`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${conn.accessToken}`,
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify({ Name: DEFAULT_ITEM_NAME, Type: "Service", IncomeAccountRef: { value: incomeAccountId } }),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`QuickBooks item creation failed (${res.status}): ${text}`);
+  }
+  const data = await res.json();
+  return data.Item.Id as string;
+}
+
+export interface QboInvoiceLineInput {
+  description: string;
+  qty: number;
+  amountCents: number;
+}
+
+export interface CreateInvoiceInput {
+  customerId: string;
+  itemId: string;
+  invoiceDate: string;
+  dueDate?: string | null;
+  docNumber?: string | null;
+  lines: QboInvoiceLineInput[];
+}
+
+export async function createInvoice(conn: QuickBooksConnection, input: CreateInvoiceInput): Promise<string> {
+  const body: Record<string, unknown> = {
+    CustomerRef: { value: input.customerId },
+    TxnDate: input.invoiceDate,
+    Line: input.lines.map((l) => ({
+      DetailType: "SalesItemLineDetail",
+      Amount: centsToDollars(l.amountCents),
+      Description: l.description,
+      SalesItemLineDetail: { ItemRef: { value: input.itemId }, Qty: l.qty },
+    })),
+  };
+  if (input.dueDate) body.DueDate = input.dueDate;
+  if (input.docNumber) body.DocNumber = input.docNumber;
+
+  const res = await fetch(`${conn.baseUrl}/v3/company/${conn.realmId}/invoice`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${conn.accessToken}`,
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`QuickBooks invoice creation failed (${res.status}): ${text}`);
+  }
+  const data = await res.json();
+  return data.Invoice.Id as string;
+}
+
+export interface CreatePaymentInput {
+  customerId: string;
+  qboInvoiceId: string;
+  amountCents: number;
+  paymentDate: string;
+}
+
+export async function createPayment(conn: QuickBooksConnection, input: CreatePaymentInput): Promise<string> {
+  const amount = centsToDollars(input.amountCents);
+  const body = {
+    CustomerRef: { value: input.customerId },
+    TotalAmt: amount,
+    TxnDate: input.paymentDate,
+    Line: [{ Amount: amount, LinkedTxn: [{ TxnId: input.qboInvoiceId, TxnType: "Invoice" }] }],
+  };
+  const res = await fetch(`${conn.baseUrl}/v3/company/${conn.realmId}/payment`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${conn.accessToken}`,
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`QuickBooks payment creation failed (${res.status}): ${text}`);
+  }
+  const data = await res.json();
+  return data.Payment.Id as string;
+}
+
+async function recordSyncResult(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  db: any,
+  orgId: string,
+  status: "ok" | "error"
+): Promise<void> {
+  await db
+    .from("integrations")
+    .update({ last_sync_status: status, last_sync_at: new Date().toISOString() })
+    .eq("org_id", orgId)
+    .eq("provider", "quickbooks");
+}
+
+async function resolveCustomerId(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  db: any,
+  conn: QuickBooksConnection,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  client: any
+): Promise<{ customerId: string } | { ambiguous: true }> {
+  if (client.qbo_customer_id) return { customerId: client.qbo_customer_id };
+
+  const match = await findOrCreateCustomer(conn, {
+    displayName: client.display_name,
+    email: client.primary_email,
+    phone: client.primary_phone,
+    billingAddressLine1: client.billing_address,
+    billingCity: client.billing_city,
+    billingState: client.billing_state,
+    billingZip: client.billing_zip,
+  });
+  if (match.status === "ambiguous") return { ambiguous: true };
+
+  const customerId = match.customerId!;
+  await db.from("clients").update({ qbo_customer_id: customerId }).eq("id", client.id);
+  return { customerId };
+}
+
+export interface PushInvoiceResult {
+  status: "pushed" | "already_synced" | "skipped" | "error";
+  qboInvoiceId?: string;
+  reason?: string;
+}
+
+/**
+ * Pushes an invoice to QuickBooks as a new Invoice, resolving the client's
+ * QBO customer lazily (same policy as Phase 2) if it isn't linked yet.
+ * Idempotent — a no-op if this invoice already has a qbo_invoice_id. Never
+ * throws: callers (the automatic "invoice sent" hook and a manual retry
+ * route) must not fail their own action because QuickBooks is down or
+ * unconfigured.
+ */
+export async function pushInvoiceToQuickBooks(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  db: any,
+  orgId: string,
+  invoiceId: string
+): Promise<PushInvoiceResult> {
+  const { data: invoice } = await db
+    .from("crm_invoices")
+    .select(`
+      id, client_id, invoice_number, invoice_date, due_date, description, qbo_invoice_id,
+      clients (id, display_name, primary_email, primary_phone, billing_address, billing_city, billing_state, billing_zip, qbo_customer_id),
+      crm_invoice_line_items (name, description, qty, total_cents, sort_order)
+    `)
+    .eq("id", invoiceId)
+    .eq("org_id", orgId)
+    .is("deleted_at", null)
+    .maybeSingle();
+  if (!invoice) return { status: "error", reason: "invoice_not_found" };
+  if (invoice.qbo_invoice_id) return { status: "already_synced", qboInvoiceId: invoice.qbo_invoice_id };
+
+  const conn = await getValidConnection(db, orgId);
+  if (!conn) return { status: "skipped", reason: "not_connected" };
+
+  const client = invoice.clients;
+  if (!client) return { status: "error", reason: "client_not_found" };
+
+  try {
+    const resolved = await resolveCustomerId(db, conn, client);
+    if ("ambiguous" in resolved) {
+      await recordSyncResult(db, orgId, "error");
+      return { status: "error", reason: "ambiguous_client_match" };
+    }
+
+    const itemId = await getOrCreateDefaultServiceItem(conn);
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const lineItems = (invoice.crm_invoice_line_items ?? []).sort((a: any, b: any) => a.sort_order - b.sort_order);
+    const lines: QboInvoiceLineInput[] = lineItems.length > 0
+      ? lineItems.map(
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (li: any) => ({
+            description: li.name ? `${li.name}${li.description ? ` — ${li.description}` : ""}` : (li.description ?? "Service"),
+            qty: Number(li.qty) || 1,
+            amountCents: li.total_cents ?? 0,
+          })
+        )
+      : [{ description: invoice.description || "Service", qty: 1, amountCents: 0 }];
+
+    const qboInvoiceId = await createInvoice(conn, {
+      customerId: resolved.customerId,
+      itemId,
+      invoiceDate: invoice.invoice_date,
+      dueDate: invoice.due_date,
+      docNumber: invoice.invoice_number != null ? String(invoice.invoice_number) : null,
+      lines,
+    });
+
+    await db.from("crm_invoices").update({ qbo_invoice_id: qboInvoiceId }).eq("id", invoiceId);
+    await recordSyncResult(db, orgId, "ok");
+    return { status: "pushed", qboInvoiceId };
+  } catch (err) {
+    log.error("QuickBooks invoice push failed", { err, invoiceId, orgId });
+    await recordSyncResult(db, orgId, "error");
+    return { status: "error", reason: "quickbooks_api_error" };
+  }
+}
+
+export interface PushPaymentResult {
+  status: "pushed" | "skipped" | "error";
+  pushedAllocations?: number;
+  skippedAllocations?: number;
+  reason?: string;
+}
+
+/**
+ * Pushes each of a payment's invoice allocations to QuickBooks as its own
+ * Payment linked to that allocation's QBO invoice (decided with the user —
+ * a split payment becomes multiple QBO Payments, one per invoice it's
+ * applied to). An allocation whose invoice hasn't been pushed to
+ * QuickBooks yet is skipped rather than force-pushing that invoice too —
+ * Phase 4's reconciliation UI is where that gets surfaced and retried.
+ * Idempotent per allocation. Prepayments/credits with no invoice
+ * allocation are out of scope for this phase.
+ */
+export async function pushPaymentToQuickBooks(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  db: any,
+  orgId: string,
+  paymentId: string
+): Promise<PushPaymentResult> {
+  const { data: payment } = await db
+    .from("crm_payments")
+    .select(`
+      id, client_id, payment_date,
+      clients (id, display_name, primary_email, primary_phone, billing_address, billing_city, billing_state, billing_zip, qbo_customer_id),
+      crm_payment_allocations (id, amount_cents, qbo_payment_id, crm_invoices (id, qbo_invoice_id))
+    `)
+    .eq("id", paymentId)
+    .eq("org_id", orgId)
+    .is("deleted_at", null)
+    .maybeSingle();
+  if (!payment) return { status: "error", reason: "payment_not_found" };
+
+  const allocations = payment.crm_payment_allocations ?? [];
+  if (allocations.length === 0) return { status: "skipped", reason: "no_allocations" };
+
+  const conn = await getValidConnection(db, orgId);
+  if (!conn) return { status: "skipped", reason: "not_connected" };
+
+  const client = payment.clients;
+  if (!client) return { status: "error", reason: "client_not_found" };
+
+  try {
+    const resolved = await resolveCustomerId(db, conn, client);
+    if ("ambiguous" in resolved) {
+      await recordSyncResult(db, orgId, "error");
+      return { status: "error", reason: "ambiguous_client_match" };
+    }
+
+    let pushed = 0;
+    let skipped = 0;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    for (const alloc of allocations as any[]) {
+      if (alloc.qbo_payment_id) continue;
+      const qboInvoiceId = alloc.crm_invoices?.qbo_invoice_id;
+      if (!qboInvoiceId) {
+        skipped++;
+        continue;
+      }
+
+      const qboPaymentId = await createPayment(conn, {
+        customerId: resolved.customerId,
+        qboInvoiceId,
+        amountCents: alloc.amount_cents,
+        paymentDate: payment.payment_date,
+      });
+      await db.from("crm_payment_allocations").update({ qbo_payment_id: qboPaymentId }).eq("id", alloc.id);
+      pushed++;
+    }
+
+    await recordSyncResult(db, orgId, "ok");
+    return { status: pushed > 0 ? "pushed" : "skipped", pushedAllocations: pushed, skippedAllocations: skipped };
+  } catch (err) {
+    log.error("QuickBooks payment push failed", { err, paymentId, orgId });
+    await recordSyncResult(db, orgId, "error");
+    return { status: "error", reason: "quickbooks_api_error" };
+  }
 }

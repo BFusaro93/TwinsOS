@@ -10,6 +10,7 @@ import { fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
 import { addParagraphSpacing } from "@/lib/utils/document-template-renderer";
 import { buildInvoiceStatementData } from "@/lib/invoices/statement-data";
 import { getOrCreateInvoiceShareToken, buildInvoiceViewUrl } from "@/lib/invoices/share-token";
+import { pushInvoiceToQuickBooks } from "@/lib/integrations/quickbooks";
 
 const FROM = "Twins Lawn Service <noreply@twinslawnservice.com>";
 
@@ -296,6 +297,12 @@ export async function POST(req: NextRequest) {
   if (inv.status === "draft" || inv.status === "printed") {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await (supabase as any).from("crm_invoices").update({ status: "sent" }).eq("id", invoiceId);
+  }
+
+  // Push to QuickBooks now that the invoice has gone out — never throws, so
+  // a QuickBooks outage can't fail an invoice send.
+  if (profile?.org_id) {
+    await pushInvoiceToQuickBooks(supabase, profile.org_id, invoiceId);
   }
 
   if (inv.client_id && profile?.org_id) {

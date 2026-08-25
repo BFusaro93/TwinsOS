@@ -3,6 +3,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 import { fireAutomationTrigger } from "@/lib/automations/fire-trigger-client";
+import { fireQuickBooksInvoiceSync, fireQuickBooksPaymentSync } from "@/lib/integrations/quickbooks-client";
 import type { CRMInvoice, InvoiceLineItem, CRMPayment } from "@/types/crm-invoices";
 
 // ── mappers ───────────────────────────────────────────────────────────────────
@@ -481,9 +482,12 @@ export function useUpdateInvoiceStatus() {
         .eq("id", id);
       if (error) throw error;
     },
-    onSuccess: () => {
+    onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: ["crm-invoices"] });
       qc.invalidateQueries({ queryKey: ["clients"] });
+      if (vars.status === "sent") {
+        fireQuickBooksInvoiceSync(vars.id);
+      }
     },
   });
 }
@@ -634,7 +638,7 @@ export function useRecordPayment() {
         ref_table: "crm_payments",
       });
 
-      return { newlyPaidInvoiceIds };
+      return { newlyPaidInvoiceIds, paymentId: inserted.id, hasAllocations: activeAllocations.length > 0 };
     },
     onSuccess: (data, vars) => {
       qc.invalidateQueries({ queryKey: ["crm-invoices"] });
@@ -644,6 +648,9 @@ export function useRecordPayment() {
       qc.invalidateQueries({ queryKey: ["clients", vars.clientId, "activity"] });
       for (const invoiceId of data?.newlyPaidInvoiceIds ?? []) {
         fireAutomationTrigger({ triggerType: "invoice_paid", clientId: vars.clientId, invoiceId });
+      }
+      if (data?.hasAllocations) {
+        fireQuickBooksPaymentSync(data.paymentId);
       }
     },
   });
