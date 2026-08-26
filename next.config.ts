@@ -15,15 +15,6 @@ const nextConfig: NextConfig = {
   // function (seen on Vercel prod builds) — keep it external so Node
   // resolves it at runtime instead.
   serverExternalPackages: ["@react-pdf/renderer"],
-  async redirects() {
-    return [
-      {
-        source: "/",
-        destination: "/dashboard",
-        permanent: false,
-      },
-    ];
-  },
 };
 
 export default nextConfig;
