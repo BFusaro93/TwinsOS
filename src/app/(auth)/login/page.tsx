@@ -59,7 +59,7 @@ function LoginForm() {
     <div className="w-full max-w-sm">
       <div className="mb-8 flex flex-col items-center gap-2">
         <BrandMark variant="color" className="h-12 w-12 rounded-xl" />
-        <h1 className="text-2xl font-bold text-slate-900">Landscapt</h1>
+        <h1 className="text-2xl font-extrabold tracking-tight text-[#005642]">landscapt</h1>
         <p className="text-sm text-slate-500">Sign in to your account</p>
       </div>
 
