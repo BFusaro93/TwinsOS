@@ -19,6 +19,7 @@ import {
 import type { BillablePlan } from "@/lib/stripe/plans";
 import { getHighlightsForPlan } from "@/lib/stripe/plan-features";
 import { isBillablePlan } from "@/lib/stripe/plans";
+import { addonAvailableForPlan, type AddonKey } from "@/lib/stripe/addons";
 import { PlanComparisonTable } from "./PlanComparisonTable";
 
 const ACTIVE_STATUSES = new Set(["trialing", "active", "past_due"]);
@@ -251,48 +252,50 @@ export function SubscriptionTab() {
       <div className="rounded-lg border bg-white p-5 shadow-sm">
         <p className="mb-4 text-xs font-semibold uppercase tracking-wide text-slate-400">Add-ons</p>
         <div className="flex flex-col divide-y divide-slate-100">
-          {plansData.addons.map((a) => {
-            const currentPlan = plansData.plans.find((p) => p.plan === billing?.plan);
-            const bundled = currentPlan?.bundledAddons.includes(a.key) ?? false;
-            const enabled = bundled || (billing?.enabledAddons.includes(a.key) ?? false);
-            const priceLabel = a.configured ? formatPrice(a.amountCents, a.currency, a.interval) ?? "Contact us" : "Not configured";
-            return (
-              <div key={a.key} className="flex flex-col gap-2 py-4 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <p className="text-sm font-semibold text-slate-800">{a.label}</p>
-                  <p className="text-xs text-slate-500">
-                    {bundled ? "Included in your plan" : priceLabel}
-                    {a.metered && !bundled && " (500 messages included, then $10 per 250 over)"}
-                  </p>
-                  {a.key === "sms" && enabled && smsUsage && (
-                    <p className="mt-1 text-xs text-slate-400">
-                      {smsUsage.count.toLocaleString()} sent this period
-                      {smsUsage.overageBilledCents > 0 &&
-                        ` · ${(smsUsage.overageBilledCents / 100).toLocaleString(undefined, { style: "currency", currency: "USD" })} overage billed`}
+          {plansData.addons
+            .filter((a) => !billing?.plan || addonAvailableForPlan(billing.plan, a.key as AddonKey))
+            .map((a) => {
+              const currentPlan = plansData.plans.find((p) => p.plan === billing?.plan);
+              const bundled = currentPlan?.bundledAddons.includes(a.key) ?? false;
+              const enabled = bundled || (billing?.enabledAddons.includes(a.key) ?? false);
+              const priceLabel = a.configured ? formatPrice(a.amountCents, a.currency, a.interval) ?? "Contact us" : "Not configured";
+              return (
+                <div key={a.key} className="flex flex-col gap-2 py-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-800">{a.label}</p>
+                    <p className="text-xs text-slate-500">
+                      {bundled ? "Included in your plan" : priceLabel}
+                      {a.metered && !bundled && " (500 messages included, then $10 per 250 over)"}
                     </p>
-                  )}
+                    {a.key === "sms" && enabled && smsUsage && (
+                      <p className="mt-1 text-xs text-slate-400">
+                        {smsUsage.count.toLocaleString()} sent this period
+                        {smsUsage.overageBilledCents > 0 &&
+                          ` · ${(smsUsage.overageBilledCents / 100).toLocaleString(undefined, { style: "currency", currency: "USD" })} overage billed`}
+                      </p>
+                    )}
+                  </div>
+                  <Button
+                    variant={enabled ? "outline" : "default"}
+                    size="sm"
+                    disabled={bundled || !a.configured || toggleAddon.isPending}
+                    className={enabled ? "" : "bg-brand-500 hover:bg-brand-600"}
+                    onClick={() => handleToggleAddon(a.key, !enabled)}
+                  >
+                    {bundled ? (
+                      <>
+                        <Check className="mr-1.5 h-3.5 w-3.5" />
+                        Included
+                      </>
+                    ) : enabled ? (
+                      "Remove"
+                    ) : (
+                      "Add"
+                    )}
+                  </Button>
                 </div>
-                <Button
-                  variant={enabled ? "outline" : "default"}
-                  size="sm"
-                  disabled={bundled || !a.configured || toggleAddon.isPending}
-                  className={enabled ? "" : "bg-brand-500 hover:bg-brand-600"}
-                  onClick={() => handleToggleAddon(a.key, !enabled)}
-                >
-                  {bundled ? (
-                    <>
-                      <Check className="mr-1.5 h-3.5 w-3.5" />
-                      Included
-                    </>
-                  ) : enabled ? (
-                    "Remove"
-                  ) : (
-                    "Add"
-                  )}
-                </Button>
-              </div>
-            );
-          })}
+              );
+            })}
         </div>
         {addonError && <p className="mt-3 text-sm text-red-600">{addonError}</p>}
       </div>
