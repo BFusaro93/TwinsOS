@@ -2,8 +2,9 @@
 
 import { useEffect, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Leaf, CheckCircle, XCircle } from "lucide-react";
+import { CheckCircle, XCircle } from "lucide-react";
 import Link from "next/link";
+import { BrandMark } from "@/components/shared/BrandMark";
 import { createClient } from "@/lib/supabase/client";
 import type { EmailOtpType } from "@supabase/supabase-js";
 
@@ -90,9 +91,7 @@ export default function ConfirmPage() {
   return (
     <div className="w-full max-w-sm">
       <div className="mb-8 flex flex-col items-center gap-2">
-        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-brand-500">
-          <Leaf className="h-6 w-6 text-white" />
-        </div>
+        <BrandMark variant="color" className="h-12 w-12 rounded-xl" />
         <h1 className="text-2xl font-bold text-slate-900">Confirming…</h1>
       </div>
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { use, useEffect, useState } from "react";
-import { Leaf } from "lucide-react";
+import { BrandMark } from "@/components/shared/BrandMark";
 import { createClient } from "@/lib/supabase/client";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -762,9 +762,7 @@ function Shell({
     <div className="min-h-screen bg-slate-50 py-12 px-4">
       <div className="mx-auto max-w-lg">
         <div className="mb-8 flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-md bg-brand-600">
-            <Leaf className="h-4 w-4 text-white" />
-          </div>
+          <BrandMark variant="color" className="h-8 w-8 rounded-md" />
         </div>
         <div className="rounded-xl border bg-white p-8 shadow-sm">
           {formName && (

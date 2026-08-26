@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ArrowLeft, Leaf, Calculator, PenLine, DollarSign, ShieldAlert, Snowflake } from "lucide-react";
+import { ArrowLeft, Calculator, PenLine, DollarSign, ShieldAlert, Snowflake } from "lucide-react";
+import { BrandMark } from "./BrandMark";
 import { cn } from "@/lib/utils";
 import { useUIStore, useCurrentUserStore } from "@/stores";
 import { useSettingsStore } from "@/stores/settings-store";
@@ -52,9 +53,7 @@ export function ToolsSidebar() {
             </>
           ) : (
             <>
-              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-brand-500">
-                <Leaf className="h-4 w-4 text-white" />
-              </div>
+              <BrandMark variant="reversed" className="h-7 w-7 shrink-0 rounded-md" />
               {!sidebarCollapsed && <span className="truncate text-lg font-bold text-brand-400">Tools</span>}
             </>
           )}

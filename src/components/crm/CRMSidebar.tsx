@@ -6,9 +6,9 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { useUIStore, useCurrentUserStore } from "@/stores";
 import { useSettingsStore } from "@/stores/settings-store";
+import { BrandMark } from "@/components/shared/BrandMark";
 import {
   ArrowLeft,
-  Leaf,
   LayoutDashboard,
   Users,
   UserRound,
@@ -183,9 +183,7 @@ export function CRMSidebar() {
             </>
           ) : (
             <>
-              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-brand-500">
-                <Leaf className="h-4 w-4 text-white" />
-              </div>
+              <BrandMark variant="reversed" className="h-7 w-7 shrink-0 rounded-md" />
               {!sidebarCollapsed && (
                 <span className="truncate text-lg font-bold text-brand-400">Landscapt</span>
               )}

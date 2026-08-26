@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Leaf } from "lucide-react";
+import { BrandMark } from "@/components/shared/BrandMark";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -38,9 +38,7 @@ export default function ForgotPasswordPage() {
     <div className="w-full max-w-sm">
       {/* Logo */}
       <div className="mb-8 flex flex-col items-center gap-2">
-        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-brand-500">
-          <Leaf className="h-6 w-6 text-white" />
-        </div>
+        <BrandMark variant="color" className="h-12 w-12 rounded-xl" />
         <h1 className="text-2xl font-bold text-slate-900">Reset Password</h1>
         <p className="text-sm text-slate-500">
           Enter your email and we&apos;ll send a reset link

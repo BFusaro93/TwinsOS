@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Building2, Check, CheckCircle2, Leaf, Loader2 } from "lucide-react";
+import { Building2, Check, CheckCircle2, Loader2 } from "lucide-react";
+import { BrandMark } from "@/components/shared/BrandMark";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -124,9 +125,7 @@ export default function SignupPage() {
     return (
       <div className="w-full max-w-3xl">
         <div className="mb-8 flex flex-col items-center gap-2">
-          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-brand-500">
-            <Leaf className="h-6 w-6 text-white" />
-          </div>
+          <BrandMark variant="color" className="h-12 w-12 rounded-xl" />
           <h1 className="text-2xl font-bold text-slate-900">Equipt</h1>
           <p className="text-sm text-slate-500">Choose how you&apos;d like to get started</p>
         </div>
@@ -198,9 +197,7 @@ export default function SignupPage() {
     return (
       <div className="w-full max-w-sm">
         <div className="mb-8 flex flex-col items-center gap-2">
-          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-brand-500">
-            <Leaf className="h-6 w-6 text-white" />
-          </div>
+          <BrandMark variant="color" className="h-12 w-12 rounded-xl" />
           <h1 className="text-2xl font-bold text-slate-900">Equipt</h1>
         </div>
 
@@ -229,9 +226,7 @@ export default function SignupPage() {
   return (
     <div className="w-full max-w-sm">
       <div className="mb-8 flex flex-col items-center gap-2">
-        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-brand-500">
-          <Leaf className="h-6 w-6 text-white" />
-        </div>
+        <BrandMark variant="color" className="h-12 w-12 rounded-xl" />
         <h1 className="text-2xl font-bold text-slate-900">Equipt</h1>
         <p className="text-sm text-slate-500">Create your organization</p>
       </div>

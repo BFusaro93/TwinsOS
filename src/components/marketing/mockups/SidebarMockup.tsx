@@ -11,8 +11,8 @@ import {
   Building2,
   BarChart3,
   Settings,
-  Leaf,
 } from "lucide-react";
+import { BrandMark } from "@/components/shared/BrandMark";
 
 const SECTIONS = [
   {
@@ -55,9 +55,7 @@ export function SidebarMockup() {
     <div className="flex h-[420px] text-left">
       <div className="flex w-[220px] shrink-0 flex-col bg-[#1e1e1e] py-4">
         <div className="mb-4 flex items-center gap-2 px-4">
-          <div className="flex h-6 w-6 items-center justify-center rounded-md bg-brand-500">
-            <Leaf className="h-3.5 w-3.5 text-white" />
-          </div>
+          <BrandMark variant="reversed" className="h-6 w-6 rounded-md" />
           <span className="text-[13px] font-bold text-brand-400">Equipt</span>
         </div>
         <div className="flex-1 overflow-y-auto">

@@ -6,7 +6,8 @@ import { cn } from "@/lib/utils";
 import { useUIStore, useCurrentUserStore } from "@/stores";
 import { useSettingsStore } from "@/stores/settings-store";
 import { NAV_SECTIONS } from "./nav-config";
-import { Leaf, ArrowLeft } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
+import { BrandMark } from "./BrandMark";
 
 export function AppSidebar() {
   const pathname = usePathname();
@@ -45,9 +46,7 @@ export function AppSidebar() {
             </>
           ) : (
             <>
-              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-brand-500">
-                <Leaf className="h-4 w-4 text-white" />
-              </div>
+              <BrandMark variant="reversed" className="h-7 w-7 shrink-0 rounded-md" />
               {!sidebarCollapsed && (
                 <span className="truncate text-lg font-bold text-brand-400">Equipt</span>
               )}

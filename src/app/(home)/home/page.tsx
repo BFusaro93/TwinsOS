@@ -4,7 +4,8 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import { BarChart2, Wrench, NotepadText, Leaf, ExternalLink, Settings, Camera, Sprout } from "lucide-react";
+import { BarChart2, Wrench, NotepadText, ExternalLink, Settings, Camera, Sprout } from "lucide-react";
+import { BrandMark } from "@/components/shared/BrandMark";
 import { useCurrentUserStore } from "@/stores";
 import { useSettingsStore } from "@/stores/settings-store";
 import { createClient } from "@/lib/supabase/client";
@@ -70,9 +71,7 @@ function CrewHome() {
             className="h-14 w-14 rounded-2xl object-contain shadow-md"
           />
         ) : (
-          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-500 shadow-md">
-            <Leaf className="h-7 w-7 text-white" />
-          </div>
+          <BrandMark variant="color" className="h-14 w-14 rounded-2xl shadow-md" />
         )}
         <h1 className="text-3xl font-bold tracking-tight text-slate-900">Landscapt</h1>
         <p className="text-sm text-slate-500">What would you like to do?</p>
@@ -133,9 +132,7 @@ export default function HomePage() {
             className="h-14 w-14 rounded-2xl object-contain shadow-md"
           />
         ) : (
-          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-500 shadow-md">
-            <Leaf className="h-7 w-7 text-white" />
-          </div>
+          <BrandMark variant="color" className="h-14 w-14 rounded-2xl shadow-md" />
         )}
         <h1 className="text-3xl font-bold tracking-tight text-slate-900">Landscapt</h1>
         <p className="text-sm text-slate-500">Make a section to get started</p>
