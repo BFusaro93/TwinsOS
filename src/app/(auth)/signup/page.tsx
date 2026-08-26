@@ -126,7 +126,7 @@ export default function SignupPage() {
       <div className="w-full max-w-3xl">
         <div className="mb-8 flex flex-col items-center gap-2">
           <BrandMark variant="color" className="h-12 w-12 rounded-xl" />
-          <h1 className="text-2xl font-bold text-slate-900">Equipt</h1>
+          <h1 className="text-2xl font-bold text-slate-900">Landscapt</h1>
           <p className="text-sm text-slate-500">Choose how you&apos;d like to get started</p>
         </div>
 
@@ -198,7 +198,7 @@ export default function SignupPage() {
       <div className="w-full max-w-sm">
         <div className="mb-8 flex flex-col items-center gap-2">
           <BrandMark variant="color" className="h-12 w-12 rounded-xl" />
-          <h1 className="text-2xl font-bold text-slate-900">Equipt</h1>
+          <h1 className="text-2xl font-bold text-slate-900">Landscapt</h1>
         </div>
 
         <div className="rounded-xl border bg-white p-8 shadow-sm text-center flex flex-col items-center gap-4">
@@ -227,7 +227,7 @@ export default function SignupPage() {
     <div className="w-full max-w-sm">
       <div className="mb-8 flex flex-col items-center gap-2">
         <BrandMark variant="color" className="h-12 w-12 rounded-xl" />
-        <h1 className="text-2xl font-bold text-slate-900">Equipt</h1>
+        <h1 className="text-2xl font-bold text-slate-900">Landscapt</h1>
         <p className="text-sm text-slate-500">Create your organization</p>
       </div>
 

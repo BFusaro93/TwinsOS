@@ -39,7 +39,8 @@ export default function ForgotPasswordPage() {
       {/* Logo */}
       <div className="mb-8 flex flex-col items-center gap-2">
         <BrandMark variant="color" className="h-12 w-12 rounded-xl" />
-        <h1 className="text-2xl font-bold text-slate-900">Reset Password</h1>
+        <h1 className="text-2xl font-bold text-slate-900">Landscapt</h1>
+        <p className="text-sm font-medium text-slate-700">Reset Password</p>
         <p className="text-sm text-slate-500">
           Enter your email and we&apos;ll send a reset link
         </p>

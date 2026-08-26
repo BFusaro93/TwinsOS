@@ -143,7 +143,8 @@ export default function ResetPasswordPage() {
       {/* Logo */}
       <div className="mb-8 flex flex-col items-center gap-2">
         <BrandMark variant="color" className="h-12 w-12 rounded-xl" />
-        <h1 className="text-2xl font-bold text-slate-900">Set Your Password</h1>
+        <h1 className="text-2xl font-bold text-slate-900">Landscapt</h1>
+        <p className="text-sm font-medium text-slate-700">Set Your Password</p>
         <p className="text-sm text-slate-500">Choose a password to activate your account</p>
       </div>
 
