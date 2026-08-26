@@ -121,6 +121,46 @@ export default function FeaturesPage() {
         </p>
       </div>
 
+      {/* PRODUCT PICKER */}
+      <div className="mx-auto max-w-[1160px] px-6 pt-16 sm:px-12">
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+          <Link
+            href="/features/landscapt"
+            className="group rounded-[10px] border border-[#e6e6e0] bg-white p-7 transition-shadow hover:shadow-lg"
+          >
+            <div className="mb-3 flex items-center gap-2">
+              <span className="inline-block h-[11px] w-[11px] rounded-[3px] bg-[#60ab45]" />
+              <span className="font-[family-name:var(--font-heading)] text-lg font-extrabold text-[#005642]">
+                Landscapt
+              </span>
+            </div>
+            <p className="mb-4 text-[14px] leading-relaxed text-[#5a5a56]">
+              CRM &amp; field service — estimating, dispatch, billing, and client relationships.
+            </p>
+            <span className="text-[13px] font-semibold text-[#60ab45] group-hover:underline">
+              Explore Landscapt →
+            </span>
+          </Link>
+          <Link
+            href="/features/equipt"
+            className="group rounded-[10px] border border-[#e6e6e0] bg-white p-7 transition-shadow hover:shadow-lg"
+          >
+            <div className="mb-3 flex items-center gap-2">
+              <span className="inline-block h-[11px] w-[11px] rounded-full bg-[#2aa9e0]" />
+              <span className="font-[family-name:var(--font-heading)] text-lg font-extrabold text-[#005642]">
+                Equipt
+              </span>
+            </div>
+            <p className="mb-4 text-[14px] leading-relaxed text-[#5a5a56]">
+              Asset management &amp; maintenance — work orders, PM schedules, and purchasing.
+            </p>
+            <span className="text-[13px] font-semibold text-[#2aa9e0] group-hover:underline">
+              Explore Equipt →
+            </span>
+          </Link>
+        </div>
+      </div>
+
       <FeaturesShowcase />
 
       {/* OFFICE + FIELD */}

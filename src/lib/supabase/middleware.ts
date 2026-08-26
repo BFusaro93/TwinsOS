@@ -55,6 +55,7 @@ export async function updateSession(request: NextRequest) {
     pathname === "/" ||
     pathname === "/pricing" || // public marketing pages
     pathname === "/features" ||
+    pathname.startsWith("/features/") ||
     pathname === "/integrations" ||
     pathname === "/contact" ||
     pathname === "/help";
