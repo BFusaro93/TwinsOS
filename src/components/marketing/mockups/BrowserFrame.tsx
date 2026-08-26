@@ -21,7 +21,7 @@ export function BrowserFrame({
           </span>
         ))}
       </div>
-      <div className="max-h-[460px] overflow-hidden bg-white">{children}</div>
+      <div className="max-h-[460px] overflow-x-auto overflow-y-hidden bg-white">{children}</div>
     </div>
   );
 }
