@@ -115,7 +115,7 @@ export function LandingPage() {
       </div>
 
       {/* TWO SYSTEMS, ONE LOGIN */}
-      <div id="product" className="mx-auto max-w-[1160px] px-6 py-24 sm:px-12">
+      <div id="product" className="mx-auto max-w-[1160px] px-6 pt-24 pb-8 sm:px-12">
         <Reveal className="mb-14 text-center">
           <div className="mb-3 text-[13px] font-bold uppercase tracking-[0.1em] text-[#60ab45]">
             Two systems, one login

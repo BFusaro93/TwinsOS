@@ -8,18 +8,19 @@ const LINKS = [
   { href: "/features", label: "Product" },
   { href: "/pricing", label: "Pricing" },
   { href: "/integrations", label: "Integrations" },
+  { href: "/help", label: "Support" },
 ];
 
 export function MarketingNav() {
   return (
     <div className="flex items-center justify-between border-b border-[#eceae3] bg-[#fbfbf8] px-6 py-5 sm:px-12">
       <Link href="/" className="flex items-center gap-2.5">
-        <BrandMark />
-        <span className="font-[family-name:var(--font-heading)] text-xl font-extrabold tracking-tight text-[#005642]">
+        <BrandMark size={38} />
+        <span className="font-[family-name:var(--font-heading)] text-2xl font-extrabold tracking-tight text-[#005642]">
           landscapt
         </span>
       </Link>
-      <div className="hidden items-center gap-9 text-sm font-medium text-[#3a3a36] md:flex">
+      <div className="hidden items-center gap-6 text-sm font-medium text-[#3a3a36] lg:flex">
         {LINKS.map((l) => (
           <Link key={l.href} href={l.href} className="hover:text-[#005642]">
             {l.label}
@@ -39,7 +40,7 @@ export function MarketingNav() {
           <Link href="/signup">Start free trial</Link>
         </Button>
       </div>
-      <div className="flex items-center gap-2 md:hidden">
+      <div className="flex items-center gap-2 lg:hidden">
         <a
           href={DEMO_URL}
           className="flex items-center gap-1.5 rounded-full border border-[#005642] px-3 py-1.5 text-[12.5px] font-semibold text-[#005642]"

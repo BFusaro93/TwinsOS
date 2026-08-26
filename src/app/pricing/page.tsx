@@ -28,7 +28,7 @@ export default function PricingPage() {
       <div className="bg-[#005642] px-6 py-16 text-center sm:px-12">
         <div className="mb-3 text-[13px] font-bold uppercase tracking-[0.1em] text-[#b7d433]">Pricing</div>
         <h1 className="font-[family-name:var(--font-heading)] text-4xl font-extrabold text-white sm:text-5xl">
-          One flat rate. Every plan, one login.
+          Plans built to grow with your crew.
         </h1>
         <p className="mx-auto mt-4 max-w-xl text-base text-[#cfe6d8]">
           30-day free trial on any plan. No credit card required to start.

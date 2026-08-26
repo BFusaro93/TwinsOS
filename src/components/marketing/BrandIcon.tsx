@@ -27,7 +27,15 @@ export function BrandIcon({
   style?: React.CSSProperties;
 }) {
   return (
-    <svg role="img" viewBox="0 0 24 24" className={className} style={style} fill="currentColor">
+    <svg
+      role="img"
+      viewBox="0 0 24 24"
+      width={24}
+      height={24}
+      className={className}
+      style={style}
+      fill="currentColor"
+    >
       <path d={PATHS[slug]} />
     </svg>
   );
