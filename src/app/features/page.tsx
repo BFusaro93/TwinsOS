@@ -90,7 +90,7 @@ const CATEGORIES = [
     sub: "Shared",
     items: [
       { icon: Zap, title: "Automations", body: "One trigger → action engine spans both products — job completed, part low stock, PM due — firing emails, texts, or work orders." },
-      { icon: PieChart, title: "Reporting & Custom Dashboards", body: "About 100 built-in reports across every module, plus a drag-and-drop dashboard and analysis builder for everything else." },
+      { icon: PieChart, title: "Reporting & Custom Dashboards", body: "About 100 built-in reports — including job costing, revenue, and receivables — plus a drag-and-drop dashboard and analysis builder for everything else." },
     ],
   },
 ];
