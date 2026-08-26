@@ -55,7 +55,9 @@ export async function updateSession(request: NextRequest) {
     pathname === "/" ||
     pathname === "/pricing" || // public marketing pages
     pathname === "/features" ||
-    pathname === "/integrations";
+    pathname === "/integrations" ||
+    pathname === "/contact" ||
+    pathname === "/help";
 
   if (!user && !isPublicRoute) {
     const loginUrl = request.nextUrl.clone();
