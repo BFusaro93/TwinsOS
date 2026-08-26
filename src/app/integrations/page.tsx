@@ -51,8 +51,8 @@ const INTEGRATIONS: IntegrationEntry[] = [
     brand: "quickbooks",
     brandColor: "#2CA01C",
     name: "QuickBooks Online",
-    status: "soon",
-    body: "Two-way sync for customers, invoices, and payments so your books stay current without double entry.",
+    status: "live",
+    body: "Automatic one-way sync of customers, invoices, and payments to QuickBooks so your books stay current without double entry.",
   },
   {
     brand: "zapier",
@@ -95,9 +95,9 @@ const INTEGRATIONS: IntegrationEntry[] = [
   },
   {
     icon: Code2,
-    name: "API Access",
+    name: "API Access & MCP",
     status: "addon",
-    body: "A REST API for custom integrations and internal tooling — build whatever your workflow needs on top of your own data.",
+    body: "A REST API for custom integrations and internal tooling, plus an MCP server so Claude and other AI agents can work with your data directly — same API key, same scopes.",
   },
   {
     icon: Webhook,
