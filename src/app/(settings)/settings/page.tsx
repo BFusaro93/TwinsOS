@@ -76,9 +76,11 @@ function MasterAccountSettings() {
           </TabsContent>
 
           <TabsContent value="integrations" className="mt-0">
-            <div className="flex max-w-2xl flex-col gap-6">
-              <ZapierIntegrationCard />
-              <ApiKeysCard />
+            <div className="grid max-w-5xl grid-cols-1 items-start gap-6 lg:grid-cols-2">
+              <div className="flex flex-col gap-6">
+                <ZapierIntegrationCard />
+                <ApiKeysCard />
+              </div>
               <HomeShortcutsCard />
             </div>
           </TabsContent>
