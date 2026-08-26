@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { getStripe, isStripeConfigured } from "@/lib/stripe/server";
-import { isAddonKey, getPriceIdForAddon } from "@/lib/stripe/addons";
+import { isAddonKey, getPriceIdForAddon, addonAvailableForPlan } from "@/lib/stripe/addons";
 import { planIncludesAddon, type BundledAddonKey } from "@/lib/stripe/plans";
 import { chargeIdempotencyKey } from "@/lib/stripe/idempotency";
 
@@ -43,6 +43,13 @@ export async function POST(request: Request) {
     .eq("id", profile.org_id)
     .single();
   if (!org) return NextResponse.json({ error: "Organization not found" }, { status: 404 });
+
+  if (enabled && !addonAvailableForPlan(org.plan, addon)) {
+    return NextResponse.json(
+      { error: `The "${addon}" add-on isn't applicable to your current plan.` },
+      { status: 422 }
+    );
+  }
 
   const serviceClient = createServiceClient();
 
