@@ -1217,7 +1217,11 @@ function QuickBooksConnectSection() {
   }
 
   if (!status?.configured) {
-    return <p className="p-4 text-sm text-slate-400">QuickBooks isn&apos;t configured for this environment yet.</p>;
+    return (
+      <p className="p-4 text-sm text-slate-400">
+        QuickBooks sync is coming soon — this environment isn&apos;t configured yet.
+      </p>
+    );
   }
 
   async function handleDisconnect() {
@@ -1741,7 +1745,15 @@ function QuickBooksIntegrationCard() {
     <IntegrationCard
       title="QuickBooks Online"
       description="Push invoices and payments to QuickBooks automatically — one-way sync, nothing is pulled back."
-      status={isLoading ? "not_connected" : status?.connected ? "connected" : "not_connected"}
+      status={
+        isLoading
+          ? "not_connected"
+          : status?.connected
+            ? "connected"
+            : status?.configured
+              ? "not_connected"
+              : "coming_soon"
+      }
     >
       <div className="-mx-6 -my-4">
         <QuickBooksConnectSection />
