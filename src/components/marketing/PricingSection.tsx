@@ -37,7 +37,7 @@ const MODULE_LABEL: Record<string, string> = {
   equipt: "Equipt",
 };
 
-export function PricingSection() {
+export function PricingSection({ showHeader = true }: { showHeader?: boolean }) {
   const [plans, setPlans] = useState<BillingPlanInfo[]>(FALLBACK_PLANS);
 
   useEffect(() => {
@@ -54,15 +54,17 @@ export function PricingSection() {
 
   return (
     <div id="pricing" className="mx-auto max-w-[1160px] px-6 py-24 sm:px-12">
-      <div className="mb-14 text-center">
-        <div className="mb-3 text-[13px] font-bold uppercase tracking-[0.1em] text-brand-600">Pricing</div>
-        <h2 className="font-[family-name:var(--font-heading)] text-4xl font-extrabold text-[#005642]">
-          One flat monthly rate. Every plan starts with a 30-day free trial.
-        </h2>
-        <p className="mx-auto mt-4 max-w-xl text-[15px] text-slate-500">
-          No credit card required to try it. Field crew logins are unlimited and never count toward your seats.
-        </p>
-      </div>
+      {showHeader && (
+        <div className="mb-14 text-center">
+          <div className="mb-3 text-[13px] font-bold uppercase tracking-[0.1em] text-brand-600">Pricing</div>
+          <h2 className="font-[family-name:var(--font-heading)] text-4xl font-extrabold text-[#005642]">
+            One flat monthly rate. Every plan starts with a 30-day free trial.
+          </h2>
+          <p className="mx-auto mt-4 max-w-xl text-[15px] text-slate-500">
+            No credit card required to try it. Field crew logins are unlimited and never count toward your seats.
+          </p>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
         {plans.map((p) => {

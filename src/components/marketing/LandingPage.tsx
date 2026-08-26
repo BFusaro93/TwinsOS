@@ -12,10 +12,11 @@ import {
   Sparkles,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { BrandMark } from "@/components/marketing/BrandMark";
 import { PricingSection } from "@/components/marketing/PricingSection";
 import { ProductShowcase } from "@/components/marketing/ProductShowcase";
 import { Reveal } from "@/components/marketing/Reveal";
+import { MarketingNav } from "@/components/marketing/MarketingNav";
+import { MarketingFooter } from "@/components/marketing/MarketingFooter";
 import { BrowserFrame } from "@/components/marketing/mockups/BrowserFrame";
 import { DispatchBoardMockup } from "@/components/marketing/mockups/DispatchBoardMockup";
 
@@ -74,37 +75,18 @@ const cmmsFeatures = [
 export function LandingPage() {
   return (
     <div className={`${heading.variable} bg-[#fbfbf8] text-[#0a0a0a]`}>
-      {/* NAV */}
-      <div className="flex items-center justify-between border-b border-[#eceae3] bg-[#fbfbf8] px-6 py-5 sm:px-12">
-        <div className="flex items-center gap-2.5">
-          <BrandMark />
-          <span className="font-[family-name:var(--font-heading)] text-xl font-extrabold tracking-tight text-[#005642]">
-            landscapt
-          </span>
-        </div>
-        <div className="hidden items-center gap-9 text-sm font-medium text-[#3a3a36] md:flex">
-          <a href="#product" className="hover:text-[#005642]">Product</a>
-          <a href="#pricing" className="hover:text-[#005642]">Pricing</a>
-          <Link href="/login" className="text-[#005642] hover:underline">Log in</Link>
-          <Button asChild className="bg-[#60ab45] hover:bg-[#4a8a33]">
-            <Link href="/signup">Start free trial</Link>
-          </Button>
-        </div>
-        <Button asChild size="sm" className="bg-[#60ab45] hover:bg-[#4a8a33] md:hidden">
-          <Link href="/signup">Start trial</Link>
-        </Button>
-      </div>
+      <MarketingNav />
 
       {/* HERO */}
       <div className="bg-[#005642] px-6 py-24 text-center sm:px-12 sm:py-28">
         <div className="mx-auto max-w-[760px]">
           <div className="mb-7 inline-block rounded-full bg-[#b7d43326] px-3.5 py-1.5 text-[13px] font-bold tracking-wide text-[#b7d433]">
-            BUILT FOR LANDSCAPE &amp; SNOW OPERATIONS
+            BUILT FOR LANDSCAPERS, BY LANDSCAPERS
           </div>
           <h1 className="font-[family-name:var(--font-heading)] text-4xl font-extrabold leading-[1.08] tracking-tight text-white sm:text-6xl">
             One industry.
             <br />
-            One system. One login.
+            Two systems. One login.
           </h1>
           <p className="mx-auto mb-10 mt-6 max-w-[540px] text-lg leading-relaxed text-[#cfe6d8]">
             Landscapt runs estimating, dispatch, billing, and client relationships. Equipt runs asset
@@ -120,7 +102,7 @@ export function LandingPage() {
               variant="outline"
               className="border-[1.5px] border-white/40 bg-transparent text-white hover:bg-white/10 hover:text-white"
             >
-              <a href="#product">See what&apos;s included</a>
+              <Link href="/features">See what&apos;s included</Link>
             </Button>
           </div>
         </div>
@@ -204,6 +186,11 @@ export function LandingPage() {
       {/* PRICING */}
       <Reveal>
         <PricingSection />
+        <div className="-mt-10 pb-16 text-center">
+          <Link href="/pricing" className="text-sm font-semibold text-[#005642] hover:underline">
+            Compare full plan details &amp; add-ons →
+          </Link>
+        </div>
       </Reveal>
 
       {/* CTA */}
@@ -219,20 +206,7 @@ export function LandingPage() {
         </Reveal>
       </div>
 
-      {/* FOOTER */}
-      <div className="flex flex-col items-center justify-between gap-4 border-t border-[#eceae3] px-6 py-10 text-[13px] text-[#8a8a84] sm:flex-row sm:px-12">
-        <div className="flex items-center gap-2">
-          <BrandMark size={22} />
-          <span className="font-[family-name:var(--font-heading)] font-bold text-[#005642]">landscapt</span>
-        </div>
-        <div className="flex gap-7">
-          <a href="#product" className="hover:text-[#005642]">Product</a>
-          <a href="#pricing" className="hover:text-[#005642]">Pricing</a>
-          <Link href="/legal/privacy-policy" className="hover:text-[#005642]">Privacy</Link>
-          <Link href="/login" className="hover:text-[#005642]">Log in</Link>
-        </div>
-        <div>© {new Date().getFullYear()} Landscapt</div>
-      </div>
+      <MarketingFooter />
     </div>
   );
 }

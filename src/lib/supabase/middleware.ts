@@ -52,7 +52,10 @@ export async function updateSession(request: NextRequest) {
     pathname.startsWith("/portal/login") || // client portal login
     pathname.startsWith("/portal/register") || // client portal registration
     pathname.startsWith("/api/") || // all API routes handle their own auth
-    pathname === "/";
+    pathname === "/" ||
+    pathname === "/pricing" || // public marketing pages
+    pathname === "/features" ||
+    pathname === "/integrations";
 
   if (!user && !isPublicRoute) {
     const loginUrl = request.nextUrl.clone();
