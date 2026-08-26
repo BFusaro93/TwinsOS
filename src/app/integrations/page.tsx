@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Plus_Jakarta_Sans } from "next/font/google";
-import { Landmark, Zap, CreditCard, MessageSquareText, Map, Truck, FileSignature, Code2, Webhook } from "lucide-react";
+import { MessageSquareText, Truck, FileSignature, Code2, Webhook } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { MarketingNav } from "@/components/marketing/MarketingNav";
 import { MarketingFooter } from "@/components/marketing/MarketingFooter";
 import { Reveal } from "@/components/marketing/Reveal";
+import { BrandIcon, type BrandSlug } from "@/components/marketing/BrandIcon";
 
 const heading = Plus_Jakarta_Sans({
   subsets: ["latin"],
@@ -20,6 +21,10 @@ export const metadata: Metadata = {
 
 type Status = "live" | "addon" | "soon";
 
+function hasBrand(e: IntegrationEntry): e is Extract<IntegrationEntry, { brand: BrandSlug }> {
+  return e.brand != null;
+}
+
 const STATUS_LABEL: Record<Status, string> = {
   live: "Included",
   addon: "Add-on",
@@ -32,26 +37,33 @@ const STATUS_CLS: Record<Status, string> = {
   soon: "border-slate-200 bg-slate-100 text-slate-500",
 };
 
-const INTEGRATIONS: {
-  icon: React.ComponentType<{ className?: string }>;
+type IntegrationEntry = {
   name: string;
   status: Status;
   body: string;
-}[] = [
+} & (
+  | { icon: React.ComponentType<{ className?: string }>; brand?: never; brandColor?: never }
+  | { icon?: never; brand: BrandSlug; brandColor: string }
+);
+
+const INTEGRATIONS: IntegrationEntry[] = [
   {
-    icon: Landmark,
+    brand: "quickbooks",
+    brandColor: "#2CA01C",
     name: "QuickBooks Online",
     status: "soon",
     body: "Two-way sync for customers, invoices, and payments so your books stay current without double entry.",
   },
   {
-    icon: Zap,
+    brand: "zapier",
+    brandColor: "#FF4A00",
     name: "Zapier",
     status: "live",
     body: "Connect clients, tickets, work orders, requisitions, and jobs to 6,000+ apps — triggers and actions, no add-on required.",
   },
   {
-    icon: CreditCard,
+    brand: "stripe",
+    brandColor: "#635BFF",
     name: "Stripe",
     status: "live",
     body: "Card and ACH payment processing built into every invoice, plus saved payment methods and optional autopay.",
@@ -63,7 +75,8 @@ const INTEGRATIONS: {
     body: "SMS for automations, appointment reminders, and two-way client texting, with TCPA opt-in built in.",
   },
   {
-    icon: Map,
+    brand: "googlemaps",
+    brandColor: "#4285F4",
     name: "Google Maps",
     status: "live",
     body: "Aerial property measurement, automatic job geocoding, and crew route optimization.",
@@ -118,8 +131,15 @@ export default function IntegrationsPage() {
               className="rounded-md border border-[#e6e6e0] bg-white p-6 transition-shadow hover:shadow-lg"
             >
               <div className="mb-4 flex items-center justify-between">
-                <div className="flex h-9 w-9 items-center justify-center rounded-md bg-[#eef4e2]">
-                  <it.icon className="h-4.5 w-4.5 text-[#60ab45]" />
+                <div
+                  className="flex h-9 w-9 items-center justify-center rounded-md"
+                  style={{ backgroundColor: hasBrand(it) ? `${it.brandColor}14` : "#eef4e2" }}
+                >
+                  {hasBrand(it) ? (
+                    <BrandIcon slug={it.brand} className="h-4.5 w-4.5" style={{ color: it.brandColor }} />
+                  ) : (
+                    <it.icon className="h-4.5 w-4.5 text-[#60ab45]" />
+                  )}
                 </div>
                 <span className={`rounded border px-1.5 py-0.5 text-[10px] font-semibold ${STATUS_CLS[it.status]}`}>
                   {STATUS_LABEL[it.status]}
