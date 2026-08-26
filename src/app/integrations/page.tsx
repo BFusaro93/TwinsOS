@@ -41,8 +41,8 @@ const INTEGRATIONS: {
   {
     icon: Landmark,
     name: "QuickBooks Online",
-    status: "soon",
-    body: "Two-way sync for customers, invoices, and payments so your books stay current without double entry.",
+    status: "live",
+    body: "Automatic one-way sync of customers, invoices, and payments to QuickBooks so your books stay current without double entry.",
   },
   {
     icon: Zap,

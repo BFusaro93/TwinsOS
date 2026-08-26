@@ -1734,16 +1734,29 @@ function GoogleMapsCard() {
   );
 }
 
+function QuickBooksIntegrationCard() {
+  const { data: status, isLoading } = useQuickBooksStatus();
+
+  return (
+    <IntegrationCard
+      title="QuickBooks Online"
+      description="Push invoices and payments to QuickBooks automatically — one-way sync, nothing is pulled back."
+      status={isLoading ? "not_connected" : status?.connected ? "connected" : "not_connected"}
+    >
+      <div className="-mx-6 -my-4">
+        <QuickBooksConnectSection />
+        <QuickBooksSyncStatusSection />
+      </div>
+    </IntegrationCard>
+  );
+}
+
 function IntegrationsTab() {
   return (
     <div className="space-y-4">
 
       {/* QuickBooks */}
-      <IntegrationCard
-        title="QuickBooks Online"
-        description="Sync invoices, payments, and clients with QuickBooks for seamless bookkeeping."
-        status="coming_soon"
-      />
+      <QuickBooksIntegrationCard />
 
       {/* DocuSign */}
       <IntegrationCard
