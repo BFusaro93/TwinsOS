@@ -8,10 +8,10 @@ export type DeepDiveItem = {
 
 export function FeatureDeepDive({ items, accent }: { items: DeepDiveItem[]; accent: string }) {
   return (
-    <div className="mx-auto max-w-[820px] px-6 py-4 sm:px-12">
+    <div className="mx-auto max-w-[820px] px-6 pt-4 pb-24 sm:px-12">
       <div className="flex flex-col divide-y divide-[#eceae3]">
         {items.map((f, i) => (
-          <Reveal key={f.title} delayMs={Math.min(i, 4) * 60} className="flex gap-5 py-8 first:pt-0 last:pb-0">
+          <Reveal key={f.title} delayMs={Math.min(i, 4) * 60} className="flex gap-5 py-8 first:pt-0">
             <div
               className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md"
               style={{ backgroundColor: `${accent}1a` }}

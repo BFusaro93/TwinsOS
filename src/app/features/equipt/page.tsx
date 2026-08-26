@@ -9,6 +9,7 @@ import {
   Boxes,
   ClipboardCheck,
   Building2,
+  Zap,
   PieChart,
   Code2,
 } from "lucide-react";
@@ -65,6 +66,11 @@ const ITEMS: DeepDiveItem[] = [
     icon: Building2,
     title: "Vendor Management",
     body: "One vendor list is shared across purchasing and maintenance — a vendor who supplies both parts and services shows up once, not twice, with one history to review.",
+  },
+  {
+    icon: Zap,
+    title: "Automations",
+    body: "Trigger → action rules fire on their own — a meter crossing a threshold creates a work order, a part falling below its reorder point creates a requisition, an upcoming PM notifies the assigned technician. After a triggered work order completes, the threshold automatically advances by the service interval.",
   },
   {
     icon: PieChart,
