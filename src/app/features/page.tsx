@@ -22,6 +22,10 @@ import {
   ClipboardCheck,
   Building2,
   Code2,
+  Truck,
+  MessageSquare,
+  Shield,
+  UserCog,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { MarketingNav } from "@/components/marketing/MarketingNav";
@@ -30,6 +34,8 @@ import { Reveal } from "@/components/marketing/Reveal";
 import { FeaturesShowcase } from "@/components/marketing/FeaturesShowcase";
 import { SidebarMockup } from "@/components/marketing/mockups/SidebarMockup";
 import { MobileCrewMockup } from "@/components/marketing/mockups/MobileCrewMockup";
+import { ClientPortalMockup } from "@/components/marketing/mockups/ClientPortalMockup";
+import { DashboardBuilderMockup } from "@/components/marketing/mockups/DashboardBuilderMockup";
 
 const heading = Plus_Jakarta_Sans({
   subsets: ["latin"],
@@ -83,6 +89,8 @@ const CATEGORIES = [
       { icon: ClipboardCheck, title: "Purchasing & Approvals", body: "Requisitions route through a configurable approval chain before becoming a formal PO to a vendor." },
       { icon: Building2, title: "Vendor Management", body: "One vendor list shared across purchasing and maintenance — no duplicate entry between products." },
       { icon: Code2, title: "API Access", body: "Programmatic access to your data for custom integrations and internal tooling." },
+      { icon: Truck, title: "Asset & Vehicle Registry", body: "A full equipment and vehicle registry with service history — the backbone every work order, PM schedule, and meter ties back to." },
+      { icon: MessageSquare, title: "Maintenance Requests", body: "Let techs and requestors flag issues without creating a work order directly — requests route through approval before becoming one." },
     ],
   },
   {
@@ -91,6 +99,8 @@ const CATEGORIES = [
     items: [
       { icon: Zap, title: "Automations", body: "One trigger → action engine spans both products — job completed, part low stock, PM due — firing emails, texts, or work orders." },
       { icon: PieChart, title: "Reporting & Custom Dashboards", body: "About 100 built-in reports — including job costing, revenue, and receivables — plus a drag-and-drop dashboard and analysis builder for everything else." },
+      { icon: UserCog, title: "Roles & Permissions", body: "Six role types — Admin, Manager, Purchaser, Technician, Requestor, Viewer — control exactly what each person can see and do." },
+      { icon: Shield, title: "Data Isolation & Security", body: "Every record is scoped to your organization at the database level — queries that don't match your org simply return nothing." },
     ],
   },
 ];
@@ -155,7 +165,7 @@ export default function FeaturesPage() {
 
       {/* CATEGORY GRID */}
       <Reveal>
-        <div className="mx-auto max-w-[1160px] px-6 pb-24 sm:px-12">
+        <div className="mx-auto max-w-[1160px] px-6 pb-16 sm:px-12">
           <div className="mb-12 text-center">
             <div className="mb-3 text-[13px] font-bold uppercase tracking-[0.1em] text-[#60ab45]">
               More in the platform
@@ -195,6 +205,46 @@ export default function FeaturesPage() {
                 </div>
               </div>
             ))}
+          </div>
+        </div>
+      </Reveal>
+
+      {/* CLIENT-FACING & INSIGHTS */}
+      <Reveal>
+        <div className="mx-auto max-w-[1160px] px-6 pb-24 sm:px-12">
+          <div className="mb-12 text-center">
+            <div className="mb-3 text-[13px] font-bold uppercase tracking-[0.1em] text-[#60ab45]">
+              Client-facing &amp; insights
+            </div>
+            <h2 className="font-[family-name:var(--font-heading)] text-4xl font-extrabold text-[#005642]">
+              It&apos;s not just for your team.
+            </h2>
+          </div>
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+            <div className="overflow-hidden rounded-[10px] border border-[#e6e6e0] bg-white shadow-sm">
+              <ClientPortalMockup />
+              <div className="border-t border-[#e6e6e0] p-6">
+                <div className="font-[family-name:var(--font-heading)] mb-2 text-base font-bold text-[#0a0a0a]">
+                  What your clients see
+                </div>
+                <div className="text-[13.5px] leading-relaxed text-[#5a5a56]">
+                  Clients pay invoices, accept or push back on estimates, and check job status themselves —
+                  without a phone call.
+                </div>
+              </div>
+            </div>
+            <div className="overflow-hidden rounded-[10px] border border-[#e6e6e0] bg-white shadow-sm">
+              <DashboardBuilderMockup />
+              <div className="border-t border-[#e6e6e0] p-6">
+                <div className="font-[family-name:var(--font-heading)] mb-2 text-base font-bold text-[#0a0a0a]">
+                  Build the dashboard your business needs
+                </div>
+                <div className="text-[13.5px] leading-relaxed text-[#5a5a56]">
+                  Drag and drop charts, KPI tiles, and tables from any report into a dashboard that&apos;s actually
+                  yours — not whatever the vendor decided to ship.
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </Reveal>
