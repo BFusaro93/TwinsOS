@@ -82,9 +82,9 @@ const INTEGRATIONS: {
   },
   {
     icon: Code2,
-    name: "API Access",
+    name: "API Access & MCP",
     status: "addon",
-    body: "A REST API for custom integrations and internal tooling — build whatever your workflow needs on top of your own data.",
+    body: "A REST API for custom integrations and internal tooling, plus an MCP server so Claude and other AI agents can work with your data directly — same API key, same scopes.",
   },
   {
     icon: Webhook,
