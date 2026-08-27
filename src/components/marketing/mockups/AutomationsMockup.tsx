@@ -36,7 +36,7 @@ export function AutomationsMockup() {
     <div className="p-4 text-left">
       <div className="mb-3 flex items-center justify-between">
         <div className="text-[13px] font-bold text-[#0a0a0a]">Automations</div>
-        <span className="text-[10.5px] text-slate-400">3 of 4 active</span>
+        <span className="text-[10.5px] text-slate-400">3 enabled &middot; unlimited rules</span>
       </div>
       <div className="flex flex-col gap-2">
         {RULES.map((r) => (

@@ -38,6 +38,13 @@ function bundledOn(key: AddonKey): string[] {
   return BILLABLE_PLANS.filter((p) => (p.bundledAddons as readonly string[]).includes(key)).map((p) => p.label);
 }
 
+const MODULE_LABEL: Record<string, string> = { landscapt: "Landscapt", equipt: "Equipt" };
+
+function moduleTag(modules: string[]): string {
+  if (modules.length > 1) return "Both products";
+  return `${MODULE_LABEL[modules[0]] ?? modules[0]} only`;
+}
+
 const FALLBACK: BillingAddonInfo[] = ADDON_CATALOG.map((a) => ({
   key: a.key,
   label: a.label,
@@ -47,6 +54,7 @@ const FALLBACK: BillingAddonInfo[] = ADDON_CATALOG.map((a) => ({
   currency: null,
   interval: null,
   metered: a.metered,
+  modules: a.modules as string[],
 }));
 
 export function AddonsSection() {
@@ -92,7 +100,10 @@ export function AddonsSection() {
                   {a.metered ? <span className="ml-0.5 text-[10px] font-medium text-slate-400">metered</span> : null}
                 </span>
               </div>
-              <p className="text-[13.5px] leading-relaxed text-[#5a5a56]">{DESCRIPTIONS[a.key as AddonKey]}</p>
+              <span className="mb-2 inline-block rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                {moduleTag(a.modules)}
+              </span>
+              <p className="mt-2 text-[13.5px] leading-relaxed text-[#5a5a56]">{DESCRIPTIONS[a.key as AddonKey]}</p>
               {bundled.length > 0 && (
                 <p className="mt-3 text-[11.5px] font-medium text-[#60ab45]">
                   Included free on {bundled.join(" & ")}

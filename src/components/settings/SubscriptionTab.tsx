@@ -19,6 +19,7 @@ import {
 import type { BillablePlan } from "@/lib/stripe/plans";
 import { getHighlightsForPlan } from "@/lib/stripe/plan-features";
 import { isBillablePlan } from "@/lib/stripe/plans";
+import { addonAppliesToModules, type AddonKey } from "@/lib/stripe/addons";
 import { PlanComparisonTable } from "./PlanComparisonTable";
 
 const ACTIVE_STATUSES = new Set(["trialing", "active", "past_due"]);
@@ -139,6 +140,9 @@ export function SubscriptionTab() {
     );
   }
 
+  const currentPlan = plansData.plans.find((p) => p.plan === billing?.plan);
+  const currentPlanModules = currentPlan?.modules ?? ["landscapt", "equipt"];
+
   return (
     <div className="flex flex-col gap-4">
       {/* Current plan */}
@@ -251,8 +255,9 @@ export function SubscriptionTab() {
       <div className="rounded-lg border bg-white p-5 shadow-sm">
         <p className="mb-4 text-xs font-semibold uppercase tracking-wide text-slate-400">Add-ons</p>
         <div className="flex flex-col divide-y divide-slate-100">
-          {plansData.addons.map((a) => {
-            const currentPlan = plansData.plans.find((p) => p.plan === billing?.plan);
+          {plansData.addons
+            .filter((a) => addonAppliesToModules(a.key as AddonKey, currentPlanModules))
+            .map((a) => {
             const bundled = currentPlan?.bundledAddons.includes(a.key) ?? false;
             const enabled = bundled || (billing?.enabledAddons.includes(a.key) ?? false);
             const priceLabel = a.configured ? formatPrice(a.amountCents, a.currency, a.interval) ?? "Contact us" : "Not configured";

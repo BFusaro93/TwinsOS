@@ -29,6 +29,7 @@ export interface BillingAddonInfo {
   currency: string | null;
   interval: string | null;
   metered: boolean;
+  modules: string[];
 }
 
 // Public endpoint — no auth required. Prices/plan metadata aren't sensitive,
@@ -60,6 +61,7 @@ export async function GET() {
         currency: null,
         interval: null,
         metered: a.metered,
+        modules: a.modules as string[],
       })),
     });
   }
@@ -100,7 +102,7 @@ export async function GET() {
   const addons: BillingAddonInfo[] = await Promise.all(
     ADDON_CATALOG.map(async (a) => {
       const priceId = getPriceIdForAddon(a.key);
-      const base = { key: a.key, label: a.label, metered: a.metered };
+      const base = { key: a.key, label: a.label, metered: a.metered, modules: a.modules as string[] };
       if (!priceId) {
         return { ...base, configured: false, priceId: null, amountCents: null, currency: null, interval: null };
       }

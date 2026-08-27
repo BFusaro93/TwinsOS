@@ -202,14 +202,14 @@ export const PLAN_FEATURE_CATEGORIES: PlanFeatureCategory[] = [
         label: "Automation sequences",
         description: "Event-driven emails, texts, and alerts — e.g. job completed → follow-up email 24h later.",
         highlight: false,
-        values: { starter: "Up to 3 active", cmms: "Up to 3 active", growth: "Unlimited", enterprise: "Unlimited" },
+        values: { starter: "Unlimited", cmms: "Unlimited", growth: "Unlimited", enterprise: "Unlimited" },
       },
       {
         key: "sms",
         label: "SMS / text messaging",
         description: "500 messages included, then $10 per 250 over.",
         highlight: false,
-        values: { starter: "Add-on", cmms: "Add-on", growth: "Add-on", enterprise: "Add-on" },
+        values: { starter: "Add-on", cmms: false, growth: "Add-on", enterprise: "Add-on" },
       },
       {
         key: "client_portal",
@@ -249,14 +249,14 @@ export const PLAN_FEATURE_CATEGORIES: PlanFeatureCategory[] = [
         label: "Route optimization",
         description: "Automatically sequence stops to minimize drive time between jobs or service calls.",
         highlight: false,
-        values: { starter: "Add-on", cmms: "Add-on", growth: "Add-on", enterprise: true },
+        values: { starter: "Add-on", cmms: false, growth: "Add-on", enterprise: true },
       },
       {
         key: "api_access",
         label: "API access",
         description: "Programmatic access to your data for custom integrations.",
         highlight: false,
-        values: { starter: false, cmms: false, growth: "Add-on", enterprise: true },
+        values: { starter: "Add-on", cmms: "Add-on", growth: "Add-on", enterprise: true },
       },
       {
         key: "zapier",

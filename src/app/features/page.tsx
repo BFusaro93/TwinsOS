@@ -204,8 +204,7 @@ export default function FeaturesPage() {
       </Reveal>
 
       {/* CATEGORY GRID */}
-      <Reveal>
-        <div className="mx-auto max-w-[1160px] px-6 pb-16 sm:px-12">
+      <div className="mx-auto max-w-[1160px] px-6 pb-16 sm:px-12">
           <div className="mb-12 text-center">
             <div className="mb-3 text-[13px] font-bold uppercase tracking-[0.1em] text-[#60ab45]">
               More in the platform
@@ -246,8 +245,7 @@ export default function FeaturesPage() {
               </div>
             ))}
           </div>
-        </div>
-      </Reveal>
+      </div>
 
       {/* CLIENT-FACING & INSIGHTS */}
       <Reveal>
