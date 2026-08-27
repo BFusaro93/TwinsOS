@@ -17,6 +17,9 @@ import {
 import { useParts } from "@/lib/hooks/use-parts";
 import { useVendors } from "@/lib/hooks/use-vendors";
 import { PartDetailSheet } from "@/components/cmms/PartDetailSheet";
+import { getCatalogCost } from "@/lib/cost-methods";
+import { useSettingsStore } from "@/stores/settings-store";
+import { NewRequisitionDialog } from "@/components/po/NewRequisitionDialog";
 import {
   useWOParts,
   useAddWOPart,
@@ -35,6 +38,8 @@ import type { WOPart, WOLaborEntry, WOVendorCharge } from "@/types";
 
 interface WOCostsTabProps {
   workOrderId: string;
+  workOrderNumber?: string;
+  workOrderTitle?: string;
 }
 
 // ── Shared row action buttons ─────────────────────────────────────────────────
@@ -62,11 +67,12 @@ function RowActions({ onEdit, onDelete }: { onEdit: () => void; onDelete: () => 
   );
 }
 
-function SectionHeader({ icon, title, count, onAdd }: {
+function SectionHeader({ icon, title, count, onAdd, extraAction }: {
   icon: React.ReactNode;
   title: string;
   count: number;
   onAdd: () => void;
+  extraAction?: React.ReactNode;
 }) {
   return (
     <div className="flex items-center justify-between">
@@ -77,25 +83,34 @@ function SectionHeader({ icon, title, count, onAdd }: {
           <span className="ml-1.5 font-normal normal-case text-slate-300">({count})</span>
         </p>
       </div>
-      <Button size="sm" variant="outline" onClick={onAdd}>
-        <Plus className="mr-1.5 h-3.5 w-3.5" />
-        Add
-      </Button>
+      <div className="flex items-center gap-2">
+        {extraAction}
+        <Button size="sm" variant="outline" onClick={onAdd}>
+          <Plus className="mr-1.5 h-3.5 w-3.5" />
+          Add
+        </Button>
+      </div>
     </div>
   );
 }
 
 // ── Parts section ─────────────────────────────────────────────────────────────
 
-function PartsSection({ workOrderId }: { workOrderId: string }) {
+function PartsSection({ workOrderId, workOrderNumber, workOrderTitle }: {
+  workOrderId: string;
+  workOrderNumber?: string;
+  workOrderTitle?: string;
+}) {
   const { data: items = [] } = useWOParts(workOrderId);
   const { data: allParts = [] } = useParts();
+  const { costMethod } = useSettingsStore();
   const { mutate: addPart, isPending: adding } = useAddWOPart();
   const { mutate: updatePart } = useUpdateWOPart();
   const { mutate: deletePart } = useDeleteWOPart();
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
+  const [requestPartsOpen, setRequestPartsOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [qtyMap, setQtyMap] = useState<Record<string, number>>({});
   const [selectedPartId, setSelectedPartId] = useState<string | null>(null);
@@ -147,7 +162,7 @@ function PartsSection({ workOrderId }: { workOrderId: string }) {
         partName: part.name,
         partNumber: part.partNumber,
         quantity: qtyMap[partId] ?? 1,
-        unitCost: part.unitCost,
+        unitCost: getCatalogCost(part.unitCost, part.costLayers, costMethod),
       },
       {
         onSuccess: () => {
@@ -173,6 +188,20 @@ function PartsSection({ workOrderId }: { workOrderId: string }) {
         title="Parts"
         count={items.length}
         onAdd={() => setAddOpen(true)}
+        extraAction={
+          <Button size="sm" variant="outline" onClick={() => setRequestPartsOpen(true)}>
+            Request Parts
+          </Button>
+        }
+      />
+
+      <NewRequisitionDialog
+        open={requestPartsOpen}
+        onOpenChange={setRequestPartsOpen}
+        prefillData={{
+          workOrderId,
+          title: workOrderNumber ? `Parts for ${workOrderNumber}${workOrderTitle ? ` — ${workOrderTitle}` : ""}` : "Parts request",
+        }}
       />
 
       {items.length === 0 ? (
@@ -275,7 +304,7 @@ function PartsSection({ workOrderId }: { workOrderId: string }) {
                         <p className="text-sm font-medium text-slate-800">{part.name}</p>
                         <p className="text-xs text-slate-500">
                           {part.partNumber && <>{part.partNumber} · </>}
-                          {formatCurrency(part.unitCost)} each
+                          {formatCurrency(getCatalogCost(part.unitCost, part.costLayers, costMethod))} each
                           {" · "}
                           <span className={
                             part.quantityOnHand === 0
@@ -804,7 +833,7 @@ function CostSummary({
 
 // ── Main export ───────────────────────────────────────────────────────────────
 
-export function WOCostsTab({ workOrderId }: WOCostsTabProps) {
+export function WOCostsTab({ workOrderId, workOrderNumber, workOrderTitle }: WOCostsTabProps) {
   // Query all three datasets for the summary — sections manage their own queries internally
   const { data: parts = [] } = useWOParts(workOrderId);
   const { data: labor = [] } = useWOLabor(workOrderId);
@@ -812,7 +841,7 @@ export function WOCostsTab({ workOrderId }: WOCostsTabProps) {
 
   return (
     <div className="flex flex-col gap-6 p-6">
-      <PartsSection workOrderId={workOrderId} />
+      <PartsSection workOrderId={workOrderId} workOrderNumber={workOrderNumber} workOrderTitle={workOrderTitle} />
       <Separator />
       <LaborSection workOrderId={workOrderId} />
       <Separator />

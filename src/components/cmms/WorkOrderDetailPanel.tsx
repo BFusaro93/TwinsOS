@@ -810,7 +810,13 @@ export function WorkOrderDetailPanel({ workOrder }: WorkOrderDetailPanelProps) {
           {
             value: "costs",
             label: "Costs",
-            content: <WOCostsTab workOrderId={workOrder.id} />,
+            content: (
+              <WOCostsTab
+                workOrderId={workOrder.id}
+                workOrderNumber={workOrder.workOrderNumber}
+                workOrderTitle={workOrder.title}
+              />
+            ),
           },
           {
             value: "history",

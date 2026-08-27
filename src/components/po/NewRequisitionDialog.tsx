@@ -68,6 +68,10 @@ interface PrefillData {
   partNumber?: string;
   unitCost?: number;
   quantity?: number;
+  /** Pre-fills the Title field — used e.g. when opening this dialog from a Work Order. */
+  title?: string;
+  /** Links the created requisition back to the Work Order it was requested from (requisitions.work_order_id). */
+  workOrderId?: string;
 }
 
 interface NewRequisitionDialogProps {
@@ -125,6 +129,7 @@ export function NewRequisitionDialog({ open, onOpenChange, initialData, prefillD
   const allParts = [...parts, ...extraParts];
 
   const [title, setTitle] = useState("");
+  const [workOrderId, setWorkOrderId] = useState<string | null>(null);
   const [vendorId, setVendorId] = useState("none");
   const [notes, setNotes] = useState("");
   const [lineItems, setLineItems] = useState<DraftLineItem[]>(() => [emptyLineItem()]);
@@ -173,6 +178,8 @@ export function NewRequisitionDialog({ open, onOpenChange, initialData, prefillD
 
   useEffect(() => {
     if (open && !initialData && prefillData) {
+      if (prefillData.title) setTitle(prefillData.title);
+      if (prefillData.workOrderId) setWorkOrderId(prefillData.workOrderId);
       const itemsToFill: PrefillItem[] =
         prefillData.items ??
         (prefillData.productKey
@@ -217,6 +224,7 @@ export function NewRequisitionDialog({ open, onOpenChange, initialData, prefillD
   function handleClose() {
     onOpenChange(false);
     setTitle("");
+    setWorkOrderId(null);
     setVendorId("none");
     setNotes("");
     setLineItems([emptyLineItem()]);
@@ -366,6 +374,7 @@ export function NewRequisitionDialog({ open, onOpenChange, initialData, prefillD
         discountCost: discountCents,
         grandTotal: subtotalCents - discountCents + salesTaxCents + shippingCents,
         notes: notes || null,
+        workOrderId,
       },
       {
         onSuccess: (req) => {
