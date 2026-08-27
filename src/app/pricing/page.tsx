@@ -63,9 +63,10 @@ export default function PricingPage() {
             </div>
             <p className="mx-auto max-w-xl text-[13.5px] leading-relaxed text-[#5a5a56]">
               Card and ACH payments run through Stripe on every plan — no separate fee to turn it on. Stripe&apos;s
-              own card and ACH transaction fees apply. On top of that, each company can configure a card
-              processing fee to pass to clients (3.5% on payments above $500 by default — both the rate and
-              threshold are adjustable, and it&apos;s waivable per charge).
+              standard rates apply: 2.9% + $0.30 per card charge, and 0.8% per ACH transfer (capped at $5). On
+              top of that, a pass-through fee to help recover the card cost is on by default — 3.5% on payments
+              above $500 — and both the rate and threshold are adjustable per company, including turning it off
+              entirely, and it&apos;s waivable per charge.
             </p>
           </div>
         </div>
