@@ -9,7 +9,7 @@ import { GuideBackButton } from "@/components/docs/GuideBackButton";
 export default function GuidesLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex h-[75vh] max-h-[900px] min-h-[520px] overflow-hidden rounded-lg border border-[#e6e6e0] bg-white shadow-sm print:block print:h-auto print:max-h-none print:min-h-0 print:overflow-visible print:rounded-none print:border-none print:shadow-none">
-      <aside className="hidden w-64 shrink-0 border-r border-slate-100 lg:flex lg:flex-col print:hidden">
+      <aside className="hidden w-80 shrink-0 border-r border-slate-100 lg:flex lg:flex-col print:hidden">
         <GuideSidebar />
       </aside>
       <div className="flex flex-1 flex-col overflow-hidden print:block print:h-auto print:overflow-visible">
