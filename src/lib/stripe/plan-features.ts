@@ -181,7 +181,7 @@ export const PLAN_FEATURE_CATEGORIES: PlanFeatureCategory[] = [
       {
         key: "stripe_processing",
         label: "Stripe-powered payment processing",
-        description: "Card: 3.5% processing fee on payments over $500 (waivable per charge). ACH bank transfer: no processing fee.",
+        description: "Configurable card processing fee (3.5% above $500 by default, adjustable per org) can be passed to clients, waivable per charge. Stripe's own card and ACH transaction fees apply either way.",
         highlight: true,
         values: { starter: true, cmms: false, growth: true, enterprise: true },
       },

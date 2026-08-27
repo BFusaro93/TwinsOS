@@ -69,7 +69,11 @@ export function LandingPage() {
             <h1 className="font-[family-name:var(--font-heading)] text-4xl font-extrabold leading-[1.08] tracking-tight text-white sm:text-5xl lg:text-[3.4rem]">
               One industry.
               <br />
-              One platform. Two systems. One login.
+              One platform.
+              <br />
+              Two systems.
+              <br />
+              One login.
             </h1>
             <p className="mx-auto mb-10 mt-6 max-w-[480px] text-lg leading-relaxed text-[#cfe6d8] lg:mx-0">
               Landscapt runs estimating, dispatch, billing, and client relationships. Equipt runs asset
@@ -165,9 +169,12 @@ export function LandingPage() {
             billing, and equipment maintenance in one system instead of five logins.&rdquo;
           </div>
           <div className="text-sm text-[#a9d3bf]">The team behind Landscapt &amp; Equipt</div>
-          <div className="mx-auto mt-7 max-w-[520px] rounded-lg border border-white/15 bg-white/5 px-5 py-3.5 text-[13.5px] leading-relaxed text-[#cfe6d8]">
+          <div className="mx-auto mt-7 max-w-[560px] rounded-lg border border-white/15 bg-white/5 px-5 py-4 text-[13.5px] leading-relaxed text-[#cfe6d8]">
             <span className="font-semibold text-white">One purpose:</span> replace the five different logins a
-            landscaping and snow company juggles with one system built the way the work actually happens.
+            landscaping and snow company juggles with one system built the way the work actually happens — and
+            put real numbers behind every decision. Job costing, production rates, and margin data that used to
+            live in someone&apos;s head or a spreadsheet after the fact now drive estimates and show up the
+            moment a job is done, so growth and profitability decisions are backed by data, not a gut feeling.
           </div>
         </Reveal>
       </div>

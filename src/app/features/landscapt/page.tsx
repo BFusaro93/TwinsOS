@@ -59,7 +59,7 @@ const ITEMS: DeepDiveItem[] = [
   {
     icon: CreditCard,
     title: "Invoicing & Payments",
-    body: "Draft-to-paid invoicing with Stripe-powered card and ACH payments built in. Clients can save a payment method on file for optional autopay on invoice due dates. ACH transfers carry no processing fee; card payments over $500 carry a 3.5% fee, which can be waived per charge.",
+    body: "Draft-to-paid invoicing with Stripe-powered card and ACH payments built in. Clients can save a payment method on file for optional autopay on invoice due dates. A card processing fee (3.5% above $500 by default) is configurable per company and can be passed to clients, waivable per charge.",
   },
   {
     icon: Users,

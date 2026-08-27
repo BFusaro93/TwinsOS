@@ -8,6 +8,7 @@ import { Reveal } from "@/components/marketing/Reveal";
 import { PricingSection } from "@/components/marketing/PricingSection";
 import { AddonsSection } from "@/components/marketing/AddonsSection";
 import { PlanComparisonTable } from "@/components/settings/PlanComparisonTable";
+import { BrandIcon } from "@/components/marketing/BrandIcon";
 
 const heading = Plus_Jakarta_Sans({
   subsets: ["latin"],
@@ -54,12 +55,17 @@ export default function PricingPage() {
       <Reveal>
         <div className="mx-auto max-w-[1160px] px-6 pb-6 sm:px-12">
           <div className="rounded-lg border border-[#e6e6e0] bg-white p-6 text-center">
-            <div className="font-[family-name:var(--font-heading)] mb-1.5 text-[15px] font-bold text-[#0a0a0a]">
-              Client payment processing
+            <div className="mb-3 flex items-center justify-center gap-2">
+              <BrandIcon slug="stripe" className="h-5 w-5" style={{ color: "#635BFF" }} />
+              <div className="font-[family-name:var(--font-heading)] text-[15px] font-bold text-[#0a0a0a]">
+                Client payment processing
+              </div>
             </div>
-            <p className="text-[13.5px] leading-relaxed text-[#5a5a56]">
-              Included on every plan — no separate fee to turn it on. ACH bank transfers carry no processing fee.
-              Card payments over $500 carry a 3.5% fee, which can be waived per charge.
+            <p className="mx-auto max-w-xl text-[13.5px] leading-relaxed text-[#5a5a56]">
+              Card and ACH payments run through Stripe on every plan — no separate fee to turn it on. Stripe&apos;s
+              own card and ACH transaction fees apply. On top of that, each company can configure a card
+              processing fee to pass to clients (3.5% on payments above $500 by default — both the rate and
+              threshold are adjustable, and it&apos;s waivable per charge).
             </p>
           </div>
         </div>
