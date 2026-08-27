@@ -64,12 +64,11 @@ export default function PortalDashboard({
 }: Props) {
   const [upcomingVisits, setUpcomingVisits] = useState(initialVisits);
 
-  // Subscribe to real-time visit status changes. Note: crm_job_visits isn't
-  // currently in the supabase_realtime publication (confirmed via
-  // pg_publication_tables), so this never actually fires yet — filtering by
-  // client_id rather than the broader org_id is still correct defensively,
-  // so that if the table is ever added to the publication, this subscription
-  // doesn't request every other client's visit updates in the same org.
+  // Subscribe to real-time visit status changes. crm_job_visits was added to
+  // the supabase_realtime publication in 20260826153000_crm_job_visits_realtime.sql;
+  // RLS's own portal-scoped policy (client_portal_multi_org.sql) is what
+  // actually restricts delivery to this client's rows — the client_id filter
+  // here is just to avoid subscribing to an unfiltered stream client-side.
   useEffect(() => {
     const supabase = createClient();
     const channel = supabase

@@ -577,17 +577,6 @@ export async function submitFormResponse(
     }
   }
 
-  // ── Log activity on client timeline ──────────────────────────────────────────
-  if (relatedClientId) {
-    await db.from("client_activity").insert({
-      org_id: form.org_id,
-      client_id: relatedClientId,
-      activity_type: "note",
-      subject: `Form submitted: ${form.name}`,
-      body: Object.entries(formData).map(([k, v]) => `${k}: ${formatFormFieldValue(v)}`).join("\n"),
-    });
-  }
-
   // ── Create ticket ─────────────────────────────────────────────────────────────
   let relatedTicketId: string | null = null;
   {
@@ -626,6 +615,23 @@ export async function submitFormResponse(
     relatedTicketId = ticket?.id ?? null;
 
     if (ticket) {
+      // Log on the client's Activity Timeline the same way a manually-created
+      // ticket does (see useCreateTicket) — activity_type "ticket" with
+      // ref_id/ref_table so the row deep-links to the ticket, rather than an
+      // orphaned "note" duplicating the ticket's own body.
+      if (relatedClientId) {
+        await db.from("client_activity").insert({
+          org_id: form.org_id,
+          client_id: relatedClientId,
+          activity_type: "ticket",
+          subject: ticketSubject,
+          body: ticketBody,
+          status: "open",
+          ref_id: ticket.id,
+          ref_table: "crm_tickets",
+        });
+      }
+
       await notifyStaffOfNewTicket(db, {
         orgId: form.org_id,
         ticketId: ticket.id,

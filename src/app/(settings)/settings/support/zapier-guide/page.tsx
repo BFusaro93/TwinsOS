@@ -1,60 +1,13 @@
-import type { ReactNode } from "react";
-import { PageHeader } from "@/components/shared/PageHeader";
-
-function TOCLink({ href, children }: { href: string; children: ReactNode }) {
-  return (
-    <a href={href} className="block text-sm text-brand-600 hover:underline">
-      {children}
-    </a>
-  );
-}
-
-function Section({
-  id,
-  title,
-  children,
-}: {
-  id: string;
-  title: string;
-  children: ReactNode;
-}) {
-  return (
-    <section id={id} className="scroll-mt-6 rounded-lg border bg-white p-6 shadow-sm">
-      <h2 className="mb-3 text-lg font-semibold text-slate-900">{title}</h2>
-      <div className="flex flex-col gap-3 text-sm leading-relaxed text-slate-600">{children}</div>
-    </section>
-  );
-}
-
-function Callout({ children }: { children: ReactNode }) {
-  return (
-    <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-      {children}
-    </div>
-  );
-}
-
-function Chip({ instant }: { instant: boolean }) {
-  return (
-    <span
-      className={
-        instant
-          ? "inline-flex rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700"
-          : "inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700"
-      }
-    >
-      {instant ? "Instant" : "Polling"}
-    </span>
-  );
-}
-
-function Table({ children }: { children: ReactNode }) {
-  return (
-    <div className="overflow-x-auto rounded-md border border-slate-200">
-      <table className="w-full border-collapse text-sm">{children}</table>
-    </div>
-  );
-}
+import {
+  DocsFontScope,
+  DocsHero,
+  Section,
+  Callout,
+  Chip,
+  Table,
+  TableHeadRow,
+  TOCLink,
+} from "@/components/docs/DocsBrand";
 
 const CRM_TRIGGERS: [string, string][] = [
   ["New Client", "A client record is created."],
@@ -98,14 +51,17 @@ const ACTIONS: [string, string, string, string][] = [
 
 export default function ZapierGuidePage() {
   return (
-    <div className="flex h-full flex-col gap-6 overflow-y-auto pb-12">
-      <PageHeader
+    <DocsFontScope className="flex h-full flex-col gap-6 overflow-y-auto pb-12">
+      <DocsHero
+        kicker="Integrations"
         title="Connecting Zapier"
         description="Every trigger, every action, and exactly what fires each one."
       />
 
-      <div className="rounded-lg border bg-white p-6 shadow-sm">
-        <h2 className="mb-3 text-lg font-semibold text-slate-900">On this page</h2>
+      <div className="rounded-lg border border-[#e6e6e0] bg-white p-6 shadow-sm">
+        <h2 className="mb-3 font-[family-name:var(--font-heading)] text-lg font-bold text-[#005642]">
+          On this page
+        </h2>
         <div className="flex flex-col gap-1">
           <TOCLink href="#connecting">Connecting</TOCLink>
           <TOCLink href="#how-triggers-work">How triggers work</TOCLink>
@@ -148,16 +104,16 @@ export default function ZapierGuidePage() {
         <p>Two delivery methods. You don&apos;t choose — Zapier handles it automatically.</p>
         <Table>
           <tbody>
-            <tr className="border-b border-slate-100">
+            <tr className="border-b border-[#eceae3]">
               <td className="w-32 px-3 py-2 align-top"><Chip instant /></td>
-              <td className="px-3 py-2 text-slate-600">
+              <td className="px-3 py-2 text-[#4a4a46]">
                 The moment the event happens inside Equipt or Landscapt, we push it straight to
                 Zapier&apos;s webhook URL. Most triggers work this way.
               </td>
             </tr>
             <tr>
               <td className="w-32 px-3 py-2 align-top"><Chip instant={false} /></td>
-              <td className="px-3 py-2 text-slate-600">
+              <td className="px-3 py-2 text-[#4a4a46]">
                 Zapier calls our API every few minutes to check for new matching records. This also
                 powers the &quot;Test&quot; step when setting up any Zap, and is the <em>only</em>{" "}
                 method for a few triggers with no natural &quot;moment it happened&quot; to hook into.
@@ -174,16 +130,16 @@ export default function ZapierGuidePage() {
         </p>
         <Table>
           <thead>
-            <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
+            <TableHeadRow>
               <th className="px-3 py-2">Trigger</th>
               <th className="px-3 py-2">Fires when&hellip;</th>
-            </tr>
+            </TableHeadRow>
           </thead>
           <tbody>
             {CRM_TRIGGERS.map(([name, desc]) => (
-              <tr key={name} className="border-b border-slate-100 last:border-0">
-                <td className="whitespace-nowrap px-3 py-2 font-medium text-slate-800">{name}</td>
-                <td className="px-3 py-2 text-slate-600">{desc}</td>
+              <tr key={name} className="border-b border-[#eceae3] last:border-0">
+                <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a]">{name}</td>
+                <td className="px-3 py-2 text-[#4a4a46]">{desc}</td>
               </tr>
             ))}
           </tbody>
@@ -199,17 +155,17 @@ export default function ZapierGuidePage() {
         </p>
         <Table>
           <thead>
-            <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
+            <TableHeadRow>
               <th className="px-3 py-2">Trigger</th>
               <th className="px-3 py-2">Fires when&hellip;</th>
               <th className="w-24 px-3 py-2">Delivery</th>
-            </tr>
+            </TableHeadRow>
           </thead>
           <tbody>
             {CMMS_TRIGGERS.map(([name, desc, instant]) => (
-              <tr key={name} className="border-b border-slate-100 last:border-0">
-                <td className="whitespace-nowrap px-3 py-2 font-medium text-slate-800">{name}</td>
-                <td className="px-3 py-2 text-slate-600">{desc}</td>
+              <tr key={name} className="border-b border-[#eceae3] last:border-0">
+                <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a]">{name}</td>
+                <td className="px-3 py-2 text-[#4a4a46]">{desc}</td>
                 <td className="px-3 py-2"><Chip instant={instant} /></td>
               </tr>
             ))}
@@ -255,20 +211,20 @@ export default function ZapierGuidePage() {
         </p>
         <Table>
           <thead>
-            <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
+            <TableHeadRow>
               <th className="px-3 py-2">Action</th>
               <th className="px-3 py-2">Creates</th>
               <th className="px-3 py-2">Required</th>
               <th className="px-3 py-2">Optional</th>
-            </tr>
+            </TableHeadRow>
           </thead>
           <tbody>
             {ACTIONS.map(([name, creates, required, optional]) => (
-              <tr key={name} className="border-b border-slate-100 last:border-0">
-                <td className="whitespace-nowrap px-3 py-2 font-medium text-slate-800">{name}</td>
-                <td className="px-3 py-2 text-slate-600">{creates}</td>
-                <td className="px-3 py-2 text-slate-600">{required}</td>
-                <td className="px-3 py-2 text-slate-600">{optional}</td>
+              <tr key={name} className="border-b border-[#eceae3] last:border-0">
+                <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a]">{name}</td>
+                <td className="px-3 py-2 text-[#4a4a46]">{creates}</td>
+                <td className="px-3 py-2 text-[#4a4a46]">{required}</td>
+                <td className="px-3 py-2 text-[#4a4a46]">{optional}</td>
               </tr>
             ))}
           </tbody>
@@ -292,6 +248,6 @@ export default function ZapierGuidePage() {
           </li>
         </ul>
       </Section>
-    </div>
+    </DocsFontScope>
   );
 }

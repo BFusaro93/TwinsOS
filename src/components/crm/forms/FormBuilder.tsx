@@ -1200,7 +1200,7 @@ function FieldTypeConfig({
     return (
       <div className={baseClass}>
         <DescriptionRow field={field} onUpdate={onUpdate} inputClass={inputClass} labelClass={labelClass} />
-        <p className="text-[11px] text-slate-400">Max file size: 100 MB. Accepted formats: any.</p>
+        <p className="text-[11px] text-slate-400">Max file size: 15 MB. Accepted formats: JPEG, PNG, WEBP, GIF, PDF.</p>
       </div>
     );
   }

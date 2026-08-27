@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { submitFormResponse } from "@/lib/forms/submit-form-response";
+import { verifyTurnstileToken } from "@/lib/turnstile";
 
 // POST /api/public/forms/[slug]/submit — anonymous form submission
 export async function POST(req: Request, { params }: { params: Promise<{ slug: string }> }) {
@@ -27,6 +28,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
 
   const body = await req.json();
   const { data: formData = {} } = body;
+
+  const forwardedFor = req.headers.get("x-forwarded-for");
+  const turnstileResult = await verifyTurnstileToken(body.turnstileToken, forwardedFor?.split(",")[0]?.trim());
+  if (!turnstileResult.ok) {
+    return NextResponse.json({ error: turnstileResult.error }, { status: 400 });
+  }
 
   // submitFormResponse matches/creates clients, tickets, tags, and fires
   // automations — all RLS-gated on the caller's own profiles.org_id, which is

@@ -2,7 +2,12 @@
 
 import { use, useEffect, useState } from "react";
 import { BrandMark } from "@/components/shared/BrandMark";
+import { TurnstileWidget } from "@/components/shared/TurnstileWidget";
 import { createClient } from "@/lib/supabase/client";
+
+// Unset in most environments — see .env.local.example. When unset, no widget
+// renders and no token is required, so existing forms are unaffected.
+const TURNSTILE_SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -87,6 +92,8 @@ export default function PublicFormPage({ params }: { params: Promise<{ slug: str
   const [submitError, setSubmitError] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [hiddenFieldIds, setHiddenFieldIds] = useState<Set<string>>(new Set());
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+  const [turnstileKey, setTurnstileKey] = useState(0);
 
   useEffect(() => {
     fetch(`/api/public/forms/${slug}`)
@@ -251,6 +258,10 @@ export default function PublicFormPage({ params }: { params: Promise<{ slug: str
     e.preventDefault();
     if (!validatePage(pageFields)) return;
     if (!form) return;
+    if (TURNSTILE_SITE_KEY && !turnstileToken) {
+      setSubmitError("Please complete the verification check before submitting.");
+      return;
+    }
     setState("submitting");
     setSubmitError("");
 
@@ -289,6 +300,7 @@ export default function PublicFormPage({ params }: { params: Promise<{ slug: str
           data,
           referer: typeof window !== "undefined" ? window.location.href : undefined,
           ruleTags: { add: [...tagsToAdd], remove: [...tagsToRemove] },
+          turnstileToken,
         }),
       });
 
@@ -306,6 +318,9 @@ export default function PublicFormPage({ params }: { params: Promise<{ slug: str
     } catch (err) {
       setSubmitError(err instanceof Error ? err.message : "Something went wrong");
       setState("error");
+      // A Turnstile token is single-use — force a fresh solve on retry.
+      setTurnstileToken(null);
+      setTurnstileKey((k) => k + 1);
     }
   }
 
@@ -395,6 +410,15 @@ export default function PublicFormPage({ params }: { params: Promise<{ slug: str
           />
         ))}
 
+        {isLastPage && TURNSTILE_SITE_KEY && (
+          <TurnstileWidget
+            key={turnstileKey}
+            siteKey={TURNSTILE_SITE_KEY}
+            onVerify={setTurnstileToken}
+            onExpire={() => setTurnstileToken(null)}
+          />
+        )}
+
         {submitError && (
           <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-md px-4 py-3">
             {submitError}
@@ -414,7 +438,7 @@ export default function PublicFormPage({ params }: { params: Promise<{ slug: str
           {isLastPage ? (
             <button
               type="submit"
-              disabled={state === "submitting"}
+              disabled={state === "submitting" || (!!TURNSTILE_SITE_KEY && !turnstileToken)}
               className="flex-1 rounded-md bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-brand-700 disabled:opacity-60 transition-colors"
             >
               {state === "submitting"

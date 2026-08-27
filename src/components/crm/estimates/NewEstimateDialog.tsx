@@ -31,6 +31,7 @@ import { useCRMServices } from "@/lib/hooks/use-crm-jobs";
 import { computeLineItem, getBreakevenRateCents } from "@/lib/estimate-calc";
 import { useOrgSettings } from "@/lib/hooks/use-org-settings";
 import { getOrgDefaultDisplaySettings } from "@/lib/estimate-display-settings";
+import { useRequiredFields } from "@/lib/hooks/use-required-fields";
 import { toast } from "sonner";
 import type { Estimate } from "@/types/crm-estimates";
 
@@ -80,6 +81,7 @@ export function NewEstimateDialog({ open, onOpenChange, defaultClientId, onCreat
   const { data: orgSettings } = useOrgSettings();
   const breakevenRateCents = getBreakevenRateCents(orgSettings?.customizations);
   const { data: crmServices } = useCRMServices();
+  const rf = useRequiredFields("estimate");
 
   const selectableClients = (clients ?? [])
     .filter((c) => c.status !== "inactive" && c.status !== "cancelled")
@@ -122,6 +124,14 @@ export function NewEstimateDialog({ open, onOpenChange, defaultClientId, onCreat
   }, [open, setValue]);
 
   async function onSubmit(values: FormValues) {
+    if (rf.isRequired("valid_until") && !values.validUntilDate) {
+      toast.error("Valid Until is required");
+      return;
+    }
+    if (rf.isRequired("sales_rep") && values.salesRepId === "none") {
+      toast.error("Sales Rep is required");
+      return;
+    }
     try {
       const tpl = values.templateId && values.templateId !== "none"
         ? (templates ?? []).find((t) => t.id === values.templateId)
@@ -255,7 +265,7 @@ export function NewEstimateDialog({ open, onOpenChange, defaultClientId, onCreat
               <Input type="date" {...register("estimateDate")} />
             </div>
             <div className="flex flex-col gap-1.5">
-              <Label>Valid Until</Label>
+              <Label>Valid Until{rf.req("valid_until")}</Label>
               <Input type="date" {...register("validUntilDate")} />
             </div>
           </div>
@@ -276,7 +286,7 @@ export function NewEstimateDialog({ open, onOpenChange, defaultClientId, onCreat
               </Select>
             </div>
             <div className="flex flex-col gap-1.5">
-              <Label>Sales Rep</Label>
+              <Label>Sales Rep{rf.req("sales_rep")}</Label>
               <Select value={watch("salesRepId")} onValueChange={(v) => setValue("salesRepId", v)}>
                 <SelectTrigger>
                   <SelectValue placeholder="Assign sales rep…" />
@@ -342,7 +352,14 @@ export function NewEstimateDialog({ open, onOpenChange, defaultClientId, onCreat
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button onClick={handleSubmit(onSubmit)} disabled={isPending}>
+          <Button
+            onClick={handleSubmit(onSubmit)}
+            disabled={
+              isPending ||
+              (rf.isRequired("valid_until") && !watch("validUntilDate")) ||
+              (rf.isRequired("sales_rep") && watch("salesRepId") === "none")
+            }
+          >
             {isPending ? "Creating…" : "Create Estimate"}
           </Button>
         </DialogFooter>

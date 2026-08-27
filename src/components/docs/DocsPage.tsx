@@ -141,7 +141,7 @@ function Sidebar({
                         className={cn(
                           "flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors w-full",
                           isActive
-                            ? "bg-brand-50 text-brand-700 font-medium"
+                            ? "bg-[#eef4e2] text-[#396927] font-medium"
                             : "text-slate-600 hover:bg-slate-100 hover:text-slate-800"
                         )}
                       >
@@ -166,7 +166,7 @@ function Sidebar({
             className={cn(
               "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors mt-1",
               activeSection === "faq"
-                ? "bg-brand-50 text-brand-700 font-medium"
+                ? "bg-[#eef4e2] text-[#396927] font-medium"
                 : "text-slate-600 hover:bg-slate-100"
             )}
           >
@@ -203,10 +203,10 @@ function ArticleView({
           {sectionLabel}
         </p>
         <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-50">
-            <ArticleIcon className="h-5 w-5 text-brand-600" />
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#eef4e2]">
+            <ArticleIcon className="h-5 w-5 text-[#60ab45]" />
           </div>
-          <h1 className="text-2xl font-bold text-slate-900">{article.title}</h1>
+          <h1 className="font-[family-name:var(--font-heading)] text-2xl font-extrabold text-[#005642]">{article.title}</h1>
         </div>
         <p className="text-slate-500">{article.summary}</p>
         <div className="mt-1 h-px bg-slate-100" />
@@ -217,7 +217,7 @@ function ArticleView({
         {article.steps.map((step, i) => (
           <li key={i} className="flex gap-4">
             <div className="flex flex-col items-center">
-              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-600 text-xs font-bold text-white">
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#60ab45] text-xs font-bold text-white">
                 {i + 1}
               </span>
               {i < article.steps.length - 1 && (
@@ -232,7 +232,7 @@ function ArticleView({
               {step.href && (
                 <Link
                   href={step.href}
-                  className="mt-2 inline-flex items-center gap-1 text-sm font-medium text-brand-600 hover:text-brand-700"
+                  className="mt-2 inline-flex items-center gap-1 text-sm font-medium text-[#60ab45] hover:text-[#4a8a33]"
                 >
                   {step.linkLabel ?? "Learn more"}
                   <ArrowRight className="h-3.5 w-3.5" />
@@ -249,7 +249,7 @@ function ArticleView({
           {prev && (
             <button
               onClick={() => onNavigate(prev.sectionId, prev.article.id)}
-              className="group flex items-center gap-2 text-sm text-slate-500 hover:text-brand-600 transition-colors"
+              className="group flex items-center gap-2 text-sm text-slate-500 hover:text-[#60ab45] transition-colors"
             >
               <ArrowLeft className="h-4 w-4 transition-transform group-hover:-translate-x-0.5" />
               <div className="text-left">
@@ -263,7 +263,7 @@ function ArticleView({
           {next && (
             <button
               onClick={() => onNavigate(next.sectionId, next.article.id)}
-              className="group flex items-center gap-2 text-sm text-slate-500 hover:text-brand-600 transition-colors"
+              className="group flex items-center gap-2 text-sm text-slate-500 hover:text-[#60ab45] transition-colors"
             >
               <div className="text-right">
                 <p className="text-xs text-slate-400">Next</p>
@@ -296,7 +296,7 @@ function FAQView({ searchQuery }: { searchQuery: string }) {
     <div className="flex flex-col gap-8">
       <div className="flex flex-col gap-2">
         <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Reference</p>
-        <h1 className="text-2xl font-bold text-slate-900">Frequently Asked Questions</h1>
+        <h1 className="font-[family-name:var(--font-heading)] text-2xl font-extrabold text-[#005642]">Frequently Asked Questions</h1>
         <p className="text-slate-500">Quick answers to the most common questions.</p>
         <div className="mt-1 h-px bg-slate-100" />
       </div>
@@ -313,7 +313,7 @@ function FAQView({ searchQuery }: { searchQuery: string }) {
                   key={i}
                   className="group border-b border-slate-100 last:border-0"
                 >
-                  <summary className="flex cursor-pointer list-none items-center justify-between gap-4 py-4 text-sm font-medium text-slate-800 hover:text-brand-600">
+                  <summary className="flex cursor-pointer list-none items-center justify-between gap-4 py-4 text-sm font-medium text-slate-800 hover:text-[#60ab45]">
                     {faq.q}
                     <ChevronDown className="h-4 w-4 shrink-0 text-slate-400 transition-transform duration-200 group-open:rotate-180" />
                   </summary>
@@ -364,7 +364,7 @@ export function DocsPage() {
     DOC_SECTIONS.find((s) => s.id === activeSection)?.label ?? "FAQ";
 
   return (
-    <div className="flex h-[calc(100vh-56px)] overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+    <div className="flex h-[75vh] max-h-[820px] min-h-[480px] overflow-hidden rounded-lg border border-[#e6e6e0] bg-white shadow-sm">
       {/* Desktop sidebar */}
       <aside className="hidden w-64 shrink-0 border-r border-slate-100 lg:flex lg:flex-col">
         <Sidebar

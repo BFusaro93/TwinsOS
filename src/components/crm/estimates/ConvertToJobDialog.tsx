@@ -27,6 +27,7 @@ import { useCreateJobsFromEstimate, useCRMCrews, useCRMSchedules } from "@/lib/h
 import { useClientProjects } from "@/lib/hooks/use-client-cmms";
 import { NewProjectDialog } from "@/components/po/NewProjectDialog";
 import { budgetedHoursFromLineItem } from "@/lib/estimate-calc";
+import { useRequiredFields } from "@/lib/hooks/use-required-fields";
 import type { Estimate, EstimateLineItem, EstimateDirectCost } from "@/types/crm-estimates";
 
 const JOB_TYPES = [
@@ -74,6 +75,7 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
 
   const { data: crews = [] } = useCRMCrews();
   const { data: crmSchedules = [] } = useCRMSchedules();
+  const rf = useRequiredFields("job");
   const { data: clientProjects } = useClientProjects(estimate.clientId, estimate.clientName ?? "");
   const createJobs = useCreateJobsFromEstimate();
   // All-in estimated cost (revenue - net profit) — seeds a linked project's EAC
@@ -115,6 +117,10 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
     }
     if (jobType === "recurring" && !schedule) {
       toast.error("Schedule is required for recurring jobs");
+      return;
+    }
+    if (rf.isRequired("crew") && !crewId) {
+      toast.error("Crew is required");
       return;
     }
 
@@ -358,7 +364,7 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
           )}
 
           <div className="flex flex-col gap-1">
-            <Label className="text-xs font-medium text-slate-600">Assign Crew</Label>
+            <Label className="text-xs font-medium text-slate-600">Assign Crew{rf.req("crew")}</Label>
             <Select value={crewId || "none"} onValueChange={(v) => setCrewId(v === "none" ? "" : v)}>
               <SelectTrigger className="text-sm">
                 <SelectValue placeholder="Unassigned" />
@@ -390,7 +396,7 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
           </Button>
           <Button
             onClick={handleCreate}
-            disabled={createJobs.isPending || selectedItems.length === 0}
+            disabled={createJobs.isPending || selectedItems.length === 0 || (rf.isRequired("crew") && !crewId)}
             className="bg-green-600 hover:bg-green-700"
           >
             {createJobs.isPending ? "Creating Job…" : `Create Job (${selectedItems.length} service${selectedItems.length !== 1 ? "s" : ""})`}

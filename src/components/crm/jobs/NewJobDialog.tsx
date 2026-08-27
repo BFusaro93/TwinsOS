@@ -31,6 +31,7 @@ import { computePackageVisitSchedule } from "@/lib/package-schedule";
 import { computeJobServiceBudgetedHours } from "@/lib/estimate-calc";
 import { formatCurrency } from "@/lib/utils";
 import { NewProjectDialog } from "@/components/po/NewProjectDialog";
+import { useRequiredFields } from "@/lib/hooks/use-required-fields";
 import { Plus, X } from "lucide-react";
 import { toast } from "sonner";
 import type { JobType, BudgetMethod } from "@/types/crm-jobs";
@@ -97,6 +98,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
   const { data: employees } = useSelectableEmployees();
   const { data: crews } = useCRMCrews();
   const salesReps = (employees ?? []).filter((e) => e.isSalesRep);
+  const rf = useRequiredFields("job");
 
   const [selectedClientId, setSelectedClientId] = useState(defaultClientId ?? "");
   const [jobType, setJobType] = useState<JobType>(initialJobType ?? "one_time");
@@ -253,6 +255,8 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
     if (jobType === "recurring" && !schedule) { toast.error("Schedule is required for recurring jobs"); return; }
     if (jobType === "package" && !packageId) { toast.error("Package is required for package jobs"); return; }
     if (services.some((s) => !s.serviceName)) { toast.error("Select a service for each row"); return; }
+    if (rf.isRequired("crew") && !crewId) { toast.error("Crew is required"); return; }
+    if (rf.isRequired("sales_rep") && !salesRepId) { toast.error("Sales Rep is required"); return; }
 
     setIsPending(true);
     try {
@@ -363,7 +367,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
                 </Select>
               </div>
               <div className="flex flex-col gap-1.5">
-                <Label>Sales Rep</Label>
+                <Label>Sales Rep{rf.req("sales_rep")}</Label>
                 <Select value={salesRepId ?? "none"} onValueChange={(v) => setSalesRepId(v === "none" ? null : v)}>
                   <SelectTrigger><SelectValue placeholder="Assign sales rep…" /></SelectTrigger>
                   <SelectContent>
@@ -377,7 +381,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
                 </Select>
               </div>
               <div className="flex flex-col gap-1.5">
-                <Label>Crew</Label>
+                <Label>Crew{rf.req("crew")}</Label>
                 <Select value={crewId ?? "unassigned"} onValueChange={(v) => setCrewId(v === "unassigned" ? null : v)}>
                   <SelectTrigger><SelectValue placeholder="Unassigned" /></SelectTrigger>
                   <SelectContent>
@@ -687,7 +691,14 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button onClick={handleSubmit} disabled={isPending}>
+          <Button
+            onClick={handleSubmit}
+            disabled={
+              isPending ||
+              (rf.isRequired("crew") && !crewId) ||
+              (rf.isRequired("sales_rep") && !salesRepId)
+            }
+          >
             {isPending ? "Creating…" : "Create Job"}
           </Button>
         </DialogFooter>
