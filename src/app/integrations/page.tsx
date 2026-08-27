@@ -114,7 +114,7 @@ export default function IntegrationsPage() {
 
       <div className="bg-[#005642] px-6 py-16 text-center sm:px-12">
         <div className="mb-3 text-[13px] font-bold uppercase tracking-[0.1em] text-[#b7d433]">Integrations</div>
-        <h1 className="mx-auto max-w-2xl font-[family-name:var(--font-heading)] text-4xl font-extrabold text-white sm:text-5xl">
+        <h1 className="mx-auto max-w-3xl font-[family-name:var(--font-heading)] text-3xl font-extrabold text-white sm:whitespace-nowrap sm:text-5xl">
           Fits into how you already work.
         </h1>
         <p className="mx-auto mt-4 max-w-xl text-base text-[#cfe6d8]">

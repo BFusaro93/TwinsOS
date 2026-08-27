@@ -63,13 +63,13 @@ export function LandingPage() {
       <div className="bg-[#005642] px-6 py-20 sm:px-12">
         <div className="mx-auto grid max-w-[1320px] items-center gap-10 lg:grid-cols-[2fr_3fr] lg:gap-14">
           <div className="text-center lg:text-left">
-            <div className="mb-7 inline-block rounded-full bg-[#b7d43326] px-3.5 py-1.5 text-[13px] font-bold tracking-wide text-[#b7d433]">
+            <div className="mb-7 inline-block rounded-full bg-[#2aa9e026] px-3.5 py-1.5 text-[13px] font-bold tracking-wide text-[#2aa9e0]">
               BUILT FOR LANDSCAPERS, BY LANDSCAPERS
             </div>
             <h1 className="font-[family-name:var(--font-heading)] text-4xl font-extrabold leading-[1.08] tracking-tight text-white sm:text-5xl lg:text-[3.4rem]">
               One industry.
               <br />
-              Two systems. One login.
+              One platform. Two systems. One login.
             </h1>
             <p className="mx-auto mb-10 mt-6 max-w-[480px] text-lg leading-relaxed text-[#cfe6d8] lg:mx-0">
               Landscapt runs estimating, dispatch, billing, and client relationships. Equipt runs asset
@@ -165,6 +165,10 @@ export function LandingPage() {
             billing, and equipment maintenance in one system instead of five logins.&rdquo;
           </div>
           <div className="text-sm text-[#a9d3bf]">The team behind Landscapt &amp; Equipt</div>
+          <div className="mx-auto mt-7 max-w-[520px] rounded-lg border border-white/15 bg-white/5 px-5 py-3.5 text-[13.5px] leading-relaxed text-[#cfe6d8]">
+            <span className="font-semibold text-white">One purpose:</span> replace the five different logins a
+            landscaping and snow company juggles with one system built the way the work actually happens.
+          </div>
         </Reveal>
       </div>
 

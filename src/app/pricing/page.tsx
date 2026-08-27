@@ -28,7 +28,7 @@ export default function PricingPage() {
       <div className="bg-[#005642] px-6 py-16 text-center sm:px-12">
         <div className="mb-3 text-[13px] font-bold uppercase tracking-[0.1em] text-[#b7d433]">Pricing</div>
         <h1 className="font-[family-name:var(--font-heading)] text-4xl font-extrabold text-white sm:text-5xl">
-          Plans built to grow with your crew.
+          Plans built to grow with your company.
         </h1>
         <p className="mx-auto mt-4 max-w-xl text-base text-[#cfe6d8]">
           30-day free trial on any plan. No credit card required to start.
@@ -48,6 +48,20 @@ export default function PricingPage() {
             </h2>
           </div>
           <PlanComparisonTable />
+        </div>
+      </Reveal>
+
+      <Reveal>
+        <div className="mx-auto max-w-[1160px] px-6 pb-6 sm:px-12">
+          <div className="rounded-lg border border-[#e6e6e0] bg-white p-6 text-center">
+            <div className="font-[family-name:var(--font-heading)] mb-1.5 text-[15px] font-bold text-[#0a0a0a]">
+              Client payment processing
+            </div>
+            <p className="text-[13.5px] leading-relaxed text-[#5a5a56]">
+              Included on every plan — no separate fee to turn it on. ACH bank transfers carry no processing fee.
+              Card payments over $500 carry a 3.5% fee, which can be waived per charge.
+            </p>
+          </div>
         </div>
       </Reveal>
 

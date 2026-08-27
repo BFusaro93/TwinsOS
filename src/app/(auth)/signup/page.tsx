@@ -123,14 +123,14 @@ export default function SignupPage() {
 
   if (step === "plan") {
     return (
-      <div className="w-full max-w-3xl">
+      <div className="w-full max-w-5xl">
         <div className="mb-8 flex flex-col items-center gap-2">
           <BrandMark variant="color" className="h-12 w-12 rounded-xl" />
           <h1 className="text-2xl font-extrabold tracking-tight text-[#005642]">landscapt</h1>
           <p className="text-sm text-slate-500">Choose how you&apos;d like to get started</p>
         </div>
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-5">
           <button
             type="button"
             onClick={() => setSelectedPlan(null)}

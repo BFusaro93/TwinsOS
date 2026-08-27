@@ -34,9 +34,10 @@ const FEATURED_QUESTIONS = [
   "How do I add or remove users from my organization?",
 ];
 
-const featuredFaqs = FAQ_CATEGORIES.flatMap((c) => c.items).filter((item) =>
-  FEATURED_QUESTIONS.includes(item.q)
-);
+const featuredFaqCategories = FAQ_CATEGORIES.map((c) => ({
+  label: c.label,
+  items: c.items.filter((item) => FEATURED_QUESTIONS.includes(item.q)),
+})).filter((c) => c.items.length > 0);
 
 export default function SupportPage() {
   return (
@@ -75,28 +76,32 @@ export default function SupportPage() {
 
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
           {DOC_SECTIONS.map((section, i) => (
-            <Reveal
-              key={section.id}
-              delayMs={i * 50}
-              className="rounded-md border border-[#e6e6e0] bg-white p-6"
-            >
-              <div className="mb-4 flex items-center gap-2.5">
-                <div className="flex h-8 w-8 items-center justify-center rounded-md bg-[#eef4e2]">
-                  <section.icon className="h-4 w-4 text-[#60ab45]" />
+            <Reveal key={section.id} delayMs={i * 50}>
+              <Link
+                href="/login?redirectTo=%2Fdocs"
+                className="group flex h-full flex-col rounded-md border border-[#e6e6e0] bg-white p-6 transition-shadow hover:shadow-lg"
+              >
+                <div className="mb-4 flex items-center gap-2.5">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-md bg-[#eef4e2]">
+                    <section.icon className="h-4 w-4 text-[#60ab45]" />
+                  </div>
+                  <span className="font-[family-name:var(--font-heading)] text-[15px] font-bold text-[#0a0a0a]">
+                    {section.label}
+                  </span>
                 </div>
-                <span className="font-[family-name:var(--font-heading)] text-[15px] font-bold text-[#0a0a0a]">
-                  {section.label}
+                <ul className="mb-4 flex flex-1 flex-col gap-2.5">
+                  {section.articles.map((article) => (
+                    <li key={article.id} className="text-[13px] leading-snug text-[#5a5a56]">
+                      <span className="font-medium text-[#3a3a36]">{article.title}</span>
+                      {" — "}
+                      {article.summary}
+                    </li>
+                  ))}
+                </ul>
+                <span className="text-[12.5px] font-semibold text-[#60ab45] group-hover:underline">
+                  Sign in to view full guide →
                 </span>
-              </div>
-              <ul className="flex flex-col gap-2.5">
-                {section.articles.map((article) => (
-                  <li key={article.id} className="text-[13px] leading-snug text-[#5a5a56]">
-                    <span className="font-medium text-[#3a3a36]">{article.title}</span>
-                    {" — "}
-                    {article.summary}
-                  </li>
-                ))}
-              </ul>
+              </Link>
             </Reveal>
           ))}
         </div>
@@ -113,15 +118,24 @@ export default function SupportPage() {
               Straight from the source.
             </h2>
           </div>
-          <div className="flex flex-col divide-y divide-[#eceae3] rounded-md border border-[#e6e6e0] bg-white">
-            {featuredFaqs.map((item) => (
-              <details key={item.q} className="group px-6 py-4">
-                <summary className="flex cursor-pointer list-none items-center justify-between gap-4 text-[14.5px] font-semibold text-[#0a0a0a]">
-                  {item.q}
-                  <ChevronDown className="h-4 w-4 shrink-0 text-slate-400 transition-transform group-open:rotate-180" />
-                </summary>
-                <p className="mt-3 text-[13.5px] leading-relaxed text-[#5a5a56]">{item.a}</p>
-              </details>
+          <div className="flex flex-col gap-8">
+            {featuredFaqCategories.map((cat) => (
+              <div key={cat.label}>
+                <div className="mb-3 text-[12px] font-bold uppercase tracking-[0.08em] text-slate-400">
+                  {cat.label}
+                </div>
+                <div className="flex flex-col divide-y divide-[#eceae3] rounded-md border border-[#e6e6e0] bg-white">
+                  {cat.items.map((item) => (
+                    <details key={item.q} className="group px-6 py-4">
+                      <summary className="flex cursor-pointer list-none items-center justify-between gap-4 text-[14.5px] font-semibold text-[#0a0a0a]">
+                        {item.q}
+                        <ChevronDown className="h-4 w-4 shrink-0 text-slate-400 transition-transform group-open:rotate-180" />
+                      </summary>
+                      <p className="mt-3 text-[13.5px] leading-relaxed text-[#5a5a56]">{item.a}</p>
+                    </details>
+                  ))}
+                </div>
+              </div>
             ))}
           </div>
         </div>
