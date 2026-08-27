@@ -234,7 +234,7 @@ export function SnowPricingCalculatorPage() {
       rows: [
         {
           label: "Salt applications",
-          detail: `${saltAcres.toFixed(2)} acres · ${saltYardsPerApp.toFixed(2)} yds/app · ${num(saltApplications)} applications`,
+          detail: `${saltAcres.toFixed(2)} acres · ${saltYardsPerApp.toFixed(2)} yds/app · ${formatCurrency(saltCostPerApp)}/application · ${num(saltApplications)} applications`,
           amount: saltSeasonTotal,
         },
       ],
