@@ -6,8 +6,8 @@ import "./globals.css";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Equipt",
-  description: "Work orders, purchasing & asset management",
+  title: "Landscapt",
+  description: "CRM, field service, work orders, purchasing & asset management",
   viewport: "width=device-width, initial-scale=1, maximum-scale=1",
 };
 

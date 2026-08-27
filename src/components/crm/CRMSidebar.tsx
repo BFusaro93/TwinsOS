@@ -60,7 +60,7 @@ interface NavSection {
   items: NavItem[];
 }
 
-const CRM_NAV: NavSection[] = [
+export const CRM_NAV: NavSection[] = [
   {
     label: "Overview",
     items: [

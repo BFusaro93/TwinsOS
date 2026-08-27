@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
-import { CRMSidebar } from "@/components/crm/CRMSidebar";
+import { CRMSidebar, CRM_NAV } from "@/components/crm/CRMSidebar";
 import { TopBar } from "@/components/shared/TopBar";
 import { RealtimeSync } from "@/components/shared/RealtimeSync";
 import { SettingsLoader } from "@/components/shared/SettingsLoader";
@@ -13,6 +13,7 @@ import { useCrmAccess } from "@/lib/hooks/use-permissions";
 import { useModuleAccess } from "@/lib/hooks/use-module-access";
 import { useTrialStatus } from "@/lib/hooks/use-trial-status";
 import { TrialBanner } from "@/components/shared/TrialBanner";
+import { usePageTitle } from "@/lib/hooks/use-page-title";
 
 export default function CRMLayout({ children }: { children: React.ReactNode }) {
   const { sidebarOpen, setSidebarOpen } = useUIStore();
@@ -20,6 +21,8 @@ export default function CRMLayout({ children }: { children: React.ReactNode }) {
   const { allowed, isLoading } = useCrmAccess(pathname);
   const { allowed: planAllowed, isLoading: planLoading } = useModuleAccess("landscapt");
   const { isExpired: trialExpired, isLoading: trialLoading } = useTrialStatus();
+
+  usePageTitle(pathname, CRM_NAV, "Landscapt");
 
   useEffect(() => {
     setSidebarOpen(false);

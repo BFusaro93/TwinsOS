@@ -12,6 +12,8 @@ import { useUIStore } from "@/stores";
 import { useIsCrewOnly } from "@/lib/hooks/use-permissions";
 import { useTrialStatus } from "@/lib/hooks/use-trial-status";
 import { TrialBanner } from "@/components/shared/TrialBanner";
+import { NAV_SECTIONS } from "@/components/shared/nav-config";
+import { usePageTitle } from "@/lib/hooks/use-page-title";
 
 export default function DashboardLayout({
   children,
@@ -23,6 +25,8 @@ export default function DashboardLayout({
   const router = useRouter();
   const { isCrewOnly, isLoading } = useIsCrewOnly();
   const { isExpired: trialExpired, isLoading: trialLoading } = useTrialStatus();
+
+  usePageTitle(pathname, NAV_SECTIONS, "Equipt");
 
   // Auto-close mobile sidebar drawer on navigation
   useEffect(() => {
