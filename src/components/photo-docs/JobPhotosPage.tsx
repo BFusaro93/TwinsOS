@@ -67,7 +67,7 @@ const EMPTY_FORM = { name: "", customerName: "", address: "", city: "", state: "
 
 // ── Full-featured detail pane (list view) ─────────────────────────────────────
 
-function JobDetailPane({ jobId }: { jobId: string }) {
+function JobDetailPane({ jobId, onDeleted }: { jobId: string; onDeleted: () => void }) {
   const router = useRouter();
   const { isCrew: isCrewRole, canAnnotate } = usePhotoAccess();
   const { data: job, isLoading } = usePhotoJob(jobId);
@@ -223,7 +223,7 @@ function JobDetailPane({ jobId }: { jobId: string }) {
               disabled={deleting}
               onClick={() => {
                 if (confirm(`Permanently delete "${job.name}"? This cannot be undone.`)) {
-                  deleteJob(job.id, { onSuccess: () => { toast.success("Job deleted"); router.back(); }, onError: () => toast.error("Failed to delete job") });
+                  deleteJob(job.id, { onSuccess: () => { toast.success("Job deleted"); onDeleted(); }, onError: () => toast.error("Failed to delete job") });
                 }
               }}
             >
@@ -644,7 +644,7 @@ export function JobPhotosPage() {
           <MasterDetailLayout
             className="min-h-0 flex-1"
             listPanel={listPanel}
-            detailPanel={selectedJobId ? <JobDetailPane jobId={selectedJobId} /> : null}
+            detailPanel={selectedJobId ? <JobDetailPane jobId={selectedJobId} onDeleted={() => setSelectedJobId(null)} /> : null}
             emptyState={
               <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
                 <Images className="h-10 w-10 text-slate-200" />
