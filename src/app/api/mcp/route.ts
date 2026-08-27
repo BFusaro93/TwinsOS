@@ -3,6 +3,7 @@ import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/
 import { adminClient, peekApiKeyScopes } from "@/lib/api/auth";
 import { logger } from "@/lib/logger";
 import { registerResourceTools } from "./tools";
+import { registerDocsTools } from "./docs-tools";
 
 const log = logger.child("mcp-server");
 
@@ -53,6 +54,7 @@ async function handleMcpRequest(request: Request): Promise<Response> {
   );
 
   registerResourceTools(server, request, auth.scopes);
+  registerDocsTools(server);
 
   const transport = new WebStandardStreamableHTTPServerTransport({
     sessionIdGenerator: undefined,

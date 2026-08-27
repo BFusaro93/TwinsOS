@@ -8,7 +8,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "docs:index": "node scripts/build-docs-index.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.106.0",

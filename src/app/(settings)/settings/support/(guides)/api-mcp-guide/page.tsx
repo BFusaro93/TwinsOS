@@ -51,6 +51,7 @@ export default function ApiMcpGuidePage() {
           <TOCLink href="#scopes">Resources & scopes</TOCLink>
           <TOCLink href="#walkthrough">Walkthrough: a read-only reporting key</TOCLink>
           <TOCLink href="#mcp">Using the key with MCP</TOCLink>
+          <TOCLink href="#docs-tools">Answering &quot;how do I&hellip;&quot; from the help docs</TOCLink>
           <TOCLink href="#why-one-system">Why REST and MCP share one key</TOCLink>
           <TOCLink href="#managing-keys">Rate limits, errors & revoking</TOCLink>
         </div>
@@ -256,10 +257,13 @@ export default function ApiMcpGuidePage() {
           </tbody>
         </Table>
         <p>
-          A key with <em>zero</em> scopes still connects successfully and gets exactly one tool,{" "}
-          <code className="rounded bg-[#f4f6f0] px-1 py-0.5 font-mono text-xs">whoami</code>, so an
-          agent can at least confirm which org and scopes it&apos;s connected as before deciding what
-          to do next — it never sees an empty, broken-looking connection.
+          A key with <em>zero</em> resource scopes still connects successfully and gets three tools —{" "}
+          <code className="rounded bg-[#f4f6f0] px-1 py-0.5 font-mono text-xs">whoami</code>,{" "}
+          <code className="rounded bg-[#f4f6f0] px-1 py-0.5 font-mono text-xs">search_docs</code>, and{" "}
+          <code className="rounded bg-[#f4f6f0] px-1 py-0.5 font-mono text-xs">get_guide</code> — so an
+          agent can at least confirm which org and scopes it&apos;s connected as, and answer &quot;how
+          do I&hellip;&quot; questions from the help docs, before deciding what else to do — it never
+          sees an empty, broken-looking connection.
         </p>
         <p>
           Every tool call is charged against the key&apos;s rate limit exactly once, the same as a
@@ -267,6 +271,35 @@ export default function ApiMcpGuidePage() {
           agent that calls a tool in a loop burns the same budget a script hammering the REST endpoint
           would.
         </p>
+      </Section>
+
+      <Section id="docs-tools" title="Answering &quot;how do I&hellip;&quot; from the help docs">
+        <p>
+          Two tools are always available, regardless of the key&apos;s scopes, because they only read
+          the same non-sensitive help content already visible at Support and Docs — no org data:{" "}
+          <code className="rounded bg-[#f4f6f0] px-1 py-0.5 font-mono text-xs">search_docs</code>{" "}
+          (full-text search across every short Support article and every long-form Docs guide, e.g.
+          Purchase Orders, Work Orders, Estimating) and{" "}
+          <code className="rounded bg-[#f4f6f0] px-1 py-0.5 font-mono text-xs">get_guide</code> (the
+          full text of one guide, by the slug a search result points at).
+        </p>
+        <p>
+          This is what lets a connected agent answer a genuine &quot;how do I convert a requisition to
+          a PO&quot; or &quot;what does FIFO costing actually do here&quot; question from your own
+          documentation instead of guessing from general knowledge — search first, then fetch the full
+          guide if one result looks like the right one.
+        </p>
+        <Callout>
+          <strong>Guide content is a generated index, not live.</strong> The long-form guides are
+          ordinary app pages (JSX, not structured data), so their searchable text is pre-extracted into{" "}
+          <code className="rounded bg-[#f4f6f0] px-1 py-0.5 font-mono text-xs">
+            src/lib/docs-guides-content.json
+          </code>{" "}
+          by <code className="rounded bg-[#f4f6f0] px-1 py-0.5 font-mono text-xs">npm run docs:index</code>{" "}
+          rather than rendered on every search call. If you&apos;re maintaining this app: re-run that
+          script after adding or editing a guide, or search_docs and get_guide will keep returning the
+          old text.
+        </Callout>
       </Section>
 
       <Section id="why-one-system" title="Why REST and MCP share one key">
