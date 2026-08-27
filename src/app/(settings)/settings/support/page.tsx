@@ -13,11 +13,11 @@ export default function MasterSettingsSupportPage() {
         hideDownload
         action={
           <Link
-            href="/settings/support/library"
+            href="/settings/docs"
             className="inline-flex items-center gap-1.5 rounded-md border border-white/30 bg-white/10 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-white/20"
           >
             <BookOpen className="h-3.5 w-3.5" />
-            Guide Library
+            Advanced Guides
           </Link>
         }
       />
