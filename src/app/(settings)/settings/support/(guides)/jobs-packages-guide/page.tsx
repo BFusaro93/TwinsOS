@@ -21,7 +21,7 @@ export default function JobsPackagesGuidePage() {
   return (
     <DocsFontScope className="flex h-full flex-col gap-6 overflow-y-auto pb-12">
       <DocsHero
-        kicker="Landscapt / CRM"
+        kicker="Landscapt (CRM)"
         title="Jobs & Packages"
         description="The six job types, how a job's status differs from a visit's status, and how a Package template turns into a billed job."
       />

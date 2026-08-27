@@ -19,7 +19,7 @@ export default function OnlinePaymentsGuidePage() {
   return (
     <DocsFontScope className="flex h-full flex-col gap-6 overflow-y-auto pb-12">
       <DocsHero
-        kicker="Landscapt / CRM"
+        kicker="Landscapt (CRM)"
         title="Online Payments & Stripe"
         description="How a client actually pays an invoice online, how Stripe Connect keeps every org's money in their own account, and how the platform takes zero cut."
       />

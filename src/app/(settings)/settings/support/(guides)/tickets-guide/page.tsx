@@ -45,7 +45,7 @@ export default function TicketsGuidePage() {
   return (
     <DocsFontScope className="flex h-full flex-col gap-6 overflow-y-auto pb-12">
       <DocsHero
-        kicker="Landscapt / CRM"
+        kicker="Landscapt (CRM)"
         title="Tickets"
         description="Support and service tickets — where they come from, how they're worked, and how they connect to the rest of a client's record."
       />

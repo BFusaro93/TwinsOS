@@ -65,7 +65,7 @@ export default function ZapierGuidePage() {
         <div className="flex flex-col gap-1">
           <TOCLink href="#connecting">Connecting</TOCLink>
           <TOCLink href="#how-triggers-work">How triggers work</TOCLink>
-          <TOCLink href="#crm-triggers">Landscapt / CRM triggers</TOCLink>
+          <TOCLink href="#crm-triggers">Landscapt (CRM) triggers</TOCLink>
           <TOCLink href="#cmms-triggers">Equipt triggers</TOCLink>
           <TOCLink href="#meter-threshold">Meter Threshold, in detail</TOCLink>
           <TOCLink href="#actions">Actions</TOCLink>
@@ -123,7 +123,7 @@ export default function ZapierGuidePage() {
         </Table>
       </Section>
 
-      <Section id="crm-triggers" title="Landscapt / CRM triggers">
+      <Section id="crm-triggers" title="Landscapt (CRM) triggers">
         <p>
           All instant — these piggyback on the same internal event dispatch that runs Landscapt&apos;s
           own automations feature, so a Zap fires at the same moment an internal automation would.

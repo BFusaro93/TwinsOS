@@ -29,7 +29,7 @@ export default function EstimatingGuidePage() {
   return (
     <DocsFontScope className="flex h-full flex-col gap-6 overflow-y-auto pb-12">
       <DocsHero
-        kicker="Landscapt / CRM"
+        kicker="Landscapt (CRM)"
         title="Estimates & the Budget Engine"
         description="How an estimate is built, how its numbers are actually calculated, and how it becomes a job."
       />

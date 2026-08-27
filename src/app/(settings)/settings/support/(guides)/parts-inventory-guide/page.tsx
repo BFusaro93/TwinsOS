@@ -33,7 +33,7 @@ export default function PartsInventoryGuidePage() {
   return (
     <DocsFontScope className="flex h-full flex-col gap-6 overflow-y-auto pb-12">
       <DocsHero
-        kicker="Maintenance (CMMS)"
+        kicker="Equipt (CMMS)"
         title="Parts Inventory"
         description="Adding parts, linking them to assets, keeping stock and cost in sync, and when to split a part number into two."
       />

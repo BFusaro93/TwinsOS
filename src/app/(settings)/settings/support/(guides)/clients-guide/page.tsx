@@ -55,7 +55,7 @@ export default function ClientsGuidePage() {
   return (
     <DocsFontScope className="flex h-full flex-col gap-6 overflow-y-auto pb-12">
       <DocsHero
-        kicker="Landscapt / CRM"
+        kicker="Landscapt (CRM)"
         title="Clients, Properties & Leads"
         description="Client accounts, commercial hierarchies, service properties, and the activity timeline that ties it all together."
       />

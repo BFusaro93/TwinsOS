@@ -28,7 +28,7 @@ export default function DamageCasesGuidePage() {
   return (
     <DocsFontScope className="flex h-full flex-col gap-6 overflow-y-auto pb-12">
       <DocsHero
-        kicker="Landscapt / CRM"
+        kicker="Landscapt (CRM)"
         title="Damage Cases"
         description="Tracking property damage and warranty claims tied to a job — what a case captures, how cost rolls up, and a real current limitation in how it connects to a client record."
       />

@@ -30,7 +30,7 @@ export default function ContractsGuidePage() {
   return (
     <DocsFontScope className="flex h-full flex-col gap-6 overflow-y-auto pb-12">
       <DocsHero
-        kicker="Landscapt / CRM"
+        kicker="Landscapt (CRM)"
         title="Contracts"
         description="Ongoing billing agreements — monthly amounts, seasonal overrides, sub-properties, and how signing and invoicing actually work."
       />

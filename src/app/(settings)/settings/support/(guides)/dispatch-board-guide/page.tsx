@@ -34,7 +34,7 @@ export default function DispatchBoardGuidePage() {
   return (
     <DocsFontScope className="flex h-full flex-col gap-6 overflow-y-auto pb-12">
       <DocsHero
-        kicker="Landscapt / CRM"
+        kicker="Landscapt (CRM)"
         title="The Dispatch Board"
         description="The daily scheduling screen crews and dispatchers live in — visits, crews, status, and how actual hours get calculated."
       />

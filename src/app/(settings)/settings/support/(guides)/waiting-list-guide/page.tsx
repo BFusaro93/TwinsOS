@@ -12,7 +12,7 @@ export default function WaitingListGuidePage() {
   return (
     <DocsFontScope className="flex h-full flex-col gap-6 overflow-y-auto pb-12">
       <DocsHero
-        kicker="Landscapt / CRM"
+        kicker="Landscapt (CRM)"
         title="The Waiting List"
         description="Jobs with a date range instead of a date, held for opportunistic scheduling — and how to actually get them dispatched."
       />

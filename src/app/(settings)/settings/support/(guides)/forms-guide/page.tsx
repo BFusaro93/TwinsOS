@@ -44,7 +44,7 @@ export default function FormsGuidePage() {
   return (
     <DocsFontScope className="flex h-full flex-col gap-6 overflow-y-auto pb-12">
       <DocsHero
-        kicker="Landscapt / CRM"
+        kicker="Landscapt (CRM)"
         title="Forms & Lead Capture"
         description="Building, publishing, and sharing public forms — and what happens to a submission once it lands."
       />

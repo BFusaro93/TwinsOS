@@ -30,7 +30,7 @@ export default function SnowGuidePage() {
   return (
     <DocsFontScope className="flex h-full flex-col gap-6 overflow-y-auto pb-12">
       <DocsHero
-        kicker="Landscapt / CRM"
+        kicker="Landscapt (CRM)"
         title="Snow Jobs & Storm Dispatch"
         description="Storm events, priority dispatch, and the invoicing flow built specifically for snow."
       />

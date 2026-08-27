@@ -92,7 +92,7 @@ export const DOC_SECTIONS: DocSection[] = [
               "Handles the full procurement lifecycle: Purchase Requisitions → Approval → Purchase Orders → Vendor management → Receiving → Parts inventory update. Every line item references a catalog entry from the Products section.",
           },
           {
-            step: "Maintenance (CMMS) Module",
+            step: "Equipt (CMMS) Module",
             detail:
               "Handles asset and maintenance lifecycle: Asset registry → Preventive Maintenance schedules → Work Orders → Parts inventory → Labor tracking → Maintenance history. Vehicles are a specialized asset type with service-interval reminders.",
           },
@@ -321,7 +321,7 @@ export const DOC_SECTIONS: DocSection[] = [
   },
   {
     id: "maintenance",
-    label: "Maintenance (CMMS)",
+    label: "Equipt (CMMS)",
     icon: Wrench,
     articles: [
       {
@@ -577,7 +577,7 @@ export const DOC_SECTIONS: DocSection[] = [
   },
   {
     id: "crm",
-    label: "CRM / Field Service",
+    label: "Landscapt (CRM)",
     icon: Building2,
     articles: [
       {
@@ -1448,7 +1448,7 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
     ],
   },
   {
-    label: "CRM / Field Service",
+    label: "Landscapt (CRM)",
     items: [
       {
         q: "What's the difference between an estimate's stage and its approval status?",

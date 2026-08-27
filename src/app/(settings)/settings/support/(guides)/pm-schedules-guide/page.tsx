@@ -31,7 +31,7 @@ export default function PMSchedulesGuidePage() {
   return (
     <DocsFontScope className="flex h-full flex-col gap-6 overflow-y-auto pb-12">
       <DocsHero
-        kicker="Maintenance (CMMS)"
+        kicker="Equipt (CMMS)"
         title="Preventive Maintenance Schedules"
         description="Calendar-based recurring service, from one schedule covering a whole fleet down to per-asset parts."
       />

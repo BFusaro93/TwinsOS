@@ -76,7 +76,7 @@ export default function AutomationsGuidePage() {
   return (
     <DocsFontScope className="flex h-full flex-col gap-6 overflow-y-auto pb-12">
       <DocsHero
-        kicker="Landscapt / CRM"
+        kicker="Landscapt (CRM)"
         title="Communication Automations"
         description="How sequences, triggers, and events work — and how Automations differ from Sales Campaigns."
       />

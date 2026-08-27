@@ -28,7 +28,7 @@ export default function WorkOrdersGuidePage() {
   return (
     <DocsFontScope className="flex h-full flex-col gap-6 overflow-y-auto pb-12">
       <DocsHero
-        kicker="Maintenance (CMMS)"
+        kicker="Equipt (CMMS)"
         title="Work Orders & Maintenance Requests"
         description="How a Work Order actually moves through status, how a Maintenance Request gets triaged into one, and what really happens to parts inventory along the way."
       />

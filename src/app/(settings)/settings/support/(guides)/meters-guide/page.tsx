@@ -37,7 +37,7 @@ export default function MetersGuidePage() {
   return (
     <DocsFontScope className="flex h-full flex-col gap-6 overflow-y-auto pb-12">
       <DocsHero
-        kicker="Maintenance (CMMS)"
+        kicker="Equipt (CMMS)"
         title="Meters & Usage-Based Automations"
         description="Track hours, miles, gallons, and cycles on any asset — and let Equipt open the work order for you the moment a threshold is crossed."
       />
