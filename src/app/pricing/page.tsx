@@ -54,20 +54,44 @@ export default function PricingPage() {
 
       <Reveal>
         <div className="mx-auto max-w-[1160px] px-6 pb-6 sm:px-12">
-          <div className="rounded-lg border border-[#e6e6e0] bg-white p-6 text-center">
-            <div className="mb-3 flex items-center justify-center gap-2">
+          <div className="rounded-lg border border-[#e6e6e0] bg-white p-6">
+            <div className="mb-5 flex items-center justify-center gap-2">
               <BrandIcon slug="stripe" className="h-5 w-5" style={{ color: "#635BFF" }} />
               <div className="font-[family-name:var(--font-heading)] text-[15px] font-bold text-[#0a0a0a]">
                 Client payment processing
               </div>
             </div>
-            <p className="mx-auto max-w-xl text-[13.5px] leading-relaxed text-[#5a5a56]">
-              Card and ACH payments run through Stripe on every plan — no separate fee to turn it on. Stripe&apos;s
-              standard rates apply: 2.9% + $0.30 per card charge, and 0.8% per ACH transfer (capped at $5). On
-              top of that, a pass-through fee to help recover the card cost is on by default — 3.5% on payments
-              above $500 — and both the rate and threshold are adjustable per company, including turning it off
-              entirely, and it&apos;s waivable per charge.
+            <p className="mx-auto mb-6 max-w-xl text-center text-[13px] text-slate-500">
+              Card and ACH payments run through Stripe on every plan — no separate fee to turn it on.
             </p>
+            <div className="mx-auto grid max-w-2xl grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="rounded-md border border-[#e6e6e0] bg-[#fbfbf8] p-4">
+                <div className="mb-2 text-[11px] font-bold uppercase tracking-wide text-slate-400">
+                  Stripe&apos;s processing rates
+                </div>
+                <div className="flex items-center justify-between py-1 text-[13.5px]">
+                  <span className="text-slate-600">Card</span>
+                  <span className="font-semibold text-[#0a0a0a]">2.9% + $0.30</span>
+                </div>
+                <div className="flex items-center justify-between py-1 text-[13.5px]">
+                  <span className="text-slate-600">ACH transfer</span>
+                  <span className="font-semibold text-[#0a0a0a]">0.8% (capped at $5)</span>
+                </div>
+              </div>
+              <div className="rounded-md border border-[#e6e6e0] bg-[#fbfbf8] p-4">
+                <div className="mb-2 text-[11px] font-bold uppercase tracking-wide text-slate-400">
+                  Pass-through fee to clients
+                </div>
+                <div className="flex items-center justify-between py-1 text-[13.5px]">
+                  <span className="text-slate-600">Default rate</span>
+                  <span className="font-semibold text-[#0a0a0a]">3.5% above $500</span>
+                </div>
+                <div className="py-1 text-[12px] leading-relaxed text-slate-500">
+                  On by default. Rate, threshold, and whether it&apos;s charged at all are adjustable per
+                  company — and waivable per charge.
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </Reveal>
