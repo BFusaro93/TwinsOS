@@ -13,6 +13,7 @@ import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createClient } from "@supabase/supabase-js";
 import { Resend } from "resend";
 import { formatCurrency } from "@/lib/utils";
+import { EMAIL_FROM, EMAIL_FROM_EQUIPT } from "@/lib/email/send";
 
 // `linkPath` has an `{id}` slot the deep link is built from — list pages that
 // only support auto-opening a record via `?id=` (po/requisitions, po/orders)
@@ -142,6 +143,8 @@ export async function POST(request: Request) {
 
   const resend = new Resend(process.env.RESEND_API_KEY!);
   const entityLabel = meta.label;
+  // purchase_order/requisition are Equipt (PO module); crm_estimate is Landscapt.
+  const fromAddress = entityType === "crm_estimate" ? EMAIL_FROM : EMAIL_FROM_EQUIPT;
 
   let sent = 0;
   for (const req of activeRequests) {
@@ -149,7 +152,7 @@ export async function POST(request: Request) {
     if (!toEmail) continue;
 
     await resend.emails.send({
-      from: "Equipt <noreply@twinslawnservice.com>",
+      from: fromAddress,
       to: toEmail,
       subject: `Action required: ${entityNumber} needs your approval`,
       html: `

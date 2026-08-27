@@ -1,5 +1,6 @@
 import { Resend } from "resend";
 import { resolveBroadcastRecipients } from "@/lib/notify-shared";
+import { EMAIL_FROM } from "@/lib/email/send";
 
 // Notifies staff about CRM ticket events (created / assigned / commented).
 // Mirrors src/lib/estimate-client-notify.ts's shape: per-recipient pref
@@ -90,7 +91,7 @@ async function sendToRecipients(
   const resend = new Resend(resendKey);
   for (const p of emailEligible) {
     await resend.emails.send({
-      from: "Equipt <noreply@twinslawnservice.com>",
+      from: EMAIL_FROM,
       to: p.email,
       subject: opts.title,
       html: opts.emailHtml(p.name ?? null),

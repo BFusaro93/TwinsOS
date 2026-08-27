@@ -1,5 +1,6 @@
 import { Resend } from "resend";
 import { resolveBroadcastRecipients } from "@/lib/notify-shared";
+import { EMAIL_FROM } from "@/lib/email/send";
 
 // Notifies staff when a CLIENT accepts or declines an estimate — via either
 // the public proposal link or the logged-in client portal. Separate from the
@@ -72,7 +73,7 @@ export async function notifyStaffOfEstimateDecision(
 
   for (const p of emailEligible) {
     await resend.emails.send({
-      from: "Equipt <noreply@twinslawnservice.com>",
+      from: EMAIL_FROM,
       to: p.email,
       subject: title,
       html: `<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px 24px">

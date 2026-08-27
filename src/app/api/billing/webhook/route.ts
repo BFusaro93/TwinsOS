@@ -6,6 +6,7 @@ import { getStripe, isStripeConfigured } from "@/lib/stripe/server";
 import { getPlanForPriceId } from "@/lib/stripe/plans";
 import { syncSeatOverage } from "@/lib/stripe/seat-sync";
 import { logger } from "@/lib/logger";
+import { EMAIL_FROM } from "@/lib/email/send";
 
 const log = logger.child("stripe webhook");
 
@@ -252,7 +253,7 @@ async function notifyPaymentFailed(
   const resend = new Resend(process.env.RESEND_API_KEY);
   try {
     await resend.emails.send({
-      from: "Equipt <noreply@twinslawnservice.com>",
+      from: EMAIL_FROM,
       to: recipients,
       subject: `Payment failed for ${org.name}'s subscription`,
       html: `

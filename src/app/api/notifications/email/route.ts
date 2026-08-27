@@ -17,6 +17,7 @@ import { NextResponse } from "next/server";
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createClient } from "@supabase/supabase-js";
 import { Resend } from "resend";
+import { EMAIL_FROM_EQUIPT } from "@/lib/email/send";
 
 type NotifType =
   | "wo_created"
@@ -71,7 +72,7 @@ const INAPP_PREF_KEY: Record<NotifType, string | null> = {
 };
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://twins-os.vercel.app";
-const FROM     = "Equipt <noreply@twinslawnservice.com>";
+const FROM     = EMAIL_FROM_EQUIPT;
 
 export async function POST(request: Request) {
   // ── Auth ─────────────────────────────────────────────────────────────────

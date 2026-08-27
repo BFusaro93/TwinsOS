@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { Resend } from "resend";
 import { fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
+import { EMAIL_FROM } from "@/lib/email/send";
 
 /**
  * GET /api/cron/contract-expiry-notify — called daily by Vercel Cron.
@@ -96,7 +97,7 @@ export async function GET(request: Request) {
 
     try {
       await resend.emails.send({
-        from: "Equipt <noreply@twinslawnservice.com>",
+        from: EMAIL_FROM,
         to: rep.email,
         subject: `Contract expires in ${daysLeft} day${daysLeft === 1 ? "" : "s"} — ${contract.title}`,
         html: `<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px 24px">

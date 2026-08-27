@@ -1,7 +1,9 @@
 import { Resend } from "resend";
 import { KNOWN_MERGE_TAG_KEYS } from "@/lib/utils/document-template-renderer";
 
-export const EMAIL_FROM = "Twins Lawn Service <noreply@twinslawnservice.com>";
+export const EMAIL_FROM = "Landscapt <noreply@landscapt.com>";
+/** Same mailbox/domain as EMAIL_FROM — only the display name differs, for CMMS/Equipt-triggered notifications (work orders, maintenance requests, PO/requisitions). */
+export const EMAIL_FROM_EQUIPT = "Equipt <noreply@landscapt.com>";
 
 /** Replaces `[token]` placeholders (case-insensitive) with resolved values. */
 export function resolveMergeTags(template: string, vars: Record<string, string>): string {

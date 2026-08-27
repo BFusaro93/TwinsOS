@@ -6,6 +6,7 @@ import type { Database } from "@/types/supabase";
 import { processDueEnrollment } from "@/lib/automations/sequence-processor";
 import { notifyZapierSubscribers } from "@/lib/integrations/zapier";
 import { POLLING_TRIGGERS } from "@/lib/integrations/zapier-triggers";
+import { EMAIL_FROM } from "@/lib/email/send";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AdminClient = ReturnType<typeof createClient<any>>;
@@ -118,7 +119,7 @@ async function executeAction(
           await Promise.allSettled(
             eligible.map((p: { email: string | null; name: string | null }) =>
               resend.emails.send({
-                from: "Equipt <noreply@twinslawnservice.com>",
+                from: EMAIL_FROM,
                 to: p.email as string,
                 subject,
                 html: `<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px 24px">
