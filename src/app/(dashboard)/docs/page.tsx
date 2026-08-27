@@ -8,6 +8,7 @@ export default function DocumentationPage() {
         kicker="Documentation"
         title="Guides for every module."
         description="Step-by-step guides for every part of the platform."
+        hideDownload
       />
       <DocsPage />
     </DocsFontScope>

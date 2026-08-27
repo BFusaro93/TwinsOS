@@ -72,3 +72,18 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Docs guide printing (window.print() via the "Download PDF" button in
+   DocsHero) — preserve brand colors/backgrounds, which browsers otherwise
+   strip by default unless the viewer manually checks "Background graphics". */
+@media print {
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    color-adjust: exact !important;
+  }
+  a {
+    color: inherit !important;
+    text-decoration: underline !important;
+  }
+}

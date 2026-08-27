@@ -17,11 +17,11 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
   }, [pathname, setSidebarOpen]);
 
   return (
-    <div className="flex h-dvh overflow-hidden bg-slate-50">
+    <div className="flex h-dvh overflow-hidden bg-slate-50 print:h-auto print:overflow-visible print:block">
       <RealtimeSync />
       <SettingsLoader />
 
-      <div className="hidden h-full md:flex">
+      <div className="hidden h-full md:flex print:hidden">
         <SettingsSidebar />
       </div>
 
@@ -34,9 +34,11 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
         </div>
       )}
 
-      <div className="flex flex-1 flex-col overflow-hidden">
-        <TopBar />
-        <main className="flex-1 overflow-auto p-4 md:p-6">{children}</main>
+      <div className="flex flex-1 flex-col overflow-hidden print:block print:h-auto print:overflow-visible">
+        <div className="print:hidden">
+          <TopBar />
+        </div>
+        <main className="flex-1 overflow-auto p-4 md:p-6 print:overflow-visible print:p-0">{children}</main>
       </div>
     </div>
   );

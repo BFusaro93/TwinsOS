@@ -1,5 +1,8 @@
+"use client";
+
 import type { ReactNode } from "react";
 import { Plus_Jakarta_Sans } from "next/font/google";
+import { Download } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // Shared visual language for docs/support surfaces, pulled from the Landscapt
@@ -18,19 +21,38 @@ export function DocsFontScope({ children, className }: { children: ReactNode; cl
   return <div className={cn(docsHeading.variable, className)}>{children}</div>;
 }
 
+export function DownloadPdfButton({ className }: { className?: string }) {
+  return (
+    <button
+      type="button"
+      onClick={() => window.print()}
+      className={cn(
+        "inline-flex items-center gap-1.5 rounded-md border border-white/30 bg-white/10 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-white/20 print:hidden",
+        className
+      )}
+    >
+      <Download className="h-3.5 w-3.5" />
+      Download PDF
+    </button>
+  );
+}
+
 export function DocsHero({
   kicker,
   title,
   description,
   action,
+  hideDownload,
 }: {
   kicker: string;
   title: string;
   description?: string;
   action?: ReactNode;
+  /** Set true to omit the default "Download PDF" button (e.g. on the library index, which isn't a single-guide page). */
+  hideDownload?: boolean;
 }) {
   return (
-    <div className="rounded-2xl bg-[#005642] px-6 py-8 md:px-10 md:py-10">
+    <div className="rounded-2xl bg-[#005642] px-6 py-8 md:px-10 md:py-10 print:rounded-none print:px-0">
       <div className="mb-2 text-[11px] font-bold uppercase tracking-[0.1em] text-[#b7d433]">
         {kicker}
       </div>
@@ -43,7 +65,12 @@ export function DocsHero({
             <p className="mt-1.5 max-w-xl text-sm leading-relaxed text-[#cfe6d8]">{description}</p>
           )}
         </div>
-        {action && <div className="flex flex-wrap gap-2 shrink-0">{action}</div>}
+        {(action || !hideDownload) && (
+          <div className="flex flex-wrap gap-2 shrink-0">
+            {action}
+            {!hideDownload && <DownloadPdfButton />}
+          </div>
+        )}
       </div>
     </div>
   );
