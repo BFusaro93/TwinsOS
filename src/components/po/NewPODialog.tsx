@@ -588,7 +588,6 @@ export function NewPODialog({ open, onOpenChange, initialData, prefillData, onCr
                               </td>
                               <td className="py-1.5 pr-2 align-top">
                                 <DecimalInput
-                                  min={0}
                                   className="h-8 w-28 text-xs"
                                   value={li.unitCost}
                                   selectOnFocus

@@ -211,7 +211,6 @@ export function AddProjectMaterialsDialog({
                       </td>
                       <td className="py-1.5 pr-2">
                         <DecimalInput
-                          min={0}
                           className="h-8 w-24 text-xs"
                           value={item.unitCost}
                           onCommit={(cost) =>

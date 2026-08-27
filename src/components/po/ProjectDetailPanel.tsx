@@ -613,7 +613,7 @@ function MaterialsTab({ project }: { project: Project }) {
               </div>
               <div className="flex flex-1 flex-col gap-1">
                 <label className="text-xs font-medium text-slate-600">Unit Cost ($)</label>
-                <Input type="number" min={0} step="any" value={editForm.unitCost} onChange={(e) => setEditForm((f) => ({ ...f, unitCost: e.target.value }))} />
+                <Input type="number" step="any" value={editForm.unitCost} onChange={(e) => setEditForm((f) => ({ ...f, unitCost: e.target.value }))} />
               </div>
             </div>
             <Button onClick={saveEdit} className="mt-1">Save Changes</Button>
