@@ -26,6 +26,7 @@ const CHANNELS = [
     body: "See Landscapt and Equipt walked through on your own use case — 30 minutes, no pressure.",
     cta: "Schedule a time",
     href: DEMO_URL,
+    external: true,
   },
   {
     icon: Mail,
@@ -81,7 +82,9 @@ export default function ContactPage() {
               </div>
               <div className="mb-5 text-[14px] leading-relaxed text-[#5a5a56]">{c.body}</div>
               <Button asChild variant="outline">
-                <a href={c.href}>{c.cta}</a>
+                <a href={c.href} {...(c.external ? { target: "_blank", rel: "noopener noreferrer" } : {})}>
+                  {c.cta}
+                </a>
               </Button>
             </Reveal>
           ))}

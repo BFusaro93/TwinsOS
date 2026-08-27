@@ -68,6 +68,8 @@ export function MarketingNav() {
           </Link>
           <a
             href={DEMO_URL}
+            target="_blank"
+            rel="noopener noreferrer"
             className="flex items-center gap-1.5 rounded-full border border-[#005642] px-4 py-2 text-[13px] font-semibold text-[#005642] transition-colors hover:bg-[#005642] hover:text-white"
           >
             <CalendarClock className="h-3.5 w-3.5" />
@@ -124,6 +126,8 @@ export function MarketingNav() {
 
           <a
             href={DEMO_URL}
+            target="_blank"
+            rel="noopener noreferrer"
             className="flex items-center gap-2 rounded-md px-2 py-2.5 text-[15px] font-medium text-[#005642]"
           >
             <CalendarClock className="h-4 w-4" />
