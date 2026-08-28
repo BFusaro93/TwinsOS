@@ -114,43 +114,6 @@ export type FormatRule = z.infer<typeof formatRuleSchema>;
 export const visualTypeSchema = z.enum(["kpi", "table", "bar", "line", "pie", "gauge"]);
 export type VisualType = z.infer<typeof visualTypeSchema>;
 
-export const customReportInputSchema = z.object({
-  name: z.string().min(1).max(120),
-  description: z.string().max(500).nullish(),
-  config: analysisConfigSchema,
-  /** How to render this saved analysis — table (default) or a chart, same
-   *  visual fields a Dashboard panel has. Kept separate from `config` so
-   *  the query definition stays exactly an AnalysisConfig. */
-  visualType: visualTypeSchema.optional(),
-  // nullish (not optional): the PATCH route only writes a field when it's
-  // present at all, so a client clearing a chart's label/KPI column back to
-  // "none" has to be able to send an explicit null — sending `undefined`
-  // is indistinguishable from "not touching this field" once JSON-encoded
-  // (JSON.stringify drops undefined keys), so the old value would never
-  // actually get cleared, including the dangling reference left behind by a
-  // dataset change.
-  labelColumn: z.string().nullish(),
-  valueColumns: z.array(z.string()).optional(),
-  kpiColumn: z.string().nullish(),
-  /** Cell color-coding for the table view — e.g. balance > $1000 → red. */
-  formatRules: z.array(formatRuleSchema).optional(),
-});
-export type CustomReportInput = z.infer<typeof customReportInputSchema>;
-
-export interface CustomReport {
-  id: string;
-  name: string;
-  description: string | null;
-  config: AnalysisConfig;
-  visualType: VisualType;
-  labelColumn: string | null;
-  valueColumns: string[];
-  kpiColumn: string | null;
-  formatRules: FormatRule[];
-  createdAt: string;
-  updatedAt: string;
-}
-
 export const visualSpecSchema = z.object({
   type: visualTypeSchema,
   /** Base analysis config. Does NOT include the shared tab date-range filter
@@ -191,6 +154,52 @@ export const visualSpecSchema = z.object({
   formatRules: z.array(formatRuleSchema).optional(),
 });
 export type VisualSpec = z.infer<typeof visualSpecSchema>;
+
+export const customReportInputSchema = z.object({
+  name: z.string().min(1).max(120),
+  description: z.string().max(500).nullish(),
+  config: analysisConfigSchema,
+  /** How to render this saved analysis — table (default) or a chart, same
+   *  visual fields a Dashboard panel has. Kept separate from `config` so
+   *  the query definition stays exactly an AnalysisConfig. */
+  visualType: visualTypeSchema.optional(),
+  // nullish (not optional): the PATCH route only writes a field when it's
+  // present at all, so a client clearing a chart's label/KPI column back to
+  // "none" has to be able to send an explicit null — sending `undefined`
+  // is indistinguishable from "not touching this field" once JSON-encoded
+  // (JSON.stringify drops undefined keys), so the old value would never
+  // actually get cleared, including the dangling reference left behind by a
+  // dataset change.
+  labelColumn: z.string().nullish(),
+  valueColumns: z.array(z.string()).optional(),
+  kpiColumn: z.string().nullish(),
+  /** Cell color-coding for the table view — e.g. balance > $1000 → red. */
+  formatRules: z.array(formatRuleSchema).optional(),
+  /** A chart shown above this analysis (and embedded above it in PDF
+   *  export) — independent of `visualType`, so even a table-type analysis
+   *  can carry a graphic. Usually picked from the Graphics Library, stored
+   *  as a snapshot copy (same "copy not reference" convention as a
+   *  dashboard panel's `savedReportId`). */
+  headerVisual: visualSpecSchema.nullish(),
+  headerVisualTitle: z.string().max(120).nullish(),
+});
+export type CustomReportInput = z.infer<typeof customReportInputSchema>;
+
+export interface CustomReport {
+  id: string;
+  name: string;
+  description: string | null;
+  config: AnalysisConfig;
+  visualType: VisualType;
+  labelColumn: string | null;
+  valueColumns: string[];
+  kpiColumn: string | null;
+  formatRules: FormatRule[];
+  headerVisual: VisualSpec | null;
+  headerVisualTitle: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
 
 export const dashboardPanelSchema = z.object({
   id: z.string(),

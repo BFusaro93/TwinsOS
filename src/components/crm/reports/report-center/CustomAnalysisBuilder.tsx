@@ -16,9 +16,11 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -31,6 +33,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { downloadCSV } from "@/lib/csv";
 import { downloadXLSX } from "@/lib/xlsx-export";
 import { exportReportPDF } from "@/lib/reports/export-pdf";
+import type { ReportExportChartInput } from "@/lib/reports/export-pdf";
 import {
   aggregateAlias,
   aggregateLabel,
@@ -41,12 +44,14 @@ import {
   useCreateCustomReport,
   useCustomReport,
   useDeleteCustomReport,
+  useGraphicLibraryItems,
   useRunAnalysis,
   useUpdateCustomReport,
 } from "@/lib/hooks/use-report-center";
-import type { FormatRule, FormatRuleOp, VisualSpec, VisualType } from "@/types/crm-reports";
+import type { FormatRule, FormatRuleOp, ReportResult, VisualSpec, VisualType } from "@/types/crm-reports";
 import { FORMAT_COLORS } from "@/types/crm-reports";
 import { AnalysisConfigEditor } from "./AnalysisConfigEditor";
+import { chartInputFromResult, HeaderVisual } from "./HeaderVisual";
 import { exportCellValue, formatCellValue, ReportTable } from "./ReportTable";
 import { VisualRenderer } from "./VisualRenderer";
 
@@ -84,6 +89,11 @@ export function CustomAnalysisBuilder({ reportId }: { reportId?: string }) {
   const [valueColumns, setValueColumns] = useState<string[]>([]);
   const [kpiColumn, setKpiColumn] = useState("");
   const [formatRules, setFormatRules] = useState<FormatRule[]>([]);
+  const [headerVisual, setHeaderVisual] = useState<VisualSpec | undefined>(undefined);
+  const [headerVisualTitle, setHeaderVisualTitle] = useState("");
+  const [headerChartResult, setHeaderChartResult] = useState<ReportResult | undefined>(undefined);
+  const [graphicPickerOpen, setGraphicPickerOpen] = useState(false);
+  const { items: graphicItems } = useGraphicLibraryItems();
 
   const builder = useAnalysisConfigBuilder(undefined, () => {
     // Switching datasets invalidates any chart/format-rule column references
@@ -106,6 +116,8 @@ export function CustomAnalysisBuilder({ reportId }: { reportId?: string }) {
     setValueColumns(existing.valueColumns);
     setKpiColumn(existing.kpiColumn ?? "");
     setFormatRules(existing.formatRules ?? []);
+    setHeaderVisual(existing.headerVisual ?? undefined);
+    setHeaderVisualTitle(existing.headerVisualTitle ?? "");
     setHydrated(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [existing, hydrated]);
@@ -191,6 +203,8 @@ export function CustomAnalysisBuilder({ reportId }: { reportId?: string }) {
           valueColumns,
           kpiColumn: kpiColumn || null,
           formatRules,
+          headerVisual: headerVisual ?? null,
+          headerVisualTitle: headerVisual ? headerVisualTitle || null : null,
         });
       } else {
         const created = await createReport.mutateAsync({
@@ -202,6 +216,8 @@ export function CustomAnalysisBuilder({ reportId }: { reportId?: string }) {
           valueColumns,
           kpiColumn: kpiColumn || null,
           formatRules,
+          headerVisual: headerVisual ?? null,
+          headerVisualTitle: headerVisual ? headerVisualTitle || null : null,
         });
         router.push(`/crm/admin/reports/analysis/${created.id}`);
       }
@@ -248,13 +264,22 @@ export function CustomAnalysisBuilder({ reportId }: { reportId?: string }) {
     if (!result) return;
     setExportingPdf(true);
     try {
-      await exportReportPDF(name.trim() || "Analysis", [
-        {
-          heading: "",
-          columns: result.columns.map((c) => c.label),
-          rows: result.rows.map((row) => result.columns.map((c) => formatCellValue(row[c.key], c.type))),
-        },
-      ]);
+      const charts: ReportExportChartInput[] = [];
+      if (headerVisual && headerChartResult) {
+        const chart = chartInputFromResult(headerVisualTitle || "Chart", headerChartResult);
+        if (chart) charts.push(chart);
+      }
+      await exportReportPDF(
+        name.trim() || "Analysis",
+        [
+          {
+            heading: "",
+            columns: result.columns.map((c) => c.label),
+            rows: result.rows.map((row) => result.columns.map((c) => formatCellValue(row[c.key], c.type))),
+          },
+        ],
+        charts.length > 0 ? charts : undefined
+      );
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : "PDF export failed");
     } finally {
@@ -558,7 +583,91 @@ export function CustomAnalysisBuilder({ reportId }: { reportId?: string }) {
 
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-sm">9. Run</CardTitle>
+              <CardTitle className="text-sm">9. Header Graphic</CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-3">
+              <p className="text-xs text-muted-foreground">
+                Show a chart above this analysis, embedded above it in PDF export too —
+                pick one from the Graphics Library.
+              </p>
+              {headerVisual ? (
+                <div className="flex items-center justify-between gap-3 rounded-md border border-brand-200 bg-brand-50 px-3 py-2 text-xs text-brand-800">
+                  <span className="flex items-center gap-2">
+                    {headerVisualTitle || "Untitled graphic"}
+                    <Badge variant="secondary" className="text-[10px] capitalize">
+                      {headerVisual.type}
+                    </Badge>
+                  </span>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-6 text-[11px]"
+                    onClick={() => {
+                      setHeaderVisual(undefined);
+                      setHeaderVisualTitle("");
+                      setHeaderChartResult(undefined);
+                    }}
+                  >
+                    Remove
+                  </Button>
+                </div>
+              ) : (
+                <div>
+                  <Button variant="outline" size="sm" onClick={() => setGraphicPickerOpen(true)}>
+                    <Plus className="mr-1.5 h-3.5 w-3.5" />
+                    Choose From Graphics Library
+                  </Button>
+                </div>
+              )}
+              {headerVisual && (
+                <HeaderVisual
+                  headerVisual={{ title: headerVisualTitle || "Chart", visual: headerVisual }}
+                  onData={(_title, result) => setHeaderChartResult(result)}
+                />
+              )}
+            </CardContent>
+          </Card>
+
+          <Dialog open={graphicPickerOpen} onOpenChange={setGraphicPickerOpen}>
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle>Choose a Header Graphic</DialogTitle>
+              </DialogHeader>
+              <div className="flex max-h-96 flex-col gap-1 overflow-y-auto">
+                {graphicItems.length === 0 && (
+                  <p className="py-4 text-center text-sm text-muted-foreground">
+                    No graphics available yet.
+                  </p>
+                )}
+                {graphicItems.map((g) => (
+                  <button
+                    key={g.id}
+                    onClick={() => {
+                      setHeaderVisual(g.visual);
+                      setHeaderVisualTitle(g.name);
+                      setHeaderChartResult(undefined);
+                      setGraphicPickerOpen(false);
+                    }}
+                    className="flex flex-col rounded-md border p-3 text-left text-sm hover:bg-accent"
+                  >
+                    <span className="flex items-center gap-2 font-medium">
+                      {g.name}
+                      <Badge variant="secondary" className="text-[10px]">
+                        {g.isSystem ? "Built-in" : "My Graphics"}
+                      </Badge>
+                    </span>
+                    {g.description && (
+                      <span className="text-xs text-muted-foreground">{g.description}</span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            </DialogContent>
+          </Dialog>
+
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm">10. Run</CardTitle>
             </CardHeader>
             <CardContent className="flex flex-wrap items-center gap-3">
               <Button size="sm" onClick={handleRun} disabled={!canRun || runAnalysis.isPending}>
