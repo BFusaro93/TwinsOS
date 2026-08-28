@@ -6,6 +6,8 @@ import { getReport } from "@/lib/reports/registry";
 const createScheduleSchema = z.object({
   reportKey: z.string().min(1),
   recipients: z.array(z.string().email()).min(1),
+  /** Hour of day (America/New_York, 0-23) the cron should send this at. */
+  hourLocal: z.number().int().min(0).max(23).optional(),
 });
 
 export async function GET() {
@@ -19,7 +21,7 @@ export async function GET() {
 
   const { data, error } = await supabase
     .from("report_schedules")
-    .select("id, report_key, recipients, enabled, last_run_at, last_run_status, last_run_error, created_at")
+    .select("id, report_key, recipients, enabled, hour_local, last_run_at, last_run_status, last_run_error, created_at")
     .is("deleted_at", null)
     .order("created_at", { ascending: false });
 
@@ -63,9 +65,10 @@ export async function POST(request: Request) {
     .insert({
       report_key: parsed.data.reportKey,
       recipients: parsed.data.recipients,
+      ...(parsed.data.hourLocal !== undefined ? { hour_local: parsed.data.hourLocal } : {}),
       created_by: user.id,
     })
-    .select("id, report_key, recipients, enabled, last_run_at, last_run_status, last_run_error, created_at")
+    .select("id, report_key, recipients, enabled, hour_local, last_run_at, last_run_status, last_run_error, created_at")
     .single();
 
   if (error || !data) {

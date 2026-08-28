@@ -83,6 +83,8 @@ function avbHeaderVisuals(dateFilters: AnalysisFilter[]): ReportHeaderVisual[] {
 const AVB_COLUMNS = [
   "client_name",
   "men_count",
+  "actual_start_time",
+  "actual_stop_time",
   "budgeted_hours",
   "actual_hours",
   "variance_hours",

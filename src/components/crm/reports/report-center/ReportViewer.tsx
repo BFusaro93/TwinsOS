@@ -24,6 +24,7 @@ import { exportCellValue, formatCellValue, ReportTable } from "./ReportTable";
 import { HeaderVisual } from "./HeaderVisual";
 import { ReportScheduleDialog } from "./ReportScheduleDialog";
 import type { ReportExportChartInput } from "@/lib/reports/export-pdf";
+import { buildGroupedPdfSection } from "@/lib/reports/pdf-grouping";
 
 function chartInputFromResult(
   title: string,
@@ -147,13 +148,15 @@ function PrebuiltReportRunner({ def }: { def: PrebuiltReportDef }) {
       const charts = headerVisuals
         .map((hv) => (chartResults[hv.title] ? chartInputFromResult(hv.title, chartResults[hv.title]) : null))
         .filter((c): c is ReportExportChartInput => c !== null);
+      const grouped = buildGroupedPdfSection(result, formatCellValue) ?? undefined;
       await exportReportPDF(
         def.name,
         [
           {
             heading: "",
-            columns: result.columns.map((c) => c.label),
-            rows: result.rows.map((row) => result.columns.map((c) => formatCellValue(row[c.key], c.type))),
+            columns: grouped ? grouped.columns : result.columns.map((c) => c.label),
+            rows: grouped ? [] : result.rows.map((row) => result.columns.map((c) => formatCellValue(row[c.key], c.type))),
+            grouped,
           },
         ],
         charts

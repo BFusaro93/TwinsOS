@@ -1,9 +1,15 @@
 import { Document, Page, View, Text, StyleSheet } from "@react-pdf/renderer";
 
+export interface ReportExportGrouped {
+  grandTotal: string[];
+  groups: { label: string; subtotal: string[]; rows: string[][] }[];
+}
+
 export interface ReportExportSection {
   heading: string;
   columns: string[];
   rows: string[][];
+  grouped?: ReportExportGrouped;
 }
 
 export interface ReportExportChart {
@@ -31,6 +37,9 @@ const styles = StyleSheet.create({
   row: { flexDirection: "row", borderTopWidth: 1, borderTopColor: "#e2e8f0" },
   cellHeader: { flex: 1, padding: 4, fontWeight: 700, color: "#334155" },
   cell: { flex: 1, padding: 4, color: "#334155" },
+  grandTotalRow: { flexDirection: "row", borderTopWidth: 1, borderTopColor: "#e2e8f0", backgroundColor: "#cbd5e1" },
+  subtotalRow: { flexDirection: "row", borderTopWidth: 1, borderTopColor: "#e2e8f0", backgroundColor: "#e2e8f0" },
+  cellBold: { flex: 1, padding: 4, fontWeight: 700, color: "#1e293b" },
   chartsRow: { flexDirection: "row", gap: 24, marginBottom: 4 },
   chart: { flex: 1 },
   chartTitle: { fontSize: 10, fontWeight: 700, marginBottom: 6, color: "#1e293b" },
@@ -88,17 +97,50 @@ export function ReportExportDocument({ title, generatedAt, sections, charts }: R
                   <Text key={ci} style={styles.cellHeader}>{col}</Text>
                 ))}
               </View>
-              {section.rows.map((row, ri) => (
-                <View key={ri} style={styles.row} wrap={false}>
-                  {row.map((cell, ci) => (
-                    <Text key={ci} style={styles.cell}>{cell}</Text>
+              {section.grouped ? (
+                <>
+                  <View style={styles.grandTotalRow} wrap={false}>
+                    {section.grouped.grandTotal.map((cell, ci) => (
+                      <Text key={ci} style={styles.cellBold}>{cell}</Text>
+                    ))}
+                  </View>
+                  {section.grouped.groups.map((group, gi) => (
+                    <View key={gi}>
+                      <View style={styles.subtotalRow} wrap={false}>
+                        {group.subtotal.map((cell, ci) => (
+                          <Text key={ci} style={styles.cellBold}>{cell}</Text>
+                        ))}
+                      </View>
+                      {group.rows.map((row, ri) => (
+                        <View key={ri} style={styles.row} wrap={false}>
+                          {row.map((cell, ci) => (
+                            <Text key={ci} style={styles.cell}>{cell}</Text>
+                          ))}
+                        </View>
+                      ))}
+                    </View>
                   ))}
-                </View>
-              ))}
-              {section.rows.length === 0 && (
-                <View style={styles.row}>
-                  <Text style={styles.cell}>No rows.</Text>
-                </View>
+                  {section.grouped.groups.length === 0 && (
+                    <View style={styles.row}>
+                      <Text style={styles.cell}>No rows.</Text>
+                    </View>
+                  )}
+                </>
+              ) : (
+                <>
+                  {section.rows.map((row, ri) => (
+                    <View key={ri} style={styles.row} wrap={false}>
+                      {row.map((cell, ci) => (
+                        <Text key={ci} style={styles.cell}>{cell}</Text>
+                      ))}
+                    </View>
+                  ))}
+                  {section.rows.length === 0 && (
+                    <View style={styles.row}>
+                      <Text style={styles.cell}>No rows.</Text>
+                    </View>
+                  )}
+                </>
               )}
             </View>
           </View>

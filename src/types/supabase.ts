@@ -10810,6 +10810,7 @@ export type Database = {
           created_by: string | null
           deleted_at: string | null
           enabled: boolean
+          hour_local: number
           id: string
           last_run_at: string | null
           last_run_error: string | null
@@ -10824,6 +10825,7 @@ export type Database = {
           created_by?: string | null
           deleted_at?: string | null
           enabled?: boolean
+          hour_local?: number
           id?: string
           last_run_at?: string | null
           last_run_error?: string | null
@@ -10838,6 +10840,7 @@ export type Database = {
           created_by?: string | null
           deleted_at?: string | null
           enabled?: boolean
+          hour_local?: number
           id?: string
           last_run_at?: string | null
           last_run_error?: string | null
@@ -12205,6 +12208,8 @@ export type Database = {
         Row: {
           actual_hours: number | null
           actual_labor_cost_cents: number | null
+          actual_start_time: string | null
+          actual_stop_time: string | null
           budget_methods: string | null
           budgeted_hours: number | null
           budgeted_rev_per_man_hr_cents: number | null

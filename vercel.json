@@ -59,7 +59,7 @@
     },
     {
       "path": "/api/cron/report-schedules",
-      "schedule": "0 12 * * *"
+      "schedule": "0 * * * *"
     }
   ]
 }

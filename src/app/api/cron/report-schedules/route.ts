@@ -6,11 +6,23 @@ import { getReport } from "@/lib/reports/registry";
 import { renderScheduledReportPdf } from "@/lib/reports/run-scheduled";
 import { EMAIL_FROM } from "@/lib/email/send";
 
+/** Current hour (0-23) in America/New_York — the timezone every schedule's
+ *  `hour_local` picker is expressed in. */
+function currentHourEastern(): number {
+  const hourStr = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    hour: "numeric",
+    hour12: false,
+  }).format(new Date());
+  // "24" shows up for midnight with hour12:false in some environments.
+  return Number(hourStr) % 24;
+}
+
 /**
- * GET /api/cron/report-schedules — called daily by Vercel Cron at noon UTC
- * (~7-8am US Eastern, matching the other morning cron jobs in this file).
+ * GET /api/cron/report-schedules — called hourly by Vercel Cron.
  *
- * For every enabled `report_schedules` row: runs its report (scoped to that
+ * For every enabled `report_schedules` row whose `hour_local` (America/
+ * New_York) matches the current hour: runs its report (scoped to that
  * schedule's org — see renderScheduledReportPdf), renders a PDF, and emails
  * it to the schedule's recipients. Only schedulable reports (a fixed date
  * window recomputed each run, e.g. "Yesterday", "Month to Date") make sense
@@ -36,6 +48,7 @@ export async function GET(request: Request) {
     .from("report_schedules")
     .select("id, org_id, report_key, recipients")
     .eq("enabled", true)
+    .eq("hour_local", currentHourEastern())
     .is("deleted_at", null);
 
   if (error) {

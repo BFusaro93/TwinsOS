@@ -1,7 +1,16 @@
+export interface ReportExportGroupedInput {
+  grandTotal: string[];
+  groups: { label: string; subtotal: string[]; rows: string[][] }[];
+}
+
 export interface ReportExportSectionInput {
   heading: string;
   columns: string[];
   rows: string[][];
+  /** When set, `rows` is ignored — the PDF renders a grand-total row up top,
+   *  then each group's subtotal row immediately followed by its detail rows
+   *  (matches the legacy SA layout), via buildGroupedPdfSection. */
+  grouped?: ReportExportGroupedInput;
 }
 
 export interface ReportExportChartInput {

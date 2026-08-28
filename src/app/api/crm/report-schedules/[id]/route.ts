@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 const updateScheduleSchema = z.object({
   recipients: z.array(z.string().email()).min(1).optional(),
   enabled: z.boolean().optional(),
+  hourLocal: z.number().int().min(0).max(23).optional(),
 });
 
 export async function PATCH(
@@ -35,11 +36,16 @@ export async function PATCH(
     );
   }
 
+  const { recipients, enabled, hourLocal } = parsed.data;
   const { data, error } = await supabase
     .from("report_schedules")
-    .update(parsed.data)
+    .update({
+      ...(recipients !== undefined ? { recipients } : {}),
+      ...(enabled !== undefined ? { enabled } : {}),
+      ...(hourLocal !== undefined ? { hour_local: hourLocal } : {}),
+    })
     .eq("id", id)
-    .select("id, report_key, recipients, enabled, last_run_at, last_run_status, last_run_error, created_at")
+    .select("id, report_key, recipients, enabled, hour_local, last_run_at, last_run_status, last_run_error, created_at")
     .single();
 
   if (error || !data) {

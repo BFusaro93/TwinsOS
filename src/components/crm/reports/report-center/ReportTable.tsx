@@ -202,26 +202,67 @@ export function ReportTable({ result, formatRules }: { result: ReportResult; for
                   ))}
                 </tr>
               </thead>
+              {/* In subtotal mode, the grand total leads the report (matching
+                  the legacy SA layout) instead of trailing it in a <tfoot> —
+                  ordinary grouped/ungrouped reports keep the trailing <tfoot>
+                  below unchanged. */}
+              {result.totals && result.groupSubtotals && (
+                <tbody>
+                  <tr className="border-b bg-slate-200 font-semibold text-slate-800">
+                    {displayColumns.map((col, i) => {
+                      const total = result.totals?.[col.key];
+                      const hasTotal = col.totalable && total !== undefined && total !== null;
+                      return (
+                        <td
+                          key={col.key}
+                          className={cn(
+                            "px-3 py-2.5",
+                            NUMERIC_TYPES.includes(col.type) &&
+                              "text-right tabular-nums"
+                          )}
+                        >
+                          {i === 0
+                            ? "Totals"
+                            : hasTotal
+                              ? formatCellValue(total, col.type)
+                              : ""}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                </tbody>
+              )}
               <tbody>
                 {pagedRows.map((row, i) => {
                   const section = sectionKey ? String(row[sectionKey] ?? "") : null;
                   const prevSection = sectionKey && i > 0 ? String(pagedRows[i - 1][sectionKey] ?? "") : null;
-                  const nextSection = sectionKey && i < pagedRows.length - 1 ? String(pagedRows[i + 1][sectionKey] ?? "") : null;
                   const showSectionHeader = section !== null && section !== prevSection;
-                  const isLastOfSection = section !== null && (i === pagedRows.length - 1 || section !== nextSection);
-                  const subtotal = result.groupSubtotals && isLastOfSection
+                  // The section's subtotal renders as ONE combined row with the
+                  // header at the start of the group (crew name + its sums
+                  // together), matching the legacy SA layout, rather than a
+                  // plain divider followed by a separate subtotal row at the end.
+                  const subtotal = result.groupSubtotals && showSectionHeader
                     ? computeGroupSubtotal(pagedRows, sectionKey!, section!, displayColumns)
                     : null;
                   return (
                     <Fragment key={i}>
                       {showSectionHeader && (
-                        <tr className="border-b bg-slate-100">
-                          <td
-                            colSpan={displayColumns.length}
-                            className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-600"
-                          >
-                            {section}
-                          </td>
+                        <tr className="border-b bg-slate-100 font-semibold text-slate-700">
+                          {displayColumns.map((col, ci) => {
+                            const total = subtotal?.[col.key];
+                            const hasTotal = col.totalable && total !== undefined && total !== null;
+                            return (
+                              <td
+                                key={col.key}
+                                className={cn(
+                                  "px-3 py-1.5",
+                                  NUMERIC_TYPES.includes(col.type) && "text-right tabular-nums"
+                                )}
+                              >
+                                {ci === 0 ? section : hasTotal ? formatCellValue(total, col.type) : ""}
+                              </td>
+                            );
+                          })}
                         </tr>
                       )}
                       <tr className="border-b last:border-0 hover:bg-slate-50">
@@ -242,30 +283,11 @@ export function ReportTable({ result, formatRules }: { result: ReportResult; for
                           );
                         })}
                       </tr>
-                      {subtotal && (
-                        <tr className="border-b bg-slate-50 font-medium text-slate-700">
-                          {displayColumns.map((col, ci) => {
-                            const total = subtotal[col.key];
-                            const hasTotal = col.totalable && total !== undefined && total !== null;
-                            return (
-                              <td
-                                key={col.key}
-                                className={cn(
-                                  "px-3 py-2",
-                                  NUMERIC_TYPES.includes(col.type) && "text-right tabular-nums"
-                                )}
-                              >
-                                {ci === 0 ? `Subtotal — ${section}` : hasTotal ? formatCellValue(total, col.type) : ""}
-                              </td>
-                            );
-                          })}
-                        </tr>
-                      )}
                     </Fragment>
                   );
                 })}
               </tbody>
-              {result.totals && (
+              {result.totals && !result.groupSubtotals && (
                 <tfoot>
                   <tr className="border-t bg-slate-50 font-medium text-slate-800">
                     {displayColumns.map((col, i) => {

@@ -5,6 +5,7 @@ import { formatCurrency, formatDate } from "@/lib/utils";
 import { ReportExportDocument } from "@/components/crm/reports/pdf/ReportExportDocument";
 import type { ReportExportChart } from "@/components/crm/reports/pdf/ReportExportDocument";
 import { runAnalysis } from "@/lib/reports/engine";
+import { buildGroupedPdfSection } from "@/lib/reports/pdf-grouping";
 import type { PrebuiltReportDef } from "@/lib/reports/definition-types";
 import type { ReportColumnDef, ReportFieldType, ReportResult } from "@/types/crm-reports";
 
@@ -91,6 +92,7 @@ export async function renderScheduledReportPdf(
     timeStyle: "short",
   });
 
+  const grouped = buildGroupedPdfSection(result, formatCellValueServer) ?? undefined;
   const buffer = await renderToBuffer(
     createElement(ReportExportDocument, {
       title: def.name,
@@ -99,8 +101,9 @@ export async function renderScheduledReportPdf(
       sections: [
         {
           heading: "",
-          columns: result.columns.map((c) => c.label),
-          rows: result.rows.map((row) => result.columns.map((c) => formatCellValueServer(row[c.key], c.type))),
+          columns: grouped ? grouped.columns : result.columns.map((c) => c.label),
+          rows: grouped ? [] : result.rows.map((row) => result.columns.map((c) => formatCellValueServer(row[c.key], c.type))),
+          grouped,
         },
       ],
     })

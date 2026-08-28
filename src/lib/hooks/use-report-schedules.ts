@@ -5,6 +5,7 @@ export interface ReportSchedule {
   report_key: string;
   recipients: string[];
   enabled: boolean;
+  hour_local: number;
   last_run_at: string | null;
   last_run_status: string | null;
   last_run_error: string | null;
@@ -35,7 +36,7 @@ export function useReportSchedules() {
 export function useCreateReportSchedule() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (input: { reportKey: string; recipients: string[] }) => {
+    mutationFn: async (input: { reportKey: string; recipients: string[]; hourLocal?: number }) => {
       const res = await fetch("/api/crm/report-schedules", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -61,6 +62,7 @@ export function useUpdateReportSchedule() {
       id: string;
       recipients?: string[];
       enabled?: boolean;
+      hourLocal?: number;
     }) => {
       const res = await fetch(`/api/crm/report-schedules/${id}`, {
         method: "PATCH",

@@ -142,6 +142,8 @@ export const REPORT_DATASETS: ReportDataset[] = [
       { key: "crew_name", label: "Crew", type: "text" },
       { key: "sales_rep", label: "Sales Rep", type: "text" },
       { key: "men_count", label: "# of Men", type: "number" },
+      { key: "actual_start_time", label: "Actual Start Time", type: "text" },
+      { key: "actual_stop_time", label: "Actual Stop Time", type: "text" },
       { key: "budgeted_hours", label: "Budgeted Hours", type: "hours" },
       { key: "actual_hours", label: "Actual Hours", type: "hours" },
       { key: "man_hours", label: "Man Hours", type: "hours" },

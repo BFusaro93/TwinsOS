@@ -14,6 +14,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -30,11 +31,18 @@ function parseEmails(text: string): string[] {
     .filter(Boolean);
 }
 
+/** Hour-of-day options (America/New_York) for the schedule's send time. */
+const HOUR_OPTIONS = Array.from({ length: 24 }, (_, hour) => ({
+  value: hour,
+  label: new Date(2000, 0, 1, hour).toLocaleTimeString("en-US", { hour: "numeric", hour12: true }),
+}));
+
 /** "Schedule" button + dialog for a schedulable report — lets a user set up
  *  (or manage existing) daily email delivery of that report as a PDF. */
 export function ReportScheduleDialog({ reportKey, reportName }: { reportKey: string; reportName: string }) {
   const [open, setOpen] = useState(false);
   const [recipientsText, setRecipientsText] = useState("");
+  const [hourLocal, setHourLocal] = useState(7);
 
   const { data: allSchedules } = useReportSchedules();
   const schedules = (allSchedules ?? []).filter((s) => s.report_key === reportKey);
@@ -50,7 +58,7 @@ export function ReportScheduleDialog({ reportKey, reportName }: { reportKey: str
       return;
     }
     createSchedule.mutate(
-      { reportKey, recipients },
+      { reportKey, recipients, hourLocal },
       {
         onSuccess: () => {
           setRecipientsText("");
@@ -98,6 +106,21 @@ export function ReportScheduleDialog({ reportKey, reportName }: { reportKey: str
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
+                    <Select
+                      value={String(s.hour_local)}
+                      onValueChange={(value) => updateSchedule.mutate({ id: s.id, hourLocal: Number(value) })}
+                    >
+                      <SelectTrigger className="h-7 w-[92px] text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {HOUR_OPTIONS.map((h) => (
+                          <SelectItem key={h.value} value={String(h.value)}>
+                            {h.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                     <Switch
                       checked={s.enabled}
                       onCheckedChange={(enabled) => updateSchedule.mutate({ id: s.id, enabled })}
@@ -124,6 +147,22 @@ export function ReportScheduleDialog({ reportKey, reportName }: { reportKey: str
               value={recipientsText}
               onChange={(e) => setRecipientsText(e.target.value)}
             />
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-slate-600">Send time</label>
+            <Select value={String(hourLocal)} onValueChange={(value) => setHourLocal(Number(value))}>
+              <SelectTrigger className="w-[120px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {HOUR_OPTIONS.map((h) => (
+                  <SelectItem key={h.value} value={String(h.value)}>
+                    {h.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         </div>
 
