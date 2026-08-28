@@ -16,6 +16,20 @@ const exportRequestSchema = z.object({
       })
     )
     .min(1),
+  charts: z
+    .array(
+      z.object({
+        title: z.string(),
+        bars: z.array(
+          z.object({
+            label: z.string(),
+            value: z.number(),
+            valueLabel: z.string(),
+          })
+        ),
+      })
+    )
+    .optional(),
 });
 
 // Renders whatever ReportResult data the authenticated client already fetched
@@ -55,6 +69,7 @@ export async function POST(request: Request) {
       title: parsed.data.title,
       generatedAt,
       sections: parsed.data.sections,
+      charts: parsed.data.charts,
     })
   );
 

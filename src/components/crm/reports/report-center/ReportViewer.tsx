@@ -15,12 +15,31 @@ import { exportReportPDF } from "@/lib/reports/export-pdf";
 import { useRunReport } from "@/lib/hooks/use-report-center";
 import { getReport } from "@/lib/reports/registry";
 import type { PrebuiltReportDef } from "@/lib/reports/definition-types";
-import type { ReportFilterDef } from "@/types/crm-reports";
+import type { ReportResult, ReportFilterDef } from "@/types/crm-reports";
 import {
   computePresetRange,
   ReportFilterBar,
 } from "./ReportFilterBar";
 import { exportCellValue, formatCellValue, ReportTable } from "./ReportTable";
+import { HeaderVisual } from "./HeaderVisual";
+import type { ReportExportChartInput } from "@/lib/reports/export-pdf";
+
+function chartInputFromResult(
+  title: string,
+  result: ReportResult
+): ReportExportChartInput | null {
+  const labelCol = result.columns[0];
+  const valueCol = result.columns[1];
+  if (!labelCol || !valueCol) return null;
+  return {
+    title,
+    bars: result.rows.map((row) => ({
+      label: String(row[labelCol.key] ?? ""),
+      value: typeof row[valueCol.key] === "number" ? (row[valueCol.key] as number) : 0,
+      valueLabel: formatCellValue(row[valueCol.key], valueCol.type),
+    })),
+  };
+}
 
 const HUB_HREF = "/crm/admin/reports?tab=center";
 
@@ -80,8 +99,17 @@ function PrebuiltReportRunner({ def }: { def: PrebuiltReportDef }) {
   );
   const { data: result, isFetching, error, refetch } = useRunReport(def.key, values);
 
+  const headerVisuals = def.headerVisuals?.(values) ?? [];
+  const [chartResults, setChartResults] = useState<Record<string, ReportResult>>({});
+  const handleChartData = (title: string, chartResult: ReportResult) => {
+    setChartResults((prev) => (prev[title] === chartResult ? prev : { ...prev, [title]: chartResult }));
+  };
+
   const handleChange = (key: string, value: string) => {
     setValues((prev) => ({ ...prev, [key]: value }));
+    // Filter changes (date range, crew) can change which charts' data is
+    // stale — clear so a changed range doesn't export under the old one.
+    setChartResults({});
   };
 
   const handleExport = () => {
@@ -115,13 +143,20 @@ function PrebuiltReportRunner({ def }: { def: PrebuiltReportDef }) {
     if (!result) return;
     setExportingPdf(true);
     try {
-      await exportReportPDF(def.name, [
-        {
-          heading: "",
-          columns: result.columns.map((c) => c.label),
-          rows: result.rows.map((row) => result.columns.map((c) => formatCellValue(row[c.key], c.type))),
-        },
-      ]);
+      const charts = headerVisuals
+        .map((hv) => (chartResults[hv.title] ? chartInputFromResult(hv.title, chartResults[hv.title]) : null))
+        .filter((c): c is ReportExportChartInput => c !== null);
+      await exportReportPDF(
+        def.name,
+        [
+          {
+            heading: "",
+            columns: result.columns.map((c) => c.label),
+            rows: result.rows.map((row) => result.columns.map((c) => formatCellValue(row[c.key], c.type))),
+          },
+        ],
+        charts
+      );
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "PDF export failed");
     } finally {
@@ -181,6 +216,14 @@ function PrebuiltReportRunner({ def }: { def: PrebuiltReportDef }) {
           }
         />
       </div>
+
+      {headerVisuals.length > 0 && (
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          {headerVisuals.map((hv) => (
+            <HeaderVisual key={hv.title} headerVisual={hv} onData={handleChartData} />
+          ))}
+        </div>
+      )}
 
       {isFetching ? (
         <div className="rounded-lg border bg-white p-4 shadow-sm">
