@@ -202,7 +202,7 @@ export function NewTicketDialog({ open, onOpenChange, defaultClientId, defaultTy
     { label: "Call", value: "call" },
     { label: "Event", value: "event" },
   ];
-  const typeLabel = form.type === "call" ? "Call" : form.type === "event" ? "Event" : "Ticket";
+  const typeLabel = form.type === "call" ? "Call" : form.type === "event" ? "Event" : form.type === "text" ? "Text" : "Ticket";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -450,7 +450,7 @@ export function TicketsList(props: Props) {
 }
 
 function TicketsListInner({ clientId, typeFilter, title = "Tickets", description = "Support and service tickets" }: Props) {
-  const listTypeLabel = typeFilter === "call" ? "Call" : typeFilter === "event" ? "Event" : "Ticket";
+  const listTypeLabel = typeFilter === "call" ? "Call" : typeFilter === "event" ? "Event" : typeFilter === "text" ? "Text" : "Ticket";
   const { data: categoryOptions } = useOrgList("ticket_categories");
   const categories = categoryOptions && categoryOptions.length > 0
     ? categoryOptions.map((o) => o.value)
@@ -646,7 +646,7 @@ function TicketsListInner({ clientId, typeFilter, title = "Tickets", description
             />
             <Button size="sm" className="h-8 text-xs" onClick={() => setDialogOpen(true)}>
               <Plus className="mr-1 h-3.5 w-3.5" />
-              Add {typeFilter === "call" ? "Call" : typeFilter === "event" ? "Event" : "Ticket"}
+              Add {typeFilter === "call" ? "Call" : typeFilter === "event" ? "Event" : typeFilter === "text" ? "Text" : "Ticket"}
             </Button>
           </div>
         }
@@ -739,7 +739,7 @@ function TicketsListInner({ clientId, typeFilter, title = "Tickets", description
             <DropdownMenuContent align="start" className="w-48">
               <DropdownMenuItem onSelect={() => setDialogOpen(true)}>
                 <Plus className="mr-2 h-3.5 w-3.5" />
-                Add {typeFilter === "call" ? "Call" : typeFilter === "event" ? "Event" : "Ticket"}
+                Add {typeFilter === "call" ? "Call" : typeFilter === "event" ? "Event" : typeFilter === "text" ? "Text" : "Ticket"}
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem

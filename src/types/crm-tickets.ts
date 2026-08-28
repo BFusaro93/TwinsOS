@@ -1,4 +1,4 @@
-export type TicketType = 'note' | 'call' | 'event';
+export type TicketType = 'note' | 'call' | 'event' | 'text';
 export type TicketStatus = 'open' | 'on_hold' | 'pending' | 'closed';
 export type TicketPriority = 'low' | 'normal' | 'high' | 'urgent';
 
