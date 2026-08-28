@@ -392,7 +392,7 @@ export function SupportPage({ docsHref = "/docs" }: { docsHref?: string } = {}) 
                     <DocsEyebrow>Get in Touch</DocsEyebrow>
                     <div className="mt-4 grid gap-4 sm:grid-cols-2">
                       <a
-                        href="mailto:support@twinsOS.com"
+                        href="mailto:support@landscapt.com"
                         className="flex items-start gap-4 rounded-lg border border-[#e6e6e0] bg-white p-5 shadow-sm transition-shadow hover:shadow-md"
                       >
                         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#eef4e2]">
@@ -400,7 +400,7 @@ export function SupportPage({ docsHref = "/docs" }: { docsHref?: string } = {}) 
                         </div>
                         <div>
                           <p className="font-[family-name:var(--font-heading)] text-sm font-bold text-[#0a0a0a]">Email Support</p>
-                          <p className="mt-0.5 text-sm font-medium text-[#60ab45]">support@twinsOS.com</p>
+                          <p className="mt-0.5 text-sm font-medium text-[#60ab45]">support@landscapt.com</p>
                           <p className="mt-1 text-xs text-[#5a5a56]">We typically respond within one business day.</p>
                         </div>
                       </a>
@@ -425,7 +425,7 @@ export function SupportPage({ docsHref = "/docs" }: { docsHref?: string } = {}) 
                   <LifeBuoy className="h-5 w-5 shrink-0 text-[#60ab45]" />
                   <p className="text-sm text-[#3a5a1a]">
                     Can&rsquo;t find what you&rsquo;re looking for?{" "}
-                    <a href="mailto:support@twinsOS.com" className="font-semibold underline">
+                    <a href="mailto:support@landscapt.com" className="font-semibold underline">
                       Send us a message
                     </a>{" "}
                     and we&rsquo;ll get back to you as soon as possible.
