@@ -182,7 +182,7 @@ async function executeAction(
     const resendKey = process.env.RESEND_API_KEY;
     if (!resendKey) return { skipReason: "RESEND_API_KEY not configured" };
 
-    const fromEmail = process.env.FROM_EMAIL ?? "noreply@twinsOS.com";
+    const fromEmail = process.env.FROM_EMAIL ?? "noreply@landscapt.com";
     const subject = `Automation triggered: ${auto.name}`;
     const body = (ac.message as string)
       ? `${ac.message as string}\n\nTriggered by automation: ${auto.name}`
