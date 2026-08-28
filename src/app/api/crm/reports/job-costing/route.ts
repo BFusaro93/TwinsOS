@@ -40,20 +40,24 @@ export async function GET(request: Request) {
   const to = searchParams.get("to");
   const serviceId = searchParams.get("service_id");
 
-  // clocked_out_at lives on crm_job_visits, not crm_jobs — filter visits first,
-  // then look up the jobs those visits belong to (see visitMap dedupe below).
+  // completed_at + status='completed' lives on crm_job_visits, not crm_jobs —
+  // filter visits first, then look up the jobs those visits belong to (see
+  // visitMap dedupe below). clocked_out_at only reflects the crew time-clock
+  // flow and stays null for visits completed via the dispatch board, so it
+  // undercounts completed jobs — use the visit's own completion signal instead.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let visitQ = (supabase as any)
     .from("crm_job_visits")
-    .select("job_id, men_count, rate_cents, clocked_out_at")
-    .not("clocked_out_at", "is", null)
+    .select("job_id, men_count, rate_cents, completed_at")
+    .eq("status", "completed")
+    .not("completed_at", "is", null)
     .is("deleted_at", null)
-    .order("clocked_out_at", { ascending: false });
+    .order("completed_at", { ascending: false });
 
-  if (from) visitQ = visitQ.gte("clocked_out_at", from);
-  // clocked_out_at is a timestamptz — a bare date string casts to midnight
+  if (from) visitQ = visitQ.gte("completed_at", from);
+  // completed_at is a timestamptz — a bare date string casts to midnight
   // UTC, which in any US timezone excludes almost the entire `to` day.
-  if (to) visitQ = visitQ.lte("clocked_out_at", `${to} 23:59:59.999`);
+  if (to) visitQ = visitQ.lte("completed_at", `${to} 23:59:59.999`);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: visits, error: visitsError } = await (visitQ as any);
@@ -61,7 +65,7 @@ export async function GET(request: Request) {
 
   // Build a map: jobId → most recent visit within range
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const visitMap = new Map<string, { men_count: number; rate_cents: number; clocked_out_at: string }>();
+  const visitMap = new Map<string, { men_count: number; rate_cents: number; completed_at: string }>();
   for (const v of (visits ?? [])) {
     if (!visitMap.has(v.job_id)) visitMap.set(v.job_id, v);
   }
@@ -120,7 +124,7 @@ export async function GET(request: Request) {
       jobTitle: job.title ?? "Untitled",
       clientName: job.clients?.display_name ?? "—",
       serviceName: job.crm_services?.name ?? "—",
-      completedAt: visit?.clocked_out_at ?? "",
+      completedAt: visit?.completed_at ?? "",
       menCount,
       budgetedHours,
       actualHours,

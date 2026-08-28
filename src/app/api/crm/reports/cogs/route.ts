@@ -50,6 +50,7 @@ export async function GET(request: Request) {
     let vq = (supabase as any)
       .from("crm_job_visits")
       .select("job_id")
+      .eq("status", "completed")
       .not("completed_at", "is", null)
       .is("deleted_at", null);
     if (from) vq = vq.gte("completed_at", from);
@@ -89,15 +90,18 @@ export async function GET(request: Request) {
 
   const jobIds: string[] = (jobs ?? []).map((j: { id: string }) => j.id);
 
-  // Fetch most recent completed visit per job for men_count
+  // Fetch most recent completed visit per job for men_count. Use completed_at
+  // (not clocked_out_at) — clocked_out_at only reflects the crew time-clock
+  // flow and stays null for visits completed via the dispatch board.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: visits } = await (supabase as any)
     .from("crm_job_visits")
-    .select("job_id, men_count, rate_cents, clocked_out_at")
+    .select("job_id, men_count, rate_cents, completed_at")
     .in("job_id", jobIds.length > 0 ? jobIds : ["00000000-0000-0000-0000-000000000000"])
-    .not("clocked_out_at", "is", null)
+    .eq("status", "completed")
+    .not("completed_at", "is", null)
     .is("deleted_at", null)
-    .order("clocked_out_at", { ascending: false });
+    .order("completed_at", { ascending: false });
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const visitMap = new Map<string, { men_count: number; rate_cents: number }>();
