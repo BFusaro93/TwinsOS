@@ -10804,6 +10804,66 @@ export type Database = {
           },
         ]
       }
+      report_schedules: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          enabled: boolean
+          id: string
+          last_run_at: string | null
+          last_run_error: string | null
+          last_run_status: string | null
+          org_id: string
+          recipients: string[]
+          report_key: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          enabled?: boolean
+          id?: string
+          last_run_at?: string | null
+          last_run_error?: string | null
+          last_run_status?: string | null
+          org_id?: string
+          recipients?: string[]
+          report_key: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          enabled?: boolean
+          id?: string
+          last_run_at?: string | null
+          last_run_error?: string | null
+          last_run_status?: string | null
+          org_id?: string
+          recipients?: string[]
+          report_key?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "report_schedules_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "report_schedules_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       requisition_line_items: {
         Row: {
           created_at: string
@@ -12156,6 +12216,7 @@ export type Database = {
           id: string | null
           man_hours: number | null
           men_count: number | null
+          org_id: string | null
           rate_cents: number | null
           rev_per_man_hr_cents: number | null
           revenue_cents: number | null

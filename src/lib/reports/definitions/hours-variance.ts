@@ -109,6 +109,9 @@ function avbReport(
       "Hours Variance is Budgeted Hours minus Actual Hours; negative means the visit ran over budget.",
     ],
     formatRules: AVB_FORMAT_RULES,
+    // Fixed date window recomputed on every run — safe to schedule daily
+    // (unlike the custom-range variant below, which would go stale).
+    schedulable: true,
     headerVisuals: () => {
       const { from, to } = range();
       return avbHeaderVisuals([

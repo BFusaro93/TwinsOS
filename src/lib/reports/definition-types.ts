@@ -49,4 +49,9 @@ export interface PrebuiltReportDef {
   analysis?: (params: ReportParams) => AnalysisConfig;
   run?: (ctx: ReportContext) => Promise<ReportResult>;
   href?: string;
+  /** Can be scheduled for daily email delivery (report_schedules). Only
+   *  makes sense for reports whose `analysis` needs no per-run filter
+   *  params — a fixed date window it recomputes itself each run, not a
+   *  user-picked range that would otherwise go stale. */
+  schedulable?: boolean;
 }

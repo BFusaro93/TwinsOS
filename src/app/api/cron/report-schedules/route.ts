@@ -1,0 +1,103 @@
+import { NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
+import { Resend } from "resend";
+import type { Database } from "@/types/supabase";
+import { getReport } from "@/lib/reports/registry";
+import { renderScheduledReportPdf } from "@/lib/reports/run-scheduled";
+import { EMAIL_FROM } from "@/lib/email/send";
+
+/**
+ * GET /api/cron/report-schedules — called daily by Vercel Cron at noon UTC
+ * (~7-8am US Eastern, matching the other morning cron jobs in this file).
+ *
+ * For every enabled `report_schedules` row: runs its report (scoped to that
+ * schedule's org — see renderScheduledReportPdf), renders a PDF, and emails
+ * it to the schedule's recipients. Only schedulable reports (a fixed date
+ * window recomputed each run, e.g. "Yesterday", "Month to Date") make sense
+ * here — the catalog enforces that at creation time, not this route.
+ *
+ * Security: Vercel passes Authorization: Bearer {CRON_SECRET}. Reject
+ * anything else.
+ */
+export async function GET(request: Request) {
+  const authHeader = request.headers.get("authorization");
+  const isCron =
+    process.env.CRON_SECRET && authHeader === `Bearer ${process.env.CRON_SECRET}`;
+  if (!isCron) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const supabase = createClient<Database>(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+
+  const { data: schedules, error } = await supabase
+    .from("report_schedules")
+    .select("id, org_id, report_key, recipients")
+    .eq("enabled", true)
+    .is("deleted_at", null);
+
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  const resend = new Resend(process.env.RESEND_API_KEY?.trim());
+  let sent = 0;
+  let failed = 0;
+
+  for (const schedule of schedules ?? []) {
+    const def = getReport(schedule.report_key);
+    if (!def || !def.schedulable || schedule.recipients.length === 0) {
+      failed++;
+      await supabase
+        .from("report_schedules")
+        .update({
+          last_run_at: new Date().toISOString(),
+          last_run_status: "error",
+          last_run_error: !def
+            ? `Unknown report key: ${schedule.report_key}`
+            : !def.schedulable
+              ? `Report is not schedulable: ${schedule.report_key}`
+              : "No recipients configured",
+        })
+        .eq("id", schedule.id);
+      continue;
+    }
+
+    try {
+      const pdfBuffer = await renderScheduledReportPdf(supabase, def, schedule.org_id);
+      const { error: sendErr } = await resend.emails.send({
+        from: EMAIL_FROM,
+        to: schedule.recipients,
+        subject: `${def.name} — ${new Date().toLocaleDateString("en-US")}`,
+        html: `<p>Attached: <strong>${def.name}</strong>, generated ${new Date().toLocaleString("en-US")}.</p>`,
+        attachments: [
+          {
+            filename: `${def.name.replace(/[^a-z0-9-_ ]/gi, "").trim()}.pdf`,
+            content: pdfBuffer.toString("base64"),
+          },
+        ],
+      });
+      if (sendErr) throw new Error(sendErr.message);
+
+      sent++;
+      await supabase
+        .from("report_schedules")
+        .update({ last_run_at: new Date().toISOString(), last_run_status: "success", last_run_error: null })
+        .eq("id", schedule.id);
+    } catch (err) {
+      failed++;
+      await supabase
+        .from("report_schedules")
+        .update({
+          last_run_at: new Date().toISOString(),
+          last_run_status: "error",
+          last_run_error: err instanceof Error ? err.message : "Unknown error",
+        })
+        .eq("id", schedule.id);
+    }
+  }
+
+  return NextResponse.json({ sent, failed, total: schedules?.length ?? 0 });
+}

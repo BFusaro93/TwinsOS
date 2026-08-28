@@ -22,6 +22,7 @@ import {
 } from "./ReportFilterBar";
 import { exportCellValue, formatCellValue, ReportTable } from "./ReportTable";
 import { HeaderVisual } from "./HeaderVisual";
+import { ReportScheduleDialog } from "./ReportScheduleDialog";
 import type { ReportExportChartInput } from "@/lib/reports/export-pdf";
 
 function chartInputFromResult(
@@ -212,6 +213,7 @@ function PrebuiltReportRunner({ def }: { def: PrebuiltReportDef }) {
                 <Printer className="mr-1.5 h-3.5 w-3.5" />
                 Print
               </Button>
+              {def.schedulable && <ReportScheduleDialog reportKey={def.key} reportName={def.name} />}
             </>
           }
         />

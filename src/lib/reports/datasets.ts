@@ -157,6 +157,11 @@ export const REPORT_DATASETS: ReportDataset[] = [
       { key: "clocked_in_at", label: "Clocked In", type: "datetime" },
       { key: "clocked_out_at", label: "Clocked Out", type: "datetime" },
       { key: "budget_methods", label: "Budget Method(s)", type: "text" },
+      // Not shown in the report builder's column picker (not in a UI list
+      // anywhere) — exists only so a service-role caller (e.g. the
+      // report-schedules cron, which has no user session for RLS to scope
+      // by) can filter to one org explicitly.
+      { key: "org_id", label: "Org", type: "text" },
     ],
   },
   {
