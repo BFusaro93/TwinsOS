@@ -159,13 +159,13 @@ export function ReportTable({ result, formatRules }: { result: ReportResult; for
   );
   const showPager = result.rows.length > PAGE_SIZE;
 
-  // A sectionColumn (e.g. "group_type" on breakdown reports) renders as a
-  // full-width divider header instead of a regular column — CSV export
+  // A sectionColumn (e.g. "crew_name" on the AvB reports) stays a real
+  // column — its own header cell — but only ever holds a value on the
+  // grand-total/subtotal rows (see below); ordinary data rows leave it
+  // blank so the group's label isn't repeated on every row. CSV export
   // still uses result.columns/rows directly, so it's untouched there.
   const sectionKey = result.sectionColumn;
-  const displayColumns = sectionKey
-    ? result.columns.filter((c) => c.key !== sectionKey)
-    : result.columns;
+  const displayColumns = result.columns;
 
   return (
     <div className="flex flex-col gap-2">
@@ -209,7 +209,7 @@ export function ReportTable({ result, formatRules }: { result: ReportResult; for
               {result.totals && result.groupSubtotals && (
                 <tbody>
                   <tr className="border-b bg-slate-200 font-semibold text-slate-800">
-                    {displayColumns.map((col, i) => {
+                    {displayColumns.map((col) => {
                       const total = result.totals?.[col.key];
                       const hasTotal = col.totalable && total !== undefined && total !== null;
                       return (
@@ -221,7 +221,7 @@ export function ReportTable({ result, formatRules }: { result: ReportResult; for
                               "text-right tabular-nums"
                           )}
                         >
-                          {i === 0
+                          {col.key === sectionKey
                             ? "Totals"
                             : hasTotal
                               ? formatCellValue(total, col.type)
@@ -248,7 +248,7 @@ export function ReportTable({ result, formatRules }: { result: ReportResult; for
                     <Fragment key={i}>
                       {showSectionHeader && (
                         <tr className="border-b bg-slate-100 font-semibold text-slate-700">
-                          {displayColumns.map((col, ci) => {
+                          {displayColumns.map((col) => {
                             const total = subtotal?.[col.key];
                             const hasTotal = col.totalable && total !== undefined && total !== null;
                             return (
@@ -259,7 +259,7 @@ export function ReportTable({ result, formatRules }: { result: ReportResult; for
                                   NUMERIC_TYPES.includes(col.type) && "text-right tabular-nums"
                                 )}
                               >
-                                {ci === 0 ? section : hasTotal ? formatCellValue(total, col.type) : ""}
+                                {col.key === sectionKey ? section : hasTotal ? formatCellValue(total, col.type) : ""}
                               </td>
                             );
                           })}
@@ -278,7 +278,7 @@ export function ReportTable({ result, formatRules }: { result: ReportResult; for
                               )}
                               style={ruleMatch ? { backgroundColor: ruleMatch.bg, color: ruleMatch.text, fontWeight: 600 } : undefined}
                             >
-                              {formatCellValue(row[col.key], col.type)}
+                              {col.key === sectionKey ? "" : formatCellValue(row[col.key], col.type)}
                             </td>
                           );
                         })}

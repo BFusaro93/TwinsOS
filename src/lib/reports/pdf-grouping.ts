@@ -21,12 +21,17 @@ export function buildGroupedPdfSection(
   const sectionKey = result.sectionColumn;
   if (!sectionKey || !result.groupSubtotals) return null;
 
-  const displayColumns = result.columns.filter((c) => c.key !== sectionKey);
+  // The section column (e.g. crew_name) stays a real column — its own
+  // header — but only ever holds a value on the grand-total/subtotal rows,
+  // matching ReportTable's on-screen rendering: blank on every detail row so
+  // the group's label isn't repeated down the column.
+  const columns = result.columns;
 
-  const grandTotal = displayColumns.map((c, i) => {
+  const grandTotal = columns.map((c) => {
+    if (c.key === sectionKey) return "Totals";
     const total = result.totals?.[c.key];
     const hasTotal = c.totalable && total !== undefined && total !== null;
-    return i === 0 ? "Totals" : hasTotal ? formatCell(total, c.type) : "";
+    return hasTotal ? formatCell(total, c.type) : "";
   });
 
   const groups: GroupedPdfSection["groups"] = [];
@@ -35,16 +40,17 @@ export function buildGroupedPdfSection(
 
   const flush = () => {
     if (currentLabel === null) return;
-    const totals = computeTotals(displayColumns, currentRows);
-    const subtotal = displayColumns.map((c, i) => {
+    const totals = computeTotals(columns, currentRows);
+    const subtotal = columns.map((c) => {
+      if (c.key === sectionKey) return currentLabel!;
       const t = totals?.[c.key];
       const hasTotal = c.totalable && t !== undefined && t !== null;
-      return i === 0 ? currentLabel! : hasTotal ? formatCell(t, c.type) : "";
+      return hasTotal ? formatCell(t, c.type) : "";
     });
     groups.push({
       label: currentLabel,
       subtotal,
-      rows: currentRows.map((row) => displayColumns.map((c) => formatCell(row[c.key], c.type))),
+      rows: currentRows.map((row) => columns.map((c) => (c.key === sectionKey ? "" : formatCell(row[c.key], c.type)))),
     });
   };
 
@@ -59,5 +65,5 @@ export function buildGroupedPdfSection(
   }
   flush();
 
-  return { columns: displayColumns.map((c) => c.label), grandTotal, groups };
+  return { columns: columns.map((c) => c.label), grandTotal, groups };
 }

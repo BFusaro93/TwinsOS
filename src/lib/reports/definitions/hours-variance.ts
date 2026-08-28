@@ -30,11 +30,14 @@ function addDays(d: Date, days: number): Date {
   return copy;
 }
 
-// Matches the color-coding on the legacy SA export: over-budget (negative
-// variance) in red, under-budget (positive variance) in green.
+// Matches the color-coding on the legacy SA export: over-budget (actual ran
+// longer than budgeted, negative variance) in red, under-budget (finished
+// under the budgeted hours, positive variance) in green, and an exact match
+// (actual == budgeted) in yellow.
 const AVB_FORMAT_RULES: PrebuiltReportDef["formatRules"] = [
   { column: "variance_hours", op: "lt", value: 0, color: "red" },
   { column: "variance_hours", op: "gt", value: 0, color: "green" },
+  { column: "variance_hours", op: "eq", value: 0, color: "yellow" },
 ];
 
 /** The two SA-style crew bar charts, filtered to the same date window (and
