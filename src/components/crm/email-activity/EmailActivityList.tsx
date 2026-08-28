@@ -4,7 +4,6 @@ import { useMemo, useState } from "react";
 import { Mail, X, Search, ChevronDown, RotateCcw, Send } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
-import { PageHeader } from "@/components/shared/PageHeader";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -244,23 +243,14 @@ export function EmailActivityList() {
 
   if (isLoading) {
     return (
-      <div className="flex h-full flex-col gap-4">
-        <PageHeader title="Email Activity" description="All email communications sent to clients" />
-        <div className="flex flex-col gap-2">
-          {[1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-12 w-full rounded-lg" />)}
-        </div>
+      <div className="flex flex-col gap-2 pt-4">
+        {[1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-12 w-full rounded-lg" />)}
       </div>
     );
   }
 
   return (
     <div className="flex h-full flex-col gap-4">
-      {/* Page header */}
-      <PageHeader
-        title="Email Activity"
-        description="All email communications sent to clients"
-      />
-
       {/* Stat cards */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         {[

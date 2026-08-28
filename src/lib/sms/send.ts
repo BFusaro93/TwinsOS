@@ -40,10 +40,12 @@ export async function sendClientSms(
     return { ok: false, reason: "Twilio not configured (env vars or org override)" };
   }
 
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://twins-os.vercel.app";
   const form = new URLSearchParams({
     To: params.toPhone,
     MessagingServiceSid: messagingServiceSid,
     Body: params.body,
+    StatusCallback: `${siteUrl}/api/webhooks/twilio/status`,
   });
 
   const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`, {
