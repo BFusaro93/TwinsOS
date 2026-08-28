@@ -1,4 +1,5 @@
 import type { PrebuiltReportDef } from "@/lib/reports/definition-types";
+import { dateRangeFilterDef, dateRangeFilters, eqFilter } from "@/lib/reports/helpers";
 
 // ============================================================
 // Hours Variance section — pre-built reports.
@@ -112,4 +113,42 @@ export const HOURS_VARIANCE_REPORTS: PrebuiltReportDef[] = [
       return { from: iso(lastMonday), to: iso(addDays(lastMonday, 6)) };
     }
   ),
+  avbReport(
+    "avb-hours-month-to-date",
+    "Month to Date",
+    "Shows this month's visits (the 1st through today) with budgeted vs actual hours and revenue, grouped by crew.",
+    () => {
+      const now = new Date();
+      return { from: iso(new Date(now.getFullYear(), now.getMonth(), 1)), to: iso(now) };
+    }
+  ),
+  {
+    key: "avb-hours-custom",
+    section: "job_hours",
+    name: "Actual v. Budgeted Hours (Custom Range)",
+    description:
+      "Shows visits in any date range you pick — defaults to month to date — with budgeted vs actual hours and revenue, grouped by crew.",
+    filters: [
+      dateRangeFilterDef("Visit Date", "this_month"),
+      { key: "crew", label: "Crew", type: "select", optionsSource: "crews" },
+    ],
+    notes: [
+      "Grouped by crew (Assigned Resources), with a subtotal row per crew — matches the legacy SA export.",
+      "Hours Variance is Budgeted Hours minus Actual Hours; negative means the visit ran over budget.",
+      "Defaults to month to date (the 1st through today) — pick your own From/To dates to run any range.",
+    ],
+    analysis: (params) => ({
+      dataset: "rpt_job_visits",
+      columns: AVB_COLUMNS,
+      filters: [
+        ...dateRangeFilters("scheduled_date", params, { preset: "this_month" }),
+        ...eqFilter("crew_name", params.crew),
+      ],
+      groupBy: ["crew_name"],
+      aggregates: [],
+      subtotals: true,
+      sortColumn: "client_name",
+      sortDir: "asc",
+    }),
+  },
 ];
