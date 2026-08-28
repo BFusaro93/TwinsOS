@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type {
   AnalysisConfig,
+  FormatRule,
   ReportFilterDef,
   ReportResult,
   ReportSectionKey,
@@ -31,6 +32,8 @@ export interface PrebuiltReportDef {
   filters: ReportFilterDef[];
   /** SA-style column-definition footnotes shown under the table. */
   notes?: string[];
+  /** Cell color-coding for the table view — same shape as a saved analysis's formatRules. */
+  formatRules?: FormatRule[];
   analysis?: (params: ReportParams) => AnalysisConfig;
   run?: (ctx: ReportContext) => Promise<ReportResult>;
   href?: string;

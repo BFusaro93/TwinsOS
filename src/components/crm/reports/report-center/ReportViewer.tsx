@@ -197,7 +197,7 @@ function PrebuiltReportRunner({ def }: { def: PrebuiltReportDef }) {
           <AlertDescription>{error.message}</AlertDescription>
         </Alert>
       ) : result ? (
-        <ReportTable result={result} />
+        <ReportTable result={result} formatRules={def.formatRules} />
       ) : null}
     </div>
   );

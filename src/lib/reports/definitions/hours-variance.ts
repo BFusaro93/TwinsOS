@@ -29,6 +29,13 @@ function addDays(d: Date, days: number): Date {
   return copy;
 }
 
+// Matches the color-coding on the legacy SA export: over-budget (negative
+// variance) in red, under-budget (positive variance) in green.
+const AVB_FORMAT_RULES: PrebuiltReportDef["formatRules"] = [
+  { column: "variance_hours", op: "lt", value: 0, color: "red" },
+  { column: "variance_hours", op: "gt", value: 0, color: "green" },
+];
+
 const AVB_COLUMNS = [
   "client_name",
   "men_count",
@@ -54,9 +61,10 @@ function avbReport(
     description,
     filters: [],
     notes: [
-      "Grouped by crew (Assigned Resources), with a subtotal row per crew — matches the legacy SA export.",
+      "Grouped by crew (Assigned Resources), with a subtotal row per crew.",
       "Hours Variance is Budgeted Hours minus Actual Hours; negative means the visit ran over budget.",
     ],
+    formatRules: AVB_FORMAT_RULES,
     analysis: () => {
       const { from, to } = range();
       return {
@@ -133,10 +141,11 @@ export const HOURS_VARIANCE_REPORTS: PrebuiltReportDef[] = [
       { key: "crew", label: "Crew", type: "select", optionsSource: "crews" },
     ],
     notes: [
-      "Grouped by crew (Assigned Resources), with a subtotal row per crew — matches the legacy SA export.",
+      "Grouped by crew (Assigned Resources), with a subtotal row per crew.",
       "Hours Variance is Budgeted Hours minus Actual Hours; negative means the visit ran over budget.",
       "Defaults to month to date (the 1st through today) — pick your own From/To dates to run any range.",
     ],
+    formatRules: AVB_FORMAT_RULES,
     analysis: (params) => ({
       dataset: "rpt_job_visits",
       columns: AVB_COLUMNS,
