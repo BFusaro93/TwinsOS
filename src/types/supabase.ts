@@ -12147,6 +12147,7 @@ export type Database = {
           actual_labor_cost_cents: number | null
           budget_methods: string | null
           budgeted_hours: number | null
+          budgeted_rev_per_man_hr_cents: number | null
           client_name: string | null
           clocked_in_at: string | null
           clocked_out_at: string | null
@@ -12161,6 +12162,7 @@ export type Database = {
           sales_rep: string | null
           scheduled_date: string | null
           service_city: string | null
+          service_code: string | null
           service_names: string | null
           service_zip: string | null
           skip_reason: string | null

@@ -5,6 +5,7 @@ import { CHEMICAL_REPORTS } from "@/lib/reports/definitions/chemical-reports";
 import { CLIENT_REPORTS } from "@/lib/reports/definitions/client-reports";
 import { ESTIMATE_REPORTS } from "@/lib/reports/definitions/estimates";
 import { FINANCIAL_REPORTS } from "@/lib/reports/definitions/financial";
+import { HOURS_VARIANCE_REPORTS } from "@/lib/reports/definitions/hours-variance";
 import { JOB_COSTING_REPORTS } from "@/lib/reports/definitions/job-costing";
 import { JOB_HOURS_REPORTS } from "@/lib/reports/definitions/job-hours";
 import { LEAD_REPORTS } from "@/lib/reports/definitions/lead";
@@ -19,6 +20,7 @@ export const ALL_REPORTS: PrebuiltReportDef[] = [
   ...CLIENT_REPORTS,
   ...ESTIMATE_REPORTS,
   ...FINANCIAL_REPORTS,
+  ...HOURS_VARIANCE_REPORTS,
   ...JOB_COSTING_REPORTS,
   ...JOB_HOURS_REPORTS,
   ...LEAD_REPORTS,

@@ -10,6 +10,10 @@ export interface DashboardTemplate {
   key: string;
   name: string;
   description: string;
+  /** Auto-cloned into every org as a real, editable dashboard on their first
+   *  Report Center visit (see ensureSystemDashboardsSeeded). Templates without
+   *  this flag stay picker-only starting points, same as before. */
+  seedable?: boolean;
   config: DashboardConfig;
 }
 
@@ -18,6 +22,7 @@ export const DASHBOARD_TEMPLATES: DashboardTemplate[] = [
     key: "sales-overview",
     name: "Sales Overview",
     description: "Estimate pipeline, win rate, and recent activity.",
+    seedable: true,
     config: {
       tabs: [
         {
@@ -56,7 +61,7 @@ export const DASHBOARD_TEMPLATES: DashboardTemplate[] = [
                 config: {
                   dataset: "rpt_estimates",
                   columns: [],
-                  filters: [{ column: "stage", op: "in", value: ["draft", "quote", "sent"] }],
+                  filters: [{ column: "stage", op: "in", value: ["draft", "quote"] }],
                   groupBy: [],
                   aggregates: [{ column: "total_cents", fn: "sum" }],
                   sortDir: "asc",
@@ -75,7 +80,14 @@ export const DASHBOARD_TEMPLATES: DashboardTemplate[] = [
                 config: {
                   dataset: "rpt_estimates",
                   columns: [],
-                  filters: [{ column: "stage", op: "in", value: ["won", "invoiced"] }],
+                  // Estimate stages are org-configurable via crm_estimate_stages
+                  // (migration 20260629012636); the old fixed 'won' stage was
+                  // merged into 'accepted' in 20260719022236 — 'won' has not
+                  // existed as a real stage_key since, so this KPI always
+                  // read $0. 'accepted'/'invoiced' matches the same
+                  // convention already used by the won-estimates-by-service
+                  // and estimate-value-vs-actual report definitions.
+                  filters: [{ column: "stage", op: "in", value: ["accepted", "invoiced"] }],
                   groupBy: [],
                   aggregates: [{ column: "total_cents", fn: "sum" }],
                   sortDir: "asc",
@@ -160,6 +172,7 @@ export const DASHBOARD_TEMPLATES: DashboardTemplate[] = [
     key: "ar-overview",
     name: "A/R Overview",
     description: "Outstanding balances, collections, and payment activity.",
+    seedable: true,
     config: {
       tabs: [
         {
@@ -291,9 +304,69 @@ export const DASHBOARD_TEMPLATES: DashboardTemplate[] = [
       ],
     },
   },
+  {
+    key: "crew-production-avb",
+    name: "Crew Production (AvB)",
+    description: "Actual vs. budgeted hours and revenue per man-hour by crew.",
+    config: {
+      tabs: [
+        {
+          id: "avb",
+          name: "AvB",
+          useDateFilter: true,
+          panels: [
+            {
+              id: "rev-per-man-hr-by-crew",
+              title: "Actual Revenue / Man Hour by Crew",
+              size: "half",
+              visual: {
+                type: "bar",
+                useTabDateRange: true,
+                labelColumn: "crew_name",
+                valueColumns: ["avg_rev_per_man_hr_cents"],
+                config: {
+                  dataset: "rpt_job_visits",
+                  columns: [],
+                  filters: [],
+                  groupBy: ["crew_name"],
+                  aggregates: [{ column: "rev_per_man_hr_cents", fn: "avg" }],
+                  sortColumn: "avg_rev_per_man_hr_cents",
+                  sortDir: "desc",
+                },
+              },
+            },
+            {
+              id: "variance-hours-by-crew",
+              title: "Actual Time Variance (Hours) by Crew",
+              size: "half",
+              visual: {
+                type: "bar",
+                useTabDateRange: true,
+                labelColumn: "crew_name",
+                valueColumns: ["sum_variance_hours"],
+                config: {
+                  dataset: "rpt_job_visits",
+                  columns: [],
+                  filters: [],
+                  groupBy: ["crew_name"],
+                  aggregates: [{ column: "variance_hours", fn: "sum" }],
+                  sortColumn: "sum_variance_hours",
+                  sortDir: "desc",
+                },
+              },
+            },
+          ],
+        },
+      ],
+    },
+  },
 ];
 
 export function getDashboardTemplate(key: string | undefined): DashboardTemplate | undefined {
   if (!key) return undefined;
   return DASHBOARD_TEMPLATES.find((t) => t.key === key);
+}
+
+export function getSeedableDashboardTemplates(): DashboardTemplate[] {
+  return DASHBOARD_TEMPLATES.filter((t) => t.seedable);
 }

@@ -1,0 +1,115 @@
+import type { PrebuiltReportDef } from "@/lib/reports/definition-types";
+
+// ============================================================
+// Hours Variance section — pre-built reports.
+//
+// Fixed-window "Actual v. Budgeted Hours" reports, matching the crew
+// production reports pulled daily/weekly from the old SA setup. Each
+// variant is a fixed date window (not a date-range filter) grouped by
+// crew with per-crew subtotal rows, same shape as the legacy exports.
+// ============================================================
+
+function iso(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
+
+/** Monday of the week containing `d` (local time, week starts Monday). */
+function mondayOf(d: Date): Date {
+  const day = d.getDay(); // 0 = Sun .. 6 = Sat
+  const diff = day === 0 ? -6 : 1 - day;
+  const monday = new Date(d);
+  monday.setDate(d.getDate() + diff);
+  return monday;
+}
+
+function addDays(d: Date, days: number): Date {
+  const copy = new Date(d);
+  copy.setDate(copy.getDate() + days);
+  return copy;
+}
+
+const AVB_COLUMNS = [
+  "client_name",
+  "men_count",
+  "budgeted_hours",
+  "actual_hours",
+  "variance_hours",
+  "revenue_cents",
+  "budgeted_rev_per_man_hr_cents",
+  "rev_per_man_hr_cents",
+  "service_code",
+];
+
+function avbReport(
+  key: string,
+  label: string,
+  description: string,
+  range: () => { from: string; to: string }
+): PrebuiltReportDef {
+  return {
+    key,
+    section: "job_hours",
+    name: `Actual v. Budgeted Hours (${label})`,
+    description,
+    filters: [],
+    notes: [
+      "Grouped by crew (Assigned Resources), with a subtotal row per crew — matches the legacy SA export.",
+      "Hours Variance is Budgeted Hours minus Actual Hours; negative means the visit ran over budget.",
+    ],
+    analysis: () => {
+      const { from, to } = range();
+      return {
+        dataset: "rpt_job_visits",
+        columns: AVB_COLUMNS,
+        filters: [
+          { column: "scheduled_date", op: "gte", value: from },
+          { column: "scheduled_date", op: "lte", value: to },
+        ],
+        groupBy: ["crew_name"],
+        aggregates: [],
+        subtotals: true,
+        sortColumn: "client_name",
+        sortDir: "asc",
+      };
+    },
+  };
+}
+
+export const HOURS_VARIANCE_REPORTS: PrebuiltReportDef[] = [
+  avbReport(
+    "avb-hours-today",
+    "Today",
+    "Shows today's visits with budgeted vs actual hours and revenue, grouped by crew.",
+    () => {
+      const today = iso(new Date());
+      return { from: today, to: today };
+    }
+  ),
+  avbReport(
+    "avb-hours-yesterday",
+    "Yesterday",
+    "Shows yesterday's visits with budgeted vs actual hours and revenue, grouped by crew.",
+    () => {
+      const yesterday = iso(addDays(new Date(), -1));
+      return { from: yesterday, to: yesterday };
+    }
+  ),
+  avbReport(
+    "avb-hours-week-to-date",
+    "Week to Date",
+    "Shows this week's visits (Monday through today) with budgeted vs actual hours and revenue, grouped by crew.",
+    () => {
+      const now = new Date();
+      return { from: iso(mondayOf(now)), to: iso(now) };
+    }
+  ),
+  avbReport(
+    "avb-hours-last-week",
+    "Last Week",
+    "Shows last week's visits (Monday through Sunday) with budgeted vs actual hours and revenue, grouped by crew.",
+    () => {
+      const lastMonday = addDays(mondayOf(new Date()), -7);
+      return { from: iso(lastMonday), to: iso(addDays(lastMonday, 6)) };
+    }
+  ),
+];
