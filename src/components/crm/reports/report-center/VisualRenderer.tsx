@@ -43,6 +43,51 @@ function KpiVisual({ result, visual }: { result: ReportResult; visual: VisualSpe
   );
 }
 
+function GaugeVisual({ result, visual }: { result: ReportResult; visual: VisualSpec }) {
+  const col = colFor(result.columns, visual.kpiColumn);
+  const row = result.rows[0];
+  const raw = col && row ? row[col.key] : undefined;
+  const value = typeof raw === "number" ? raw : Number(raw) || 0;
+
+  const budgetCol = colFor(result.columns, visual.budgetColumn);
+  const budgetRaw = budgetCol && row ? row[budgetCol.key] : undefined;
+  const budgetValue = typeof budgetRaw === "number" ? budgetRaw : Number(budgetRaw) || 0;
+  const hasBudget = !!budgetCol && budgetValue > 0;
+
+  const max = hasBudget ? budgetValue : visual.gaugeMax && visual.gaugeMax > 0 ? visual.gaugeMax : value || 1;
+  const pct = Math.min(100, Math.max(0, (value / max) * 100));
+
+  return (
+    <div className="flex h-full flex-col justify-center gap-3 py-4">
+      <p className="text-center text-2xl font-bold text-slate-900">
+        {col && raw !== undefined ? formatCellValue(raw, col.type) : "—"}
+      </p>
+      {hasBudget && (
+        <p className="text-center text-xs text-muted-foreground">
+          of {formatCellValue(budgetValue, budgetCol.type)} budgeted
+        </p>
+      )}
+      <div className="relative px-1">
+        <div
+          className="absolute -top-2.5 -translate-x-1/2 text-slate-700"
+          style={{ left: `${pct}%` }}
+        >
+          ▼
+        </div>
+        <div className="flex h-3 w-full overflow-hidden rounded-full">
+          <div className="flex-1 bg-red-400" />
+          <div className="flex-1 bg-yellow-400" />
+          <div className="flex-1 bg-green-500" />
+        </div>
+      </div>
+      <div className="flex justify-between text-[11px] text-muted-foreground">
+        <span>0</span>
+        <span>{col ? formatCellValue(max, col.type) : max}</span>
+      </div>
+    </div>
+  );
+}
+
 function ChartVisual({ result, visual }: { result: ReportResult; visual: VisualSpec }) {
   const labelCol = colFor(result.columns, visual.labelColumn);
   const valueCols = visual.valueColumns
@@ -135,6 +180,7 @@ function ChartVisual({ result, visual }: { result: ReportResult; visual: VisualS
             name={vc.label}
             fill={SERIES_COLORS[i % SERIES_COLORS.length]}
             radius={[4, 4, 0, 0]}
+            stackId={visual.stacked ? "stack" : undefined}
           />
         ))}
       </BarChart>
@@ -162,6 +208,13 @@ export function VisualRenderer({
     return (
       <div className={className}>
         <KpiVisual result={result} visual={visual} />
+      </div>
+    );
+  }
+  if (visual.type === "gauge") {
+    return (
+      <div className={className}>
+        <GaugeVisual result={result} visual={visual} />
       </div>
     );
   }

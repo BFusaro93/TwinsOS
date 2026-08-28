@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { AlertCircle, ArrowLeft, Pencil, Plus, Save, Trash2, X } from "lucide-react";
+import { AlertCircle, ArrowLeft, BookmarkPlus, Pencil, Plus, Save, Trash2, X } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   AlertDialog,
@@ -16,6 +16,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -31,6 +32,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { getDashboardTemplate } from "@/lib/reports/dashboard-templates";
+import { panelFromGraphic } from "@/lib/reports/panel-from-graphic";
 import {
   aggregateAlias,
   aggregateLabel,
@@ -39,10 +41,12 @@ import {
 } from "@/lib/hooks/use-analysis-config-builder";
 import {
   useCreateDashboard,
+  useCreateSavedGraphic,
   useCustomReport,
   useCustomReports,
   useDashboard,
   useDeleteDashboard,
+  useGraphicLibraryItems,
   useRunVisualQuery,
   useUpdateDashboard,
 } from "@/lib/hooks/use-report-center";
@@ -67,6 +71,7 @@ const VISUAL_TYPE_OPTIONS: { value: VisualType; label: string }[] = [
   { value: "bar", label: "Bar Chart" },
   { value: "line", label: "Line Chart" },
   { value: "pie", label: "Pie Chart" },
+  { value: "gauge", label: "Gauge" },
 ];
 
 const SIZE_SPAN_CLASS: Record<DashboardPanel["size"], string> = {
@@ -150,7 +155,9 @@ export function DashboardBuilder({ dashboardId }: { dashboardId?: string }) {
   const [hydrated, setHydrated] = useState(false);
   const [tabPendingRemoval, setTabPendingRemoval] = useState<DashboardTab | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [graphicPickerOpen, setGraphicPickerOpen] = useState(false);
   const { data: savedReports = [] } = useCustomReports();
+  const { items: graphicItems } = useGraphicLibraryItems();
 
   // hydrate once when editing an existing dashboard
   useEffect(() => {
@@ -465,6 +472,10 @@ export function DashboardBuilder({ dashboardId }: { dashboardId?: string }) {
                 <Plus className="mr-1.5 h-3.5 w-3.5" />
                 Add From Saved Analysis
               </Button>
+              <Button variant="outline" size="sm" onClick={() => setGraphicPickerOpen(true)}>
+                <Plus className="mr-1.5 h-3.5 w-3.5" />
+                Add From Graphics Library
+              </Button>
             </div>
           )}
 
@@ -490,6 +501,41 @@ export function DashboardBuilder({ dashboardId }: { dashboardId?: string }) {
                   >
                     <span className="font-medium">{r.name}</span>
                     {r.description && <span className="text-xs text-muted-foreground">{r.description}</span>}
+                  </button>
+                ))}
+              </div>
+            </DialogContent>
+          </Dialog>
+
+          <Dialog open={graphicPickerOpen} onOpenChange={setGraphicPickerOpen}>
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle>Add Panel From Graphics Library</DialogTitle>
+              </DialogHeader>
+              <div className="flex max-h-96 flex-col gap-1 overflow-y-auto">
+                {graphicItems.length === 0 && (
+                  <p className="py-4 text-center text-sm text-muted-foreground">
+                    No graphics available yet.
+                  </p>
+                )}
+                {graphicItems.map((g) => (
+                  <button
+                    key={g.id}
+                    onClick={() => {
+                      setEditingPanel(panelFromGraphic(g.name, g.visual));
+                      setGraphicPickerOpen(false);
+                    }}
+                    className="flex flex-col rounded-md border p-3 text-left text-sm hover:bg-accent"
+                  >
+                    <span className="flex items-center gap-2 font-medium">
+                      {g.name}
+                      <Badge variant="secondary" className="text-[10px]">
+                        {g.isSystem ? "Built-in" : "My Graphics"}
+                      </Badge>
+                    </span>
+                    {g.description && (
+                      <span className="text-xs text-muted-foreground">{g.description}</span>
+                    )}
                   </button>
                 ))}
               </div>
@@ -524,12 +570,21 @@ function PanelPreviewCard({
     panel.visual,
     panel.visual.useTabDateRange ? previewDateRange() : undefined
   );
+  const [saveOpen, setSaveOpen] = useState(false);
 
   return (
     <Card className="flex h-full flex-col">
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
         <CardTitle className="text-sm">{panel.title}</CardTitle>
         <div className="flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label="Save to Graphics Library"
+            onClick={() => setSaveOpen(true)}
+          >
+            <BookmarkPlus className="h-3.5 w-3.5" />
+          </Button>
           <Button variant="ghost" size="icon" aria-label="Edit panel" onClick={onEdit}>
             <Pencil className="h-3.5 w-3.5" />
           </Button>
@@ -555,7 +610,87 @@ function PanelPreviewCard({
         )}
         {data && !isLoading && !error && <VisualRenderer result={data} visual={panel.visual} />}
       </CardContent>
+      <SaveToGraphicsLibraryDialog panel={panel} open={saveOpen} onOpenChange={setSaveOpen} />
     </Card>
+  );
+}
+
+function SaveToGraphicsLibraryDialog({
+  panel,
+  open,
+  onOpenChange,
+}: {
+  panel: DashboardPanel;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const createSavedGraphic = useCreateSavedGraphic();
+  const [name, setName] = useState(panel.title);
+  const [description, setDescription] = useState("");
+  const [category, setCategory] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (open) {
+      setName(panel.title);
+      setDescription("");
+      setCategory("");
+      setError(null);
+    }
+  }, [open, panel.title]);
+
+  const handleSave = async () => {
+    if (!name.trim()) return;
+    setError(null);
+    try {
+      await createSavedGraphic.mutateAsync({
+        name: name.trim(),
+        description: description.trim() || null,
+        category: category.trim() || null,
+        visual: panel.visual,
+      });
+      onOpenChange(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Save failed");
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Save to Graphics Library</DialogTitle>
+        </DialogHeader>
+        <div className="flex flex-col gap-3">
+          <Input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Name"
+            className="h-9 text-sm"
+          />
+          <Input
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder="Description (optional)"
+            className="h-9 text-sm"
+          />
+          <Input
+            value={category}
+            onChange={(e) => setCategory(e.target.value)}
+            placeholder="Category (optional)"
+            className="h-9 text-sm"
+          />
+          {error && <p className="text-xs text-red-600">{error}</p>}
+          <Button
+            size="sm"
+            onClick={() => void handleSave()}
+            disabled={!name.trim() || createSavedGraphic.isPending}
+          >
+            {createSavedGraphic.isPending ? "Saving…" : "Save Graphic"}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -574,6 +709,9 @@ function PanelEditor({ panel, tabUsesDateFilter, onSave, onCancel }: PanelEditor
   const [labelColumn, setLabelColumn] = useState(panel.visual.labelColumn ?? "");
   const [valueColumns, setValueColumns] = useState<string[]>(panel.visual.valueColumns);
   const [kpiColumn, setKpiColumn] = useState(panel.visual.kpiColumn ?? "");
+  const [gaugeMax, setGaugeMax] = useState(panel.visual.gaugeMax?.toString() ?? "");
+  const [budgetColumn, setBudgetColumn] = useState(panel.visual.budgetColumn ?? "");
+  const [stacked, setStacked] = useState(panel.visual.stacked ?? false);
   const [savedReportId, setSavedReportId] = useState(panel.visual.savedReportId);
   const [formatRules, setFormatRules] = useState(panel.visual.formatRules);
   const { data: linkedReport } = useCustomReport(savedReportId);
@@ -642,6 +780,12 @@ function PanelEditor({ panel, tabUsesDateFilter, onSave, onCancel }: PanelEditor
       labelColumn: labelColumn || undefined,
       valueColumns,
       kpiColumn: kpiColumn || undefined,
+      gaugeMax:
+        visualType === "gauge" && gaugeMax && Number.isFinite(Number(gaugeMax)) && Number(gaugeMax) > 0
+          ? Number(gaugeMax)
+          : undefined,
+      budgetColumn: visualType === "gauge" && budgetColumn ? budgetColumn : undefined,
+      stacked: visualType === "bar" ? stacked : undefined,
       savedReportId,
       formatRules,
     };
@@ -671,7 +815,7 @@ function PanelEditor({ panel, tabUsesDateFilter, onSave, onCancel }: PanelEditor
 
   const canSave =
     builder.canRun &&
-    (visualType === "kpi"
+    (visualType === "kpi" || visualType === "gauge"
       ? !!kpiColumn
       : isChart
         ? !!labelColumn && valueColumns.length > 0
@@ -811,6 +955,15 @@ function PanelEditor({ panel, tabUsesDateFilter, onSave, onCancel }: PanelEditor
                 </div>
               )}
             </div>
+            {visualType === "bar" && valueColumns.length > 1 && (
+              <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-700">
+                <Checkbox
+                  checked={stacked}
+                  onCheckedChange={(checked) => setStacked(checked === true)}
+                />
+                Stack value columns in one bar
+              </label>
+            )}
           </CardContent>
         </Card>
       )}
@@ -834,6 +987,65 @@ function PanelEditor({ panel, tabUsesDateFilter, onSave, onCancel }: PanelEditor
                 ))}
               </SelectContent>
             </Select>
+          </CardContent>
+        </Card>
+      )}
+
+      {builder.datasetDef && visualType === "gauge" && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm">7. Chart Fields</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-3">
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="w-32 text-xs font-medium text-slate-600">Gauge Value</span>
+              <Select value={kpiColumn} onValueChange={setKpiColumn}>
+                <SelectTrigger className="h-8 w-64 text-sm">
+                  <SelectValue placeholder="Choose a value…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {outputOptions.map((o) => (
+                    <SelectItem key={o.value} value={o.value}>
+                      {o.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="w-32 text-xs font-medium text-slate-600">Budget Column</span>
+              <Select
+                value={budgetColumn || "__none"}
+                onValueChange={(v) => setBudgetColumn(v === "__none" ? "" : v)}
+              >
+                <SelectTrigger className="h-8 w-64 text-sm">
+                  <SelectValue placeholder="None — use a fixed max instead" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none">None — use a fixed max instead</SelectItem>
+                  {outputOptions.map((o) => (
+                    <SelectItem key={o.value} value={o.value}>
+                      {o.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <span className="text-xs text-muted-foreground">
+                A column from this same query (e.g. budgeted hours) to use as the scale&apos;s max.
+              </span>
+            </div>
+            {!budgetColumn && (
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="w-32 text-xs font-medium text-slate-600">Fixed Gauge Max</span>
+                <Input
+                  type="number"
+                  value={gaugeMax}
+                  onChange={(e) => setGaugeMax(e.target.value)}
+                  placeholder="e.g. 100000"
+                  className="h-8 w-40 text-sm"
+                />
+              </div>
+            )}
           </CardContent>
         </Card>
       )}

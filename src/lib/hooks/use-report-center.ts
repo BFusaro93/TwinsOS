@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 import { getDataset } from "@/lib/reports/datasets";
+import { GRAPHIC_TEMPLATES } from "@/lib/reports/graphic-templates";
 import type {
   AnalysisConfig,
   CustomReport,
@@ -9,6 +10,8 @@ import type {
   DashboardInput,
   ReportFilterOption,
   ReportResult,
+  SavedGraphic,
+  SavedGraphicInput,
   VisualSpec,
 } from "@/types/crm-reports";
 
@@ -291,6 +294,88 @@ export function useDeleteDashboard() {
       void queryClient.invalidateQueries({ queryKey: ["dashboards"] });
     },
   });
+}
+
+// ── saved graphics (Graphics Library) CRUD ────────────────────────────────────
+
+export function useSavedGraphics() {
+  return useQuery<SavedGraphic[]>({
+    queryKey: ["saved-graphics"],
+    queryFn: async () => {
+      const res = await fetch("/api/crm/graphics");
+      if (!res.ok) throw new Error(await readError(res));
+      const body = (await res.json()) as { graphics: SavedGraphic[] };
+      return body.graphics;
+    },
+  });
+}
+
+export function useCreateSavedGraphic() {
+  const queryClient = useQueryClient();
+  return useMutation<SavedGraphic, Error, SavedGraphicInput>({
+    mutationFn: async (input) => {
+      const res = await fetch("/api/crm/graphics", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+      });
+      if (!res.ok) throw new Error(await readError(res));
+      const body = (await res.json()) as { graphic: SavedGraphic };
+      return body.graphic;
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["saved-graphics"] });
+    },
+  });
+}
+
+export function useDeleteSavedGraphic() {
+  const queryClient = useQueryClient();
+  return useMutation<void, Error, string>({
+    mutationFn: async (id) => {
+      const res = await fetch(`/api/crm/graphics/${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error(await readError(res));
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["saved-graphics"] });
+    },
+  });
+}
+
+// ── combined Graphics Library items (system catalog + org's saved graphics) ──
+
+export interface GraphicLibraryItem {
+  /** Stable across renders — template key for system graphics, row id for
+   *  saved ones. Prefixed so the two id spaces never collide. */
+  id: string;
+  name: string;
+  description: string | null;
+  category: string;
+  visual: VisualSpec;
+  isSystem: boolean;
+}
+
+export function useGraphicLibraryItems() {
+  const saved = useSavedGraphics();
+  const items: GraphicLibraryItem[] = [
+    ...GRAPHIC_TEMPLATES.map((t) => ({
+      id: `system:${t.key}`,
+      name: t.name,
+      description: t.description,
+      category: t.category,
+      visual: t.visual,
+      isSystem: true,
+    })),
+    ...(saved.data ?? []).map((g) => ({
+      id: `saved:${g.id}`,
+      name: g.name,
+      description: g.description,
+      category: g.category ?? "My Graphics",
+      visual: g.visual,
+      isSystem: false,
+    })),
+  ];
+  return { items, isLoading: saved.isLoading };
 }
 
 // ── run a dashboard panel's visual ────────────────────────────────────────────

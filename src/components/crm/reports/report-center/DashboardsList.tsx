@@ -21,6 +21,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatDate } from "@/lib/utils";
 import { DASHBOARD_TEMPLATES } from "@/lib/reports/dashboard-templates";
@@ -135,6 +136,11 @@ export function DashboardsList() {
                       >
                         {dashboard.name}
                       </Link>
+                      {dashboard.isSystemSeeded && (
+                        <Badge variant="secondary" className="ml-2 align-middle text-[10px]">
+                          Built-in
+                        </Badge>
+                      )}
                     </td>
                     <td className="px-4 py-2.5 text-slate-600">
                       {dashboard.description || "—"}

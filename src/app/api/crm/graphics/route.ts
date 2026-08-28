@@ -1,25 +1,24 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { dashboardInputSchema } from "@/types/crm-reports";
-import { ensureSystemDashboardsSeeded } from "@/lib/reports/seed-dashboards";
+import { savedGraphicInputSchema } from "@/types/crm-reports";
 
-interface DashboardRow {
+interface SavedGraphicRow {
   id: string;
   name: string;
   description: string | null;
-  config: unknown;
-  is_system_seeded: boolean | null;
+  category: string | null;
+  visual: unknown;
   created_at: string;
   updated_at: string;
 }
 
-function mapRow(row: DashboardRow) {
+function mapRow(row: SavedGraphicRow) {
   return {
     id: row.id,
     name: row.name,
     description: row.description,
-    config: row.config,
-    isSystemSeeded: row.is_system_seeded ?? false,
+    category: row.category,
+    visual: row.visual,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -34,13 +33,11 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  await ensureSystemDashboardsSeeded(supabase);
-
-  // crm_dashboards is newer than the generated Database types
+  // crm_saved_graphics is newer than the generated Database types
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data, error } = await (supabase as any)
-    .from("crm_dashboards")
-    .select("id, name, description, config, is_system_seeded, created_at, updated_at")
+    .from("crm_saved_graphics")
+    .select("id, name, description, category, visual, created_at, updated_at")
     .is("deleted_at", null)
     .order("updated_at", { ascending: false });
 
@@ -48,7 +45,7 @@ export async function GET() {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
   return NextResponse.json({
-    dashboards: ((data ?? []) as DashboardRow[]).map(mapRow),
+    graphics: ((data ?? []) as SavedGraphicRow[]).map(mapRow),
   });
 }
 
@@ -68,24 +65,25 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const parsed = dashboardInputSchema.safeParse(body);
+  const parsed = savedGraphicInputSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json(
-      { error: parsed.error.issues[0]?.message ?? "Invalid dashboard" },
+      { error: parsed.error.issues[0]?.message ?? "Invalid graphic" },
       { status: 400 }
     );
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data, error } = await (supabase as any)
-    .from("crm_dashboards")
+    .from("crm_saved_graphics")
     .insert({
       name: parsed.data.name,
       description: parsed.data.description ?? null,
-      config: parsed.data.config,
+      category: parsed.data.category ?? null,
+      visual: parsed.data.visual,
       created_by: user.id,
     })
-    .select("id, name, description, config, created_at, updated_at")
+    .select("id, name, description, category, visual, created_at, updated_at")
     .single();
 
   if (error || !data) {
@@ -95,7 +93,7 @@ export async function POST(request: Request) {
     );
   }
   return NextResponse.json(
-    { dashboard: mapRow(data as DashboardRow) },
+    { graphic: mapRow(data as SavedGraphicRow) },
     { status: 201 }
   );
 }

@@ -111,7 +111,7 @@ export type FormatRule = z.infer<typeof formatRuleSchema>;
 
 // ---------- Dashboards (visuals built on the analysis engine) ----------
 
-export const visualTypeSchema = z.enum(["kpi", "table", "bar", "line", "pie"]);
+export const visualTypeSchema = z.enum(["kpi", "table", "bar", "line", "pie", "gauge"]);
 export type VisualType = z.infer<typeof visualTypeSchema>;
 
 export const customReportInputSchema = z.object({
@@ -164,8 +164,23 @@ export const visualSpecSchema = z.object({
   /** One or more numeric output columns to plot as series (bar/line) or the
    *  single value (pie's slice size). */
   valueColumns: z.array(z.string()).default([]),
-  /** Output column to render as the big number for a "kpi" visual. */
+  /** Output column to render as the big number for a "kpi" visual, or as the
+   *  needle position for a "gauge" visual. */
   kpiColumn: z.string().optional(),
+  /** "gauge" visual only — the scale's upper bound (lower bound is always 0).
+   *  The track renders as three equal red/yellow/green bands with the
+   *  current value marked at its position along the scale. */
+  gaugeMax: z.number().positive().optional(),
+  /** "gauge" visual only — an output column (from the same query result row
+   *  as kpiColumn) whose value is used as the scale's upper bound instead of
+   *  the fixed `gaugeMax` number — e.g. a "budgeted_hours" sum next to an
+   *  "actual_hours" sum, so the gauge tracks a real budget/target per period
+   *  instead of a hardcoded goal. Takes priority over `gaugeMax` when set
+   *  and the column resolves to a positive number. */
+  budgetColumn: z.string().optional(),
+  /** "bar" visual only — stack multiple value columns in one bar per label
+   *  instead of rendering them as side-by-side bars. */
+  stacked: z.boolean().optional(),
   /** Set when this panel was added "from a saved analysis" (My Reports) —
    *  `config` is a snapshot copied in at add/refresh time, not a live
    *  reference; re-picking the same analysis (via "Refresh from source")
@@ -207,11 +222,35 @@ export const dashboardInputSchema = z.object({
 });
 export type DashboardInput = z.infer<typeof dashboardInputSchema>;
 
+// ---------- Graphics Library (reusable panel-level visuals) ----------
+
+export const savedGraphicInputSchema = z.object({
+  name: z.string().min(1).max(120),
+  description: z.string().max(500).nullish(),
+  category: z.string().max(60).nullish(),
+  visual: visualSpecSchema,
+});
+export type SavedGraphicInput = z.infer<typeof savedGraphicInputSchema>;
+
+export interface SavedGraphic {
+  id: string;
+  name: string;
+  description: string | null;
+  category: string | null;
+  visual: VisualSpec;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface Dashboard {
   id: string;
   name: string;
   description: string | null;
   config: DashboardConfig;
+  /** True when this dashboard was auto-cloned from a system template
+   *  (see ensureSystemDashboardsSeeded) rather than created by a user.
+   *  Purely informational — the row is a normal, fully editable dashboard. */
+  isSystemSeeded: boolean;
   createdAt: string;
   updatedAt: string;
 }
