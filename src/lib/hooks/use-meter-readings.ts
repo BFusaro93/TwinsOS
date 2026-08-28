@@ -66,15 +66,41 @@ export function useDeleteMeterReading() {
     mutationFn: async ({ id, meterId }: { id: string; meterId: string }) => {
       const supabase = createClient();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error } = await (supabase as any)
+      const db = supabase as any;
+      const { error } = await db
         .from("meter_readings")
         .update({ deleted_at: new Date().toISOString() })
         .eq("id", id);
       if (error) throw error;
+
+      // meters.current_value / last_reading_at are denormalized off the most
+      // recent reading (see useAddMeterReading). Deleting a reading can
+      // delete the one that set those fields, so recompute from whatever
+      // reading is now the most recent — otherwise the meter keeps showing a
+      // value that no longer has a backing reading. If no readings remain,
+      // leave the meter's fields alone (no baseline to fall back to).
+      const { data: latest, error: latestError } = await db
+        .from("meter_readings")
+        .select("value, reading_at")
+        .eq("meter_id", meterId)
+        .is("deleted_at", null)
+        .order("reading_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (latestError) throw latestError;
+      if (latest) {
+        const { error: updateError } = await db
+          .from("meters")
+          .update({ current_value: latest.value, last_reading_at: latest.reading_at })
+          .eq("id", meterId);
+        if (updateError) throw updateError;
+      }
       return meterId;
     },
     onSuccess: (meterId) => {
       queryClient.invalidateQueries({ queryKey: ["meter-readings", meterId] });
+      queryClient.invalidateQueries({ queryKey: ["meters"] });
+      queryClient.invalidateQueries({ queryKey: ["meters", meterId] });
     },
   });
 }

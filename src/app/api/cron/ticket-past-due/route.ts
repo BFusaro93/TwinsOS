@@ -5,10 +5,11 @@ import { fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
 /**
  * GET /api/cron/ticket-past-due — called daily by Vercel Cron.
  *
- * Fires the 'ticket_past_due' automation trigger for every open ticket whose
- * due date has passed. Tickets with no client_id (internal-only tickets)
- * have nothing to enroll and are skipped — automations are always
- * client-scoped.
+ * Fires the 'ticket_past_due' automation trigger for every open or pending
+ * ticket whose due date has passed. on_hold tickets are excluded — a ticket
+ * on hold is deliberately paused, not overdue. Tickets with no client_id
+ * (internal-only tickets) have nothing to enroll and are skipped —
+ * automations are always client-scoped.
  */
 export async function GET(request: Request) {
   const authHeader = request.headers.get("authorization");
@@ -29,7 +30,7 @@ export async function GET(request: Request) {
     .select("id, org_id, client_id")
     .not("due_date", "is", null)
     .lt("due_date", todayStr)
-    .eq("status", "open")
+    .in("status", ["open", "pending"])
     .not("client_id", "is", null)
     .is("deleted_at", null);
 

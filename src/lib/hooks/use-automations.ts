@@ -53,15 +53,13 @@ export function mapAutomation(row: AutomationRow): AutomationRule {
     case "wo_status_change":
       trigger = {
         type: "wo_status_change",
-        toStatus: (tc.to_status as AutomationTrigger & { type: "wo_status_change" })["toStatus"] ??
-          (tc.toStatus as "open" | "in_progress" | "on_hold" | "done") ?? "open",
+        toStatus: (tc.to_status as "open" | "in_progress" | "on_hold" | "done") ?? "open",
       };
       break;
     case "po_status_change":
       trigger = {
         type: "po_status_change",
-        toStatus: (tc.to_status as AutomationTrigger & { type: "po_status_change" })["toStatus"] ??
-          (tc.toStatus as "draft" | "pending_approval" | "approved" | "rejected" | "ordered" | "closed") ?? "approved",
+        toStatus: (tc.to_status as "draft" | "pending_approval" | "approved" | "rejected" | "ordered" | "closed") ?? "approved",
       };
       break;
     default:

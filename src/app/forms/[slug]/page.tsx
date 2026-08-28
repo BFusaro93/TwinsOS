@@ -94,6 +94,17 @@ export default function PublicFormPage({ params }: { params: Promise<{ slug: str
   const [hiddenFieldIds, setHiddenFieldIds] = useState<Set<string>>(new Set());
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   const [turnstileKey, setTurnstileKey] = useState(0);
+  // Set when the Turnstile widget itself reports it can't produce a token
+  // (script blocked, domain not registered, render error, or it simply
+  // never responds). Without this, a widget failure left the Submit button
+  // disabled forever with no explanation — the server is still the real
+  // enforcement point (verifyTurnstileToken), so it's safe to stop gating
+  // the button client-side once the widget has told us it's broken.
+  const [turnstileUnavailable, setTurnstileUnavailable] = useState(false);
+  // requiresTurnstileToken reflects whether the client should still WAIT for
+  // a token before allowing submit — false once the widget has reported it
+  // can't produce one, even though TURNSTILE_SITE_KEY itself is still set.
+  const requiresTurnstileToken = !!TURNSTILE_SITE_KEY && !turnstileUnavailable;
 
   useEffect(() => {
     fetch(`/api/public/forms/${slug}`)
@@ -105,6 +116,32 @@ export default function PublicFormPage({ params }: { params: Promise<{ slug: str
       })
       .catch(() => setState("not_found"));
   }, [slug]);
+
+  // The "Script" embed option (EmbedDialog.tsx) advertises auto-resizing the
+  // host page's iframe to fit this form's content — it listens for a
+  // `{type:'twins-form-height', height}` postMessage. Nothing on this side
+  // ever sent one, so every embedder using that snippet got a fixed
+  // 600px-tall iframe no matter how tall the form actually was (cut off on
+  // long forms, wasted whitespace on short ones) — the feature was
+  // advertised but dead. Report height on every content change (page
+  // navigation, validation errors appearing, success/error state) via
+  // ResizeObserver, and only when actually embedded in an iframe.
+  useEffect(() => {
+    if (typeof window === "undefined" || window.self === window.top) return;
+    const target = document.documentElement;
+    let lastHeight = 0;
+    const report = () => {
+      const height = target.scrollHeight;
+      if (height !== lastHeight) {
+        lastHeight = height;
+        window.parent.postMessage({ type: "twins-form-height", height }, "*");
+      }
+    };
+    const observer = new ResizeObserver(report);
+    observer.observe(target);
+    report();
+    return () => observer.disconnect();
+  }, [state, currentPage, form]);
 
   const totalPages = form
     ? Math.max(1, ...form.fields.map((f) => f.pageNumber ?? 1))
@@ -258,7 +295,7 @@ export default function PublicFormPage({ params }: { params: Promise<{ slug: str
     e.preventDefault();
     if (!validatePage(pageFields)) return;
     if (!form) return;
-    if (TURNSTILE_SITE_KEY && !turnstileToken) {
+    if (requiresTurnstileToken && !turnstileToken) {
       setSubmitError("Please complete the verification check before submitting.");
       return;
     }
@@ -410,12 +447,13 @@ export default function PublicFormPage({ params }: { params: Promise<{ slug: str
           />
         ))}
 
-        {isLastPage && TURNSTILE_SITE_KEY && (
+        {isLastPage && TURNSTILE_SITE_KEY && !turnstileUnavailable && (
           <TurnstileWidget
             key={turnstileKey}
             siteKey={TURNSTILE_SITE_KEY}
             onVerify={setTurnstileToken}
             onExpire={() => setTurnstileToken(null)}
+            onError={() => setTurnstileUnavailable(true)}
           />
         )}
 
@@ -438,7 +476,7 @@ export default function PublicFormPage({ params }: { params: Promise<{ slug: str
           {isLastPage ? (
             <button
               type="submit"
-              disabled={state === "submitting" || (!!TURNSTILE_SITE_KEY && !turnstileToken)}
+              disabled={state === "submitting" || (requiresTurnstileToken && !turnstileToken)}
               className="flex-1 rounded-md bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-brand-700 disabled:opacity-60 transition-colors"
             >
               {state === "submitting"

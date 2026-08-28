@@ -33,10 +33,12 @@ interface Props {
   /** Active saved discount presets, for reporting-consistent type tracking. */
   discounts: CRMDiscount[];
   onSave: (patch: LineItemDiscountPatch) => void;
+  /** When true, the trigger is inert — used to keep this line read-only on a locked invoice/estimate. */
+  disabled?: boolean;
 }
 
 export function LineItemDiscountPopover({
-  discountCents, discountType, discountValue, appliedDiscountId, lineTotalCents, discounts, onSave,
+  discountCents, discountType, discountValue, appliedDiscountId, lineTotalCents, discounts, onSave, disabled = false,
 }: Props) {
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<DiscountType>("flat");
@@ -96,11 +98,12 @@ export function LineItemDiscountPopover({
   }
 
   return (
-    <Popover open={open} onOpenChange={handleOpen}>
+    <Popover open={open && !disabled} onOpenChange={(o) => { if (!disabled) handleOpen(o); }}>
       <PopoverTrigger asChild>
         <button
           type="button"
-          className="relative flex h-6 w-6 items-center justify-center rounded hover:bg-slate-100"
+          disabled={disabled}
+          className="relative flex h-6 w-6 items-center justify-center rounded hover:bg-slate-100 disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:bg-transparent"
           title={discountCents > 0 ? `Discount applied: $${(discountCents / 100).toFixed(2)}` : "Add a discount to this line"}
         >
           <DollarSign className={cn("h-3.5 w-3.5", discountCents > 0 ? "text-green-600" : "text-slate-400")} />

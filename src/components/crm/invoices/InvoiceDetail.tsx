@@ -116,18 +116,30 @@ function fmtDate(dateStr: string | null) {
 // ── inline editable field ─────────────────────────────────────────────────────
 
 function InlineEdit({
-  value, onSave, type = "text", className, placeholder,
+  value, onSave, type = "text", className, placeholder, disabled = false,
 }: {
   value: string;
   onSave: (v: string) => void;
   type?: "text" | "date" | "number";
   className?: string;
   placeholder?: string;
+  disabled?: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const [local, setLocal] = useState(value);
 
   useEffect(() => { setLocal(value); }, [value]);
+
+  // Locked invoices must not be editable through this field — render it as
+  // plain, non-interactive text instead of the edit-trigger button, matching
+  // "Save Invoice" and every other locked-state control on this page.
+  if (disabled) {
+    return (
+      <span className={cn("block px-1 py-0.5 text-left", !value && "text-slate-400 italic", className)}>
+        {type === "date" ? (value ? fmtDate(value) : (placeholder ?? "—")) : (value || (placeholder ?? "—"))}
+      </span>
+    );
+  }
 
   if (!editing) {
     return (
@@ -168,9 +180,9 @@ function InlineEdit({
 // ── line item row ─────────────────────────────────────────────────────────────
 
 function LineItemRow({
-  item, invoiceId, taxRateBps, discounts,
+  item, invoiceId, taxRateBps, discounts, locked = false,
 }: {
-  item: InvoiceLineItem; invoiceId: string; taxRateBps: number; discounts: CRMDiscount[];
+  item: InvoiceLineItem; invoiceId: string; taxRateBps: number; discounts: CRMDiscount[]; locked?: boolean;
 }) {
   const [row, setRow] = useState(item);
   const [dirty, setDirty] = useState(false);
@@ -276,7 +288,8 @@ function LineItemRow({
           onChange={(e) => update("description", e.target.value)}
           onBlur={save}
           placeholder="Description…"
-          className="w-full rounded border border-transparent bg-transparent px-1 py-0.5 text-xs text-slate-700 hover:border-slate-200 focus:border-brand-400 focus:outline-none focus:bg-white"
+          disabled={locked}
+          className="w-full rounded border border-transparent bg-transparent px-1 py-0.5 text-xs text-slate-700 hover:border-slate-200 focus:border-brand-400 focus:outline-none focus:bg-white disabled:opacity-60 disabled:cursor-not-allowed"
         />
       </td>
       {/* Service date */}
@@ -290,7 +303,8 @@ function LineItemRow({
             setDirty(true);
           }}
           onBlur={save}
-          className="w-full rounded border border-transparent bg-transparent px-1 py-0.5 text-xs text-slate-500 hover:border-slate-200 focus:border-brand-400 focus:outline-none focus:bg-white"
+          disabled={locked}
+          className="w-full rounded border border-transparent bg-transparent px-1 py-0.5 text-xs text-slate-500 hover:border-slate-200 focus:border-brand-400 focus:outline-none focus:bg-white disabled:opacity-60 disabled:cursor-not-allowed"
         />
       </td>
       {/* Taxable */}
@@ -298,9 +312,10 @@ function LineItemRow({
         <button
           type="button"
           onClick={toggleTaxable}
+          disabled={locked}
           title={row.isTaxable ? "Taxable — click to remove" : "Non-taxable — click to apply"}
           className={cn(
-            "rounded px-1.5 py-0.5 text-[10px] font-semibold transition-colors",
+            "rounded px-1.5 py-0.5 text-[10px] font-semibold transition-colors disabled:opacity-60 disabled:cursor-not-allowed",
             row.isTaxable
               ? "bg-amber-100 text-amber-700 hover:bg-amber-200"
               : "bg-slate-100 text-slate-400 hover:bg-slate-200"
@@ -323,7 +338,8 @@ function LineItemRow({
             setDirty(true);
           }}
           onBlur={save}
-          className="w-full rounded border border-transparent bg-transparent px-1 py-0.5 text-right text-xs text-slate-600 placeholder-slate-300 hover:border-slate-200 focus:border-brand-400 focus:outline-none focus:bg-white"
+          disabled={locked}
+          className="w-full rounded border border-transparent bg-transparent px-1 py-0.5 text-right text-xs text-slate-600 placeholder-slate-300 hover:border-slate-200 focus:border-brand-400 focus:outline-none focus:bg-white disabled:opacity-60 disabled:cursor-not-allowed"
         />
       </td>
       {/* Men */}
@@ -339,7 +355,8 @@ function LineItemRow({
             setDirty(true);
           }}
           onBlur={save}
-          className="w-full rounded border border-transparent bg-transparent px-1 py-0.5 text-right text-xs text-slate-600 placeholder-slate-300 hover:border-slate-200 focus:border-brand-400 focus:outline-none focus:bg-white"
+          disabled={locked}
+          className="w-full rounded border border-transparent bg-transparent px-1 py-0.5 text-right text-xs text-slate-600 placeholder-slate-300 hover:border-slate-200 focus:border-brand-400 focus:outline-none focus:bg-white disabled:opacity-60 disabled:cursor-not-allowed"
         />
       </td>
       {/* Qty */}
@@ -349,7 +366,8 @@ function LineItemRow({
           value={row.qty}
           onChange={(e) => update("qty", Number(e.target.value))}
           onBlur={save}
-          className="w-full rounded border border-transparent bg-transparent px-1 py-0.5 text-right text-xs hover:border-slate-200 focus:border-brand-400 focus:outline-none focus:bg-white"
+          disabled={locked}
+          className="w-full rounded border border-transparent bg-transparent px-1 py-0.5 text-right text-xs hover:border-slate-200 focus:border-brand-400 focus:outline-none focus:bg-white disabled:opacity-60 disabled:cursor-not-allowed"
         />
       </td>
       {/* Rate */}
@@ -367,7 +385,8 @@ function LineItemRow({
             setRow(updated);
             saveRow(updated);
           }}
-          className="w-full rounded border border-transparent bg-transparent px-1 py-0.5 text-right text-xs hover:border-slate-200 focus:border-brand-400 focus:outline-none focus:bg-white"
+          disabled={locked}
+          className="w-full rounded border border-transparent bg-transparent px-1 py-0.5 text-right text-xs hover:border-slate-200 focus:border-brand-400 focus:outline-none focus:bg-white disabled:opacity-60 disabled:cursor-not-allowed"
         />
       </td>
       {/* Total */}
@@ -392,6 +411,7 @@ function LineItemRow({
             lineTotalCents={row.totalCents}
             discounts={discounts}
             onSave={saveDiscount}
+            disabled={locked}
           />
           {removing ? (
             <span className="text-[10px] text-slate-400">…</span>
@@ -399,14 +419,15 @@ function LineItemRow({
             <button
               type="button"
               onClick={handleDelete}
-              className="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+              disabled={locked}
+              className="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity disabled:opacity-0"
             >
               <Trash2 className="h-3.5 w-3.5" />
             </button>
           )}
         </div>
         {isPending && !removing && <span className="text-[10px] text-slate-400">…</span>}
-        {dirty && !isPending && (
+        {dirty && !isPending && !locked && (
           <button type="button" onClick={save} className="text-[10px] text-brand-500 hover:underline">save</button>
         )}
       </td>
@@ -952,6 +973,7 @@ export function InvoiceDetail({
                 }}
                 type="number"
                 className="ml-1 w-20 bg-brand-700 text-white text-sm font-semibold border-brand-500"
+                disabled={invoice.locked}
               />
             </span>
             {invoice.clientName && (
@@ -959,6 +981,7 @@ export function InvoiceDetail({
             )}
             <Select
               value={invoice.status}
+              disabled={invoice.locked}
               onValueChange={(v) => {
                 // Voiding needs to zero the balance and resync the client's total,
                 // so route it through the confirm dialog instead of a bare status write.
@@ -966,7 +989,7 @@ export function InvoiceDetail({
                 updateStatus({ id: invoice.id, status: v });
               }}
             >
-              <SelectTrigger className="h-6 w-28 text-xs bg-brand-700 border-brand-500 text-white ml-auto">
+              <SelectTrigger className="h-6 w-28 text-xs bg-brand-700 border-brand-500 text-white ml-auto disabled:opacity-60 disabled:cursor-not-allowed">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -993,6 +1016,7 @@ export function InvoiceDetail({
                   onSave={(v) => updateHeader({ id: invoice.id, patch: { service_address: v || null } })}
                   className="text-xs text-slate-600 w-full"
                   placeholder="Click to set a different service address…"
+                  disabled={invoice.locked}
                 />
               </div>
             </div>
@@ -1010,20 +1034,21 @@ export function InvoiceDetail({
                         onSave={(v) => setInvoiceNumber(Number(v) || invoice.invoiceNumber)}
                         type="number"
                         className="w-28"
+                        disabled={invoice.locked}
                       />
                     </td>
                   </tr>
                   <tr className="border-b border-slate-50">
                     <td className="py-2 pr-4 text-slate-400 font-medium">Invoice Date</td>
                     <td className="py-2 text-slate-700">
-                      <InlineEdit value={invoiceDate} onSave={handleInvoiceDateChange} type="date" className="w-32" />
+                      <InlineEdit value={invoiceDate} onSave={handleInvoiceDateChange} type="date" className="w-32" disabled={invoice.locked} />
                     </td>
                   </tr>
                   <tr className="border-b border-slate-50">
                     <td className="py-2 pr-4 text-slate-400 font-medium">Terms</td>
                     <td className="py-2">
-                      <Select value={terms} onValueChange={handleTermsChange}>
-                        <SelectTrigger className="h-7 text-xs w-40 border border-slate-200 shadow-none">
+                      <Select value={terms} onValueChange={handleTermsChange} disabled={invoice.locked}>
+                        <SelectTrigger className="h-7 text-xs w-40 border border-slate-200 shadow-none disabled:opacity-60 disabled:cursor-not-allowed">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -1037,7 +1062,7 @@ export function InvoiceDetail({
                   <tr className="border-b border-slate-50">
                     <td className="py-2 pr-4 text-slate-400 font-medium">Due Date</td>
                     <td className="py-2 text-slate-700">
-                      <InlineEdit value={dueDate} onSave={setDueDate} type="date" className="w-32" />
+                      <InlineEdit value={dueDate} onSave={setDueDate} type="date" className="w-32" disabled={invoice.locked} />
                     </td>
                   </tr>
                   <tr>
@@ -1046,6 +1071,7 @@ export function InvoiceDetail({
                       <div className="flex items-center gap-3">
                         <button
                           type="button"
+                          disabled={invoice.locked}
                           onClick={() => {
                             const fallback = (invoice.clientDefaultTaxRateBps ?? 0) > 0
                               ? invoice.clientDefaultTaxRateBps!
@@ -1053,7 +1079,7 @@ export function InvoiceDetail({
                             setTaxRateBps(hasTax ? 0 : fallback);
                           }}
                           className={cn(
-                            "relative inline-flex h-5 w-9 items-center rounded-full transition-colors shrink-0",
+                            "relative inline-flex h-5 w-9 items-center rounded-full transition-colors shrink-0 disabled:opacity-60 disabled:cursor-not-allowed",
                             hasTax ? "bg-amber-500" : "bg-slate-200"
                           )}
                         >
@@ -1069,6 +1095,7 @@ export function InvoiceDetail({
                               value={(taxRateBps / 100).toFixed(2)}
                               onChange={(e) => setTaxRateBps(Math.round(parseFloat(e.target.value || "0") * 100))}
                               className="h-7 w-24 text-right text-xs"
+                              disabled={invoice.locked}
                             />
                             <span className="text-slate-500 font-medium">%</span>
                           </div>
@@ -1089,10 +1116,11 @@ export function InvoiceDetail({
                           onChange={(e) => handleDiscountStrChange(e.target.value)}
                           onBlur={() => setDiscountCents(Math.round((parseFloat(discountStr) || 0) * 100))}
                           className="h-7 w-24 text-right text-xs"
+                          disabled={invoice.locked}
                         />
                         {activeDiscounts.length > 0 && (
-                          <Select onValueChange={applyNamedDiscount}>
-                            <SelectTrigger className="h-7 w-48 text-xs">
+                          <Select onValueChange={applyNamedDiscount} disabled={invoice.locked}>
+                            <SelectTrigger className="h-7 w-48 text-xs disabled:opacity-60 disabled:cursor-not-allowed">
                               <SelectValue placeholder="Apply a saved discount…" />
                             </SelectTrigger>
                             <SelectContent>
@@ -1117,6 +1145,7 @@ export function InvoiceDetail({
                         onSave={(v) => updateHeader({ id: invoice.id, patch: { po_number: v || null } })}
                         className="w-36"
                         placeholder="Click to add…"
+                        disabled={invoice.locked}
                       />
                     </td>
                   </tr>
@@ -1126,8 +1155,9 @@ export function InvoiceDetail({
                       <Select
                         value={invoice.salesRepId ?? ""}
                         onValueChange={(v) => updateHeader({ id: invoice.id, patch: { sales_rep_id: v || null } })}
+                        disabled={invoice.locked}
                       >
-                        <SelectTrigger className="h-7 text-xs w-44 border border-slate-200 shadow-none">
+                        <SelectTrigger className="h-7 text-xs w-44 border border-slate-200 shadow-none disabled:opacity-60 disabled:cursor-not-allowed">
                           <SelectValue placeholder="Assign sales rep…" />
                         </SelectTrigger>
                         <SelectContent>
@@ -1151,8 +1181,9 @@ export function InvoiceDetail({
                       <Select
                         value={invoice.preferredPaymentMethod ?? invoice.clientDefaultPaymentMethod ?? ""}
                         onValueChange={(v) => updateHeader({ id: invoice.id, patch: { preferred_payment_method: v || null } })}
+                        disabled={invoice.locked}
                       >
-                        <SelectTrigger className="h-7 text-xs w-44 border border-slate-200 shadow-none">
+                        <SelectTrigger className="h-7 text-xs w-44 border border-slate-200 shadow-none disabled:opacity-60 disabled:cursor-not-allowed">
                           <SelectValue placeholder="Select method…" />
                         </SelectTrigger>
                         <SelectContent>
@@ -1201,7 +1232,7 @@ export function InvoiceDetail({
               </thead>
               <tbody>
                 {lineItems.map((li) => (
-                  <LineItemRow key={li.id} item={li} invoiceId={invoice.id} taxRateBps={taxRateBps} discounts={activeDiscounts} />
+                  <LineItemRow key={li.id} item={li} invoiceId={invoice.id} taxRateBps={taxRateBps} discounts={activeDiscounts} locked={invoice.locked} />
                 ))}
                 {lineItems.length === 0 && (
                   <tr>
@@ -1216,15 +1247,16 @@ export function InvoiceDetail({
             {/* Add item + totals */}
             <div className="border-t p-4 flex items-start justify-between gap-4 bg-slate-50">
               <Popover
-                open={lineItemPickerOpen}
+                open={lineItemPickerOpen && !invoice.locked}
                 onOpenChange={(o) => {
+                  if (invoice.locked) return;
                   setLineItemPickerOpen(o);
                   if (!o) setLineItemSearch("");
                   else setTimeout(() => lineItemSearchRef.current?.focus(), 50);
                 }}
               >
                 <PopoverTrigger asChild>
-                  <Button variant="outline" size="sm" className="h-8 text-xs">
+                  <Button variant="outline" size="sm" className="h-8 text-xs" disabled={invoice.locked}>
                     <Plus className="mr-1 h-3.5 w-3.5" /> Add Line Item
                     <ChevronDown className="ml-1 h-3 w-3 text-slate-400" />
                   </Button>

@@ -382,8 +382,8 @@ async function handleRun(request: Request) {
       for (const auto of candidates ?? []) {
         if (eventTrigger === "wo_status_change" || eventTrigger === "po_status_change") {
           const tc = (auto.trigger_config ?? {}) as Record<string, unknown>;
-          if (tc.toStatus !== toStatus) {
-            skipped.push({ automationId: auto.id, reason: `toStatus "${toStatus}" doesn't match configured "${tc.toStatus}"` });
+          if (tc.to_status !== toStatus) {
+            skipped.push({ automationId: auto.id, reason: `toStatus "${toStatus}" doesn't match configured "${tc.to_status}"` });
             continue;
           }
         }

@@ -265,7 +265,7 @@ export function FormBuilder({ form, publicBaseUrl }: Props) {
       fieldType: type,
       config: defaultConfig(type),
       options: OPTIONS_TYPES.includes(type) ? (current?.options ?? []) : null,
-      required: DISPLAY_TYPES.includes(type) ? false : current?.required ?? false,
+      required: DISPLAY_TYPES.includes(type) || type === "hidden" ? false : current?.required ?? false,
       label: isSmsOptIn && !current?.label
         ? "I agree to receive text messages from this business about my service appointments and account, including appointment reminders, crew arrival notices, and job status updates."
         : current?.label ?? "",
@@ -652,6 +652,14 @@ function FieldCard({
   onUpdate, onUpdateConfig, onChangeType, onMoveUp, onMoveDown, onRemove,
 }: FieldCardProps) {
   const isDisplay = DISPLAY_TYPES.includes(field.fieldType);
+  // "hidden" is deliberately NOT in DISPLAY_TYPES (it still needs a label,
+  // for the formData key, and is mappable to a CRM field) — but every
+  // required-field check in the app (submit-form-response.ts,
+  // forms/[slug]/page.tsx, FillOutFormDialog.tsx) treats it as a display
+  // type and skips it, since a submitter never sees it to fill in. Leaving
+  // the Required checkbox enabled here let staff check it expecting it to
+  // block submission, when it's actually unenforceable everywhere.
+  const requiredUnenforceable = field.fieldType === "hidden";
 
   return (
     <div
@@ -719,9 +727,13 @@ function FieldCard({
         <div className="space-y-1 flex flex-col items-center pt-0.5">
           <Label className="text-[10px] uppercase tracking-widest text-slate-400">Req.</Label>
           <Checkbox
-            checked={lockRequired ? true : field.required}
-            disabled={isDisplay || lockRequired}
-            title={lockRequired ? "Required because the SMS opt-in field on this form is required" : undefined}
+            checked={lockRequired ? true : requiredUnenforceable ? false : field.required}
+            disabled={isDisplay || lockRequired || requiredUnenforceable}
+            title={
+              lockRequired ? "Required because the SMS opt-in field on this form is required" :
+              requiredUnenforceable ? "Hidden fields are never shown to the submitter, so \"required\" can't be enforced" :
+              undefined
+            }
             onCheckedChange={(v) => onUpdate({ required: !!v })}
             className="mt-1.5"
           />
@@ -755,8 +767,13 @@ function FieldCard({
       </div>
 
       {/* Field mapping — sms_optin is detected by field type, not a mapping,
-          so it gets its own note below (in FieldTypeConfig) instead. */}
-      {!isDisplay && field.fieldType !== "sms_optin" && (
+          so it gets its own note below (in FieldTypeConfig) instead.
+          attachment is excluded too: a mapped CRM field expects a scalar
+          string (submit-form-response.ts does mappedData[field] =
+          String(value)), but an attachment's answer is a
+          {path,name,size} object — mapping one silently wrote the literal
+          text "[object Object]" into whatever CRM field it was mapped to. */}
+      {!isDisplay && field.fieldType !== "sms_optin" && field.fieldType !== "attachment" && (
         <div className="border-t border-slate-100 px-4 py-2.5 flex items-center gap-3">
           <Label className="text-[10px] uppercase tracking-widest text-slate-400 shrink-0 w-24">
             Map to field

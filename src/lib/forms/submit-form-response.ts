@@ -65,6 +65,59 @@ interface FormFieldRow {
   required: boolean | null;
 }
 
+/** An attachment answer's {path,name,size} was never checked against the
+ *  actual Storage object it claims to reference — a raw POST to the public
+ *  submit endpoint could fabricate a path/size for a file that was never
+ *  uploaded. Confirms the path is scoped under this form's own folder (the
+ *  upload flow in src/app/forms/[slug]/page.tsx always writes to
+ *  `${form.id}/${uuid}-${filename}`) and that an object with that exact name
+ *  actually exists in the form-attachments bucket. */
+async function attachmentPathExists(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  db: any,
+  formId: string,
+  path: string
+): Promise<boolean> {
+  if (!path.startsWith(`${formId}/`)) return false;
+  const fileName = path.slice(formId.length + 1);
+  if (!fileName) return false;
+  const { data, error } = await db.storage
+    .from("form-attachments")
+    .list(formId, { search: fileName, limit: 1 });
+  if (error) return false;
+  return (data ?? []).some((f: { name: string }) => f.name === fileName);
+}
+
+/** Returns the labels of every attachment-type field whose submitted value
+ *  isn't a well-formed {path,name,size} object referencing a real, previously
+ *  uploaded object — empty when every submitted attachment answer checks out.
+ *  Fields with no value are skipped here; findMissingRequiredFields already
+ *  covers "required but empty". */
+async function findInvalidAttachments(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  db: any,
+  formId: string,
+  formFields: FormFieldRow[],
+  formData: Record<string, unknown>
+): Promise<string[]> {
+  const invalid: string[] = [];
+  for (const field of formFields) {
+    if (field.field_type !== "attachment") continue;
+    const value = formData[field.label];
+    if (value === undefined || value === null || value === "") continue;
+
+    const path = value && typeof value === "object" ? (value as { path?: unknown }).path : undefined;
+    if (typeof path !== "string" || !path) {
+      invalid.push(field.label || "This field");
+      continue;
+    }
+    if (!(await attachmentPathExists(db, formId, path))) {
+      invalid.push(field.label || "This field");
+    }
+  }
+  return invalid;
+}
+
 /** Returns the labels of every required, rule-visible field with no value
  *  in formData — empty when the submission is valid. */
 async function findMissingRequiredFields(
@@ -166,16 +219,31 @@ export async function submitFormResponse(
         status: 422,
       };
     }
+
+    const invalidAttachments = await findInvalidAttachments(db, form.id, formFields, formData);
+    if (invalidAttachments.length > 0) {
+      return {
+        ok: false,
+        error: `Invalid attachment${invalidAttachments.length > 1 ? "s" : ""}: ${invalidAttachments.join(", ")}`,
+        status: 422,
+      };
+    }
   }
 
   // ── Build mapped data from field labels → mapped CRM fields ──────────────────
+  // Uses formatFormFieldValue (not a raw String(value)) so a field that was
+  // mapped to a CRM field despite holding a non-scalar answer — an
+  // attachment's {path,name,size} object is the case that actually
+  // happened, the Builder UI now excludes it from being mappable at all —
+  // degrades to the filename instead of the literal text "[object Object]"
+  // silently overwriting the mapped CRM field.
   const mappedData: Record<string, string> = {};
   if (formFields) {
     for (const field of formFields) {
       if (!field.mapped_field) continue;
       const value = formData[field.label];
       if (value !== undefined && value !== null && value !== "") {
-        mappedData[field.mapped_field] = String(value);
+        mappedData[field.mapped_field] = formatFormFieldValue(value);
       }
     }
   }

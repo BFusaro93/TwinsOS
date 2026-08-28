@@ -126,9 +126,11 @@ export async function enrollClientInSequence(
     const cfg = firstEvent.config as Record<string, number> | null;
     const days = cfg?.days ?? 0;
     const hours = cfg?.hours ?? 0;
+    const minutes = cfg?.minutes ?? 0;
     const d = new Date();
     d.setDate(d.getDate() + days);
     d.setHours(d.getHours() + hours);
+    d.setMinutes(d.getMinutes() + minutes);
     nextFireAt = d.toISOString();
   }
 
@@ -189,6 +191,7 @@ const SPECIAL_CLIENT_CONDITION_FIELDS = new Set<ConditionField>([
   "has_credit_card",
   "does_not_have_credit_card",
   "is_opted_in_emails",
+  "opt_in_texts",
   "client_lead_status",
   "client_source",
   "billing_term",
@@ -380,7 +383,7 @@ export async function evaluateConditionSet(
   ] = await Promise.all([
     needsClient && clientId
       ? supabase.from("clients")
-          .select("status, source, account_type, billing_terms, map_code, cancellation_reason, service_zip, client_since, balance_outstanding_cents, ok_to_email, payment_method, sales_rep_id")
+          .select("status, source, account_type, billing_terms, map_code, cancellation_reason, service_zip, client_since, balance_outstanding_cents, ok_to_email, sms_opt_in, payment_method, sales_rep_id")
           .eq("id", clientId).maybeSingle().then((r: { data: Record<string, unknown> | null }) => r.data)
       : Promise.resolve(null),
     needsEstimate && estimateId
@@ -456,6 +459,7 @@ export async function evaluateConditionSet(
       return vs.length > 0 && !!salesRepId && vs.includes(salesRepId);
     }
     if (c.field === "is_opted_in_emails") return client?.ok_to_email === true;
+    if (c.field === "opt_in_texts") return client?.sms_opt_in === true;
     if (c.field === "client_lead_status") {
       const vs = csvValues(c.value);
       const status = client?.status ? String(client.status).toLowerCase() : null;
