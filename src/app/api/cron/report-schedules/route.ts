@@ -19,7 +19,13 @@ function currentHourEastern(): number {
 }
 
 /**
- * GET /api/cron/report-schedules — called hourly by Vercel Cron.
+ * GET /api/cron/report-schedules — called hourly by a GitHub Actions
+ * scheduled workflow (.github/workflows/report-schedules-cron.yml), NOT
+ * Vercel Cron — the account is on Vercel's Hobby plan, which caps cron jobs
+ * at once/day regardless of schedule string, so an hourly Vercel Cron entry
+ * here would get silently throttled and the per-schedule hour picker
+ * wouldn't be honored. See TASKS.md "Deferred — Vercel plan upgrade for
+ * true hourly cron" for the full writeup; revisit if the plan changes.
  *
  * For every enabled `report_schedules` row whose `hour_local` (America/
  * New_York) matches the current hour: runs its report (scoped to that
@@ -28,8 +34,9 @@ function currentHourEastern(): number {
  * window recomputed each run, e.g. "Yesterday", "Month to Date") make sense
  * here — the catalog enforces that at creation time, not this route.
  *
- * Security: Vercel passes Authorization: Bearer {CRON_SECRET}. Reject
- * anything else.
+ * Security: the calling workflow passes Authorization: Bearer {CRON_SECRET}
+ * (same secret Vercel's own cron jobs use, also set as a GitHub Actions
+ * repo secret). Reject anything else.
  */
 export async function GET(request: Request) {
   const authHeader = request.headers.get("authorization");

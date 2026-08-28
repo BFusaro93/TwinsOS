@@ -1,0 +1,26 @@
+name: Report schedules cron
+
+# Vercel Hobby caps cron jobs at once/day regardless of schedule string, so
+# the app's own hourly Vercel Cron entry for this route gets silently
+# throttled — see TASKS.md "Deferred — Vercel plan upgrade for true hourly
+# cron". This workflow calls the same route on GitHub's free scheduler
+# instead, which has no such per-plan frequency cap.
+on:
+  schedule:
+    - cron: "0 * * * *"
+  workflow_dispatch: {}
+
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call report-schedules cron route
+        run: |
+          status=$(curl -s -o /tmp/response.json -w "%{http_code}" \
+            -X GET "https://twins-os-bfusaro93s-projects.vercel.app/api/cron/report-schedules" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}")
+          echo "HTTP status: $status"
+          cat /tmp/response.json
+          if [ "$status" -ge 300 ]; then
+            exit 1
+          fi

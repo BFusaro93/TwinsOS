@@ -56,10 +56,6 @@
     {
       "path": "/api/cron/bill-sms-overage",
       "schedule": "0 5 * * *"
-    },
-    {
-      "path": "/api/cron/report-schedules",
-      "schedule": "0 * * * *"
     }
   ]
 }
