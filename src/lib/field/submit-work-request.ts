@@ -105,7 +105,7 @@ export async function submitWorkRequest(
 
       if (eligible.length > 0) {
         const resend = new Resend(resendKey);
-        const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://twins-os.vercel.app";
+        const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://landscapt.com";
         const subject = `New maintenance request: ${input.title}`;
         const link = `${siteUrl}/cmms/requests?id=${mr.id}`;
 

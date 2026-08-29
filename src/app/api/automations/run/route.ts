@@ -113,7 +113,7 @@ async function executeAction(
 
         if (eligible.length > 0) {
           const resend = new Resend(resendKey);
-          const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://twins-os.vercel.app";
+          const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://landscapt.com";
           const subject = `New maintenance request: ${acTitle}`;
           const link = `${siteUrl}/cmms/work-orders`;
           await Promise.allSettled(

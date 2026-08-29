@@ -71,7 +71,7 @@ const INAPP_PREF_KEY: Record<NotifType, string | null> = {
   new_maintenance_request: null,
 };
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://twins-os.vercel.app";
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://landscapt.com";
 const FROM     = EMAIL_FROM_EQUIPT;
 
 export async function POST(request: Request) {

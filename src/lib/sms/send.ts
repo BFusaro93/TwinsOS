@@ -40,7 +40,7 @@ export async function sendClientSms(
     return { ok: false, reason: "Twilio not configured (env vars or org override)" };
   }
 
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://twins-os.vercel.app";
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://landscapt.com";
   const form = new URLSearchParams({
     To: params.toPhone,
     MessagingServiceSid: messagingServiceSid,

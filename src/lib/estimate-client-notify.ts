@@ -67,7 +67,7 @@ export async function notifyStaffOfEstimateDecision(
   if (!emailEligible.length) return;
 
   const resend = new Resend(resendKey);
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://twins-os.vercel.app";
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://landscapt.com";
   const link = `${siteUrl}/crm/estimates/${estimateId}`;
   const color = decision === "accepted" ? "#60ab45" : "#dc2626";
 

@@ -138,7 +138,7 @@ export async function POST(request: Request) {
     .single();
   const submitterName = submitterProfile?.name ?? "A team member";
 
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://twins-os.vercel.app";
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://landscapt.com";
   const deepLink = `${siteUrl}/${meta.linkPath.replace("{id}", entityId)}`;
 
   const resend = new Resend(process.env.RESEND_API_KEY!);
