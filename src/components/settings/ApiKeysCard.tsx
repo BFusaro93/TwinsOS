@@ -241,7 +241,7 @@ export function ApiKeysCard() {
 
       {/* New key reveal dialog */}
       <Dialog open={newKey !== null} onOpenChange={(open) => !open && setNewKey(null)}>
-        <DialogContent>
+        <DialogContent className="sm:max-w-xl">
           <DialogHeader>
             <DialogTitle>API key created</DialogTitle>
             <DialogDescription>
@@ -254,7 +254,7 @@ export function ApiKeysCard() {
             <div className="space-y-1.5">
               <Label>Connect this key as an MCP server</Label>
               <div className="relative">
-                <pre className="overflow-x-auto rounded bg-slate-900 p-3 text-xs text-slate-100">
+                <pre className="whitespace-pre-wrap break-all rounded bg-slate-900 p-3 pr-16 text-xs text-slate-100">
                   {JSON.stringify(
                     {
                       mcpServers: {
