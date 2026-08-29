@@ -180,16 +180,29 @@ export default function ApiMcpGuidePage() {
             the MCP config block underneath it too (it&apos;s pre-filled with this exact key).
           </li>
           <li>
-            Open Claude Desktop&apos;s settings → <strong>Developer → Edit Config</strong>, and paste
-            the block into <code className="rounded bg-[#f4f6f0] px-1 py-0.5 font-mono text-xs">claude_desktop_config.json</code>{" "}
-            under <code className="rounded bg-[#f4f6f0] px-1 py-0.5 font-mono text-xs">mcpServers</code> (merge it
-            in if other servers are already configured there). It looks like this:
+            <strong>If you use Claude Code</strong>, run the command shown in that same dialog — it
+            looks like this, and you paste the whole thing at your terminal prompt (it&apos;s one
+            command, not a file to edit):
+          </li>
+        </ol>
+        <pre className="overflow-x-auto rounded-md bg-[#0a1f18] p-3 text-xs text-[#d7f0c9]">
+{`claude mcp add --transport http landscapt https://<your-domain>/api/mcp --header "Authorization: Bearer <your-api-key>"`}
+        </pre>
+        <ol start={5} className="list-decimal space-y-2 pl-5">
+          <li>
+            <strong>If you use Claude Desktop (or any other MCP client)</strong> instead, open its
+            settings → <strong>Developer → Edit Config</strong>, and paste the JSON block from the same
+            dialog into{" "}
+            <code className="rounded bg-[#f4f6f0] px-1 py-0.5 font-mono text-xs">claude_desktop_config.json</code>{" "}
+            under <code className="rounded bg-[#f4f6f0] px-1 py-0.5 font-mono text-xs">mcpServers</code> (merge
+            it in if other servers are already configured there) — this is a config-file snippet, not a
+            command, so it goes in that file, never into a terminal. It looks like this:
           </li>
         </ol>
         <pre className="overflow-x-auto rounded-md bg-[#0a1f18] p-3 text-xs text-[#d7f0c9]">
 {`{
   "mcpServers": {
-    "twinsos": {
+    "landscapt": {
       "url": "https://<your-domain>/api/mcp",
       "headers": {
         "Authorization": "Bearer <your-api-key>"
@@ -198,8 +211,8 @@ export default function ApiMcpGuidePage() {
   }
 }`}
         </pre>
-        <ol start={5} className="list-decimal space-y-2 pl-5">
-          <li>Restart Claude Desktop. It connects to the MCP server and negotiates available tools.</li>
+        <ol start={6} className="list-decimal space-y-2 pl-5">
+          <li>Restart Claude Desktop (or Claude Code). It connects to the MCP server and negotiates available tools.</li>
           <li>
             Because this key only has three <em>read</em> scopes, the agent sees exactly six tools:{" "}
             <code className="rounded bg-[#f4f6f0] px-1 py-0.5 font-mono text-xs">whoami</code>,{" "}
@@ -237,6 +250,27 @@ export default function ApiMcpGuidePage() {
         <pre className="overflow-x-auto rounded-md bg-[#0a1f18] p-3 text-xs text-[#d7f0c9]">
 {`Authorization: Bearer <your-api-key>`}
         </pre>
+        <Callout>
+          <strong>Two common ways this trips people up:</strong>
+          <ul className="mt-2 list-disc space-y-2 pl-5">
+            <li>
+              The key-creation dialog shows two different snippets — a <strong>command</strong> (for
+              Claude Code, starts with <code className="rounded bg-[#f4f6f0] px-1 py-0.5 font-mono text-xs">claude mcp add</code>)
+              and a <strong>JSON config block</strong> (for every other MCP client). The command is
+              meant to be pasted at a terminal prompt; the JSON is meant to be pasted into a config
+              <em>file</em>. Pasting the JSON directly into a terminal will fail with a shell parse
+              error — it isn&apos;t a command.
+            </li>
+            <li>
+              <strong>Claude Code and Claude Desktop are the reliable path today.</strong> Claude.ai&apos;s
+              web chat also has a &quot;custom connector&quot; option, but as of this writing its UI is
+              built around OAuth (Authorization URL, Client ID/Secret) and doesn&apos;t consistently
+              expose a field for a plain bearer token / API key the way this server needs. It may or may
+              not work depending on what you&apos;re shown — Claude Code or Desktop won&apos;t have that
+              problem.
+            </li>
+          </ul>
+        </Callout>
         <p>Tool names follow one fixed convention, generated directly from the REST route each tool calls:</p>
         <Table>
           <thead>
@@ -338,7 +372,9 @@ export default function ApiMcpGuidePage() {
         <Callout>
           Revoked keys stay listed, greyed out, for your own audit trail — they just stop working.
           There&apos;s no &quot;pause&quot; short of revoking; if you need a key temporarily disabled,
-          revoke it and create a fresh one when it&apos;s needed again.
+          revoke it and create a fresh one when it&apos;s needed again. Once a key is revoked, a{" "}
+          <strong>Remove</strong> button next to it lets you clear it from the list entirely if it&apos;s
+          just clutter — that only hides it from view, it doesn&apos;t erase the underlying audit record.
         </Callout>
       </Section>
     </DocsFontScope>
