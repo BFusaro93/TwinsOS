@@ -9,6 +9,7 @@ import { BrandingTab } from "@/components/settings/BrandingTab";
 import { SubscriptionTab } from "@/components/settings/SubscriptionTab";
 import { ZapierIntegrationCard } from "@/components/settings/ZapierIntegrationCard";
 import { ApiKeysCard } from "@/components/settings/ApiKeysCard";
+import { OAuthConnectionsCard } from "@/components/settings/OAuthConnectionsCard";
 import { HomeShortcutsCard } from "@/components/settings/HomeShortcutsCard";
 import { AccessDenied } from "@/components/shared/AccessDenied";
 import { useCurrentUserStore } from "@/stores";
@@ -80,6 +81,7 @@ function MasterAccountSettings() {
               <div className="flex flex-col gap-6">
                 <ZapierIntegrationCard />
                 <ApiKeysCard />
+                <OAuthConnectionsCard />
               </div>
               <HomeShortcutsCard />
             </div>

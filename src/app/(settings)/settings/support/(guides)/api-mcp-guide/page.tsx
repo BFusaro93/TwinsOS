@@ -261,12 +261,14 @@ export default function ApiMcpGuidePage() {
               error — it isn&apos;t a command.
             </li>
             <li>
-              <strong>Claude Code and Claude Desktop are the reliable path today.</strong> Claude.ai&apos;s
-              web chat also has a &quot;custom connector&quot; option, but as of this writing its UI is
-              built around OAuth (Authorization URL, Client ID/Secret) and doesn&apos;t consistently
-              expose a field for a plain bearer token / API key the way this server needs. It may or may
-              not work depending on what you&apos;re shown — Claude Code or Desktop won&apos;t have that
-              problem.
+              <strong>Claude.ai&apos;s web/desktop &quot;custom connector&quot; also works</strong> — sign
+              in instead of pasting a key. Add a custom connector with this server&apos;s URL, leave
+              authentication on <strong>&quot;Always required&quot;</strong> (Claude detects this
+              automatically), and don&apos;t add any request header. You&apos;ll be redirected to sign in
+              to your account and approve exactly the scopes you want that connection to have — no API
+              key to generate or paste at all. This is a separate, independent connection from any Public
+              API Key: it shows up under <strong>Connected Apps</strong> below the key list, and can be
+              revoked there without touching your API keys.
             </li>
           </ul>
         </Callout>
