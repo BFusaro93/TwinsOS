@@ -17,4 +17,5 @@ export interface Comment extends BaseRecord {
   authorId: string;
   authorName: string;
   body: string;
+  mentionedUserIds: string[];
 }

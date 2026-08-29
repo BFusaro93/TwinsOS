@@ -24,6 +24,7 @@ export interface NotificationPrefs {
   emailLowStockAlert: boolean;
   emailPmScheduleDue: boolean;
   emailNewMaintenanceRequest: boolean;
+  emailMention: boolean;
   // Email — admin: any WO events (shown only to admins in Settings)
   emailAdminWoCreated: boolean;
   emailAdminWoStatusChanged: boolean;
@@ -48,6 +49,7 @@ export interface NotificationPrefs {
   inAppLowStockAlert: boolean;
   inAppPmScheduleDue: boolean;
   inAppNewMaintenanceRequest: boolean;
+  inAppMention: boolean;
 }
 
 export const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = {
@@ -72,6 +74,7 @@ export const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = {
   emailLowStockAlert: true,
   emailPmScheduleDue: false,
   emailNewMaintenanceRequest: false,
+  emailMention: true,
   emailAdminWoCreated: false,
   emailAdminWoStatusChanged: false,
   emailAdminWoComment: false,
@@ -94,6 +97,7 @@ export const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = {
   inAppLowStockAlert: true,
   inAppPmScheduleDue: false,
   inAppNewMaintenanceRequest: false,
+  inAppMention: true,
 };
 
 function mergePrefs(stored: Record<string, unknown>): NotificationPrefs {

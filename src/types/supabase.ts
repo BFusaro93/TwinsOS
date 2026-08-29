@@ -10,7 +10,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.4"
+    PostgrestVersion: "14.5"
   }
   public: {
     Tables: {
@@ -833,6 +833,7 @@ export type Database = {
           created_at: string
           created_by: string | null
           delivered_at: string | null
+          direction: string | null
           failed_at: string | null
           id: string
           occurred_at: string
@@ -855,6 +856,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           delivered_at?: string | null
+          direction?: string | null
           failed_at?: string | null
           id?: string
           occurred_at?: string
@@ -877,6 +879,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           delivered_at?: string | null
+          direction?: string | null
           failed_at?: string | null
           id?: string
           occurred_at?: string
@@ -1703,6 +1706,7 @@ export type Database = {
           created_by: string | null
           deleted_at: string | null
           id: string
+          mentioned_user_ids: string[]
           org_id: string
           record_id: string
           record_type: string
@@ -1716,6 +1720,7 @@ export type Database = {
           created_by?: string | null
           deleted_at?: string | null
           id?: string
+          mentioned_user_ids?: string[]
           org_id?: string
           record_id: string
           record_type: string
@@ -1729,6 +1734,7 @@ export type Database = {
           created_by?: string | null
           deleted_at?: string | null
           id?: string
+          mentioned_user_ids?: string[]
           org_id?: string
           record_id?: string
           record_type?: string
@@ -1754,6 +1760,48 @@ export type Database = {
             columns: ["org_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      crew_push_tokens: {
+        Row: {
+          created_at: string
+          expo_push_token: string
+          id: string
+          org_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          expo_push_token: string
+          id?: string
+          org_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          expo_push_token?: string
+          id?: string
+          org_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crew_push_tokens_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crew_push_tokens_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -3084,6 +3132,8 @@ export type Database = {
           deleted_at: string | null
           description: string | null
           format_rules: Json
+          header_visual: Json | null
+          header_visual_title: string | null
           id: string
           kpi_column: string | null
           label_column: string | null
@@ -3100,6 +3150,8 @@ export type Database = {
           deleted_at?: string | null
           description?: string | null
           format_rules?: Json
+          header_visual?: Json | null
+          header_visual_title?: string | null
           id?: string
           kpi_column?: string | null
           label_column?: string | null
@@ -3116,6 +3168,8 @@ export type Database = {
           deleted_at?: string | null
           description?: string | null
           format_rules?: Json
+          header_visual?: Json | null
+          header_visual_title?: string | null
           id?: string
           kpi_column?: string | null
           label_column?: string | null
@@ -3143,8 +3197,10 @@ export type Database = {
           deleted_at: string | null
           description: string | null
           id: string
+          is_system_seeded: boolean
           name: string
           org_id: string
+          source_template_key: string | null
           updated_at: string
         }
         Insert: {
@@ -3154,8 +3210,10 @@ export type Database = {
           deleted_at?: string | null
           description?: string | null
           id?: string
+          is_system_seeded?: boolean
           name: string
           org_id?: string
+          source_template_key?: string | null
           updated_at?: string
         }
         Update: {
@@ -3165,8 +3223,10 @@ export type Database = {
           deleted_at?: string | null
           description?: string | null
           id?: string
+          is_system_seeded?: boolean
           name?: string
           org_id?: string
+          source_template_key?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -5796,6 +5856,173 @@ export type Database = {
           },
         ]
       }
+      crm_sales_meetings: {
+        Row: {
+          client_id: string | null
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          duration_minutes: number
+          estimate_id: string | null
+          id: string
+          lead_name: string | null
+          location: string | null
+          meeting_type: string
+          notes: string | null
+          org_id: string
+          sales_rep_id: string
+          scheduled_at: string
+          status: string
+          ticket_id: string | null
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          client_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          duration_minutes?: number
+          estimate_id?: string | null
+          id?: string
+          lead_name?: string | null
+          location?: string | null
+          meeting_type?: string
+          notes?: string | null
+          org_id?: string
+          sales_rep_id: string
+          scheduled_at: string
+          status?: string
+          ticket_id?: string | null
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          client_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          duration_minutes?: number
+          estimate_id?: string | null
+          id?: string
+          lead_name?: string | null
+          location?: string | null
+          meeting_type?: string
+          notes?: string | null
+          org_id?: string
+          sales_rep_id?: string
+          scheduled_at?: string
+          status?: string
+          ticket_id?: string | null
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_sales_meetings_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_sales_meetings_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_sales_meetings_estimate_id_fkey"
+            columns: ["estimate_id"]
+            isOneToOne: false
+            referencedRelation: "estimates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_sales_meetings_estimate_id_fkey"
+            columns: ["estimate_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_estimates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_sales_meetings_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_sales_meetings_sales_rep_id_fkey"
+            columns: ["sales_rep_id"]
+            isOneToOne: false
+            referencedRelation: "crm_employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_sales_meetings_sales_rep_id_fkey"
+            columns: ["sales_rep_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_sales_meetings_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: false
+            referencedRelation: "crm_tickets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      crm_saved_graphics: {
+        Row: {
+          category: string | null
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          description: string | null
+          id: string
+          name: string
+          org_id: string
+          updated_at: string
+          visual: Json
+        }
+        Insert: {
+          category?: string | null
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          description?: string | null
+          id?: string
+          name: string
+          org_id?: string
+          updated_at?: string
+          visual?: Json
+        }
+        Update: {
+          category?: string | null
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          description?: string | null
+          id?: string
+          name?: string
+          org_id?: string
+          updated_at?: string
+          visual?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_saved_graphics_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       crm_schedules: {
         Row: {
           anchor_date: string | null
@@ -6931,7 +7158,7 @@ export type Database = {
           link_type: string
           linked_id: string
           linked_label?: string | null
-          org_id: string
+          org_id?: string
           ticket_id: string
         }
         Update: {
@@ -12488,6 +12715,10 @@ export type Database = {
         }
         Returns: undefined
       }
+      append_cost_layer: {
+        Args: { p_layers: Json; p_qty: number; p_unit_cost: number }
+        Returns: Json
+      }
       apply_payment_to_invoice: {
         Args: { p_delta_cents: number; p_invoice_id: string }
         Returns: {
@@ -12515,6 +12746,10 @@ export type Database = {
           p_sort_column?: string
           p_sort_dir?: string
         }
+        Returns: Json
+      }
+      decrement_cost_layers: {
+        Args: { p_layers: Json; p_qty: number }
         Returns: Json
       }
       delete_job_product: {

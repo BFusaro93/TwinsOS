@@ -220,6 +220,9 @@ export function NotificationsPage({ hideHeader = false, scope = "cmms" }: Notifi
         <div className="divide-y px-5">
           {scope === "cmms" && (
             <>
+              <SettingRow label="Mentioned in a Comment" description="When someone @mentions you in a comment on any record">
+                <Switch checked={prefs.emailMention} onCheckedChange={() => toggle("emailMention")} />
+              </SettingRow>
               {hasEquipt && (
                 <>
                   <SettingRow label="Work Order Assigned" description="When a work order is assigned to you">
@@ -281,6 +284,9 @@ export function NotificationsPage({ hideHeader = false, scope = "cmms" }: Notifi
           )}
           {scope === "crm" && (
             <>
+              <SettingRow label="Mentioned in a Comment" description="When someone @mentions you in a comment on any record">
+                <Switch checked={prefs.emailMention} onCheckedChange={() => toggle("emailMention")} />
+              </SettingRow>
               <SettingRow label="Estimate Approved" description="When your estimate is approved">
                 <Switch checked={prefs.emailEstimateApproved} onCheckedChange={() => toggle("emailEstimateApproved")} />
               </SettingRow>
@@ -335,6 +341,9 @@ export function NotificationsPage({ hideHeader = false, scope = "cmms" }: Notifi
         <div className="divide-y px-5">
           {scope === "cmms" && (
             <>
+              <SettingRow label="Mentioned in a Comment" description="When someone @mentions you in a comment on any record">
+                <Switch checked={prefs.inAppMention} onCheckedChange={() => toggle("inAppMention")} />
+              </SettingRow>
               {hasEquipt && (
                 <>
                   <SettingRow label="Work Order Assigned" description="When a work order is assigned to you">
@@ -380,6 +389,9 @@ export function NotificationsPage({ hideHeader = false, scope = "cmms" }: Notifi
           )}
           {scope === "crm" && (
             <>
+              <SettingRow label="Mentioned in a Comment" description="When someone @mentions you in a comment on any record">
+                <Switch checked={prefs.inAppMention} onCheckedChange={() => toggle("inAppMention")} />
+              </SettingRow>
               <SettingRow label="Estimate Approval Required" description="When an estimate requires your approval">
                 <Switch checked={prefs.inAppEstimateApprovalRequired} onCheckedChange={() => toggle("inAppEstimateApprovalRequired")} />
               </SettingRow>

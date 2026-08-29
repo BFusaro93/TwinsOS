@@ -29,7 +29,8 @@ export interface AppNotification {
     | "ticket_assigned"
     | "ticket_comment"
     | "contract_expiring"
-    | "automation_alert";
+    | "automation_alert"
+    | "comment_mention";
   title: string;
   body: string;
   href: string;

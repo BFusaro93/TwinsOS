@@ -275,7 +275,9 @@ export interface GenerateInvoicesResult {
  * this ignores billing_day_of_month/is_active/auto_generate, since a manual
  * click is an explicit request to bill now. It still enforces the same
  * idempotency check (skip if this contract already has an invoice dated
- * within the current calendar month) so it can't double-bill.
+ * within the current calendar month) so it can't double-bill, and the same
+ * status/start_date/end_date guard as the cron so an unsigned, cancelled,
+ * expired, not-yet-started, or already-ended contract can't be billed either.
  */
 export function useGenerateContractInvoices() {
   const qc = useQueryClient();
@@ -287,16 +289,35 @@ export function useGenerateContractInvoices() {
 
       const results: GenerateInvoicesResult[] = [];
 
+      const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(todayDay).padStart(2, "0")}`;
+
       for (const contractId of contractIds) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data: contract, error: fetchErr } = await (supabase as any)
           .from("crm_contracts")
-          .select("id, org_id, client_id, title, monthly_amount_cents, monthly_amounts, invoice_line_items, sales_rep_id, bill_month_in_advance")
+          .select("id, org_id, client_id, title, status, start_date, end_date, monthly_amount_cents, monthly_amounts, invoice_line_items, sales_rep_id, bill_month_in_advance")
           .eq("id", contractId)
           .is("deleted_at", null)
           .single();
         if (fetchErr || !contract) {
           results.push({ contractId, status: "skipped", reason: "contract not found" });
+          continue;
+        }
+
+        // Same guard as the daily cron (src/app/api/cron/contract-invoices):
+        // a manual "Create Invoices" click must not be able to bill a
+        // contract the client never signed, or one that's been cancelled/
+        // expired, or one whose term hasn't started or has already ended.
+        if (contract.status !== "signed" && contract.status !== "active") {
+          results.push({ contractId, status: "skipped", reason: `contract is ${contract.status}, not signed/active` });
+          continue;
+        }
+        if (contract.start_date && contract.start_date > todayStr) {
+          results.push({ contractId, status: "skipped", reason: "contract hasn't started yet" });
+          continue;
+        }
+        if (contract.end_date && contract.end_date < todayStr) {
+          results.push({ contractId, status: "skipped", reason: "contract has ended" });
           continue;
         }
 
@@ -422,6 +443,82 @@ export function useDeleteContract() {
       if (error) throw error;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["crm-contracts"] }),
+  });
+}
+
+// ── contract balance & visits summary ───────────────────────────────────────────
+
+export interface ContractBalanceSummary {
+  totalBilledCents: number;
+  totalPaidCents: number;
+  remainingBalanceCents: number;
+  invoiceCount: number;
+}
+
+// Sums crm_invoices for this contract — those rows already carry
+// total_cents/amount_paid_cents/balance_cents kept current by the invoice
+// payment/status triggers (see use-invoices.ts), so this is a plain rollup,
+// not a recompute. Void invoices are excluded — a voided invoice was never
+// really billed, so it shouldn't count toward "billed" or "remaining."
+export function useContractBalance(contractId?: string) {
+  return useQuery({
+    queryKey: ["crm-contracts", contractId, "balance"],
+    queryFn: async () => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
+        .from("crm_invoices")
+        .select("total_cents, amount_paid_cents, balance_cents")
+        .eq("contract_id", contractId)
+        .is("deleted_at", null)
+        .neq("status", "void");
+      if (error) throw error;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const rows = (data ?? []) as any[];
+      return {
+        totalBilledCents: rows.reduce((s, r) => s + (r.total_cents ?? 0), 0),
+        totalPaidCents: rows.reduce((s, r) => s + (r.amount_paid_cents ?? 0), 0),
+        remainingBalanceCents: rows.reduce((s, r) => s + (r.balance_cents ?? 0), 0),
+        invoiceCount: rows.length,
+      } as ContractBalanceSummary;
+    },
+    enabled: !!contractId,
+  });
+}
+
+export interface ContractVisitsSummary {
+  totalVisits: number;
+  remainingVisits: number;
+  nextVisit: { id: string; scheduledDate: string } | null;
+}
+
+const VISIT_TERMINAL_STATUSES = new Set(["completed", "cancelled"]);
+
+// crm_job_visits has no contract_id of its own — it links to a contract only
+// through job_id -> crm_jobs.contract_id (same two-hop path JobsUnderContractTab
+// uses via useJobsByContract), so this joins through crm_jobs to filter.
+export function useContractVisits(contractId?: string) {
+  return useQuery({
+    queryKey: ["crm-contracts", contractId, "visits"],
+    queryFn: async () => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
+        .from("crm_job_visits")
+        .select("id, scheduled_date, status, crm_jobs!inner(contract_id)")
+        .eq("crm_jobs.contract_id", contractId)
+        .is("deleted_at", null)
+        .order("scheduled_date", { ascending: true });
+      if (error) throw error;
+      const rows = (data ?? []) as { id: string; scheduled_date: string; status: string }[];
+      const upcoming = rows.filter((v) => !VISIT_TERMINAL_STATUSES.has(v.status));
+      return {
+        totalVisits: rows.length,
+        remainingVisits: upcoming.length,
+        nextVisit: upcoming[0] ? { id: upcoming[0].id, scheduledDate: upcoming[0].scheduled_date } : null,
+      } as ContractVisitsSummary;
+    },
+    enabled: !!contractId,
   });
 }
 

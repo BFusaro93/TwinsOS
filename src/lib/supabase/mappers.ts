@@ -332,6 +332,7 @@ export function mapComment(row: CommentRow): Comment {
     authorId: row.author_id ?? "",
     authorName: row.author_name,
     body: row.body,
+    mentionedUserIds: row.mentioned_user_ids ?? [],
   };
 }
 

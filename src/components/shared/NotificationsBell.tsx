@@ -15,6 +15,7 @@ import {
   Activity,
   MessageSquare,
   MessageSquarePlus,
+  AtSign,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -30,7 +31,24 @@ import { useRequests } from "@/lib/hooks/use-requests";
 import { useNotificationReads } from "@/lib/hooks/use-notification-reads";
 import { useNotificationPrefs } from "@/lib/hooks/use-notification-prefs";
 import { createClient } from "@/lib/supabase/client";
-import type { AppNotification } from "@/types/notification";
+import type { AppNotification, NotificationEntityType } from "@/types/notification";
+
+// A comment_mention notification's entity_type is the CommentRecordType the
+// comment was left on (ticket, work_order, po, requisition, ...) — map each
+// to where to send the user and, where an existing store-backed detail panel
+// exists, to the NotificationEntityType handleNotifClick already knows how
+// to open (reusing its switch below instead of duplicating that logic here).
+const MENTION_RECORD_ROUTES: Record<string, { href: (id: string) => string; entityType: NotificationEntityType }> = {
+  ticket:       { href: (id) => `/crm/tickets?open=${id}`, entityType: "ticket" },
+  work_order:   { href: () => "/cmms/work-orders", entityType: "work_order" },
+  po:           { href: () => "/po/orders", entityType: "purchase_order" },
+  requisition:  { href: () => "/po/requisitions", entityType: "requisition" },
+  crm_estimate: { href: (id) => `/crm/estimates/${id}`, entityType: "estimate" },
+  receiving:    { href: () => "/po/receiving", entityType: null },
+  project:      { href: () => "/po/projects", entityType: null },
+  damage_case:  { href: () => "/dashboard/damage-cases", entityType: null },
+  job_photo:    { href: () => "/photos/projects", entityType: null },
+};
 
 function timeAgo(isoString: string): string {
   const diffMs = Date.now() - new Date(isoString).getTime();
@@ -79,6 +97,8 @@ function NotifIcon({ type }: { type: AppNotification["type"] }) {
       return <CalendarClock className={cn(cls, "text-amber-500")} />;
     case "automation_alert":
       return <Bell className={cn(cls, "text-amber-500")} />;
+    case "comment_mention":
+      return <AtSign className={cn(cls, "text-brand-500")} />;
     default:
       return <Bell className={cn(cls, "text-slate-400")} />;
   }
@@ -112,7 +132,7 @@ export function NotificationsBell() {
       .from("notifications")
       .select("id, type, title, message, entity_id, entity_type, created_at")
       .eq("user_id", currentUser.id)
-      .in("type", ["wo_comment", "wo_status_changed", "estimate_change_request", "estimate_client_accepted", "estimate_client_rejected", "ticket_created", "ticket_assigned", "ticket_comment", "contract_expiring", "automation_alert"])
+      .in("type", ["wo_comment", "wo_status_changed", "estimate_change_request", "estimate_client_accepted", "estimate_client_rejected", "ticket_created", "ticket_assigned", "ticket_comment", "contract_expiring", "automation_alert", "comment_mention"])
       .order("created_at", { ascending: false })
       .limit(50)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -312,9 +332,31 @@ export function NotificationsBell() {
     dbNotifications.filter((n) => {
       if (n.type === "wo_comment" && notifPrefs?.inAppWorkOrderComment === false) return false;
       if (n.type === "wo_status_changed" && notifPrefs?.inAppWorkOrderStatusChanged === false) return false;
+      if (n.type === "comment_mention" && notifPrefs?.inAppMention === false) return false;
       return true;
     }).forEach((n) => {
       const id = `db-notif-${n.id}`;
+
+      // comment_mention's href/entityType depend on WHICH record type the
+      // comment was on, unlike every other DB_NOTIF_META entry which always
+      // points at the same place — so it's resolved separately here instead
+      // of fitting the simple entityId-only map below.
+      if (n.type === "comment_mention") {
+        const route = n.entity_type ? MENTION_RECORD_ROUTES[n.entity_type] : undefined;
+        items.push({
+          id,
+          type: "comment_mention",
+          title: n.title ?? "Mentioned You",
+          body: n.message,
+          href: route && n.entity_id ? route.href(n.entity_id) : "/crm/tickets",
+          entityId: n.entity_id,
+          entityType: route ? route.entityType : null,
+          createdAt: n.created_at,
+          readAt: readIds.has(id) ? new Date().toISOString() : null,
+        });
+        return;
+      }
+
       const meta = n.type ? DB_NOTIF_META[n.type] : undefined;
       const notifType = (meta ? n.type : "wo_comment") as AppNotification["type"];
       const href = meta ? meta.href(n.entity_id) : "/cmms/work-orders";

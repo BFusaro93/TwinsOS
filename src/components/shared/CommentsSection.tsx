@@ -6,7 +6,29 @@ import { formatDateTime, getInitials, getAvatarColor } from "@/lib/utils";
 import { useComments, useAddComment } from "@/lib/hooks/use-comments";
 import { useCurrentUserStore } from "@/stores";
 import { Button } from "@/components/ui/button";
+import { MentionTextarea } from "@/components/shared/MentionTextarea";
+import { parseMentionSegments } from "@/lib/mentions";
 import type { CommentRecordType } from "@/types";
+
+function CommentBody({ body, dark }: { body: string; dark: boolean }) {
+  const segments = parseMentionSegments(body);
+  return (
+    <p className={`mt-0.5 whitespace-pre-wrap text-sm ${dark ? "text-slate-300" : "text-slate-700"}`}>
+      {segments.map((seg, i) =>
+        seg.type === "mention" ? (
+          <span
+            key={i}
+            className={`rounded px-1 font-medium ${dark ? "bg-brand-500/20 text-brand-300" : "bg-brand-50 text-brand-700"}`}
+          >
+            @{seg.content}
+          </span>
+        ) : (
+          <span key={i}>{seg.content}</span>
+        )
+      )}
+    </p>
+  );
+}
 
 interface CommentsSectionProps {
   recordType: CommentRecordType;
@@ -61,7 +83,7 @@ export function CommentsSection({ recordType, recordId, dark = false }: Comments
                       {formatDateTime(comment.createdAt)}
                     </span>
                   </div>
-                  <p className={`mt-0.5 whitespace-pre-wrap text-sm ${dark ? "text-slate-300" : "text-slate-700"}`}>{comment.body}</p>
+                  <CommentBody body={comment.body} dark={dark} />
                 </div>
               </li>
             );
@@ -73,12 +95,13 @@ export function CommentsSection({ recordType, recordId, dark = false }: Comments
 
       {/* New comment input */}
       <div className={`flex gap-2 rounded-md border p-2 ${dark ? "border-[#3a3a3a] bg-[#2a2a2a]" : "border-slate-200 bg-white"}`}>
-        <textarea
+        <MentionTextarea
           value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          placeholder="Add a comment…"
+          onChange={setDraft}
+          placeholder="Add a comment… (@ to mention someone)"
           rows={2}
-          className={`flex-1 resize-none bg-transparent text-sm placeholder:text-slate-500 focus:outline-none ${dark ? "text-white" : "text-slate-900 placeholder:text-slate-400"}`}
+          dark={dark}
+          className={`w-full resize-none bg-transparent text-sm placeholder:text-slate-500 focus:outline-none ${dark ? "text-white" : "text-slate-900 placeholder:text-slate-400"}`}
           onKeyDown={(e) => {
             if (e.key === "Enter" && (e.shiftKey || e.metaKey || e.ctrlKey)) {
               e.preventDefault();

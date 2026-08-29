@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 import { mapComment } from "@/lib/supabase/mappers";
+import { extractMentionedUserIds } from "@/lib/mentions";
 import type { Comment, CommentRecordType } from "@/types/comment";
 
 export function useComments(recordType: CommentRecordType, recordId: string) {
@@ -45,6 +46,8 @@ export function useAddComment() {
         .single();
       if (!profile) throw new Error("Profile not found");
 
+      const mentionedUserIds = extractMentionedUserIds(input.body);
+
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
         .from("comments")
@@ -56,6 +59,7 @@ export function useAddComment() {
           record_id: input.recordId,
           author_name: input.authorName,
           body: input.body,
+          mentioned_user_ids: mentionedUserIds,
         })
         .select()
         .single();
@@ -81,6 +85,20 @@ export function useAddComment() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ event: "comment", commentBody: comment.body }),
+        }).catch(() => {});
+      }
+      // @mentions notify regardless of record type — a separate, additive
+      // path from the record-type-specific notifications above.
+      if (comment.mentionedUserIds.length > 0) {
+        fetch("/api/comments/mention-notify", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            recordType,
+            recordId,
+            mentionedUserIds: comment.mentionedUserIds,
+            commentBody: comment.body,
+          }),
         }).catch(() => {});
       }
     },

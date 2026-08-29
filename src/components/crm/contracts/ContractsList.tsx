@@ -12,9 +12,11 @@ import {
   useCreateContractNote,
   useDeleteContractNote,
   useGenerateContractInvoices,
+  useContractBalance,
+  useContractVisits,
 } from "@/lib/hooks/use-contracts";
-import { useClients } from "@/lib/hooks/use-clients";
-import { useCRMServices } from "@/lib/hooks/use-crm-jobs";
+import { useClients, useClientProperties } from "@/lib/hooks/use-clients";
+import { useCRMServices, useJobsByContract } from "@/lib/hooks/use-crm-jobs";
 import { useSelectableEmployees } from "@/lib/hooks/use-employees";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -490,9 +492,94 @@ function OtherDetailsTab({
   );
 }
 
+// ── overview tab (covered locations, remaining visits, balance) ──────────────
+
+function StatCard({
+  label, value, detail, emphasize,
+}: { label: string; value: string; detail?: string; emphasize?: boolean }) {
+  return (
+    <div className="rounded border bg-slate-50 p-4">
+      <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">{label}</div>
+      <div className={cn("mt-1 text-2xl font-bold", emphasize ? "text-brand-600" : "text-slate-800")}>
+        {value}
+      </div>
+      {detail && <div className="mt-1 text-xs text-slate-500">{detail}</div>}
+    </div>
+  );
+}
+
+function ContractOverviewTab({ contract }: { contract: CRMContract }) {
+  const { data: balance, isLoading: loadingBalance } = useContractBalance(contract.id);
+  const { data: visits, isLoading: loadingVisits } = useContractVisits(contract.id);
+  const { data: properties, isLoading: loadingProps } = useClientProperties(contract.clientId);
+
+  // include_sub_properties=false means the contract only covers the client's
+  // primary property, not every property on the account.
+  const coveredProperties = contract.includeSubProperties
+    ? (properties ?? [])
+    : (properties ?? []).filter((p) => p.isMaster);
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <StatCard
+          label="Covered Locations"
+          value={loadingProps ? "…" : String(coveredProperties.length)}
+          detail={coveredProperties.length === 1 ? (coveredProperties[0].name ?? coveredProperties[0].address ?? undefined) : undefined}
+        />
+        <StatCard
+          label="Remaining Visits"
+          value={loadingVisits ? "…" : String(visits?.remainingVisits ?? 0)}
+          detail={
+            loadingVisits ? undefined
+              : visits?.nextVisit ? `Next visit: ${fmtDate(visits.nextVisit.scheduledDate)}`
+              : "No upcoming visits"
+          }
+        />
+        <StatCard
+          label="Remaining Balance"
+          value={loadingBalance ? "…" : formatCurrency(balance?.remainingBalanceCents ?? 0)}
+          detail={loadingBalance ? undefined : `${formatCurrency(balance?.totalBilledCents ?? 0)} billed`}
+          emphasize
+        />
+      </div>
+
+      <Section label="Covered Locations">
+        {loadingProps ? (
+          <Skeleton className="h-4 w-full" />
+        ) : coveredProperties.length === 0 ? (
+          <p className="text-sm text-slate-400">No covered locations found for this client.</p>
+        ) : (
+          <ul className="divide-y">
+            {coveredProperties.map((p) => (
+              <li key={p.id} className="flex items-center justify-between py-1.5 text-sm">
+                <span className="text-slate-700">
+                  {p.name || p.address || "Untitled property"}
+                  {p.isMaster && <span className="ml-2 text-xs text-slate-400">(Primary)</span>}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Section>
+    </div>
+  );
+}
+
 // ── jobs under contract tab ───────────────────────────────────────────────────
 
+const JOB_TYPE_LABEL: Record<string, string> = {
+  recurring: "Recurring",
+  one_time: "One Time",
+  waiting_list: "Waiting List",
+  package: "Package",
+  snow: "Snow",
+  project: "Project",
+};
+
 function JobsUnderContractTab({ contractId }: { contractId?: string }) {
+  const { data: jobs, isLoading } = useJobsByContract(contractId);
+
   if (!contractId) {
     return (
       <Section label="Scheduled Services">
@@ -500,6 +587,9 @@ function JobsUnderContractTab({ contractId }: { contractId?: string }) {
       </Section>
     );
   }
+
+  const rows = jobs ?? [];
+
   return (
     <Section label="Scheduled Services">
       <div className="overflow-x-auto">
@@ -514,11 +604,38 @@ function JobsUnderContractTab({ contractId }: { contractId?: string }) {
             </tr>
           </thead>
           <tbody>
-            <tr>
-              <td colSpan={5} className="py-4 text-sm text-slate-400">
-                No scheduled services on this contract yet.
-              </td>
-            </tr>
+            {isLoading ? (
+              <tr>
+                <td colSpan={5} className="py-4"><Skeleton className="h-4 w-full" /></td>
+              </tr>
+            ) : rows.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="py-4 text-sm text-slate-400">
+                  No scheduled services on this contract yet.
+                </td>
+              </tr>
+            ) : (
+              rows.map((job) => {
+                const serviceNames = job.services?.map((s) => s.serviceName).filter(Boolean).join(", ");
+                const qty = job.services?.reduce((sum, s) => sum + (s.qty ?? 1), 0) ?? 1;
+                const hours = job.services?.reduce((sum, s) => sum + (Number(s.budgetedHours) || 0), 0) ?? job.budgetedHours ?? 0;
+                return (
+                  <tr key={job.id} className="border-b last:border-0">
+                    <td className="py-1.5 pr-3 text-slate-700">
+                      {serviceNames || JOB_TYPE_LABEL[job.jobType] || job.jobType}
+                    </td>
+                    <td className="py-1.5 pr-3 text-slate-600">
+                      {job.rateCents != null ? formatCurrency(job.rateCents) : "—"}
+                    </td>
+                    <td className="py-1.5 pr-3 text-slate-600">
+                      {job.schedule || JOB_TYPE_LABEL[job.jobType] || job.jobType}
+                    </td>
+                    <td className="py-1.5 pr-3 text-slate-600">{qty}</td>
+                    <td className="py-1.5 text-slate-600">{hours || "—"}</td>
+                  </tr>
+                );
+              })
+            )}
           </tbody>
         </table>
       </div>
@@ -607,7 +724,7 @@ function ContractNotesTab({ contractId }: { contractId?: string }) {
 
 // ── contract dialog (new + edit) ──────────────────────────────────────────────
 
-type TabId = "details" | "other" | "jobs" | "notes" | "attachments" | "audit";
+type TabId = "overview" | "details" | "other" | "jobs" | "notes" | "attachments" | "audit";
 
 const NEW_TABS: { id: TabId; label: string }[] = [
   { id: "details", label: "Contract Details" },
@@ -616,7 +733,10 @@ const NEW_TABS: { id: TabId; label: string }[] = [
   { id: "notes", label: "Contract Notes" },
 ];
 
+// Overview needs a saved contract (invoices/visits key off contract_id), so
+// it's only available once editing an existing contract, not on create.
 const EDIT_TABS: { id: TabId; label: string }[] = [
+  { id: "overview", label: "Overview" },
   ...NEW_TABS,
   { id: "attachments", label: "Contract Attachments" },
   { id: "audit", label: "Audit Trail" },
@@ -637,7 +757,7 @@ export function ContractDialog({
 }) {
   const isNew = !contract;
   const tabs = isNew ? NEW_TABS : EDIT_TABS;
-  const [activeTab, setActiveTab] = useState<TabId>("details");
+  const [activeTab, setActiveTab] = useState<TabId>(isNew ? "details" : "overview");
 
   const [details, setDetails] = useState<DetailsState>({
     clientId: contract?.clientId ?? defaultClientId ?? "",
@@ -802,6 +922,9 @@ export function ContractDialog({
         </DialogHeader>
 
         <div className="flex-1 overflow-auto px-6 py-4">
+          {activeTab === "overview" && contract && (
+            <ContractOverviewTab contract={contract} />
+          )}
           {activeTab === "details" && (
             <ContractDetailsTab
               state={details}
