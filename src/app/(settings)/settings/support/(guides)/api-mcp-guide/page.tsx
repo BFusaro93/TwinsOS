@@ -18,7 +18,7 @@ const RESOURCES: [string, string][] = [
   ["Work Orders", "Read, Write"],
   ["PM Schedules", "Read, Write"],
   ["Parts", "Read, Write"],
-  ["Requisitions", "Read, Write, Write (sensitive)"],
+  ["Requisitions", "Read, Write"],
   ["Purchase Orders", "Read"],
   ["Vendors", "Read, Write"],
   ["Products", "Read, Write"],
@@ -121,10 +121,9 @@ export default function ApiMcpGuidePage() {
           Every request — REST or MCP — is checked against the connecting key&apos;s scopes before it
           touches the database. A scope is written as <code className="rounded bg-[#f4f6f0] px-1 py-0.5 font-mono text-xs">resource:tier</code>,
           e.g. <code className="rounded bg-[#f4f6f0] px-1 py-0.5 font-mono text-xs">clients:read</code> or{" "}
-          <code className="rounded bg-[#f4f6f0] px-1 py-0.5 font-mono text-xs">requisitions:write:sensitive</code>.
-          There are 14 resources spanning both products, each offering some combination of{" "}
-          <strong>Read</strong>, <strong>Write</strong>, and — for the resources with real financial
-          or ordering weight — <strong>Write (sensitive)</strong>.
+          <code className="rounded bg-[#f4f6f0] px-1 py-0.5 font-mono text-xs">requisitions:write:safe</code>.
+          There are 14 resources spanning both products, each offering <strong>Read</strong> and, where
+          a create/update endpoint actually exists, <strong>Write</strong>.
         </p>
         <Table>
           <thead>
