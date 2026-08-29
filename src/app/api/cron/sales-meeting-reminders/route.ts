@@ -75,7 +75,7 @@ export async function GET(request: Request) {
       ?? "a new lead";
     const scheduledAt = new Date(meeting.scheduled_at as string);
     const timeStr = scheduledAt.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
-    const meetingUrl = `${process.env.NEXT_PUBLIC_SITE_URL ?? "https://twins-os.vercel.app"}/crm/sales-meetings`;
+    const meetingUrl = `${process.env.NEXT_PUBLIC_SITE_URL ?? "https://landscapt.com"}/crm/sales-meetings`;
 
     if (rep) {
       // crm_employees has no notification_prefs of its own — that lives on
