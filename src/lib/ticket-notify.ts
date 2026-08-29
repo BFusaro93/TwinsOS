@@ -102,7 +102,7 @@ async function sendToRecipients(
 }
 
 export function ticketLink(ticketId: string): string {
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://twins-os.vercel.app";
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://landscapt.com";
   return `${siteUrl}/crm/tickets?open=${ticketId}`;
 }
 

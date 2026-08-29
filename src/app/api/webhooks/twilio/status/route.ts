@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { verifyTwilioRequest, parseTwilioForm } from "@/lib/sms/verify-twilio-request";
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://twins-os.vercel.app";
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://landscapt.com";
 
 /**
  * POST /api/webhooks/twilio/status

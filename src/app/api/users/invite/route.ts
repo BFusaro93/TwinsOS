@@ -49,7 +49,7 @@ export async function POST(request: Request) {
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   );
 
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://twins-os.vercel.app";
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://landscapt.com";
 
   // 3. Generate a one-time link. If the user was already invited (orphaned
   //    auth record from a previous attempt), fall back to a recovery link

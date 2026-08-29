@@ -124,7 +124,7 @@ export async function POST(
     return NextResponse.json({ error: "Failed to create share token" }, { status: 500 });
   }
 
-  const proposalUrl = `${process.env.NEXT_PUBLIC_APP_URL ?? "https://twins-os.vercel.app"}/proposal/${shareToken.token}`;
+  const proposalUrl = `${process.env.NEXT_PUBLIC_APP_URL ?? "https://landscapt.com"}/proposal/${shareToken.token}`;
 
   const clientDisplayName = (est.clients?.display_name as string) ?? "";
   const firstName = clientDisplayName.split(" ")[0] ?? clientDisplayName;

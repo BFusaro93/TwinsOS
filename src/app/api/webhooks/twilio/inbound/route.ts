@@ -3,7 +3,7 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { verifyTwilioRequest, parseTwilioForm } from "@/lib/sms/verify-twilio-request";
 import { notifyStaffOfNewTicket, notifyTicketComment } from "@/lib/ticket-notify";
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://twins-os.vercel.app";
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://landscapt.com";
 
 // Twilio's own Advanced Opt-Out feature (on the Messaging Service) normally
 // intercepts these keywords before they ever reach this webhook and replies

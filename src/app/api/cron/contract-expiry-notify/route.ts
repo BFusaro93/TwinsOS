@@ -77,7 +77,7 @@ export async function GET(request: Request) {
     const clientName = (contract.clients as Record<string, unknown> | null)?.display_name as string ?? "the client";
     const endDate = contract.end_date as string;
     const daysLeft = Math.ceil((new Date(endDate).getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-    const contractUrl = `${process.env.NEXT_PUBLIC_SITE_URL ?? "https://twins-os.vercel.app"}/crm/accounting/contracts`;
+    const contractUrl = `${process.env.NEXT_PUBLIC_SITE_URL ?? "https://landscapt.com"}/crm/accounting/contracts`;
 
     if (prefs.inAppContractExpiring !== false) {
       await (supabase as any)

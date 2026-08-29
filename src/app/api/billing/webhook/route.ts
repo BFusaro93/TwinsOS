@@ -248,7 +248,7 @@ async function notifyPaymentFailed(
   const amountDisplay = invoice.amount_due != null
     ? new Intl.NumberFormat("en-US", { style: "currency", currency: (invoice.currency ?? "usd").toUpperCase() }).format(invoice.amount_due / 100)
     : null;
-  const portalUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://twins-os.vercel.app";
+  const portalUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://landscapt.com";
 
   const resend = new Resend(process.env.RESEND_API_KEY);
   try {
