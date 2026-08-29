@@ -1,5 +1,5 @@
 import { randomBytes, createHash } from "crypto";
-import { API_SCOPE_RESOURCES, scopeString } from "@/lib/api/scopes";
+import { API_SCOPE_RESOURCES, scopeString, type ApiScopeResource, type ApiScopeTier } from "@/lib/api/scopes";
 
 /**
  * Shared constants/helpers for the MCP server's OAuth 2.1 + PKCE flow
@@ -50,4 +50,34 @@ export function hashToken(token: string): string {
 export function verifyPkce(codeVerifier: string, codeChallenge: string): boolean {
   const computed = createHash("sha256").update(codeVerifier).digest("base64url");
   return computed === codeChallenge;
+}
+
+/** The scope tiers a given profile role is allowed to grant itself via the
+ * OAuth consent screen. Only admins can hand out a write scope -- every
+ * other role (manager, technician, purchaser, viewer) is capped at
+ * read-only, same restriction whether they're picking checkboxes on the
+ * consent screen (see oauthResourcesForRole below) or the actual grant is
+ * enforced server-side (POST /api/mcp/oauth/authorize). */
+export function allowedTiersForRole(role: string): ApiScopeTier[] {
+  return role === "admin" ? ["read", "write:safe"] : ["read"];
+}
+
+/** The scope catalog trimmed to what a role's consent screen should even
+ * show -- a resource with no tiers left after the cap (none exist today,
+ * since every resource offers at least read) is naturally excluded. */
+export function oauthResourcesForRole(role: string): ApiScopeResource[] {
+  const allowedTiers = allowedTiersForRole(role);
+  return API_SCOPE_RESOURCES.map((resource) => ({
+    ...resource,
+    tiers: resource.tiers.filter((tier) => allowedTiers.includes(tier)),
+  })).filter((resource) => resource.tiers.length > 0);
+}
+
+/** Scope strings a role is allowed to grant, for server-side enforcement of
+ * the same cap oauthResourcesForRole applies to the consent screen's
+ * checkboxes -- never trust the submitted form alone. */
+export function allowedScopeStringsForRole(role: string): Set<string> {
+  return new Set(
+    oauthResourcesForRole(role).flatMap((resource) => resource.tiers.map((tier) => scopeString(resource.key, tier)))
+  );
 }

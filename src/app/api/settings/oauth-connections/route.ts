@@ -32,9 +32,9 @@ export async function GET() {
   }
 
   const db = adminClient();
-  const { data: rows, error } = await db
+  const { data: refreshRows, error } = await db
     .from("oauth_tokens")
-    .select("id, scopes, last_used_at, created_at, oauth_clients(client_name), profiles(name)")
+    .select("id, client_id, user_id, scopes, last_used_at, created_at, oauth_clients(client_name), profiles(name)")
     .eq("org_id", profile.org_id)
     .eq("token_type", "refresh")
     .is("revoked_at", null)
@@ -44,12 +44,33 @@ export async function GET() {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  const connections = (rows ?? []).map((row) => ({
+  // A connection's own refresh-token row only gets last_used_at touched when
+  // it's actually redeemed for a new pair (rare -- access tokens last an
+  // hour, so most activity never refreshes). Every real tool call instead
+  // updates the access token's own row, so pull the most recent last_used_at
+  // across this connection's whole token history (every access token ever
+  // issued for the same client_id/user_id) to get an accurate "last used".
+  const { data: allTokens } = await db
+    .from("oauth_tokens")
+    .select("client_id, user_id, last_used_at")
+    .eq("org_id", profile.org_id)
+    .not("last_used_at", "is", null);
+
+  const lastUsedByConnection = new Map<string, string>();
+  for (const t of allTokens ?? []) {
+    const key = `${t.client_id}:${t.user_id}`;
+    const existing = lastUsedByConnection.get(key);
+    if (!existing || new Date(t.last_used_at!) > new Date(existing)) {
+      lastUsedByConnection.set(key, t.last_used_at!);
+    }
+  }
+
+  const connections = (refreshRows ?? []).map((row) => ({
     id: row.id,
     clientName: (row.oauth_clients as unknown as { client_name: string } | null)?.client_name ?? "Unknown app",
     connectedByName: (row.profiles as unknown as { name: string | null } | null)?.name ?? null,
     scopes: row.scopes ?? [],
-    lastUsedAt: row.last_used_at,
+    lastUsedAt: lastUsedByConnection.get(`${row.client_id}:${row.user_id}`) ?? row.last_used_at,
     createdAt: row.created_at,
   }));
 

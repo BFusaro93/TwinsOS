@@ -5,6 +5,7 @@ import { isKnownScope } from "@/lib/api/scopes";
 import {
   generateOpaqueToken,
   hashToken,
+  allowedScopeStringsForRole,
   AUTHORIZATION_CODE_PREFIX,
   AUTHORIZATION_CODE_TTL_MS,
 } from "@/lib/api/oauth";
@@ -56,11 +57,6 @@ export async function POST(request: Request) {
     return redirectWithParams({ error: "access_denied" });
   }
 
-  const scopes = requestedScopes.filter(isKnownScope);
-  if (scopes.length === 0) {
-    return redirectWithParams({ error: "invalid_scope", error_description: "No valid scope was selected" });
-  }
-
   const supabase = await createClient();
   const {
     data: { user },
@@ -68,9 +64,18 @@ export async function POST(request: Request) {
   if (!user) {
     return NextResponse.json({ error: "access_denied", error_description: "Not signed in" }, { status: 401 });
   }
-  const { data: profile } = await supabase.from("profiles").select("org_id").eq("id", user.id).single();
+  const { data: profile } = await supabase.from("profiles").select("org_id, role").eq("id", user.id).single();
   if (!profile) {
     return NextResponse.json({ error: "server_error" }, { status: 500 });
+  }
+
+  // Never trust the submitted checkboxes alone -- the consent page (PR 3)
+  // already hides write scopes from a non-admin's picker, but re-check here
+  // too in case of a forged/replayed form post.
+  const allowedForRole = allowedScopeStringsForRole(profile.role);
+  const scopes = requestedScopes.filter((s) => isKnownScope(s) && allowedForRole.has(s));
+  if (scopes.length === 0) {
+    return redirectWithParams({ error: "invalid_scope", error_description: "No valid scope was selected" });
   }
 
   const code = generateOpaqueToken(AUTHORIZATION_CODE_PREFIX);
