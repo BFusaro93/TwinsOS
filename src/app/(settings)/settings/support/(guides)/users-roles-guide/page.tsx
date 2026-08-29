@@ -106,6 +106,14 @@ export default function UsersRolesGuidePage() {
           A Landscapt-only org has no purchase orders, work orders, or assets for those roles to act
           on, so the invite and role dropdowns hide them until Equipt is on the plan.
         </Callout>
+        <Callout>
+          <strong>The role descriptions in Settings → Users → Roles also adapt to your plan.</strong>{" "}
+          Admin, Manager, Viewer, and Crew exist regardless of which module(s) you have, but the
+          permission bullets under each one are filtered to what your org's plan actually includes —
+          a Landscapt-only org won't see work-order or purchase-order bullets under Admin/Manager,
+          and an Equipt-only org won't see client/estimate/dispatch bullets. Nothing about the
+          underlying role or its real access changes — this only cleans up what's displayed.
+        </Callout>
       </Section>
 
       <Section id="matrix" title="Role permission matrix">
@@ -267,6 +275,17 @@ export default function UsersRolesGuidePage() {
             <code>crm_roles</code> row an employee is assigned to gets deleted, that employee loses
             CRM access the same as if no role were assigned at all — nothing on the user record
             itself changes to indicate why.
+          </li>
+          <li>
+            <strong>The employee record has a third, unrelated &quot;User Role&quot; field — it grants nothing.</strong>{" "}
+            CRM Settings → Employees → an employee&apos;s User Settings tab shows a{" "}
+            <strong>User Role</strong> field with options like Admin, Manager, Technician, Purchaser,
+            and Viewer — the same familiar names as the organization role. It is purely a display
+            label on <code>crm_employees.user_role</code> and has no effect on access anywhere in the
+            app. Once the employee is linked to a login, it&apos;s auto-populated from that login&apos;s
+            real organization role and shown read-only, so it can&apos;t drift out of sync — before a
+            login is linked, it&apos;s just a manually-set label. Don&apos;t confuse it with either the
+            organization role or the Landscapt Role (<code>crm_role_id</code>) on the same tab.
           </li>
         </ul>
       </Section>
