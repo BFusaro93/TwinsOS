@@ -3,6 +3,7 @@ import { ADDITIONAL_REPORTS } from "@/lib/reports/definitions/additions";
 import { AUDIT_REPORTS } from "@/lib/reports/definitions/audits";
 import { CHEMICAL_REPORTS } from "@/lib/reports/definitions/chemical-reports";
 import { CLIENT_REPORTS } from "@/lib/reports/definitions/client-reports";
+import { CONTRACT_SERVICE_REPORTS } from "@/lib/reports/definitions/contract-services";
 import { ESTIMATE_REPORTS } from "@/lib/reports/definitions/estimates";
 import { FINANCIAL_REPORTS } from "@/lib/reports/definitions/financial";
 import { HOURS_VARIANCE_REPORTS } from "@/lib/reports/definitions/hours-variance";
@@ -18,6 +19,7 @@ export const ALL_REPORTS: PrebuiltReportDef[] = [
   ...AUDIT_REPORTS,
   ...CHEMICAL_REPORTS,
   ...CLIENT_REPORTS,
+  ...CONTRACT_SERVICE_REPORTS,
   ...ESTIMATE_REPORTS,
   ...FINANCIAL_REPORTS,
   ...HOURS_VARIANCE_REPORTS,

@@ -505,6 +505,36 @@ export const REPORT_DATASETS: ReportDataset[] = [
       { key: "actual_cents", label: "Actual", type: "money" },
     ],
   },
+  {
+    key: "rpt_contract_service_usage",
+    label: "Contract Service Usage",
+    description: "Bundled services on active contracts (e.g. 25 mowings included) against actual completed visits.",
+    defaultDateField: "contract_start_date",
+    fields: [
+      { key: "client_name", label: "Client", type: "text" },
+      { key: "contract_title", label: "Contract", type: "text" },
+      {
+        key: "contract_status",
+        label: "Contract Status",
+        type: "text",
+        options: [
+          { value: "draft", label: "Draft" },
+          { value: "sent", label: "Sent" },
+          { value: "signed", label: "Signed" },
+          { value: "active", label: "Active" },
+          { value: "expired", label: "Expired" },
+          { value: "cancelled", label: "Cancelled" },
+        ],
+      },
+      { key: "contract_start_date", label: "Contract Start", type: "date" },
+      { key: "contract_end_date", label: "Contract End", type: "date" },
+      { key: "service_name", label: "Service", type: "text" },
+      { key: "visits_included", label: "Included", type: "number" },
+      { key: "visits_used", label: "Used", type: "number" },
+      { key: "visits_remaining", label: "Remaining", type: "number" },
+      { key: "is_over", label: "Over Included Count", type: "boolean" },
+    ],
+  },
 ];
 
 export const DATASET_MAP: Record<string, ReportDataset> = Object.fromEntries(
