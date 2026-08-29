@@ -13,7 +13,12 @@ export async function GET() {
 
   const metadata: OAuthMetadata = {
     issuer,
-    authorization_endpoint: `${issuer}/api/mcp/oauth/authorize`,
+    // A real page (not an /api/ route) so the existing auth middleware's
+    // login-redirect-with-return-path logic (src/lib/supabase/middleware.ts)
+    // handles "user isn't signed in yet" for free -- see PR 3 for the page
+    // itself and why the actual code issuance still lives at the /api/mcp
+    // POST endpoint below.
+    authorization_endpoint: `${issuer}/oauth/authorize`,
     token_endpoint: `${issuer}/api/mcp/oauth/token`,
     registration_endpoint: `${issuer}/api/mcp/oauth/register`,
     revocation_endpoint: `${issuer}/api/mcp/oauth/revoke`,
