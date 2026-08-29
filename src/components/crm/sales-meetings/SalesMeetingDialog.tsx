@@ -242,7 +242,7 @@ export function SalesMeetingDialog({
           <DialogTitle>{isEditing ? "Edit Meeting" : "Book Meeting"}</DialogTitle>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4 py-2 max-h-[70vh] overflow-y-auto">
+        <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4 py-2 pr-1 max-h-[70vh] overflow-y-auto">
           <div className="flex flex-col gap-1.5">
             <Label>Sales Rep *</Label>
             <Controller
