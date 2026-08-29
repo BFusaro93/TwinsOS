@@ -88,6 +88,100 @@ function GaugeVisual({ result, visual }: { result: ReportResult; visual: VisualS
   );
 }
 
+function CrosstabVisual({ result, visual }: { result: ReportResult; visual: VisualSpec }) {
+  const labelCol = colFor(result.columns, visual.labelColumn);
+  const headerCol = colFor(result.columns, visual.crosstabHeaderColumn);
+  const valueCol = colFor(result.columns, visual.valueColumns[0]);
+
+  if (!labelCol || !headerCol || !valueCol) {
+    return (
+      <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
+        Choose a row label, header, and value column.
+      </div>
+    );
+  }
+
+  // A client-side pivot of an already-flat, already-aggregated query result
+  // (grouped by both labelCol and headerCol) — no backend changes needed.
+  const headerValues: string[] = [];
+  const headerSeen = new Set<string>();
+  const rowOrder: string[] = [];
+  const rowSeen = new Set<string>();
+  const cellMap = new Map<string, number>();
+  const rowTotals = new Map<string, number>();
+  const colTotals = new Map<string, number>();
+  let grandTotal = 0;
+
+  for (const row of result.rows) {
+    const rowLabel = formatCellValue(row[labelCol.key], labelCol.type);
+    const headerLabel = formatCellValue(row[headerCol.key], headerCol.type);
+    const value = Number(row[valueCol.key]) || 0;
+    if (!rowSeen.has(rowLabel)) {
+      rowSeen.add(rowLabel);
+      rowOrder.push(rowLabel);
+    }
+    if (!headerSeen.has(headerLabel)) {
+      headerSeen.add(headerLabel);
+      headerValues.push(headerLabel);
+    }
+    const cellKey = `${rowLabel}|${headerLabel}`;
+    cellMap.set(cellKey, (cellMap.get(cellKey) ?? 0) + value);
+    rowTotals.set(rowLabel, (rowTotals.get(rowLabel) ?? 0) + value);
+    colTotals.set(headerLabel, (colTotals.get(headerLabel) ?? 0) + value);
+    grandTotal += value;
+  }
+  headerValues.sort();
+
+  return (
+    <div className="max-h-72 overflow-auto">
+      <table className="w-full text-xs">
+        <thead>
+          <tr className="border-b bg-slate-50 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+            <th className="whitespace-nowrap px-3 py-2 text-left">{labelCol.label}</th>
+            {headerValues.map((h) => (
+              <th key={h} className="whitespace-nowrap px-3 py-2 text-right">
+                {h}
+              </th>
+            ))}
+            <th className="whitespace-nowrap px-3 py-2 text-right">Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rowOrder.map((r) => (
+            <tr key={r} className="border-b last:border-0 hover:bg-slate-50">
+              <td className="whitespace-nowrap px-3 py-2 font-medium text-slate-700">{r}</td>
+              {headerValues.map((h) => {
+                const v = cellMap.get(`${r}|${h}`);
+                return (
+                  <td key={h} className="px-3 py-2 text-right tabular-nums text-slate-700">
+                    {v === undefined ? "—" : formatCellValue(v, valueCol.type)}
+                  </td>
+                );
+              })}
+              <td className="px-3 py-2 text-right tabular-nums font-medium text-slate-800">
+                {formatCellValue(rowTotals.get(r) ?? 0, valueCol.type)}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+        <tfoot>
+          <tr className="border-t bg-slate-50 font-medium text-slate-800">
+            <td className="px-3 py-2">Total</td>
+            {headerValues.map((h) => (
+              <td key={h} className="px-3 py-2 text-right tabular-nums">
+                {formatCellValue(colTotals.get(h) ?? 0, valueCol.type)}
+              </td>
+            ))}
+            <td className="px-3 py-2 text-right tabular-nums">
+              {formatCellValue(grandTotal, valueCol.type)}
+            </td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  );
+}
+
 function ChartVisual({ result, visual }: { result: ReportResult; visual: VisualSpec }) {
   const labelCol = colFor(result.columns, visual.labelColumn);
   const valueCols = visual.valueColumns
@@ -102,13 +196,35 @@ function ChartVisual({ result, visual }: { result: ReportResult; visual: VisualS
     );
   }
 
-  const data = result.rows.map((row) => {
+  let data = result.rows.map((row) => {
     const point: Record<string, unknown> = {
       __label: formatCellValue(row[labelCol.key], labelCol.type),
     };
     for (const vc of valueCols) point[vc.key] = Number(row[vc.key]) || 0;
     return point;
   });
+
+  // Bar/pie only — a line chart's categories are usually a time series where
+  // "top N" doesn't apply. Ranks by the first value column's magnitude so a
+  // chart with many long-tail categories (e.g. 50 lead sources) stays
+  // readable instead of rendering an unreadable wall of slices/bars.
+  if ((visual.type === "bar" || visual.type === "pie") && visual.topN && data.length > visual.topN) {
+    const primaryKey = valueCols[0].key;
+    const sorted = [...data].sort(
+      (a, b) => Math.abs(Number(b[primaryKey])) - Math.abs(Number(a[primaryKey]))
+    );
+    const top = sorted.slice(0, visual.topN);
+    const rest = sorted.slice(visual.topN);
+    if (visual.showOthers && rest.length > 0) {
+      const othersPoint: Record<string, unknown> = { __label: "Others" };
+      for (const vc of valueCols) {
+        othersPoint[vc.key] = rest.reduce((sum, r) => sum + (Number(r[vc.key]) || 0), 0);
+      }
+      data = [...top, othersPoint];
+    } else {
+      data = top;
+    }
+  }
 
   if (visual.type === "pie") {
     const valueCol = valueCols[0];
@@ -221,7 +337,18 @@ export function VisualRenderer({
   if (visual.type === "table") {
     return (
       <div className={cn("max-h-72 overflow-auto", className)}>
-        <ReportTable result={result} formatRules={visual.formatRules} />
+        <ReportTable
+          result={result}
+          formatRules={visual.formatRules}
+          colorSpectrumColumns={visual.colorSpectrumColumns}
+        />
+      </div>
+    );
+  }
+  if (visual.type === "crosstab") {
+    return (
+      <div className={className}>
+        <CrosstabVisual result={result} visual={visual} />
       </div>
     );
   }

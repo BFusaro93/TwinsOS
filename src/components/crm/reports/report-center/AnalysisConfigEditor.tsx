@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Select,
   SelectContent,
@@ -16,12 +17,14 @@ import { cn } from "@/lib/utils";
 import { REPORT_DATASETS } from "@/lib/reports/datasets";
 import {
   FN_OPTIONS,
+  FORMULA_DISPLAY_TYPE_OPTIONS,
+  FORMULA_OPERATOR_OPTIONS,
   NUMERIC_FIELD_TYPES,
   OP_OPTIONS,
   filterValueInputType,
   type AnalysisConfigBuilder,
 } from "@/lib/hooks/use-analysis-config-builder";
-import type { AggregateFn, FilterOp } from "@/types/crm-reports";
+import type { AggregateFn, FilterOp, FormulaDisplayType, FormulaOperator } from "@/types/crm-reports";
 
 /**
  * The Data / Columns / Filters / Group & Total / Sort cards shared by the
@@ -43,6 +46,7 @@ export function AnalysisConfigEditor({
     groupBy,
     aggregates,
     subtotals,
+    formulas,
     sortColumn,
     sortDir,
     setColumns,
@@ -50,6 +54,7 @@ export function AnalysisConfigEditor({
     setGroupBy,
     setAggregates,
     setSubtotals,
+    setFormulas,
     setSortColumn,
     setSortDir,
     handleDatasetChange,
@@ -213,7 +218,32 @@ export function AnalysisConfigEditor({
                       </SelectContent>
                     </Select>
                     {needsValue &&
-                      (field?.type === "boolean" ? (
+                      (filter.op === "in" ? (
+                        field?.options ? (
+                          <MultiSelectFilterValue
+                            options={field.options}
+                            value={filter.value}
+                            onChange={(v) =>
+                              setFilters((prev) =>
+                                prev.map((f, j) => (j === i ? { ...f, value: v } : f))
+                              )
+                            }
+                          />
+                        ) : (
+                          <Input
+                            className="h-8 w-52 text-sm"
+                            placeholder="Comma-separated values"
+                            value={filter.value}
+                            onChange={(e) =>
+                              setFilters((prev) =>
+                                prev.map((f, j) =>
+                                  j === i ? { ...f, value: e.target.value } : f
+                                )
+                              )
+                            }
+                          />
+                        )
+                      ) : field?.type === "boolean" ? (
                         <Select
                           value={filter.value}
                           onValueChange={(v) =>
@@ -421,8 +451,139 @@ export function AnalysisConfigEditor({
           </Card>
 
           <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-3">
+              <CardTitle className="text-sm">{n(5)}. Formulas</CardTitle>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs"
+                disabled={sortOptions.length === 0}
+                onClick={() =>
+                  setFormulas((prev) => [
+                    ...prev,
+                    {
+                      name: "",
+                      left: sortOptions[0]?.value ?? "",
+                      operator: "+",
+                      right: sortOptions[0]?.value ?? "",
+                      displayType: "number",
+                    },
+                  ])
+                }
+              >
+                <Plus className="mr-1 h-3 w-3" />
+                Add Formula
+              </Button>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-2">
+              {formulas.length === 0 && (
+                <p className="text-xs text-muted-foreground">
+                  Build a calculated column from two existing output columns, e.g. &quot;Revenue −
+                  Cost&quot;.
+                </p>
+              )}
+              {formulas.map((formula, i) => (
+                <div key={i} className="flex flex-wrap items-center gap-2">
+                  <Input
+                    value={formula.name}
+                    onChange={(e) =>
+                      setFormulas((prev) =>
+                        prev.map((f, j) => (j === i ? { ...f, name: e.target.value } : f))
+                      )
+                    }
+                    placeholder="Column name"
+                    className="h-8 w-36 text-sm"
+                  />
+                  <span className="text-sm text-slate-500">=</span>
+                  <Select
+                    value={formula.left}
+                    onValueChange={(v) =>
+                      setFormulas((prev) => prev.map((f, j) => (j === i ? { ...f, left: v } : f)))
+                    }
+                  >
+                    <SelectTrigger className="h-8 w-44 text-sm">
+                      <SelectValue placeholder="Column" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {sortOptions.map((o) => (
+                        <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Select
+                    value={formula.operator}
+                    onValueChange={(v) =>
+                      setFormulas((prev) =>
+                        prev.map((f, j) => (j === i ? { ...f, operator: v as FormulaOperator } : f))
+                      )
+                    }
+                  >
+                    <SelectTrigger className="h-8 w-36 text-sm">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {FORMULA_OPERATOR_OPTIONS.map((o) => (
+                        <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Select
+                    value={formula.right}
+                    onValueChange={(v) =>
+                      setFormulas((prev) => prev.map((f, j) => (j === i ? { ...f, right: v } : f)))
+                    }
+                  >
+                    <SelectTrigger className="h-8 w-44 text-sm">
+                      <SelectValue placeholder="Column" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {sortOptions.map((o) => (
+                        <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Select
+                    value={formula.displayType}
+                    onValueChange={(v) =>
+                      setFormulas((prev) =>
+                        prev.map((f, j) =>
+                          j === i ? { ...f, displayType: v as FormulaDisplayType } : f
+                        )
+                      )
+                    }
+                  >
+                    <SelectTrigger className="h-8 w-28 text-sm">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {FORMULA_DISPLAY_TYPE_OPTIONS.map((o) => (
+                        <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 text-muted-foreground"
+                    aria-label="Remove formula"
+                    onClick={() => setFormulas((prev) => prev.filter((_, j) => j !== i))}
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              ))}
+              {formulas.length > 0 && (
+                <p className="text-xs text-muted-foreground">
+                  Pick a display type that matches the operands&apos; units — e.g. dividing a money
+                  column by an hours column isn&apos;t itself money.
+                </p>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-sm">{n(5)}. Sort</CardTitle>
+              <CardTitle className="text-sm">{n(6)}. Sort</CardTitle>
             </CardHeader>
             <CardContent className="flex flex-wrap items-center gap-3">
               <Select
@@ -455,5 +616,59 @@ export function AnalysisConfigEditor({
         </>
       )}
     </>
+  );
+}
+
+/** "is any of" filter value picker for a field with a fixed option set —
+ *  stores the selection as the same comma-joined string every other filter
+ *  value uses (BuilderFilter.value is always a plain string; toAnalysisFilter
+ *  splits it back into an array for the "in" op). */
+function MultiSelectFilterValue({
+  options,
+  value,
+  onChange,
+}: {
+  options: { value: string; label: string }[];
+  value: string;
+  onChange: (next: string) => void;
+}) {
+  const selected = value
+    .split(",")
+    .map((v) => v.trim())
+    .filter((v) => v !== "");
+
+  const toggle = (optionValue: string, checked: boolean) => {
+    const next = checked
+      ? [...selected, optionValue]
+      : selected.filter((v) => v !== optionValue);
+    onChange(next.join(", "));
+  };
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button variant="outline" size="sm" className="h-8 w-44 justify-start text-sm font-normal">
+          {selected.length === 0
+            ? "Choose values…"
+            : `${selected.length} selected`}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-56 p-2" align="start">
+        <div className="flex max-h-64 flex-col gap-1 overflow-y-auto">
+          {options.map((o) => (
+            <label
+              key={o.value}
+              className="flex cursor-pointer items-center gap-2 rounded px-1.5 py-1 text-sm hover:bg-accent"
+            >
+              <Checkbox
+                checked={selected.includes(o.value)}
+                onCheckedChange={(checked) => toggle(o.value, checked === true)}
+              />
+              {o.label}
+            </label>
+          ))}
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }

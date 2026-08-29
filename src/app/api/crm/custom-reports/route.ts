@@ -12,6 +12,7 @@ interface CustomReportRow {
   value_columns: string[] | null;
   kpi_column: string | null;
   format_rules: unknown;
+  color_spectrum_columns: string[] | null;
   header_visual: unknown;
   header_visual_title: string | null;
   created_at: string;
@@ -29,6 +30,7 @@ function mapRow(row: CustomReportRow) {
     valueColumns: row.value_columns ?? [],
     kpiColumn: row.kpi_column,
     formatRules: row.format_rules ?? [],
+    colorSpectrumColumns: row.color_spectrum_columns ?? [],
     headerVisual: row.header_visual ?? null,
     headerVisualTitle: row.header_visual_title ?? null,
     createdAt: row.created_at,
@@ -49,7 +51,7 @@ export async function GET() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data, error } = await (supabase as any)
     .from("crm_custom_reports")
-    .select("id, name, description, config, visual_type, label_column, value_columns, kpi_column, format_rules, header_visual, header_visual_title, created_at, updated_at")
+    .select("id, name, description, config, visual_type, label_column, value_columns, kpi_column, format_rules, color_spectrum_columns, header_visual, header_visual_title, created_at, updated_at")
     .is("deleted_at", null)
     .order("updated_at", { ascending: false });
 
@@ -98,11 +100,12 @@ export async function POST(request: Request) {
       value_columns: parsed.data.valueColumns ?? [],
       kpi_column: parsed.data.kpiColumn ?? null,
       format_rules: parsed.data.formatRules ?? [],
+      color_spectrum_columns: parsed.data.colorSpectrumColumns ?? [],
       header_visual: parsed.data.headerVisual ?? null,
       header_visual_title: parsed.data.headerVisualTitle ?? null,
       created_by: user.id,
     })
-    .select("id, name, description, config, visual_type, label_column, value_columns, kpi_column, format_rules, header_visual, header_visual_title, created_at, updated_at")
+    .select("id, name, description, config, visual_type, label_column, value_columns, kpi_column, format_rules, color_spectrum_columns, header_visual, header_visual_title, created_at, updated_at")
     .single();
 
   if (error || !data) {

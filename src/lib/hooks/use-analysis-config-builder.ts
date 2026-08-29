@@ -7,6 +7,8 @@ import type {
   AnalysisFilter,
   DatasetField,
   FilterOp,
+  FormulaDisplayType,
+  FormulaOperator,
 } from "@/types/crm-reports";
 
 // ============================================================
@@ -25,6 +27,28 @@ export interface BuilderAggregate {
   fn: AggregateFn;
 }
 
+export interface BuilderFormula {
+  name: string;
+  left: string;
+  operator: FormulaOperator;
+  right: string;
+  displayType: FormulaDisplayType;
+}
+
+export const FORMULA_OPERATOR_OPTIONS: { value: FormulaOperator; label: string }[] = [
+  { value: "+", label: "+ (add)" },
+  { value: "-", label: "− (subtract)" },
+  { value: "*", label: "× (multiply)" },
+  { value: "/", label: "÷ (divide)" },
+];
+
+export const FORMULA_DISPLAY_TYPE_OPTIONS: { value: FormulaDisplayType; label: string }[] = [
+  { value: "number", label: "Number" },
+  { value: "money", label: "Money" },
+  { value: "hours", label: "Hours" },
+  { value: "percent", label: "Percent" },
+];
+
 export const OP_OPTIONS: { value: FilterOp; label: string }[] = [
   { value: "eq", label: "equals" },
   { value: "neq", label: "not equals" },
@@ -33,6 +57,7 @@ export const OP_OPTIONS: { value: FilterOp; label: string }[] = [
   { value: "lt", label: "less than" },
   { value: "lte", label: "at most" },
   { value: "contains", label: "contains" },
+  { value: "in", label: "is any of" },
   { value: "is_null", label: "is empty" },
   { value: "not_null", label: "is not empty" },
 ];
@@ -69,6 +94,14 @@ export function toAnalysisFilter(
   }
   if (filter.value === "") return null;
   const field = fields.find((f) => f.key === filter.column);
+  if (filter.op === "in") {
+    const parts = filter.value
+      .split(",")
+      .map((v) => v.trim())
+      .filter((v) => v !== "");
+    if (parts.length === 0) return null;
+    return { column: filter.column, op: filter.op, value: parts };
+  }
   if (field?.type === "money") {
     const dollars = parseFloat(filter.value);
     if (Number.isNaN(dollars)) return null;
@@ -106,6 +139,7 @@ export interface AnalysisConfigBuilder {
   groupBy: string[];
   aggregates: BuilderAggregate[];
   subtotals: boolean;
+  formulas: BuilderFormula[];
   sortColumn: string;
   sortDir: "asc" | "desc";
   setDataset: (v: string) => void;
@@ -116,6 +150,7 @@ export interface AnalysisConfigBuilder {
     v: BuilderAggregate[] | ((prev: BuilderAggregate[]) => BuilderAggregate[])
   ) => void;
   setSubtotals: (v: boolean) => void;
+  setFormulas: (v: BuilderFormula[] | ((prev: BuilderFormula[]) => BuilderFormula[])) => void;
   setSortColumn: (v: string) => void;
   setSortDir: (v: "asc" | "desc") => void;
   handleDatasetChange: (next: string) => void;
@@ -159,6 +194,15 @@ export function useAnalysisConfigBuilder(
     (initial?.aggregates ?? []).map((a) => ({ column: a.column, fn: a.fn }))
   );
   const [subtotals, setSubtotals] = useState(initial?.subtotals ?? false);
+  const [formulas, setFormulas] = useState<BuilderFormula[]>(
+    (initial?.formulas ?? []).map((f) => ({
+      name: f.name,
+      left: f.left,
+      operator: f.operator,
+      right: f.right,
+      displayType: f.displayType,
+    }))
+  );
   const [sortColumn, setSortColumn] = useState(initial?.sortColumn ?? "");
   const [sortDir, setSortDir] = useState<"asc" | "desc">(initial?.sortDir ?? "asc");
 
@@ -200,6 +244,7 @@ export function useAnalysisConfigBuilder(
     setGroupBy([]);
     setAggregates([]);
     setSubtotals(false);
+    setFormulas([]);
     setSortColumn("");
     onDatasetChange?.(next);
   };
@@ -215,6 +260,7 @@ export function useAnalysisConfigBuilder(
       groupBy,
       aggregates: aggregates.filter((a) => a.column),
       subtotals: subtotalMode,
+      formulas: formulas.filter((f) => f.name && f.left && f.right),
       sortColumn: sortColumn || undefined,
       sortDir,
       limit: 500,
@@ -236,6 +282,7 @@ export function useAnalysisConfigBuilder(
     groupBy,
     aggregates,
     subtotals,
+    formulas,
     sortColumn,
     sortDir,
     setDataset,
@@ -244,6 +291,7 @@ export function useAnalysisConfigBuilder(
     setGroupBy,
     setAggregates,
     setSubtotals,
+    setFormulas,
     setSortColumn,
     setSortDir,
     handleDatasetChange,
@@ -280,6 +328,15 @@ export function hydrateBuilder(builder: AnalysisConfigBuilder, cfg: AnalysisConf
   builder.setGroupBy(cfg.groupBy ?? []);
   builder.setAggregates((cfg.aggregates ?? []).map((a) => ({ column: a.column, fn: a.fn })));
   builder.setSubtotals(cfg.subtotals ?? false);
+  builder.setFormulas(
+    (cfg.formulas ?? []).map((f) => ({
+      name: f.name,
+      left: f.left,
+      operator: f.operator,
+      right: f.right,
+      displayType: f.displayType,
+    }))
+  );
   builder.setSortColumn(cfg.sortColumn ?? "");
   builder.setSortDir(cfg.sortDir ?? "asc");
 }

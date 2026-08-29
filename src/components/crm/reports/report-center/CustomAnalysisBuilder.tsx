@@ -89,6 +89,7 @@ export function CustomAnalysisBuilder({ reportId }: { reportId?: string }) {
   const [valueColumns, setValueColumns] = useState<string[]>([]);
   const [kpiColumn, setKpiColumn] = useState("");
   const [formatRules, setFormatRules] = useState<FormatRule[]>([]);
+  const [colorSpectrumColumns, setColorSpectrumColumns] = useState<string[]>([]);
   const [headerVisual, setHeaderVisual] = useState<VisualSpec | undefined>(undefined);
   const [headerVisualTitle, setHeaderVisualTitle] = useState("");
   const [headerChartResult, setHeaderChartResult] = useState<ReportResult | undefined>(undefined);
@@ -103,6 +104,7 @@ export function CustomAnalysisBuilder({ reportId }: { reportId?: string }) {
     setValueColumns([]);
     setKpiColumn("");
     setFormatRules([]);
+    setColorSpectrumColumns([]);
   });
 
   // hydrate once when editing an existing analysis
@@ -116,29 +118,43 @@ export function CustomAnalysisBuilder({ reportId }: { reportId?: string }) {
     setValueColumns(existing.valueColumns);
     setKpiColumn(existing.kpiColumn ?? "");
     setFormatRules(existing.formatRules ?? []);
+    setColorSpectrumColumns(existing.colorSpectrumColumns ?? []);
     setHeaderVisual(existing.headerVisual ?? undefined);
     setHeaderVisualTitle(existing.headerVisualTitle ?? "");
     setHydrated(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [existing, hydrated]);
 
-  const { canRun, buildConfig, grouped, groupBy, aggregates, columns, numericFields, fields } = builder;
+  const { canRun, buildConfig, grouped, groupBy, aggregates, columns, numericFields, fields, formulas } = builder;
   const isChart = visualType === "bar" || visualType === "line" || visualType === "pie";
 
-  const outputOptions = grouped
-    ? [
-        ...groupBy.map((key) => ({ value: key, label: fields.find((f) => f.key === key)?.label ?? key })),
-        ...aggregates
-          .filter((a) => a.column)
-          .map((a) => ({ value: aggregateAlias(a), label: aggregateLabel(a, fields) })),
-      ]
-    : columns.map((key) => ({ value: key, label: fields.find((f) => f.key === key)?.label ?? key }));
+  // Formula columns are always numeric, so they belong in both the general
+  // output-column list (format rules, crosstab/table columns) and the
+  // numeric-only value-column list (chart series, color spectrum).
+  const formulaOptions = formulas
+    .filter((f) => f.name && f.left && f.right)
+    .map((f) => ({ value: f.name, label: f.name }));
 
-  const valueOptions = grouped
-    ? aggregates
-        .filter((a) => a.column)
-        .map((a) => ({ value: aggregateAlias(a), label: aggregateLabel(a, fields) }))
-    : numericFields.map((f) => ({ value: f.key, label: f.label }));
+  const outputOptions = [
+    ...(grouped
+      ? [
+          ...groupBy.map((key) => ({ value: key, label: fields.find((f) => f.key === key)?.label ?? key })),
+          ...aggregates
+            .filter((a) => a.column)
+            .map((a) => ({ value: aggregateAlias(a), label: aggregateLabel(a, fields) })),
+        ]
+      : columns.map((key) => ({ value: key, label: fields.find((f) => f.key === key)?.label ?? key }))),
+    ...formulaOptions,
+  ];
+
+  const valueOptions = [
+    ...(grouped
+      ? aggregates
+          .filter((a) => a.column)
+          .map((a) => ({ value: aggregateAlias(a), label: aggregateLabel(a, fields) }))
+      : numericFields.map((f) => ({ value: f.key, label: f.label }))),
+    ...formulaOptions,
+  ];
 
   const handleRun = () => {
     const config = buildConfig();
@@ -203,6 +219,7 @@ export function CustomAnalysisBuilder({ reportId }: { reportId?: string }) {
           valueColumns,
           kpiColumn: kpiColumn || null,
           formatRules,
+          colorSpectrumColumns,
           headerVisual: headerVisual ?? null,
           headerVisualTitle: headerVisual ? headerVisualTitle || null : null,
         });
@@ -216,6 +233,7 @@ export function CustomAnalysisBuilder({ reportId }: { reportId?: string }) {
           valueColumns,
           kpiColumn: kpiColumn || null,
           formatRules,
+          colorSpectrumColumns,
           headerVisual: headerVisual ?? null,
           headerVisualTitle: headerVisual ? headerVisualTitle || null : null,
         });
@@ -400,7 +418,7 @@ export function CustomAnalysisBuilder({ reportId }: { reportId?: string }) {
         <>
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-sm">6. Visualization</CardTitle>
+              <CardTitle className="text-sm">7. Visualization</CardTitle>
             </CardHeader>
             <CardContent className="flex items-center gap-3">
               <span className="w-32 text-xs font-medium text-slate-600">Display As</span>
@@ -420,7 +438,7 @@ export function CustomAnalysisBuilder({ reportId }: { reportId?: string }) {
           {isChart && (
             <Card>
               <CardHeader className="pb-3">
-                <CardTitle className="text-sm">7. Chart Fields</CardTitle>
+                <CardTitle className="text-sm">8. Chart Fields</CardTitle>
               </CardHeader>
               <CardContent className="flex flex-col gap-4">
                 <div className="flex items-center gap-3">
@@ -474,7 +492,7 @@ export function CustomAnalysisBuilder({ reportId }: { reportId?: string }) {
           {visualType === "kpi" && (
             <Card>
               <CardHeader className="pb-3">
-                <CardTitle className="text-sm">7. Chart Fields</CardTitle>
+                <CardTitle className="text-sm">8. Chart Fields</CardTitle>
               </CardHeader>
               <CardContent className="flex items-center gap-3">
                 <span className="w-32 text-xs font-medium text-slate-600">KPI Value</span>
@@ -494,7 +512,7 @@ export function CustomAnalysisBuilder({ reportId }: { reportId?: string }) {
 
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-sm">8. Conditional Formatting</CardTitle>
+              <CardTitle className="text-sm">9. Conditional Formatting</CardTitle>
             </CardHeader>
             <CardContent className="flex flex-col gap-3">
               {formatRules.length === 0 && (
@@ -578,12 +596,36 @@ export function CustomAnalysisBuilder({ reportId }: { reportId?: string }) {
                   Add Rule
                 </Button>
               </div>
+              {valueOptions.length > 0 && (
+                <div className="border-t pt-3">
+                  <p className="mb-1.5 text-xs font-medium text-slate-600">
+                    Color Spectrum — shade a column light-to-dark by magnitude
+                  </p>
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 sm:grid-cols-3 lg:grid-cols-4">
+                    {valueOptions.map((o) => (
+                      <label key={o.value} className="flex cursor-pointer items-center gap-2 text-sm text-slate-700">
+                        <Checkbox
+                          checked={colorSpectrumColumns.includes(o.value)}
+                          onCheckedChange={(checked) =>
+                            setColorSpectrumColumns((prev) =>
+                              checked === true
+                                ? [...prev, o.value]
+                                : prev.filter((k) => k !== o.value)
+                            )
+                          }
+                        />
+                        {o.label}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-sm">9. Header Graphic</CardTitle>
+              <CardTitle className="text-sm">10. Header Graphic</CardTitle>
             </CardHeader>
             <CardContent className="flex flex-col gap-3">
               <p className="text-xs text-muted-foreground">
@@ -667,7 +709,7 @@ export function CustomAnalysisBuilder({ reportId }: { reportId?: string }) {
 
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-sm">10. Run</CardTitle>
+              <CardTitle className="text-sm">11. Run</CardTitle>
             </CardHeader>
             <CardContent className="flex flex-wrap items-center gap-3">
               <Button size="sm" onClick={handleRun} disabled={!canRun || runAnalysis.isPending}>
@@ -688,7 +730,11 @@ export function CustomAnalysisBuilder({ reportId }: { reportId?: string }) {
             </Alert>
           )}
           {runAnalysis.data && (visualType === "table" ? (
-            <ReportTable result={runAnalysis.data} formatRules={formatRules} />
+            <ReportTable
+              result={runAnalysis.data}
+              formatRules={formatRules}
+              colorSpectrumColumns={colorSpectrumColumns}
+            />
           ) : visualSpec ? (
             <Card>
               <CardContent className="pt-4">

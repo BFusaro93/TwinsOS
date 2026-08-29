@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn, formatCurrency, formatDate } from "@/lib/utils";
@@ -35,6 +35,42 @@ function matchFormatRule(
     }
   }
   return null;
+}
+
+/** Continuous magnitude-based cell shading (light-to-dark blue) — one min/max
+ *  range per requested column, computed across the FULL result set (not just
+ *  the current page) so the scale stays consistent as the user pages
+ *  through. Complements (rather than replaces) FormatRule's discrete
+ *  threshold coloring — a rule match always wins if both apply to a cell. */
+function computeSpectrumRanges(
+  rows: ReportResultRow[],
+  columns: string[] | undefined
+): Record<string, { min: number; max: number }> {
+  const ranges: Record<string, { min: number; max: number }> = {};
+  if (!columns || columns.length === 0) return ranges;
+  for (const key of columns) {
+    let min = Infinity;
+    let max = -Infinity;
+    for (const row of rows) {
+      const v = row[key];
+      if (typeof v === "number") {
+        if (v < min) min = v;
+        if (v > max) max = v;
+      }
+    }
+    if (min !== Infinity) ranges[key] = { min, max };
+  }
+  return ranges;
+}
+
+function spectrumColorFor(value: number, range: { min: number; max: number }): { bg: string; text: string } {
+  const t = range.max === range.min ? 0.5 : (value - range.min) / (range.max - range.min);
+  const clamped = Math.min(1, Math.max(0, t));
+  const lightness = 92 - clamped * 52; // 92% (near white, low) -> 40% (dark blue, high)
+  return {
+    bg: `hsl(217, 70%, ${lightness}%)`,
+    text: lightness < 55 ? "#ffffff" : "#1e3a5f",
+  };
 }
 
 /** Format a single cell for display (also used by CSV export). */
@@ -144,12 +180,25 @@ function Pager({
   );
 }
 
-export function ReportTable({ result, formatRules }: { result: ReportResult; formatRules?: FormatRule[] }) {
+export function ReportTable({
+  result,
+  formatRules,
+  colorSpectrumColumns,
+}: {
+  result: ReportResult;
+  formatRules?: FormatRule[];
+  colorSpectrumColumns?: string[];
+}) {
   const [page, setPage] = useState(0);
 
   useEffect(() => {
     setPage(0);
   }, [result]);
+
+  const spectrumRanges = useMemo(
+    () => computeSpectrumRanges(result.rows, colorSpectrumColumns),
+    [result.rows, colorSpectrumColumns]
+  );
 
   const pageCount = Math.max(1, Math.ceil(result.rows.length / PAGE_SIZE));
   const safePage = Math.min(page, pageCount - 1);
@@ -268,6 +317,17 @@ export function ReportTable({ result, formatRules }: { result: ReportResult; for
                       <tr className="border-b last:border-0 hover:bg-slate-50">
                         {displayColumns.map((col) => {
                           const ruleMatch = matchFormatRule(row[col.key], col.key, formatRules);
+                          const cellValue = row[col.key];
+                          const spectrumRange = !ruleMatch ? spectrumRanges[col.key] : undefined;
+                          const spectrumMatch =
+                            spectrumRange && typeof cellValue === "number"
+                              ? spectrumColorFor(cellValue, spectrumRange)
+                              : null;
+                          const style = ruleMatch
+                            ? { backgroundColor: ruleMatch.bg, color: ruleMatch.text, fontWeight: 600 }
+                            : spectrumMatch
+                              ? { backgroundColor: spectrumMatch.bg, color: spectrumMatch.text }
+                              : undefined;
                           return (
                             <td
                               key={col.key}
@@ -276,7 +336,7 @@ export function ReportTable({ result, formatRules }: { result: ReportResult; for
                                 NUMERIC_TYPES.includes(col.type) &&
                                   "text-right tabular-nums"
                               )}
-                              style={ruleMatch ? { backgroundColor: ruleMatch.bg, color: ruleMatch.text, fontWeight: 600 } : undefined}
+                              style={style}
                             >
                               {col.key === sectionKey ? "" : formatCellValue(row[col.key], col.type)}
                             </td>

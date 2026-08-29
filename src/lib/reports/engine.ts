@@ -71,6 +71,21 @@ export function validateAnalysisConfig(config: AnalysisConfig): string | null {
       return `Filter on "${filter.column}" is missing a value.`;
     }
   }
+
+  const baseColumnKeys = new Set(baseColumnsForAnalysis(config).map((c) => c.key));
+  const formulaNames = new Set<string>();
+  for (const formula of config.formulas ?? []) {
+    if (baseColumnKeys.has(formula.name) || formulaNames.has(formula.name)) {
+      return `Formula name "${formula.name}" conflicts with an existing column.`;
+    }
+    if (!baseColumnKeys.has(formula.left)) {
+      return `Unknown formula column: ${formula.left}`;
+    }
+    if (!baseColumnKeys.has(formula.right)) {
+      return `Unknown formula column: ${formula.right}`;
+    }
+    formulaNames.add(formula.name);
+  }
   return null;
 }
 
@@ -78,8 +93,30 @@ export function aggregateAlias(fn: string, column: string): string {
   return column === "*" ? "count_all" : `${fn}_${column}`;
 }
 
-/** Output column defs for an analysis config (drives table rendering + CSV). */
-export function columnsForAnalysis(config: AnalysisConfig): ReportColumnDef[] {
+const FORMULA_LABELS: Record<string, string> = { "+": "+", "-": "−", "*": "×", "/": "÷" };
+
+/** Formula columns to append, resolved against the analysis's own base
+ *  output columns (so a formula can only ever reference a real, already-
+ *  whitelisted column/aggregate — never arbitrary text). */
+function formulaColumnsFor(
+  config: AnalysisConfig,
+  baseColumns: ReportColumnDef[]
+): ReportColumnDef[] {
+  const baseByKey = new Map(baseColumns.map((c) => [c.key, c]));
+  return (config.formulas ?? [])
+    .filter((f) => baseByKey.has(f.left) && baseByKey.has(f.right))
+    .map((f) => ({
+      key: f.name,
+      label: `${baseByKey.get(f.left)?.label ?? f.left} ${FORMULA_LABELS[f.operator]} ${baseByKey.get(f.right)?.label ?? f.right}`,
+      type: f.displayType,
+      totalable: f.displayType !== "percent",
+    }));
+}
+
+/** Output column defs for an analysis config's base query — excludes
+ *  formula columns (used both as the real output shape before formulas are
+ *  appended, and as the whitelist formulas may reference). */
+function baseColumnsForAnalysis(config: AnalysisConfig): ReportColumnDef[] {
   const subtotalMode = isSubtotalMode(config);
   const aggregated = !subtotalMode && (config.groupBy.length > 0 || config.aggregates.length > 0);
   if (!aggregated) {
@@ -120,6 +157,13 @@ export function columnsForAnalysis(config: AnalysisConfig): ReportColumnDef[] {
     };
   });
   return [...groupCols, ...aggCols];
+}
+
+/** Output column defs for an analysis config (drives table rendering + CSV)
+ *  — base columns plus any calculated formula columns appended at the end. */
+export function columnsForAnalysis(config: AnalysisConfig): ReportColumnDef[] {
+  const base = baseColumnsForAnalysis(config);
+  return [...base, ...formulaColumnsFor(config, base)];
 }
 
 /** Sum totalable columns. Null when a column has no numeric values at all. */
@@ -186,6 +230,30 @@ export async function runAnalysis(
 
   const payload = data as { rows: ReportResultRow[]; row_count: number };
   let rows = payload?.rows ?? [];
+
+  // Calculated columns — computed here (never sent into the crm_run_report
+  // RPC's dynamic SQL) from two of the query's own already-whitelisted
+  // output columns, validated in validateAnalysisConfig above.
+  const formulas = config.formulas ?? [];
+  if (formulas.length > 0) {
+    rows = rows.map((row) => {
+      const next: ReportResultRow = { ...row };
+      for (const formula of formulas) {
+        const left = Number(row[formula.left]);
+        const right = Number(row[formula.right]);
+        if (!Number.isFinite(left) || !Number.isFinite(right)) {
+          next[formula.name] = null;
+          continue;
+        }
+        next[formula.name] =
+          formula.operator === "+" ? left + right :
+          formula.operator === "-" ? left - right :
+          formula.operator === "*" ? left * right :
+          right === 0 ? null : left / right;
+      }
+      return next;
+    });
+  }
 
   // Stable secondary sort by the group column so same-group rows sit
   // together for the divider header + subtotal rendering, without

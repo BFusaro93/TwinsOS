@@ -72,6 +72,37 @@ export const analysisAggregateSchema = z.object({
 });
 export type AnalysisAggregate = z.infer<typeof analysisAggregateSchema>;
 
+export const formulaOperatorSchema = z.enum(["+", "-", "*", "/"]);
+export type FormulaOperator = z.infer<typeof formulaOperatorSchema>;
+
+/** A formula's result is always numeric, but which of these four numeric
+ *  display types applies is a unit question the engine can't infer (e.g.
+ *  money ÷ hours isn't money) — the user picks it explicitly, same as SA's
+ *  "Display Format" field. */
+export const formulaDisplayTypeSchema = z.enum(["money", "number", "hours", "percent"]);
+export type FormulaDisplayType = z.infer<typeof formulaDisplayTypeSchema>;
+
+export const analysisFormulaSchema = z.object({
+  /** New computed column's key/label — must not collide with an existing
+   *  output column and must be a safe SQL-free identifier (it's never
+   *  interpolated into SQL; the whole formula is computed client-side in
+   *  the report engine after the whitelisted crm_run_report RPC returns). */
+  name: z
+    .string()
+    .min(1)
+    .max(60)
+    .regex(/^[a-z][a-z0-9_]*$/i, "Must start with a letter; letters, numbers, underscores only"),
+  /** Left operand — must be an existing output column key (a plain selected
+   *  column or an aggregate alias), validated against the analysis's own
+   *  already-whitelisted output columns, not arbitrary text. */
+  left: z.string().min(1),
+  operator: formulaOperatorSchema,
+  /** Right operand — same constraint as `left`. */
+  right: z.string().min(1),
+  displayType: formulaDisplayTypeSchema.default("number"),
+});
+export type AnalysisFormula = z.infer<typeof analysisFormulaSchema>;
+
 export const analysisConfigSchema = z.object({
   dataset: z.string().min(1),
   columns: z.array(z.string()).default([]),
@@ -82,6 +113,13 @@ export const analysisConfigSchema = z.object({
    *  grouped under a divider header per groupBy[0] value with a subtotal row
    *  per group — instead of collapsing to one row per group. */
   subtotals: z.boolean().optional(),
+  /** Calculated columns (e.g. Revenue - Cost) — computed client-side in the
+   *  report engine from two existing output columns, never sent into SQL.
+   *  Can't reference another formula (no chaining) in this v1. Optional
+   *  (not defaulted) so the ~70 hand-written PrebuiltReportDef analysis
+   *  literals across src/lib/reports/definitions/ don't all need updating —
+   *  every reader already treats a missing value as `[]`. */
+  formulas: z.array(analysisFormulaSchema).optional(),
   sortColumn: z.string().optional(),
   sortDir: z.enum(["asc", "desc"]).default("asc"),
   limit: z.number().int().positive().max(5000).optional(),
@@ -111,7 +149,7 @@ export type FormatRule = z.infer<typeof formatRuleSchema>;
 
 // ---------- Dashboards (visuals built on the analysis engine) ----------
 
-export const visualTypeSchema = z.enum(["kpi", "table", "bar", "line", "pie", "gauge"]);
+export const visualTypeSchema = z.enum(["kpi", "table", "bar", "line", "pie", "gauge", "crosstab"]);
 export type VisualType = z.infer<typeof visualTypeSchema>;
 
 export const visualSpecSchema = z.object({
@@ -144,6 +182,20 @@ export const visualSpecSchema = z.object({
   /** "bar" visual only — stack multiple value columns in one bar per label
    *  instead of rendering them as side-by-side bars. */
   stacked: z.boolean().optional(),
+  /** "bar"/"pie" only — cap the chart to its top N categories (ranked by the
+   *  first value column's magnitude) so a long-tail dataset doesn't render
+   *  as an unreadable wall of bars/slices. */
+  topN: z.number().int().positive().optional(),
+  /** When `topN` is set, bucket the remaining categories into one "Others"
+   *  bar/slice (summed) instead of just dropping them. */
+  showOthers: z.boolean().optional(),
+  /** "crosstab" visual only — the column whose distinct values become
+   *  pivoted column headers. Rows come from `labelColumn`, cell values are
+   *  `valueColumns[0]` summed per (label, header) pair — a client-side pivot
+   *  of an already-flat, already-aggregated query result (no backend
+   *  changes needed: the underlying AnalysisConfig just groups by both
+   *  columns). */
+  crosstabHeaderColumn: z.string().optional(),
   /** Set when this panel was added "from a saved analysis" (My Reports) —
    *  `config` is a snapshot copied in at add/refresh time, not a live
    *  reference; re-picking the same analysis (via "Refresh from source")
@@ -152,6 +204,11 @@ export const visualSpecSchema = z.object({
   /** Cell color-coding for the table view — carried over from a saved
    *  analysis (or set directly), same shape as CustomReport.formatRules. */
   formatRules: z.array(formatRuleSchema).optional(),
+  /** Table view only — numeric columns to continuously shade (light to dark)
+   *  by each cell's magnitude relative to that column's min/max across the
+   *  displayed rows, instead of (or alongside) discrete FormatRule
+   *  thresholds. */
+  colorSpectrumColumns: z.array(z.string()).optional(),
 });
 export type VisualSpec = z.infer<typeof visualSpecSchema>;
 
@@ -175,6 +232,10 @@ export const customReportInputSchema = z.object({
   kpiColumn: z.string().nullish(),
   /** Cell color-coding for the table view — e.g. balance > $1000 → red. */
   formatRules: z.array(formatRuleSchema).optional(),
+  /** Numeric columns to continuously shade by magnitude — see
+   *  VisualSpec.colorSpectrumColumns for the same feature on dashboard
+   *  panels. */
+  colorSpectrumColumns: z.array(z.string()).optional(),
   /** A chart shown above this analysis (and embedded above it in PDF
    *  export) — independent of `visualType`, so even a table-type analysis
    *  can carry a graphic. Usually picked from the Graphics Library, stored
@@ -195,6 +256,7 @@ export interface CustomReport {
   valueColumns: string[];
   kpiColumn: string | null;
   formatRules: FormatRule[];
+  colorSpectrumColumns: string[];
   headerVisual: VisualSpec | null;
   headerVisualTitle: string | null;
   createdAt: string;

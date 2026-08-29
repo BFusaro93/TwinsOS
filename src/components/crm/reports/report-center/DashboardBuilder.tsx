@@ -72,6 +72,7 @@ const VISUAL_TYPE_OPTIONS: { value: VisualType; label: string }[] = [
   { value: "line", label: "Line Chart" },
   { value: "pie", label: "Pie Chart" },
   { value: "gauge", label: "Gauge" },
+  { value: "crosstab", label: "Crosstab" },
 ];
 
 const SIZE_SPAN_CLASS: Record<DashboardPanel["size"], string> = {
@@ -119,6 +120,7 @@ function panelFromSavedReport(report: CustomReport): DashboardPanel {
       kpiColumn: report.kpiColumn ?? undefined,
       savedReportId: report.id,
       formatRules: report.formatRules,
+      colorSpectrumColumns: report.colorSpectrumColumns,
     },
   };
 }
@@ -711,9 +713,15 @@ function PanelEditor({ panel, tabUsesDateFilter, onSave, onCancel }: PanelEditor
   const [kpiColumn, setKpiColumn] = useState(panel.visual.kpiColumn ?? "");
   const [gaugeMax, setGaugeMax] = useState(panel.visual.gaugeMax?.toString() ?? "");
   const [budgetColumn, setBudgetColumn] = useState(panel.visual.budgetColumn ?? "");
+  const [crosstabHeaderColumn, setCrosstabHeaderColumn] = useState(
+    panel.visual.crosstabHeaderColumn ?? ""
+  );
   const [stacked, setStacked] = useState(panel.visual.stacked ?? false);
+  const [topN, setTopN] = useState(panel.visual.topN?.toString() ?? "");
+  const [showOthers, setShowOthers] = useState(panel.visual.showOthers ?? false);
   const [savedReportId, setSavedReportId] = useState(panel.visual.savedReportId);
   const [formatRules, setFormatRules] = useState(panel.visual.formatRules);
+  const [colorSpectrumColumns, setColorSpectrumColumns] = useState(panel.visual.colorSpectrumColumns);
   const { data: linkedReport } = useCustomReport(savedReportId);
 
   const builder = useAnalysisConfigBuilder(
@@ -737,36 +745,47 @@ function PanelEditor({ panel, tabUsesDateFilter, onSave, onCancel }: PanelEditor
     error: previewError,
   } = useRunVisualQuery(previewVisual, previewVisual?.useTabDateRange ? previewDateRange() : undefined);
 
-  const { grouped, groupBy, aggregates, columns, numericFields, fields } = builder;
+  const { grouped, groupBy, aggregates, columns, numericFields, fields, formulas } = builder;
+
+  // Formula columns are always numeric, so they belong in both the general
+  // output-column list (label columns, format rules) and the numeric-only
+  // value-column list (chart series, gauge/budget columns, color spectrum).
+  const formulaOptions = useMemo(
+    () =>
+      formulas
+        .filter((f) => f.name && f.left && f.right)
+        .map((f) => ({ value: f.name, label: f.name })),
+    [formulas]
+  );
 
   // "output columns" option set: grouped -> groupBy + aggregate aliases; else plain columns
   const outputOptions = useMemo(() => {
-    if (grouped) {
-      return [
-        ...groupBy.map((key) => ({
+    const base = grouped
+      ? [
+          ...groupBy.map((key) => ({
+            value: key,
+            label: fields.find((f) => f.key === key)?.label ?? key,
+          })),
+          ...aggregates
+            .filter((a) => a.column)
+            .map((a) => ({ value: aggregateAlias(a), label: aggregateLabel(a, fields) })),
+        ]
+      : columns.map((key) => ({
           value: key,
           label: fields.find((f) => f.key === key)?.label ?? key,
-        })),
-        ...aggregates
-          .filter((a) => a.column)
-          .map((a) => ({ value: aggregateAlias(a), label: aggregateLabel(a, fields) })),
-      ];
-    }
-    return columns.map((key) => ({
-      value: key,
-      label: fields.find((f) => f.key === key)?.label ?? key,
-    }));
-  }, [grouped, groupBy, aggregates, columns, fields]);
+        }));
+    return [...base, ...formulaOptions];
+  }, [grouped, groupBy, aggregates, columns, fields, formulaOptions]);
 
   // value-column option set for charts: grouped -> aggregate aliases only; else numeric fields
   const valueOptions = useMemo(() => {
-    if (grouped) {
-      return aggregates
-        .filter((a) => a.column)
-        .map((a) => ({ value: aggregateAlias(a), label: aggregateLabel(a, fields) }));
-    }
-    return numericFields.map((f) => ({ value: f.key, label: f.label }));
-  }, [grouped, aggregates, numericFields, fields]);
+    const base = grouped
+      ? aggregates
+          .filter((a) => a.column)
+          .map((a) => ({ value: aggregateAlias(a), label: aggregateLabel(a, fields) }))
+      : numericFields.map((f) => ({ value: f.key, label: f.label }));
+    return [...base, ...formulaOptions];
+  }, [grouped, aggregates, numericFields, fields, formulaOptions]);
 
   const isChart = visualType === "bar" || visualType === "line" || visualType === "pie";
 
@@ -786,8 +805,18 @@ function PanelEditor({ panel, tabUsesDateFilter, onSave, onCancel }: PanelEditor
           : undefined,
       budgetColumn: visualType === "gauge" && budgetColumn ? budgetColumn : undefined,
       stacked: visualType === "bar" ? stacked : undefined,
+      topN:
+        (visualType === "bar" || visualType === "pie") &&
+        topN &&
+        Number.isFinite(Number(topN)) &&
+        Number(topN) > 0
+          ? Math.floor(Number(topN))
+          : undefined,
+      showOthers: (visualType === "bar" || visualType === "pie") ? showOthers : undefined,
+      crosstabHeaderColumn: visualType === "crosstab" ? crosstabHeaderColumn || undefined : undefined,
       savedReportId,
       formatRules,
+      colorSpectrumColumns,
     };
   };
 
@@ -795,6 +824,7 @@ function PanelEditor({ panel, tabUsesDateFilter, onSave, onCancel }: PanelEditor
     if (!linkedReport) return;
     hydrateBuilder(builder, linkedReport.config);
     setFormatRules(linkedReport.formatRules);
+    setColorSpectrumColumns(linkedReport.colorSpectrumColumns);
     // Also pick up chart-setting changes made in My Reports since this panel
     // was linked/last refreshed — otherwise "refresh" only ever updated the
     // underlying query, silently leaving a stale visualization behind it.
@@ -817,9 +847,11 @@ function PanelEditor({ panel, tabUsesDateFilter, onSave, onCancel }: PanelEditor
     builder.canRun &&
     (visualType === "kpi" || visualType === "gauge"
       ? !!kpiColumn
-      : isChart
-        ? !!labelColumn && valueColumns.length > 0
-        : true);
+      : visualType === "crosstab"
+        ? !!labelColumn && !!crosstabHeaderColumn && valueColumns.length > 0
+        : isChart
+          ? !!labelColumn && valueColumns.length > 0
+          : true);
 
   const handleSave = () => {
     const visual = buildVisual();
@@ -896,7 +928,7 @@ function PanelEditor({ panel, tabUsesDateFilter, onSave, onCancel }: PanelEditor
       {builder.datasetDef && isChart && (
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-sm">7. Chart Fields</CardTitle>
+            <CardTitle className="text-sm">8. Chart Fields</CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
             <div className="flex flex-wrap items-center gap-3">
@@ -964,6 +996,27 @@ function PanelEditor({ panel, tabUsesDateFilter, onSave, onCancel }: PanelEditor
                 Stack value columns in one bar
               </label>
             )}
+            {(visualType === "bar" || visualType === "pie") && (
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="w-32 text-xs font-medium text-slate-600">Limit To</span>
+                <Input
+                  type="number"
+                  value={topN}
+                  onChange={(e) => setTopN(e.target.value)}
+                  placeholder="e.g. 10 (blank = all)"
+                  className="h-8 w-44 text-sm"
+                />
+                {topN && (
+                  <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-700">
+                    <Checkbox
+                      checked={showOthers}
+                      onCheckedChange={(checked) => setShowOthers(checked === true)}
+                    />
+                    Group the rest into &quot;Others&quot;
+                  </label>
+                )}
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
@@ -971,7 +1024,7 @@ function PanelEditor({ panel, tabUsesDateFilter, onSave, onCancel }: PanelEditor
       {builder.datasetDef && visualType === "kpi" && (
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-sm">7. Chart Fields</CardTitle>
+            <CardTitle className="text-sm">8. Chart Fields</CardTitle>
           </CardHeader>
           <CardContent className="flex items-center gap-3">
             <span className="w-32 text-xs font-medium text-slate-600">KPI Value</span>
@@ -994,7 +1047,7 @@ function PanelEditor({ panel, tabUsesDateFilter, onSave, onCancel }: PanelEditor
       {builder.datasetDef && visualType === "gauge" && (
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-sm">7. Chart Fields</CardTitle>
+            <CardTitle className="text-sm">8. Chart Fields</CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col gap-3">
             <div className="flex flex-wrap items-center gap-3">
@@ -1046,6 +1099,64 @@ function PanelEditor({ panel, tabUsesDateFilter, onSave, onCancel }: PanelEditor
                 />
               </div>
             )}
+          </CardContent>
+        </Card>
+      )}
+
+      {builder.datasetDef && visualType === "crosstab" && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm">8. Chart Fields</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-3">
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="w-32 text-xs font-medium text-slate-600">Row Label</span>
+              <Select value={labelColumn} onValueChange={setLabelColumn}>
+                <SelectTrigger className="h-8 w-64 text-sm">
+                  <SelectValue placeholder="Choose a row label column…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {outputOptions.map((o) => (
+                    <SelectItem key={o.value} value={o.value}>
+                      {o.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="w-32 text-xs font-medium text-slate-600">Header Column</span>
+              <Select value={crosstabHeaderColumn} onValueChange={setCrosstabHeaderColumn}>
+                <SelectTrigger className="h-8 w-64 text-sm">
+                  <SelectValue placeholder="Choose a column to pivot into headers…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {outputOptions.map((o) => (
+                    <SelectItem key={o.value} value={o.value}>
+                      {o.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="w-32 text-xs font-medium text-slate-600">Value Column</span>
+              <Select value={valueColumns[0] ?? ""} onValueChange={(v) => setValueColumns([v])}>
+                <SelectTrigger className="h-8 w-64 text-sm">
+                  <SelectValue placeholder="Choose a value to aggregate…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {valueOptions.map((o) => (
+                    <SelectItem key={o.value} value={o.value}>
+                      {o.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Group By must include both the row label and header columns for a meaningful pivot.
+            </p>
           </CardContent>
         </Card>
       )}

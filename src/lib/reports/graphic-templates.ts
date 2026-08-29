@@ -265,6 +265,27 @@ export const GRAPHIC_TEMPLATES: GraphicTemplate[] = [
     },
   },
   {
+    key: "actual-hours-by-crew-and-service-crosstab",
+    name: "Actual Hours by Crew and Service",
+    description: "Pivot table of actual hours worked, crews down the side, service codes across the top.",
+    category: "Job Costing",
+    visual: {
+      type: "crosstab",
+      useTabDateRange: true,
+      labelColumn: "crew_name",
+      crosstabHeaderColumn: "service_code",
+      valueColumns: ["sum_actual_hours"],
+      config: {
+        dataset: "rpt_job_visits",
+        columns: [],
+        filters: [],
+        groupBy: ["crew_name", "service_code"],
+        aggregates: [{ column: "actual_hours", fn: "sum" }],
+        sortDir: "asc",
+      },
+    },
+  },
+  {
     key: "clients-with-balance-table",
     name: "Clients with a Balance",
     description: "Table of clients that currently owe a balance.",
