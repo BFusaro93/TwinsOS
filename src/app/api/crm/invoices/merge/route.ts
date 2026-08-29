@@ -38,7 +38,7 @@ export async function POST(request: Request) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: invoices, error: fetchErr } = await (supabase as any)
     .from("crm_invoices")
-    .select("id, client_id, status, tax_rate_bps, invoice_number, amount_paid_cents, discount_cents")
+    .select("id, client_id, status, tax_rate_bps, invoice_number, amount_paid_cents, discount_cents, locked")
     .in("id", allIds)
     .eq("org_id", orgId)
     .is("deleted_at", null);
@@ -57,6 +57,19 @@ export async function POST(request: Request) {
   const voidedIds = inv.filter((i) => i.status === "void").map((i) => i.id);
   if (voidedIds.length > 0) {
     return NextResponse.json({ error: "Cannot merge voided invoices" }, { status: 422 });
+  }
+
+  // A locked invoice (printed/sent, meant to be immutable per accounting
+  // conventions — see InvoiceDetail.tsx's lock toggle) must not have its
+  // totals rewritten (as parent) or be voided out from under a client who
+  // may already have a copy of it (as child). Without this check, merge
+  // silently bypassed the entire locking mechanism.
+  const lockedIds = inv.filter((i) => i.locked).map((i) => `#${i.invoice_number}`);
+  if (lockedIds.length > 0) {
+    return NextResponse.json(
+      { error: `Cannot merge locked invoice${lockedIds.length > 1 ? "s" : ""} (${lockedIds.join(", ")}). Unlock ${lockedIds.length > 1 ? "them" : "it"} first.` },
+      { status: 422 }
+    );
   }
 
   // Fetch ALL line items for parent + children BEFORE reassigning.

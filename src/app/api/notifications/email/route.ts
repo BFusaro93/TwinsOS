@@ -18,6 +18,7 @@ import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createClient } from "@supabase/supabase-js";
 import { Resend } from "resend";
 import { EMAIL_FROM_EQUIPT } from "@/lib/email/send";
+import { sendPushToUser } from "@/lib/notifications/send-push";
 
 type NotifType =
   | "wo_created"
@@ -147,7 +148,29 @@ export async function POST(request: Request) {
 
   } else if (notifType === "approved" || notifType === "rejected") {
     const submitterId = (entity.requested_by_id ?? entity.created_by) as string | null;
-    if (submitterId && submitterId !== user.id) directRecipientIds.push(submitterId);
+    if (submitterId && submitterId !== user.id) {
+      directRecipientIds.push(submitterId);
+
+      // Push notification alongside the email below — fires for whoever
+      // submitted the requisition/PO/estimate, but only actually sends if
+      // that user has a crew_push_tokens row (sendPushToUser no-ops
+      // otherwise), i.e. only requesters who came from crew-app's field
+      // materials-request flow, not the web app. Best-effort — never let a
+      // push failure affect the email send below.
+      const isApproved = notifType === "approved";
+      const entityLabel = entityType === "requisition" ? "Materials request"
+        : entityType === "crm_estimate" ? "Estimate"
+        : "Purchase order";
+      const reason = extra.comment;
+      void sendPushToUser({
+        userId: submitterId,
+        title: `${entityLabel} ${isApproved ? "Approved" : "Rejected"}`,
+        body: isApproved
+          ? "Tap to view details."
+          : (reason ? `Reason: ${reason}` : "Tap to view details."),
+        data: { type: notifType, entityType, entityId },
+      });
+    }
 
   } else if (notifType === "new_maintenance_request") {
     const { data: managers } = await adminClient

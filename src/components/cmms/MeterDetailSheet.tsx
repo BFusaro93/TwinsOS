@@ -76,7 +76,14 @@ function MeterContent({ meter }: { meter: Meter }) {
   const chronological = readings ?? [];
   const sorted = [...chronological].reverse(); // newest first for the table
 
-  const chartData = chronological.map((r) => ({
+  // The chart is labeled "(12 Months)" but was plotting the meter's ENTIRE
+  // reading history — filter to match the label (see the same fix in
+  // MeterDetailPanel.tsx, the other surface for this same data).
+  const twelveMonthsAgo = new Date();
+  twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 12);
+  const recentChronological = chronological.filter((r) => new Date(r.readingAt) >= twelveMonthsAgo);
+
+  const chartData = recentChronological.map((r) => ({
     label: new Date(r.readingAt).toLocaleDateString("en-US", { month: "short", year: "2-digit" }),
     value: r.value,
   }));

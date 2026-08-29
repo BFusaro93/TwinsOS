@@ -2,18 +2,21 @@
 
 import { useEffect } from "react";
 import { usePathname } from "next/navigation";
-import { ToolsSidebar } from "@/components/shared/ToolsSidebar";
+import { ToolsSidebar, TOOLS_NAV } from "@/components/shared/ToolsSidebar";
 import { TopBar } from "@/components/shared/TopBar";
 import { RealtimeSync } from "@/components/shared/RealtimeSync";
 import { SettingsLoader } from "@/components/shared/SettingsLoader";
 import { InternalOnlyGuard } from "@/components/shared/InternalOnlyGuard";
 import { useUIStore } from "@/stores";
+import { usePageTitle } from "@/lib/hooks/use-page-title";
 
 const INTERNAL_ONLY_PATHS = ["/tools/snow-calculator"];
 
 export default function ToolsLayout({ children }: { children: React.ReactNode }) {
   const { sidebarOpen, setSidebarOpen } = useUIStore();
   const pathname = usePathname();
+
+  usePageTitle(pathname, [{ items: TOOLS_NAV }], "Landscapt");
 
   useEffect(() => {
     setSidebarOpen(false);

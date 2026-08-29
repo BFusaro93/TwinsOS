@@ -89,6 +89,24 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Failed to generate invite link" }, { status: 500 });
   }
 
+  // The "already registered" fallback means this email belongs to SOME
+  // existing auth user — not necessarily one in the caller's own org. Without
+  // this check, an admin in Org A entering an email that happens to belong to
+  // an Org B user would silently send that Org B user an unsolicited
+  // password-recovery email and flip their profiles.status to "invited"
+  // below — a cross-tenant write triggered by an org member with no
+  // authority over the other org's data.
+  if (linkType === "recovery" && linkData.user) {
+    const { data: existingProfile } = await adminClient
+      .from("profiles")
+      .select("org_id")
+      .eq("id", linkData.user.id)
+      .maybeSingle();
+    if (existingProfile && existingProfile.org_id !== callerProfile.org_id) {
+      return NextResponse.json({ error: "A user with that email already exists" }, { status: 409 });
+    }
+  }
+
   // Build the URL directly so the user lands on /reset-password without
   // needing Supabase's redirect allowlist.
   const hashedToken = linkData.properties?.hashed_token;

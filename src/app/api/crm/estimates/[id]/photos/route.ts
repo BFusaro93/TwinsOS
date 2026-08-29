@@ -41,7 +41,13 @@ export async function POST(
     return NextResponse.json({ error: "Only image files can be attached as photos" }, { status: 400 });
   }
 
-  const ext = file.name.split(".").pop() ?? "jpg";
+  // file.name is client-controlled and can contain "/"/".." segments —
+  // restrict the extracted extension to a safe charset before it lands in
+  // a storage path, or a crafted name could traverse out of this org's
+  // prefix in the shared "attachments" bucket (same class of bug fixed in
+  // the crew-app photos route).
+  const rawExt = file.name.split(".").pop() ?? "jpg";
+  const ext = /^[a-zA-Z0-9]{1,10}$/.test(rawExt) ? rawExt : "jpg";
   const storagePath = `estimate-photos/${estimate.org_id}/${estimateId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
   const buffer = Buffer.from(await file.arrayBuffer());
 

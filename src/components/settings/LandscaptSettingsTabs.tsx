@@ -386,6 +386,10 @@ function DiscountsEditor() {
       toast.error(newType === "percent" ? "Enter a rate greater than 0%" : "Enter an amount greater than $0");
       return;
     }
+    if (newType === "percent" && amount > 100) {
+      toast.error("A percent discount can't exceed 100%");
+      return;
+    }
     try {
       await createDiscount({
         name,

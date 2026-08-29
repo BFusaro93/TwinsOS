@@ -402,18 +402,24 @@ export function useUpdateEstimateStage() {
         });
       }
 
-      return { salesRepId: existing?.sales_rep_id as string | null | undefined };
+      return { salesRepId: existing?.sales_rep_id as string | null | undefined, clientId: resolvedClientId as string | undefined };
     },
     onSuccess: (data, vars) => {
       qc.invalidateQueries({ queryKey: ["estimates", "detail", vars.id] });
       qc.invalidateQueries({ queryKey: ["estimates"] });
       const matchValues = data?.salesRepId ? [data.salesRepId] : undefined;
-      if (vars.clientId) {
-        qc.invalidateQueries({ queryKey: ["clients", vars.clientId, "activity"] });
+      // Neither caller (EstimateDetail's single-accept flow nor EstimatesList's
+      // bulk actions) ever passes clientId into the mutation — it's only
+      // resolved server-side from the estimate row (see resolvedClientId
+      // above). Reading it from the mutation's own result here (not vars)
+      // is what actually makes these two automation triggers fire at all.
+      const clientId = data?.clientId;
+      if (clientId) {
+        qc.invalidateQueries({ queryKey: ["clients", clientId, "activity"] });
         if (vars.stage === "accepted") {
-          fireAutomationTrigger({ triggerType: "estimate_won", clientId: vars.clientId, estimateId: vars.id, matchValues });
+          fireAutomationTrigger({ triggerType: "estimate_won", clientId, estimateId: vars.id, matchValues });
         } else if (vars.stage === "lost") {
-          fireAutomationTrigger({ triggerType: "estimate_lost", clientId: vars.clientId, estimateId: vars.id, matchValues });
+          fireAutomationTrigger({ triggerType: "estimate_lost", clientId, estimateId: vars.id, matchValues });
         }
       }
     },

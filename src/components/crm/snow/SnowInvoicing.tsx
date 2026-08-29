@@ -140,6 +140,11 @@ export function SnowInvoicing() {
           `${result.excludedZeroAmountVisits} visit${result.excludedZeroAmountVisits !== 1 ? "s" : ""} priced at $0 left in the queue — check rates and re-invoice`
         );
       }
+      if (result.skippedRaceConditionGroups > 0) {
+        toast.warning(
+          `${result.skippedRaceConditionGroups} client${result.skippedRaceConditionGroups !== 1 ? "s" : ""} skipped — already invoiced by another request just now`
+        );
+      }
       setSelectedIds(new Set());
       void refetch();
     } catch {

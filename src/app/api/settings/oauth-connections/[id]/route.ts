@@ -9,8 +9,9 @@ import { adminClient } from "@/lib/api/auth";
  * alongside it for the same (client, user, org) triple -- there can be more
  * than one access token if the connection refreshed since it was first
  * created (PR 4's rotation issues a new pair each time), so this clears the
- * whole history rather than just the current pair. Admin-only, same as
- * revoking an API key.
+ * whole history rather than just the current pair. Any org member can
+ * revoke their OWN connection (the grant is per-user, not a shared org-wide
+ * key — matching the GET route); admins can additionally revoke anyone's.
  */
 export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -24,8 +25,8 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
   }
 
   const { data: profile } = await supabase.from("profiles").select("org_id, role").eq("id", user.id).single();
-  if (!profile || profile.role !== "admin") {
-    return NextResponse.json({ error: "Admin role required" }, { status: 403 });
+  if (!profile) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const db = adminClient();
@@ -39,6 +40,9 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
 
   if (!connection) {
     return NextResponse.json({ error: "Connection not found" }, { status: 404 });
+  }
+  if (profile.role !== "admin" && connection.user_id !== user.id) {
+    return NextResponse.json({ error: "You can only disconnect your own connections" }, { status: 403 });
   }
 
   const { error } = await db

@@ -71,6 +71,18 @@ export default async function OAuthAuthorizePage({
   const orgWriteRoles = org?.oauth_write_roles ?? [];
   const canGrantWrite = profile.role === "admin" || orgWriteRoles.includes(profile.role);
 
+  // client_name is whatever the registering caller chose at DCR time (any
+  // caller can self-register a client under any name, including "Claude" or
+  // similar) — the registered redirect_uri is the one thing an attacker
+  // can't spoof without also controlling that origin, so show it explicitly
+  // rather than asking the user to trust the display name alone.
+  let redirectHost = redirectUri;
+  try {
+    redirectHost = new URL(redirectUri).host;
+  } catch {
+    // Malformed URL somehow got registered — fall back to showing it raw.
+  }
+
   return (
     <div className="mx-auto flex min-h-screen max-w-lg items-center justify-center px-4">
       <div className="w-full rounded-lg border bg-white p-6 shadow-sm">
@@ -78,6 +90,10 @@ export default async function OAuthAuthorizePage({
         <p className="mt-1 text-sm text-slate-500">
           {client.client_name} wants to access <span className="font-medium text-slate-700">{org?.name ?? "your organization"}</span>
           {profile.name ? ` as ${profile.name}` : ""}. Choose what it can access below.
+        </p>
+        <p className="mt-2 rounded bg-slate-50 px-2 py-1.5 text-xs text-slate-500">
+          You&apos;ll be redirected to <span className="font-mono font-medium text-slate-700">{redirectHost}</span> after approving.
+          Only continue if you recognize this destination.
         </p>
         {!canGrantWrite && (
           <p className="mt-1 text-xs text-slate-400">

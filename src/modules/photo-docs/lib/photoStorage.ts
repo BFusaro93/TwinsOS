@@ -12,7 +12,13 @@ export function buildPhotoPath(
   projectId: string,
   fileName: string,
 ): string {
-  const ext = fileName.split(".").pop() ?? "jpg";
+  // fileName is a browser File.name, which a crafted client can set to
+  // anything (including "/" and ".." segments) — restrict the extracted
+  // extension to a safe charset before it lands in a storage path, or a
+  // crafted name could traverse out of this org/project's prefix in the
+  // shared bucket (same class of bug fixed in the crew-app photos route).
+  const rawExt = fileName.split(".").pop() ?? "jpg";
+  const ext = /^[a-zA-Z0-9]{1,10}$/.test(rawExt) ? rawExt : "jpg";
   const ts = Date.now();
   const rand = Math.random().toString(36).slice(2, 8);
   return `${orgId}/${projectId}/${ts}-${rand}.${ext}`;

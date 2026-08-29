@@ -5,7 +5,8 @@
 -- below. Appended at the end of the SELECT list, same reason as the
 -- previous migration: CREATE OR REPLACE VIEW can't insert/reorder columns
 -- mid-list without an explicit RENAME.
-create or replace view rpt_job_visits
+drop view if exists rpt_job_visits;
+create view rpt_job_visits
 with (security_invoker = on) as
 select
   v.id,
@@ -85,6 +86,7 @@ create table if not exists report_schedules (
 create index if not exists report_schedules_org_id_idx on report_schedules (org_id) where deleted_at is null;
 alter table report_schedules enable row level security;
 
+drop policy if exists "org members can manage report_schedules" on report_schedules;
 create policy "org members can manage report_schedules"
   on report_schedules for all
   using (org_id = (select org_id from profiles where id = auth.uid()))

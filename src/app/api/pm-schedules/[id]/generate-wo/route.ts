@@ -116,16 +116,37 @@ export async function POST(
   }
 
   // ── 3. Fetch linked assets ────────────────────────────────────────────────
-  const { data: scheduleAssets } = await adminClient
+  const { data: allScheduleAssets } = await adminClient
     .from("pm_schedule_assets")
     .select("*")
     .eq("pm_schedule_id", scheduleId)
     .is("deleted_at", null)
     .order("asset_name");
 
-  if (!scheduleAssets || scheduleAssets.length === 0) {
+  if (!allScheduleAssets || allScheduleAssets.length === 0) {
     return NextResponse.json(
       { error: "No assets linked to this PM schedule. Add assets first." },
+      { status: 422 }
+    );
+  }
+
+  // A schedule's pm_schedule_assets rows cache asset_id/asset_name at link time
+  // and are never cleaned up when the underlying asset is later soft-deleted or
+  // marked disposed — without this check, generating work orders would keep
+  // creating WOs against equipment that no longer exists / is retired.
+  const assetIds = allScheduleAssets.map((sa) => sa.asset_id).filter(Boolean);
+  const { data: liveAssets } = await adminClient
+    .from("assets")
+    .select("id, status")
+    .in("id", assetIds)
+    .is("deleted_at", null)
+    .not("status", "eq", "disposed");
+  const liveAssetIds = new Set((liveAssets ?? []).map((a) => a.id));
+  const scheduleAssets = allScheduleAssets.filter((sa) => liveAssetIds.has(sa.asset_id));
+
+  if (scheduleAssets.length === 0) {
+    return NextResponse.json(
+      { error: "All assets linked to this PM schedule have been deleted or disposed. Update the schedule's assets before generating work orders." },
       { status: 422 }
     );
   }

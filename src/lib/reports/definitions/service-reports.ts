@@ -218,7 +218,7 @@ export const SERVICE_REPORTS: PrebuiltReportDef[] = [
       const { data, error } = await supabase
         .from("crm_jobs")
         .select(
-          "package_name, package_step, package_total_steps, is_complete, status, total_cents, scheduled_date"
+          "id, package_name, package_step, package_total_steps, is_complete, status, total_cents, scheduled_date"
         )
         .eq("job_type", "package")
         .is("deleted_at", null)
@@ -226,6 +226,7 @@ export const SERVICE_REPORTS: PrebuiltReportDef[] = [
       if (error) throw new Error(error.message);
 
       interface Row {
+        id: string;
         package_name: string | null;
         package_step: number | null;
         package_total_steps: number | null;
@@ -235,6 +236,33 @@ export const SERVICE_REPORTS: PrebuiltReportDef[] = [
         scheduled_date: string | null;
       }
       const rows = (data ?? []) as unknown as Row[];
+
+      // crm_jobs.scheduled_date is never populated for package/recurring
+      // jobs — only the individual crm_job_visits rows carry a date — so
+      // First Visit/Last Visit always rendered blank without this. Pull
+      // each package job's earliest/latest visit date and use it as a
+      // fallback when the job itself has no scheduled_date.
+      const jobIds = rows.map((r) => r.id);
+      const visitDatesByJob = new Map<string, { min: string; max: string }>();
+      if (jobIds.length > 0) {
+        const { data: visits, error: visitsError } = await supabase
+          .from("crm_job_visits")
+          .select("job_id, scheduled_date")
+          .in("job_id", jobIds)
+          .is("deleted_at", null)
+          .not("scheduled_date", "is", null)
+          .limit(10000);
+        if (visitsError) throw new Error(visitsError.message);
+        for (const v of (visits ?? []) as { job_id: string; scheduled_date: string }[]) {
+          const existing = visitDatesByJob.get(v.job_id);
+          if (!existing) {
+            visitDatesByJob.set(v.job_id, { min: v.scheduled_date, max: v.scheduled_date });
+          } else {
+            if (v.scheduled_date < existing.min) existing.min = v.scheduled_date;
+            if (v.scheduled_date > existing.max) existing.max = v.scheduled_date;
+          }
+        }
+      }
 
       interface Summary {
         package_name: string;
@@ -272,12 +300,17 @@ export const SERVICE_REPORTS: PrebuiltReportDef[] = [
         } else {
           summary.pending_cents += cents;
         }
-        if (r.scheduled_date) {
-          if (!summary.first_date || r.scheduled_date < summary.first_date) {
-            summary.first_date = r.scheduled_date;
+        const visitDates = visitDatesByJob.get(r.id);
+        const earliest = r.scheduled_date ?? visitDates?.min ?? null;
+        const latest = r.scheduled_date ?? visitDates?.max ?? null;
+        if (earliest) {
+          if (!summary.first_date || earliest < summary.first_date) {
+            summary.first_date = earliest;
           }
-          if (!summary.last_date || r.scheduled_date > summary.last_date) {
-            summary.last_date = r.scheduled_date;
+        }
+        if (latest) {
+          if (!summary.last_date || latest > summary.last_date) {
+            summary.last_date = latest;
           }
         }
       }

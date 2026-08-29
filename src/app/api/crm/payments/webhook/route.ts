@@ -131,17 +131,18 @@ export async function POST(request: Request) {
   }
 
   try {
-    const newPaid = invoiceBefore.amount_paid_cents + appliedCents;
-    const newBalance = Math.max(0, invoiceBefore.total_cents - newPaid);
-    const openStatus = invoiceBefore.status === "printed" ? "printed" : "sent";
-    const newStatus = newBalance <= 0 ? "paid" : newPaid > 0 ? "partial" : openStatus;
-    const wasNewlyPaid = newStatus === "paid" && invoiceBefore.status !== "paid";
-
-    const { error: updateErr } = await supabase
-      .from("crm_invoices")
-      .update({ amount_paid_cents: newPaid, balance_cents: newBalance, status: newStatus })
-      .eq("id", invoiceId);
-    if (updateErr) throw updateErr;
+    // Row-locked (SELECT ... FOR UPDATE inside the RPC) so a concurrent
+    // recording/edit/refund against this same invoice can't read the same
+    // stale amount_paid_cents and clobber this write — see
+    // apply_payment_to_invoice()'s own migration comment. A plain
+    // read-then-write here would reintroduce exactly the race that RPC was
+    // built to close.
+    const { data: rpcResult, error: rpcErr } = await supabase.rpc("apply_payment_to_invoice", {
+      p_invoice_id: invoiceId,
+      p_delta_cents: appliedCents,
+    });
+    if (rpcErr) throw rpcErr;
+    const wasNewlyPaid = !!(rpcResult as { was_newly_paid?: boolean }[] | null)?.[0]?.was_newly_paid;
 
     if (wasNewlyPaid) {
       await fireSimpleTrigger(supabase, { orgId, clientId, invoiceId, triggerType: "invoice_paid" });

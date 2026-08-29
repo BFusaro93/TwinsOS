@@ -177,6 +177,15 @@ const CONTRACT_FINANCIAL_FIELDS = [
   "invoice_line_items",
   "start_date",
   "end_date",
+  // Re-pointing a signed contract to a different client would otherwise let
+  // the cron start billing that new client under the original client's
+  // signature/consent with no new signature required.
+  "client_id",
+  // Both directly control when/which month the invoicing cron bills —
+  // same class of "changes what was actually agreed to" as the amount/date
+  // fields above.
+  "billing_day_of_month",
+  "bill_month_in_advance",
 ] as const;
 
 export function useUpdateContract() {

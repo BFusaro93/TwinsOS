@@ -12,7 +12,6 @@ import { ApiKeysCard } from "@/components/settings/ApiKeysCard";
 import { OAuthConnectionsCard } from "@/components/settings/OAuthConnectionsCard";
 import { OAuthWriteRolesCard } from "@/components/settings/OAuthWriteRolesCard";
 import { HomeShortcutsCard } from "@/components/settings/HomeShortcutsCard";
-import { AccessDenied } from "@/components/shared/AccessDenied";
 import { useCurrentUserStore } from "@/stores";
 
 const TAB_KEYS = ["organization", "branding", "users", "subscription", "integrations"] as const;
@@ -102,19 +101,36 @@ export default function MasterAccountSettingsPage() {
   // sensitive, and not something every role should see or change. Unlike
   // Landscapt Settings (gated by the crm_settings permission — see
   // LandscaptSettingsTabs), there's no finer-grained permission to check
-  // here, so this is admin-only.
+  // here, so this is admin-only — EXCEPT the OAuth "Connected Apps" card,
+  // which isn't an org-wide setting: an OAuth grant belongs to whichever
+  // user approved it (the API route it's backed by already scopes non-admins
+  // to their own connections only), so every org member gets a stripped-down
+  // view of just that, rather than being blocked from ever disconnecting an
+  // app they connected themselves.
   if (currentUserLoaded && currentUser.role !== "admin") {
-    return (
-      <AccessDenied
-        title="Admins only"
-        message="Master Account Settings — organization info, users, branding, billing, and integrations — is only available to admins. Ask an admin if you need something changed here."
-      />
-    );
+    return <NonAdminConnectedApps />;
   }
 
   return (
     <Suspense>
       <MasterAccountSettings />
     </Suspense>
+  );
+}
+
+function NonAdminConnectedApps() {
+  return (
+    <div className="flex flex-col gap-0">
+      <div className="px-4 pt-4 pb-0 md:px-6 md:pt-6">
+        <h1 className="text-xl font-semibold text-slate-900">Connected Apps</h1>
+        <p className="mt-1 text-sm text-slate-500">
+          Apps you&apos;ve signed in and granted access to. The rest of Master Account Settings —
+          organization info, users, branding, billing — is only available to admins.
+        </p>
+      </div>
+      <div className="p-4 md:p-6 md:max-w-lg">
+        <OAuthConnectionsCard />
+      </div>
+    </div>
   );
 }

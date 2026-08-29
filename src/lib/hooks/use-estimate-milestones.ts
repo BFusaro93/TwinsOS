@@ -143,44 +143,27 @@ export function useCreateInvoiceFromMilestone() {
     }) => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const supabase = createClient() as any;
-      const { data: { user } } = await supabase.auth.getUser();
-      const todayStr = new Date().toISOString().slice(0, 10);
+
+      // Locks the milestone row and checks it isn't already 'invoiced' before
+      // creating anything — a double-click or a second tab would otherwise
+      // both read "not yet invoiced" and each create a full duplicate
+      // invoice for the same milestone (see the migration's own comment).
+      const { data: rpcResult, error: rpcErr } = await supabase.rpc("create_invoice_from_milestone", {
+        p_milestone_id: milestone.id,
+        p_client_id: clientId,
+        p_sales_rep_id: salesRepId ?? null,
+        p_po_number: poNumber ?? null,
+      });
+      if (rpcErr) throw rpcErr;
+      const invoiceId = rpcResult?.[0]?.invoice_id as string | undefined;
+      if (!invoiceId) throw new Error("Failed to create invoice from milestone");
 
       const { data: inv, error: invErr } = await supabase
         .from("crm_invoices")
-        .insert({
-          created_by: user?.id ?? null,
-          client_id: clientId,
-          estimate_id: estimateId,
-          sales_rep_id: salesRepId ?? null,
-          description: milestone.name,
-          invoice_date: todayStr,
-          po_number: poNumber ?? null,
-          subtotal_cents: milestone.amountCents,
-          total_cents: milestone.amountCents,
-          balance_cents: milestone.amountCents,
-          status: "draft",
-        })
-        .select()
+        .select("*")
+        .eq("id", invoiceId)
         .single();
       if (invErr) throw invErr;
-
-      const { error: liErr } = await supabase.from("crm_invoice_line_items").insert({
-        invoice_id: inv.id,
-        name: milestone.name,
-        description: "",
-        qty: 1,
-        rate_cents: milestone.amountCents,
-        total_cents: milestone.amountCents,
-        sort_order: 0,
-      });
-      if (liErr) throw liErr;
-
-      const { error: msErr } = await supabase
-        .from("estimate_milestones")
-        .update({ status: "invoiced", invoice_id: inv.id })
-        .eq("id", milestone.id);
-      if (msErr) throw msErr;
 
       return mapInvoice(inv);
     },

@@ -5,6 +5,23 @@ export const EMAIL_FROM = "Landscapt <noreply@landscapt.com>";
 /** Same mailbox/domain as EMAIL_FROM — only the display name differs, for CMMS/Equipt-triggered notifications (work orders, maintenance requests, PO/requisitions). */
 export const EMAIL_FROM_EQUIPT = "Equipt <noreply@landscapt.com>";
 
+/**
+ * Escapes text for safe interpolation into HTML markup. Merge-tag values
+ * here originate from freeform fields (client display name, org name/phone)
+ * that staff — or in some flows an external submitter — control; without
+ * this, a name containing `<`/`&`/quotes breaks the HTML or, worse, injects
+ * markup/script into an email actually delivered to a real recipient (same
+ * class of bug fixed for form-submission notification emails).
+ */
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 /** Replaces `[token]` placeholders (case-insensitive) with resolved values. */
 export function resolveMergeTags(template: string, vars: Record<string, string>): string {
   return template.replace(/\[(\w+)\]/g, (match) => {
@@ -34,24 +51,33 @@ export function buildClientMergeVars(
   client: ClientForMergeVars,
   org: OrgForMergeVars
 ): Record<string, string> {
-  const displayName = client.displayName ?? "";
-  const firstName = displayName.split(" ")[0] ?? displayName;
-  const lastName = displayName.split(" ").slice(1).join(" ");
+  // Compute names/split from the raw value, then escape only at the point
+  // of exposure below — escaping first would corrupt the split (e.g. an
+  // embedded "&" becoming "&amp;" before the space-split runs).
+  const rawDisplayName = client.displayName ?? "";
+  const rawFirstName = rawDisplayName.split(" ")[0] ?? rawDisplayName;
+  const rawLastName = rawDisplayName.split(" ").slice(1).join(" ");
   const balance = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" })
     .format((client.balanceOutstandingCents ?? 0) / 100);
+
+  const displayName = escapeHtml(rawDisplayName);
+  const firstName = escapeHtml(rawFirstName);
+  const lastName = escapeHtml(rawLastName);
+  const companyName = escapeHtml(org.name ?? "Your Service Provider");
+  const companyPhone = escapeHtml(org.addressPhone ?? "");
 
   return {
     "[clientfirstname]": firstName,
     "[clientlastname]": lastName,
     "[clientfullname]": displayName,
-    "[companyname]": org.name ?? "Your Service Provider",
-    "[companyphonenumber]": org.addressPhone ?? "",
+    "[companyname]": companyName,
+    "[companyphonenumber]": companyPhone,
     "[accountbalance]": balance,
     // Aliases for the Documents module's merge-tag vocabulary (src/types/crm-documents.ts)
     // — a "marketing" template picked into a campaign uses those tag names, not the
     // ones above, so both must resolve or picked-template tags render as literal text.
     "[clientname]": displayName,
-    "[companyphone]": org.addressPhone ?? "",
+    "[companyphone]": companyPhone,
     "[clientaccountbalance]": balance,
   };
 }

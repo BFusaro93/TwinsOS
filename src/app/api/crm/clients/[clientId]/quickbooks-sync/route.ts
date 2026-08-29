@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { getValidConnection, findOrCreateCustomer, createCustomer } from "@/lib/integrations/quickbooks";
+import { getValidConnection, findOrCreateCustomer, createCustomer, customerExists } from "@/lib/integrations/quickbooks";
 import { logger } from "@/lib/logger";
 
 /** GET /api/crm/clients/[clientId]/quickbooks-sync — current link status, for the Settings UI. */
@@ -77,6 +77,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ clientI
     let customerId: string;
 
     if (forcedCustomerId) {
+      // Confirm this id is a real customer in the org's own QBO company
+      // before writing it — otherwise any org member could force-link a
+      // client to an arbitrary string, only surfacing as an opaque QBO 400
+      // on the next invoice push.
+      if (!(await customerExists(conn, forcedCustomerId))) {
+        return NextResponse.json({ error: "That QuickBooks customer could not be found" }, { status: 400 });
+      }
       customerId = forcedCustomerId;
     } else if (forceCreate) {
       customerId = await createCustomer(conn, customerInput);

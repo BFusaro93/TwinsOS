@@ -403,6 +403,19 @@ export function useDeleteInvoice() {
   return useMutation({
     mutationFn: async ({ id, clientId }: { id: string; clientId: string }) => {
       const supabase = createClient();
+      // Line items are otherwise never deleted (soft-delete happens only on
+      // the parent invoice), but a visit-linked line item now carries a
+      // unique constraint on visit_id (crm_invoice_line_items_visit_id_unique)
+      // — leaving this draft's line items dangling would permanently block
+      // those visits from ever being invoiced again, even though discarding
+      // an unsaved draft is exactly the one case meant to free them back up.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error: lineItemsError } = await (supabase as any)
+        .from("crm_invoice_line_items")
+        .delete()
+        .eq("invoice_id", id);
+      if (lineItemsError) throw lineItemsError;
+
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any)
         .from("crm_invoices")
@@ -1286,7 +1299,7 @@ export function useCreateInvoiceFromJob() {
       await (supabase as any).from("client_activity").insert({
         client_id: clientId,
         activity_type: "invoice",
-        subject: `Invoice #${data.invoice_number}`,
+        subject: data.invoice_number != null ? `Invoice #${data.invoice_number}` : "Draft Invoice",
         amount_cents: data.total_cents ?? 0,
         ref_id: invoiceId,
         ref_table: "crm_invoices",

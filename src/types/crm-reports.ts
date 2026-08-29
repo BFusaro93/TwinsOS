@@ -268,6 +268,20 @@ export const dashboardPanelSchema = z.object({
   title: z.string(),
   size: z.enum(["third", "half", "full"]).default("half"),
   visual: visualSpecSchema,
+  /** When set, this panel embeds an existing Report Center prebuilt report
+   *  (by its PrebuiltReportDef key) instead of rendering `visual` — needed
+   *  for reports with bespoke `run` logic (e.g. date-bucketed aging
+   *  reports) that can't be expressed as a plain AnalysisConfig. `visual`
+   *  is still populated with an inert placeholder in this case, purely so
+   *  every existing call site that assumes it's always present keeps
+   *  working — it's simply never rendered when reportKey is set. */
+  reportKey: z.string().optional(),
+  /** Filter param overrides for the embedded report (keyed by the report's
+   *  own ReportFilterDef keys, e.g. "crew"). Anything not set here falls
+   *  back to the report's own default filter values, computed fresh on
+   *  every render — so a date-range default like "this month" never goes
+   *  stale in a saved dashboard. */
+  reportParams: z.record(z.string()).optional(),
 });
 export type DashboardPanel = z.infer<typeof dashboardPanelSchema>;
 
