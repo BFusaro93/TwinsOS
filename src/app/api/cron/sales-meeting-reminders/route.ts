@@ -68,6 +68,19 @@ export async function GET(request: Request) {
   let notified = 0;
 
   for (const meeting of upcoming as Record<string, unknown>[]) {
+    // Claim this meeting before sending anything — conditioned on
+    // reminder_sent_at still being null, so an overlapping/retried cron run
+    // (this fires every 15 min and isn't guaranteed exactly-once) can't also
+    // pick it up and send a duplicate reminder. Same pattern as the campaign
+    // send cron's claim-before-send guard.
+    const { data: claimed } = await (supabase as any)
+      .from("crm_sales_meetings")
+      .update({ reminder_sent_at: now.toISOString() })
+      .eq("id", meeting.id)
+      .is("reminder_sent_at", null)
+      .select("id");
+    if (!claimed?.length) continue;
+
     const rep = meeting.crm_employees as Record<string, unknown> | null;
     const clientId = meeting.client_id as string | null;
     const clientName = (meeting.clients as Record<string, unknown> | null)?.display_name as string
@@ -136,11 +149,6 @@ export async function GET(request: Request) {
         triggerType: "sales_meeting_reminder",
       });
     }
-
-    await (supabase as any)
-      .from("crm_sales_meetings")
-      .update({ reminder_sent_at: now.toISOString() })
-      .eq("id", meeting.id);
   }
 
   return NextResponse.json({ notified });

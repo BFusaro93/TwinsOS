@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
-import { createServerClient } from "@supabase/ssr";
-import { cookies } from "next/headers";
 import { z } from "zod";
+import { getRouteAuth, assertCallerOwnsVisit } from "@/lib/supabase/route-auth";
 
 const Body = z.object({
   // HH:mm in the crew member's local time — the server (Vercel) runs in UTC,
@@ -13,14 +12,9 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ visitId: string }> }
 ) {
-  const cookieStore = await cookies();
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    { cookies: { getAll: () => cookieStore.getAll(), setAll: () => {} } }
-  );
-
-  const { data: { user } } = await supabase.auth.getUser();
+  // Accepts either the web app's cookie session or crew-app's bearer token —
+  // see getRouteAuth().
+  const { supabase, user } = await getRouteAuth(request);
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { visitId } = await params;
@@ -36,9 +30,14 @@ export async function POST(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: existing } = await (supabase as any)
     .from("crm_job_visits")
-    .select("clocked_in_at")
+    .select("clocked_in_at, org_id, crew_id")
     .eq("id", visitId)
+    .is("deleted_at", null)
     .single();
+  if (!existing) return NextResponse.json({ error: "Visit not found" }, { status: 404 });
+  if (!(await assertCallerOwnsVisit(supabase, user.id, existing.org_id, existing.crew_id))) {
+    return NextResponse.json({ error: "Not assigned to this visit" }, { status: 403 });
+  }
   if (existing?.clocked_in_at) {
     return NextResponse.json({ error: "Already clocked in" }, { status: 409 });
   }

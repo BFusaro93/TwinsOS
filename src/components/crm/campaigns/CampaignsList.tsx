@@ -411,7 +411,7 @@ function CampaignRow({
   campaign: CRMCampaign;
   onEdit: (c: CRMCampaign) => void;
   onDelete: (c: CRMCampaign) => void;
-  onStatusChange: (id: string, status: CampaignStatus) => void;
+  onStatusChange: (id: string, status: CampaignStatus, campaign: CRMCampaign) => void;
   onSend: (c: CRMCampaign) => void;
 }) {
   const openRate =
@@ -505,7 +505,7 @@ function CampaignRow({
             )}
             {campaign.status === "draft" && (
               <DropdownMenuItem
-                onClick={() => onStatusChange(campaign.id, "scheduled")}
+                onClick={() => onStatusChange(campaign.id, "scheduled", campaign)}
               >
                 <Send className="mr-2 h-3.5 w-3.5" />
                 Mark Scheduled
@@ -513,7 +513,7 @@ function CampaignRow({
             )}
             {campaign.status === "active" && (
               <DropdownMenuItem
-                onClick={() => onStatusChange(campaign.id, "paused")}
+                onClick={() => onStatusChange(campaign.id, "paused", campaign)}
               >
                 <PauseCircle className="mr-2 h-3.5 w-3.5" />
                 Pause
@@ -521,7 +521,7 @@ function CampaignRow({
             )}
             {campaign.status === "paused" && (
               <DropdownMenuItem
-                onClick={() => onStatusChange(campaign.id, "active")}
+                onClick={() => onStatusChange(campaign.id, "active", campaign)}
               >
                 <PlayCircle className="mr-2 h-3.5 w-3.5" />
                 Resume
@@ -577,7 +577,16 @@ export function CampaignsList() {
     return true;
   });
 
-  async function handleStatusChange(id: string, status: CampaignStatus) {
+  async function handleStatusChange(id: string, status: CampaignStatus, campaign?: CRMCampaign) {
+    // The scheduled-send cron only ever picks up rows with a non-null
+    // scheduled_at (see /api/cron/scheduled-campaigns) — marking a campaign
+    // "scheduled" without ever having set a date silently strands it forever
+    // (Send Now still works, but nothing tells the user their "schedule" did
+    // nothing). Block the transition client-side rather than let it happen.
+    if (status === "scheduled" && !campaign?.scheduledAt) {
+      toast.error("Set a Schedule Send date before marking this campaign as scheduled");
+      return;
+    }
     try {
       await update({ id, updates: { status } });
       toast.success("Campaign updated");

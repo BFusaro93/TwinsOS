@@ -16,7 +16,7 @@ export const BILLABLE_PLANS = [
     envVar: "STRIPE_PRICE_CMMS",
     modules: ["equipt"] as PlatformModule[],
     seatsIncluded: 5,
-    seatOverageCents: 1500,
+    seatOverageCents: 500,
     bundledAddons: [] as BundledAddonKey[],
   },
   {

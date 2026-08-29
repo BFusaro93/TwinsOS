@@ -349,6 +349,22 @@ export async function recalcEstimateTotals(supabase: AnySupabaseClient, estimate
     .eq("estimate_id", estimateId);
   if (dcError) throw dcError;
 
+  // Sub-items (estimate_line_item_subitems) are real priced Product/Subservice
+  // rows a user attaches under a line item (their own rate/cost/qty/total, see
+  // AddSubitemDialog) — not decorative notes. They have no estimate_id column
+  // of their own, only line_item_id, so reach them through the parent line
+  // item via an embedded filter. Excluded whenever the PARENT line item is
+  // lost or soft-deleted, matching the line-item exclusion above; subitems
+  // have no status of their own to filter on.
+  const { data: subitems, error: siError } = await supabase
+    .from("estimate_line_item_subitems")
+    .select("total_cents, cost_cents, qty, estimate_line_items!inner(estimate_id, status, deleted_at)")
+    .eq("estimate_line_items.estimate_id", estimateId)
+    .neq("estimate_line_items.status", "lost")
+    .is("estimate_line_items.deleted_at", null)
+    .is("deleted_at", null);
+  if (siError) throw siError;
+
   const { data: overheadRow } = await supabase
     .from("crm_overhead_settings")
     .select("*")
@@ -357,9 +373,14 @@ export async function recalcEstimateTotals(supabase: AnySupabaseClient, estimate
   const overheadSettings = overheadRow ? mapOverheadSettingsRow(overheadRow) : OVERHEAD_SETTINGS_DEFAULTS;
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const subtotalCents = (lineItems ?? []).reduce((s: number, li: any) => s + (li.total_cents - (li.discount_cents ?? 0)), 0);
+  const lineItemSubtotalCents = (lineItems ?? []).reduce((s: number, li: any) => s + (li.total_cents - (li.discount_cents ?? 0)), 0);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const totalCostCents = (lineItems ?? []).reduce((s: number, li: any) => s + li.total_cost_cents, 0);
+  const subitemRevenueCents = (subitems ?? []).reduce((s: number, si: any) => s + (si.total_cents ?? 0), 0);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const subitemCostCents = (subitems ?? []).reduce((s: number, si: any) => s + Math.round((si.cost_cents ?? 0) * (si.qty ?? 1)), 0);
+  const subtotalCents = lineItemSubtotalCents + subitemRevenueCents;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const totalCostCents = (lineItems ?? []).reduce((s: number, li: any) => s + li.total_cost_cents, 0) + subitemCostCents;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const directTotal = (directCosts ?? []).reduce((s: number, dc: any) => s + dc.total_cents, 0);
   // A "percent" discount is a % of the subtotal at whatever it is NOW, not a

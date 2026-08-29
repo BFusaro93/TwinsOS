@@ -91,7 +91,12 @@ export async function GET(
 
   // ── build data shapes ───────────────────────────────────────────────────────
   const lineItems: EstimatePDFLineItem[] = (est.estimate_line_items ?? [])
-    .filter((li: Record<string, unknown>) => !li.deleted_at && li.status === "quote")
+    // Matches EstimateSummaryPanel's/recalcEstimateTotals's own line-item filter
+    // (exclude soft-deleted and 'lost' rows) — previously hard-coded to only
+    // status === "quote", so regenerating a PDF for an ACCEPTED estimate (whose
+    // won line items flip to status "won") rendered a blank document with zero
+    // line items.
+    .filter((li: Record<string, unknown>) => !li.deleted_at && li.status !== "lost")
     .sort((a: Record<string, unknown>, b: Record<string, unknown>) =>
       ((a.sort_order as number) ?? 0) - ((b.sort_order as number) ?? 0)
     )
@@ -102,7 +107,12 @@ export async function GET(
       estimateDesc: li.estimate_desc as string | null,
       qty: (li.qty as number) ?? 1,
       unitType: li.unit_type as string | null,
-      rateCents: (li.rate_cents as number) ?? 0,
+      // computeLineItem prices totalCents off adjRateCents ?? rateCents (see
+      // estimate-calc.ts) — using the raw rate_cents here made the printed
+      // Rate column fail to reconcile against Total whenever a line used the
+      // Adj Rate override. ConvertToJobDialog already applies this same
+      // adjRateCents-first precedence when carrying a line item into a job.
+      rateCents: (li.adj_rate_cents as number | null) ?? (li.rate_cents as number) ?? 0,
       visits: (li.visits as number) ?? 1,
       totalCents: (li.total_cents as number) ?? 0,
       tier: (li.tier as "basic" | "standard" | "premium" | null) ?? null,
@@ -115,7 +125,7 @@ export async function GET(
     estimateNumber: est.estimate_number as number,
     description: est.description as string | null,
     createdAt: est.created_at as string,
-    validUntil: est.valid_until as string | null,
+    validUntil: est.valid_until_date as string | null,
     notes: est.notes as string | null,
     clientName: est.clients?.display_name ?? null,
     clientAddress: est.clients?.billing_address ?? null,

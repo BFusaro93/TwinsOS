@@ -93,6 +93,11 @@ export function PricingSection({ showHeader = true }: { showHeader?: boolean }) 
               </div>
               <div className="mt-4 text-2xl font-extrabold text-[#0a0a0a]">{priceLabel ?? "Contact us"}</div>
               <div className="mt-0.5 text-xs text-slate-500">{p.seatsIncluded} office/admin seats included</div>
+              {p.plan === "enterprise" && (
+                <div className="mt-0.5 text-xs text-slate-400">
+                  Larger team? <Link href="/contact" className="underline hover:text-slate-600">Contact sales</Link> for custom pricing.
+                </div>
+              )}
               <ul className="mt-5 flex flex-1 flex-col gap-2.5">
                 {highlights.map((h) => (
                   <li key={h} className="flex items-start gap-2 text-[13px] leading-snug text-slate-600">

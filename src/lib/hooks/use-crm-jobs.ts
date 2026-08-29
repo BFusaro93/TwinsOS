@@ -980,6 +980,26 @@ export function useUpdateVisit() {
       // /api/crm/jobs/[jobId]/propagate-crew), not a side effect of fixing
       // one visit.
 
+      // Push notification — best-effort, fire-and-forget (see
+      // src/app/api/crm/visits/[visitId]/notify/route.ts for why this goes
+      // through a server route rather than sending directly from here: the
+      // Expo push API call needs the service-role client to read
+      // crew_push_tokens, which this client-side mutation doesn't have).
+      if (updates.crew_id) {
+        fetch(`/api/crm/visits/${id}/notify`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ kind: 'assigned' }),
+        }).catch(() => {});
+      }
+      if (updates.notes_to_crew) {
+        fetch(`/api/crm/visits/${id}/notify`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ kind: 'note' }),
+        }).catch(() => {});
+      }
+
       return { clientId, dateChanged, dateChangeClientId, dateChangeServiceIds };
     },
     onSuccess: (data) => {
@@ -2021,7 +2041,11 @@ export function useUpdateJobService() {
       if (error) throw error;
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['crm-job-detail'] });
+      // No jobId in scope here (only the crm_job_services row id) — invalidate
+      // the whole ['crm-jobs','detail'] prefix rather than the wrong,
+      // never-matching ['crm-job-detail'] key useJobDetail actually uses
+      // (['crm-jobs','detail',id]).
+      qc.invalidateQueries({ queryKey: ['crm-jobs', 'detail'] });
       qc.invalidateQueries({ queryKey: ['crm-jobs'] });
     },
   });
@@ -2073,8 +2097,8 @@ export function useAddJobService() {
 
       return data;
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['crm-job-detail'] });
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ['crm-jobs', 'detail', vars.jobId] });
       qc.invalidateQueries({ queryKey: ['crm-jobs'] });
       qc.invalidateQueries({ queryKey: ['crm-job-visits'] });
     },
@@ -2091,7 +2115,8 @@ export function useDeleteJobService() {
       if (error) throw error;
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['crm-job-detail'] });
+      // No jobId in scope here — see useUpdateJobService's onSuccess above.
+      qc.invalidateQueries({ queryKey: ['crm-jobs', 'detail'] });
       qc.invalidateQueries({ queryKey: ['crm-jobs'] });
     },
   });
@@ -2178,7 +2203,7 @@ export function useAddCRMJobProduct() {
     },
     onSuccess: (_, v) => {
       qc.invalidateQueries({ queryKey: ['crm-job-products', v.jobId] });
-      qc.invalidateQueries({ queryKey: ['crm-job-detail'] });
+      qc.invalidateQueries({ queryKey: ['crm-jobs', 'detail', v.jobId] });
     },
   });
 }
@@ -2207,7 +2232,7 @@ export function useUpdateCRMJobProduct() {
     },
     onSuccess: (_, v) => {
       qc.invalidateQueries({ queryKey: ['crm-job-products', v.jobId] });
-      qc.invalidateQueries({ queryKey: ['crm-job-detail'] });
+      qc.invalidateQueries({ queryKey: ['crm-jobs', 'detail', v.jobId] });
     },
   });
 }
@@ -2227,7 +2252,7 @@ export function useDeleteCRMJobProduct() {
     },
     onSuccess: (_, v) => {
       qc.invalidateQueries({ queryKey: ['crm-job-products', v.jobId] });
-      qc.invalidateQueries({ queryKey: ['crm-job-detail'] });
+      qc.invalidateQueries({ queryKey: ['crm-jobs', 'detail', v.jobId] });
     },
   });
 }
@@ -2277,7 +2302,7 @@ export function useSetJobProductStatus() {
     },
     onSuccess: (data, v) => {
       qc.invalidateQueries({ queryKey: ['crm-job-products', v.jobId] });
-      qc.invalidateQueries({ queryKey: ['crm-job-detail'] });
+      qc.invalidateQueries({ queryKey: ['crm-jobs', 'detail', v.jobId] });
       if (data?.invoiceId) qc.invalidateQueries({ queryKey: ["crm-invoices", "detail", data.invoiceId] });
       qc.invalidateQueries({ queryKey: ["crm-invoices"] });
       qc.invalidateQueries({ queryKey: ["products"] });

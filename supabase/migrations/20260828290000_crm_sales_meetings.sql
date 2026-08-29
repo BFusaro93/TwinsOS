@@ -33,12 +33,14 @@ create index if not exists idx_crm_sales_meetings_client
   on public.crm_sales_meetings (client_id)
   where deleted_at is null;
 
+drop trigger if exists trg_crm_sales_meetings_updated_at on public.crm_sales_meetings;
 create trigger trg_crm_sales_meetings_updated_at
   before update on public.crm_sales_meetings
   for each row execute function public.set_updated_at();
 
 alter table public.crm_sales_meetings enable row level security;
 
+drop policy if exists "org members manage sales meetings" on public.crm_sales_meetings;
 create policy "org members manage sales meetings"
   on public.crm_sales_meetings for all
   using (org_id = my_org_id())

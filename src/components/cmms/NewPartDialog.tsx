@@ -30,7 +30,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { ChevronDown, Check } from "lucide-react";
 import { useVendors } from "@/lib/hooks/use-vendors";
-import { useParts, useCreatePart, useUpdatePart } from "@/lib/hooks/use-parts";
+import { useParts, useCreatePart, useUpdatePart, useAdjustPartQuantityManual } from "@/lib/hooks/use-parts";
 import { useSettingsStore } from "@/stores/settings-store";
 import { VendorCombobox } from "@/components/shared/VendorCombobox";
 import { NewVendorDialog } from "@/components/shared/NewVendorDialog";
@@ -71,6 +71,7 @@ export function NewPartDialog({ open, onOpenChange, initialData, onCreated }: Ne
 
   const createPart = useCreatePart();
   const updatePart = useUpdatePart();
+  const adjustQuantity = useAdjustPartQuantityManual();
 
   // Available parent parts (exclude the part being edited, exclude parts that already have a parent)
   const parentPartOptions = (allParts ?? []).filter(
@@ -135,9 +136,28 @@ export function NewPartDialog({ open, onOpenChange, initialData, onCreated }: Ne
     };
 
     if (isEditing && initialData) {
+      // Don't send quantityOnHand through the plain update() below — it was
+      // captured when the dialog opened, so submitting it unconditionally
+      // (e.g. after just fixing this part's name) would silently stomp any
+      // real change to stock (a goods receipt, a WO part usage) that landed
+      // via adjust_part_quantity while this dialog sat open. Only forward an
+      // actual, intentional change, and route it through the same audited
+      // RPC the QtyAdjustControl stepper uses instead of a raw update.
+      const { quantityOnHand: newQuantityOnHand, ...editPayload } = payload;
       updatePart.mutate(
-        { id: initialData.id, ...payload },
-        { onSuccess: () => handleClose() }
+        { id: initialData.id, ...editPayload },
+        {
+          onSuccess: () => {
+            if (newQuantityOnHand !== initialData.quantityOnHand) {
+              adjustQuantity.mutate(
+                { id: initialData.id, quantityOnHand: newQuantityOnHand, reason: "Edited via part form" },
+                { onSettled: () => handleClose() }
+              );
+            } else {
+              handleClose();
+            }
+          },
+        }
       );
     } else {
       createPart.mutate(payload, {
@@ -150,7 +170,7 @@ export function NewPartDialog({ open, onOpenChange, initialData, onCreated }: Ne
     }
   }
 
-  const saving = createPart.isPending || updatePart.isPending;
+  const saving = createPart.isPending || updatePart.isPending || adjustQuantity.isPending;
 
   return (
     <>

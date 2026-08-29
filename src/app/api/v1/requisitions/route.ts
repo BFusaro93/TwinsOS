@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { adminClient, authenticateApiRequest } from "@/lib/api/auth";
 import { jsonError, parsePagination } from "@/lib/api/route-helpers";
+import { createRequisitionRecord } from "@/lib/requisitions/create-requisition";
 import { REQUISITION_SELECT, shapeRequisition } from "./shape";
 import { createRequisitionSchema } from "./validation";
 
@@ -52,7 +53,7 @@ export async function POST(request: Request) {
   const productIds = [...new Set(body.lineItems.map((li) => li.productItemId))];
   const { data: products } = await db
     .from("product_items")
-    .select("id, org_id, name, part_number, unit_cost")
+    .select("id, org_id, name, part_number, unit_cost, category")
     .in("id", productIds);
   const productMap = new Map((products ?? []).map((p) => [p.id as string, p]));
   for (const id of productIds) {
@@ -60,57 +61,56 @@ export async function POST(request: Request) {
     if (!product || product.org_id !== auth.orgId) return jsonError(`Product item ${id} not found`, 404);
   }
 
-  const lineItemRows = body.lineItems.map((li) => {
+  // Only project_material and stocked_material categories may carry a
+  // project_id (see CLAUDE.md "Project cost tracking") — the app's
+  // NewRequisitionDialog enforces this client-side but this public API
+  // bypasses that UI entirely, so it must be re-checked here.
+  const projectIds = [...new Set(body.lineItems.map((li) => li.projectId).filter((id): id is string => !!id))];
+  const projectMap = new Map<string, { org_id: string }>();
+  if (projectIds.length > 0) {
+    const { data: projects } = await db.from("projects").select("id, org_id").in("id", projectIds);
+    for (const p of projects ?? []) projectMap.set(p.id as string, p as { org_id: string });
+  }
+  for (const li of body.lineItems) {
+    if (!li.projectId) continue;
     const product = productMap.get(li.productItemId)!;
-    const unitCost = li.unitCostCents ?? (product.unit_cost as number);
-    return {
-      org_id: auth.orgId,
-      product_item_id: li.productItemId,
-      product_item_name: product.name as string,
-      part_number: (product.part_number as string) ?? "",
-      quantity: li.quantity,
-      unit_cost: unitCost,
-      total_cost: unitCost * li.quantity,
-      project_id: li.projectId ?? null,
-      notes: li.notes ?? null,
-    };
-  });
-  const subtotal = lineItemRows.reduce((sum, li) => sum + li.total_cost, 0);
-  const taxRatePercent = body.taxRatePercent ?? 0;
-  const salesTax = Math.round(subtotal * (taxRatePercent / 100));
-  const shippingCost = body.shippingCostCents ?? 0;
-  const grandTotal = subtotal + salesTax + shippingCost;
+    if (product.category === "maintenance_part") {
+      return jsonError(
+        `Product item ${li.productItemId} is a maintenance_part and cannot carry a projectId`,
+        400
+      );
+    }
+    // Never trust a client-supplied projectId's org — a caller could pass
+    // another org's project id and have it silently linked to this org's
+    // requisition line item.
+    const project = projectMap.get(li.projectId);
+    if (!project || project.org_id !== auth.orgId) return jsonError(`Project ${li.projectId} not found`, 404);
+  }
 
-  const requisitionNumber = `REQ-${new Date().getFullYear()}-${Date.now().toString().slice(-6)}`;
-
-  const { data: requisition, error } = await db
-    .from("requisitions")
-    .insert({
-      org_id: auth.orgId,
+  const { requisition, error: createError } = await createRequisitionRecord(
+    db,
+    {
+      orgId: auth.orgId,
       title: body.title,
-      requisition_number: requisitionNumber,
-      vendor_id: body.vendorId ?? null,
-      vendor_name: vendorName,
-      work_order_id: body.workOrderId ?? null,
+      vendorId: body.vendorId ?? null,
+      vendorName,
+      workOrderId: body.workOrderId ?? null,
+      requestedByName: "Public API",
       notes: body.notes ?? null,
-      requested_by_name: "Public API",
-      status: "draft",
-      subtotal,
-      tax_rate_percent: taxRatePercent,
-      sales_tax: salesTax,
-      shipping_cost: shippingCost,
-      grand_total: grandTotal,
-    })
-    .select(REQUISITION_SELECT)
-    .single();
+      taxRatePercent: body.taxRatePercent,
+      shippingCostCents: body.shippingCostCents,
+      lineItems: body.lineItems.map((li) => ({
+        productItemId: li.productItemId,
+        quantity: li.quantity,
+        unitCostCents: li.unitCostCents,
+        projectId: li.projectId,
+        notes: li.notes,
+      })),
+    },
+    productMap as unknown as Map<string, { name: string; part_number?: string | null; unit_cost: number }>
+  );
 
-  if (error || !requisition) return jsonError(error?.message ?? "create failed", 500);
-
-  const { error: lineItemsError } = await db
-    .from("requisition_line_items")
-    .insert(lineItemRows.map((li) => ({ ...li, requisition_id: requisition.id })));
-
-  if (lineItemsError) return jsonError(lineItemsError.message, 500);
+  if (createError || !requisition) return jsonError(createError ?? "create failed", 500);
 
   return NextResponse.json(shapeRequisition(requisition), { status: 201 });
 }

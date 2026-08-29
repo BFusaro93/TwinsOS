@@ -2,6 +2,31 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
+import { recalcEstimateTotals as recalcEstimateTotalsShared } from "@/lib/estimate-calc";
+
+// Sub-items are real priced rows (own rate/cost/qty/total — see
+// AddSubitemDialog) but have no estimate_id column of their own, only
+// line_item_id, so a subitem write must look up the owning estimate before it
+// can recalc that estimate's rollups. Without this, recalcEstimateTotals never
+// ran after a subitem add/edit/delete, so subitem dollars were silently
+// excluded from subtotal_cents/total_cents/cost/margin on the estimate.
+async function recalcParentEstimate(
+  supabase: ReturnType<typeof createClient>,
+  lineItemId: string,
+  queryClient: ReturnType<typeof useQueryClient>
+) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: li } = await (supabase as any)
+    .from("estimate_line_items")
+    .select("estimate_id")
+    .eq("id", lineItemId)
+    .single();
+  if (!li?.estimate_id) return;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await recalcEstimateTotalsShared(supabase as any, li.estimate_id);
+  queryClient.invalidateQueries({ queryKey: ["estimates", "detail", li.estimate_id] });
+  queryClient.invalidateQueries({ queryKey: ["estimates"] });
+}
 
 export interface LineItemSubitem {
   id: string;
@@ -121,8 +146,9 @@ export function useUpsertSubitem() {
       if (error) throw error;
       return mapRow(data);
     },
-    onSuccess: (_data, variables) => {
+    onSuccess: async (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["subitems", variables.lineItemId] });
+      await recalcParentEstimate(createClient(), variables.lineItemId, queryClient);
     },
   });
 }
@@ -141,8 +167,9 @@ export function useDeleteSubitem() {
       if (error) throw error;
       return { id, lineItemId };
     },
-    onSuccess: (_data, variables) => {
+    onSuccess: async (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["subitems", variables.lineItemId] });
+      await recalcParentEstimate(createClient(), variables.lineItemId, queryClient);
     },
   });
 }

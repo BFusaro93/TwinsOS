@@ -80,6 +80,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import type { CRMJobVisit, VisitStatus, JobComment, CrewMemberTime } from "@/types/crm-jobs";
 import { useCrews, useCrewDailyMembers, useSetCrewDailyMember, useClearCrewDailyMember, useEmployees, useAddCrewMember } from "@/lib/hooks/use-employees";
 import { useCRMServices, useCreateVisit } from "@/lib/hooks/use-crm-jobs";
+import { useCurrentUserStore } from "@/stores/current-user-store";
 import { useNearbyWaitingListJobs } from "@/lib/hooks/use-nearby-waiting-list";
 import { groupVisitsIntoStops } from "@/lib/utils/visit-stops";
 import { stripHtml } from "@/lib/utils/strip-html";
@@ -230,6 +231,7 @@ function JobDetailSheet({
   const { mutateAsync: updateVisit, isPending } = useUpdateVisit();
   const router = useRouter();
   const { mutateAsync: createInvoice, isPending: invoicing } = useCreateInvoiceFromJob();
+  const { currentUser } = useCurrentUserStore();
 
   const job  = visit.job;
   const services = job?.services ?? [];
@@ -457,8 +459,8 @@ function JobDetailSheet({
     if (!newComment.trim()) return;
     const comment: JobComment = {
       id: crypto.randomUUID(),
-      authorName: "Me",
-      authorId: "current",
+      authorName: currentUser.name,
+      authorId: currentUser.id,
       text: newComment.trim(),
       createdAt: new Date().toISOString(),
     };
@@ -1849,7 +1851,11 @@ function VisitRow({
   const endButtonRef = useRef<HTMLButtonElement>(null);
 
   const { data: richCrewsForSize } = useCrews(false);
-  const { data: dailyOverridesForSize = [] } = useCrewDailyMembers(selectedDate);
+  // Must key off this visit's own date, not the board's global selectedDate —
+  // on a multi-day (From/To range) view, a visit from day 2+ of the range
+  // would otherwise resolve its headcount override against day 1's roster.
+  // JobDetailSheet does this correctly (useCrewDailyMembers(visit.scheduledDate)).
+  const { data: dailyOverridesForSize = [] } = useCrewDailyMembers(visit.scheduledDate);
   const upsertMemberTime = useUpsertCrewMemberTime();
 
   // Does the crew actually on this visit have different punch times from each
@@ -2775,7 +2781,11 @@ export function DispatchBoard() {
     const rows = displayVisits.map((v, i) => {
       const job = v.job;
       const svc = (job?.services ?? []).map((s) => s.serviceName).join("; ");
-      const rateCents = (v as any).rateCents ?? job?.rateCents ?? 0;
+      // Must use the same linked-service fallback every other aggregate on
+      // this board uses (see the comment above visitAmountCents) — a plain
+      // rateCents/job.rateCents read exports $0 for any recurring/multi-
+      // service job priced via its crm_job_services row instead.
+      const rateCents = visitAmountCents(v);
       return [
         i + 1,
         v.clientName ?? "",

@@ -611,8 +611,17 @@ function CloseOutDialog({
 
   async function handleCloseOut() {
     try {
-      const qty = materialQty ? parseFloat(materialQty) : 1;
+      const totalQty = materialQty ? parseFloat(materialQty) : 1;
       const unitCostCents = materialUnitCost ? Math.round(parseFloat(materialUnitCost) * 100) : 0;
+      const totalHours = actualHours ? parseFloat(actualHours) : null;
+      // The qty/hours fields are entered once for the whole batch (e.g. "10
+      // bags of salt" / "2.5 hrs" for this close-out), not per stop — split
+      // evenly across the selected visits so a multi-stop close-out doesn't
+      // multiply material cost and actual hours by the visit count in Job
+      // Costing/COGS and hourly-billed invoicing (both key off per-visit
+      // values). A single-visit close-out is unaffected (divide by 1).
+      const qty = totalQty / visits.length;
+      const hoursPerVisit = totalHours !== null ? totalHours / visits.length : null;
       await Promise.all(visits.map((v) => updateVisit({
         id: v.id,
         jobId: v.jobId,
@@ -626,7 +635,7 @@ function CloseOutDialog({
           materials_used: materialName
             ? [{ name: materialName, qty, rate_cents: unitCostCents }]
             : [],
-          ...(actualHours ? { actual_hours: parseFloat(actualHours) } : {}),
+          ...(hoursPerVisit !== null ? { actual_hours: hoursPerVisit } : {}),
         },
       })));
       // materials_used on crm_job_visits is display-only — it never feeds

@@ -66,7 +66,24 @@ export async function GET(request: Request) {
   let sent = 0;
   let failed = 0;
 
+  // Start of the current UTC hour — since America/New_York is always a
+  // whole-hour offset from UTC (even across DST), this also marks the start
+  // of the current Eastern hour bucket that `hour_local` matches against.
+  // Used to claim each schedule before sending, so an overlapping/retried
+  // GitHub Actions run (not guaranteed exactly-once, and this workflow also
+  // allows manual workflow_dispatch) can't double-send the same schedule's
+  // report within the same hour.
+  const hourStart = new Date(Math.floor(Date.now() / 3_600_000) * 3_600_000).toISOString();
+
   for (const schedule of schedules ?? []) {
+    const { data: claimed } = await supabase
+      .from("report_schedules")
+      .update({ last_run_at: new Date().toISOString() })
+      .eq("id", schedule.id)
+      .or(`last_run_at.is.null,last_run_at.lt.${hourStart}`)
+      .select("id");
+    if (!claimed?.length) continue;
+
     const def = getReport(schedule.report_key);
     if (!def || !def.schedulable || schedule.recipients.length === 0) {
       failed++;

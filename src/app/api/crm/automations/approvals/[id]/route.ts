@@ -21,6 +21,20 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  // RLS on crm_sequence_step_approvals only checks org_id, not role — without
+  // this, any authenticated org member (including viewer/technician/crew)
+  // could approve or reject a queued outbound client email/SMS, unlike every
+  // other approval surface in the app (approval_requests chain order,
+  // approval_flows config) which is role-gated.
+  const { data: callerProfile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single();
+  if (!callerProfile || !["admin", "manager"].includes(callerProfile.role)) {
+    return NextResponse.json({ error: "Admin or manager role required" }, { status: 403 });
+  }
+
   const body = (await req.json().catch(() => ({}))) as { action?: string };
   if (body.action !== "approve" && body.action !== "reject") {
     return NextResponse.json({ error: "action must be 'approve' or 'reject'" }, { status: 400 });

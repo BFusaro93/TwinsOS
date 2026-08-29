@@ -518,6 +518,17 @@ function CancelClientDialog({ clientId, clientName, open, onOpenChange }: {
   const [reason, setReason] = useState("");
   const [custom, setCustom] = useState("");
 
+  // Reset the picked reason each time the dialog opens — otherwise a reason
+  // chosen (or typed) on a previous cancellation attempt lingers pre-selected
+  // the next time this dialog is opened, since it's mounted once per panel
+  // rather than remounted per open.
+  useEffect(() => {
+    if (open) {
+      setReason("");
+      setCustom("");
+    }
+  }, [open]);
+
   async function confirm() {
     const finalReason = reason === "Other" ? custom.trim() : reason;
     if (!finalReason) { toast.error("Select a cancellation reason"); return; }
@@ -839,8 +850,10 @@ function EditClientDialog({ client, open, onOpenChange }: { client: Client; open
           // unified payment method — stored in both columns for compat
           paymentMethod: form.paymentMethod || null,
           defaultPaymentMethod: form.paymentMethod || null,
-          billingTerms: null,
-          mapCode: null,
+          // billingTerms / mapCode intentionally omitted here — this dialog has
+          // no fields for them. Sending explicit nulls (as before) silently wiped
+          // out any existing value on every save; leaving them undefined lets
+          // useUpdateClient skip those columns so existing data is preserved.
           turfSqft: form.turfSqft !== "" ? parseFloat(form.turfSqft) : null,
           mulchBedSqft: form.mulchBedSqft !== "" ? parseFloat(form.mulchBedSqft) : null,
           grossSqft: form.grossSqft !== "" ? parseFloat(form.grossSqft) : null,
@@ -1655,6 +1668,18 @@ function LinkParentDialog({
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState(currentParentId ?? "");
 
+  // Re-sync the selection to the client's actual current parent every time
+  // the dialog opens. Without this, a selection made (or a search typed) but
+  // never saved — the user picked something then hit Cancel — would still be
+  // sitting in state the next time the dialog is opened, since this
+  // component stays mounted across opens/closes rather than remounting.
+  useEffect(() => {
+    if (open) {
+      setSelectedId(currentParentId ?? "");
+      setSearch("");
+    }
+  }, [open, currentParentId]);
+
   const options = (allClients ?? []).filter(
     (c) => c.id !== clientId && c.parentClientId == null // can't link to a child
       && (search === "" || c.displayName.toLowerCase().includes(search.toLowerCase()))
@@ -2366,7 +2391,7 @@ function JobVisitsModal({
               <tbody className="divide-y">
                 {isWaitingList ? waitingListRows.map((svc) => {
                   const hrs = svc.budgetedHours > 0 ? `${svc.budgetedHours}hrs` : (job.budgetedHours != null ? `${job.budgetedHours}hrs` : "—");
-                  const amt = svc.rateCents != null ? `$${(svc.rateCents / 100).toFixed(2)}` : "—";
+                  const amt = svc.rateCents != null ? formatCurrency(svc.rateCents) : "—";
                   return (
                     <tr key={svc.id} className="cursor-pointer hover:bg-neutral-50" onClick={() => { onClose(); onOpenJob(job.id); }}>
                       <td className="px-4 py-2.5 text-center">
@@ -2392,7 +2417,7 @@ function JobVisitsModal({
                   const hours = mode === "history"
                     ? (() => { const h = computeActualHours(v); return h != null ? `${h.toFixed(1)}hrs` : "0hrs"; })()
                     : (v.budgetedHours != null ? `${v.budgetedHours}hrs` : job.budgetedHours != null ? `${job.budgetedHours}hrs` : "—");
-                  const amount = v.rateCents != null ? `$${(v.rateCents / 100).toFixed(2)}` : (job.rateCents != null ? `$${(job.rateCents / 100).toFixed(2)}` : "—");
+                  const amount = v.rateCents != null ? formatCurrency(v.rateCents) : (job.rateCents != null ? formatCurrency(job.rateCents) : "—");
                   const dateStr = fmtDate(v.scheduledDate);
 
                   return (
@@ -2932,7 +2957,7 @@ function ClientAllVisitsModal({
                   const hours = mode === "history"
                     ? (() => { const h = computeActualHours(v); return h != null ? `${h.toFixed(1)}hrs` : "0hrs"; })()
                     : (v.budgetedHours != null ? `${v.budgetedHours}hrs` : "—");
-                  const amount = v.rateCents != null ? `$${(v.rateCents / 100).toFixed(2)}` : "—";
+                  const amount = v.rateCents != null ? formatCurrency(v.rateCents) : "—";
                   return (
                     <tr
                       key={v.id}

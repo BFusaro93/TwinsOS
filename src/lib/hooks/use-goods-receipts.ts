@@ -118,6 +118,28 @@ export function useCreateGoodsReceipt() {
   });
 }
 
+/**
+ * Hard-deletes a goods receipt (header + lines, via ON DELETE CASCADE) — used
+ * only to roll back a receipt that ReceiveGoodsDialog just created when
+ * applying its inventory increments afterward fails partway through. Not a
+ * general-purpose "undo a receipt" action (there's no soft-delete here on
+ * purpose): a receipt this deletes was never shown to the user as
+ * successful, so there's nothing to preserve for audit.
+ */
+export function useDeleteGoodsReceipt() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const supabase = createClient();
+      const { error } = await supabase.from("goods_receipts").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["goods-receipts"] });
+    },
+  });
+}
+
 export function useUpdateGoodsReceipt() {
   const queryClient = useQueryClient();
   return useMutation({
