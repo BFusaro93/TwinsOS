@@ -33,7 +33,7 @@ interface ReportsNavItem {
   requiresModule?: PlatformModule;
 }
 
-const DASHBOARDS_NAV: ReportsNavItem[] = [
+export const DASHBOARDS_NAV: ReportsNavItem[] = [
   { label: "Overview",            href: "/dashboards",                 icon: LayoutDashboard },
   { label: "Equipt Dashboard",    href: "/dashboards/equipt",          icon: Wrench,      requiresModule: "equipt" },
   { label: "Landscapt My Day",    href: "/dashboards/myday",           icon: CalendarCheck, requiresModule: "landscapt" },

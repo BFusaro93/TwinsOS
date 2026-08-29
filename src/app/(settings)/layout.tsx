@@ -2,15 +2,18 @@
 
 import { useEffect } from "react";
 import { usePathname } from "next/navigation";
-import { SettingsSidebar } from "@/components/shared/SettingsSidebar";
+import { SettingsSidebar, SETTINGS_NAV_TITLES } from "@/components/shared/SettingsSidebar";
 import { TopBar } from "@/components/shared/TopBar";
 import { RealtimeSync } from "@/components/shared/RealtimeSync";
 import { SettingsLoader } from "@/components/shared/SettingsLoader";
 import { useUIStore } from "@/stores";
+import { usePageTitle } from "@/lib/hooks/use-page-title";
 
 export default function SettingsLayout({ children }: { children: React.ReactNode }) {
   const { sidebarOpen, setSidebarOpen } = useUIStore();
   const pathname = usePathname();
+
+  usePageTitle(pathname, [{ items: SETTINGS_NAV_TITLES }], "Landscapt");
 
   useEffect(() => {
     setSidebarOpen(false);

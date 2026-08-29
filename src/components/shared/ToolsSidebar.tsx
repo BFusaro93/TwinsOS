@@ -19,7 +19,7 @@ interface ToolsNavItem {
   internalOnly?: boolean;
 }
 
-const TOOLS_NAV: ToolsNavItem[] = [
+export const TOOLS_NAV: ToolsNavItem[] = [
   { label: "Estimate Builder",  href: "/tools/estimate-builder", icon: PenLine,      description: "Generate estimate text & language",  hideFromCrew: true },
   { label: "Job Costing",       href: "/tools/job-costing",      icon: DollarSign,   description: "Track per-job material costs",        hideFromCrew: true },
   { label: "Damage Cases",      href: "/tools/damage-cases",     icon: ShieldAlert,  description: "Track property damage & warranty",    hideFromCrew: true },

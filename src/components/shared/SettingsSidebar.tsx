@@ -21,6 +21,17 @@ interface SettingsNavItem {
   description: string;
 }
 
+// Static equivalent of the in-component SETTINGS_NAV below, for the browser
+// tab title (usePageTitle) — kept separate so the title doesn't need to
+// resolve the hasEquipt-dependent label wording.
+export const SETTINGS_NAV_TITLES: { label: string; href: string }[] = [
+  { label: "Master Account", href: "/settings" },
+  { label: "Equipt Settings", href: "/settings/equipt" },
+  { label: "Landscapt Settings", href: "/settings/landscapt" },
+  { label: "Support", href: "/settings/support" },
+  { label: "Docs", href: "/settings/docs" },
+];
+
 export function SettingsSidebar() {
   const pathname = usePathname();
   const { sidebarCollapsed } = useUIStore();

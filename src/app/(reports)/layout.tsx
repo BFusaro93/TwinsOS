@@ -2,12 +2,13 @@
 
 import { useEffect } from "react";
 import { usePathname } from "next/navigation";
-import { ReportsSidebar } from "@/components/shared/ReportsSidebar";
+import { ReportsSidebar, DASHBOARDS_NAV } from "@/components/shared/ReportsSidebar";
 import { TopBar } from "@/components/shared/TopBar";
 import { RealtimeSync } from "@/components/shared/RealtimeSync";
 import { SettingsLoader } from "@/components/shared/SettingsLoader";
 import { InternalOnlyGuard } from "@/components/shared/InternalOnlyGuard";
 import { useUIStore } from "@/stores";
+import { usePageTitle } from "@/lib/hooks/use-page-title";
 
 const INTERNAL_ONLY_PATHS = ["/dashboards/financials", "/dashboards/avb", "/dashboards/safety", "/dashboards/crm"];
 
@@ -18,6 +19,8 @@ export default function ReportsLayout({
 }) {
   const { sidebarOpen, setSidebarOpen } = useUIStore();
   const pathname = usePathname();
+
+  usePageTitle(pathname, [{ items: DASHBOARDS_NAV }], "Landscapt");
 
   // Auto-close mobile sidebar drawer on navigation
   useEffect(() => {

@@ -17,12 +17,12 @@ interface PhotoNavItem {
   internalOnly?: boolean;
 }
 
-const PHOTOS_NAV: PhotoNavItem[] = [
+export const PHOTOS_NAV: PhotoNavItem[] = [
   { label: "Job Photos", href: "/photos/jobs",     icon: FileImage },
   { label: "Projects",   href: "/photos/projects", icon: Briefcase, requiresPoAccess: true },
 ];
 
-const FIELD_NAV: PhotoNavItem[] = [
+export const FIELD_NAV: PhotoNavItem[] = [
   { label: "Morning Checklist",  href: "/photos/field/crew-checklist",  icon: ClipboardList, internalOnly: true },
   { label: "Time Off Request",   href: "/photos/field/time-off",        icon: CalendarDays,  internalOnly: true },
   { label: "Repair Request",     href: "/photos/field/repair-request",  icon: Wrench },
