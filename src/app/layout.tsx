@@ -9,6 +9,19 @@ export const metadata: Metadata = {
   title: "Landscapt",
   description: "CRM, field service, work orders, purchasing & asset management",
   viewport: "width=device-width, initial-scale=1, maximum-scale=1",
+  icons: {
+    // Explicit list, not the app/icon.* file convention — Next only ever
+    // emits a single <link rel="icon"> for that convention, silently
+    // picking one format when both a .svg and .png exist for the same
+    // name. Listing both here generates a <link> for each, so browsers
+    // that render SVG favicons fine (Chrome, Firefox) get the scalable
+    // rounded mark, and browsers with SVG-favicon quirks (Safari) can
+    // fall back to the plain PNG.
+    icon: [
+      { url: "/favicon.png", type: "image/png", sizes: "128x128" },
+      { url: "/icon.svg", type: "image/svg+xml" },
+    ],
+  },
 };
 
 export default function RootLayout({
