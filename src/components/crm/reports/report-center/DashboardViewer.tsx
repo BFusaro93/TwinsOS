@@ -9,12 +9,24 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/shared/PageHeader";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { downloadCSV } from "@/lib/csv";
 import { downloadXLSX } from "@/lib/xlsx-export";
 import { exportReportPDF } from "@/lib/reports/export-pdf";
-import { useDashboard, useRunReport, useRunVisualQuery } from "@/lib/hooks/use-report-center";
+import {
+  useDashboard,
+  useReportFilterOptions,
+  useRunReport,
+  useRunVisualQuery,
+} from "@/lib/hooks/use-report-center";
 import { getReport } from "@/lib/reports/registry";
 import { computePresetRange } from "./ReportFilterBar";
 import { VisualRenderer } from "./VisualRenderer";
@@ -121,10 +133,12 @@ function ReportPanelView({
 function DashboardPanelView({
   panel,
   dateRange,
+  repFilter,
   onData,
 }: {
   panel: DashboardPanel;
   dateRange?: { from: string; to: string };
+  repFilter?: string;
   onData?: (panelId: string, result: ReportResult) => void;
 }) {
   if (panel.reportKey) {
@@ -132,22 +146,25 @@ function DashboardPanelView({
   }
 
   return (
-    <DashboardVisualPanelView panel={panel} dateRange={dateRange} onData={onData} />
+    <DashboardVisualPanelView panel={panel} dateRange={dateRange} repFilter={repFilter} onData={onData} />
   );
 }
 
 function DashboardVisualPanelView({
   panel,
   dateRange,
+  repFilter,
   onData,
 }: {
   panel: DashboardPanel;
   dateRange?: { from: string; to: string };
+  repFilter?: string;
   onData?: (panelId: string, result: ReportResult) => void;
 }) {
   const { data, isFetching, error } = useRunVisualQuery(
     panel.visual,
-    panel.visual.useTabDateRange ? dateRange : undefined
+    panel.visual.useTabDateRange ? dateRange : undefined,
+    panel.visual.useTabRepFilter ? repFilter : undefined
   );
 
   useEffect(() => {
@@ -175,6 +192,8 @@ function DashboardVisualPanelView({
 
 function DashboardTabView({ tab, dashboardName }: { tab: DashboardTab; dashboardName: string }) {
   const [dateRange, setDateRange] = useState(defaultDateRange);
+  const [repFilter, setRepFilter] = useState("");
+  const { data: salesRepOptions = [] } = useReportFilterOptions(tab.useRepFilter ? "salesReps" : undefined);
   const [panelResults, setPanelResults] = useState<Record<string, ReportResult>>({});
   const [exportingPdf, setExportingPdf] = useState(false);
 
@@ -198,6 +217,23 @@ function DashboardTabView({ tab, dashboardName }: { tab: DashboardTab; dashboard
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dateRange.from, dateRange.to]);
+
+  // Same idea as the date-range effect above, but for the tab's shared Sales
+  // Rep select — only clear panels that actually filter on it.
+  useEffect(() => {
+    setPanelResults((prev) => {
+      const next = { ...prev };
+      let changed = false;
+      for (const panel of tab.panels) {
+        if (panel.visual.useTabRepFilter && panel.id in next) {
+          delete next[panel.id];
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [repFilter]);
 
   const handlePanelData = (panelId: string, result: ReportResult) => {
     setPanelResults((prev) => (prev[panelId] === result ? prev : { ...prev, [panelId]: result }));
@@ -311,6 +347,27 @@ function DashboardTabView({ tab, dashboardName }: { tab: DashboardTab; dashboard
         </div>
       )}
 
+      {tab.useRepFilter && (
+        <div className="flex flex-wrap items-end gap-x-4 gap-y-3 rounded-lg border bg-white p-3 shadow-sm">
+          <span className="pb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+            Sales Rep
+          </span>
+          <Select value={repFilter || "all"} onValueChange={(v) => setRepFilter(v === "all" ? "" : v)}>
+            <SelectTrigger className="h-8 w-56 text-sm">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Sales Reps</SelectItem>
+              {salesRepOptions.map((o) => (
+                <SelectItem key={o.value} value={o.value}>
+                  {o.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 gap-4 md:grid-cols-6">
         {tab.panels.map((panel) => (
           <div key={panel.id} className={PANEL_SIZE_CLASSES[panel.size]}>
@@ -319,7 +376,7 @@ function DashboardTabView({ tab, dashboardName }: { tab: DashboardTab; dashboard
                 <CardTitle className="text-sm">{panel.title}</CardTitle>
               </CardHeader>
               <CardContent>
-                <DashboardPanelView panel={panel} dateRange={dateRange} onData={handlePanelData} />
+                <DashboardPanelView panel={panel} dateRange={dateRange} repFilter={repFilter} onData={handlePanelData} />
               </CardContent>
             </Card>
           </div>

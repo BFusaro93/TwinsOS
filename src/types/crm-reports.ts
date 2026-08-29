@@ -160,12 +160,22 @@ export const visualSpecSchema = z.object({
   /** Append a gte/lte filter on the dataset's defaultDateField from the
    *  dashboard tab's shared date range control. */
   useTabDateRange: z.boolean().default(false),
+  /** Override which column useTabDateRange/relativeDateFilter filters on —
+   *  defaults to the dataset's defaultDateField. Needed when a dataset's
+   *  default date field doesn't fit every panel on it (e.g. rpt_clients'
+   *  defaultDateField is client_since, which is null for leads — a "New
+   *  Leads" panel needs created_at instead). */
+  dateColumn: z.string().optional(),
   /** Append an eq filter on the dataset's defaultDateField for today's or
    *  yesterday's date, computed fresh at query time — for KPI panels like
    *  "Payments Made Today" that need a fixed relative day rather than the
    *  tab's shared (and user-adjustable) date range. Mutually exclusive with
    *  `useTabDateRange` in practice, though nothing enforces that. */
   relativeDateFilter: z.enum(["today", "yesterday"]).optional(),
+  /** Append an eq filter on this dataset's "sales_rep" column using the
+   *  value picked in the tab's shared Sales Rep select (see DashboardTab's
+   *  useRepFilter) — no filter is added while nothing is picked. */
+  useTabRepFilter: z.boolean().optional(),
   /** Category/x-axis column for bar/line/pie (a groupBy column or plain column). */
   labelColumn: z.string().optional(),
   /** One or more numeric output columns to plot as series (bar/line) or the
@@ -298,6 +308,11 @@ export const dashboardTabSchema = z.object({
   /** Show a shared date-range control for this tab (applies to any panel
    *  whose visual has useTabDateRange: true). */
   useDateFilter: z.boolean().default(false),
+  /** Show a shared "Sales Rep" select control for this tab (applies to any
+   *  panel whose visual has useTabRepFilter: true) — e.g. an "Individual
+   *  Sales Rep" tab where every panel should scope to whichever rep is
+   *  picked, defaulting to no filter (all reps) until one is chosen. */
+  useRepFilter: z.boolean().optional(),
 });
 export type DashboardTab = z.infer<typeof dashboardTabSchema>;
 

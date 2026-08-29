@@ -175,6 +175,28 @@ export const GRAPHIC_TEMPLATES: GraphicTemplate[] = [
     },
   },
   {
+    key: "new-leads-ytd-gauge",
+    name: "New Leads YTD",
+    description: "Gauge of new leads received against a yearly goal.",
+    category: "Sales",
+    visual: {
+      type: "gauge",
+      useTabDateRange: true,
+      dateColumn: "created_at",
+      kpiColumn: "count_all",
+      valueColumns: [],
+      gaugeMax: 600,
+      config: {
+        dataset: "rpt_clients",
+        columns: [],
+        filters: [{ column: "status", op: "eq", value: "lead" }],
+        groupBy: [],
+        aggregates: [{ column: "*", fn: "count" }],
+        sortDir: "asc",
+      },
+    },
+  },
+  {
     key: "new-clients-ytd-gauge",
     name: "New Clients YTD",
     description: "Gauge of new clients acquired against a yearly goal.",

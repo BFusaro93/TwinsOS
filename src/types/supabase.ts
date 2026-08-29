@@ -12,6 +12,31 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "14.5"
   }
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
   public: {
     Tables: {
       api_key_rate_limits: {
@@ -689,100 +714,6 @@ export type Database = {
           },
           {
             foreignKeyName: "automations_org_id_fkey"
-            columns: ["org_id"]
-            isOneToOne: false
-            referencedRelation: "organizations"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      avb_crews: {
-        Row: {
-          code: string
-          created_at: string | null
-          id: string
-          is_active: boolean
-          name: string
-          org_id: string
-          sort_order: number
-          updated_at: string | null
-        }
-        Insert: {
-          code: string
-          created_at?: string | null
-          id?: string
-          is_active?: boolean
-          name: string
-          org_id: string
-          sort_order?: number
-          updated_at?: string | null
-        }
-        Update: {
-          code?: string
-          created_at?: string | null
-          id?: string
-          is_active?: boolean
-          name?: string
-          org_id?: string
-          sort_order?: number
-          updated_at?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "avb_crews_org_id_fkey"
-            columns: ["org_id"]
-            isOneToOne: false
-            referencedRelation: "organizations"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      avb_employees: {
-        Row: {
-          created_at: string
-          csv_job: string
-          csv_name: string
-          default_crew: string
-          deleted_at: string | null
-          id: string
-          is_active: boolean
-          is_field: boolean
-          name: string
-          org_id: string
-          updated_at: string
-          uuid: string
-        }
-        Insert: {
-          created_at?: string
-          csv_job?: string
-          csv_name?: string
-          default_crew?: string
-          deleted_at?: string | null
-          id?: string
-          is_active?: boolean
-          is_field?: boolean
-          name: string
-          org_id: string
-          updated_at?: string
-          uuid: string
-        }
-        Update: {
-          created_at?: string
-          csv_job?: string
-          csv_name?: string
-          default_crew?: string
-          deleted_at?: string | null
-          id?: string
-          is_active?: boolean
-          is_field?: boolean
-          name?: string
-          org_id?: string
-          updated_at?: string
-          uuid?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "avb_employees_org_id_fkey"
             columns: ["org_id"]
             isOneToOne: false
             referencedRelation: "organizations"
@@ -1698,6 +1629,13 @@ export type Database = {
             referencedRelation: "rpt_employees"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "clients_sales_rep_id_fkey"
+            columns: ["sales_rep_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_sales_rep_month"
+            referencedColumns: ["employee_id"]
+          },
         ]
       }
       comments: {
@@ -2348,6 +2286,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "crm_chemical_applications_applicator_employee_id_fkey"
+            columns: ["applicator_employee_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_sales_rep_month"
+            referencedColumns: ["employee_id"]
+          },
+          {
             foreignKeyName: "crm_chemical_applications_job_id_fkey"
             columns: ["job_id"]
             isOneToOne: false
@@ -2782,6 +2727,13 @@ export type Database = {
             referencedRelation: "rpt_employees"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "crm_contracts_sales_rep_id_fkey"
+            columns: ["sales_rep_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_sales_rep_month"
+            referencedColumns: ["employee_id"]
+          },
         ]
       }
       crm_crew_daily_members: {
@@ -2919,7 +2871,7 @@ export type Database = {
           employee_id: string | null
           id: string
           is_foreman: boolean
-          labor_burden_cents_per_hour: number
+          labor_burden_cents_per_hour: number | null
           name: string
           org_id: string
           role: string | null
@@ -2931,7 +2883,7 @@ export type Database = {
           employee_id?: string | null
           id?: string
           is_foreman?: boolean
-          labor_burden_cents_per_hour?: number
+          labor_burden_cents_per_hour?: number | null
           name: string
           org_id?: string
           role?: string | null
@@ -2943,7 +2895,7 @@ export type Database = {
           employee_id?: string | null
           id?: string
           is_foreman?: boolean
-          labor_burden_cents_per_hour?: number
+          labor_burden_cents_per_hour?: number | null
           name?: string
           org_id?: string
           role?: string | null
@@ -2969,6 +2921,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "rpt_employees"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_crew_members_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_sales_rep_month"
+            referencedColumns: ["employee_id"]
           },
           {
             foreignKeyName: "crm_crew_members_org_id_fkey"
@@ -3076,6 +3035,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "rpt_employees"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_crews_foreman_id_fkey"
+            columns: ["foreman_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_sales_rep_month"
+            referencedColumns: ["employee_id"]
           },
           {
             foreignKeyName: "crm_crews_org_id_fkey"
@@ -3477,6 +3443,7 @@ export type Database = {
           is_active: boolean
           is_certified_driver: boolean
           is_sales_rep: boolean
+          labor_burden_cents_per_hour: number
           last_name: string
           last_pay_raise_cents: number
           last_pay_raise_date: string | null
@@ -3501,6 +3468,7 @@ export type Database = {
           resource_pin: string | null
           resource_tags: string[] | null
           route_sheet_format: string | null
+          sales_goals: Json
           send_text_alerts: boolean
           show_in_calendar: boolean
           show_in_selection: boolean
@@ -3553,6 +3521,7 @@ export type Database = {
           is_active?: boolean
           is_certified_driver?: boolean
           is_sales_rep?: boolean
+          labor_burden_cents_per_hour?: number
           last_name: string
           last_pay_raise_cents?: number
           last_pay_raise_date?: string | null
@@ -3577,6 +3546,7 @@ export type Database = {
           resource_pin?: string | null
           resource_tags?: string[] | null
           route_sheet_format?: string | null
+          sales_goals?: Json
           send_text_alerts?: boolean
           show_in_calendar?: boolean
           show_in_selection?: boolean
@@ -3629,6 +3599,7 @@ export type Database = {
           is_active?: boolean
           is_certified_driver?: boolean
           is_sales_rep?: boolean
+          labor_burden_cents_per_hour?: number
           last_name?: string
           last_pay_raise_cents?: number
           last_pay_raise_date?: string | null
@@ -3653,6 +3624,7 @@ export type Database = {
           resource_pin?: string | null
           resource_tags?: string[] | null
           route_sheet_format?: string | null
+          sales_goals?: Json
           send_text_alerts?: boolean
           show_in_calendar?: boolean
           show_in_selection?: boolean
@@ -3694,6 +3666,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "rpt_employees"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_employees_manager_id_fkey"
+            columns: ["manager_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_sales_rep_month"
+            referencedColumns: ["employee_id"]
           },
           {
             foreignKeyName: "crm_employees_org_id_fkey"
@@ -4473,6 +4452,13 @@ export type Database = {
             referencedRelation: "rpt_employees"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "crm_invoices_sales_rep_id_fkey"
+            columns: ["sales_rep_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_sales_rep_month"
+            referencedColumns: ["employee_id"]
+          },
         ]
       }
       crm_job_materials: {
@@ -4785,7 +4771,7 @@ export type Database = {
         Row: {
           acknowledged_notes_at: string | null
           actual_hours: number | null
-          actual_labor_cost_cents: number
+          actual_labor_cost_cents: number | null
           asset_type: string | null
           assigned_employee_id: string | null
           budgeted_hours: number | null
@@ -4827,7 +4813,7 @@ export type Database = {
         Insert: {
           acknowledged_notes_at?: string | null
           actual_hours?: number | null
-          actual_labor_cost_cents?: number
+          actual_labor_cost_cents?: number | null
           asset_type?: string | null
           assigned_employee_id?: string | null
           budgeted_hours?: number | null
@@ -4869,7 +4855,7 @@ export type Database = {
         Update: {
           acknowledged_notes_at?: string | null
           actual_hours?: number | null
-          actual_labor_cost_cents?: number
+          actual_labor_cost_cents?: number | null
           asset_type?: string | null
           assigned_employee_id?: string | null
           budgeted_hours?: number | null
@@ -4909,6 +4895,27 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "crm_job_visits_assigned_employee_id_fkey"
+            columns: ["assigned_employee_id"]
+            isOneToOne: false
+            referencedRelation: "crm_employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_job_visits_assigned_employee_id_fkey"
+            columns: ["assigned_employee_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_job_visits_assigned_employee_id_fkey"
+            columns: ["assigned_employee_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_sales_rep_month"
+            referencedColumns: ["employee_id"]
+          },
           {
             foreignKeyName: "crm_job_visits_client_id_fkey"
             columns: ["client_id"]
@@ -5299,6 +5306,13 @@ export type Database = {
             referencedRelation: "rpt_employees"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "crm_jobs_sales_rep_id_fkey"
+            columns: ["sales_rep_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_sales_rep_month"
+            referencedColumns: ["employee_id"]
+          },
         ]
       }
       crm_list_options: {
@@ -5316,7 +5330,7 @@ export type Database = {
           deleted_at?: string | null
           id?: string
           list_name: string
-          org_id?: string
+          org_id: string
           sort_order?: number
           value: string
         }
@@ -5517,6 +5531,13 @@ export type Database = {
           visits_per_season?: number
         }
         Relationships: [
+          {
+            foreignKeyName: "crm_packages_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "crm_packages_org_id_fkey"
             columns: ["org_id"]
@@ -5792,28 +5813,50 @@ export type Database = {
           org_id?: string
           sort_order?: number
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "crm_rate_matrix_field_defs_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       crm_reports: {
         Row: {
-          html_content: string
+          created_at: string
+          html_content: string | null
           id: string
           metrics: Json | null
-          updated_at: string | null
+          org_id: string
+          updated_at: string
         }
         Insert: {
-          html_content: string
-          id?: string
+          created_at?: string
+          html_content?: string | null
+          id: string
           metrics?: Json | null
-          updated_at?: string | null
+          org_id: string
+          updated_at?: string
         }
         Update: {
-          html_content?: string
+          created_at?: string
+          html_content?: string | null
           id?: string
           metrics?: Json | null
-          updated_at?: string | null
+          org_id?: string
+          updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "crm_reports_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       crm_roles: {
         Row: {
@@ -5975,6 +6018,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "rpt_employees"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_sales_meetings_sales_rep_id_fkey"
+            columns: ["sales_rep_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_sales_rep_month"
+            referencedColumns: ["employee_id"]
           },
           {
             foreignKeyName: "crm_sales_meetings_ticket_id_fkey"
@@ -6714,60 +6764,48 @@ export type Database = {
         Row: {
           budgeted_cost_cents: number
           budgeted_hours: number
-          calc_type: number
-          custom_field_id: string
-          deleted_at: string | null
-          from_val: number
+          created_at: string
+          from_qty: number
           id: string
-          is_tail_row: boolean
           org_id: string
           rate_cents: number
           service_id: string
           sort_order: number
-          tail_every_qty: number | null
-          tail_over_qty: number | null
-          to_val: number | null
+          to_qty: number
+          updated_at: string
         }
         Insert: {
           budgeted_cost_cents?: number
           budgeted_hours?: number
-          calc_type?: number
-          custom_field_id: string
-          deleted_at?: string | null
-          from_val?: number
+          created_at?: string
+          from_qty: number
           id?: string
-          is_tail_row?: boolean
           org_id: string
           rate_cents?: number
           service_id: string
           sort_order?: number
-          tail_every_qty?: number | null
-          tail_over_qty?: number | null
-          to_val?: number | null
+          to_qty: number
+          updated_at?: string
         }
         Update: {
           budgeted_cost_cents?: number
           budgeted_hours?: number
-          calc_type?: number
-          custom_field_id?: string
-          deleted_at?: string | null
-          from_val?: number
+          created_at?: string
+          from_qty?: number
           id?: string
-          is_tail_row?: boolean
           org_id?: string
           rate_cents?: number
           service_id?: string
           sort_order?: number
-          tail_every_qty?: number | null
-          tail_over_qty?: number | null
-          to_val?: number | null
+          to_qty?: number
+          updated_at?: string
         }
         Relationships: [
           {
-            foreignKeyName: "crm_service_rate_matrix_custom_field_id_fkey"
-            columns: ["custom_field_id"]
+            foreignKeyName: "crm_service_rate_matrix_org_id_fkey"
+            columns: ["org_id"]
             isOneToOne: false
-            referencedRelation: "crm_rate_matrix_field_defs"
+            referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
           {
@@ -7228,6 +7266,7 @@ export type Database = {
           ticket_number: number
           type: string
           updated_at: string
+          visible_to_client: boolean
         }
         Insert: {
           assigned_to?: string | null
@@ -7249,6 +7288,7 @@ export type Database = {
           ticket_number?: number
           type?: string
           updated_at?: string
+          visible_to_client?: boolean
         }
         Update: {
           assigned_to?: string | null
@@ -7270,6 +7310,7 @@ export type Database = {
           ticket_number?: number
           type?: string
           updated_at?: string
+          visible_to_client?: boolean
         }
         Relationships: [
           {
@@ -7285,6 +7326,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "rpt_employees"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_tickets_assigned_to_id_fkey"
+            columns: ["assigned_to_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_sales_rep_month"
+            referencedColumns: ["employee_id"]
           },
           {
             foreignKeyName: "crm_tickets_client_id_fkey"
@@ -7642,7 +7690,7 @@ export type Database = {
         Insert: {
           cost_type?: string
           created_at?: string
-          description: string
+          description?: string
           estimate_id: string
           id?: string
           org_id?: string
@@ -8396,6 +8444,13 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "estimate_templates_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "estimate_templates_org_id_fkey"
             columns: ["org_id"]
             isOneToOne: false
@@ -8481,6 +8536,7 @@ export type Database = {
           est_document: string
           estimate_date: string
           estimate_number: number
+          expiry_notified_at: string | null
           gross_profit_cents: number
           id: string
           installment_day_of_month: number | null
@@ -8536,8 +8592,9 @@ export type Database = {
           discount_value?: number | null
           display_settings?: Json
           est_document?: string
-          estimate_date: string
+          estimate_date?: string
           estimate_number?: number
+          expiry_notified_at?: string | null
           gross_profit_cents?: number
           id?: string
           installment_day_of_month?: number | null
@@ -8595,6 +8652,7 @@ export type Database = {
           est_document?: string
           estimate_date?: string
           estimate_number?: number
+          expiry_notified_at?: string | null
           gross_profit_cents?: number
           id?: string
           installment_day_of_month?: number | null
@@ -8654,6 +8712,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "estimates_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "estimates_org_id_fkey"
             columns: ["org_id"]
             isOneToOne: false
@@ -8673,6 +8738,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "rpt_employees"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estimates_sales_rep_id_fkey"
+            columns: ["sales_rep_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_sales_rep_month"
+            referencedColumns: ["employee_id"]
           },
           {
             foreignKeyName: "estimates_stage_id_fkey"
@@ -9104,61 +9176,16 @@ export type Database = {
           },
         ]
       }
-      kpi_actuals: {
-        Row: {
-          actual_value: number | null
-          created_at: string
-          created_by: string | null
-          id: string
-          metric_key: string
-          org_id: string
-          period: string
-          target_value: number | null
-          updated_at: string
-        }
-        Insert: {
-          actual_value?: number | null
-          created_at?: string
-          created_by?: string | null
-          id?: string
-          metric_key: string
-          org_id: string
-          period: string
-          target_value?: number | null
-          updated_at?: string
-        }
-        Update: {
-          actual_value?: number | null
-          created_at?: string
-          created_by?: string | null
-          id?: string
-          metric_key?: string
-          org_id?: string
-          period?: string
-          target_value?: number | null
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "kpi_actuals_org_id_fkey"
-            columns: ["org_id"]
-            isOneToOne: false
-            referencedRelation: "organizations"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       maintenance_requests: {
         Row: {
           asset_id: string | null
           asset_name: string | null
-          automation_id: string | null
           created_at: string
           created_by: string | null
           deleted_at: string | null
           description: string | null
           equipment_type: string | null
-          has_repair_tag: boolean | null
+          has_repair_tag: boolean
           id: string
           linked_work_order_id: string | null
           linked_work_order_number: string | null
@@ -9175,13 +9202,12 @@ export type Database = {
         Insert: {
           asset_id?: string | null
           asset_name?: string | null
-          automation_id?: string | null
           created_at?: string
           created_by?: string | null
           deleted_at?: string | null
           description?: string | null
           equipment_type?: string | null
-          has_repair_tag?: boolean | null
+          has_repair_tag?: boolean
           id?: string
           linked_work_order_id?: string | null
           linked_work_order_number?: string | null
@@ -9198,13 +9224,12 @@ export type Database = {
         Update: {
           asset_id?: string | null
           asset_name?: string | null
-          automation_id?: string | null
           created_at?: string
           created_by?: string | null
           deleted_at?: string | null
           description?: string | null
           equipment_type?: string | null
-          has_repair_tag?: boolean | null
+          has_repair_tag?: boolean
           id?: string
           linked_work_order_id?: string | null
           linked_work_order_number?: string | null
@@ -9219,13 +9244,6 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
-          {
-            foreignKeyName: "maintenance_requests_automation_id_fkey"
-            columns: ["automation_id"]
-            isOneToOne: false
-            referencedRelation: "automations"
-            referencedColumns: ["id"]
-          },
           {
             foreignKeyName: "maintenance_requests_created_by_fkey"
             columns: ["created_by"]
@@ -9863,7 +9881,7 @@ export type Database = {
       parts: {
         Row: {
           alternate_vendors: Json
-          categories: string[]
+          categories: Json | null
           category: string
           cost_layers: Json
           created_at: string
@@ -9888,7 +9906,7 @@ export type Database = {
         }
         Insert: {
           alternate_vendors?: Json
-          categories?: string[]
+          categories?: Json | null
           category?: string
           cost_layers?: Json
           created_at?: string
@@ -9913,7 +9931,7 @@ export type Database = {
         }
         Update: {
           alternate_vendors?: Json
-          categories?: string[]
+          categories?: Json | null
           category?: string
           cost_layers?: Json
           created_at?: string
@@ -10192,13 +10210,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "photo_jobs_created_by_fkey"
-            columns: ["created_by"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-          {
             foreignKeyName: "photo_jobs_org_id_fkey"
             columns: ["org_id"]
             isOneToOne: false
@@ -10456,6 +10467,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "pm_schedules_assigned_to_id_fkey"
+            columns: ["assigned_to_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "pm_schedules_created_by_fkey"
             columns: ["created_by"]
@@ -10900,54 +10918,67 @@ export type Database = {
       }
       project_subcontract_costs: {
         Row: {
-          amount: number
+          amount: number | null
+          cost: number
           cost_date: string | null
-          cost_type: string
+          cost_type: string | null
           created_at: string
           created_by: string | null
           deleted_at: string | null
           description: string
           id: string
+          invoice_date: string | null
           notes: string | null
           org_id: string
           project_id: string
           updated_at: string
           vendor_id: string | null
-          vendor_name: string
+          vendor_name: string | null
         }
         Insert: {
-          amount?: number
+          amount?: number | null
+          cost?: number
           cost_date?: string | null
-          cost_type: string
+          cost_type?: string | null
           created_at?: string
           created_by?: string | null
           deleted_at?: string | null
           description: string
           id?: string
+          invoice_date?: string | null
           notes?: string | null
           org_id?: string
           project_id: string
           updated_at?: string
           vendor_id?: string | null
-          vendor_name: string
+          vendor_name?: string | null
         }
         Update: {
-          amount?: number
+          amount?: number | null
+          cost?: number
           cost_date?: string | null
-          cost_type?: string
+          cost_type?: string | null
           created_at?: string
           created_by?: string | null
           deleted_at?: string | null
           description?: string
           id?: string
+          invoice_date?: string | null
           notes?: string | null
           org_id?: string
           project_id?: string
           updated_at?: string
           vendor_id?: string | null
-          vendor_name?: string
+          vendor_name?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "project_subcontract_costs_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "project_subcontract_costs_org_id_fkey"
             columns: ["org_id"]
@@ -10990,7 +11021,7 @@ export type Database = {
           address: string
           budget_hours: number | null
           burdened_rate_cents: number | null
-          city: string
+          city: string | null
           client_id: string | null
           contract_price: number
           created_at: string
@@ -11008,17 +11039,17 @@ export type Database = {
           org_id: string
           progress_pct: number
           start_date: string | null
-          state: string
+          state: string | null
           status: string
           total_cost: number
           updated_at: string
-          zip: string
+          zip: string | null
         }
         Insert: {
           address?: string
           budget_hours?: number | null
           burdened_rate_cents?: number | null
-          city?: string
+          city?: string | null
           client_id?: string | null
           contract_price?: number
           created_at?: string
@@ -11036,17 +11067,17 @@ export type Database = {
           org_id?: string
           progress_pct?: number
           start_date?: string | null
-          state?: string
+          state?: string | null
           status?: string
           total_cost?: number
           updated_at?: string
-          zip?: string
+          zip?: string | null
         }
         Update: {
           address?: string
           budget_hours?: number | null
           burdened_rate_cents?: number | null
-          city?: string
+          city?: string | null
           client_id?: string | null
           contract_price?: number
           created_at?: string
@@ -11064,11 +11095,11 @@ export type Database = {
           org_id?: string
           progress_pct?: number
           start_date?: string | null
-          state?: string
+          state?: string | null
           status?: string
           total_cost?: number
           updated_at?: string
-          zip?: string
+          zip?: string | null
         }
         Relationships: [
           {
@@ -11994,6 +12025,7 @@ export type Database = {
       }
       wo_vendor_charges: {
         Row: {
+          categories: Json | null
           cost: number
           created_at: string
           created_by: string | null
@@ -12007,6 +12039,7 @@ export type Database = {
           work_order_id: string
         }
         Insert: {
+          categories?: Json | null
           cost?: number
           created_at?: string
           created_by?: string | null
@@ -12020,6 +12053,7 @@ export type Database = {
           work_order_id: string
         }
         Update: {
+          categories?: Json | null
           cost?: number
           created_at?: string
           created_by?: string | null
@@ -12175,6 +12209,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "rpt_employees"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_orders_assigned_to_id_fkey"
+            columns: ["assigned_to_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_sales_rep_month"
+            referencedColumns: ["employee_id"]
           },
           {
             foreignKeyName: "work_orders_automation_id_fkey"
@@ -12772,6 +12813,24 @@ export type Database = {
         }
         Relationships: []
       }
+      rpt_sales_rep_month: {
+        Row: {
+          actual_cents: number | null
+          employee_id: string | null
+          goal_cents: number | null
+          org_id: string | null
+          sales_rep: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_employees_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       rpt_services: {
         Row: {
           category: string | null
@@ -12957,6 +13016,19 @@ export type Database = {
         Args: { p_job_product_id: string }
         Returns: undefined
       }
+      get_auth_user_id_by_email: { Args: { p_email: string }; Returns: string }
+      get_portal_invite_by_token: {
+        Args: { p_token: string }
+        Returns: {
+          accepted_at: string
+          client_id: string
+          email: string
+          expires_at: string
+          id: string
+          org_id: string
+        }[]
+      }
+      has_settings_permission: { Args: { p_key: string }; Returns: boolean }
       increment_api_key_rate_limit: {
         Args: { p_api_key_id: string; p_window_start: string }
         Returns: number
@@ -13017,9 +13089,25 @@ export type Database = {
           new_refunded_amount_cents: number
         }[]
       }
+      server_insert_audit: {
+        Args: {
+          p_action: string
+          p_created_by?: string
+          p_description: string
+          p_org_id: string
+          p_record_id: string
+          p_record_type: string
+          p_user_name?: string
+        }
+        Returns: undefined
+      }
       set_job_product_status: {
         Args: { p_job_product_id: string; p_new_status: string }
         Returns: undefined
+      }
+      settings_permission_for_list_name: {
+        Args: { p_list_name: string }
+        Returns: string
       }
       sync_client_balance: { Args: { p_client_id: string }; Returns: undefined }
       try_increment_ai_draft_usage: {
@@ -13162,6 +13250,9 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {},
   },

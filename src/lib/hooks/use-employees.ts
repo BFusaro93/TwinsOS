@@ -73,6 +73,7 @@ function mapEmployee(row: any): CRMEmployee {
     mapIconColor: row.map_icon_color,
     mapCodes: row.map_codes,
     isSalesRep: row.is_sales_rep ?? false,
+    salesGoals: (row.sales_goals as CRMEmployee["salesGoals"]) ?? {},
     startingAddress: row.starting_address,
     startingCity: row.starting_city,
     startingState: row.starting_state,

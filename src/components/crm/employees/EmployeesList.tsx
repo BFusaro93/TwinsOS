@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   useEmployees,
   useCreateEmployee,
@@ -9,6 +9,8 @@ import {
   useActivateEmployee,
 } from "@/lib/hooks/use-employees";
 import { useRoles } from "@/lib/hooks/use-roles";
+import { useUsers } from "@/lib/hooks/use-users";
+import { MONTH_KEYS, MONTH_LABELS } from "@/lib/reports/helpers";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -401,6 +403,44 @@ function PayrollTab({
   );
 }
 
+function SalesGoalsTab({
+  form,
+  onChange,
+}: {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  form: Record<string, any>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  onChange: (key: string, value: any) => void;
+}) {
+  const goals: Record<string, number> = form.sales_goals ?? {};
+
+  function setGoal(month: string, dollars: string) {
+    const cents = Math.round(parseFloat(dollars || "0") * 100);
+    onChange("sales_goals", { ...goals, [month]: cents || undefined });
+  }
+
+  return (
+    <div className="rounded border">
+      <SectionBar title="Monthly Sales Goals" />
+      <div className="grid grid-cols-4 gap-4 p-4">
+        {MONTH_KEYS.map((month, i) => (
+          <Field key={month} label={MONTH_LABELS[i]}>
+            <FieldInput
+              type="number"
+              step="0.01"
+              min="0"
+              value={goals[month] != null ? (goals[month] / 100).toFixed(2) : ""}
+              onChange={(e) => setGoal(month, e.target.value)}
+              placeholder="0.00"
+              className="h-8 w-28 text-sm"
+            />
+          </Field>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ── user settings tab ─────────────────────────────────────────────────────────
 
 const USER_TYPE_OPTIONS: { value: UserType; label: string }[] = [
@@ -414,16 +454,31 @@ const USER_ROLES = [
   "Admin", "Manager", "Sales / Account Mgr", "Technician", "Purchaser", "Viewer",
 ];
 
+// Display labels for the platform-wide account role (org_users/profiles.role) —
+// keyed the same as PLATFORM_ROLE_LABELS in Settings > Users.
+const PLATFORM_ROLE_LABELS: Record<string, string> = {
+  admin: "Admin",
+  manager: "Manager",
+  purchaser: "Purchaser",
+  technician: "Technician",
+  viewer: "Viewer",
+  requestor: "Requestor",
+  crew: "Crew",
+};
+
 function UserSettingsTab({
   form,
   onChange,
   roles,
+  linkedAccountRole,
 }: {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   form: Record<string, any>;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   onChange: (key: string, value: any) => void;
   roles: { id: string; name: string }[];
+  /** The linked login's real platform role (org_users.role), or null if unlinked. */
+  linkedAccountRole: string | null;
 }) {
   return (
     <div className="rounded border">
@@ -456,14 +511,30 @@ function UserSettingsTab({
             <Checkbox checked={!!form.send_text_alerts} onCheckedChange={(c) => onChange("send_text_alerts", !!c)} />
           </Field>
           <Field label="User Role">
-            <Select value={form.user_role ?? ""} onValueChange={(v) => onChange("user_role", v || null)}>
-              <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Select…" /></SelectTrigger>
-              <SelectContent>
-                {USER_ROLES.map((r) => (
-                  <SelectItem key={r} value={r}>{r}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {linkedAccountRole ? (
+              <>
+                <div className="flex h-8 items-center rounded border bg-slate-50 px-3 text-sm text-slate-600">
+                  {PLATFORM_ROLE_LABELS[linkedAccountRole] ?? linkedAccountRole}
+                </div>
+                <p className="mt-1 text-[11px] text-slate-400">
+                  Set automatically from the linked account&apos;s role. Manage it in Settings → Users.
+                </p>
+              </>
+            ) : (
+              <>
+                <Select value={form.user_role ?? ""} onValueChange={(v) => onChange("user_role", v || null)}>
+                  <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Select…" /></SelectTrigger>
+                  <SelectContent>
+                    {USER_ROLES.map((r) => (
+                      <SelectItem key={r} value={r}>{r}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="mt-1 text-[11px] text-slate-400">
+                  Display label only — link this employee to a login account to set it automatically.
+                </p>
+              </>
+            )}
           </Field>
           <Field label="Landscapt Role">
             <Select value={form.crm_role_id ?? "none"} onValueChange={(v) => onChange("crm_role_id", v === "none" ? null : v)}>
@@ -475,6 +546,9 @@ function UserSettingsTab({
                 ))}
               </SelectContent>
             </Select>
+            <p className="mt-1 text-[11px] text-slate-400">
+              Only applies to non-admin logins — an account with the Admin user role always has full access, regardless of what&apos;s selected here.
+            </p>
           </Field>
           <Field label="Map Icon / Color">
             <FieldInput value={form.map_icon_color ?? ""} onChange={(e) => onChange("map_icon_color", e.target.value)} placeholder="e.g. Gold" />
@@ -566,6 +640,7 @@ function EmployeeDialog({
 }) {
   const { data: employees } = useEmployees(false);
   const { data: crmRoles } = useRoles(true);
+  const { data: orgUsers } = useUsers();
   const { mutateAsync: create, isPending: creating } = useCreateEmployee();
   const { mutateAsync: update, isPending: updating } = useUpdateEmployee();
 
@@ -580,6 +655,7 @@ function EmployeeDialog({
     num_dependants: 0, hourly_rate_cents: 0, overtime_rate_cents: 0,
     vacation_days: 0, sick_days: 0, commission_pct: 0, last_pay_raise_cents: 0,
     resource_tags: [] as string[],
+    sales_goals: {} as Record<string, number>,
   };
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -611,6 +687,7 @@ function EmployeeDialog({
       office_time_clock: e.officeTimeClock, send_text_alerts: e.sendTextAlerts,
       user_role: e.userRole, crm_role_id: e.crmRoleId, route_sheet_format: e.routeSheetFormat,
       map_icon_color: e.mapIconColor, map_codes: e.mapCodes, is_sales_rep: e.isSalesRep,
+    sales_goals: e.salesGoals,
       starting_address: e.startingAddress, starting_city: e.startingCity,
       starting_state: e.startingState, starting_zip: e.startingZip,
       starting_lat: e.startingLat, starting_lng: e.startingLng,
@@ -628,6 +705,18 @@ function EmployeeDialog({
   function onChange(key: string, value: any) {
     setForm((prev) => ({ ...prev, [key]: value }));
   }
+
+  const linkedAccountRole: string | null =
+    (form.user_id && orgUsers?.find((u) => u.id === form.user_id)?.role) || null;
+
+  // Keep the display-only "User Role" label in sync with the linked account's
+  // actual platform role — it must never drift from what really grants access.
+  useEffect(() => {
+    if (!linkedAccountRole) return;
+    const label = PLATFORM_ROLE_LABELS[linkedAccountRole] ?? linkedAccountRole;
+    if (form.user_role !== label) onChange("user_role", label);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [linkedAccountRole]);
 
   async function submit() {
     if (!form.first_name || !form.last_name) {
@@ -666,6 +755,7 @@ function EmployeeDialog({
               { value: "personal", label: "Personal Information" },
               { value: "employment", label: "Employment" },
               { value: "payroll", label: "Payroll / Job Costing" },
+              ...(form.is_sales_rep ? [{ value: "sales_goals", label: "Sales Goals" }] : []),
               { value: "user_settings", label: "User Settings" },
               { value: "notes", label: "Notes" },
             ].map((tab) => (
@@ -689,8 +779,13 @@ function EmployeeDialog({
             <TabsContent value="payroll" className="mt-0">
               <PayrollTab form={form} onChange={onChange} />
             </TabsContent>
+            {form.is_sales_rep && (
+              <TabsContent value="sales_goals" className="mt-0">
+                <SalesGoalsTab form={form} onChange={onChange} />
+              </TabsContent>
+            )}
             <TabsContent value="user_settings" className="mt-0">
-              <UserSettingsTab form={form} onChange={onChange} roles={crmRoles ?? []} />
+              <UserSettingsTab form={form} onChange={onChange} roles={crmRoles ?? []} linkedAccountRole={linkedAccountRole} />
             </TabsContent>
             <TabsContent value="notes" className="mt-0">
               <textarea

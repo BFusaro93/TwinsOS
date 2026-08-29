@@ -495,6 +495,16 @@ export const REPORT_DATASETS: ReportDataset[] = [
       { key: "created_at", label: "Created At", type: "datetime" },
     ],
   },
+  {
+    key: "rpt_sales_rep_month",
+    label: "Sales Rep — Current Month",
+    description: "Each sales rep's invoiced revenue so far this month against their sales goal for the month.",
+    fields: [
+      { key: "sales_rep", label: "Sales Rep", type: "text" },
+      { key: "goal_cents", label: "Goal", type: "money" },
+      { key: "actual_cents", label: "Actual", type: "money" },
+    ],
+  },
 ];
 
 export const DATASET_MAP: Record<string, ReportDataset> = Object.fromEntries(

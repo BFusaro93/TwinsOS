@@ -485,4 +485,149 @@ export const CLIENT_REPORTS: PrebuiltReportDef[] = [
       );
     },
   },
+  {
+    key: "clients-leads-monthly-matrix",
+    section: "client",
+    name: "Clients/Leads Monthly Matrix",
+    description: "New clients, new leads, conversion rate, and terminations for the last 3 months.",
+    filters: [],
+    run: async ({ supabase }) => {
+      const now = new Date();
+      const months = [2, 1, 0].map((back) => {
+        const d = new Date(now.getFullYear(), now.getMonth() - back, 1);
+        return {
+          key: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`,
+          label: d.toLocaleString("en-US", { month: "short", year: "numeric" }),
+          start: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`,
+          end: new Date(d.getFullYear(), d.getMonth() + 1, 0).toISOString().slice(0, 10),
+        };
+      });
+      const earliestStart = months[0].start;
+
+      const { data, error } = await supabase
+        .from("clients")
+        .select("status, client_since, created_at, closed_at")
+        .is("deleted_at", null)
+        .or(
+          `client_since.gte.${earliestStart},created_at.gte.${earliestStart},closed_at.gte.${earliestStart}`
+        )
+        .limit(10000);
+      if (error) throw new Error(error.message);
+
+      type Row = {
+        status: string | null;
+        client_since: string | null;
+        created_at: string | null;
+        closed_at: string | null;
+      };
+      const rows = (data ?? []) as unknown as Row[];
+
+      function inMonth(dateStr: string | null, m: (typeof months)[number]): boolean {
+        if (!dateStr) return false;
+        const d = dateStr.slice(0, 10);
+        return d >= m.start && d <= m.end;
+      }
+
+      const newClients: Record<string, number> = {};
+      const newLeads: Record<string, number> = {};
+      const terminated: Record<string, number> = {};
+      for (const m of months) {
+        newClients[m.key] = rows.filter((r) => r.status !== "lead" && inMonth(r.client_since, m)).length;
+        newLeads[m.key] = rows.filter((r) => r.status === "lead" && inMonth(r.created_at, m)).length;
+        terminated[m.key] = rows.filter((r) => r.status === "cancelled" && inMonth(r.closed_at, m)).length;
+      }
+
+      const metricRow = (
+        label: string,
+        values: Record<string, number>,
+        format: (n: number) => string | number
+      ) => {
+        const out: Record<string, string | number> = { metric: label };
+        for (const m of months) out[m.key] = format(values[m.key]);
+        return out;
+      };
+
+      const resultRows = [
+        metricRow("New Clients", newClients, (n) => n),
+        metricRow("New Leads", newLeads, (n) => n),
+        {
+          metric: "Conversion %",
+          ...Object.fromEntries(
+            months.map((m) => [
+              m.key,
+              newLeads[m.key] > 0 ? Math.round((newClients[m.key] / newLeads[m.key]) * 1000) / 10 : 0,
+            ])
+          ),
+        },
+        metricRow("Terminated", terminated, (n) => n),
+      ];
+
+      return buildResult(
+        [
+          col("metric", "Metric"),
+          ...months.map((m) => col(m.key, m.label, "number", false)),
+        ],
+        resultRows
+      );
+    },
+  },
+  {
+    key: "clients-leads-stats",
+    section: "client",
+    name: "Clients and Leads",
+    description: "New leads, converted leads, average days to convert, and cancellations for a date range, plus current totals.",
+    filters: [dateRangeFilterDef("Date Range", "this_year")],
+    run: async ({ supabase, params }) => {
+      const { from, to } = resolveDateRange(params, "this_year");
+
+      const { data, error } = await supabase
+        .from("clients")
+        .select("status, client_since, created_at, closed_at")
+        .is("deleted_at", null)
+        .limit(20000);
+      if (error) throw new Error(error.message);
+
+      type Row = {
+        status: string | null;
+        client_since: string | null;
+        created_at: string | null;
+        closed_at: string | null;
+      };
+      const rows = (data ?? []) as unknown as Row[];
+
+      function inRange(dateStr: string | null): boolean {
+        if (!dateStr) return false;
+        const d = dateStr.slice(0, 10);
+        return (!from || d >= from) && (!to || d <= to);
+      }
+
+      const newLeads = rows.filter((r) => r.status === "lead" && inRange(r.created_at));
+      const convertedLeads = rows.filter((r) => r.status !== "lead" && r.client_since && inRange(r.client_since));
+      const cancelledClients = rows.filter((r) => r.status === "cancelled" && inRange(r.closed_at));
+      const totalClients = rows.filter((r) => r.status !== "lead").length;
+      const totalLeads = rows.filter((r) => r.status === "lead").length;
+
+      const convertDays = convertedLeads
+        .filter((r) => r.client_since && r.created_at)
+        .map((r) => (new Date(r.client_since!).getTime() - new Date(r.created_at!).getTime()) / 86400000);
+      const avgDaysToConvert =
+        convertDays.length > 0
+          ? Math.round((convertDays.reduce((a, b) => a + b, 0) / convertDays.length) * 100) / 100
+          : 0;
+
+      const resultRows = [
+        { metric: "New Leads", value: newLeads.length },
+        { metric: "Converted Leads", value: convertedLeads.length },
+        { metric: "Avg Days to Convert", value: avgDaysToConvert },
+        { metric: "Cancelled Clients", value: cancelledClients.length },
+        { metric: "Total Clients", value: totalClients },
+        { metric: "Total Leads", value: totalLeads },
+      ];
+
+      return buildResult(
+        [col("metric", "Metric"), col("value", "Value", "number", false)],
+        resultRows
+      );
+    },
+  },
 ];

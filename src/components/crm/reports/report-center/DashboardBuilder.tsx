@@ -484,6 +484,15 @@ export function DashboardBuilder({ dashboardId }: { dashboardId?: string }) {
                 />
                 Show a shared date range filter for this tab
               </label>
+              <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-700">
+                <Checkbox
+                  checked={!!activeTab.useRepFilter}
+                  onCheckedChange={(checked) =>
+                    updateActiveTab((tab) => ({ ...tab, useRepFilter: checked === true }))
+                  }
+                />
+                Show a shared Sales Rep filter for this tab
+              </label>
             </CardContent>
           </Card>
 
@@ -644,6 +653,7 @@ export function DashboardBuilder({ dashboardId }: { dashboardId?: string }) {
                 key={editingPanel.id}
                 panel={editingPanel}
                 tabUsesDateFilter={activeTab.useDateFilter}
+                tabUsesRepFilter={!!activeTab.useRepFilter}
                 onSave={handleSavePanel}
                 onCancel={() => setEditingPanel(null)}
               />
@@ -934,15 +944,17 @@ function ReportPanelEditor({
 interface PanelEditorProps {
   panel: DashboardPanel;
   tabUsesDateFilter: boolean;
+  tabUsesRepFilter: boolean;
   onSave: (panel: DashboardPanel) => void;
   onCancel: () => void;
 }
 
-function PanelEditor({ panel, tabUsesDateFilter, onSave, onCancel }: PanelEditorProps) {
+function PanelEditor({ panel, tabUsesDateFilter, tabUsesRepFilter, onSave, onCancel }: PanelEditorProps) {
   const [title, setTitle] = useState(panel.title);
   const [size, setSize] = useState<DashboardPanel["size"]>(panel.size);
   const [visualType, setVisualType] = useState<VisualType>(panel.visual.type);
   const [useTabDateRange, setUseTabDateRange] = useState(panel.visual.useTabDateRange);
+  const [useTabRepFilter, setUseTabRepFilter] = useState(!!panel.visual.useTabRepFilter);
   const [relativeDateFilter, setRelativeDateFilter] = useState(
     panel.visual.relativeDateFilter ?? "none"
   );
@@ -1034,6 +1046,7 @@ function PanelEditor({ panel, tabUsesDateFilter, onSave, onCancel }: PanelEditor
       type: visualType,
       config,
       useTabDateRange,
+      useTabRepFilter: useTabRepFilter || undefined,
       relativeDateFilter:
         relativeDateFilter === "today" || relativeDateFilter === "yesterday"
           ? relativeDateFilter
@@ -1160,6 +1173,15 @@ function PanelEditor({ panel, tabUsesDateFilter, onSave, onCancel }: PanelEditor
                 onCheckedChange={(checked) => setUseTabDateRange(checked === true)}
               />
               Use this tab&apos;s shared date range
+            </label>
+          )}
+          {tabUsesRepFilter && (
+            <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-700">
+              <Checkbox
+                checked={useTabRepFilter}
+                onCheckedChange={(checked) => setUseTabRepFilter(checked === true)}
+              />
+              Use this tab&apos;s shared Sales Rep filter
             </label>
           )}
           <Select value={relativeDateFilter} onValueChange={setRelativeDateFilter}>

@@ -217,4 +217,114 @@ export const ESTIMATE_REPORTS: PrebuiltReportDef[] = [
       );
     },
   },
+  {
+    key: "close-ratios-by-sales-rep",
+    section: "estimates",
+    name: "Close Ratios by Sales Rep",
+    description: "Shows each sales rep's win rate by estimate count and by dollar value for a date range.",
+    filters: [dateRangeFilterDef("Estimate Date", "this_month")],
+    run: async ({ supabase, params }) => {
+      const { from, to } = resolveDateRange(params, "this_month");
+      let query = supabase
+        .from("estimates")
+        .select("stage, total_cents, sales_rep:crm_employees!estimates_sales_rep_id_fkey(first_name,last_name)")
+        .is("deleted_at", null);
+      if (from) query = query.gte("estimate_date", from);
+      if (to) query = query.lte("estimate_date", to);
+      const { data, error } = await query.limit(10000);
+      if (error) throw new Error(error.message);
+
+      type Row = {
+        stage: string | null;
+        total_cents: number | null;
+        sales_rep: { first_name: string | null; last_name: string | null } | null;
+      };
+
+      interface RepTotals {
+        won_count: number;
+        total_count: number;
+        won_cents: number;
+        total_cents: number;
+      }
+      const byRep = new Map<string, RepTotals>();
+      for (const r of (data ?? []) as unknown as Row[]) {
+        const name = `${r.sales_rep?.first_name ?? ""} ${r.sales_rep?.last_name ?? ""}`.trim() || "(unassigned)";
+        const totals = byRep.get(name) ?? { won_count: 0, total_count: 0, won_cents: 0, total_cents: 0 };
+        const isWon = r.stage === "accepted" || r.stage === "invoiced";
+        totals.total_count += 1;
+        totals.total_cents += r.total_cents ?? 0;
+        if (isWon) {
+          totals.won_count += 1;
+          totals.won_cents += r.total_cents ?? 0;
+        }
+        byRep.set(name, totals);
+      }
+
+      const rows = [...byRep.entries()]
+        .map(([sales_rep, t]) => ({
+          sales_rep,
+          won_count: t.won_count,
+          total_count: t.total_count,
+          won_count_pct: t.total_count > 0 ? Math.round((t.won_count / t.total_count) * 1000) / 10 : 0,
+          won_cents: t.won_cents,
+          total_est_cents: t.total_cents,
+          won_amount_pct: t.total_cents > 0 ? Math.round((t.won_cents / t.total_cents) * 1000) / 10 : 0,
+        }))
+        .sort((a, b) => b.total_count - a.total_count);
+
+      return buildResult(
+        [
+          col("sales_rep", "Sales Rep"),
+          col("won_count", "Won Count", "number", false),
+          col("total_count", "Total Count", "number", false),
+          col("won_count_pct", "Won Count Ratio", "percent"),
+          col("won_cents", "Won Amount", "money"),
+          col("total_est_cents", "Total Estimated", "money"),
+          col("won_amount_pct", "Won Amount Ratio", "percent"),
+        ],
+        rows
+      );
+    },
+  },
+  {
+    key: "sales-activity-last-7-days",
+    section: "estimates",
+    name: "Sales Activity (Last 7 Days)",
+    description: "Shows estimates created or sent per day over the last 7 days.",
+    filters: [],
+    run: async ({ supabase }) => {
+      const today = new Date();
+      const start = new Date(today);
+      start.setDate(start.getDate() - 6);
+      const startIso = start.toISOString().slice(0, 10);
+
+      const { data, error } = await supabase
+        .from("estimates")
+        .select("estimate_date")
+        .is("deleted_at", null)
+        .gte("estimate_date", startIso)
+        .limit(10000);
+      if (error) throw new Error(error.message);
+
+      const counts = new Map<string, number>();
+      for (const r of (data ?? []) as { estimate_date: string | null }[]) {
+        if (!r.estimate_date) continue;
+        const day = r.estimate_date.slice(0, 10);
+        counts.set(day, (counts.get(day) ?? 0) + 1);
+      }
+
+      const days: { day: string; count: number }[] = [];
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date(today);
+        d.setDate(d.getDate() - i);
+        const key = d.toISOString().slice(0, 10);
+        days.push({ day: key, count: counts.get(key) ?? 0 });
+      }
+
+      return buildResult(
+        [col("day", "Date", "date"), col("count", "# of Estimates", "number", false)],
+        days
+      );
+    },
+  },
 ];

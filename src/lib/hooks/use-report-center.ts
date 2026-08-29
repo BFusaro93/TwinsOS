@@ -393,11 +393,12 @@ function relativeDateISO(kind: "today" | "yesterday"): string {
 
 export function buildEffectiveConfig(
   visual: VisualSpec,
-  dateRange?: { from: string; to: string }
+  dateRange?: { from: string; to: string },
+  repFilter?: string
 ): AnalysisConfig {
   let config = visual.config;
   const dataset = getDataset(config.dataset);
-  const dateField = dataset?.defaultDateField;
+  const dateField = visual.dateColumn ?? dataset?.defaultDateField;
   if (visual.useTabDateRange && dateRange && dateField) {
     config = {
       ...config,
@@ -417,18 +418,25 @@ export function buildEffectiveConfig(
       ],
     };
   }
+  if (visual.useTabRepFilter && repFilter) {
+    config = {
+      ...config,
+      filters: [...config.filters, { column: "sales_rep", op: "eq", value: repFilter }],
+    };
+  }
   return config;
 }
 
 export function useRunVisualQuery(
   visual: VisualSpec | undefined,
-  dateRange?: { from: string; to: string }
+  dateRange?: { from: string; to: string },
+  repFilter?: string
 ) {
   return useQuery<ReportResult>({
-    queryKey: ["run-visual", visual, dateRange],
+    queryKey: ["run-visual", visual, dateRange, repFilter],
     enabled: !!visual,
     queryFn: async () => {
-      const config = buildEffectiveConfig(visual as VisualSpec, dateRange);
+      const config = buildEffectiveConfig(visual as VisualSpec, dateRange, repFilter);
       const res = await fetch("/api/crm/reports/analysis/run", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
