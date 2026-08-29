@@ -250,48 +250,66 @@ export function ApiKeysCard() {
           </DialogHeader>
           <Input readOnly value={newKey?.apiKey ?? ""} className="font-mono text-sm" />
 
-          {newKey && (
-            <div className="space-y-1.5">
-              <Label>Connect this key as an MCP server</Label>
-              <div className="relative">
-                <pre className="whitespace-pre-wrap break-all rounded bg-slate-900 p-3 pr-16 text-xs text-slate-100">
-                  {JSON.stringify(
-                    {
-                      mcpServers: {
-                        twinsos: { url: mcpUrl, headers: { Authorization: `Bearer ${newKey.apiKey}` } },
-                      },
-                    },
-                    null,
-                    2
-                  )}
-                </pre>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="absolute right-2 top-2 bg-white"
-                  onClick={() =>
-                    copyToClipboard(
-                      JSON.stringify(
-                        {
-                          mcpServers: {
-                            twinsos: { url: mcpUrl, headers: { Authorization: `Bearer ${newKey.apiKey}` } },
-                          },
-                        },
-                        null,
-                        2
-                      )
-                    )
-                  }
-                >
-                  Copy
-                </Button>
+          {newKey && (() => {
+            const mcpConfigJson = JSON.stringify(
+              {
+                mcpServers: {
+                  landscapt: { url: mcpUrl, headers: { Authorization: `Bearer ${newKey.apiKey}` } },
+                },
+              },
+              null,
+              2
+            );
+            const mcpCliCommand = `claude mcp add --transport http landscapt ${mcpUrl} --header "Authorization: Bearer ${newKey.apiKey}"`;
+
+            return (
+              <div className="space-y-4">
+                <div className="space-y-1.5">
+                  <Label>For Claude Code (run in your terminal)</Label>
+                  <div className="relative">
+                    <pre className="whitespace-pre-wrap break-all rounded bg-slate-900 p-3 pr-16 text-xs text-slate-100">
+                      {mcpCliCommand}
+                    </pre>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="absolute right-2 top-2 bg-white"
+                      onClick={() => copyToClipboard(mcpCliCommand)}
+                    >
+                      Copy
+                    </Button>
+                  </div>
+                  <p className="text-xs text-slate-500">
+                    Registers this key as an MCP server named &quot;landscapt&quot; for the Claude Code CLI. Paste the whole
+                    line at your terminal prompt — it&apos;s one command, not a file to edit.
+                  </p>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label>For other MCP clients (config file)</Label>
+                  <div className="relative">
+                    <pre className="whitespace-pre-wrap break-all rounded bg-slate-900 p-3 pr-16 text-xs text-slate-100">
+                      {mcpConfigJson}
+                    </pre>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="absolute right-2 top-2 bg-white"
+                      onClick={() => copyToClipboard(mcpConfigJson)}
+                    >
+                      Copy
+                    </Button>
+                  </div>
+                  <p className="text-xs text-slate-500">
+                    This is a config-file snippet, not a command — paste it into your MCP client&apos;s own config file
+                    (Claude Desktop, ChatGPT, Gemini, or any other MCP-compatible client; exact file location and key
+                    names vary by client). Don&apos;t paste it into a terminal. Either way, this key only sees tools for
+                    the scopes you just granted it.
+                  </p>
+                </div>
               </div>
-              <p className="text-xs text-slate-500">
-                Paste into your MCP client&apos;s config (e.g. Claude Desktop/Code). The key only sees tools for the
-                scopes you just granted it.
-              </p>
-            </div>
-          )}
+            );
+          })()}
 
           <DialogFooter>
             <Button onClick={() => setNewKey(null)}>Done</Button>
