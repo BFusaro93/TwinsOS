@@ -45,20 +45,34 @@ export function MeterDetailPanel({ meter }: MeterDetailPanelProps) {
   const [showAllReadings, setShowAllReadings] = useState(false);
   const { data: readings, isLoading } = useMeterReadings(meter.id);
 
-  const chartData = (readings ?? []).map((r) => ({
+  // Both the chart and the stat cards below are labeled as a 12-month
+  // window ("Past 12 mo" / "Reading History (12 months)") but were computed
+  // over the meter's ENTIRE reading history — a meter with readings
+  // spanning years showed a multi-year delta and avg/mo = delta ÷
+  // (readingCount − 1) (reading-count-based, not time-based) under that
+  // label. Filter to the actual last 12 months for both.
+  const twelveMonthsAgo = new Date();
+  twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 12);
+  const recentReadings = (readings ?? []).filter((r) => new Date(r.readingAt) >= twelveMonthsAgo);
+
+  const chartData = recentReadings.map((r) => ({
     date: formatReadingDate(r.readingAt),
     value: r.value,
     fullDate: r.readingAt,
   }));
 
-  // Calculate delta from first to last reading
-  const firstReading = readings?.[0];
-  const lastReading = readings?.[readings.length - 1];
+  // Calculate delta from first to last reading within the window
+  const firstReading = recentReadings[0];
+  const lastReading = recentReadings[recentReadings.length - 1];
   const totalDelta =
     firstReading && lastReading ? lastReading.value - firstReading.value : null;
+  const monthsElapsed =
+    firstReading && lastReading
+      ? Math.max(1, (new Date(lastReading.readingAt).getTime() - new Date(firstReading.readingAt).getTime()) / (1000 * 60 * 60 * 24 * 30))
+      : null;
   const avgPerMonth =
-    totalDelta !== null && readings && readings.length > 1
-      ? Math.round(totalDelta / (readings.length - 1))
+    totalDelta !== null && monthsElapsed !== null && recentReadings.length > 1
+      ? Math.round(totalDelta / monthsElapsed)
       : null;
 
   return (

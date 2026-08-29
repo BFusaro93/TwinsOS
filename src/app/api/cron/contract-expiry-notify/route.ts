@@ -7,11 +7,20 @@ import { EMAIL_FROM } from "@/lib/email/send";
 /**
  * GET /api/cron/contract-expiry-notify — called daily by Vercel Cron.
  *
- * Finds contracts ending in the next 3 days (still active, not auto-renewing)
- * and emails the contract's sales rep — same shape as
- * /api/crm/estimates/expiry-notify, but keyed off `sales_rep_id` (contracts'
- * owner field) rather than `created_by` (which is what the estimate cron
- * uses, since these two features ended up with different owner columns).
+ * Finds contracts ending in the next 3 days (still active) and emails the
+ * contract's sales rep — same shape as /api/crm/estimates/expiry-notify, but
+ * keyed off `sales_rep_id` (contracts' owner field) rather than `created_by`
+ * (which is what the estimate cron uses, since these two features ended up
+ * with different owner columns).
+ *
+ * Previously excluded auto_renew=true contracts on the assumption those
+ * renew themselves — but no code anywhere actually extends a contract's
+ * end_date or performs a renewal, so that exclusion meant an auto_renew
+ * contract would reach its end date, silently stop being billed (the
+ * invoicing cron correctly requires status IN ('signed','active') and
+ * doesn't care about auto_renew), and nobody would ever be told it lapsed.
+ * Notify for every expiring contract regardless of auto_renew until real
+ * auto-renewal exists.
  *
  * Security: Vercel passes Authorization: Bearer {CRON_SECRET}.
  */
@@ -42,7 +51,6 @@ export async function GET(request: Request) {
     .gte("end_date", todayStr)
     .lte("end_date", windowEndStr)
     .eq("is_active", true)
-    .eq("auto_renew", false)
     .is("deleted_at", null);
 
   if (!expiring?.length) {
