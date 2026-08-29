@@ -60,7 +60,7 @@ export default function ApiDocsPage() {
         <p className="text-sm leading-relaxed text-slate-600">
           <code className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-xs">/api/mcp</code> exposes the same
           API keys and scopes as an MCP server, so an AI agent (Claude, or any other MCP client) can be pointed at
-          your TwinsOS data directly. Connect with the same{" "}
+          your Landscapt data directly. Connect with the same{" "}
           <code className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-xs">
             Authorization: Bearer &lt;your-api-key&gt;
           </code>{" "}
