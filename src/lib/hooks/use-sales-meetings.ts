@@ -139,7 +139,25 @@ export function useUpdateSalesMeeting() {
       if (values.title !== undefined) patch.title = values.title;
       if (values.meetingType !== undefined) patch.meeting_type = values.meetingType;
       if (values.location !== undefined) patch.location = values.location;
-      if (values.scheduledAt !== undefined) patch.scheduled_at = values.scheduledAt;
+      if (values.scheduledAt !== undefined) {
+        patch.scheduled_at = values.scheduledAt;
+        // The edit dialog always resubmits scheduledAt (recomputed from its
+        // date/time fields) even when the user only changed something else
+        // like notes — so only reset the reminder if the time is ACTUALLY
+        // changing, or every unrelated edit would also re-arm (and
+        // duplicate-send) the reminder. The cron only selects rows where
+        // reminder_sent_at is null, so a genuine reschedule after the
+        // reminder already fired for the old time needs this reset or
+        // nothing ever re-fires for the new time.
+        const { data: existing } = await supabase
+          .from("crm_sales_meetings")
+          .select("scheduled_at")
+          .eq("id", id)
+          .maybeSingle();
+        if (existing && new Date(existing.scheduled_at).getTime() !== new Date(values.scheduledAt).getTime()) {
+          patch.reminder_sent_at = null;
+        }
+      }
       if (values.durationMinutes !== undefined) patch.duration_minutes = values.durationMinutes;
       if (values.notes !== undefined) patch.notes = values.notes;
       if (values.estimateId !== undefined) patch.estimate_id = values.estimateId;
