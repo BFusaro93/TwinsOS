@@ -29,6 +29,7 @@ export async function resolveEmailStepContent(
     orgId: string;
     clientId: string;
     estimateId: string | null;
+    meetingId?: string | null;
     subjectTemplate: string;
     bodyTemplate: string;
     toSelection?: string[];
@@ -72,13 +73,17 @@ export async function resolveEmailStepContent(
 
   let fromAddress = DEFAULT_FROM_ADDRESS;
   if (params.fromSelection === "sales_rep" && client.sales_rep_id) {
+    // clients.sales_rep_id references crm_employees, not profiles — an
+    // employee's email/name live there directly regardless of whether they
+    // have a login (profiles row) at all.
     const { data: rep } = await supabase
-      .from("profiles")
-      .select("name, email")
+      .from("crm_employees")
+      .select("first_name, last_name, email")
       .eq("id", client.sales_rep_id)
       .single();
     if (rep?.email) {
-      fromAddress = rep.name ? `${rep.name} <${rep.email}>` : (rep.email as string);
+      const repName = `${rep.first_name ?? ""} ${rep.last_name ?? ""}`.trim();
+      fromAddress = repName ? `${repName} <${rep.email}>` : (rep.email as string);
     }
   }
 
@@ -100,6 +105,28 @@ export async function resolveEmailStepContent(
     }
   }
 
+  let meetingDate = "";
+  let meetingTime = "";
+  let meetingLocation = "";
+  let meetingTitle = "";
+  let salesRepName = "";
+  if (params.meetingId) {
+    const { data: meeting } = await supabase
+      .from("crm_sales_meetings")
+      .select("title, scheduled_at, location, crm_employees(first_name, last_name)")
+      .eq("id", params.meetingId)
+      .single();
+    if (meeting) {
+      const when = new Date(meeting.scheduled_at as string);
+      meetingDate = when.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
+      meetingTime = when.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+      meetingLocation = (meeting.location as string | null) ?? "";
+      meetingTitle = (meeting.title as string) ?? "";
+      const rep = meeting.crm_employees as { first_name: string; last_name: string } | null;
+      salesRepName = rep ? `${rep.first_name} ${rep.last_name}`.trim() : "";
+    }
+  }
+
   const clientDisplayName = (client.display_name as string) ?? "";
   const clientFirstName = clientDisplayName.split(" ")[0] ?? clientDisplayName;
   const orgName = (orgRow?.name as string) ?? "Your Service Provider";
@@ -117,6 +144,11 @@ export async function resolveEmailStepContent(
     "[billingstate]": (client.billing_state as string | null) ?? "",
     "[billingzip]": (client.billing_zip as string | null) ?? "",
     "[accountnumber]": (client.account_number as string | null) ?? "",
+    "[meetingdate]": meetingDate,
+    "[meetingtime]": meetingTime,
+    "[meetinglocation]": meetingLocation,
+    "[meetingtitle]": meetingTitle,
+    "[salesrepname]": salesRepName,
   };
   const resolve = (template: string) =>
     template.replace(/\[(\w+)\]/gi, (match) => {

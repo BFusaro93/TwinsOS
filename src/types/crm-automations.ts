@@ -56,6 +56,8 @@ export type TriggerType =
   | 'ticket_closed'
   | 'ticket_created'
   | 'ticket_reopened'
+  // Sales Meeting
+  | 'sales_meeting_reminder'
   // Legacy / keep for compatibility
   | 'client_status_changed'
   | 'date_based'
@@ -261,6 +263,8 @@ export interface CRMSequence {
 export interface TriggerConfig {
   /** date-gap trigger types (estimate_expiring, estimate_no_response). */
   days?: number;
+  /** minutes-gap trigger types (sales_meeting_reminder). */
+  minutes?: number;
   /** service_visit_completed — a crm_services.id to match, or unset for "any service". */
   service_id?: string;
   /**

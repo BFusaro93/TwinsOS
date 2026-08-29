@@ -534,7 +534,7 @@ async function handleRun(request: Request) {
 
     let enrollQuery = (adminClient as AdminClient)
       .from("crm_sequence_enrollments")
-      .select("id, org_id, sequence_id, client_id, estimate_id, ticket_id, invoice_id, next_event_position")
+      .select("id, org_id, sequence_id, client_id, estimate_id, ticket_id, invoice_id, meeting_id, next_event_position")
       .lte("next_fire_at", nowIso)
       .is("completed_at", null)
       .is("stopped_at", null)

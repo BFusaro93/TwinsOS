@@ -25,6 +25,7 @@ export async function isEligibleForEnrollment(
     estimateId: string | null;
     ticketId?: string | null;
     invoiceId?: string | null;
+    meetingId?: string | null;
     allowReentry: boolean;
     reentryAfterMinutes: number;
   }
@@ -38,17 +39,19 @@ export async function isEligibleForEnrollment(
     .limit(1);
 
   // Dedup against the most specific record this trigger is scoped to — an
-  // estimate/ticket/invoice-scoped trigger re-checks against that same
-  // record's own enrollment history, not the client's enrollments in general
-  // (mirrors the pre-existing estimate_id behavior).
+  // estimate/ticket/invoice/meeting-scoped trigger re-checks against that
+  // same record's own enrollment history, not the client's enrollments in
+  // general (mirrors the pre-existing estimate_id behavior).
   if (params.estimateId) {
     query = query.eq("estimate_id", params.estimateId);
   } else if (params.ticketId) {
     query = query.eq("ticket_id", params.ticketId);
   } else if (params.invoiceId) {
     query = query.eq("invoice_id", params.invoiceId);
+  } else if (params.meetingId) {
+    query = query.eq("meeting_id", params.meetingId);
   } else {
-    query = query.eq("client_id", params.clientId).is("estimate_id", null).is("ticket_id", null).is("invoice_id", null);
+    query = query.eq("client_id", params.clientId).is("estimate_id", null).is("ticket_id", null).is("invoice_id", null).is("meeting_id", null);
   }
 
   const { data: existing } = await query.maybeSingle();
@@ -109,6 +112,7 @@ export async function enrollClientInSequence(
     estimateId?: string | null;
     ticketId?: string | null;
     invoiceId?: string | null;
+    meetingId?: string | null;
   }
 ): Promise<string | null> {
   const { data: firstEvent } = await supabase
@@ -143,6 +147,7 @@ export async function enrollClientInSequence(
       estimate_id: params.estimateId ?? null,
       ticket_id: params.ticketId ?? null,
       invoice_id: params.invoiceId ?? null,
+      meeting_id: params.meetingId ?? null,
       enrolled_at: new Date().toISOString(),
       next_event_position: firstEvent?.event_type === "wait" ? 1 : 0,
       next_fire_at: nextFireAt,
@@ -681,6 +686,7 @@ export async function fireSimpleTrigger(
     /** The ticket/invoice this event pertains to — threaded through so ticket_category/ticket_past_due_days/invoice_* conditions can check the right record, and so the enrollment (and its later stop-condition checks) stay scoped to it. */
     ticketId?: string | null;
     invoiceId?: string | null;
+    meetingId?: string | null;
     triggerType: TriggerType;
     /**
      * The value(s) this specific event pertains to (a visit's service ids, a
@@ -730,6 +736,7 @@ export async function fireSimpleTrigger(
       estimateId: params.estimateId ?? null,
       ticketId: params.ticketId ?? null,
       invoiceId: params.invoiceId ?? null,
+      meetingId: params.meetingId ?? null,
       allowReentry: seq.allow_reentry ?? false,
       reentryAfterMinutes: seq.reentry_after_minutes ?? 1440,
     });
@@ -742,6 +749,7 @@ export async function fireSimpleTrigger(
       estimateId: params.estimateId ?? null,
       ticketId: params.ticketId ?? null,
       invoiceId: params.invoiceId ?? null,
+      meetingId: params.meetingId ?? null,
     });
     if (enrollmentId) enrolledIds.push(enrollmentId);
   }

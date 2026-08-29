@@ -132,7 +132,7 @@ export function NotificationsBell() {
       .from("notifications")
       .select("id, type, title, message, entity_id, entity_type, created_at")
       .eq("user_id", currentUser.id)
-      .in("type", ["wo_comment", "wo_status_changed", "estimate_change_request", "estimate_client_accepted", "estimate_client_rejected", "ticket_created", "ticket_assigned", "ticket_comment", "contract_expiring", "automation_alert", "comment_mention"])
+      .in("type", ["wo_comment", "wo_status_changed", "estimate_change_request", "estimate_client_accepted", "estimate_client_rejected", "ticket_created", "ticket_assigned", "ticket_comment", "contract_expiring", "automation_alert", "comment_mention", "sales_meeting_reminder"])
       .order("created_at", { ascending: false })
       .limit(50)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any

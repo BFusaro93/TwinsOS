@@ -1,0 +1,37 @@
+name: Sales meeting reminders cron
+
+# Vercel Hobby caps cron jobs at once/day regardless of schedule string, and
+# meeting reminders need much finer granularity than that (a "60 minutes
+# before" or "15 minutes before" lead time) — same problem and same fix as
+# report-schedules-cron.yml. Runs both the rep-facing reminder cron and the
+# automation date-trigger evaluator every 15 minutes on GitHub's free
+# scheduler instead.
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch: {}
+
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call sales-meeting-reminders cron route
+        run: |
+          status=$(curl -s -o /tmp/response.json -w "%{http_code}" \
+            -X GET "https://twins-os-bfusaro93s-projects.vercel.app/api/cron/sales-meeting-reminders" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}")
+          echo "HTTP status: $status"
+          cat /tmp/response.json
+          if [ "$status" -ge 300 ]; then
+            exit 1
+          fi
+      - name: Call sales-meetings automation-date-triggers route
+        run: |
+          status=$(curl -s -o /tmp/response2.json -w "%{http_code}" \
+            -X GET "https://twins-os-bfusaro93s-projects.vercel.app/api/crm/sales-meetings/automation-date-triggers" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}")
+          echo "HTTP status: $status"
+          cat /tmp/response2.json
+          if [ "$status" -ge 300 ]; then
+            exit 1
+          fi

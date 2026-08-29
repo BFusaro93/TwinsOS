@@ -323,6 +323,12 @@ export function NotificationsPage({ hideHeader = false, scope = "cmms" }: Notifi
               <SettingRow label="Contract Expiring Soon" description="When a contract you own is ending within 3 days and isn't set to auto-renew">
                 <Switch checked={prefs.emailContractExpiring} onCheckedChange={() => toggle("emailContractExpiring")} />
               </SettingRow>
+              <div className="pb-1 pt-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Sales Meetings</p>
+              </div>
+              <SettingRow label="Meeting Reminder" description="When a sales meeting you're booked for is coming up soon">
+                <Switch checked={prefs.emailMeetingReminder} onCheckedChange={() => toggle("emailMeetingReminder")} />
+              </SettingRow>
             </>
           )}
         </div>
@@ -421,6 +427,12 @@ export function NotificationsPage({ hideHeader = false, scope = "cmms" }: Notifi
               </div>
               <SettingRow label="Contract Expiring Soon" description="When a contract you own is ending within 3 days and isn't set to auto-renew">
                 <Switch checked={prefs.inAppContractExpiring} onCheckedChange={() => toggle("inAppContractExpiring")} />
+              </SettingRow>
+              <div className="pb-1 pt-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Sales Meetings</p>
+              </div>
+              <SettingRow label="Meeting Reminder" description="When a sales meeting you're booked for is coming up soon">
+                <Switch checked={prefs.inAppMeetingReminder} onCheckedChange={() => toggle("inAppMeetingReminder")} />
               </SettingRow>
             </>
           )}

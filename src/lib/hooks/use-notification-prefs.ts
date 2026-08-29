@@ -21,6 +21,7 @@ export interface NotificationPrefs {
   emailTicketAssigned: boolean;
   emailTicketComment: boolean;
   emailContractExpiring: boolean;
+  emailMeetingReminder: boolean;
   emailLowStockAlert: boolean;
   emailPmScheduleDue: boolean;
   emailNewMaintenanceRequest: boolean;
@@ -46,6 +47,7 @@ export interface NotificationPrefs {
   inAppTicketAssigned: boolean;
   inAppTicketComment: boolean;
   inAppContractExpiring: boolean;
+  inAppMeetingReminder: boolean;
   inAppLowStockAlert: boolean;
   inAppPmScheduleDue: boolean;
   inAppNewMaintenanceRequest: boolean;
@@ -71,6 +73,7 @@ export const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = {
   emailTicketAssigned: true,
   emailTicketComment: true,
   emailContractExpiring: true,
+  emailMeetingReminder: true,
   emailLowStockAlert: true,
   emailPmScheduleDue: false,
   emailNewMaintenanceRequest: false,
@@ -94,6 +97,7 @@ export const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = {
   inAppTicketAssigned: true,
   inAppTicketComment: true,
   inAppContractExpiring: true,
+  inAppMeetingReminder: true,
   inAppLowStockAlert: true,
   inAppPmScheduleDue: false,
   inAppNewMaintenanceRequest: false,

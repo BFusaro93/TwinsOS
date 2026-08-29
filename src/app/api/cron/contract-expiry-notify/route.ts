@@ -65,26 +65,42 @@ export async function GET(request: Request) {
     const repId = contract.sales_rep_id as string | null;
     if (!repId) continue;
 
+    // contracts.sales_rep_id references crm_employees, not profiles — an
+    // employee's email/name live there directly regardless of whether they
+    // have a login. notification_prefs (and the notifications table's
+    // user_id) only exist for a linked profiles row, so those are looked up
+    // separately via crm_employees.user_id when present.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: rep } = await (supabase as any)
-      .from("profiles")
-      .select("id, email, name, notification_prefs")
+      .from("crm_employees")
+      .select("user_id, email, first_name, last_name")
       .eq("id", repId)
       .single();
     if (!rep) continue;
-    const prefs = (rep.notification_prefs ?? {}) as Record<string, unknown>;
+
+    let prefs: Record<string, unknown> = {};
+    if (rep.user_id) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: profile } = await (supabase as any)
+        .from("profiles")
+        .select("notification_prefs")
+        .eq("id", rep.user_id)
+        .single();
+      prefs = (profile?.notification_prefs ?? {}) as Record<string, unknown>;
+    }
+    const repName = `${rep.first_name ?? ""} ${rep.last_name ?? ""}`.trim();
 
     const clientName = (contract.clients as Record<string, unknown> | null)?.display_name as string ?? "the client";
     const endDate = contract.end_date as string;
     const daysLeft = Math.ceil((new Date(endDate).getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
     const contractUrl = `${process.env.NEXT_PUBLIC_SITE_URL ?? "https://landscapt.com"}/crm/accounting/contracts`;
 
-    if (prefs.inAppContractExpiring !== false) {
+    if (rep.user_id && prefs.inAppContractExpiring !== false) {
       await (supabase as any)
         .from("notifications")
         .insert({
           org_id: contract.org_id,
-          user_id: rep.id,
+          user_id: rep.user_id,
           type: "contract_expiring",
           title: `Contract Expiring Soon — ${contract.title}`,
           message: `${contract.title} for ${clientName} ends on ${new Date(endDate).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })} and isn't set to auto-renew.`,
@@ -102,7 +118,7 @@ export async function GET(request: Request) {
         subject: `Contract expires in ${daysLeft} day${daysLeft === 1 ? "" : "s"} — ${contract.title}`,
         html: `<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px 24px">
           <h2 style="margin:0 0 8px;font-size:20px;color:#0f172a">Contract Expiring Soon</h2>
-          <p style="margin:0 0 4px;color:#475569">Hi ${rep.name ?? "there"},</p>
+          <p style="margin:0 0 4px;color:#475569">Hi ${repName || "there"},</p>
           <p style="margin:0 0 24px;color:#475569"><strong>${contract.title}</strong> for ${clientName} ends on ${new Date(endDate).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })} and isn't set to auto-renew.</p>
           <a href="${contractUrl}" style="display:inline-block;padding:12px 24px;background:#60ab45;color:#fff;text-decoration:none;border-radius:6px;font-weight:600">View Contracts</a>
         </div>`,

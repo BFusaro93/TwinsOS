@@ -5873,6 +5873,7 @@ export type Database = {
           meeting_type: string
           notes: string | null
           org_id: string
+          reminder_sent_at: string | null
           sales_rep_id: string
           scheduled_at: string
           status: string
@@ -5893,6 +5894,7 @@ export type Database = {
           meeting_type?: string
           notes?: string | null
           org_id?: string
+          reminder_sent_at?: string | null
           sales_rep_id: string
           scheduled_at: string
           status?: string
@@ -5913,6 +5915,7 @@ export type Database = {
           meeting_type?: string
           notes?: string | null
           org_id?: string
+          reminder_sent_at?: string | null
           sales_rep_id?: string
           scheduled_at?: string
           status?: string
@@ -6097,6 +6100,7 @@ export type Database = {
           estimate_id: string | null
           id: string
           invoice_id: string | null
+          meeting_id: string | null
           next_event_position: number
           next_fire_at: string | null
           org_id: string
@@ -6117,6 +6121,7 @@ export type Database = {
           estimate_id?: string | null
           id?: string
           invoice_id?: string | null
+          meeting_id?: string | null
           next_event_position?: number
           next_fire_at?: string | null
           org_id?: string
@@ -6137,6 +6142,7 @@ export type Database = {
           estimate_id?: string | null
           id?: string
           invoice_id?: string | null
+          meeting_id?: string | null
           next_event_position?: number
           next_fire_at?: string | null
           org_id?: string
@@ -6187,6 +6193,13 @@ export type Database = {
             columns: ["invoice_id"]
             isOneToOne: false
             referencedRelation: "rpt_invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_sequence_enrollments_meeting_id_fkey"
+            columns: ["meeting_id"]
+            isOneToOne: false
+            referencedRelation: "crm_sales_meetings"
             referencedColumns: ["id"]
           },
           {

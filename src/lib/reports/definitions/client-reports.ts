@@ -273,7 +273,7 @@ export const CLIENT_REPORTS: PrebuiltReportDef[] = [
       const { from, to } = resolveDateRange(params, "this_year");
       let query = supabase
         .from("clients")
-        .select("cancellation_reason, source, billing_zip, closed_at, sales_rep_id, profiles:sales_rep_id(name)")
+        .select("cancellation_reason, source, billing_zip, closed_at, sales_rep_id, sales_rep:crm_employees!clients_sales_rep_id_fkey(first_name,last_name)")
         .eq("status", "cancelled")
         .is("deleted_at", null);
       if (from) query = query.gte("closed_at", from);
@@ -285,7 +285,7 @@ export const CLIENT_REPORTS: PrebuiltReportDef[] = [
         cancellation_reason: string | null;
         source: string | null;
         billing_zip: string | null;
-        profiles: { name: string | null } | null;
+        sales_rep: { first_name: string | null; last_name: string | null } | null;
       };
       const rows = (data ?? []) as unknown as Row[];
       const total = rows.length;
@@ -313,7 +313,7 @@ export const CLIENT_REPORTS: PrebuiltReportDef[] = [
         { group_type: "Total", group_value: "All Cancellations", count: total, percent: 100 },
         ...breakdown("By Reason", (r) => r.cancellation_reason ?? ""),
         ...breakdown("By Source", (r) => r.source ?? ""),
-        ...breakdown("By Sales Rep", (r) => r.profiles?.name ?? ""),
+        ...breakdown("By Sales Rep", (r) => `${r.sales_rep?.first_name ?? ""} ${r.sales_rep?.last_name ?? ""}`.trim()),
         ...breakdown("By Postal Code", (r) => r.billing_zip ?? ""),
       ];
 
@@ -340,7 +340,7 @@ export const CLIENT_REPORTS: PrebuiltReportDef[] = [
       const { from, to } = resolveDateRange(params, "this_year");
       let query = supabase
         .from("clients")
-        .select("source, billing_zip, client_since, profiles:sales_rep_id(name)")
+        .select("source, billing_zip, client_since, sales_rep:crm_employees!clients_sales_rep_id_fkey(first_name,last_name)")
         .neq("status", "lead")
         .is("deleted_at", null);
       if (from) query = query.gte("client_since", from);
@@ -351,7 +351,7 @@ export const CLIENT_REPORTS: PrebuiltReportDef[] = [
       type Row = {
         source: string | null;
         billing_zip: string | null;
-        profiles: { name: string | null } | null;
+        sales_rep: { first_name: string | null; last_name: string | null } | null;
       };
       const rows = (data ?? []) as unknown as Row[];
       const total = rows.length;
@@ -376,7 +376,7 @@ export const CLIENT_REPORTS: PrebuiltReportDef[] = [
         { group_type: "Total", group_value: "All New Clients", count: total, percent: 100 },
         ...breakdown("By Postal Code", (r) => r.billing_zip ?? ""),
         ...breakdown("By Source", (r) => r.source ?? ""),
-        ...breakdown("By Sales Rep", (r) => r.profiles?.name ?? ""),
+        ...breakdown("By Sales Rep", (r) => `${r.sales_rep?.first_name ?? ""} ${r.sales_rep?.last_name ?? ""}`.trim()),
       ];
 
       return buildResult(

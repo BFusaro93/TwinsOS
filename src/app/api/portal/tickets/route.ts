@@ -145,14 +145,15 @@ export async function POST(req: Request) {
   let notifyName: string | null = null;
 
   if (client?.sales_rep_id) {
+    // clients.sales_rep_id references crm_employees, not profiles.
     const { data: rep } = await supabase
-      .from("profiles")
-      .select("email, name")
+      .from("crm_employees")
+      .select("email, first_name, last_name")
       .eq("id", client.sales_rep_id)
       .single();
     if (rep?.email) {
       notifyEmail = rep.email;
-      notifyName = rep.name;
+      notifyName = `${rep.first_name ?? ""} ${rep.last_name ?? ""}`.trim() || null;
     }
   }
 

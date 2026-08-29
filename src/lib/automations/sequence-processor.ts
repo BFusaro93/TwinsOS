@@ -15,6 +15,7 @@ export interface DueEnrollmentRow {
   estimate_id: string | null;
   ticket_id: string | null;
   invoice_id: string | null;
+  meeting_id: string | null;
   next_event_position: number;
 }
 
@@ -36,7 +37,7 @@ export async function processDueEnrollment(
   enrollment: DueEnrollmentRow
 ): Promise<ProcessOutcome> {
   const nowIso = new Date().toISOString();
-  const { id: enrollId, org_id: orgId, sequence_id, client_id, estimate_id, ticket_id, invoice_id, next_event_position } = enrollment;
+  const { id: enrollId, org_id: orgId, sequence_id, client_id, estimate_id, ticket_id, invoice_id, meeting_id, next_event_position } = enrollment;
 
   const { data: events } = await adminClient
     .from("crm_sequence_events")
@@ -121,6 +122,7 @@ export async function processDueEnrollment(
       orgId,
       clientId: client_id!,
       estimateId: estimate_id ?? null,
+      meetingId: meeting_id ?? null,
       subjectTemplate: eventConfig.subject ?? "",
       bodyTemplate: eventConfig.bodyHtml ?? eventConfig.body ?? "",
       toSelection: eventConfig.to,
@@ -205,6 +207,7 @@ export async function processDueEnrollment(
     const built = await resolveSmsStepContent(adminClient, {
       orgId,
       clientId: client_id!,
+      meetingId: meeting_id ?? null,
       bodyTemplate: eventConfig.message ?? "",
     });
     if ("error" in built) {
@@ -544,7 +547,7 @@ export async function processEnrollmentImmediately(
   for (let i = 0; i < maxSteps; i++) {
     const { data: row } = await adminClient
       .from("crm_sequence_enrollments")
-      .select("id, org_id, sequence_id, client_id, estimate_id, ticket_id, invoice_id, next_event_position, next_fire_at, completed_at, stopped_at, awaiting_approval")
+      .select("id, org_id, sequence_id, client_id, estimate_id, ticket_id, invoice_id, meeting_id, next_event_position, next_fire_at, completed_at, stopped_at, awaiting_approval")
       .eq("id", enrollmentId)
       .maybeSingle();
 

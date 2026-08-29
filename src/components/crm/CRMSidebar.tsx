@@ -45,6 +45,7 @@ import {
   BookOpen,
   FileImage,
   ClipboardList,
+  CalendarCheck,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -75,6 +76,7 @@ export const CRM_NAV: NavSection[] = [
       { label: "Estimates",  href: "/crm/estimates",           icon: ClipboardSignature },
       { label: "Tickets",   href: "/crm/tickets",   icon: Ticket },
       { label: "Calls",     href: "/crm/calls",     icon: Phone },
+      { label: "Sales Meetings", href: "/crm/sales-meetings", icon: CalendarCheck },
     ],
   },
   {
