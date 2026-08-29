@@ -53,20 +53,22 @@ export function verifyPkce(codeVerifier: string, codeChallenge: string): boolean
 }
 
 /** The scope tiers a given profile role is allowed to grant itself via the
- * OAuth consent screen. Only admins can hand out a write scope -- every
- * other role (manager, technician, purchaser, viewer) is capped at
- * read-only, same restriction whether they're picking checkboxes on the
- * consent screen (see oauthResourcesForRole below) or the actual grant is
- * enforced server-side (POST /api/mcp/oauth/authorize). */
-export function allowedTiersForRole(role: string): ApiScopeTier[] {
-  return role === "admin" ? ["read", "write:safe"] : ["read"];
+ * OAuth consent screen. Admins always get write; orgWriteRoles (an org's
+ * organizations.oauth_write_roles column, e.g. ["manager", "purchaser"])
+ * lets an org additionally opt specific non-admin roles into write access --
+ * defaults to none, matching this feature's original hardcoded behavior.
+ * Every other role is capped at read-only, same restriction whether it's
+ * hiding checkboxes on the consent screen (see oauthResourcesForRole below)
+ * or enforced server-side (POST /api/mcp/oauth/authorize). */
+export function allowedTiersForRole(role: string, orgWriteRoles: string[] = []): ApiScopeTier[] {
+  return role === "admin" || orgWriteRoles.includes(role) ? ["read", "write:safe"] : ["read"];
 }
 
 /** The scope catalog trimmed to what a role's consent screen should even
  * show -- a resource with no tiers left after the cap (none exist today,
  * since every resource offers at least read) is naturally excluded. */
-export function oauthResourcesForRole(role: string): ApiScopeResource[] {
-  const allowedTiers = allowedTiersForRole(role);
+export function oauthResourcesForRole(role: string, orgWriteRoles: string[] = []): ApiScopeResource[] {
+  const allowedTiers = allowedTiersForRole(role, orgWriteRoles);
   return API_SCOPE_RESOURCES.map((resource) => ({
     ...resource,
     tiers: resource.tiers.filter((tier) => allowedTiers.includes(tier)),
@@ -76,8 +78,15 @@ export function oauthResourcesForRole(role: string): ApiScopeResource[] {
 /** Scope strings a role is allowed to grant, for server-side enforcement of
  * the same cap oauthResourcesForRole applies to the consent screen's
  * checkboxes -- never trust the submitted form alone. */
-export function allowedScopeStringsForRole(role: string): Set<string> {
+export function allowedScopeStringsForRole(role: string, orgWriteRoles: string[] = []): Set<string> {
   return new Set(
-    oauthResourcesForRole(role).flatMap((resource) => resource.tiers.map((tier) => scopeString(resource.key, tier)))
+    oauthResourcesForRole(role, orgWriteRoles).flatMap((resource) =>
+      resource.tiers.map((tier) => scopeString(resource.key, tier))
+    )
   );
 }
+
+/** Non-admin roles an org can opt into OAuth write access (Settings >
+ * Public API Keys > OAuth Write Access). Admin is excluded -- it always has
+ * write and isn't a configurable choice. */
+export const CONFIGURABLE_WRITE_ROLES = ["manager", "technician", "purchaser", "viewer"] as const;

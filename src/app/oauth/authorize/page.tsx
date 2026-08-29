@@ -63,7 +63,13 @@ export default async function OAuthAuthorizePage({
   if (!profile) {
     return <ErrorScreen message="Couldn't load your account. Please try again." />;
   }
-  const { data: org } = await supabase.from("organizations").select("name").eq("id", profile.org_id).single();
+  const { data: org } = await supabase
+    .from("organizations")
+    .select("name, oauth_write_roles")
+    .eq("id", profile.org_id)
+    .single();
+  const orgWriteRoles = org?.oauth_write_roles ?? [];
+  const canGrantWrite = profile.role === "admin" || orgWriteRoles.includes(profile.role);
 
   return (
     <div className="mx-auto flex min-h-screen max-w-lg items-center justify-center px-4">
@@ -73,9 +79,9 @@ export default async function OAuthAuthorizePage({
           {client.client_name} wants to access <span className="font-medium text-slate-700">{org?.name ?? "your organization"}</span>
           {profile.name ? ` as ${profile.name}` : ""}. Choose what it can access below.
         </p>
-        {profile.role !== "admin" && (
+        {!canGrantWrite && (
           <p className="mt-1 text-xs text-slate-400">
-            Your role ({profile.role}) can grant read-only access. An admin can grant write access from their own account.
+            Your role ({profile.role}) can grant read-only access. An admin can grant write access from their own account, or opt your role into write access org-wide.
           </p>
         )}
 
@@ -85,7 +91,7 @@ export default async function OAuthAuthorizePage({
           codeChallenge={codeChallenge}
           codeChallengeMethod={codeChallengeMethod}
           state={state}
-          resources={oauthResourcesForRole(profile.role)}
+          resources={oauthResourcesForRole(profile.role, orgWriteRoles)}
         />
       </div>
     </div>
