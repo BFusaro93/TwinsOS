@@ -29,6 +29,7 @@ export async function GET() {
     .from("api_keys")
     .select("id, name, key_prefix, scopes, rate_limit_per_min, last_used_at, revoked_at, created_at")
     .eq("org_id", profile.org_id)
+    .is("deleted_at", null)
     .order("created_at", { ascending: false });
 
   if (error) {
