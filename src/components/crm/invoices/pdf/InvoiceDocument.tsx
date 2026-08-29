@@ -310,7 +310,7 @@ function DefaultInvoiceLayout({ invoice, org }: { invoice: InvoicePDFData; org: 
       {/* ── advertisement ──────────────────────────────────────────── */}
       {invoice.advertisementText ? (
         <View style={S.notesSection}>
-          <Text style={S.notesText}>{invoice.advertisementText}</Text>
+          <Text style={S.notesText}>{invoice.advertisementText?.replace(/<[^>]+>/g, "")}</Text>
         </View>
       ) : null}
 
@@ -318,7 +318,7 @@ function DefaultInvoiceLayout({ invoice, org }: { invoice: InvoicePDFData; org: 
       {invoice.notes ? (
         <View style={S.notesSection}>
           <Text style={S.notesLabel}>Notes</Text>
-          <Text style={S.notesText}>{invoice.notes}</Text>
+          <Text style={S.notesText}>{invoice.notes?.replace(/<[^>]+>/g, "")}</Text>
         </View>
       ) : null}
 
@@ -485,14 +485,14 @@ function CompactInvoiceLayout({ invoice, org }: { invoice: InvoicePDFData; org: 
 
       {invoice.advertisementText ? (
         <View style={SC.notes}>
-          <Text>{invoice.advertisementText}</Text>
+          <Text>{invoice.advertisementText?.replace(/<[^>]+>/g, "")}</Text>
         </View>
       ) : null}
 
       {invoice.notes ? (
         <View style={SC.notes}>
           <Text style={SC.notesLabel}>Notes</Text>
-          <Text>{invoice.notes}</Text>
+          <Text>{invoice.notes?.replace(/<[^>]+>/g, "")}</Text>
         </View>
       ) : null}
 
@@ -741,13 +741,13 @@ function StatementInvoiceLayout({
 
       {invoice.advertisementText ? (
         <View style={{ marginTop: 10 }}>
-          <Text style={[SS.activityText, { fontSize: 7.5 }]}>{invoice.advertisementText}</Text>
+          <Text style={[SS.activityText, { fontSize: 7.5 }]}>{invoice.advertisementText?.replace(/<[^>]+>/g, "")}</Text>
         </View>
       ) : null}
 
       {invoice.notes ? (
         <View style={SS.termsSection}>
-          <Text style={SS.termsText}>{invoice.notes}</Text>
+          <Text style={SS.termsText}>{invoice.notes?.replace(/<[^>]+>/g, "")}</Text>
         </View>
       ) : null}
 
