@@ -48,7 +48,7 @@ export function ApiKeysCard() {
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
 
-  const mcpUrl = typeof window !== "undefined" ? `${window.location.origin}/api/mcp` : "/api/mcp";
+  const mcpUrl = `${process.env.NEXT_PUBLIC_SITE_URL ?? (typeof window !== "undefined" ? window.location.origin : "")}/api/mcp`;
 
   function copyToClipboard(text: string) {
     navigator.clipboard.writeText(text);
@@ -160,7 +160,7 @@ export function ApiKeysCard() {
         )}
 
         {revokedKeys.length > 0 && (
-          <div className="mt-4 border-t pt-4">
+          <div className="border-t pt-3">
             <p className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-400">Revoked</p>
             <ul className="divide-y">
               {revokedKeys.map((key) => (
