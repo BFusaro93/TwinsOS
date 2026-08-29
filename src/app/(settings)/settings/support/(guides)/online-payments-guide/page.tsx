@@ -43,7 +43,7 @@ export default function OnlinePaymentsGuidePage() {
       <Section id="two-integrations" title="Two Stripe integrations — don't confuse them">
         <Callout>
           This app uses Stripe in <strong>two entirely separate ways</strong>. Your{" "}
-          <strong>TwinsOS subscription</strong> (what you pay to use the platform) is billed on a
+          <strong>Landscapt subscription</strong> (what you pay to use the platform) is billed on a
           completely different Stripe setup than the one this guide covers. This guide is only about
           the <strong>client-facing feature</strong> — your Landscapt clients paying <em>you</em> for
           lawn service invoices. The two never share data or configuration.
@@ -56,9 +56,9 @@ export default function OnlinePaymentsGuidePage() {
           <strong>Card Payments (Stripe)</strong>. Connecting takes you through Stripe&apos;s own
           hosted onboarding (a <strong>Standard Connect account</strong>) — only an admin can start
           this. Once complete, payments your clients make land directly in{" "}
-          <strong>your own independent Stripe account</strong>, not a TwinsOS-controlled one.
+          <strong>your own independent Stripe account</strong>, not a Landscapt-controlled one.
           &ldquo;Manage on Stripe&rdquo; simply opens your normal Stripe Dashboard — it&apos;s your
-          account in every sense, TwinsOS is never the merchant of record and never touches the
+          account in every sense, Landscapt is never the merchant of record and never touches the
           funds.
         </p>
       </Section>
@@ -110,7 +110,7 @@ export default function OnlinePaymentsGuidePage() {
 
       <Section id="fees" title="Processing fees — you set your own, the platform takes none">
         <p>
-          TwinsOS takes <strong>zero cut</strong> of any client payment — every charge is a direct
+          Landscapt takes <strong>zero cut</strong> of any client payment — every charge is a direct
           charge straight to your own connected Stripe account. What you see charged is entirely a
           fee <em>you</em> configure, in Settings &gt; Accounting, to help cover Stripe&apos;s own
           card-processing rate:

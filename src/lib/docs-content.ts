@@ -1278,7 +1278,7 @@ export const DOC_SECTIONS: DocSection[] = [
           {
             step: "When it runs",
             detail:
-              "A daily scheduled sync, plus a manual 'Sync Now' button for admins. There's no webhook — Samsara doesn't push data to TwinsOS in real time.",
+              "A daily scheduled sync, plus a manual 'Sync Now' button for admins. There's no webhook — Samsara doesn't push data to Landscapt in real time.",
           },
           {
             step: "Full guide",
