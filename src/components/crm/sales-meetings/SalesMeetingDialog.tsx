@@ -28,6 +28,7 @@ import { useEstimates } from "@/lib/hooks/use-estimates";
 import { useTickets } from "@/lib/hooks/use-tickets";
 import {
   useSalesReps,
+  useSalesMeetings,
   useCreateSalesMeeting,
   useUpdateSalesMeeting,
   useDeleteSalesMeeting,
@@ -154,6 +155,34 @@ export function SalesMeetingDialog({
   const { data: clientEstimates } = useEstimates(clientId || undefined);
   const { data: clientTickets } = useTickets(clientId ? { clientId } : undefined);
 
+  // Warn (don't block — matches the same-class overlap warning on the
+  // dispatch board) when this rep already has another meeting overlapping
+  // the picked time. Scoped to just the picked day so this stays a light
+  // query, not a full-calendar fetch.
+  const salesRepId = watch("salesRepId");
+  const scheduledDate = watch("scheduledDate");
+  const scheduledTime = watch("scheduledTime");
+  const durationMinutes = watch("durationMinutes");
+  const dayStart = scheduledDate ? `${scheduledDate}T00:00:00.000Z` : "";
+  const dayEnd = scheduledDate ? `${scheduledDate}T23:59:59.999Z` : "";
+  const { data: dayMeetings } = useSalesMeetings(dayStart, dayEnd);
+
+  function findConflict(): SalesMeetingWithClient | null {
+    if (!salesRepId || !scheduledDate || !scheduledTime || !durationMinutes) return null;
+    const start = new Date(`${scheduledDate}T${scheduledTime}:00`).getTime();
+    const end = start + durationMinutes * 60_000;
+    return (
+      (dayMeetings ?? []).find((m) => {
+        if (m.salesRepId !== salesRepId) return false;
+        if (meeting && m.id === meeting.id) return false; // editing this same meeting
+        if (m.status === "canceled") return false;
+        const mStart = new Date(m.scheduledAt).getTime();
+        const mEnd = mStart + m.durationMinutes * 60_000;
+        return start < mEnd && mStart < end;
+      }) ?? null
+    );
+  }
+
   const selectableClients = useMemo(
     () => (clients ?? []).map((c) => ({ id: c.id, displayName: c.displayName, billingAddress: c.billingAddress })),
     [clients]
@@ -174,6 +203,12 @@ export function SalesMeetingDialog({
       estimateId: values.estimateId || null,
       ticketId: values.ticketId || null,
     };
+    const conflict = findConflict();
+    if (conflict) {
+      const { time } = toLocalDateTimeParts(conflict.scheduledAt);
+      toast.warning(`This rep already has "${conflict.title}" at ${time} — double-check for a scheduling conflict.`);
+    }
+
     try {
       if (isEditing && meeting) {
         await updateMeeting.mutateAsync({ id: meeting.id, values: payload });
@@ -202,7 +237,7 @@ export function SalesMeetingDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>{isEditing ? "Edit Meeting" : "Book Meeting"}</DialogTitle>
         </DialogHeader>
