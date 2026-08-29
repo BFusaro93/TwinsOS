@@ -14,6 +14,12 @@ import {
   useGenerateContractInvoices,
   useContractBalance,
   useContractVisits,
+  useContractServices,
+  useUpsertContractService,
+  useDeleteContractService,
+  useContractServiceVisitCounts,
+  useContractJobServiceRows,
+  type CRMContractService,
 } from "@/lib/hooks/use-contracts";
 import { useClients, useClientProperties } from "@/lib/hooks/use-clients";
 import { useCRMServices, useJobsByContract } from "@/lib/hooks/use-crm-jobs";
@@ -643,6 +649,203 @@ function JobsUnderContractTab({ contractId }: { contractId?: string }) {
   );
 }
 
+// ── included services tab (bundled visit caps, e.g. "25 mowings included") ───
+
+function IncludedServiceRow({
+  service,
+  usedCount,
+  contractId,
+}: {
+  service: CRMContractService;
+  usedCount: number;
+  contractId: string;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [countDraft, setCountDraft] = useState(String(service.visitsIncluded));
+  const { mutateAsync: upsert, isPending } = useUpsertContractService();
+  const { mutateAsync: remove } = useDeleteContractService();
+
+  async function save() {
+    const visitsIncluded = parseInt(countDraft, 10);
+    if (!Number.isFinite(visitsIncluded) || visitsIncluded < 0) {
+      toast.error("Enter a valid included count");
+      return;
+    }
+    try {
+      await upsert({
+        id: service.id,
+        contractId,
+        serviceId: service.serviceId,
+        serviceName: service.serviceName,
+        visitsIncluded,
+        sortOrder: service.sortOrder,
+      });
+      setEditing(false);
+    } catch {
+      toast.error("Failed to update");
+    }
+  }
+
+  const overIncluded = usedCount > service.visitsIncluded;
+
+  return (
+    <tr className="group border-b last:border-0">
+      <td className="py-1.5 pr-4 text-slate-700">{service.serviceName}</td>
+      <td className="py-1.5 pr-4 text-right">
+        {editing ? (
+          <div className="flex items-center justify-end gap-1.5">
+            <Input
+              type="number"
+              min={0}
+              className="h-7 w-20 text-right text-sm"
+              value={countDraft}
+              onChange={(e) => setCountDraft(e.target.value)}
+              autoFocus
+            />
+            <Button size="sm" className="h-7 px-2 text-xs" onClick={save} disabled={isPending}>
+              Save
+            </Button>
+          </div>
+        ) : (
+          <button
+            className="text-slate-700 hover:underline"
+            onClick={() => { setCountDraft(String(service.visitsIncluded)); setEditing(true); }}
+          >
+            {service.visitsIncluded}
+          </button>
+        )}
+      </td>
+      <td className={cn("py-1.5 pr-4 text-right font-medium", overIncluded ? "text-red-600" : "text-slate-600")}>
+        {usedCount}
+        {overIncluded && <span className="ml-1 text-xs font-normal">(over)</span>}
+      </td>
+      <td className="py-1.5">
+        <button
+          onClick={() => remove({ id: service.id, contractId })}
+          className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-500"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </button>
+      </td>
+    </tr>
+  );
+}
+
+function AddIncludedServiceRow({ contractId, sortOrder }: { contractId: string; sortOrder: number }) {
+  const { data: services } = useCRMServices();
+  const { mutateAsync: upsert, isPending } = useUpsertContractService();
+  const [serviceId, setServiceId] = useState("");
+  const [count, setCount] = useState("1");
+
+  async function add() {
+    const service = (services ?? []).find((s) => s.id === serviceId);
+    if (!service) { toast.error("Pick a service"); return; }
+    const visitsIncluded = parseInt(count, 10);
+    if (!Number.isFinite(visitsIncluded) || visitsIncluded < 0) { toast.error("Enter a valid included count"); return; }
+    try {
+      await upsert({ contractId, serviceId: service.id, serviceName: service.name, visitsIncluded, sortOrder });
+      setServiceId("");
+      setCount("1");
+    } catch {
+      toast.error("Failed to add");
+    }
+  }
+
+  return (
+    <div className="flex items-center gap-2 border-t pt-3 mt-1">
+      <Select value={serviceId} onValueChange={setServiceId}>
+        <SelectTrigger className="h-8 w-56 text-sm"><SelectValue placeholder="Select service…" /></SelectTrigger>
+        <SelectContent>
+          {(services ?? []).filter((s) => s.isActive).map((s) => (
+            <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <Input
+        type="number"
+        min={0}
+        className="h-8 w-24 text-sm"
+        value={count}
+        onChange={(e) => setCount(e.target.value)}
+        placeholder="Visits"
+      />
+      <Button size="sm" onClick={add} disabled={isPending || !serviceId}>
+        <Plus className="mr-1 h-3.5 w-3.5" /> Add
+      </Button>
+    </div>
+  );
+}
+
+function IncludedServicesTab({ contractId }: { contractId?: string }) {
+  const { data: contractServices, isLoading: loadingServices } = useContractServices(contractId);
+  const { data: visitCounts } = useContractServiceVisitCounts(contractId);
+  const { data: jobServiceRows } = useContractJobServiceRows(contractId);
+
+  if (!contractId) {
+    return (
+      <Section label="Included Services">
+        <p className="text-sm text-slate-400">Save the contract first to bundle included services.</p>
+      </Section>
+    );
+  }
+
+  // Roll job_service-row-level completed counts (keyed by crm_job_services.id)
+  // up to a per-service_id total, so a service scheduled across multiple jobs
+  // under the same contract (or re-added over time) still sums correctly.
+  const usedByServiceId = new Map<string, number>();
+  const usedByServiceName = new Map<string, number>();
+  for (const jsRow of jobServiceRows ?? []) {
+    const n = visitCounts?.get(jsRow.id) ?? 0;
+    if (n === 0) continue;
+    if (jsRow.service_id) {
+      usedByServiceId.set(jsRow.service_id, (usedByServiceId.get(jsRow.service_id) ?? 0) + n);
+    } else {
+      usedByServiceName.set(jsRow.service_name, (usedByServiceName.get(jsRow.service_name) ?? 0) + n);
+    }
+  }
+
+  const rows = contractServices ?? [];
+
+  return (
+    <Section label="Included Services">
+      <p className="mb-3 text-xs text-slate-500">
+        Visits bundled into this contract&apos;s price, e.g. 25 mowings for a seasonal maintenance
+        plan. Tracked against actual completed visits — doesn&apos;t block scheduling, just flags
+        when a service runs over.
+      </p>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b text-left text-xs font-semibold text-slate-500">
+              <th className="py-2 pr-4">Service</th>
+              <th className="py-2 pr-4 text-right">Included</th>
+              <th className="py-2 pr-4 text-right">Used</th>
+              <th />
+            </tr>
+          </thead>
+          <tbody>
+            {loadingServices ? (
+              <tr><td colSpan={4} className="py-4"><Skeleton className="h-4 w-full" /></td></tr>
+            ) : rows.length === 0 ? (
+              <tr><td colSpan={4} className="py-4 text-sm text-slate-400">No bundled services yet.</td></tr>
+            ) : (
+              rows.map((s) => (
+                <IncludedServiceRow
+                  key={s.id}
+                  service={s}
+                  usedCount={(s.serviceId ? usedByServiceId.get(s.serviceId) : usedByServiceName.get(s.serviceName)) ?? 0}
+                  contractId={contractId}
+                />
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+      <AddIncludedServiceRow contractId={contractId} sortOrder={rows.length} />
+    </Section>
+  );
+}
+
 // ── notes tab ─────────────────────────────────────────────────────────────────
 
 function ContractNotesTab({ contractId }: { contractId?: string }) {
@@ -724,12 +927,13 @@ function ContractNotesTab({ contractId }: { contractId?: string }) {
 
 // ── contract dialog (new + edit) ──────────────────────────────────────────────
 
-type TabId = "overview" | "details" | "other" | "jobs" | "notes" | "attachments" | "audit";
+type TabId = "overview" | "details" | "other" | "jobs" | "included" | "notes" | "attachments" | "audit";
 
 const NEW_TABS: { id: TabId; label: string }[] = [
   { id: "details", label: "Contract Details" },
   { id: "other", label: "Other Details" },
   { id: "jobs", label: "Jobs Under Contract" },
+  { id: "included", label: "Included Services" },
   { id: "notes", label: "Contract Notes" },
 ];
 
@@ -946,6 +1150,9 @@ export function ContractDialog({
           )}
           {activeTab === "jobs" && (
             <JobsUnderContractTab contractId={contract?.id} />
+          )}
+          {activeTab === "included" && (
+            <IncludedServicesTab contractId={contract?.id} />
           )}
           {activeTab === "notes" && (
             <ContractNotesTab contractId={contract?.id} />

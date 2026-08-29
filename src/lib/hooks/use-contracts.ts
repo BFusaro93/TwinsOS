@@ -531,6 +531,166 @@ export function useContractVisits(contractId?: string) {
   });
 }
 
+// ── contract included services (bundled visit caps) ──────────────────────────
+// e.g. a seasonal maintenance contract that includes 25 lawn mowings — how
+// many visits of a given service are bundled into the contract price, and
+// how many have actually been used. Distinct from crm_job_services.qty
+// (a per-job snapshot on the Jobs Under Contract tab, not a contract-level
+// cap tracked against real completed visits).
+
+export interface CRMContractService {
+  id: string;
+  orgId: string;
+  contractId: string;
+  serviceId: string | null;
+  serviceName: string;
+  visitsIncluded: number;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapContractService(row: any): CRMContractService {
+  return {
+    id: row.id,
+    orgId: row.org_id,
+    contractId: row.contract_id,
+    serviceId: row.service_id,
+    serviceName: row.service_name,
+    visitsIncluded: row.visits_included,
+    sortOrder: row.sort_order,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+export function useContractServices(contractId?: string) {
+  return useQuery({
+    queryKey: ["crm-contracts", contractId, "services"],
+    queryFn: async () => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
+        .from("crm_contract_services")
+        .select("*")
+        .eq("contract_id", contractId)
+        .is("deleted_at", null)
+        .order("sort_order", { ascending: true });
+      if (error) throw error;
+      return (data.map(mapContractService)) as CRMContractService[];
+    },
+    enabled: !!contractId,
+  });
+}
+
+export function useUpsertContractService() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      id,
+      contractId,
+      serviceId,
+      serviceName,
+      visitsIncluded,
+      sortOrder,
+    }: {
+      id?: string;
+      contractId: string;
+      serviceId: string | null;
+      serviceName: string;
+      visitsIncluded: number;
+      sortOrder: number;
+    }) => {
+      const supabase = createClient();
+      const row = {
+        contract_id: contractId,
+        service_id: serviceId,
+        service_name: serviceName,
+        visits_included: visitsIncluded,
+        sort_order: sortOrder,
+      };
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = id
+        ? await (supabase as any).from("crm_contract_services").update(row).eq("id", id)
+        : await (supabase as any).from("crm_contract_services").insert(row);
+      if (error) throw error;
+    },
+    onSuccess: (_d, vars) => qc.invalidateQueries({ queryKey: ["crm-contracts", vars.contractId, "services"] }),
+  });
+}
+
+export function useDeleteContractService() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id }: { id: string; contractId: string }) => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase as any)
+        .from("crm_contract_services")
+        .update({ deleted_at: new Date().toISOString() })
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: (_d, vars) => qc.invalidateQueries({ queryKey: ["crm-contracts", vars.contractId, "services"] }),
+  });
+}
+
+/** Completed-visit count per crm_job_services row (id) across every job
+ *  linked to this contract — used to compute "used / included" for each
+ *  bundled service. Keyed by job_service_id rather than service name/id
+ *  directly: a visit only counts here if it's actually linked
+ *  (crm_job_visits.job_service_id) to the specific service line it was
+ *  scheduled against, same linkage the Waiting List / package-visit
+ *  scheduling already relies on. A visit with no job_service_id (e.g. an
+ *  older single-service recurring job never split into per-service rows)
+ *  isn't attributed to any one service here — undercounting is the safer
+ *  failure mode for a usage cap than silently guessing which service it was. */
+export function useContractServiceVisitCounts(contractId?: string) {
+  return useQuery({
+    queryKey: ["crm-contracts", contractId, "service-visit-counts"],
+    queryFn: async () => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
+        .from("crm_job_visits")
+        .select("job_service_id, crm_jobs!inner(contract_id)")
+        .eq("crm_jobs.contract_id", contractId)
+        .eq("status", "completed")
+        .is("deleted_at", null)
+        .not("job_service_id", "is", null);
+      if (error) throw error;
+      const counts = new Map<string, number>();
+      for (const row of (data ?? []) as { job_service_id: string }[]) {
+        counts.set(row.job_service_id, (counts.get(row.job_service_id) ?? 0) + 1);
+      }
+      return counts;
+    },
+    enabled: !!contractId,
+  });
+}
+
+/** Every crm_job_services row (id + service_id) across jobs linked to this
+ *  contract — needed to resolve useContractServiceVisitCounts' per-row
+ *  counts back to a service_id/name so they can be matched against this
+ *  contract's bundled crm_contract_services entries. */
+export function useContractJobServiceRows(contractId?: string) {
+  return useQuery({
+    queryKey: ["crm-contracts", contractId, "job-service-rows"],
+    queryFn: async () => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
+        .from("crm_job_services")
+        .select("id, service_id, service_name, crm_jobs!inner(contract_id)")
+        .eq("crm_jobs.contract_id", contractId);
+      if (error) throw error;
+      return (data ?? []) as { id: string; service_id: string | null; service_name: string }[];
+    },
+    enabled: !!contractId,
+  });
+}
+
 // ── contract notes ────────────────────────────────────────────────────────────
 
 export function useContractNotes(contractId: string) {
