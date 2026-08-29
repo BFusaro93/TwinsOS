@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
-import { useApiKeys, useCreateApiKey, useRevokeApiKey } from "@/lib/hooks/use-api-keys";
+import { useApiKeys, useCreateApiKey, useRevokeApiKey, useDeleteApiKey } from "@/lib/hooks/use-api-keys";
 import { API_SCOPE_RESOURCES, scopeString, tierLabel } from "@/lib/api/scopes";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -38,6 +38,7 @@ export function ApiKeysCard() {
   const { data: keys, isLoading } = useApiKeys();
   const createKey = useCreateApiKey();
   const revokeKey = useRevokeApiKey();
+  const deleteKey = useDeleteApiKey();
 
   const [createOpen, setCreateOpen] = useState(false);
   const [name, setName] = useState("");
@@ -168,7 +169,18 @@ export function ApiKeysCard() {
                     <p className="text-sm text-slate-700">{key.name}</p>
                     <p className="font-mono text-xs text-slate-500">{key.keyPrefix}…</p>
                   </div>
-                  <span className="text-xs text-slate-400">Revoked</span>
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs text-slate-400">Revoked</span>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 px-2 text-xs text-slate-500 hover:text-red-600"
+                      disabled={deleteKey.isPending}
+                      onClick={() => deleteKey.mutate(key.id)}
+                    >
+                      Remove
+                    </Button>
+                  </div>
                 </li>
               ))}
             </ul>

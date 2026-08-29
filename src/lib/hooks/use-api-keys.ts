@@ -71,3 +71,18 @@ export function useRevokeApiKey() {
     },
   });
 }
+
+/** Removes an already-revoked key from the list. The row isn't hard-deleted — only hidden. */
+export function useDeleteApiKey() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const res = await fetch(`/api/settings/api-keys/${id}`, { method: "PATCH" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Failed to remove API key");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["api-keys"] });
+    },
+  });
+}
