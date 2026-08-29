@@ -16,6 +16,16 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   Dialog,
   DialogContent,
   DialogHeader,
@@ -28,7 +38,7 @@ import { NewVendorDialog } from "./NewVendorDialog";
 import { getInitials, getAvatarColor, formatDate, formatCurrency } from "@/lib/utils";
 import { usePurchaseOrders } from "@/lib/hooks/use-purchase-orders";
 import { useParts, useUpdatePart } from "@/lib/hooks/use-parts";
-import { useUpdateVendor } from "@/lib/hooks/use-vendors";
+import { useUpdateVendor, useDeleteVendor } from "@/lib/hooks/use-vendors";
 import { useProducts } from "@/lib/hooks/use-products";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { PartDetailSheet } from "@/components/cmms/PartDetailSheet";
@@ -580,9 +590,23 @@ function POHistoryTab({ vendor }: { vendor: Vendor }) {
 
 export function VendorDetailSheet({ vendor, open, onOpenChange }: VendorDetailSheetProps) {
   const [editOpen, setEditOpen] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const { mutate: updateVendor } = useUpdateVendor();
+  const { mutate: deleteVendor, isPending: deleting } = useDeleteVendor();
 
   if (!vendor) return null;
+
+  function handleDelete() {
+    if (!vendor) return;
+    deleteVendor(vendor.id, {
+      onSuccess: () => {
+        toast.success(`${vendor.name} deleted`);
+        setDeleteConfirmOpen(false);
+        onOpenChange(false);
+      },
+      onError: () => toast.error("Failed to delete vendor"),
+    });
+  }
 
   const initials = getInitials(vendor.name);
   const avatarColor = getAvatarColor(vendor.name);
@@ -618,7 +642,17 @@ export function VendorDetailSheet({ vendor, open, onOpenChange }: VendorDetailSh
                 {vendor.isActive ? "Active" : "Inactive"}
               </Badge>
             </div>
-            <EditButton onClick={() => setEditOpen(true)} />
+            <div className="flex items-center gap-1">
+              <EditButton onClick={() => setEditOpen(true)} />
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 text-slate-400 hover:bg-red-50 hover:text-red-500"
+                onClick={() => setDeleteConfirmOpen(true)}
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
         </SheetHeader>
 
@@ -648,6 +682,29 @@ export function VendorDetailSheet({ vendor, open, onOpenChange }: VendorDetailSh
         </Tabs>
       </SheetContent>
       <NewVendorDialog open={editOpen} onOpenChange={setEditOpen} initialData={vendor} />
+
+      <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Vendor</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete <strong>{vendor.name}</strong>? Parts, products, and
+              purchase orders that reference this vendor will keep their existing assignment, but
+              it will no longer appear in vendor pickers. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 hover:bg-red-700 focus:ring-red-500"
+              disabled={deleting}
+              onClick={handleDelete}
+            >
+              {deleting ? "Deleting…" : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Sheet>
   );
 }

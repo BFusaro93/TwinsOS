@@ -28,6 +28,15 @@ interface VendorComboboxProps {
   id?: string;
   /** When provided, shows an "Add New Vendor" option at the bottom of the list. */
   onCreateNew?: () => void;
+  /**
+   * The record's own snapshotted vendor name (e.g. a PO/requisition line
+   * item's vendorName field) — used only as a fallback label when `value`
+   * references a vendor that's no longer in `vendors` (soft-deleted since
+   * this record was assigned it). Without this, a soft-deleted vendor
+   * silently renders as `noneLabel`, indistinguishable from "nothing
+   * assigned" even though a real assignment still exists.
+   */
+  selectedVendorName?: string | null;
 }
 
 export function VendorCombobox({
@@ -38,12 +47,16 @@ export function VendorCombobox({
   required = false,
   id,
   onCreateNew,
+  selectedVendorName,
 }: VendorComboboxProps) {
   const [open, setOpen] = React.useState(false);
 
   const selectedVendor = vendors.find((v) => v.id === value);
+  const isUnresolvedAssignment = value !== "none" && !!value && !selectedVendor;
   const displayLabel =
-    value === "none" || !value ? noneLabel : (selectedVendor?.name ?? noneLabel);
+    value === "none" || !value
+      ? noneLabel
+      : (selectedVendor?.name ?? (isUnresolvedAssignment ? (selectedVendorName ?? "Unknown vendor (deleted)") : noneLabel));
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -56,7 +69,7 @@ export function VendorCombobox({
           aria-expanded={open}
           className="w-full justify-between font-normal"
         >
-          <span className={cn("truncate", !selectedVendor && "text-muted-foreground")}>
+          <span className={cn("truncate", !selectedVendor && !isUnresolvedAssignment && "text-muted-foreground")}>
             {displayLabel}
           </span>
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
@@ -72,6 +85,12 @@ export function VendorCombobox({
           <CommandList className="!max-h-[220px]">
             <CommandEmpty>No vendors found.</CommandEmpty>
             <CommandGroup>
+              {isUnresolvedAssignment && (
+                <CommandItem value={value} disabled className="opacity-70">
+                  <Check className="mr-2 h-4 w-4 opacity-100" />
+                  {selectedVendorName ?? "Unknown vendor (deleted)"}
+                </CommandItem>
+              )}
               {!required && (
                 <CommandItem
                   value="none"

@@ -953,19 +953,37 @@ function ServiceRow({
       ? String((service.defaultRateCents / 100).toFixed(2))
       : ""
   );
+  const [productionRateDraft, setProductionRateDraft] = useState(
+    service.productionRateSqftPerHr != null ? String(service.productionRateSqftPerHr) : ""
+  );
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
   async function handleSave() {
     const rateCents = rateDraft !== "" ? Math.round(parseFloat(rateDraft) * 100) : null;
+    const productionRate = productionRateDraft !== "" ? parseFloat(productionRateDraft) : null;
     if (!nameDraft.trim()) { toast.error("Service name is required"); return; }
     if (!codeDraft.trim()) { toast.error("Service code is required"); return; }
     if (rateDraft !== "" && (isNaN(rateCents!) || rateCents! < 0)) {
       toast.error("Enter a valid rate"); return;
     }
+    // A zero/negative production rate would divide-by-zero (or invert the
+    // budgeted-hours calc) downstream wherever the estimate engine's
+    // production_rate budget method uses this value.
+    if (productionRateDraft !== "" && (isNaN(productionRate!) || productionRate! <= 0)) {
+      toast.error("Enter a production rate greater than 0"); return;
+    }
     setSaving(true);
     try {
-      await updateService({ id: service.id, patch: { name: nameDraft.trim(), code: codeDraft.trim().toUpperCase(), default_rate_cents: rateCents ?? null } });
+      await updateService({
+        id: service.id,
+        patch: {
+          name: nameDraft.trim(),
+          code: codeDraft.trim().toUpperCase(),
+          default_rate_cents: rateCents ?? null,
+          production_rate_sqft_per_hr: productionRate,
+        },
+      });
       toast.success("Service updated");
       setEditing(false);
       onSaved();
@@ -1014,6 +1032,16 @@ function ServiceRow({
           onChange={(e) => setRateDraft(e.target.value)}
           placeholder="Rate ($/hr)"
         />
+        <Input
+          className="h-8 w-32 text-sm"
+          type="number"
+          min="0"
+          step="0.01"
+          value={productionRateDraft}
+          onChange={(e) => setProductionRateDraft(e.target.value)}
+          placeholder="Sq ft / man-hr"
+          title="Production rate — drives budgeted hours for services using production-rate-based budgeting"
+        />
         <Button size="sm" onClick={handleSave} disabled={saving}>
           {saving ? "Saving…" : "Save"}
         </Button>
@@ -1061,6 +1089,7 @@ function AddServiceForm({ onAdded }: { onAdded: () => void }) {
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
   const [rate, setRate] = useState("");
+  const [productionRate, setProductionRate] = useState("");
   const [saving, setSaving] = useState(false);
 
   async function handleAdd() {
@@ -1070,13 +1099,28 @@ function AddServiceForm({ onAdded }: { onAdded: () => void }) {
     if (rate !== "" && (isNaN(rateCents!) || rateCents! < 0)) {
       toast.error("Enter a valid rate"); return;
     }
+    const productionRateValue = productionRate !== "" ? parseFloat(productionRate) : undefined;
+    if (productionRate !== "" && (isNaN(productionRateValue!) || productionRateValue! <= 0)) {
+      toast.error("Enter a production rate greater than 0"); return;
+    }
     setSaving(true);
     try {
-      await createService({ name: name.trim(), code: code.trim().toUpperCase(), defaultRateCents: rateCents, productionRatePerManHour: undefined });
+      // Raw DB columns, not camelCase (useCreateCRMService inserts `values`
+      // straight into crm_services) — this previously passed a
+      // productionRatePerManHour key that doesn't match the real column
+      // (production_rate_sqft_per_hr) and was hardcoded to undefined besides,
+      // so a new service's production rate could never actually be set here.
+      await createService({
+        name: name.trim(),
+        code: code.trim().toUpperCase(),
+        default_rate_cents: rateCents,
+        production_rate_sqft_per_hr: productionRateValue,
+      });
       toast.success("Service added");
       setName("");
       setCode("");
       setRate("");
+      setProductionRate("");
       onAdded();
     } catch {
       toast.error("Failed to add service");
@@ -1108,6 +1152,16 @@ function AddServiceForm({ onAdded }: { onAdded: () => void }) {
         value={rate}
         onChange={(e) => setRate(e.target.value)}
         placeholder="Rate ($/hr)"
+      />
+      <Input
+        className="h-8 w-32 text-sm"
+        type="number"
+        min="0"
+        step="0.01"
+        value={productionRate}
+        onChange={(e) => setProductionRate(e.target.value)}
+        placeholder="Sq ft / man-hr"
+        title="Production rate — drives budgeted hours for services using production-rate-based budgeting"
       />
       <Button size="sm" onClick={handleAdd} disabled={saving}>
         <Plus className="mr-1 h-3.5 w-3.5" />

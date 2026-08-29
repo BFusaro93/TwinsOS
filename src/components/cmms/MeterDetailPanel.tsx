@@ -10,15 +10,25 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
-import { Plus } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { formatDate } from "@/lib/utils";
 import { EditButton } from "@/components/shared/EditButton";
 import { NewMeterDialog } from "@/components/cmms/NewMeterDialog";
 import { AddReadingDialog } from "@/components/cmms/AddReadingDialog";
-import { useMeterReadings } from "@/lib/hooks/use-meter-readings";
+import { useMeterReadings, useDeleteMeterReading } from "@/lib/hooks/use-meter-readings";
 import type { Meter } from "@/types";
 
 interface MeterDetailPanelProps {
@@ -43,7 +53,9 @@ export function MeterDetailPanel({ meter }: MeterDetailPanelProps) {
   const [editOpen, setEditOpen] = useState(false);
   const [addReadingOpen, setAddReadingOpen] = useState(false);
   const [showAllReadings, setShowAllReadings] = useState(false);
+  const [deletingReadingId, setDeletingReadingId] = useState<string | null>(null);
   const { data: readings, isLoading } = useMeterReadings(meter.id);
+  const { mutate: deleteReading, isPending: deletingReading } = useDeleteMeterReading();
 
   // Both the chart and the stat cards below are labeled as a 12-month
   // window ("Past 12 mo" / "Reading History (12 months)") but were computed
@@ -217,17 +229,28 @@ export function MeterDetailPanel({ meter }: MeterDetailPanelProps) {
                         <th className="px-3 py-2 text-left text-xs font-medium text-slate-500">Date</th>
                         <th className="px-3 py-2 text-right text-xs font-medium text-slate-500">Reading</th>
                         <th className="px-3 py-2 text-right text-xs font-medium text-slate-500">Source</th>
+                        <th className="w-8 px-2 py-2" />
                       </tr>
                     </thead>
                     <tbody>
                       {visible.map((r) => (
-                        <tr key={r.id} className="border-t border-slate-100">
+                        <tr key={r.id} className="group border-t border-slate-100">
                           <td className="px-3 py-2 text-slate-600">{formatDate(r.readingAt)}</td>
                           <td className="px-3 py-2 text-right font-mono font-medium text-slate-900">
                             {r.value.toLocaleString()}{" "}
                             <span className="font-normal text-slate-400">{meter.unit}</span>
                           </td>
                           <td className="px-3 py-2 text-right text-slate-400 capitalize">{r.source}</td>
+                          <td className="px-2 py-2 text-right">
+                            <button
+                              type="button"
+                              onClick={() => setDeletingReadingId(r.id)}
+                              className="rounded p-1 text-slate-300 opacity-0 transition-opacity hover:bg-red-50 hover:text-red-500 group-hover:opacity-100"
+                              title="Delete reading"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -250,6 +273,33 @@ export function MeterDetailPanel({ meter }: MeterDetailPanelProps) {
 
       <NewMeterDialog open={editOpen} onOpenChange={setEditOpen} initialData={meter} />
       <AddReadingDialog open={addReadingOpen} onOpenChange={setAddReadingOpen} meter={meter} />
+
+      <AlertDialog open={!!deletingReadingId} onOpenChange={(open) => { if (!open) setDeletingReadingId(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Reading</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this meter reading? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 hover:bg-red-700 focus:ring-red-500"
+              disabled={deletingReading}
+              onClick={() => {
+                if (!deletingReadingId) return;
+                deleteReading(
+                  { id: deletingReadingId, meterId: meter.id },
+                  { onSuccess: () => setDeletingReadingId(null) }
+                );
+              }}
+            >
+              {deletingReading ? "Deleting…" : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
