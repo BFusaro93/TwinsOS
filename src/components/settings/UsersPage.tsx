@@ -69,40 +69,59 @@ const ROLE_LABELS: Record<OrgUser["role"], string> = {
   crew: "Crew",
 };
 
-const ROLES = [
+// Permission bullets tagged "cmms" or "crm" only show up for orgs whose plan
+// includes that module — an untagged bullet is module-agnostic and always shows.
+type RolePermission = { text: string; module?: "cmms" | "crm" };
+
+const ROLES: {
+  name: string;
+  key: string;
+  description: string;
+  descriptionCmmsOnly?: string;
+  descriptionCrmOnly?: string;
+  permissions: RolePermission[];
+}[] = [
   {
     name: "Admin",
     key: "admin",
     description: "Full access to everything — all modules, all records, settings, and user management.",
+    descriptionCmmsOnly: "Full access to everything — all records, settings, and user management.",
+    descriptionCrmOnly: "Full access to everything — all records, settings, and user management.",
     permissions: [
-      "Manage all users and roles",
-      "Configure organization settings and approval flows",
-      "Create, edit, and delete any record in both modules",
-      "Create and submit purchase requisitions",
-      "Create and send purchase orders",
-      "Approve any requisition or purchase order",
-      "Receive goods and update inventory",
-      "Manage vendor and product catalog records",
-      "Create and manage work orders and PM schedules",
-      "View and edit all assets and vehicles",
-      "Log meter readings and labor on work orders",
-      "View all reports and analytics",
+      { text: "Manage all users and roles" },
+      { text: "Configure organization settings and approval flows" },
+      { text: "Create, edit, and delete any record" },
+      { text: "Create and submit purchase requisitions", module: "cmms" },
+      { text: "Create and send purchase orders", module: "cmms" },
+      { text: "Approve any requisition or purchase order", module: "cmms" },
+      { text: "Receive goods and update inventory", module: "cmms" },
+      { text: "Manage vendor and product catalog records", module: "cmms" },
+      { text: "Create and manage work orders and PM schedules", module: "cmms" },
+      { text: "View and edit all assets and vehicles", module: "cmms" },
+      { text: "Log meter readings and labor on work orders", module: "cmms" },
+      { text: "Manage clients, estimates, jobs, and invoices", module: "crm" },
+      { text: "Access the dispatch board and scheduling tools", module: "crm" },
+      { text: "View all reports and analytics" },
     ],
   },
   {
     name: "Manager",
     key: "manager",
     description: "Full operational access across purchasing and maintenance — everything except organization settings and user management.",
+    descriptionCmmsOnly: "Full operational access across purchasing and maintenance — everything except organization settings and user management.",
+    descriptionCrmOnly: "Full operational access across clients, jobs, and scheduling — everything except organization settings and user management.",
     permissions: [
-      "Create and submit purchase requisitions",
-      "Create and send purchase orders",
-      "Approve and reject requisitions and POs within their limit",
-      "Receive goods and update inventory",
-      "Manage vendor and product catalog records",
-      "Create and manage work orders and PM schedules",
-      "View and edit all assets and vehicles",
-      "Log meter readings and labor on work orders",
-      "View all reports",
+      { text: "Create and submit purchase requisitions", module: "cmms" },
+      { text: "Create and send purchase orders", module: "cmms" },
+      { text: "Approve and reject requisitions and POs within their limit", module: "cmms" },
+      { text: "Receive goods and update inventory", module: "cmms" },
+      { text: "Manage vendor and product catalog records", module: "cmms" },
+      { text: "Create and manage work orders and PM schedules", module: "cmms" },
+      { text: "View and edit all assets and vehicles", module: "cmms" },
+      { text: "Log meter readings and labor on work orders", module: "cmms" },
+      { text: "Manage clients, estimates, jobs, and invoices", module: "crm" },
+      { text: "Access the dispatch board and scheduling tools", module: "crm" },
+      { text: "View all reports" },
     ],
   },
   {
@@ -110,12 +129,12 @@ const ROLES = [
     key: "purchaser",
     description: "Manages the full procurement lifecycle from requisition to receiving.",
     permissions: [
-      "Create and submit purchase requisitions",
-      "Create and send purchase orders",
-      "Receive goods and update inventory",
-      "Manage vendor records",
-      "View product catalog",
-      "View work orders (read-only)",
+      { text: "Create and submit purchase requisitions" },
+      { text: "Create and send purchase orders" },
+      { text: "Receive goods and update inventory" },
+      { text: "Manage vendor records" },
+      { text: "View product catalog" },
+      { text: "View work orders (read-only)" },
     ],
   },
   {
@@ -123,23 +142,26 @@ const ROLES = [
     key: "technician",
     description: "Executes maintenance work, creates and manages work orders, and can initiate procurement for parts.",
     permissions: [
-      "Create and manage work orders (not limited to assigned)",
-      "Log labor and parts on work orders",
-      "Submit maintenance requests",
-      "Create and submit purchase requisitions for parts",
-      "Create purchase orders for maintenance parts",
-      "View asset and vehicle details",
-      "Log meter readings",
+      { text: "Create and manage work orders (not limited to assigned)" },
+      { text: "Log labor and parts on work orders" },
+      { text: "Submit maintenance requests" },
+      { text: "Create and submit purchase requisitions for parts" },
+      { text: "Create purchase orders for maintenance parts" },
+      { text: "View asset and vehicle details" },
+      { text: "Log meter readings" },
     ],
   },
   {
     name: "Viewer",
     key: "viewer",
     description: "Read-only access to view records across both modules without making any changes.",
+    descriptionCmmsOnly: "Read-only access to view records without making any changes.",
+    descriptionCrmOnly: "Read-only access to view records without making any changes.",
     permissions: [
-      "View all records across both modules",
-      "No create, edit, or delete access",
-      "Cannot approve or reject records",
+      { text: "View purchase orders, work orders, and assets", module: "cmms" },
+      { text: "View clients, estimates, jobs, and invoices", module: "crm" },
+      { text: "No create, edit, or delete access" },
+      { text: "Cannot approve or reject records" },
     ],
   },
   {
@@ -147,11 +169,11 @@ const ROLES = [
     key: "requestor",
     description: "Limited access to submit work requests and purchase requisitions only.",
     permissions: [
-      "Submit maintenance requests",
-      "Create purchase requisitions (draft only)",
-      "View status of their own submitted records",
-      "Cannot approve, edit, or delete any records",
-      "No access to assets, vendors, or inventory",
+      { text: "Submit maintenance requests" },
+      { text: "Create purchase requisitions (draft only)" },
+      { text: "View status of their own submitted records" },
+      { text: "Cannot approve, edit, or delete any records" },
+      { text: "No access to assets, vendors, or inventory" },
     ],
   },
   {
@@ -159,11 +181,11 @@ const ROLES = [
     key: "crew",
     description: "Field crew account for shared team devices — assigned to a crew (e.g. MAINT1, ENHANCE1) rather than an individual person.",
     permissions: [
-      "Submit maintenance requests",
-      "View Labor Efficiency dashboard",
-      "View Driver Safety Scores dashboard",
-      "Upload photos to job sites (Job Photos)",
-      "No access to purchasing, assets, inventory, or settings",
+      { text: "Submit maintenance requests", module: "cmms" },
+      { text: "View Labor Efficiency dashboard" },
+      { text: "View Driver Safety Scores dashboard" },
+      { text: "Upload photos to job sites (Job Photos)" },
+      { text: "No access to purchasing, assets, inventory, or settings" },
     ],
   },
 ];
@@ -488,8 +510,24 @@ export function UsersPage() {
   // Avoid a flash of hidden roles while the org's plan is still loading —
   // only hide Purchaser/Technician/Requestor once we're sure Equipt isn't on it.
   const { allowed: equiptAllowed, isLoading: equiptLoading } = useModuleAccess("equipt");
+  const { allowed: landscaptAllowed, isLoading: landscaptLoading } = useModuleAccess("landscapt");
   const showCmmsRoles = equiptLoading || equiptAllowed;
-  const visibleRoleDefs = showCmmsRoles ? ROLES : ROLES.filter((r) => !CMMS_ONLY_ROLES.has(r.key as OrgUser["role"]));
+  const showCrmRoles = landscaptLoading || landscaptAllowed;
+  const visibleRoleDefs = (showCmmsRoles ? ROLES : ROLES.filter((r) => !CMMS_ONLY_ROLES.has(r.key as OrgUser["role"])))
+    .map((role) => ({
+      ...role,
+      description:
+        showCmmsRoles && showCrmRoles
+          ? role.description
+          : showCmmsRoles
+            ? role.descriptionCmmsOnly ?? role.description
+            : showCrmRoles
+              ? role.descriptionCrmOnly ?? role.description
+              : role.description,
+      permissions: role.permissions.filter(
+        (p) => !p.module || (p.module === "cmms" && showCmmsRoles) || (p.module === "crm" && showCrmRoles)
+      ),
+    }));
 
   async function handleResendInvite(user: OrgUser) {
     setResendingId(user.id);
@@ -721,9 +759,9 @@ export function UsersPage() {
                 <p className="text-sm text-slate-600 mb-3">{role.description}</p>
                 <ul className="space-y-1">
                   {role.permissions.map((p) => (
-                    <li key={p} className="flex items-start gap-2 text-sm text-slate-600">
+                    <li key={p.text} className="flex items-start gap-2 text-sm text-slate-600">
                       <Check className="h-4 w-4 shrink-0 text-brand-500 mt-0.5" />
-                      {p}
+                      {p.text}
                     </li>
                   ))}
                 </ul>
