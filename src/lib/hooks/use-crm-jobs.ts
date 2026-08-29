@@ -468,6 +468,25 @@ export function useClientJobs(clientId?: string) {
   });
 }
 
+/** Jobs assigned to a given contract (Contracts detail's "Scheduled Services" tab). */
+export function useJobsByContract(contractId?: string) {
+  return useQuery({
+    queryKey: ['crm-jobs', 'contract', contractId],
+    queryFn: async () => {
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from('crm_jobs')
+        .select('*, crm_job_services(*), clients(display_name, primary_phone), sales_rep:crm_employees!crm_jobs_sales_rep_id_fkey(first_name,last_name)')
+        .eq('contract_id', contractId as string)
+        .is('deleted_at', null)
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return (data.map(mapJobFull)) as CRMJob[];
+    },
+    enabled: !!contractId,
+  });
+}
+
 import type { NewClientJobFormValues, CRMJobService, CRMJobVisit, VisitStatus } from '@/types/crm-jobs';
 
 // ── visit helpers ─────────────────────────────────────────────────────────────
