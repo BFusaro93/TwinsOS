@@ -2,7 +2,18 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Image as ImageIcon, LayoutGrid, Trash2 } from "lucide-react";
+import {
+  BarChart3,
+  Gauge,
+  Grid3x3,
+  Hash,
+  Image as ImageIcon,
+  LineChart,
+  PieChart,
+  Table2,
+  Trash2,
+} from "lucide-react";
+import type { VisualType } from "@/types/crm-reports";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -46,6 +57,27 @@ import type { Dashboard } from "@/types/crm-reports";
  *  row id for API calls. */
 function savedGraphicRowId(itemId: string): string {
   return itemId.replace(/^saved:/, "");
+}
+
+/** Static per-visual-type pictogram — a rough sense of what the graphic
+ *  looks like without paying for a live-data render on every library item. */
+const VISUAL_TYPE_ICONS: Record<VisualType, typeof BarChart3> = {
+  kpi: Hash,
+  table: Table2,
+  bar: BarChart3,
+  line: LineChart,
+  pie: PieChart,
+  gauge: Gauge,
+  crosstab: Grid3x3,
+};
+
+function VisualTypeThumbnail({ type }: { type: VisualType }) {
+  const Icon = VISUAL_TYPE_ICONS[type];
+  return (
+    <div className="flex h-20 w-full items-center justify-center rounded-md border border-slate-100 bg-slate-50">
+      <Icon className="h-8 w-8 text-slate-400" />
+    </div>
+  );
 }
 
 export function GraphicsLibraryList() {
@@ -137,8 +169,8 @@ export function GraphicsLibraryList() {
                 </div>
               </CardHeader>
               <CardContent className="flex flex-1 flex-col justify-between gap-3">
+                <VisualTypeThumbnail type={item.visual.type} />
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <LayoutGrid className="h-3.5 w-3.5" />
                   <span className="capitalize">{item.visual.type}</span>
                   <span>·</span>
                   <span>{item.category}</span>

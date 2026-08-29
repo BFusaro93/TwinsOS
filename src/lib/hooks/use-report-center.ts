@@ -385,22 +385,39 @@ export function useGraphicLibraryItems() {
  * tab date-range filter when useTabDateRange is set) and runs it through the
  * same /api/crm/reports/analysis/run endpoint the custom-analysis builder uses.
  */
+function relativeDateISO(kind: "today" | "yesterday"): string {
+  const d = new Date();
+  if (kind === "yesterday") d.setDate(d.getDate() - 1);
+  return d.toISOString().slice(0, 10);
+}
+
 export function buildEffectiveConfig(
   visual: VisualSpec,
   dateRange?: { from: string; to: string }
 ): AnalysisConfig {
-  if (!visual.useTabDateRange || !dateRange) return visual.config;
-  const dataset = getDataset(visual.config.dataset);
+  let config = visual.config;
+  const dataset = getDataset(config.dataset);
   const dateField = dataset?.defaultDateField;
-  if (!dateField) return visual.config;
-  return {
-    ...visual.config,
-    filters: [
-      ...visual.config.filters,
-      { column: dateField, op: "gte", value: dateRange.from },
-      { column: dateField, op: "lte", value: dateRange.to },
-    ],
-  };
+  if (visual.useTabDateRange && dateRange && dateField) {
+    config = {
+      ...config,
+      filters: [
+        ...config.filters,
+        { column: dateField, op: "gte", value: dateRange.from },
+        { column: dateField, op: "lte", value: dateRange.to },
+      ],
+    };
+  }
+  if (visual.relativeDateFilter && dateField) {
+    config = {
+      ...config,
+      filters: [
+        ...config.filters,
+        { column: dateField, op: "eq", value: relativeDateISO(visual.relativeDateFilter) },
+      ],
+    };
+  }
+  return config;
 }
 
 export function useRunVisualQuery(

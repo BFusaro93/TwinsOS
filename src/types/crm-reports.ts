@@ -160,6 +160,12 @@ export const visualSpecSchema = z.object({
   /** Append a gte/lte filter on the dataset's defaultDateField from the
    *  dashboard tab's shared date range control. */
   useTabDateRange: z.boolean().default(false),
+  /** Append an eq filter on the dataset's defaultDateField for today's or
+   *  yesterday's date, computed fresh at query time — for KPI panels like
+   *  "Payments Made Today" that need a fixed relative day rather than the
+   *  tab's shared (and user-adjustable) date range. Mutually exclusive with
+   *  `useTabDateRange` in practice, though nothing enforces that. */
+  relativeDateFilter: z.enum(["today", "yesterday"]).optional(),
   /** Category/x-axis column for bar/line/pie (a groupBy column or plain column). */
   labelColumn: z.string().optional(),
   /** One or more numeric output columns to plot as series (bar/line) or the

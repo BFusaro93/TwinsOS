@@ -943,6 +943,9 @@ function PanelEditor({ panel, tabUsesDateFilter, onSave, onCancel }: PanelEditor
   const [size, setSize] = useState<DashboardPanel["size"]>(panel.size);
   const [visualType, setVisualType] = useState<VisualType>(panel.visual.type);
   const [useTabDateRange, setUseTabDateRange] = useState(panel.visual.useTabDateRange);
+  const [relativeDateFilter, setRelativeDateFilter] = useState(
+    panel.visual.relativeDateFilter ?? "none"
+  );
   const [labelColumn, setLabelColumn] = useState(panel.visual.labelColumn ?? "");
   const [valueColumns, setValueColumns] = useState<string[]>(panel.visual.valueColumns);
   const [kpiColumn, setKpiColumn] = useState(panel.visual.kpiColumn ?? "");
@@ -1031,6 +1034,10 @@ function PanelEditor({ panel, tabUsesDateFilter, onSave, onCancel }: PanelEditor
       type: visualType,
       config,
       useTabDateRange,
+      relativeDateFilter:
+        relativeDateFilter === "today" || relativeDateFilter === "yesterday"
+          ? relativeDateFilter
+          : undefined,
       labelColumn: labelColumn || undefined,
       valueColumns,
       kpiColumn: kpiColumn || undefined,
@@ -1155,6 +1162,16 @@ function PanelEditor({ panel, tabUsesDateFilter, onSave, onCancel }: PanelEditor
               Use this tab&apos;s shared date range
             </label>
           )}
+          <Select value={relativeDateFilter} onValueChange={setRelativeDateFilter}>
+            <SelectTrigger className="h-9 w-44 text-sm">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">No relative date filter</SelectItem>
+              <SelectItem value="today">Filter to today</SelectItem>
+              <SelectItem value="yesterday">Filter to yesterday</SelectItem>
+            </SelectContent>
+          </Select>
         </CardContent>
       </Card>
 

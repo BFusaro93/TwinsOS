@@ -394,4 +394,123 @@ export const REVENUE_REPORTS: PrebuiltReportDef[] = [
       sortDir: "desc",
     }),
   },
+  {
+    key: "invoices-and-payments",
+    section: "revenue",
+    name: "Invoices and Payments",
+    description: "Compares invoiced revenue to payments collected, month by month.",
+    filters: [dateRangeFilterDef("Date Range", "this_year")],
+    run: async ({ supabase, params }) => {
+      const { from, to } = resolveDateRange(params, "this_year");
+
+      let invQuery = supabase
+        .from("crm_invoices")
+        .select("invoice_date, total_cents, status")
+        .is("deleted_at", null)
+        .neq("status", "void");
+      if (from) invQuery = invQuery.gte("invoice_date", from);
+      if (to) invQuery = invQuery.lte("invoice_date", to);
+      const { data: invData, error: invError } = await invQuery.limit(5000);
+      if (invError) throw new Error(invError.message);
+
+      let payQuery = supabase
+        .from("crm_payments")
+        .select("payment_date, amount_cents")
+        .is("deleted_at", null);
+      if (from) payQuery = payQuery.gte("payment_date", from);
+      if (to) payQuery = payQuery.lte("payment_date", to);
+      const { data: payData, error: payError } = await payQuery.limit(5000);
+      if (payError) throw new Error(payError.message);
+
+      type InvoiceRow = { invoice_date: string | null; total_cents: number | null };
+      type PaymentRow = { payment_date: string | null; amount_cents: number | null };
+
+      const invoicedMonths = new Array<number>(12).fill(0);
+      for (const r of (invData ?? []) as unknown as InvoiceRow[]) {
+        const idx = parseInt((r.invoice_date ?? "").slice(5, 7), 10) - 1;
+        if (idx >= 0 && idx < 12) invoicedMonths[idx] += r.total_cents ?? 0;
+      }
+      const collectedMonths = new Array<number>(12).fill(0);
+      for (const r of (payData ?? []) as unknown as PaymentRow[]) {
+        const idx = parseInt((r.payment_date ?? "").slice(5, 7), 10) - 1;
+        if (idx >= 0 && idx < 12) collectedMonths[idx] += r.amount_cents ?? 0;
+      }
+
+      const rows = [
+        {
+          metric: "Invoiced",
+          ...Object.fromEntries(MONTH_KEYS.map((k, i) => [k, invoicedMonths[i]])),
+          total_cents: invoicedMonths.reduce((a, b) => a + b, 0),
+        },
+        {
+          metric: "Collected",
+          ...Object.fromEntries(MONTH_KEYS.map((k, i) => [k, collectedMonths[i]])),
+          total_cents: collectedMonths.reduce((a, b) => a + b, 0),
+        },
+      ];
+
+      return buildResult(
+        [
+          col("metric", "Metric"),
+          ...MONTH_KEYS.map((m, i) => col(m, MONTH_LABELS[i], "money")),
+          col("total_cents", "Total", "money"),
+        ],
+        rows,
+        [
+          "Invoiced reflects the invoice date; Collected reflects the payment date. Void invoices are excluded.",
+        ]
+      );
+    },
+  },
+  {
+    key: "credit-card-charges",
+    section: "revenue",
+    name: "Credit Card Charges",
+    description: "Shows credit card payments received, including processing fees where applicable.",
+    filters: [dateRangeFilterDef("Payment Date", "this_month")],
+    run: async ({ supabase, params }) => {
+      const { from, to } = resolveDateRange(params, "this_month");
+      let query = supabase
+        .from("crm_payments")
+        .select(
+          "payment_date, method, reference, amount_cents, processing_fee_cents, clients:client_id(display_name)"
+        )
+        .is("deleted_at", null)
+        .like("method", "Credit Card%");
+      if (from) query = query.gte("payment_date", from);
+      if (to) query = query.lte("payment_date", to);
+      const { data, error } = await query.order("payment_date", { ascending: false }).limit(5000);
+      if (error) throw new Error(error.message);
+
+      type Row = {
+        payment_date: string | null;
+        method: string | null;
+        reference: string | null;
+        amount_cents: number | null;
+        processing_fee_cents: number | null;
+        clients: { display_name: string | null } | null;
+      };
+
+      const rows = ((data ?? []) as unknown as Row[]).map((r) => ({
+        payment_date: r.payment_date,
+        client_name: r.clients?.display_name ?? "(unknown)",
+        method: r.method,
+        reference: r.reference,
+        amount_cents: r.amount_cents ?? 0,
+        processing_fee_cents: r.processing_fee_cents ?? 0,
+      }));
+
+      return buildResult(
+        [
+          col("payment_date", "Date"),
+          col("client_name", "Client"),
+          col("method", "Card Type"),
+          col("reference", "Reference"),
+          col("amount_cents", "Amount", "money"),
+          col("processing_fee_cents", "Processing Fee", "money"),
+        ],
+        rows
+      );
+    },
+  },
 ];
