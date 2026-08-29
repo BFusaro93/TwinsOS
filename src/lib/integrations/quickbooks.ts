@@ -260,6 +260,18 @@ export interface FindOrCreateResult {
  * Jr.") is surfaced for a human to confirm rather than guessed. Silently
  * linking the wrong customer is worse than one extra click.
  */
+/**
+ * Confirms a customer id actually exists in this org's own QBO company
+ * before it's trusted — used when force-linking a client to a specific
+ * customer id supplied by the request body, so a bad/unrelated id can't get
+ * silently written to clients.qbo_customer_id (it would otherwise only
+ * surface later as an opaque 400 on the next invoice push).
+ */
+export async function customerExists(conn: QuickBooksConnection, customerId: string): Promise<boolean> {
+  const rows = await qboQuery(conn, `SELECT Id FROM Customer WHERE Id = '${escapeQboString(customerId)}'`, "Customer");
+  return rows.length === 1;
+}
+
 export async function findOrCreateCustomer(
   conn: QuickBooksConnection,
   input: CreateCustomerInput

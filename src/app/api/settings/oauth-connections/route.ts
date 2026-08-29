@@ -27,18 +27,23 @@ export async function GET() {
   }
 
   const { data: profile } = await supabase.from("profiles").select("org_id, role").eq("id", user.id).single();
-  if (!profile || profile.role !== "admin") {
-    return NextResponse.json({ error: "Admin role required" }, { status: 403 });
+  if (!profile) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const db = adminClient();
-  const { data: refreshRows, error } = await db
+  // Every org member can self-service their own OAuth grant (the flow
+  // itself is per-user, not a shared org-wide key) — only admins get the
+  // org-wide view across every user's connections.
+  let query = db
     .from("oauth_tokens")
     .select("id, client_id, user_id, scopes, last_used_at, created_at, oauth_clients(client_name), profiles(name)")
     .eq("org_id", profile.org_id)
     .eq("token_type", "refresh")
     .is("revoked_at", null)
     .order("created_at", { ascending: false });
+  if (profile.role !== "admin") query = query.eq("user_id", user.id);
+  const { data: refreshRows, error } = await query;
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
