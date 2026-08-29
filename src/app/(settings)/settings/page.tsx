@@ -10,6 +10,7 @@ import { SubscriptionTab } from "@/components/settings/SubscriptionTab";
 import { ZapierIntegrationCard } from "@/components/settings/ZapierIntegrationCard";
 import { ApiKeysCard } from "@/components/settings/ApiKeysCard";
 import { OAuthConnectionsCard } from "@/components/settings/OAuthConnectionsCard";
+import { OAuthWriteRolesCard } from "@/components/settings/OAuthWriteRolesCard";
 import { HomeShortcutsCard } from "@/components/settings/HomeShortcutsCard";
 import { useCurrentUserStore } from "@/stores";
 
@@ -81,6 +82,7 @@ function MasterAccountSettings() {
                 <ZapierIntegrationCard />
                 <ApiKeysCard />
                 <OAuthConnectionsCard />
+                <OAuthWriteRolesCard />
               </div>
               <HomeShortcutsCard />
             </div>

@@ -4170,21 +4170,21 @@ export type Database = {
           {
             foreignKeyName: "crm_invoice_line_items_visit_id_fkey"
             columns: ["visit_id"]
-            isOneToOne: false
+            isOneToOne: true
             referencedRelation: "crm_job_visits"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "crm_invoice_line_items_visit_id_fkey"
             columns: ["visit_id"]
-            isOneToOne: false
+            isOneToOne: true
             referencedRelation: "rpt_job_services"
             referencedColumns: ["visit_id"]
           },
           {
             foreignKeyName: "crm_invoice_line_items_visit_id_fkey"
             columns: ["visit_id"]
-            isOneToOne: false
+            isOneToOne: true
             referencedRelation: "rpt_job_visits"
             referencedColumns: ["id"]
           },
@@ -9757,6 +9757,7 @@ export type Database = {
           default_invoice_frequency: string
           id: string
           name: string
+          oauth_write_roles: string[]
           pending_plan: string | null
           plan: string
           portal_enabled: boolean
@@ -9796,6 +9797,7 @@ export type Database = {
           default_invoice_frequency?: string
           id?: string
           name: string
+          oauth_write_roles?: string[]
           pending_plan?: string | null
           plan?: string
           portal_enabled?: boolean
@@ -9835,6 +9837,7 @@ export type Database = {
           default_invoice_frequency?: string
           id?: string
           name?: string
+          oauth_write_roles?: string[]
           pending_plan?: string | null
           plan?: string
           portal_enabled?: boolean
@@ -12914,6 +12917,17 @@ export type Database = {
         }[]
       }
       assign_invoice_number: { Args: { p_invoice_id: string }; Returns: number }
+      create_invoice_from_milestone: {
+        Args: {
+          p_client_id: string
+          p_milestone_id: string
+          p_po_number?: string
+          p_sales_rep_id?: string
+        }
+        Returns: {
+          invoice_id: string
+        }[]
+      }
       crm_recompute_job_actual_hours: {
         Args: { p_job_id: string }
         Returns: undefined
