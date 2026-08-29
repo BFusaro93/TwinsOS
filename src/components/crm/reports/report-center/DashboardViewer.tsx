@@ -14,10 +14,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { downloadCSV } from "@/lib/csv";
 import { downloadXLSX } from "@/lib/xlsx-export";
 import { exportReportPDF } from "@/lib/reports/export-pdf";
-import { useDashboard, useRunVisualQuery } from "@/lib/hooks/use-report-center";
+import { useDashboard, useRunReport, useRunVisualQuery } from "@/lib/hooks/use-report-center";
+import { getReport } from "@/lib/reports/registry";
+import { computePresetRange } from "./ReportFilterBar";
 import { VisualRenderer } from "./VisualRenderer";
-import { exportCellValue, formatCellValue } from "./ReportTable";
+import { exportCellValue, formatCellValue, ReportTable } from "./ReportTable";
 import type { DashboardPanel, DashboardTab, ReportResult } from "@/types/crm-reports";
+import type { ReportFilterDef } from "@/types/crm-reports";
 
 const HUB_HREF = "/crm/admin/reports?tab=dashboards";
 
@@ -41,7 +44,99 @@ function defaultDateRange(): { from: string; to: string } {
   };
 }
 
+/** Default filter values for a prebuilt report's own filter bar (date-range
+ *  presets like "this month" resolved fresh on every render), same logic
+ *  ReportViewer.tsx's standalone page uses — kept as an inline copy here
+ *  rather than importing it, since embedding needs no coupling to the rest
+ *  of that page (filter bar, exports, schedule dialog). */
+function reportDefaultParams(filters: ReportFilterDef[]): Record<string, string> {
+  const values: Record<string, string> = {};
+  for (const def of filters) {
+    if (def.type === "dateRange") {
+      const { from, to } = computePresetRange(def.defaultValue ?? "this_month");
+      values.from = from;
+      values.to = to;
+    } else {
+      values[def.key] = def.defaultValue ?? "";
+    }
+  }
+  return values;
+}
+
+/** Embeds an existing Report Center prebuilt report (by key) inside a
+ *  dashboard panel — needed for reports with bespoke `run` logic (e.g.
+ *  date-bucketed aging reports) that can't be expressed as a plain
+ *  AnalysisConfig/VisualSpec. Deliberately minimal: no filter bar or export
+ *  buttons here (those stay on the full report page) — just the table and
+ *  a link out. Not wired into the tab's bulk CSV/Excel/PDF export (open the
+ *  full report to export it individually). */
+function ReportPanelView({
+  reportKey,
+  params,
+}: {
+  reportKey: string;
+  params?: Record<string, string>;
+}) {
+  const def = getReport(reportKey);
+  const effectiveParams = useMemo(
+    () => ({ ...(def ? reportDefaultParams(def.filters) : {}), ...params }),
+    [def, params]
+  );
+  const { data, isFetching, error } = useRunReport(reportKey, effectiveParams);
+
+  if (!def) {
+    return (
+      <Alert variant="destructive">
+        <AlertCircle className="h-4 w-4" />
+        <AlertDescription>Report &quot;{reportKey}&quot; no longer exists.</AlertDescription>
+      </Alert>
+    );
+  }
+  if (isFetching && !data) {
+    return <Skeleton className="h-40 w-full" />;
+  }
+  if (error) {
+    return (
+      <Alert variant="destructive">
+        <AlertCircle className="h-4 w-4" />
+        <AlertDescription>{error.message}</AlertDescription>
+      </Alert>
+    );
+  }
+  if (!data) return null;
+
+  return (
+    <div className="flex flex-col gap-2">
+      <ReportTable result={data} formatRules={def.formatRules} />
+      <Link
+        href={`/crm/admin/reports/r/${reportKey}`}
+        className="self-start text-xs text-blue-600 hover:underline"
+      >
+        Open full report →
+      </Link>
+    </div>
+  );
+}
+
 function DashboardPanelView({
+  panel,
+  dateRange,
+  onData,
+}: {
+  panel: DashboardPanel;
+  dateRange?: { from: string; to: string };
+  onData?: (panelId: string, result: ReportResult) => void;
+}) {
+  if (panel.reportKey) {
+    return <ReportPanelView reportKey={panel.reportKey} params={panel.reportParams} />;
+  }
+
+  return (
+    <DashboardVisualPanelView panel={panel} dateRange={dateRange} onData={onData} />
+  );
+}
+
+function DashboardVisualPanelView({
   panel,
   dateRange,
   onData,

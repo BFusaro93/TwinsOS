@@ -33,6 +33,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { getDashboardTemplate } from "@/lib/reports/dashboard-templates";
 import { panelFromGraphic } from "@/lib/reports/panel-from-graphic";
+import { ALL_REPORTS } from "@/lib/reports/registry";
 import {
   aggregateAlias,
   aggregateLabel,
@@ -47,11 +48,16 @@ import {
   useDashboard,
   useDeleteDashboard,
   useGraphicLibraryItems,
+  useRunReport,
   useRunVisualQuery,
   useUpdateDashboard,
 } from "@/lib/hooks/use-report-center";
+import { getReport } from "@/lib/reports/registry";
+import { REPORT_SECTIONS } from "@/types/crm-reports";
 import type { CustomReport, DashboardPanel, DashboardTab, VisualSpec, VisualType } from "@/types/crm-reports";
 import { AnalysisConfigEditor } from "./AnalysisConfigEditor";
+import { computePresetRange } from "./ReportFilterBar";
+import { ReportTable } from "./ReportTable";
 import { VisualRenderer } from "./VisualRenderer";
 
 // ============================================================
@@ -125,6 +131,26 @@ function panelFromSavedReport(report: CustomReport): DashboardPanel {
   };
 }
 
+/** Builds a panel that embeds an existing Report Center prebuilt report by
+ *  key — for reports with bespoke `run` logic (e.g. date-bucketed aging
+ *  reports) that can't be expressed as a plain AnalysisConfig/VisualSpec.
+ *  `visual` is an inert placeholder here; DashboardPanelView renders the
+ *  report instead of it whenever `reportKey` is set. */
+function panelFromReport(reportKey: string, name: string): DashboardPanel {
+  return {
+    id: crypto.randomUUID(),
+    title: name,
+    size: "half",
+    reportKey,
+    visual: {
+      type: "table",
+      config: { dataset: "unused", columns: [], filters: [], groupBy: [], aggregates: [], sortDir: "asc" },
+      useTabDateRange: false,
+      valueColumns: [],
+    },
+  };
+}
+
 /** "This month" range used for panel previews, in the viewer's LOCAL
  *  calendar day — computed fresh on each call (not a module-level constant,
  *  so a long-lived tab doesn't keep previewing last month once it rolls
@@ -158,8 +184,23 @@ export function DashboardBuilder({ dashboardId }: { dashboardId?: string }) {
   const [tabPendingRemoval, setTabPendingRemoval] = useState<DashboardTab | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [graphicPickerOpen, setGraphicPickerOpen] = useState(false);
+  const [reportPickerOpen, setReportPickerOpen] = useState(false);
+  const [reportSearch, setReportSearch] = useState("");
   const { data: savedReports = [] } = useCustomReports();
   const { items: graphicItems } = useGraphicLibraryItems();
+
+  const reportSections = useMemo(() => {
+    const q = reportSearch.trim().toLowerCase();
+    return REPORT_SECTIONS.map((section) => ({
+      ...section,
+      reports: ALL_REPORTS.filter(
+        (r) =>
+          r.section === section.key &&
+          !r.href && // link-out reports have no data to embed
+          (q === "" || r.name.toLowerCase().includes(q) || r.description.toLowerCase().includes(q))
+      ),
+    })).filter((section) => section.reports.length > 0);
+  }, [reportSearch]);
 
   // hydrate once when editing an existing dashboard
   useEffect(() => {
@@ -478,6 +519,10 @@ export function DashboardBuilder({ dashboardId }: { dashboardId?: string }) {
                 <Plus className="mr-1.5 h-3.5 w-3.5" />
                 Add From Graphics Library
               </Button>
+              <Button variant="outline" size="sm" onClick={() => setReportPickerOpen(true)}>
+                <Plus className="mr-1.5 h-3.5 w-3.5" />
+                Add From Report Center
+              </Button>
             </div>
           )}
 
@@ -544,15 +589,65 @@ export function DashboardBuilder({ dashboardId }: { dashboardId?: string }) {
             </DialogContent>
           </Dialog>
 
-          {editingPanel && (
-            <PanelEditor
-              key={editingPanel.id}
-              panel={editingPanel}
-              tabUsesDateFilter={activeTab.useDateFilter}
-              onSave={handleSavePanel}
-              onCancel={() => setEditingPanel(null)}
-            />
-          )}
+          <Dialog open={reportPickerOpen} onOpenChange={setReportPickerOpen}>
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle>Add Panel From Report Center</DialogTitle>
+              </DialogHeader>
+              <Input
+                value={reportSearch}
+                onChange={(e) => setReportSearch(e.target.value)}
+                placeholder="Search reports…"
+                className="h-9 text-sm"
+              />
+              <div className="flex max-h-96 flex-col gap-3 overflow-y-auto">
+                {reportSections.length === 0 && (
+                  <p className="py-4 text-center text-sm text-muted-foreground">
+                    No reports match &quot;{reportSearch}&quot;.
+                  </p>
+                )}
+                {reportSections.map((section) => (
+                  <div key={section.key} className="flex flex-col gap-1">
+                    <span className="px-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                      {section.label}
+                    </span>
+                    {section.reports.map((r) => (
+                      <button
+                        key={r.key}
+                        onClick={() => {
+                          setEditingPanel(panelFromReport(r.key, r.name));
+                          setReportPickerOpen(false);
+                          setReportSearch("");
+                        }}
+                        className="flex flex-col rounded-md border p-3 text-left text-sm hover:bg-accent"
+                      >
+                        <span className="font-medium">{r.name}</span>
+                        <span className="text-xs text-muted-foreground">{r.description}</span>
+                      </button>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            </DialogContent>
+          </Dialog>
+
+          {editingPanel &&
+            (editingPanel.reportKey ? (
+              <ReportPanelEditor
+                key={editingPanel.id}
+                panel={editingPanel}
+                onSave={handleSavePanel}
+                onCancel={() => setEditingPanel(null)}
+              />
+            ) : (
+              <PanelEditor
+                key={editingPanel.id}
+                panel={editingPanel}
+                tabUsesDateFilter={activeTab.useDateFilter}
+                onSave={handleSavePanel}
+                onCancel={() => setEditingPanel(null)}
+              />
+            ))}
         </>
       )}
     </div>
@@ -568,25 +663,24 @@ function PanelPreviewCard({
   onEdit: () => void;
   onRemove: () => void;
 }) {
-  const { data, isLoading, error } = useRunVisualQuery(
-    panel.visual,
-    panel.visual.useTabDateRange ? previewDateRange() : undefined
-  );
   const [saveOpen, setSaveOpen] = useState(false);
+  const isReportPanel = !!panel.reportKey;
 
   return (
     <Card className="flex h-full flex-col">
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
         <CardTitle className="text-sm">{panel.title}</CardTitle>
         <div className="flex items-center gap-1">
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label="Save to Graphics Library"
-            onClick={() => setSaveOpen(true)}
-          >
-            <BookmarkPlus className="h-3.5 w-3.5" />
-          </Button>
+          {!isReportPanel && (
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="Save to Graphics Library"
+              onClick={() => setSaveOpen(true)}
+            >
+              <BookmarkPlus className="h-3.5 w-3.5" />
+            </Button>
+          )}
           <Button variant="ghost" size="icon" aria-label="Edit panel" onClick={onEdit}>
             <Pencil className="h-3.5 w-3.5" />
           </Button>
@@ -602,18 +696,93 @@ function PanelPreviewCard({
         </div>
       </CardHeader>
       <CardContent className="flex-1">
-        {isLoading && <Skeleton className="h-32 w-full" />}
-        {error && (
-          <Alert variant="destructive">
-            <AlertCircle className="h-4 w-4" />
-            <AlertTitle>Failed to load</AlertTitle>
-            <AlertDescription>{error.message}</AlertDescription>
-          </Alert>
+        {isReportPanel ? (
+          <ReportPanelPreview reportKey={panel.reportKey!} params={panel.reportParams} />
+        ) : (
+          <VisualPanelPreview visual={panel.visual} />
         )}
-        {data && !isLoading && !error && <VisualRenderer result={data} visual={panel.visual} />}
       </CardContent>
-      <SaveToGraphicsLibraryDialog panel={panel} open={saveOpen} onOpenChange={setSaveOpen} />
+      {!isReportPanel && (
+        <SaveToGraphicsLibraryDialog panel={panel} open={saveOpen} onOpenChange={setSaveOpen} />
+      )}
     </Card>
+  );
+}
+
+function VisualPanelPreview({ visual }: { visual: VisualSpec }) {
+  const { data, isLoading, error } = useRunVisualQuery(
+    visual,
+    visual.useTabDateRange ? previewDateRange() : undefined
+  );
+  if (isLoading) return <Skeleton className="h-32 w-full" />;
+  if (error) {
+    return (
+      <Alert variant="destructive">
+        <AlertCircle className="h-4 w-4" />
+        <AlertTitle>Failed to load</AlertTitle>
+        <AlertDescription>{error.message}</AlertDescription>
+      </Alert>
+    );
+  }
+  if (!data) return null;
+  return <VisualRenderer result={data} visual={visual} />;
+}
+
+/** Default filter values for a prebuilt report's own filter bar, resolved
+ *  fresh on every render — same logic as ReportViewer.tsx's standalone page
+ *  and DashboardViewer.tsx's embed, duplicated here rather than shared
+ *  across files to keep the builder decoupled from the viewer. */
+function reportPreviewDefaultParams(filters: { key: string; type: string; defaultValue?: string }[]): Record<string, string> {
+  const values: Record<string, string> = {};
+  for (const def of filters) {
+    if (def.type === "dateRange") {
+      const { from, to } = computePresetRange(def.defaultValue ?? "this_month");
+      values.from = from;
+      values.to = to;
+    } else {
+      values[def.key] = def.defaultValue ?? "";
+    }
+  }
+  return values;
+}
+
+function ReportPanelPreview({
+  reportKey,
+  params,
+}: {
+  reportKey: string;
+  params?: Record<string, string>;
+}) {
+  const def = getReport(reportKey);
+  const effectiveParams = useMemo(
+    () => ({ ...(def ? reportPreviewDefaultParams(def.filters) : {}), ...params }),
+    [def, params]
+  );
+  const { data, isFetching, error } = useRunReport(reportKey, effectiveParams);
+
+  if (!def) {
+    return (
+      <Alert variant="destructive">
+        <AlertCircle className="h-4 w-4" />
+        <AlertDescription>Report &quot;{reportKey}&quot; no longer exists.</AlertDescription>
+      </Alert>
+    );
+  }
+  if (isFetching && !data) return <Skeleton className="h-32 w-full" />;
+  if (error) {
+    return (
+      <Alert variant="destructive">
+        <AlertCircle className="h-4 w-4" />
+        <AlertTitle>Failed to load</AlertTitle>
+        <AlertDescription>{error.message}</AlertDescription>
+      </Alert>
+    );
+  }
+  if (!data) return null;
+  return (
+    <div className="max-h-72 overflow-auto">
+      <ReportTable result={data} formatRules={def.formatRules} />
+    </div>
   );
 }
 
@@ -693,6 +862,72 @@ function SaveToGraphicsLibraryDialog({
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/** Editor for a report-embed panel — deliberately minimal (just title/size)
+ *  since the data comes entirely from the report definition, not a
+ *  user-configured query. */
+function ReportPanelEditor({
+  panel,
+  onSave,
+  onCancel,
+}: {
+  panel: DashboardPanel;
+  onSave: (panel: DashboardPanel) => void;
+  onCancel: () => void;
+}) {
+  const [title, setTitle] = useState(panel.title);
+  const [size, setSize] = useState<DashboardPanel["size"]>(panel.size);
+  const def = getReport(panel.reportKey!);
+
+  return (
+    <div className="flex flex-col gap-4 rounded-lg border border-dashed border-slate-300 bg-slate-50/50 p-4">
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm">Panel Settings</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-wrap items-center gap-3">
+          <Input
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            className="h-9 w-64 text-sm"
+            placeholder="Panel title"
+          />
+          <Select value={size} onValueChange={(v) => setSize(v as DashboardPanel["size"])}>
+            <SelectTrigger className="h-9 w-32 text-sm">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {SIZE_OPTIONS.map((o) => (
+                <SelectItem key={o.value} value={o.value}>
+                  {o.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <span className="text-xs text-muted-foreground">
+            Embeds &quot;{def?.name ?? panel.reportKey}&quot; from the Report Center — its filters,
+            exports, and schedule live on the full report page.
+          </span>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent className="pt-4">
+          <ReportPanelPreview reportKey={panel.reportKey!} params={panel.reportParams} />
+        </CardContent>
+      </Card>
+
+      <div className="flex items-center gap-2">
+        <Button size="sm" onClick={() => onSave({ ...panel, title, size })}>
+          Save Panel
+        </Button>
+        <Button variant="outline" size="sm" onClick={onCancel}>
+          Cancel
+        </Button>
+      </div>
+    </div>
   );
 }
 
