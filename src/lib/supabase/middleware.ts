@@ -52,6 +52,7 @@ export async function updateSession(request: NextRequest) {
     pathname.startsWith("/portal/login") || // client portal login
     pathname.startsWith("/portal/register") || // client portal registration
     pathname.startsWith("/api/") || // all API routes handle their own auth
+    pathname.startsWith("/.well-known/") || // OAuth discovery metadata, fetched pre-login
     pathname === "/" ||
     pathname === "/pricing" || // public marketing pages
     pathname === "/features" ||
