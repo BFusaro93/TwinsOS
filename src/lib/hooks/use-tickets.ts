@@ -255,7 +255,7 @@ export function useUpdateTicket() {
 export interface TicketLink {
   id: string;
   ticketId: string;
-  linkType: "estimate" | "invoice" | "job";
+  linkType: "estimate" | "invoice" | "job" | "project";
   linkedId: string;
   linkedLabel: string;
   createdAt: string;
@@ -288,12 +288,40 @@ export function useTicketLinks(ticketId: string) {
   });
 }
 
+/** Tickets linked to a given record (e.g. a Project) via crm_ticket_links. */
+export function useTicketsLinkedTo(linkType: TicketLink["linkType"], linkedId: string) {
+  return useQuery({
+    queryKey: ["crm-ticket-links-for", linkType, linkedId],
+    queryFn: async () => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: links, error: linksError } = await (supabase as any)
+        .from("crm_ticket_links")
+        .select("ticket_id")
+        .eq("link_type", linkType)
+        .eq("linked_id", linkedId);
+      if (linksError) throw linksError;
+      const ticketIds = (links as { ticket_id: string }[]).map((l) => l.ticket_id);
+      if (ticketIds.length === 0) return [] as CRMTicket[];
+      const { data, error } = await supabase
+        .from("crm_tickets")
+        .select("*, clients(display_name)")
+        .in("id", ticketIds)
+        .is("deleted_at", null)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return (data.map(mapTicket)) as CRMTicket[];
+    },
+    enabled: !!linkedId,
+  });
+}
+
 export function useAddTicketLink() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (input: {
       ticketId: string;
-      linkType: "estimate" | "invoice" | "job";
+      linkType: "estimate" | "invoice" | "job" | "project";
       linkedId: string;
       linkedLabel: string;
     }) => {
@@ -308,8 +336,9 @@ export function useAddTicketLink() {
       });
       if (error) throw error;
     },
-    onSuccess: (_data, { ticketId }) => {
+    onSuccess: (_data, { ticketId, linkType, linkedId }) => {
       qc.invalidateQueries({ queryKey: ["crm-ticket-links", ticketId] });
+      qc.invalidateQueries({ queryKey: ["crm-ticket-links-for", linkType, linkedId] });
     },
     onError: () => {
       toast.error("Failed to add link");
@@ -330,6 +359,7 @@ export function useRemoveTicketLink() {
     },
     onSuccess: (_data, { ticketId }) => {
       qc.invalidateQueries({ queryKey: ["crm-ticket-links", ticketId] });
+      qc.invalidateQueries({ queryKey: ["crm-ticket-links-for"] });
     },
     onError: () => {
       toast.error("Failed to remove link");

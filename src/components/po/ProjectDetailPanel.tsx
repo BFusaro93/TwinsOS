@@ -76,6 +76,9 @@ import { RequisitionDetailPanel } from "./RequisitionDetailPanel";
 import { useProducts } from "@/lib/hooks/use-products";
 import { useParts } from "@/lib/hooks/use-parts";
 import { usePhotoJobByProjectId } from "@/modules/photo-docs/hooks/usePhotoJobs";
+import { useTicketsLinkedTo } from "@/lib/hooks/use-tickets";
+import { TicketDetailSheet } from "@/components/crm/tickets/TicketDetailSheet";
+import { Ticket as TicketIcon } from "lucide-react";
 import {
   Sheet,
   SheetContent,
@@ -1257,6 +1260,69 @@ function DetailsTab({
   );
 }
 
+const TICKET_STATUS_CLASS: Record<string, string> = {
+  open: "border border-red-400 text-red-600",
+  on_hold: "border border-orange-400 text-orange-600",
+  pending: "bg-yellow-100 text-yellow-700",
+  closed: "bg-green-100 text-green-700",
+};
+
+function TicketsTab({ project }: { project: Project }) {
+  const { data: tickets = [], isLoading } = useTicketsLinkedTo("project", project.id);
+  const [openTicketId, setOpenTicketId] = useState<string | null>(null);
+  const openTicket = tickets.find((t) => t.id === openTicketId) ?? null;
+
+  return (
+    <div className="flex flex-col gap-4 p-6">
+      <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Tickets</p>
+      {isLoading ? (
+        <p className="text-sm text-slate-400">Loading…</p>
+      ) : tickets.length === 0 ? (
+        <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed border-slate-200 py-10 text-center">
+          <TicketIcon className="h-8 w-8 text-slate-300" />
+          <p className="text-sm text-slate-400">No tickets linked to this project yet.</p>
+          <p className="text-xs text-slate-400">Link a ticket to this project from the ticket&apos;s detail view.</p>
+        </div>
+      ) : (
+        <div className="overflow-hidden rounded-md border">
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-slate-50 text-xs">
+                <TableHead>#</TableHead>
+                <TableHead>Subject</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Priority</TableHead>
+                <TableHead>Due</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {tickets.map((t) => (
+                <TableRow
+                  key={t.id}
+                  className="cursor-pointer text-sm hover:bg-slate-50"
+                  onClick={() => setOpenTicketId(t.id)}
+                >
+                  <TableCell className="font-mono text-xs text-slate-500">#{t.ticketNumber}</TableCell>
+                  <TableCell className="font-medium text-brand-600">{t.subject || "(no subject)"}</TableCell>
+                  <TableCell>
+                    <Badge variant="outline" className={`text-xs capitalize ${TICKET_STATUS_CLASS[t.status] ?? ""}`}>
+                      {t.status.replace("_", " ")}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-xs capitalize text-slate-600">{t.priority}</TableCell>
+                  <TableCell className="text-xs text-slate-500">{t.dueDate ? formatDate(t.dueDate) : "—"}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
+
+      <TicketDetailSheet ticket={openTicket} onClose={() => setOpenTicketId(null)} />
+    </div>
+  );
+}
+
 function HistoryTab({ project }: { project: Project }) {
   return (
     <div className="p-6">
@@ -1449,6 +1515,11 @@ export function ProjectDetailPanel({ project }: ProjectDetailPanelProps) {
             value: "subcontracts",
             label: "Other Costs",
             content: <SubcontractsTab project={project} />,
+          },
+          {
+            value: "tickets",
+            label: "Tickets",
+            content: <TicketsTab project={project} />,
           },
           {
             value: "history",

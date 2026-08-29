@@ -13,6 +13,7 @@ import {
 import { useEstimates } from "@/lib/hooks/use-estimates";
 import { useInvoices } from "@/lib/hooks/use-invoices";
 import { useJobsList } from "@/lib/hooks/use-crm-jobs";
+import { useProjects } from "@/lib/hooks/use-projects";
 import { useSelectableEmployees } from "@/lib/hooks/use-employees";
 import { useClients } from "@/lib/hooks/use-clients";
 import { NewClientDialog } from "@/components/crm/NewClientDialog";
@@ -336,20 +337,28 @@ function LinkedRecordsPicker({ ticket }: { ticket: CRMTicket }) {
   const addLink = useAddTicketLink();
   const removeLink = useRemoveTicketLink();
   const { data: links } = useTicketLinks(ticket.id);
-  const [newLinkType, setNewLinkType] = useState<"estimate" | "invoice" | "job">("estimate");
+  const [newLinkType, setNewLinkType] = useState<"estimate" | "invoice" | "job" | "project">("estimate");
   const [selectedId, setSelectedId] = useState("");
 
   const clientId = ticket.clientId ?? "";
   const { data: estimates } = useEstimates(clientId || undefined);
   const { data: invoices } = useInvoices(clientId || undefined);
   const { data: jobs } = useJobsList(clientId ? { clientId } : undefined);
+  const { data: allProjects } = useProjects();
+  // Projects aren't always tied to a client — narrow to the ticket's client when set,
+  // otherwise offer the full active project list.
+  const projects = clientId
+    ? (allProjects ?? []).filter((p) => p.clientId === clientId)
+    : (allProjects ?? []);
 
   const options: { id: string; label: string }[] =
     newLinkType === "estimate"
       ? (estimates ?? []).map((e) => ({ id: e.id, label: `#${e.estimateNumber} — ${e.description || "(no description)"}` }))
       : newLinkType === "invoice"
       ? (invoices ?? []).map((i) => ({ id: i.id, label: `#${i.invoiceNumber} — ${i.description || "(no description)"}` }))
-      : (jobs ?? []).map((j) => ({ id: j.id, label: j.serviceAddress || j.jobType || `Job ${j.id.slice(0, 8)}` }));
+      : newLinkType === "job"
+      ? (jobs ?? []).map((j) => ({ id: j.id, label: j.serviceAddress || j.jobType || `Job ${j.id.slice(0, 8)}` }))
+      : projects.map((p) => ({ id: p.id, label: p.name }));
 
   async function handleAdd() {
     if (!selectedId) return;
@@ -381,22 +390,23 @@ function LinkedRecordsPicker({ ticket }: { ticket: CRMTicket }) {
       <div className="rounded-md border bg-slate-50 p-3 space-y-2">
         <p className="text-xs font-medium text-slate-500">Add Link</p>
         <div className="flex gap-2">
-          <Select value={newLinkType} onValueChange={(v) => { setNewLinkType(v as "estimate" | "invoice" | "job"); setSelectedId(""); }}>
+          <Select value={newLinkType} onValueChange={(v) => { setNewLinkType(v as "estimate" | "invoice" | "job" | "project"); setSelectedId(""); }}>
             <SelectTrigger className="h-8 text-xs w-28"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="estimate">Estimate</SelectItem>
               <SelectItem value="invoice">Invoice</SelectItem>
               <SelectItem value="job">Job</SelectItem>
+              <SelectItem value="project">Project</SelectItem>
             </SelectContent>
           </Select>
           <Select value={selectedId} onValueChange={setSelectedId}>
             <SelectTrigger className="h-8 text-xs flex-1">
-              <SelectValue placeholder={clientId ? `Select ${newLinkType}…` : "No client on ticket"} />
+              <SelectValue placeholder={clientId || newLinkType === "project" ? `Select ${newLinkType}…` : "No client on ticket"} />
             </SelectTrigger>
             <SelectContent>
               {options.length === 0 ? (
                 <SelectItem value="__empty" disabled>
-                  {clientId ? `No ${newLinkType}s found` : "Ticket has no client"}
+                  {clientId || newLinkType === "project" ? `No ${newLinkType}s found` : "Ticket has no client"}
                 </SelectItem>
               ) : (
                 options.map((o) => <SelectItem key={o.id} value={o.id}>{o.label}</SelectItem>)
