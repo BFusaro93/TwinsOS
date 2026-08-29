@@ -142,10 +142,27 @@ export async function getValidConnection(
       refresh_token: tokens.refresh_token,
       expires_at: expiresAt,
     };
-    await db
+    // Optimistic write, conditioned on the refresh_token we just rotated
+    // still being the one on record — invoice-sync and payment-sync fire as
+    // separate requests, so two can land here near-simultaneously, both read
+    // the same soon-to-expire refresh_token, and both call Intuit's
+    // rotate-on-use refresh endpoint. Without this check, whichever write
+    // lands last silently overwrites the other's freshly-issued token pair,
+    // orphaning it. If our write doesn't match a row (we lost the race),
+    // re-read the row the winner already wrote instead of returning our own
+    // now-superseded tokens.
+    const { data: updated } = await db
       .from("integrations")
       .update({ config: nextConfig, last_sync_at: new Date().toISOString(), last_sync_status: "ok" })
-      .eq("id", row.id);
+      .eq("id", row.id)
+      .eq("config->>refresh_token", config.refresh_token)
+      .select("config")
+      .maybeSingle();
+    if (!updated) {
+      const { data: fresh } = await db.from("integrations").select("config").eq("id", row.id).single();
+      const freshConfig = fresh.config as QuickBooksIntegrationConfig;
+      return { accessToken: freshConfig.access_token, realmId: freshConfig.realm_id, baseUrl: apiBaseUrl() };
+    }
     return { accessToken: tokens.access_token, realmId: config.realm_id, baseUrl: apiBaseUrl() };
   }
 

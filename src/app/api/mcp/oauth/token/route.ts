@@ -4,6 +4,7 @@ import {
   generateOpaqueToken,
   hashToken,
   verifyPkce,
+  allowedScopeStringsForRole,
   ACCESS_TOKEN_PREFIX,
   REFRESH_TOKEN_PREFIX,
   ACCESS_TOKEN_TTL_MS,
@@ -118,9 +119,21 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "invalid_grant", error_description: "PKCE verification failed" }, { status: 400 });
     }
 
-    // Mark used immediately so a replayed code (e.g. a retried request)
-    // can't redeem a second token pair from it.
-    await db.from("oauth_authorization_codes").update({ used_at: new Date().toISOString() }).eq("id", authCode.id);
+    // Atomically claim the code — conditioned on used_at still being null,
+    // not a separate read-then-write — so two concurrent redemptions (e.g.
+    // a retried POST during network flakiness) can't both pass the check
+    // above and both mint a token pair from one single-use code. Only the
+    // request whose UPDATE actually matched a row proceeds.
+    const { data: claimed } = await db
+      .from("oauth_authorization_codes")
+      .update({ used_at: new Date().toISOString() })
+      .eq("id", authCode.id)
+      .is("used_at", null)
+      .select("id")
+      .maybeSingle();
+    if (!claimed) {
+      return NextResponse.json({ error: "invalid_grant" }, { status: 400 });
+    }
 
     const tokens = await issueTokenPair(db, {
       clientId,
@@ -155,11 +168,29 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "invalid_grant" }, { status: 400 });
     }
 
+    // Re-derive the cap from the user's CURRENT role rather than trusting
+    // existing.scopes forward as-is — otherwise a role downgrade (e.g. an
+    // admin demoted after granting themselves write:safe) has no effect on
+    // an already-issued refresh token, which would keep re-minting the same
+    // (now stale) elevated scopes for up to REFRESH_TOKEN_TTL_MS. Same class
+    // of bug as the stale last_used_at fix, except this one is an
+    // authorization decision, not just a display value.
+    const { data: currentProfile } = await db
+      .from("profiles")
+      .select("role")
+      .eq("id", existing.user_id)
+      .maybeSingle();
+    const allowedForCurrentRole = allowedScopeStringsForRole(currentProfile?.role ?? "");
+    const cappedScopes = (existing.scopes ?? []).filter((s: string) => allowedForCurrentRole.has(s));
+    if (cappedScopes.length === 0) {
+      return NextResponse.json({ error: "invalid_grant", error_description: "No scopes remain valid for this user's current role" }, { status: 400 });
+    }
+
     const tokens = await issueTokenPair(db, {
       clientId,
       userId: existing.user_id,
       orgId: existing.org_id,
-      scopes: existing.scopes ?? [],
+      scopes: cappedScopes,
       replacesRefreshTokenId: existing.id,
     });
     if (!tokens) return NextResponse.json({ error: "server_error" }, { status: 500 });
