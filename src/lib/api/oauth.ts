@@ -1,4 +1,4 @@
-import { randomBytes } from "crypto";
+import { randomBytes, createHash } from "crypto";
 import { API_SCOPE_RESOURCES, scopeString } from "@/lib/api/scopes";
 
 /**
@@ -36,3 +36,18 @@ export const REFRESH_TOKEN_PREFIX = "mcprt_";
 export const AUTHORIZATION_CODE_TTL_MS = 10 * 60 * 1000; // 10 minutes
 export const ACCESS_TOKEN_TTL_MS = 60 * 60 * 1000; // 1 hour
 export const REFRESH_TOKEN_TTL_MS = 90 * 24 * 60 * 60 * 1000; // 90 days
+
+/** Same sha256-hex approach as auth.ts's hashApiKey, named for this file's
+ * own tokens (authorization codes, access/refresh tokens) so oauth.ts
+ * doesn't need to import an api-key-specific helper for an unrelated use. */
+export function hashToken(token: string): string {
+  return createHash("sha256").update(token).digest("hex");
+}
+
+/** Validates a PKCE code_verifier against the code_challenge stored at
+ * authorization time (RFC 7636, S256 method only -- the only method this
+ * server advertises in its authorization server metadata). */
+export function verifyPkce(codeVerifier: string, codeChallenge: string): boolean {
+  const computed = createHash("sha256").update(codeVerifier).digest("base64url");
+  return computed === codeChallenge;
+}
