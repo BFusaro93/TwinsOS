@@ -250,28 +250,50 @@ export default function ApiMcpGuidePage() {
 {`Authorization: Bearer <your-api-key>`}
         </pre>
         <Callout>
-          <strong>Two common ways this trips people up:</strong>
-          <ul className="mt-2 list-disc space-y-2 pl-5">
-            <li>
-              The key-creation dialog shows two different snippets — a <strong>command</strong> (for
-              Claude Code, starts with <code className="rounded bg-[#f4f6f0] px-1 py-0.5 font-mono text-xs">claude mcp add</code>)
-              and a <strong>JSON config block</strong> (for every other MCP client). The command is
-              meant to be pasted at a terminal prompt; the JSON is meant to be pasted into a config
-              <em>file</em>. Pasting the JSON directly into a terminal will fail with a shell parse
-              error — it isn&apos;t a command.
-            </li>
-            <li>
-              <strong>Claude.ai&apos;s web/desktop &quot;custom connector&quot; also works</strong> — sign
-              in instead of pasting a key. Add a custom connector with this server&apos;s URL, leave
-              authentication on <strong>&quot;Always required&quot;</strong> (Claude detects this
-              automatically), and don&apos;t add any request header. You&apos;ll be redirected to sign in
-              to your account and approve exactly the scopes you want that connection to have — no API
-              key to generate or paste at all. This is a separate, independent connection from any Public
-              API Key: it shows up under <strong>Connected Apps</strong> below the key list, and can be
-              revoked there without touching your API keys.
-            </li>
-          </ul>
+          <strong>The command vs. JSON block trips people up:</strong> the key-creation dialog shows
+          two different snippets — a <strong>command</strong> (for Claude Code, starts with{" "}
+          <code className="rounded bg-[#f4f6f0] px-1 py-0.5 font-mono text-xs">claude mcp add</code>) and
+          a <strong>JSON config block</strong> (for every other MCP client). The command is meant to be
+          pasted at a terminal prompt; the JSON is meant to be pasted into a config <em>file</em>.
+          Pasting the JSON directly into a terminal will fail with a shell parse error — it isn&apos;t a
+          command.
         </Callout>
+
+        <h3 className="mt-6 font-[family-name:var(--font-heading)] text-base font-bold text-[#005642]">
+          Sign in instead — Claude.ai&apos;s connector (OAuth)
+        </h3>
+        <p>
+          Claude.ai&apos;s web and desktop app also support connecting by <strong>signing in</strong>,
+          instead of pasting an API key at all:
+        </p>
+        <ol className="list-decimal space-y-2 pl-5">
+          <li>In Claude.ai, go to Settings → Connectors → <strong>Add custom connector</strong>.</li>
+          <li>
+            Name it (e.g. &quot;Landscapt&quot;) and enter the same <code className="rounded bg-[#f4f6f0] px-1 py-0.5 font-mono text-xs">https://your-domain/api/mcp</code>{" "}
+            URL as above. Leave authentication on <strong>&quot;Always required&quot;</strong> (Claude
+            detects this automatically) with no request header — this is a different auth path from the
+            bearer-token one above.
+          </li>
+          <li>
+            Save. Claude redirects you to sign in with your normal Landscapt account, then shows a
+            consent screen listing every resource with a checkbox per scope. Check what you want this
+            connection to have, then <strong>Approve</strong>.
+          </li>
+          <li>Test it — ask Claude something like &quot;show me my 5 most recent open work orders.&quot;</li>
+        </ol>
+        <Callout>
+          <strong>Every signed-in user can do this themselves</strong> — it&apos;s not a shared,
+          org-wide key. Each connection is tied to whoever signed in and approved it, with whatever
+          scopes <em>they</em> picked. One restriction: <strong>only admins can grant Write access</strong>{" "}
+          — every other role&apos;s consent screen only ever shows Read checkboxes, so a manager,
+          technician, purchaser, or viewer connecting this way gets read-only access no matter what they
+          check. This is enforced server-side, not just hidden in the UI.
+        </Callout>
+        <p>
+          Manage or disconnect an OAuth sign-in from <strong>Settings → Public API Keys → Connected
+          Apps</strong> — a separate list from the manually-created keys above, since these aren&apos;t
+          issued directly by an admin.
+        </p>
         <p>Tool names follow one fixed convention, generated directly from the REST route each tool calls:</p>
         <Table>
           <thead>

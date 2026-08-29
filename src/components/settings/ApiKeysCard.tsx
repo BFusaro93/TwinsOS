@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { useApiKeys, useCreateApiKey, useRevokeApiKey, useDeleteApiKey } from "@/lib/hooks/use-api-keys";
-import { API_SCOPE_RESOURCES, scopeString, tierLabel } from "@/lib/api/scopes";
+import { API_SCOPE_RESOURCES, isKnownScope, scopeString, tierLabel } from "@/lib/api/scopes";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -141,10 +141,21 @@ export function ApiKeysCard() {
                 <div>
                   <p className="text-sm font-medium text-slate-900">{key.name}</p>
                   <p className="font-mono text-xs text-slate-500">{key.keyPrefix}…</p>
-                  <p className="mt-1 text-xs text-slate-400">
-                    {key.scopes.length} scope{key.scopes.length === 1 ? "" : "s"} ·{" "}
-                    {key.lastUsedAt ? `last used ${new Date(key.lastUsedAt).toLocaleDateString()}` : "never used"}
-                  </p>
+                  {(() => {
+                    // A key created before a scope was removed from the
+                    // catalog (e.g. the write:sensitive tiers PR #81 dropped)
+                    // still has that string in its stored scopes array --
+                    // harmless (nothing checks it), but counting it here
+                    // would show a number that no longer matches what
+                    // Create Key's checklist could ever grant today.
+                    const activeScopeCount = key.scopes.filter(isKnownScope).length;
+                    return (
+                      <p className="mt-1 text-xs text-slate-400">
+                        {activeScopeCount} scope{activeScopeCount === 1 ? "" : "s"} ·{" "}
+                        {key.lastUsedAt ? `last used ${new Date(key.lastUsedAt).toLocaleDateString()}` : "never used"}
+                      </p>
+                    );
+                  })()}
                 </div>
                 <Button
                   size="sm"

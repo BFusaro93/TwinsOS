@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { adminClient } from "@/lib/api/auth";
-import { API_SCOPE_RESOURCES } from "@/lib/api/scopes";
+import { oauthResourcesForRole } from "@/lib/api/oauth";
 import { ConsentForm } from "@/components/oauth/ConsentForm";
 
 /**
@@ -59,7 +59,7 @@ export default async function OAuthAuthorizePage({
     return <ErrorScreen message="You need to be signed in to approve this connection. Please refresh and sign in." />;
   }
 
-  const { data: profile } = await supabase.from("profiles").select("org_id, name").eq("id", user.id).single();
+  const { data: profile } = await supabase.from("profiles").select("org_id, name, role").eq("id", user.id).single();
   if (!profile) {
     return <ErrorScreen message="Couldn't load your account. Please try again." />;
   }
@@ -73,6 +73,11 @@ export default async function OAuthAuthorizePage({
           {client.client_name} wants to access <span className="font-medium text-slate-700">{org?.name ?? "your organization"}</span>
           {profile.name ? ` as ${profile.name}` : ""}. Choose what it can access below.
         </p>
+        {profile.role !== "admin" && (
+          <p className="mt-1 text-xs text-slate-400">
+            Your role ({profile.role}) can grant read-only access. An admin can grant write access from their own account.
+          </p>
+        )}
 
         <ConsentForm
           clientId={clientId}
@@ -80,7 +85,7 @@ export default async function OAuthAuthorizePage({
           codeChallenge={codeChallenge}
           codeChallengeMethod={codeChallengeMethod}
           state={state}
-          resources={API_SCOPE_RESOURCES}
+          resources={oauthResourcesForRole(profile.role)}
         />
       </div>
     </div>
