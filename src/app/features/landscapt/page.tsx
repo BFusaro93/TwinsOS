@@ -11,6 +11,8 @@ import {
   Users,
   Network,
   PieChart,
+  Zap,
+  ArrowRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { MarketingNav } from "@/components/marketing/MarketingNav";
@@ -78,6 +80,15 @@ const ITEMS: DeepDiveItem[] = [
   },
 ];
 
+const DEEP_DIVE_PAGES = [
+  { href: "/features/landscapt/estimating", icon: Calculator, title: "Estimating", desc: "Production rates, labor burden, AI-drafted line items" },
+  { href: "/features/landscapt/scheduling", icon: CalendarClock, title: "Scheduling & Dispatch", desc: "Daily dispatch board, waiting list, route optimization" },
+  { href: "/features/landscapt/snow", icon: Snowflake, title: "Snow", desc: "Storm-based triggers, dedicated routes, seasonal contracts" },
+  { href: "/features/landscapt/invoicing", icon: CreditCard, title: "Invoicing & Payments", desc: "Stripe-powered payments, autopay, snow-specific billing" },
+  { href: "/features/landscapt/reporting", icon: PieChart, title: "Reporting & Dashboards", desc: "About 100 built-in reports, drag-and-drop dashboards" },
+  { href: "/features/landscapt/automations", icon: Zap, title: "Automations", desc: "Event-driven emails, texts, and alerts on every plan" },
+];
+
 export default function LandscaptFeaturesPage() {
   return (
     <div className={`${heading.variable} bg-[#fbfbf8] text-[#0a0a0a]`}>
@@ -108,6 +119,36 @@ export default function LandscaptFeaturesPage() {
       </div>
 
       <LandscaptShowcase />
+
+      <div className="mx-auto max-w-[1160px] px-6 pb-20 sm:px-12">
+        <div className="mb-10 text-center">
+          <div className="mb-3 text-[13px] font-bold uppercase tracking-[0.1em] text-[#60ab45]">Go deeper</div>
+          <h2 className="font-[family-name:var(--font-heading)] text-4xl font-extrabold text-[#005642]">
+            Explore each area on its own.
+          </h2>
+        </div>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {DEEP_DIVE_PAGES.map((p, i) => (
+            <Reveal key={p.href} delayMs={i * 50}>
+              <Link
+                href={p.href}
+                className="group flex h-full items-start gap-3 rounded-md border border-[#e6e6e0] bg-white p-5 transition-shadow hover:shadow-md"
+              >
+                <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-[#eef4e2]">
+                  <p.icon className="h-4 w-4 text-[#60ab45]" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5 text-[14.5px] font-bold text-[#0a0a0a]">
+                    {p.title}
+                    <ArrowRight className="h-3.5 w-3.5 shrink-0 text-slate-300 transition-transform group-hover:translate-x-0.5 group-hover:text-[#60ab45]" />
+                  </div>
+                  <div className="mt-0.5 text-[12.5px] leading-relaxed text-slate-500">{p.desc}</div>
+                </div>
+              </Link>
+            </Reveal>
+          ))}
+        </div>
+      </div>
 
       <Reveal className="text-center">
         <div className="mb-3 text-[13px] font-bold uppercase tracking-[0.1em] text-[#60ab45]">Every module</div>
