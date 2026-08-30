@@ -20,6 +20,7 @@ const COLUMNS: { label: string; links: { href: string; label: string }[] }[] = [
       { href: "/features/landscapt/invoicing", label: "Invoicing & Payments" },
       { href: "/features/landscapt/reporting", label: "Reporting & Dashboards" },
       { href: "/features/landscapt/automations", label: "Automations" },
+      { href: "/features/landscapt/client-portal", label: "Client Portal" },
     ],
   },
   {

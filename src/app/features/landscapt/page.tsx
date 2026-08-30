@@ -87,6 +87,7 @@ const DEEP_DIVE_PAGES = [
   { href: "/features/landscapt/invoicing", icon: CreditCard, title: "Invoicing & Payments", desc: "Stripe-powered payments, autopay, snow-specific billing" },
   { href: "/features/landscapt/reporting", icon: PieChart, title: "Reporting & Dashboards", desc: "About 100 built-in reports, drag-and-drop dashboards" },
   { href: "/features/landscapt/automations", icon: Zap, title: "Automations", desc: "Event-driven emails, texts, and alerts on every plan" },
+  { href: "/features/landscapt/client-portal", icon: Users, title: "Client Portal", desc: "Pay invoices, act on estimates, and submit tickets — self-serve" },
 ];
 
 export default function LandscaptFeaturesPage() {
