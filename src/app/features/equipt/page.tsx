@@ -75,8 +75,8 @@ const ITEMS: DeepDiveItem[] = [
   },
   {
     icon: PieChart,
-    title: "Reporting & Job Costing",
-    body: "Track labor efficiency, PM compliance, and job costing across your fleet with built-in reports, plus a drag-and-drop dashboard builder for the metrics that matter most to your operation.",
+    title: "Reporting & Maintenance Costing",
+    body: "Track labor efficiency, PM compliance, and maintenance costing across your fleet with a built-in report library and a company-wide scorecard.",
   },
   {
     icon: Code2,
@@ -92,7 +92,7 @@ const DEEP_DIVE_PAGES = [
   { href: "/features/equipt/purchasing-inventory", icon: ClipboardCheck, title: "Purchasing & Inventory", desc: "Requisitions, POs, receiving, and parts inventory" },
   { href: "/features/equipt/vendors", icon: Building2, title: "Vendor Management", desc: "One vendor list, shared across purchasing & maintenance" },
   { href: "/features/equipt/automations", icon: Zap, title: "Automations", desc: "Meter and low-stock triggers that act on their own" },
-  { href: "/features/equipt/reporting", icon: PieChart, title: "Reporting & Job Costing", desc: "Labor efficiency, PM compliance, and cost rollups" },
+  { href: "/features/equipt/reporting", icon: PieChart, title: "Reporting & Maintenance Costing", desc: "Labor efficiency, PM compliance, and cost rollups" },
   { href: "/features/equipt/api-integrations", icon: Code2, title: "API & Integrations", desc: "REST API, MCP, Samsara, and Zapier" },
 ];
 

@@ -14,6 +14,10 @@ import {
   Zap,
   ArrowRight,
   Smartphone,
+  LifeBuoy,
+  FolderKanban,
+  Camera,
+  Code2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { MarketingNav } from "@/components/marketing/MarketingNav";
@@ -90,6 +94,10 @@ const DEEP_DIVE_PAGES = [
   { href: "/features/landscapt/automations", icon: Zap, title: "Automations", desc: "Event-driven emails, texts, and alerts on every plan" },
   { href: "/features/landscapt/client-portal", icon: Users, title: "Client Portal", desc: "Pay invoices, act on estimates, and submit tickets — self-serve" },
   { href: "/features/landscapt/crew-app", icon: Smartphone, title: "Crew App", desc: "Today's stops, clock in/out, photos, and material requests — offline-ready" },
+  { href: "/features/landscapt/tickets", icon: LifeBuoy, title: "Tickets", desc: "Priority, status, and automated past-due tracking" },
+  { href: "/features/landscapt/projects", icon: FolderKanban, title: "Projects", desc: "Larger jobs, tracked separately with budget vs. actual" },
+  { href: "/features/landscapt/job-photos", icon: Camera, title: "Job Photos", desc: "Before/during/after capture with annotation and tagging" },
+  { href: "/features/landscapt/api-integrations", icon: Code2, title: "API & Integrations", desc: "REST API, MCP, QuickBooks, and Zapier" },
 ];
 
 export default function LandscaptFeaturesPage() {

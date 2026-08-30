@@ -22,6 +22,10 @@ const COLUMNS: { label: string; links: { href: string; label: string }[] }[] = [
       { href: "/features/landscapt/automations", label: "Automations" },
       { href: "/features/landscapt/client-portal", label: "Client Portal" },
       { href: "/features/landscapt/crew-app", label: "Crew App" },
+      { href: "/features/landscapt/tickets", label: "Tickets" },
+      { href: "/features/landscapt/projects", label: "Projects" },
+      { href: "/features/landscapt/job-photos", label: "Job Photos" },
+      { href: "/features/landscapt/api-integrations", label: "API & Integrations" },
     ],
   },
   {
@@ -33,7 +37,7 @@ const COLUMNS: { label: string; links: { href: string; label: string }[] }[] = [
       { href: "/features/equipt/purchasing-inventory", label: "Purchasing & Inventory" },
       { href: "/features/equipt/vendors", label: "Vendor Management" },
       { href: "/features/equipt/automations", label: "Automations" },
-      { href: "/features/equipt/reporting", label: "Reporting & Job Costing" },
+      { href: "/features/equipt/reporting", label: "Reporting & Maintenance Costing" },
       { href: "/features/equipt/api-integrations", label: "API & Integrations" },
     ],
   },
@@ -60,8 +64,8 @@ const COLUMNS: { label: string; links: { href: string; label: string }[] }[] = [
 export function MarketingFooter() {
   return (
     <div className="border-t border-[#eceae3] bg-[#fbfbf8]">
-      <div className="mx-auto max-w-[1160px] px-6 py-16 sm:px-12">
-        <div className="grid grid-cols-2 gap-8 sm:grid-cols-3 lg:grid-cols-6">
+      <div className="mx-auto max-w-[1440px] px-6 py-16 sm:px-12">
+        <div className="grid grid-cols-2 gap-6 sm:grid-cols-3 lg:grid-cols-[160px_repeat(5,minmax(0,1fr))] lg:gap-5">
           <div className="col-span-2 sm:col-span-3 lg:col-span-1">
             <Link href="/" className="flex items-center gap-2">
               <BrandMark size={26} />
@@ -74,12 +78,14 @@ export function MarketingFooter() {
             </p>
           </div>
           {COLUMNS.map((col) => (
-            <div key={col.label}>
-              <div className="mb-3 text-[11px] font-bold uppercase tracking-wide text-slate-400">{col.label}</div>
+            <div key={col.label} className="min-w-0">
+              <div className="mb-3 whitespace-nowrap text-[11px] font-bold uppercase tracking-wide text-slate-400">
+                {col.label}
+              </div>
               <ul className="flex flex-col gap-2.5">
                 {col.links.map((l) => (
                   <li key={l.href}>
-                    <Link href={l.href} className="text-[13.5px] text-[#5a5a56] hover:text-[#005642]">
+                    <Link href={l.href} className="text-[13px] text-[#5a5a56] hover:text-[#005642]">
                       {l.label}
                     </Link>
                   </li>
