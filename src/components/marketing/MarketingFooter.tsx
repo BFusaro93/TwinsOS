@@ -21,6 +21,20 @@ const COLUMNS: { label: string; links: { href: string; label: string }[] }[] = [
       { href: "/features/landscapt/reporting", label: "Reporting & Dashboards" },
       { href: "/features/landscapt/automations", label: "Automations" },
       { href: "/features/landscapt/client-portal", label: "Client Portal" },
+      { href: "/features/landscapt/crew-app", label: "Crew App" },
+    ],
+  },
+  {
+    label: "Equipt features",
+    links: [
+      { href: "/features/equipt/work-orders", label: "Work Orders" },
+      { href: "/features/equipt/preventive-maintenance", label: "Preventive Maintenance" },
+      { href: "/features/equipt/asset-registry", label: "Asset & Vehicle Registry" },
+      { href: "/features/equipt/purchasing-inventory", label: "Purchasing & Inventory" },
+      { href: "/features/equipt/vendors", label: "Vendor Management" },
+      { href: "/features/equipt/automations", label: "Automations" },
+      { href: "/features/equipt/reporting", label: "Reporting & Job Costing" },
+      { href: "/features/equipt/api-integrations", label: "API & Integrations" },
     ],
   },
   {
@@ -47,7 +61,7 @@ export function MarketingFooter() {
   return (
     <div className="border-t border-[#eceae3] bg-[#fbfbf8]">
       <div className="mx-auto max-w-[1160px] px-6 py-16 sm:px-12">
-        <div className="grid grid-cols-2 gap-8 sm:grid-cols-3 lg:grid-cols-5">
+        <div className="grid grid-cols-2 gap-8 sm:grid-cols-3 lg:grid-cols-6">
           <div className="col-span-2 sm:col-span-3 lg:col-span-1">
             <Link href="/" className="flex items-center gap-2">
               <BrandMark size={26} />

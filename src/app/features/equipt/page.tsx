@@ -12,6 +12,7 @@ import {
   Zap,
   PieChart,
   Code2,
+  ArrowRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { MarketingNav } from "@/components/marketing/MarketingNav";
@@ -84,6 +85,17 @@ const ITEMS: DeepDiveItem[] = [
   },
 ];
 
+const DEEP_DIVE_PAGES = [
+  { href: "/features/equipt/work-orders", icon: Wrench, title: "Work Orders", desc: "Full status flow, plus Maintenance Requests" },
+  { href: "/features/equipt/preventive-maintenance", icon: CalendarClock, title: "Preventive Maintenance", desc: "Calendar or meter-based, auto-advancing thresholds" },
+  { href: "/features/equipt/asset-registry", icon: Truck, title: "Asset & Vehicle Registry", desc: "Meter readings and complete service history" },
+  { href: "/features/equipt/purchasing-inventory", icon: ClipboardCheck, title: "Purchasing & Inventory", desc: "Requisitions, POs, receiving, and parts inventory" },
+  { href: "/features/equipt/vendors", icon: Building2, title: "Vendor Management", desc: "One vendor list, shared across purchasing & maintenance" },
+  { href: "/features/equipt/automations", icon: Zap, title: "Automations", desc: "Meter and low-stock triggers that act on their own" },
+  { href: "/features/equipt/reporting", icon: PieChart, title: "Reporting & Job Costing", desc: "Labor efficiency, PM compliance, and cost rollups" },
+  { href: "/features/equipt/api-integrations", icon: Code2, title: "API & Integrations", desc: "REST API, MCP, Samsara, and Zapier" },
+];
+
 export default function EquiptFeaturesPage() {
   return (
     <div className={`${heading.variable} bg-[#fbfbf8] text-[#0a0a0a]`}>
@@ -114,6 +126,36 @@ export default function EquiptFeaturesPage() {
       </div>
 
       <EquiptShowcase />
+
+      <div className="mx-auto max-w-[1160px] px-6 pb-20 sm:px-12">
+        <div className="mb-10 text-center">
+          <div className="mb-3 text-[13px] font-bold uppercase tracking-[0.1em] text-[#2aa9e0]">Go deeper</div>
+          <h2 className="font-[family-name:var(--font-heading)] text-4xl font-extrabold text-[#005642]">
+            Explore each area on its own.
+          </h2>
+        </div>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {DEEP_DIVE_PAGES.map((p, i) => (
+            <Reveal key={p.href} delayMs={i * 50}>
+              <Link
+                href={p.href}
+                className="group flex h-full items-start gap-3 rounded-md border border-[#e6e6e0] bg-white p-5 transition-shadow hover:shadow-md"
+              >
+                <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-[#e6f5fb]">
+                  <p.icon className="h-4 w-4 text-[#2aa9e0]" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5 text-[14.5px] font-bold text-[#0a0a0a]">
+                    {p.title}
+                    <ArrowRight className="h-3.5 w-3.5 shrink-0 text-slate-300 transition-transform group-hover:translate-x-0.5 group-hover:text-[#2aa9e0]" />
+                  </div>
+                  <div className="mt-0.5 text-[12.5px] leading-relaxed text-slate-500">{p.desc}</div>
+                </div>
+              </Link>
+            </Reveal>
+          ))}
+        </div>
+      </div>
 
       <Reveal className="text-center">
         <div className="mb-3 text-[13px] font-bold uppercase tracking-[0.1em] text-[#2aa9e0]">Every module</div>

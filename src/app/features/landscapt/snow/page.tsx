@@ -57,7 +57,7 @@ export default function SnowFeaturePage() {
       />
 
       <Reveal className="mx-auto max-w-[1160px] px-6 text-center sm:px-12">
-        <div className="mb-3 text-[13px] font-bold uppercase tracking-[0.1em] text-[#60ab45]">Every capability</div>
+        <div className="mb-3 text-[13px] font-bold uppercase tracking-[0.1em] text-[#60ab45]">Capabilities</div>
         <h2 className="font-[family-name:var(--font-heading)] text-4xl font-extrabold text-[#005642]">
           What snow operations actually does.
         </h2>

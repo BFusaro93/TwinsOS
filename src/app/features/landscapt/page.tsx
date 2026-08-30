@@ -13,6 +13,7 @@ import {
   PieChart,
   Zap,
   ArrowRight,
+  Smartphone,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { MarketingNav } from "@/components/marketing/MarketingNav";
@@ -88,6 +89,7 @@ const DEEP_DIVE_PAGES = [
   { href: "/features/landscapt/reporting", icon: PieChart, title: "Reporting & Dashboards", desc: "About 100 built-in reports, drag-and-drop dashboards" },
   { href: "/features/landscapt/automations", icon: Zap, title: "Automations", desc: "Event-driven emails, texts, and alerts on every plan" },
   { href: "/features/landscapt/client-portal", icon: Users, title: "Client Portal", desc: "Pay invoices, act on estimates, and submit tickets — self-serve" },
+  { href: "/features/landscapt/crew-app", icon: Smartphone, title: "Crew App", desc: "Today's stops, clock in/out, photos, and material requests — offline-ready" },
 ];
 
 export default function LandscaptFeaturesPage() {

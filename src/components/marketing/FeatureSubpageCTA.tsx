@@ -2,7 +2,13 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Reveal } from "@/components/marketing/Reveal";
 
-export function FeatureSubpageCTA() {
+export function FeatureSubpageCTA({
+  backHref = "/features/landscapt",
+  backLabel = "Back to Landscapt overview",
+}: {
+  backHref?: string;
+  backLabel?: string;
+} = {}) {
   return (
     <div className="bg-[#eef4e2] px-6 py-20 text-center sm:px-12">
       <Reveal>
@@ -15,7 +21,7 @@ export function FeatureSubpageCTA() {
             <Link href="/signup">Start free trial</Link>
           </Button>
           <Button asChild size="lg" variant="outline">
-            <Link href="/features/landscapt">Back to Landscapt overview</Link>
+            <Link href={backHref}>{backLabel}</Link>
           </Button>
         </div>
       </Reveal>

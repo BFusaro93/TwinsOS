@@ -8,12 +8,19 @@ export function FeatureSubpageHero({
   subhead,
   mockupTab,
   Mockup,
+  chrome = "browser",
+  backHref = "/features/landscapt",
+  backLabel = "Explore Landscapt",
 }: {
   kicker: string;
   title: string;
   subhead: string;
-  mockupTab: string;
+  mockupTab?: string;
   Mockup: React.ComponentType;
+  /** "browser" wraps the mockup in browser chrome (default); "none" renders it as-is — use for a mockup that already supplies its own frame, like a phone mockup. */
+  chrome?: "browser" | "none";
+  backHref?: string;
+  backLabel?: string;
 }) {
   return (
     <>
@@ -33,15 +40,19 @@ export function FeatureSubpageHero({
             variant="outline"
             className="border-[1.5px] border-white/40 bg-transparent text-white hover:bg-white/10 hover:text-white"
           >
-            <Link href="/features/landscapt">Explore Landscapt &rarr;</Link>
+            <Link href={backHref}>{backLabel} &rarr;</Link>
           </Button>
         </div>
       </div>
 
       <div className="mx-auto max-w-[1040px] px-6 py-20 sm:px-12">
-        <BrowserFrame tabs={[mockupTab]} activeTab={mockupTab}>
+        {chrome === "none" ? (
           <Mockup />
-        </BrowserFrame>
+        ) : (
+          <BrowserFrame tabs={[mockupTab ?? ""]} activeTab={mockupTab ?? ""}>
+            <Mockup />
+          </BrowserFrame>
+        )}
       </div>
     </>
   );
