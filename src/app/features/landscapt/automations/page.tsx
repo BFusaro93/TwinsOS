@@ -8,6 +8,7 @@ import { FeatureSubpageHero } from "@/components/marketing/FeatureSubpageHero";
 import { FeatureSubpageCTA } from "@/components/marketing/FeatureSubpageCTA";
 import { FeatureDeepDive, type DeepDiveItem } from "@/components/marketing/FeatureDeepDive";
 import { CRMAutomationsMockup } from "@/components/marketing/mockups/CRMAutomationsMockup";
+import { RealScreenshotStack } from "@/components/marketing/RealScreenshotStack";
 
 const heading = Plus_Jakarta_Sans({
   subsets: ["latin"],
@@ -69,6 +70,14 @@ export default function AutomationsFeaturePage() {
       </Reveal>
 
       <FeatureDeepDive items={ITEMS} accent="#60ab45" />
+
+      <RealScreenshotStack
+        accent="#60ab45"
+        images={[
+          { src: "/screenshots/automations-list.png", alt: "Real Automations list in Landscapt" },
+          { src: "/screenshots/automation-sequence.png", alt: "Real automation trigger-to-action sequence in Landscapt" },
+        ]}
+      />
 
       <FeatureSubpageCTA />
       <MarketingFooter />
