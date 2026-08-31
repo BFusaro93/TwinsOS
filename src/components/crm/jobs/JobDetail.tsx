@@ -1455,7 +1455,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                   <thead>
                     <tr className="bg-slate-50 border-b text-xs font-semibold text-slate-500 uppercase tracking-wide">
                       <th className="px-4 py-3 text-left">Product</th>
-                      <th className="px-4 py-3 text-right">QTY Used</th>
+                      <th className="px-4 py-3 text-right">QTY</th>
                       <th className="px-4 py-3 text-right">QTY Invoiced</th>
                       <th className="px-4 py-3 text-right">Unit Price</th>
                       <th className="px-4 py-3 text-right">Total</th>

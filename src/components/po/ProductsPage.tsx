@@ -1,8 +1,10 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useStickyState } from "@/lib/hooks/use-sticky-state";
-import { Plus, Package, BookOpen } from "lucide-react";
+import { useModuleAccess } from "@/lib/hooks/use-module-access";
+import { Plus, Package, BookOpen, ClipboardList } from "lucide-react";
 import { ColumnChooser, type ColumnDef } from "@/components/shared/ColumnChooser";
 import { ImportExportMenu } from "@/components/shared/ImportExportMenu";
 import { exportCSV } from "@/lib/csv";
@@ -56,6 +58,7 @@ const TRACK_INVENTORY_OPTIONS = [
 export function ProductsPage() {
   const { data: products, isLoading } = useProducts();
   const { mutateAsync: bulkImportProducts } = useBulkImportProducts();
+  const { allowed: hasLandscapt } = useModuleAccess("landscapt");
   const [selectedProduct, setSelectedProduct] = useState<ProductItem | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -140,6 +143,14 @@ export function ProductsPage() {
             <Button size="sm" variant="outline" onClick={() => setBulkPriceOpen(true)}>
               Update Prices
             </Button>
+            {hasLandscapt && (
+              <Button size="sm" variant="outline" asChild>
+                <Link href="/crm/reports/materials-needed">
+                  <ClipboardList className="mr-1.5 h-4 w-4" />
+                  Materials Needed
+                </Link>
+              </Button>
+            )}
             <Button size="sm" onClick={() => setDialogOpen(true)}>
               <Plus className="mr-1.5 h-4 w-4" />
               New Product

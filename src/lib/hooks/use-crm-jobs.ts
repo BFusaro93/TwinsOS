@@ -1144,6 +1144,20 @@ export function useCreateClientJob() {
 
       const job = data as { id: string };
 
+      if (values.products.length > 0) {
+        const productRows = values.products.map((p) => ({
+          job_id: job.id,
+          product_id: p.productId,
+          product_name: p.productName,
+          qty: p.qty,
+          unit_price_cents: p.unitPriceCents,
+          unit_cost_cents: p.unitCostCents,
+        }));
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error: prodErr } = await (supabase as any).from('crm_job_products').insert(productRows);
+        if (prodErr) throw prodErr;
+      }
+
       // Auto-create the first visit for jobs with a fixed scheduled date
       // Recurring jobs get their first visit here; Generate Visits handles future ones.
       // A job with MORE THAN ONE service gets one visit per service instead of a
@@ -1243,10 +1257,13 @@ export function useCreateClientJob() {
 
       return data;
     },
-    onSuccess: (_data, values) => {
+    onSuccess: (data, values) => {
       qc.invalidateQueries({ queryKey: ['crm-jobs'] });
       qc.invalidateQueries({ queryKey: ['crm-jobs', 'client', values.clientId] });
       qc.invalidateQueries({ queryKey: ['clients', values.clientId, 'activity'] });
+      if (values.products.length > 0) {
+        qc.invalidateQueries({ queryKey: ['crm-job-products', (data as { id: string }).id] });
+      }
       fireAutomationTrigger({ triggerType: 'job_created', clientId: values.clientId, matchValues: [values.jobType] });
       if (values.jobType === 'package') {
         fireAutomationTrigger({

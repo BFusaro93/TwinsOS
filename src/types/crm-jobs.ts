@@ -224,6 +224,15 @@ export interface NewClientJobFormValues {
   notes: string | null;
   notesToCrew: string | null;
   services: NewClientJobServiceValues[];
+  products: NewClientJobProductValues[];
+}
+
+export interface NewClientJobProductValues {
+  productId: string | null;
+  productName: string;
+  qty: number;
+  unitPriceCents: number;
+  unitCostCents: number | null;
 }
 
 export type VisitStatus = 'scheduled' | 'dispatched' | 'in_progress' | 'completed' | 'cancelled' | 'skipped'

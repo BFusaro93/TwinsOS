@@ -21,6 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useCreateClientJob, useCRMServices, useCRMSchedules, useCRMCrews } from "@/lib/hooks/use-crm-jobs";
+import { useProducts } from "@/lib/hooks/use-products";
 import { useClients } from "@/lib/hooks/use-clients";
 import { useClientProjects } from "@/lib/hooks/use-client-cmms";
 import { useContracts } from "@/lib/hooks/use-contracts";
@@ -80,6 +81,18 @@ function blankServiceRow(date: string): ServiceRow {
   return { serviceId: "", serviceName: "", startDate: date, completeByDate: "", qty: 1, rateCents: 0, budgetedHours: 0, budgetMethod: "manual", teamSize: 1, minDays: null };
 }
 
+interface ProductRow {
+  productId: string;
+  productName: string;
+  qty: number;
+  unitPriceCents: number;
+  unitCostCents: number | null;
+}
+
+function blankProductRow(): ProductRow {
+  return { productId: "", productName: "", qty: 1, unitPriceCents: 0, unitCostCents: null };
+}
+
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -95,6 +108,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
   const { data: crmSchedules } = useCRMSchedules();
   const { data: orgSettings } = useOrgSettings();
   const { data: crmPackages } = usePackages(false);
+  const { data: products } = useProducts();
   const { data: employees } = useSelectableEmployees();
   const { data: crews } = useCRMCrews();
   const salesReps = (employees ?? []).filter((e) => e.isSalesRep);
@@ -115,6 +129,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
   const [packageId, setPackageId] = useState("");
   const [isComplete, setIsComplete] = useState(false);
   const [services, setServices] = useState<ServiceRow[]>([blankServiceRow(todayStr())]);
+  const [productRows, setProductRows] = useState<ProductRow[]>([]);
   const [projectId, setProjectId] = useState<string | null>(null);
   const [newProjectOpen, setNewProjectOpen] = useState(false);
 
@@ -138,6 +153,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
       setPackageId("");
       setIsComplete(false);
       setServices([blankServiceRow(today)]);
+      setProductRows([]);
       setProjectId(null);
       setInvoiceType(null);
       setInchTrigger(null);
@@ -234,6 +250,32 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
     }
   }
 
+  function updateProductRow(i: number, updates: Partial<ProductRow>) {
+    setProductRows((prev) => prev.map((p, idx) => idx === i ? { ...p, ...updates } : p));
+  }
+
+  function removeProductRow(i: number) {
+    setProductRows((prev) => prev.filter((_, idx) => idx !== i));
+  }
+
+  function addProductRow() {
+    setProductRows((prev) => [...prev, blankProductRow()]);
+  }
+
+  function pickProduct(i: number, productId: string) {
+    const prod = (products ?? []).find((p) => p.id === productId);
+    if (!prod) return;
+    updateProductRow(i, {
+      productId: prod.id,
+      productName: prod.name,
+      unitPriceCents: prod.price,
+      unitCostCents: prod.unitCost ?? null,
+    });
+  }
+
+  const productCatalog = (products ?? []).filter((p) => p.category === "stocked_material" || p.category === "project_material");
+  const productTotalCents = productRows.reduce((s, p) => s + p.qty * p.unitPriceCents, 0);
+
   const effectiveClientId = defaultClientId ?? selectedClientId;
   const effectiveClientName = (clients ?? []).find((c) => c.id === effectiveClientId)?.displayName ?? "";
   const { data: clientProjects } = useClientProjects(effectiveClientId, effectiveClientName);
@@ -313,6 +355,15 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
           sortOrder: idx,
           minDays: s.minDays,
         })),
+        products: productRows
+          .filter((p) => p.productId)
+          .map((p) => ({
+            productId: p.productId,
+            productName: p.productName,
+            qty: p.qty,
+            unitPriceCents: p.unitPriceCents,
+            unitCostCents: p.unitCostCents,
+          })),
       });
       toast.success("Job created");
       onOpenChange(false);
@@ -648,6 +699,65 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
                   <span>Service Total</span>
                   <span>{formatCurrency(serviceTotalCents)}</span>
                 </div>
+              </div>
+            </div>
+
+            {/* Products table */}
+            <div>
+              <div className="mb-1.5 flex items-center justify-between">
+                <Label>Products</Label>
+                <Button type="button" variant="ghost" size="sm" className="h-6 text-xs" onClick={addProductRow}>
+                  <Plus className="mr-1 h-3 w-3" /> Add Product
+                </Button>
+              </div>
+              <div className="rounded border overflow-hidden">
+                <div className="overflow-x-auto">
+                <div
+                  className="grid min-w-[480px] text-white text-xs font-medium px-3 py-2"
+                  style={{ gridTemplateColumns: "2fr 1fr 1fr 1.2fr 28px", backgroundColor: brandColor }}
+                >
+                  <span>Product</span>
+                  <span>Qty</span>
+                  <span>Unit Price ($)</span>
+                  <span>Total</span>
+                  <span />
+                </div>
+                {productRows.length === 0 && (
+                  <div className="px-3 py-3 text-center text-xs text-slate-400 bg-white">No products on this job yet.</div>
+                )}
+                {productRows.map((row, i) => (
+                  <div
+                    key={i}
+                    className="grid min-w-[480px] items-center gap-1.5 border-b last:border-0 bg-white px-3 py-2"
+                    style={{ gridTemplateColumns: "2fr 1fr 1fr 1.2fr 28px" }}
+                  >
+                    <Select value={row.productId || ""} onValueChange={(v) => pickProduct(i, v)}>
+                      <SelectTrigger className="h-7 text-xs"><SelectValue placeholder="Select product…" /></SelectTrigger>
+                      <SelectContent>
+                        {productCatalog.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                    <Input type="number" min="0" step="0.01" value={row.qty} onChange={(e) => updateProductRow(i, { qty: parseFloat(e.target.value) || 1 })} className="h-7 text-xs" />
+                    <DecimalInput
+                      min={0}
+                      className="h-7 text-xs"
+                      value={row.unitPriceCents / 100}
+                      selectOnFocus
+                      onCommit={(price) => updateProductRow(i, { unitPriceCents: Math.round(price * 100) })}
+                    />
+                    <span className="text-xs text-slate-700 font-medium text-right pr-1">{formatCurrency(row.qty * row.unitPriceCents)}</span>
+                    <button type="button" onClick={() => removeProductRow(i)} className="flex h-6 w-6 items-center justify-center rounded text-slate-400 hover:text-red-500">
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ))}
+                </div>
+                {productRows.length > 0 && (
+                  <div className="flex items-center justify-between border-t bg-slate-50 px-3 py-2 text-xs font-medium text-slate-700">
+                    <span>Product Total</span>
+                    <span>{formatCurrency(productTotalCents)}</span>
+                  </div>
+                )}
               </div>
             </div>
 
