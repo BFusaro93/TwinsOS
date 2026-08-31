@@ -74,7 +74,7 @@ export function MarketingFooter() {
               </span>
             </Link>
             <p className="mt-3 max-w-[220px] text-[13px] leading-relaxed text-[#8a8a84]">
-              One industry. One platform. Two systems. One login.
+              One industry. One platform. One Purpose.
             </p>
           </div>
           {COLUMNS.map((col) => (
