@@ -38,8 +38,8 @@ const ITEMS: DeepDiveItem[] = [
   },
   {
     icon: FileStack,
-    title: "Shared Documents",
-    body: "Contracts, proposals, and other files you've shared with the client are available for them to reference anytime, without asking you to resend them.",
+    title: "Company Document Library",
+    body: "A company-wide library of files every client can reference — warranties, watering instructions, and other reference material — instead of emailing the same PDF over and over.",
   },
   {
     icon: Layers,
