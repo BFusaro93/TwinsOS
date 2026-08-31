@@ -86,11 +86,7 @@ export function MarketingFooter() {
               <div className="mb-3 whitespace-nowrap text-[11px] font-bold uppercase tracking-wide text-slate-400">
                 {col.label}
               </div>
-              <ul
-                className={
-                  col.wide ? "grid grid-cols-2 gap-x-4 gap-y-2.5" : "flex flex-col gap-2.5"
-                }
-              >
+              <ul className="flex flex-col gap-2.5">
                 {col.links.map((l) => (
                   <li key={l.href}>
                     <Link href={l.href} className="text-[13px] text-[#5a5a56] hover:text-[#005642]">
