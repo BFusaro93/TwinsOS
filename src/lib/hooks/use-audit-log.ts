@@ -72,7 +72,6 @@ const CMMS_RECORD_TYPES = [
   "part",
   "asset",
   "vehicle",
-  "project",
   "pm_schedule",
 ] as const;
 

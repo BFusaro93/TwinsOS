@@ -120,11 +120,11 @@ export async function POST(request: Request) {
   const { error: emailErr } = await resend.emails.send({
     from: "Twins Lawn Service <noreply@twinslawnservice.com>",
     to: email,
-    subject: "You've been invited to Equipt",
+    subject: "You've been invited to Landscapt",
     html: `
       <div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px 24px">
-        <h2 style="margin:0 0 8px;font-size:20px;color:#0f172a">You've been invited to Equipt</h2>
-        <p style="margin:0 0 24px;color:#475569">Hi ${name}, you've been added as a <strong>${role}</strong> on your team's Equipt account.</p>
+        <h2 style="margin:0 0 8px;font-size:20px;color:#0f172a">You've been invited to Landscapt</h2>
+        <p style="margin:0 0 24px;color:#475569">Hi ${name}, you've been added as a <strong>${role}</strong> on your team's Landscapt account.</p>
         <a href="${inviteUrl}" style="display:inline-block;padding:12px 24px;background:#60ab45;color:#fff;text-decoration:none;border-radius:6px;font-weight:600">Accept Invitation</a>
         <p style="margin:24px 0 0;font-size:12px;color:#94a3b8">This link expires in 24 hours. If you weren't expecting this, you can ignore this email.</p>
       </div>
