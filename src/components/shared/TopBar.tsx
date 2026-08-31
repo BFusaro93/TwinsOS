@@ -27,6 +27,7 @@ import { Badge } from "@/components/ui/badge";
 import { GlobalSearchDialog } from "@/components/shared/GlobalSearchDialog";
 import { NotificationsBell } from "@/components/shared/NotificationsBell";
 import { EditProfileDialog } from "@/components/shared/EditProfileDialog";
+import { FeedbackButton } from "@/components/shared/FeedbackButton";
 import { useUsers } from "@/lib/hooks/use-users";
 import { useSyncCurrentUser } from "@/lib/hooks/use-current-user";
 
@@ -304,6 +305,7 @@ export function TopBar() {
         </DropdownMenuContent>
       </DropdownMenu>
     </header>
+    <FeedbackButton />
     </>
   );
 }
