@@ -34,6 +34,7 @@ import {
   Upload,
   ListChecks,
   Satellite,
+  Handshake,
 } from "lucide-react";
 import type { ElementType } from "react";
 
@@ -714,6 +715,56 @@ export const DOC_SECTIONS: DocSection[] = [
               "The day-to-day scheduling screen — status cycling, crew assignment, and exactly how actual hours are calculated when a crew doesn't clock in.",
             href: "/settings/support/dispatch-board-guide",
             linkLabel: "Open the Dispatch Board guide",
+          },
+        ],
+      },
+      {
+        id: "sales-meetings",
+        title: "Sales Meetings",
+        summary: "Book sales appointments per rep, catch double-bookings, and remind reps and clients automatically.",
+        icon: Handshake,
+        steps: [
+          {
+            step: "Setting up sales reps",
+            detail:
+              "Only employees flagged as a sales rep show up on the calendar. Mark someone as a sales rep (and make sure they're active) in Team > Employees before booking meetings for them.",
+          },
+          {
+            step: "Where it is",
+            detail:
+              "CRM > Sales Meetings shows a per-rep Day, Week, or Month calendar. Click any open slot to book a new meeting for that rep and time, or click an existing meeting to edit it.",
+          },
+          {
+            step: "Booking a meeting",
+            detail:
+              "Pick a sales rep, an existing client (or a free-text lead name for a new prospect), a title, meeting type (in person, phone, video), date/time, and duration. Location accepts either an address or a meeting link.",
+          },
+          {
+            step: "Double-booking warning",
+            detail:
+              "If the picked rep already has another meeting overlapping the chosen time, the dialog warns you when you save — it does not block the save. This matches the same-class overlap warning used on the Dispatch Board.",
+          },
+          {
+            step: "Linking to estimates and tickets",
+            detail:
+              "Once a client is selected, the dialog lets you link the meeting to one of that client's existing estimates or tickets — useful for tying an in-person walkthrough back to the estimate it's discussing.",
+          },
+          {
+            step: "Reminders",
+            detail:
+              "60 minutes before a scheduled meeting, the assigned rep gets an in-app and email reminder automatically (toggle either off in Settings > Notifications). If the meeting has a client, a separate 'Sales Meeting Reminder' automation trigger is also available in the Automations builder for a client-facing reminder.",
+          },
+          {
+            step: "Rescheduling",
+            detail:
+              "Changing a meeting's date or time re-arms its reminder so it fires again for the new time. Editing anything else (notes, title, link to an estimate) leaves an already-sent reminder alone.",
+          },
+          {
+            step: "Full guide",
+            detail:
+              "Sales-rep visibility rules, exactly how the double-booking check compares meetings, and the split between the rep's direct reminder and the client-facing automation trigger.",
+            href: "/settings/support/sales-meetings-guide",
+            linkLabel: "Open the Sales Meetings guide",
           },
         ],
       },

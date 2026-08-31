@@ -41,6 +41,7 @@ import {
   PackageCheck,
   ClipboardCheck,
   CreditCard,
+  Handshake,
   type LucideIcon,
 } from "lucide-react";
 
@@ -120,6 +121,13 @@ export const DOC_GUIDES: DocGuide[] = [
     title: "The Dispatch Board",
     description: "The daily scheduling screen crews and dispatchers live in — visits, crews, status, and how actual hours get calculated.",
     icon: Map,
+  },
+  {
+    slug: "sales-meetings-guide",
+    kicker: "Landscapt (CRM)",
+    title: "Sales Meetings",
+    description: "Booking appointments per sales rep, the double-booking warning, and the split between a rep's direct reminder and the client-facing automation trigger.",
+    icon: Handshake,
   },
   {
     slug: "waiting-list-guide",
