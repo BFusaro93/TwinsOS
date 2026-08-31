@@ -8,6 +8,7 @@ import { FeatureSubpageHero } from "@/components/marketing/FeatureSubpageHero";
 import { FeatureSubpageCTA } from "@/components/marketing/FeatureSubpageCTA";
 import { FeatureDeepDive, type DeepDiveItem } from "@/components/marketing/FeatureDeepDive";
 import { DashboardBuilderMockup } from "@/components/marketing/mockups/DashboardBuilderMockup";
+import { RealScreenshot } from "@/components/marketing/RealScreenshot";
 
 const heading = Plus_Jakarta_Sans({
   subsets: ["latin"],
@@ -69,6 +70,8 @@ export default function ReportingFeaturePage() {
       </Reveal>
 
       <FeatureDeepDive items={ITEMS} accent="#60ab45" />
+
+      <RealScreenshot src="/screenshots/my-day.png" alt="Real My Day dashboard in Landscapt" tab="My Day" accent="#60ab45" />
 
       <FeatureSubpageCTA />
       <MarketingFooter />

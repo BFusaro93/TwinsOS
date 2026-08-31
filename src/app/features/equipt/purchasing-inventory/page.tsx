@@ -8,6 +8,7 @@ import { FeatureSubpageHero } from "@/components/marketing/FeatureSubpageHero";
 import { FeatureSubpageCTA } from "@/components/marketing/FeatureSubpageCTA";
 import { FeatureDeepDive, type DeepDiveItem } from "@/components/marketing/FeatureDeepDive";
 import { PurchasingMockup } from "@/components/marketing/mockups/PurchasingMockup";
+import { RealScreenshotStack } from "@/components/marketing/RealScreenshotStack";
 
 const heading = Plus_Jakarta_Sans({
   subsets: ["latin"],
@@ -71,6 +72,14 @@ export default function PurchasingInventoryFeaturePage() {
       </Reveal>
 
       <FeatureDeepDive items={ITEMS} accent="#2aa9e0" />
+
+      <RealScreenshotStack
+        accent="#2aa9e0"
+        images={[
+          { src: "/screenshots/purchasing-inventory.png", alt: "Real Parts Inventory list in Equipt" },
+          { src: "/screenshots/parts-overview.png", alt: "Real part detail with linked vendors in Equipt" },
+        ]}
+      />
 
       <FeatureSubpageCTA backHref="/features/equipt" backLabel="Back to Equipt overview" />
       <MarketingFooter />

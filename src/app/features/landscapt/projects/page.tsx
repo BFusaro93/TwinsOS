@@ -8,6 +8,7 @@ import { FeatureSubpageHero } from "@/components/marketing/FeatureSubpageHero";
 import { FeatureSubpageCTA } from "@/components/marketing/FeatureSubpageCTA";
 import { FeatureDeepDive, type DeepDiveItem } from "@/components/marketing/FeatureDeepDive";
 import { ProjectsMockup } from "@/components/marketing/mockups/ProjectsMockup";
+import { RealScreenshot } from "@/components/marketing/RealScreenshot";
 
 const heading = Plus_Jakarta_Sans({
   subsets: ["latin"],
@@ -64,6 +65,8 @@ export default function ProjectsFeaturePage() {
       </Reveal>
 
       <FeatureDeepDive items={ITEMS} accent="#60ab45" />
+
+      <RealScreenshot src="/screenshots/projects.png" alt="Real Projects list in Landscapt" tab="Projects" accent="#60ab45" />
 
       <FeatureSubpageCTA />
       <MarketingFooter />

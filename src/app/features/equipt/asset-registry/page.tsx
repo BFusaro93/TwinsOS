@@ -8,6 +8,7 @@ import { FeatureSubpageHero } from "@/components/marketing/FeatureSubpageHero";
 import { FeatureSubpageCTA } from "@/components/marketing/FeatureSubpageCTA";
 import { FeatureDeepDive, type DeepDiveItem } from "@/components/marketing/FeatureDeepDive";
 import { AssetDetailMockup } from "@/components/marketing/mockups/AssetDetailMockup";
+import { RealScreenshotStack } from "@/components/marketing/RealScreenshotStack";
 
 const heading = Plus_Jakarta_Sans({
   subsets: ["latin"],
@@ -66,6 +67,14 @@ export default function AssetRegistryFeaturePage() {
       </Reveal>
 
       <FeatureDeepDive items={ITEMS} accent="#2aa9e0" />
+
+      <RealScreenshotStack
+        accent="#2aa9e0"
+        images={[
+          { src: "/screenshots/asset-registry.png", alt: "Real vehicle registry with details in Equipt" },
+          { src: "/screenshots/asset-wo-history.png", alt: "Real work order history on a vehicle in Equipt" },
+        ]}
+      />
 
       <FeatureSubpageCTA backHref="/features/equipt" backLabel="Back to Equipt overview" />
       <MarketingFooter />

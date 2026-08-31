@@ -20,6 +20,7 @@ import { MarketingFooter } from "@/components/marketing/MarketingFooter";
 import { Reveal } from "@/components/marketing/Reveal";
 import { EquiptShowcase } from "@/components/marketing/EquiptShowcase";
 import { FeatureDeepDive, type DeepDiveItem } from "@/components/marketing/FeatureDeepDive";
+import { RealScreenshot } from "@/components/marketing/RealScreenshot";
 
 const heading = Plus_Jakarta_Sans({
   subsets: ["latin"],
@@ -165,6 +166,8 @@ export default function EquiptFeaturesPage() {
       </Reveal>
 
       <FeatureDeepDive items={ITEMS} accent="#2aa9e0" />
+
+      <RealScreenshot src="/screenshots/equipt-dashboard.png" alt="Real Equipt operations dashboard" tab="Dashboard" accent="#2aa9e0" />
 
       <div className="bg-[#eef4e2] px-6 py-20 text-center sm:px-12">
         <Reveal>

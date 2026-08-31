@@ -8,6 +8,7 @@ import { FeatureSubpageHero } from "@/components/marketing/FeatureSubpageHero";
 import { FeatureSubpageCTA } from "@/components/marketing/FeatureSubpageCTA";
 import { FeatureDeepDive, type DeepDiveItem } from "@/components/marketing/FeatureDeepDive";
 import { PMScheduleMockup } from "@/components/marketing/mockups/PMScheduleMockup";
+import { RealScreenshot } from "@/components/marketing/RealScreenshot";
 
 const heading = Plus_Jakarta_Sans({
   subsets: ["latin"],
@@ -66,6 +67,8 @@ export default function PreventiveMaintenanceFeaturePage() {
       </Reveal>
 
       <FeatureDeepDive items={ITEMS} accent="#2aa9e0" />
+
+      <RealScreenshot src="/screenshots/vehicle-service.png" alt="Real fleet-wide PM/service due tracking in Equipt" tab="Service" accent="#2aa9e0" />
 
       <FeatureSubpageCTA backHref="/features/equipt" backLabel="Back to Equipt overview" />
       <MarketingFooter />

@@ -8,6 +8,7 @@ import { FeatureSubpageHero } from "@/components/marketing/FeatureSubpageHero";
 import { FeatureSubpageCTA } from "@/components/marketing/FeatureSubpageCTA";
 import { FeatureDeepDive, type DeepDiveItem } from "@/components/marketing/FeatureDeepDive";
 import { InvoicingMockup } from "@/components/marketing/mockups/InvoicingMockup";
+import { RealScreenshotStack } from "@/components/marketing/RealScreenshotStack";
 
 const heading = Plus_Jakarta_Sans({
   subsets: ["latin"],
@@ -69,6 +70,14 @@ export default function InvoicingFeaturePage() {
       </Reveal>
 
       <FeatureDeepDive items={ITEMS} accent="#60ab45" />
+
+      <RealScreenshotStack
+        accent="#60ab45"
+        images={[
+          { src: "/screenshots/invoicing-list.png", alt: "Real Invoices list in Landscapt" },
+          { src: "/screenshots/invoicing-payment.png", alt: "Real Add Payment dialog in Landscapt" },
+        ]}
+      />
 
       <FeatureSubpageCTA />
       <MarketingFooter />

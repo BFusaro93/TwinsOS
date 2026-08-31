@@ -8,6 +8,7 @@ import { FeatureSubpageHero } from "@/components/marketing/FeatureSubpageHero";
 import { FeatureSubpageCTA } from "@/components/marketing/FeatureSubpageCTA";
 import { FeatureDeepDive, type DeepDiveItem } from "@/components/marketing/FeatureDeepDive";
 import { EstimatesPipelineMockup } from "@/components/marketing/mockups/EstimatesPipelineMockup";
+import { RealScreenshotStack } from "@/components/marketing/RealScreenshotStack";
 
 const heading = Plus_Jakarta_Sans({
   subsets: ["latin"],
@@ -69,6 +70,14 @@ export default function EstimatingFeaturePage() {
       </Reveal>
 
       <FeatureDeepDive items={ITEMS} accent="#60ab45" />
+
+      <RealScreenshotStack
+        accent="#60ab45"
+        images={[
+          { src: "/screenshots/estimating-list.png", alt: "Real Estimates list in Landscapt" },
+          { src: "/screenshots/estimating-detail.png", alt: "Real estimate detail with the budget engine" },
+        ]}
+      />
 
       <FeatureSubpageCTA />
       <MarketingFooter />

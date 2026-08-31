@@ -8,6 +8,7 @@ import { FeatureSubpageHero } from "@/components/marketing/FeatureSubpageHero";
 import { FeatureSubpageCTA } from "@/components/marketing/FeatureSubpageCTA";
 import { FeatureDeepDive, type DeepDiveItem } from "@/components/marketing/FeatureDeepDive";
 import { TicketsMockup } from "@/components/marketing/mockups/TicketsMockup";
+import { RealScreenshotStack } from "@/components/marketing/RealScreenshotStack";
 
 const heading = Plus_Jakarta_Sans({
   subsets: ["latin"],
@@ -64,6 +65,14 @@ export default function TicketsFeaturePage() {
       </Reveal>
 
       <FeatureDeepDive items={ITEMS} accent="#60ab45" />
+
+      <RealScreenshotStack
+        accent="#60ab45"
+        images={[
+          { src: "/screenshots/tickets.png", alt: "Real Tickets list in Landscapt" },
+          { src: "/screenshots/calls.png", alt: "Real Calls list in Landscapt" },
+        ]}
+      />
 
       <FeatureSubpageCTA />
       <MarketingFooter />

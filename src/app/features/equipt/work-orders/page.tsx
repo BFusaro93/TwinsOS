@@ -8,6 +8,7 @@ import { FeatureSubpageHero } from "@/components/marketing/FeatureSubpageHero";
 import { FeatureSubpageCTA } from "@/components/marketing/FeatureSubpageCTA";
 import { FeatureDeepDive, type DeepDiveItem } from "@/components/marketing/FeatureDeepDive";
 import { WorkOrderMockup } from "@/components/marketing/mockups/WorkOrderMockup";
+import { RealScreenshot } from "@/components/marketing/RealScreenshot";
 
 const heading = Plus_Jakarta_Sans({
   subsets: ["latin"],
@@ -66,6 +67,8 @@ export default function WorkOrdersFeaturePage() {
       </Reveal>
 
       <FeatureDeepDive items={ITEMS} accent="#2aa9e0" />
+
+      <RealScreenshot src="/screenshots/work-orders.png" alt="Real Work Orders list in Equipt" tab="Work Orders" accent="#2aa9e0" />
 
       <FeatureSubpageCTA backHref="/features/equipt" backLabel="Back to Equipt overview" />
       <MarketingFooter />
