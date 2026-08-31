@@ -66,8 +66,8 @@ export function MarketingFooter() {
   return (
     <div className="border-t border-[#eceae3] bg-[#fbfbf8]">
       <div className="mx-auto max-w-[1440px] px-6 py-16 sm:px-12">
-        <div className="grid grid-cols-2 gap-6 sm:grid-cols-3 lg:grid-cols-[160px_repeat(5,minmax(0,1fr))] lg:gap-5">
-          <div className="col-span-2 sm:col-span-3 lg:col-span-1">
+        <div className="grid grid-cols-2 gap-6 sm:grid-cols-3 lg:flex lg:flex-nowrap lg:gap-x-10">
+          <div className="col-span-2 sm:col-span-3 lg:w-[160px] lg:flex-none">
             <Link href="/" className="flex items-center gap-2">
               <BrandMark size={26} />
               <span className="font-[family-name:var(--font-heading)] text-base font-bold text-[#005642]">
