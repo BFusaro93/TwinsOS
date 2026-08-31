@@ -2,10 +2,20 @@ import fs from "fs";
 import path from "path";
 import { Reveal } from "@/components/marketing/Reveal";
 
-function WindowFrame({ src, alt, className }: { src: string; alt: string; className?: string }) {
+function WindowFrame({
+  src,
+  alt,
+  wrapperClassName,
+  imgClassName,
+}: {
+  src: string;
+  alt: string;
+  wrapperClassName?: string;
+  imgClassName?: string;
+}) {
   return (
     <div
-      className={`overflow-hidden rounded-[10px] border border-[#e6e6e0] bg-white shadow-[0_30px_70px_-25px_rgba(0,0,0,0.35)] ${className ?? ""}`}
+      className={`overflow-hidden rounded-[10px] border border-[#e6e6e0] bg-white shadow-[0_30px_70px_-25px_rgba(0,0,0,0.35)] ${wrapperClassName ?? ""}`}
     >
       <div className="flex items-center gap-1.5 bg-[#f4f3ee] px-3 py-2.5">
         <span className="h-2.5 w-2.5 rounded-full bg-[#e6605a]" />
@@ -13,7 +23,7 @@ function WindowFrame({ src, alt, className }: { src: string; alt: string; classN
         <span className="h-2.5 w-2.5 rounded-full bg-[#5ec26a]" />
       </div>
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={src} alt={alt} className="block w-full" />
+      <img src={src} alt={alt} className={imgClassName ?? "block w-full"} />
     </div>
   );
 }
@@ -38,13 +48,16 @@ export function RealScreenshotStack({
           Real screens, not mockups.
         </h2>
       </div>
-      <div className="relative mx-auto max-w-[820px] pb-10 pl-6 pr-10 sm:pl-0 sm:pr-16">
-        {existing[0] && <WindowFrame src={existing[0].src} alt={existing[0].alt} className="relative z-0" />}
+      <div className="relative mx-auto max-w-[820px] pb-16 pt-4 pl-6 pr-10 sm:pl-0 sm:pr-16">
+        {existing[0] && (
+          <WindowFrame src={existing[0].src} alt={existing[0].alt} wrapperClassName="relative z-0" />
+        )}
         {existing[1] && (
           <WindowFrame
             src={existing[1].src}
             alt={existing[1].alt}
-            className="absolute -bottom-10 -right-4 z-10 w-[62%] sm:-right-14 sm:w-[58%]"
+            wrapperClassName="absolute -bottom-10 -right-4 z-10 sm:-right-14"
+            imgClassName="block h-[190px] w-auto object-contain sm:h-[240px]"
           />
         )}
       </div>

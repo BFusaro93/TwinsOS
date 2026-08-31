@@ -76,7 +76,7 @@ export default function PurchasingInventoryFeaturePage() {
       <RealScreenshotStack
         accent="#2aa9e0"
         images={[
-          { src: "/screenshots/purchasing-inventory.png", alt: "Real Parts Inventory list in Equipt" },
+          { src: "/screenshots/po-list.png", alt: "Real Purchase Orders list in Equipt" },
           { src: "/screenshots/parts-overview.png", alt: "Real part detail with linked vendors in Equipt" },
         ]}
       />
