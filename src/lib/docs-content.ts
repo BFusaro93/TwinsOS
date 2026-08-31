@@ -1110,6 +1110,13 @@ export const DOC_SECTIONS: DocSection[] = [
             href: "/settings/support/report-center-guide",
             linkLabel: "Open the Report Center guide",
           },
+          {
+            step: "Reports reference",
+            detail:
+              "A description, available filters, and known gotchas for every one of the ~75 reports, organized by section — for researching a specific report rather than the Report Center itself.",
+            href: "/settings/support/reports-reference-guide",
+            linkLabel: "Open the Reports Reference guide",
+          },
         ],
       },
     ],

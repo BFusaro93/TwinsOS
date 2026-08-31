@@ -206,6 +206,13 @@ export const DOC_GUIDES: DocGuide[] = [
     icon: BarChart3,
   },
   {
+    slug: "reports-reference-guide",
+    kicker: "Reporting",
+    title: "Reports Reference",
+    description: "What every report actually measures, its filters, and the gotchas to know before trusting the numbers — organized by section.",
+    icon: ListChecks,
+  },
+  {
     slug: "approval-flows-guide",
     kicker: "Administration",
     title: "Approval Flows",

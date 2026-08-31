@@ -68,6 +68,15 @@ export default function ReportCenterGuidePage() {
         </div>
       </div>
 
+      <Callout>
+        Looking for what a specific report actually measures, rather than how the Report Center
+        works? See the{" "}
+        <a href="/settings/support/reports-reference-guide" className="font-semibold underline">
+          Reports Reference guide
+        </a>{" "}
+        for a description, filters, and known gotchas for every report.
+      </Callout>
+
       <Section id="where-it-lives" title="Where it lives">
         <p>
           The CRM admin sidebar has a <strong>Reports</strong> link
