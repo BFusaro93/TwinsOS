@@ -76,7 +76,7 @@ const CATEGORIES = [
       { icon: CreditCard, title: "Credit Card & ACH Processing", body: "Stripe-powered online payments built into every invoice, at Stripe's standard rates (2.9% + $0.30 card, 0.8% capped at $5 ACH). A pass-through fee to recover the card cost (3.5% above $500 by default) is on by default and adjustable per company." },
       { icon: Users, title: "Client Portal", body: "Clients log in to view and pay invoices, review estimates, and submit their own tickets." },
       { icon: LifeBuoy, title: "Tickets", body: "Customer support tickets with priority, status, and automated past-due tracking — visible to clients in their own portal." },
-      { icon: MessageSquareText, title: "SMS & Client Texting", body: "Two-way texting for reminders, updates, and quick client questions, with TCPA opt-in built in." },
+      { icon: MessageSquareText, title: "SMS & Client Texting", body: "Automated text reminders and updates, with a client's replies landing straight in a ticket for staff to follow up on — TCPA opt-in built in." },
     ],
   },
   {
