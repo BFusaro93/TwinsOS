@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { BrandMark } from "@/components/marketing/BrandMark";
 
-const COLUMNS: { label: string; links: { href: string; label: string }[] }[] = [
+const COLUMNS: { label: string; links: { href: string; label: string }[]; wide?: boolean }[] = [
   {
     label: "Product",
     links: [
@@ -13,6 +13,7 @@ const COLUMNS: { label: string; links: { href: string; label: string }[] }[] = [
   },
   {
     label: "Landscapt features",
+    wide: true,
     links: [
       { href: "/features/landscapt/estimating", label: "Estimating" },
       { href: "/features/landscapt/scheduling", label: "Scheduling & Dispatch" },
@@ -20,11 +21,6 @@ const COLUMNS: { label: string; links: { href: string; label: string }[] }[] = [
       { href: "/features/landscapt/invoicing", label: "Invoicing & Payments" },
       { href: "/features/landscapt/reporting", label: "Reporting & Dashboards" },
       { href: "/features/landscapt/automations", label: "Automations" },
-    ],
-  },
-  {
-    label: "More Landscapt",
-    links: [
       { href: "/features/landscapt/client-portal", label: "Client Portal" },
       { href: "/features/landscapt/crew-app", label: "Crew App" },
       { href: "/features/landscapt/tickets", label: "Tickets" },
@@ -70,7 +66,7 @@ export function MarketingFooter() {
   return (
     <div className="border-t border-[#eceae3] bg-[#fbfbf8]">
       <div className="mx-auto max-w-[1440px] px-6 py-16 sm:px-12">
-        <div className="grid grid-cols-2 gap-6 sm:grid-cols-3 lg:grid-cols-[140px_repeat(6,minmax(0,1fr))] lg:gap-4">
+        <div className="grid grid-cols-2 gap-6 sm:grid-cols-3 lg:grid-cols-[160px_repeat(5,minmax(0,1fr))] lg:gap-5">
           <div className="col-span-2 sm:col-span-3 lg:col-span-1">
             <Link href="/" className="flex items-center gap-2">
               <BrandMark size={26} />
@@ -83,11 +79,18 @@ export function MarketingFooter() {
             </p>
           </div>
           {COLUMNS.map((col) => (
-            <div key={col.label} className="min-w-0">
+            <div
+              key={col.label}
+              className={`min-w-0 ${col.wide ? "order-first col-span-2 sm:order-none sm:col-span-1" : ""}`}
+            >
               <div className="mb-3 whitespace-nowrap text-[11px] font-bold uppercase tracking-wide text-slate-400">
                 {col.label}
               </div>
-              <ul className="flex flex-col gap-2.5">
+              <ul
+                className={
+                  col.wide ? "grid grid-cols-2 gap-x-4 gap-y-2.5" : "flex flex-col gap-2.5"
+                }
+              >
                 {col.links.map((l) => (
                   <li key={l.href}>
                     <Link href={l.href} className="text-[13px] text-[#5a5a56] hover:text-[#005642]">
