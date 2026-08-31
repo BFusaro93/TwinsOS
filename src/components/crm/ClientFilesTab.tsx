@@ -10,7 +10,7 @@ import {
 } from "@/lib/hooks/use-client-files";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Upload, FileText, Image, FileSpreadsheet, Trash2, Download, File } from "lucide-react";
+import { Upload, FileText, Image, FileSpreadsheet, Trash2, Download, Eye, File } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
@@ -40,6 +40,19 @@ function FileRow({ file, onDeleted }: { file: ClientFile; onDeleted: () => void 
   const { mutateAsync: deleteFile, isPending: deleting } = useDeleteClientFile();
   const getUrl = useSignedFileUrl();
   const [downloading, setDownloading] = useState(false);
+  const [viewing, setViewing] = useState(false);
+
+  async function handleView() {
+    setViewing(true);
+    try {
+      const url = await getUrl(file.storagePath);
+      window.open(url, "_blank");
+    } catch {
+      toast.error("Could not generate view link");
+    } finally {
+      setViewing(false);
+    }
+  }
 
   async function handleDownload() {
     setDownloading(true);
@@ -76,6 +89,16 @@ function FileRow({ file, onDeleted }: { file: ClientFile; onDeleted: () => void 
         <p className="text-xs text-slate-400">{formatBytes(file.sizeBytes)} · {formatDate(file.createdAt)}</p>
       </div>
       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 w-7 p-0"
+          onClick={handleView}
+          disabled={viewing}
+          title="View"
+        >
+          <Eye className="h-3.5 w-3.5" />
+        </Button>
         <Button
           variant="ghost"
           size="sm"
