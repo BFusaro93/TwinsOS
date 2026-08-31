@@ -56,8 +56,8 @@ export function RealScreenshotStack({
           <WindowFrame
             src={existing[1].src}
             alt={existing[1].alt}
-            wrapperClassName="absolute -bottom-10 -right-4 z-10 sm:-right-14"
-            imgClassName="block h-[240px] w-auto object-contain sm:h-[300px]"
+            wrapperClassName="absolute -bottom-6 -right-2 z-10 sm:-bottom-10 sm:-right-4 lg:-right-14"
+            imgClassName="block h-[clamp(90px,22vw,300px)] w-auto object-contain"
           />
         )}
       </div>

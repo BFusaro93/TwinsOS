@@ -20,6 +20,11 @@ const COLUMNS: { label: string; links: { href: string; label: string }[] }[] = [
       { href: "/features/landscapt/invoicing", label: "Invoicing & Payments" },
       { href: "/features/landscapt/reporting", label: "Reporting & Dashboards" },
       { href: "/features/landscapt/automations", label: "Automations" },
+    ],
+  },
+  {
+    label: "More Landscapt",
+    links: [
       { href: "/features/landscapt/client-portal", label: "Client Portal" },
       { href: "/features/landscapt/crew-app", label: "Crew App" },
       { href: "/features/landscapt/tickets", label: "Tickets" },
@@ -65,7 +70,7 @@ export function MarketingFooter() {
   return (
     <div className="border-t border-[#eceae3] bg-[#fbfbf8]">
       <div className="mx-auto max-w-[1440px] px-6 py-16 sm:px-12">
-        <div className="grid grid-cols-2 gap-6 sm:grid-cols-3 lg:grid-cols-[160px_repeat(5,minmax(0,1fr))] lg:gap-5">
+        <div className="grid grid-cols-2 gap-6 sm:grid-cols-3 lg:grid-cols-[140px_repeat(6,minmax(0,1fr))] lg:gap-4">
           <div className="col-span-2 sm:col-span-3 lg:col-span-1">
             <Link href="/" className="flex items-center gap-2">
               <BrandMark size={26} />
