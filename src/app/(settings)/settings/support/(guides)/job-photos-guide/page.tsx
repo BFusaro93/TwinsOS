@@ -30,7 +30,7 @@ export default function JobPhotosGuidePage() {
   return (
     <DocsFontScope className="flex h-full flex-col gap-6 overflow-y-auto pb-12">
       <DocsHero
-        kicker="Landscapt (CRM) · Equipt"
+        kicker="Landscapt (CRM)"
         title="Job Photos"
         description="Field photo documentation, annotation, and before/after comparisons — attached to a job site, not a person."
       />
