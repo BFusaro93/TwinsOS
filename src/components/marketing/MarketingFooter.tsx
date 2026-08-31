@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { BrandMark } from "@/components/marketing/BrandMark";
 
-const COLUMNS: { label: string; links: { href: string; label: string }[]; wide?: boolean }[] = [
+const COLUMNS: { label: string; links: { href: string; label: string }[] }[] = [
   {
     label: "Product",
     links: [
@@ -13,7 +13,6 @@ const COLUMNS: { label: string; links: { href: string; label: string }[]; wide?:
   },
   {
     label: "Landscapt features",
-    wide: true,
     links: [
       { href: "/features/landscapt/estimating", label: "Estimating" },
       { href: "/features/landscapt/scheduling", label: "Scheduling & Dispatch" },
@@ -79,10 +78,7 @@ export function MarketingFooter() {
             </p>
           </div>
           {COLUMNS.map((col) => (
-            <div
-              key={col.label}
-              className={`min-w-0 ${col.wide ? "order-first col-span-2 sm:order-none sm:col-span-1" : ""}`}
-            >
+            <div key={col.label} className="min-w-0">
               <div className="mb-3 whitespace-nowrap text-[11px] font-bold uppercase tracking-wide text-slate-400">
                 {col.label}
               </div>
