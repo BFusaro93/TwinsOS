@@ -57,7 +57,7 @@ export function RealScreenshotStack({
             src={existing[1].src}
             alt={existing[1].alt}
             wrapperClassName="absolute -bottom-10 -right-4 z-10 sm:-right-14"
-            imgClassName="block h-[190px] w-auto object-contain sm:h-[240px]"
+            imgClassName="block h-[240px] w-auto object-contain sm:h-[300px]"
           />
         )}
       </div>
