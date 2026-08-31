@@ -285,7 +285,7 @@ function ProjectDetailDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl p-0 gap-0 max-h-[90vh] flex flex-col">
+      <DialogContent className="max-w-4xl h-[85vh] p-0 gap-0 flex flex-col">
         {/* Header */}
         <div className="flex items-start justify-between border-b px-6 py-4">
           <div>
@@ -340,25 +340,23 @@ function ProjectDetailDialog({
               </TabsTrigger>
             ))}
           </TabsList>
-          <div className="flex-1 overflow-auto p-6">
-            <TabsContent value="milestone" className="mt-0">
-              <MilestoneTab project={project} />
-            </TabsContent>
-            <TabsContent value="billing" className="mt-0">
-              <BillingTab project={project} />
-            </TabsContent>
-            <TabsContent value="analysis" className="mt-0">
-              <AnalysisTab project={project} />
-            </TabsContent>
-            <TabsContent value="notes" className="mt-0">
-              <NotesTab project={project} />
-            </TabsContent>
-            <TabsContent value="audit" className="mt-0">
-              <div className="rounded-lg border bg-slate-50 p-6 text-center text-sm text-slate-400">
-                Audit trail coming soon
-              </div>
-            </TabsContent>
-          </div>
+          <TabsContent value="milestone" className="mt-0 min-h-0 flex-1 overflow-auto p-6">
+            <MilestoneTab project={project} />
+          </TabsContent>
+          <TabsContent value="billing" className="mt-0 min-h-0 flex-1 overflow-auto p-6">
+            <BillingTab project={project} />
+          </TabsContent>
+          <TabsContent value="analysis" className="mt-0 min-h-0 flex-1 overflow-auto p-6">
+            <AnalysisTab project={project} />
+          </TabsContent>
+          <TabsContent value="notes" className="mt-0 min-h-0 flex-1 overflow-auto p-6">
+            <NotesTab project={project} />
+          </TabsContent>
+          <TabsContent value="audit" className="mt-0 min-h-0 flex-1 overflow-auto p-6">
+            <div className="rounded-lg border bg-slate-50 p-6 text-center text-sm text-slate-400">
+              Audit trail coming soon
+            </div>
+          </TabsContent>
         </Tabs>
       </DialogContent>
 
