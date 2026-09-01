@@ -3,7 +3,6 @@ import { BookOpen } from "lucide-react";
 import { DocsFontScope, DocsHero } from "@/components/docs/DocsBrand";
 import { SupportPage } from "@/components/settings/SupportPage";
 import { SendFeedbackHeaderButton } from "@/components/shared/SendFeedbackHeaderButton";
-import { AskAIButton } from "@/components/shared/AskAIButton";
 
 export default function MasterSettingsSupportPage() {
   return (
@@ -27,7 +26,6 @@ export default function MasterSettingsSupportPage() {
         }
       />
       <SupportPage docsHref="/settings/docs" />
-      <AskAIButton />
     </DocsFontScope>
   );
 }

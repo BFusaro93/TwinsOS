@@ -20,7 +20,7 @@ export const CHEMICAL_REPORTS: PrebuiltReportDef[] = [
       "Post-application compliance record of chemicals actually applied — date, EPA #, quantities, conditions, applicator, and license number.",
     filters: [dateRangeFilterDef("Applied Between", "this_month")],
     notes: [
-      "Applicator Name/License and Application Start/End Time only populate when the applying employee has a license number on file.",
+      "Applicator Name populates whenever an applicator is assigned to the application. Applicator License Number only populates if that employee had a license on file at the time. Application Start/End Time populate only when entered on the application record, independent of licensing.",
       "Chemical Amount is the concentrate used; Solution Amount is the total mixed solution actually applied.",
     ],
     analysis: (params) => ({

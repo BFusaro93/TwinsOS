@@ -1,6 +1,5 @@
 import { GuideSidebar } from "@/components/docs/GuideSidebar";
 import { GuideBackButton } from "@/components/docs/GuideBackButton";
-import { AskAIButton } from "@/components/shared/AskAIButton";
 
 // Route group — doesn't affect URLs (guides still live at
 // /settings/support/<slug>), just wraps every guide page in a persistent
@@ -17,7 +16,6 @@ export default function GuidesLayout({ children }: { children: React.ReactNode }
         <GuideBackButton />
         <div className="flex-1 overflow-hidden print:block print:h-auto print:overflow-visible">{children}</div>
       </div>
-      <AskAIButton />
     </div>
   );
 }

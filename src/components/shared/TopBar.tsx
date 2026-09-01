@@ -27,7 +27,7 @@ import { Badge } from "@/components/ui/badge";
 import { GlobalSearchDialog } from "@/components/shared/GlobalSearchDialog";
 import { NotificationsBell } from "@/components/shared/NotificationsBell";
 import { EditProfileDialog } from "@/components/shared/EditProfileDialog";
-import { FeedbackButton } from "@/components/shared/FeedbackButton";
+import { HelpMenu } from "@/components/shared/HelpMenu";
 import { useUsers } from "@/lib/hooks/use-users";
 import { useSyncCurrentUser } from "@/lib/hooks/use-current-user";
 
@@ -167,6 +167,10 @@ export function TopBar() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const router = useRouter();
+  const pathname = usePathname();
+  // Settings/Support/Docs keep the floating Ask AI + Feedback buttons instead
+  // (mounted in (settings)/layout.tsx) — don't double them up with the menu here.
+  const isSettings = pathname.startsWith("/settings");
 
   // Sync the currentUser store with the live Supabase session on mount
   useSyncCurrentUser();
@@ -227,6 +231,8 @@ export function TopBar() {
 
       {/* Quick Add */}
       <QuickAddMenu />
+
+      {!isSettings && <HelpMenu />}
 
       {/* Notifications — hidden for crew users (they only need photo access, not CMMS/PO alerts) */}
       {currentUser.role !== "crew" && <NotificationsBell />}
@@ -305,7 +311,6 @@ export function TopBar() {
         </DropdownMenuContent>
       </DropdownMenu>
     </header>
-    <FeedbackButton />
     </>
   );
 }

@@ -45,7 +45,7 @@ export interface MaterialsNeededResult {
   notes: string[];
 }
 
-const TERMINAL_JOB_STATUSES = new Set(["cancelled", "completed"]);
+const TERMINAL_JOB_STATUSES = new Set(["cancelled", "completed", "hold"]);
 const ACTIVE_REQ_STATUSES = new Set(["pending_approval", "approved"]);
 const ACTIVE_PO_STATUSES = new Set(["requested", "pending", "approved", "ordered", "partially_fulfilled"]);
 
@@ -156,7 +156,7 @@ export async function computeMaterialsNeeded(supabase: SupabaseClient): Promise<
       .from("crm_jobs")
       .select("id, property_id, waiting_list_start, clients:client_id(display_name), crm_job_services(service_id)")
       .eq("job_type", "waiting_list")
-      .not("status", "in", '("cancelled","completed")')
+      .not("status", "in", '("cancelled","completed","hold")')
       .is("deleted_at", null)
       .limit(5000);
     if (waitingErr) throw new Error(waitingErr.message);

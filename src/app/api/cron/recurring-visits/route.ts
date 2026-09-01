@@ -210,7 +210,7 @@ export async function GET(request: Request) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     .select("id, org_id, client_id, crew_id, schedule, schedule_days, recurrence_end, package_total_steps, priority, notes_to_crew" as any)
     .in("job_type", ["recurring", "package"])
-    .not("status", "in", '("cancelled","completed")')
+    .not("status", "in", '("cancelled","completed","hold")')
     .is("deleted_at", null);
 
   if (jobsErr) {

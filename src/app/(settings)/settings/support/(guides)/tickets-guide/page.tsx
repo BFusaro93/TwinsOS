@@ -77,7 +77,7 @@ export default function TicketsGuidePage() {
         <p>
           Tickets are shown as three different lists in the app — Tickets, Calls, and Events — but
           they&apos;re all the same underlying table and component (
-          <code>TicketsList</code>, <code>src/components/crm/tickets/TicketsList.tsx</code>), just
+          <code>TicketsList</code>), just
           filtered by <code>type</code> (<code>note</code> / <code>call</code> / <code>event</code>).
         </p>
       </Section>
@@ -86,9 +86,8 @@ export default function TicketsGuidePage() {
         <Callout>
           <strong>Tickets</strong> (this page) are Landscapt/CRM&apos;s customer-service record — a
           client asks something, reports something, or needs a callback. <strong>Maintenance
-          Requests</strong> are a separate, module-specific Equipt/CMMS concept (
-          <code>src/components/cmms/RequestListPanel.tsx</code>, <code>RequestDetailPanel.tsx</code>,{" "}
-          <code>NewRequestDialog.tsx</code>) for reporting an asset or equipment problem that may
+          Requests</strong> are a separate, module-specific Equipt/CMMS concept
+          for reporting an asset or equipment problem that may
           become a Work Order. They live in different tables, have different fields, and are not
           interchangeable — a client complaint is a Ticket; a broken mower is a Maintenance Request.
         </Callout>
@@ -96,8 +95,8 @@ export default function TicketsGuidePage() {
 
       <Section id="status-priority" title="Status, priority &amp; type reference">
         <p>
-          Values come from <code>src/types/crm-tickets.ts</code>. These are literal string enums, not
-          free text — the UI (<code>TicketsList.tsx</code>, <code>TicketDetailSheet.tsx</code>) only
+          These are literal string enums, not
+          free text — the UI only
           ever writes one of these.
         </p>
         <Table>
@@ -121,8 +120,7 @@ export default function TicketsGuidePage() {
         <p>
           The detail sheet&apos;s status flow indicator only shows three visual steps — Open, In
           Progress, Closed — because <code>on_hold</code> maps to the same step index as{" "}
-          <code>open</code> (<code>TICKET_STATUS_INDEX</code> in{" "}
-          <code>TicketDetailSheet.tsx</code>). Under the hood it&apos;s still a distinct, filterable
+          <code>open</code>. Under the hood it&apos;s still a distinct, filterable
           status.
         </p>
         <div className="grid gap-3 sm:grid-cols-2">
@@ -179,15 +177,14 @@ export default function TicketsGuidePage() {
           <li>
             <strong>A public form submission, automatically</strong> — every submission on a{" "}
             <code>crm_forms</code> form creates a ticket, no matter what else the form does or how it
-            handles the matched/created client (<code>src/lib/forms/submit-form-response.ts</code>,{" "}
-            around line 606). The ticket always starts as <code>status: &quot;open&quot;</code>,{" "}
+            handles the matched/created client. The ticket always starts as <code>status: &quot;open&quot;</code>,{" "}
             <code>priority: &quot;normal&quot;</code>, <code>type: &quot;note&quot;</code>, with{" "}
             <code>category</code> set to the form&apos;s own name and the body built from the
             submitter&apos;s name/email/phone/message plus every raw field on the form.
           </li>
           <li>
-            <strong>A Communication Automation Event action</strong> — the Ticket action step (
-            <code>TicketEventDialog.tsx</code>) lets an automation sequence create a ticket with a
+            <strong>A Communication Automation Event action</strong> — the Ticket action step
+            lets an automation sequence create a ticket with a
             configurable title, description, priority (Low/Normal/High/Urgent), and assignee whenever
             it runs.
           </li>
@@ -208,7 +205,7 @@ export default function TicketsGuidePage() {
           Tickets created before <code>assigned_to_id</code> existed, or created through a path that
           never had a real user id (the public form path always leaves the assignee blank; the Zapier
           &quot;Create Ticket&quot; action has no assignee field either), only have the name string.{" "}
-          <code>resolveAssigneeId()</code> in <code>src/lib/ticket-notify.ts</code> falls back to
+          <code>resolveAssigneeId()</code> falls back to
           fuzzy-matching that name against <code>crm_employees</code> so assignment notifications
           still work — but if the name doesn&apos;t match an employee exactly, assignment
           notifications are silently skipped rather than failing.

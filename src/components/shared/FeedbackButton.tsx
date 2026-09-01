@@ -4,7 +4,9 @@ import { useState } from "react";
 import { MessageSquarePlus } from "lucide-react";
 import { FeedbackDialog } from "@/components/shared/FeedbackDialog";
 
-/** Floating action button, fixed to the bottom-right corner of the viewport. */
+/** Floating action button, fixed to the bottom-right corner of the viewport.
+ *  Mounted on Home and Settings/Support/Docs, the only screens without the
+ *  TopBar Help menu (see HelpMenu). */
 export function FeedbackButton() {
   const [open, setOpen] = useState(false);
 

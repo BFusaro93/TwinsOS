@@ -690,7 +690,7 @@ export function UsersPage() {
 
                     {isAdmin && (
                       <TableCell>
-                        {user.role === "admin" ? (
+                        {user.role === "admin" || user.role === "crew" ? (
                           <span className="text-xs text-slate-400">Always on</span>
                         ) : user.role === "requestor" ? (
                           <span className="text-xs text-slate-500">N/A</span>

@@ -60,8 +60,7 @@ export default function DamageCasesGuidePage() {
         </p>
         <p>
           It is not attached to a vehicle-accident or fleet-incident workflow — there is no field
-          for at-fault party, insurance carrier, or claim number anywhere in the schema
-          (<code>src/types/damage-case.ts:1-27</code>). What it captures is closer to &quot;an
+          for at-fault party, insurance carrier, or claim number anywhere in the schema. What it captures is closer to &quot;an
           incident happened at a customer&apos;s property, here&apos;s what it cost to make right.&quot;
         </p>
       </Section>
@@ -69,21 +68,19 @@ export default function DamageCasesGuidePage() {
       <Section id="where" title="Where cases live">
         <p>
           Damage Cases is a Landscapt tool, not a CMMS feature — it&apos;s listed in the crew-hidden
-          Tools sidebar as &quot;Track property damage &amp; warranty&quot;
-          (<code>src/components/shared/ToolsSidebar.tsx:25</code>). The same{" "}
+          Tools sidebar as &quot;Track property damage &amp; warranty&quot;. The same{" "}
           <code>DamageCasesPage</code> component is mounted at three separate routes that all render
           identically:
         </p>
         <ul className="list-disc space-y-1 pl-5">
-          <li><code>/tools/damage-cases</code> — <code>src/app/(tools)/tools/damage-cases/page.tsx</code></li>
-          <li><code>/dashboard/damage-cases</code> — <code>src/app/(dashboard)/dashboard/damage-cases/page.tsx</code></li>
-          <li><code>/dashboards/damage-cases</code> — <code>src/app/(reports)/dashboards/damage-cases/page.tsx</code></li>
+          <li><code>/tools/damage-cases</code></li>
+          <li><code>/dashboard/damage-cases</code></li>
+          <li><code>/dashboards/damage-cases</code></li>
         </ul>
         <p>
           The page itself has two tabs: <strong>Cases</strong> (a searchable list — by customer,
           case #, description, or property address) and <strong>Reporting</strong> (a chart of
-          year-to-date damage vs. warranty cost by month, with YTD summary tiles —{" "}
-          <code>src/components/damage-cases/DamageCasesChart.tsx</code>).
+          year-to-date damage vs. warranty cost by month, with YTD summary tiles).
         </p>
       </Section>
 
@@ -91,8 +88,7 @@ export default function DamageCasesGuidePage() {
         <p>
           Cases are opened standalone, from the &quot;Open Case&quot; button on the list page — there
           is no &quot;log damage&quot; action hanging off a Job, Visit, or Ticket record that
-          pre-fills a case. A crew member or office staffer fills out a plain form
-          (<code>src/components/damage-cases/NewDamageCaseDialog.tsx</code>):
+          pre-fills a case. A crew member or office staffer fills out a plain form:
         </p>
         <Table>
           <thead>
@@ -115,8 +111,7 @@ export default function DamageCasesGuidePage() {
         <p>
           A case number is assigned server-side via the <code>next_damage_case_number()</code> RPC.
           Creation retries up to three times on a unique-constraint collision (two concurrent
-          submissions computing the same number), rather than surfacing a raw DB error —
-          <code>src/lib/hooks/use-damage-cases.ts:74-114</code>.
+          submissions computing the same number), rather than surfacing a raw DB error.
         </p>
         <p>
           <strong>Worked example.</strong> A mower clips a client&apos;s sprinkler head while mowing
@@ -134,9 +129,7 @@ export default function DamageCasesGuidePage() {
         <p>
           Status is a plain four-value field, changed from a dropdown on the case&apos;s status
           badge — any status can be selected from any other at any time; there is no enforced
-          progression or guard rail in the UI or the mutation
-          (<code>src/components/damage-cases/DamageCaseDetailPanel.tsx:83-104</code>,{" "}
-          <code>src/lib/hooks/use-damage-cases.ts:150-179</code>).
+          progression or guard rail in the UI or the mutation.
         </p>
         <Table>
           <thead>
@@ -160,29 +153,26 @@ export default function DamageCasesGuidePage() {
         <p>
           A case&apos;s <strong>Total Cost</strong> is not a field you set directly — it&apos;s
           derived by summing every non-deleted row in <code>damage_case_expenses</code> for that
-          case, both in the list view and the detail panel
-          (<code>src/lib/hooks/use-damage-cases.ts:7-58</code>).
+          case, both in the list view and the detail panel.
         </p>
         <p>
           Continuing the sprinkler-head example: the case&apos;s <strong>Expenses</strong> tab gets
           an entry — Date, an optional Vendor (picked from the shared Vendors table, or typed
           free-text if the vendor isn&apos;t in the system yet), a Description
           (&quot;Replacement sprinkler head + labor&quot;), and an Amount in dollars, stored as
-          cents (<code>src/components/damage-cases/AddExpenseDialog.tsx</code>). The case detail
+          cents. The case detail
           panel&apos;s Total Cost updates immediately to match.
         </p>
         <p>
-          Each expense row also carries a nullable <code>purchaseOrderId</code>
-          (<code>src/types/damage-case.ts:19-27</code>), but the Add Expense form always submits it
-          as <code>null</code> — there is no UI control to set it per-expense today
-          (<code>src/components/damage-cases/AddExpenseDialog.tsx:40</code>). The only PO link that&apos;s
+          Each expense row also carries a nullable <code>purchaseOrderId</code>, but the Add Expense form always submits it
+          as <code>null</code> — there is no UI control to set it per-expense today. The only PO link that&apos;s
           actually wired up in the UI is the one at the case level, described next.
         </p>
         <p>
           Beyond expenses, each case has generic <strong>Files</strong>, <strong>Comments</strong>,
           and <strong>Audit Trail</strong> tabs shared with other record types across the app
-          (<code>AttachmentsSection</code>, <code>CommentsSection</code>, <code>AuditTrailTab</code> —
-          <code>src/components/damage-cases/DamageCaseDetailPanel.tsx:284-294</code>). Files accepts
+          (<code>AttachmentsSection</code>, <code>CommentsSection</code>, <code>AuditTrailTab</code>).
+          Files accepts
           images, PDFs, and common office documents, so incident photos go here — there is no
           dedicated photo field on the case itself.
         </p>
@@ -191,8 +181,8 @@ export default function DamageCasesGuidePage() {
       <Section id="po-link" title="Linking a Purchase Order">
         <p>
           A case can be linked to a single existing Purchase Order via a searchable picker (by PO
-          number or vendor) in the detail panel&apos;s header strip, and unlinked with one click
-          (<code>src/components/damage-cases/DamageCaseDetailPanel.tsx:146-207</code>). This writes
+          number or vendor) in the detail panel&apos;s header strip, and unlinked with one click.
+          This writes
           to <code>damage_cases.linkedPoId</code> — it does not create a new PO or requisition from
           the case, and a case does not spawn a repair Work Order either. If parts or materials are
           needed to fix the damage, that PO has to already exist (or be created separately in
@@ -207,14 +197,11 @@ export default function DamageCasesGuidePage() {
         <ul className="list-disc space-y-2 pl-5">
           <li>
             <strong>Landscapt&apos;s internal Automations</strong> — &quot;Damage case was
-            created&quot; is a selectable trigger, filterable by Case Type
-            (<code>src/components/crm/automations/SequenceRulesDialog.tsx:71,84-87,131-132</code>).
+            created&quot; is a selectable trigger, filterable by Case Type.
           </li>
           <li>
             <strong>Zapier</strong> — listed as the &quot;New Damage Case&quot; trigger, delivered
-            instantly like the rest of Landscapt&apos;s triggers
-            (<code>src/lib/docs-content.ts:1081</code>,{" "}
-            <code>src/lib/integrations/zapier-triggers.ts:176-185</code>). See the{" "}
+            instantly like the rest of Landscapt&apos;s triggers. See the{" "}
             <a href="/settings/support/zapier-guide" className="text-[#60ab45] underline">
               Zapier guide
             </a>{" "}
@@ -227,7 +214,7 @@ export default function DamageCasesGuidePage() {
           exact-match lookup against <code>clients.display_name</code> (trimmed, lowercased) purely
           to decide whether to fire the trigger — nothing is written back onto the case either way.
           If the typed name doesn&apos;t match a client exactly, the automation and Zapier trigger
-          silently never fire for that case (<code>src/lib/hooks/use-damage-cases.ts:116-146</code>).
+          silently never fire for that case.
           A typo, an abbreviation, or a property name instead of the client&apos;s name on file is
           enough to break this.
         </Callout>
@@ -238,13 +225,12 @@ export default function DamageCasesGuidePage() {
           <code>damage_cases.customer_name</code> is a plain text column — there is no foreign key
           to <code>clients.id</code>. This is confirmed still true directly in the code, not just in
           CLAUDE.md&apos;s general note about informal client-name strings: the type definition has
-          a <code>customerName: string</code> field and no <code>clientId</code>
-          (<code>src/types/damage-case.ts:6-17</code>), the New/Edit Case form is a plain text{" "}
+          a <code>customerName: string</code> field and no <code>clientId</code>, the New/Edit Case form is a plain text{" "}
           <code>Input</code> with placeholder <em>&quot;e.g. Sterling Storage&quot;</em>, not a
-          client picker (<code>src/components/damage-cases/NewDamageCaseDialog.tsx:118-121</code>),
+          client picker,
           and case creation has to run an exact-match text lookup against the clients table after
           the fact just to fire automations — a workaround that only exists because there&apos;s no
-          real relationship to query (<code>src/lib/hooks/use-damage-cases.ts:116-133</code>).
+          real relationship to query.
         </p>
         <Callout>
           <strong>Current impact.</strong> Damage Cases cannot be filtered or reported on by client

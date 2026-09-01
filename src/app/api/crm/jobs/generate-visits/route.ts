@@ -161,6 +161,9 @@ export async function POST(request: Request) {
   const { data: job, error: jobErr } = // eslint-disable-next-line @typescript-eslint/no-explicit-any
 await (supabase as any).from("crm_jobs").select("*" as any).eq("id", jobId).single();
   if (jobErr || !job) return NextResponse.json({ error: "Job not found" }, { status: 404 });
+  if ((job as { status?: string }).status === "hold") {
+    return NextResponse.json({ generated: 0, message: "Job is on hold." });
+  }
 
   const today = new Date(); today.setHours(0, 0, 0, 0);
   // Generate only through the end of the current calendar year — visits are

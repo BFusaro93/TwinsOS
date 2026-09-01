@@ -6,6 +6,8 @@ import { SettingsSidebar, SETTINGS_NAV_TITLES } from "@/components/shared/Settin
 import { TopBar } from "@/components/shared/TopBar";
 import { RealtimeSync } from "@/components/shared/RealtimeSync";
 import { SettingsLoader } from "@/components/shared/SettingsLoader";
+import { FeedbackButton } from "@/components/shared/FeedbackButton";
+import { AskAIButton } from "@/components/shared/AskAIButton";
 import { useUIStore } from "@/stores";
 import { usePageTitle } from "@/lib/hooks/use-page-title";
 
@@ -43,6 +45,8 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
         </div>
         <main className="flex-1 overflow-auto p-4 md:p-6 print:overflow-visible print:p-0">{children}</main>
       </div>
+      <AskAIButton />
+      <FeedbackButton />
     </div>
   );
 }

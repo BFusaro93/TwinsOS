@@ -329,6 +329,21 @@ export function useUpdateJobStatus() {
         .eq("id", id);
       if (error) throw error;
 
+      // Putting a job on hold pauses it — clear out already-generated future
+      // visits so it stops showing on the dispatch board, crew app, and route
+      // optimizer without needing a job-status join at every read site.
+      if (resolvedStatus === "hold") {
+        const todayStr = new Date().toISOString().slice(0, 10);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (supabase as any)
+          .from("crm_job_visits")
+          .update({ deleted_at: new Date().toISOString() })
+          .eq("job_id", id)
+          .eq("status", "scheduled")
+          .gte("scheduled_date", todayStr)
+          .is("deleted_at", null);
+      }
+
       // Log to client activity timeline
       const resolvedClientId = clientId ?? await (async () => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -634,7 +649,7 @@ export function useVisitsForDate(fromDate: string, toDate?: string) {
       const terminalVisitStatuses = new Set(['completed', 'skipped', 'cancelled']);
       return visits.filter((v) => {
         if (v.job?.jobType === 'snow') return false;
-        const parentDone = v.job?.status === 'cancelled' || v.job?.status === 'completed';
+        const parentDone = v.job?.status === 'cancelled' || v.job?.status === 'completed' || v.job?.status === 'hold';
         if (parentDone && !terminalVisitStatuses.has(v.status)) return false;
         return true;
       });

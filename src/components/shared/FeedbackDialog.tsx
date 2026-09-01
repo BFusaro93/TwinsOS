@@ -152,15 +152,17 @@ export function FeedbackDialog({ open, onOpenChange }: FeedbackDialogProps) {
                 </button>
               </div>
             ) : (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => fileInputRef.current?.click()}
-              >
-                <Paperclip className="mr-1.5 h-3.5 w-3.5" />
-                Attach a screenshot
-              </Button>
+              <div className="flex justify-end">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  <Paperclip className="mr-1.5 h-3.5 w-3.5" />
+                  Attach a screenshot
+                </Button>
+              </div>
             )}
           </div>
         </div>

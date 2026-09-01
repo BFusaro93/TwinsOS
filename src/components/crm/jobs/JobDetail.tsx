@@ -1681,7 +1681,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                 <p className="text-sm font-medium text-slate-700">{visits.length} visit{visits.length !== 1 ? "s" : ""}</p>
                 <div className="flex items-center gap-2">
                   {/* Manual generate button for recurring/package jobs */}
-                  {(job.jobType === "recurring" || job.jobType === "package") && (
+                  {(job.jobType === "recurring" || job.jobType === "package") && job.status !== "hold" && (
                     <Button variant="outline" size="sm" className="h-8 text-xs" onClick={handleGenerateVisits} disabled={generating}>
                       {generating ? "Generating…" : "Generate Visits"}
                     </Button>

@@ -79,15 +79,12 @@ export default function ReportCenterGuidePage() {
 
       <Section id="where-it-lives" title="Where it lives">
         <p>
-          The CRM admin sidebar has a <strong>Reports</strong> link
-          (<code>src/components/crm/CRMSidebar.tsx:122</code>) that points to{" "}
+          The CRM admin sidebar has a <strong>Reports</strong> link that points to{" "}
           <code>/crm/admin/reports</code>. That route renders a single client component,{" "}
-          <code>ReportsHub</code>{" "}
-          (<code>src/app/(crm)/crm/admin/reports/page.tsx:2</code>,{" "}
-          <code>src/components/crm/reports/report-center/ReportsHub.tsx</code>), which is a
+          <code>ReportsHub</code>, which is a
           four-tab shell driven by a <code>?tab=</code> query param — <strong>Dashboard</strong>,{" "}
           <strong>Custom Dashboards</strong>, <strong>Report Center</strong>, and{" "}
-          <strong>My Reports</strong> (ReportsHub.tsx:12&ndash;79). This is the &quot;Report
+          <strong>My Reports</strong>. This is the &quot;Report
           Center&quot; proper. It&apos;s a separate thing from the top-level{" "}
           <code>/dashboards</code> route group covered below — that one is reached from its own
           sidebar (<code>ReportsSidebar</code>) and holds a set of hand-built, curated
@@ -98,13 +95,11 @@ export default function ReportCenterGuidePage() {
 
       <Section id="report-center" title="The Report Center tab">
         <p>
-          The <strong>Report Center</strong> tab renders <code>ReportCatalog</code>{" "}
-          (<code>src/components/crm/reports/report-center/ReportCatalog.tsx</code>) — a
+          The <strong>Report Center</strong> tab renders <code>ReportCatalog</code> — a
           single searchable table, grouped by section header rows, listing every report in{" "}
-          <code>ALL_REPORTS</code> (<code>src/lib/reports/registry.ts:16&ndash;30</code>). That
-          array is the union of twelve definition arrays imported from{" "}
-          <code>src/lib/reports/definitions/*.ts</code>, one array per{" "}
-          <code>ReportSectionKey</code> (<code>src/types/crm-reports.ts:253&ndash;280</code>).
+          <code>ALL_REPORTS</code>. That
+          array is the union of twelve definition arrays, one array per{" "}
+          <code>ReportSectionKey</code>.
           Counting the actual <code>section:</code> entries across those files gives{" "}
           <strong>75 reports</strong> total, close to the ~70 figure — spread across twelve
           sections:
@@ -130,16 +125,13 @@ export default function ReportCenterGuidePage() {
         <p>
           Clicking a report name in the catalog links to{" "}
           <code>/crm/admin/reports/r/[reportKey]</code>, rendered by{" "}
-          <code>ReportViewer</code>{" "}
-          (<code>src/app/(crm)/crm/admin/reports/r/[reportKey]/page.tsx</code>,{" "}
-          <code>src/components/crm/reports/report-center/ReportViewer.tsx</code>).
+          <code>ReportViewer</code>.
         </p>
       </Section>
 
       <Section id="how-a-report-runs" title="How a report actually runs">
         <p>
-          Every catalog entry is a <code>PrebuiltReportDef</code>{" "}
-          (<code>src/lib/reports/definition-types.ts:26&ndash;37</code>), and its doc comment
+          Every catalog entry is a <code>PrebuiltReportDef</code>, and its doc comment
           spells out the three shapes a report can take — exactly one of:
         </p>
         <ul className="list-disc space-y-2 pl-5">
@@ -148,9 +140,8 @@ export default function ReportCenterGuidePage() {
             definition&apos;s <code>analysis(params)</code> function builds an{" "}
             <code>AnalysisConfig</code> (dataset name, columns, filters, group-by, aggregates,
             sort) from the filter-bar values, and that config is executed through the{" "}
-            <code>crm_run_report</code> Postgres RPC via <code>runAnalysis()</code>{" "}
-            (<code>src/lib/reports/engine.ts:149&ndash;165</code>). The RPC itself
-            re-validates every identifier server-side (per the comment at engine.ts:12&ndash;15);
+            <code>crm_run_report</code> Postgres RPC via <code>runAnalysis()</code>. The RPC itself
+            re-validates every identifier server-side;
             the client-side <code>validateAnalysisConfig</code> only exists to fail fast with a
             friendlier error message.
           </li>
@@ -162,26 +153,23 @@ export default function ReportCenterGuidePage() {
           </li>
           <li>
             <strong>Link-out (<code>href</code>)</strong> — a handful of reports (e.g. the Job
-            Costing Report and COGS Report,{" "}
-            <code>src/lib/reports/definitions/job-costing.ts:9&ndash;24</code>) are really
+            Costing Report and COGS Report) are really
             pointers to an existing standalone page under <code>/crm/reports/*</code> — the
             catalog entry exists so they&apos;re searchable and appear in the same list, but{" "}
-            <code>ReportViewer</code> just redirects (<code>LinkOutCard</code>,
-            ReportViewer.tsx:56&ndash;75).
+            <code>ReportViewer</code> just redirects (<code>LinkOutCard</code>).
           </li>
         </ul>
         <p>
           The actual HTTP execution path for declarative and bespoke reports is a GET to{" "}
-          <code>/api/crm/reports/run/[reportKey]</code>{" "}
-          (<code>src/app/api/crm/reports/run/[reportKey]/route.ts</code>): it authenticates the
+          <code>/api/crm/reports/run/[reportKey]</code>: it authenticates the
           user, looks up the definition by key in <code>REPORT_MAP</code>, flattens the URL query
           string into filter params, and calls either <code>def.run()</code> or{" "}
           <code>runAnalysis(def.analysis(params))</code> — the client hook driving this is{" "}
-          <code>useRunReport</code> (referenced from <code>ReportViewer.tsx:15,81</code>).
+          <code>useRunReport</code>.
         </p>
         <p>
           Every declarative report reads from one of <strong>19 named datasets</strong> defined
-          in <code>REPORT_DATASETS</code> (<code>src/lib/reports/datasets.ts:9</code>), each a
+          in <code>REPORT_DATASETS</code>, each a
           flat, pre-joined view over the underlying tables (columns, types, and — for
           enum-like text columns — a fixed option list). The full set:
         </p>
@@ -190,8 +178,7 @@ export default function ReportCenterGuidePage() {
 
       <Section id="worked-example" title="Worked example: Production Rate Accuracy">
         <p>
-          <strong>Production Rate Accuracy</strong> lives in the Job Costing section{" "}
-          (<code>src/lib/reports/definitions/job-costing.ts:89&ndash;126</code>). Its stated
+          <strong>Production Rate Accuracy</strong> lives in the Job Costing section. Its stated
           purpose: &quot;Compares each service&apos;s assumed production rate (sq ft per
           man-hour) against what crews actually achieved, to flag rates that need
           recalibrating.&quot;
@@ -207,7 +194,7 @@ export default function ReportCenterGuidePage() {
             Between&quot;, &quot;this_month&quot;)</code>). Changing the preset (This Month, Last
             Month, Last 30/90 Days, This Year, All Time, or Custom) recomputes the{" "}
             <code>from</code>/<code>to</code> window client-side
-            (<code>computePresetRange</code>, ReportFilterBar.tsx:37&ndash;58) and re-runs the
+            (<code>computePresetRange</code>) and re-runs the
             query.
           </li>
           <li>
@@ -236,8 +223,7 @@ export default function ReportCenterGuidePage() {
 
       <Section id="custom-analysis" title='Custom analyses ("My Reports")'>
         <p>
-          The <strong>My Reports</strong> tab (<code>MyReportsList</code>,{" "}
-          <code>src/components/crm/reports/report-center/MyReportsList.tsx</code>) lists
+          The <strong>My Reports</strong> tab (<code>MyReportsList</code>) lists
           org-saved <code>CustomReport</code> records and links to{" "}
           <code>/crm/admin/reports/analysis/new</code> to build one from scratch via{" "}
           <code>CustomAnalysisBuilder</code>. A custom analysis is the same{" "}
@@ -253,13 +239,11 @@ export default function ReportCenterGuidePage() {
       <Section id="dashboards-vs-reports" title="Dashboards vs. individual reports">
         <p>
           Inside the Report Center, <strong>Custom Dashboards</strong>{" "}
-          (<code>DashboardsList</code>,{" "}
-          <code>src/components/crm/reports/report-center/DashboardsList.tsx</code>) are described
-          in the UI itself as &quot;Multi-tab dashboards built from your saved analyses&quot;
-          (DashboardsList.tsx:83). A <code>Dashboard</code> record bundles one or more{" "}
+          (<code>DashboardsList</code>) are described
+          in the UI itself as &quot;Multi-tab dashboards built from your saved analyses&quot;.
+          A <code>Dashboard</code> record bundles one or more{" "}
           <code>CustomReport</code> analyses into tabs, built either from a blank starting point
-          or from one of the entries in <code>DASHBOARD_TEMPLATES</code>{" "}
-          (<code>src/lib/reports/dashboard-templates.ts</code>) — e.g. &quot;Sales
+          or from one of the entries in <code>DASHBOARD_TEMPLATES</code> — e.g. &quot;Sales
           Overview&quot; (estimate pipeline, win rate, recent activity) or &quot;A/R
           Overview&quot; (outstanding balances, collections, payment activity). A saved dashboard
           opens at <code>/crm/admin/reports/dashboards/[id]</code>, rendered by{" "}
@@ -267,8 +251,7 @@ export default function ReportCenterGuidePage() {
         </p>
         <p>
           Notably, that <em>same</em> <code>DashboardViewer</code> component is also mounted at{" "}
-          <code>/dashboards/custom/[id]</code>{" "}
-          (<code>src/app/(reports)/dashboards/custom/[id]/page.tsx</code>) — a user-built
+          <code>/dashboards/custom/[id]</code> — a user-built
           dashboard is reachable through either the Report Center&apos;s own tab or the top-level
           Dashboards sidebar, both pointing at the same underlying record and{" "}
           <code>useDashboards()</code> query.
@@ -278,12 +261,9 @@ export default function ReportCenterGuidePage() {
       <Section id="curated-dashboards" title="The curated, top-level dashboards">
         <p>
           Separate from anything a user builds, the app also ships a fixed set of hand-built
-          dashboard pages under <code>/dashboards/*</code>{" "}
-          (<code>src/app/(reports)/dashboards/</code>), listed on{" "}
-          <code>/dashboards</code> itself (<code>DashboardsHomePage</code>,{" "}
-          <code>src/app/(reports)/dashboards/page.tsx:49&ndash;143</code>) and in{" "}
-          <code>ReportsSidebar</code>&apos;s <code>DASHBOARDS_NAV</code>{" "}
-          (<code>src/components/shared/ReportsSidebar.tsx:36&ndash;46</code>):
+          dashboard pages under <code>/dashboards/*</code>, listed on{" "}
+          <code>/dashboards</code> itself (<code>DashboardsHomePage</code>) and in{" "}
+          <code>ReportsSidebar</code>&apos;s <code>DASHBOARDS_NAV</code>:
         </p>
         <Table>
           <thead>
@@ -305,25 +285,24 @@ export default function ReportCenterGuidePage() {
         </Table>
         <p>
           These plus any user-built Custom Dashboards are what the Dashboards home page and
-          sidebar are enumerating (DashboardsHomePage, page.tsx:61&ndash;140). &quot;Reports
+          sidebar are enumerating. &quot;Reports
           Dashboard&quot; is worth calling out: it&apos;s not part of the Report Center at all —
-          it renders <code>CRMReports</code>{" "}
-          (<code>src/components/crm/reports/CRMReports.tsx</code>), Landscapt&apos;s older,
+          it renders <code>CRMReports</code>, Landscapt&apos;s older,
           pre-Report-Center built-in reporting page, which the Report Center hub also embeds as
-          its own &quot;Dashboard&quot; tab (ReportsHub.tsx:67&ndash;69).
+          its own &quot;Dashboard&quot; tab.
         </p>
       </Section>
 
       <Section id="export" title="Exporting and printing">
         <p>
           Every pre-built report and custom analysis runs through the same viewer chrome
-          (<code>PrebuiltReportRunner</code>, ReportViewer.tsx:77&ndash;204), which offers four
+          (<code>PrebuiltReportRunner</code>), which offers four
           output actions once a result has rows:
         </p>
         <ul className="list-disc space-y-2 pl-5">
-          <li><strong>CSV</strong> — <code>downloadCSV</code> (<code>src/lib/csv.ts</code>).</li>
-          <li><strong>Excel</strong> — <code>downloadXLSX</code> (<code>src/lib/xlsx-export.ts</code>).</li>
-          <li><strong>PDF</strong> — <code>exportReportPDF</code> (<code>src/lib/reports/export-pdf.ts</code>), backed by <code>/api/crm/reports/export/pdf</code>.</li>
+          <li><strong>CSV</strong> — <code>downloadCSV</code>.</li>
+          <li><strong>Excel</strong> — <code>downloadXLSX</code>.</li>
+          <li><strong>PDF</strong> — <code>exportReportPDF</code>, backed by <code>/api/crm/reports/export/pdf</code>.</li>
           <li><strong>Print</strong> — a plain <code>window.print()</code> call; the filter bar and page header carry a <code>print:hidden</code> class so only the table prints.</li>
         </ul>
         <Callout>
@@ -341,8 +320,7 @@ export default function ReportCenterGuidePage() {
         <ul className="list-disc space-y-2 pl-5">
           <li>
             <strong>Module gating</strong> — <code>useModuleAccess(&quot;equipt&quot; |
-            &quot;landscapt&quot;)</code>{" "}
-            (<code>src/lib/hooks/use-module-access.ts:15&ndash;38</code>) checks the org&apos;s
+            &quot;landscapt&quot;)</code> checks the org&apos;s
             Stripe plan against <code>planIncludesModule</code>; it hides the Equipt Dashboard,
             Landscapt My Day, and Reports Dashboard cards/links when the org&apos;s plan doesn&apos;t
             include that module.
@@ -352,7 +330,7 @@ export default function ReportCenterGuidePage() {
             Safety Scores, and CRM Report are gated by <code>useIsInternalOrg()</code> both in the
             nav (hidden entirely) and by an <code>InternalOnlyGuard</code> wrapping{" "}
             <code>{"{children}"}</code> in the reports layout itself for the paths listed in{" "}
-            <code>INTERNAL_ONLY_PATHS</code> (<code>src/app/(reports)/layout.tsx:12,53</code>) —
+            <code>INTERNAL_ONLY_PATHS</code> —
             so even a direct URL hit is blocked, not just hidden from the nav.
           </li>
           <li>
