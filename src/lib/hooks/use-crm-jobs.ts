@@ -333,7 +333,11 @@ export function useUpdateJobStatus() {
       // visits so it stops showing on the dispatch board, crew app, and route
       // optimizer without needing a job-status join at every read site.
       if (resolvedStatus === "hold") {
-        const todayStr = new Date().toISOString().slice(0, 10);
+        // Local calendar date, not UTC — .toISOString() rolls to tomorrow's
+        // UTC date in the evening for any timezone west of UTC, which would
+        // leave today's still-scheduled visit behind instead of clearing it.
+        const now = new Date();
+        const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         await (supabase as any)
           .from("crm_job_visits")

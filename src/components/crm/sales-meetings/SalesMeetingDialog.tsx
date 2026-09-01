@@ -163,8 +163,12 @@ export function SalesMeetingDialog({
   const scheduledDate = watch("scheduledDate");
   const scheduledTime = watch("scheduledTime");
   const durationMinutes = watch("durationMinutes");
-  const dayStart = scheduledDate ? `${scheduledDate}T00:00:00.000Z` : "";
-  const dayEnd = scheduledDate ? `${scheduledDate}T23:59:59.999Z` : "";
+  // Local day boundaries, not literal UTC — scheduledAt itself is stored by
+  // parsing `${date}T${time}:00` as browser-local (see onSubmit below), so a
+  // literal `Z`-suffixed UTC window here misses evening meetings in any
+  // timezone west of UTC, silently skipping real double-bookings.
+  const dayStart = scheduledDate ? new Date(`${scheduledDate}T00:00:00`).toISOString() : "";
+  const dayEnd = scheduledDate ? new Date(`${scheduledDate}T23:59:59.999`).toISOString() : "";
   const { data: dayMeetings } = useSalesMeetings(dayStart, dayEnd);
 
   function findConflict(): SalesMeetingWithClient | null {
