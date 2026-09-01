@@ -50,6 +50,7 @@ import {
   useUpdateDashboard,
 } from "@/lib/hooks/use-report-center";
 import { panelFromGraphic } from "@/lib/reports/panel-from-graphic";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 import type { Dashboard } from "@/types/crm-reports";
 
 /** GraphicLibraryItem.id is prefixed ("system:"/"saved:") to keep the two id
@@ -81,6 +82,8 @@ function VisualTypeThumbnail({ type }: { type: VisualType }) {
 }
 
 export function GraphicsLibraryList() {
+  const { can } = usePermissions();
+  const canManage = can("manage_report_center");
   const { items, isLoading } = useGraphicLibraryItems();
   const deleteSavedGraphic = useDeleteSavedGraphic();
   const [search, setSearch] = useState("");
@@ -154,7 +157,7 @@ export function GraphicsLibraryList() {
                     <Badge variant="secondary" className="text-[10px]">
                       {item.isSystem ? "Built-in" : "My Graphics"}
                     </Badge>
-                    {!item.isSystem && (
+                    {!item.isSystem && canManage && (
                       <Button
                         variant="ghost"
                         size="icon"
@@ -178,9 +181,11 @@ export function GraphicsLibraryList() {
                 {item.description && (
                   <p className="text-xs text-slate-500">{item.description}</p>
                 )}
-                <Button size="sm" variant="outline" onClick={() => setAddTarget(item)}>
-                  Add to Dashboard
-                </Button>
+                {canManage && (
+                  <Button size="sm" variant="outline" onClick={() => setAddTarget(item)}>
+                    Add to Dashboard
+                  </Button>
+                )}
               </CardContent>
             </Card>
           ))}

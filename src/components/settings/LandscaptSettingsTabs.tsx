@@ -1320,6 +1320,8 @@ function QuickBooksConnectSection() {
 }
 
 function QuickBooksSyncStatusSection() {
+  const { can } = usePermissions();
+  const canResync = can("quickbooks_resync");
   const { data, isLoading } = useQuickBooksSyncStatus();
   const { mutateAsync: retryInvoice, isPending: retryingInvoice, variables: retryingInvoiceId } = useRetryQuickBooksInvoiceSync();
   const { mutateAsync: retryPayment, isPending: retryingPayment, variables: retryingPaymentId } = useRetryQuickBooksPaymentSync();
@@ -1371,14 +1373,16 @@ function QuickBooksSyncStatusSection() {
                 </p>
                 <p className="mt-0.5 truncate text-xs text-red-700">{inv.error}</p>
               </div>
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={retryingInvoice && retryingInvoiceId === inv.id}
-                onClick={() => void handleRetryInvoice(inv.id)}
-              >
-                {retryingInvoice && retryingInvoiceId === inv.id ? "Retrying…" : "Retry"}
-              </Button>
+              {canResync && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={retryingInvoice && retryingInvoiceId === inv.id}
+                  onClick={() => void handleRetryInvoice(inv.id)}
+                >
+                  {retryingInvoice && retryingInvoiceId === inv.id ? "Retrying…" : "Retry"}
+                </Button>
+              )}
             </div>
           ))}
           {data.failedPayments.map((pmt) => (
@@ -1391,14 +1395,16 @@ function QuickBooksSyncStatusSection() {
                 </p>
                 <p className="mt-0.5 truncate text-xs text-red-700">{pmt.error}</p>
               </div>
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={retryingPayment && retryingPaymentId === pmt.paymentId}
-                onClick={() => void handleRetryPayment(pmt.paymentId)}
-              >
-                {retryingPayment && retryingPaymentId === pmt.paymentId ? "Retrying…" : "Retry"}
-              </Button>
+              {canResync && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={retryingPayment && retryingPaymentId === pmt.paymentId}
+                  onClick={() => void handleRetryPayment(pmt.paymentId)}
+                >
+                  {retryingPayment && retryingPaymentId === pmt.paymentId ? "Retrying…" : "Retry"}
+                </Button>
+              )}
             </div>
           ))}
         </div>

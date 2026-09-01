@@ -59,6 +59,9 @@ import { AnalysisConfigEditor } from "./AnalysisConfigEditor";
 import { computePresetRange } from "./ReportFilterBar";
 import { ReportTable } from "./ReportTable";
 import { VisualRenderer } from "./VisualRenderer";
+import { EmptyState } from "@/components/shared/EmptyState";
+import { usePermissions } from "@/lib/hooks/use-permissions";
+import { LayoutDashboard } from "lucide-react";
 
 // ============================================================
 // Dashboard Builder — page-based (no drag-and-drop) editor for
@@ -169,6 +172,7 @@ function previewDateRange(): { from: string; to: string } {
 export function DashboardBuilder({ dashboardId }: { dashboardId?: string }) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { can, isLoading: permissionsLoading } = usePermissions();
   const { data: existing, isLoading: loadingExisting } = useDashboard(dashboardId);
   const createDashboard = useCreateDashboard();
   const updateDashboard = useUpdateDashboard();
@@ -311,6 +315,16 @@ export function DashboardBuilder({ dashboardId }: { dashboardId?: string }) {
     await deleteDashboard.mutateAsync(dashboardId);
     router.push("/crm/admin/reports?tab=dashboards");
   };
+
+  if (!permissionsLoading && !can("manage_report_center")) {
+    return (
+      <EmptyState
+        icon={LayoutDashboard}
+        title="No access"
+        description="You don't have permission to manage dashboards."
+      />
+    );
+  }
 
   if (dashboardId && loadingExisting) {
     return (

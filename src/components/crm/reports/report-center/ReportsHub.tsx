@@ -2,8 +2,11 @@
 
 import { useCallback } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { BarChart3 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PageHeader } from "@/components/shared/PageHeader";
+import { EmptyState } from "@/components/shared/EmptyState";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 import { CRMReports } from "@/components/crm/reports/CRMReports";
 import { ReportCatalog } from "./ReportCatalog";
 import { MyReportsList } from "./MyReportsList";
@@ -17,6 +20,17 @@ export function ReportsHub() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const { can, isLoading: permissionsLoading } = usePermissions();
+
+  if (!permissionsLoading && !can("view_report_center")) {
+    return (
+      <EmptyState
+        icon={BarChart3}
+        title="No access"
+        description="You don't have permission to view Reports."
+      />
+    );
+  }
 
   const raw = searchParams.get("tab") ?? "dashboard";
   const active: TabKey = (TAB_KEYS as readonly string[]).includes(raw)

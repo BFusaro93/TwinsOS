@@ -3,7 +3,9 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { AlertCircle, ArrowLeft, Download, FileSpreadsheet, FileText, Play, Plus, Save, Trash2, X } from "lucide-react";
+import { AlertCircle, ArrowLeft, BarChart3, Download, FileSpreadsheet, FileText, Play, Plus, Save, Trash2, X } from "lucide-react";
+import { EmptyState } from "@/components/shared/EmptyState";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   AlertDialog,
@@ -74,6 +76,7 @@ const FORMAT_RULE_OP_OPTIONS: { value: FormatRuleOp; label: string }[] = [
 
 export function CustomAnalysisBuilder({ reportId }: { reportId?: string }) {
   const router = useRouter();
+  const { can, isLoading: permissionsLoading } = usePermissions();
   const { data: existing, isLoading: loadingExisting } = useCustomReport(reportId);
   const createReport = useCreateCustomReport();
   const updateReport = useUpdateCustomReport();
@@ -306,6 +309,16 @@ export function CustomAnalysisBuilder({ reportId }: { reportId?: string }) {
   };
 
   const saving = createReport.isPending || updateReport.isPending;
+
+  if (!permissionsLoading && !can("manage_report_center")) {
+    return (
+      <EmptyState
+        icon={BarChart3}
+        title="No access"
+        description="You don't have permission to manage custom analyses."
+      />
+    );
+  }
 
   if (reportId && loadingExisting) {
     return (

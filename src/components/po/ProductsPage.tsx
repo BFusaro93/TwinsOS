@@ -30,6 +30,7 @@ import { formatCurrency } from "@/lib/utils";
 import { PRODUCT_CATEGORY_LABELS } from "@/lib/constants";
 import { toast } from "sonner";
 import { useProducts, useBulkImportProducts } from "@/lib/hooks/use-products";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 import type { ProductItem } from "@/types";
 
 const PRODUCTS_COLUMNS: ColumnDef[] = [
@@ -59,6 +60,12 @@ export function ProductsPage() {
   const { data: products, isLoading } = useProducts();
   const { mutateAsync: bulkImportProducts } = useBulkImportProducts();
   const { allowed: hasLandscapt } = useModuleAccess("landscapt");
+  // This page is shared with Equipt (/po/products) — an Equipt-only user has
+  // no crm_employees/roleId at all, so only apply the Landscapt permission
+  // check to users who actually have a CRM role. Everyone else (including
+  // Equipt purchasers) keeps their existing unrestricted access.
+  const { can, isAdmin, roleId } = usePermissions();
+  const canBulkEditProducts = isAdmin || !roleId || can("bulk_edit_products");
   const [selectedProduct, setSelectedProduct] = useState<ProductItem | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -140,9 +147,11 @@ export function ProductsPage() {
                 }
               }}
             />
-            <Button size="sm" variant="outline" onClick={() => setBulkPriceOpen(true)}>
-              Update Prices
-            </Button>
+            {canBulkEditProducts && (
+              <Button size="sm" variant="outline" onClick={() => setBulkPriceOpen(true)}>
+                Update Prices
+              </Button>
+            )}
             {hasLandscapt && (
               <Button size="sm" variant="outline" asChild>
                 <Link href="/crm/reports/materials-needed">

@@ -27,6 +27,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { exportCSVTemplate, readCSVFile } from "@/lib/csv";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 
 interface ImportExportMenuProps {
   /** Human-readable entity name, e.g. "Parts" */
@@ -179,6 +180,18 @@ export function ImportExportMenu({
 }: ImportExportMenuProps) {
   const fileRef = useRef<HTMLInputElement>(null);
 
+  // This component is shared across CRM (Landscapt) and Equipt/CMMS pages —
+  // an Equipt-only user has no crm_employees/roleId at all, so the generic
+  // export_lists/imports permission checks below only apply to users who
+  // actually have a CRM role; everyone else keeps unrestricted access.
+  // Callers that already have a more specific bulk-create permission (e.g.
+  // client_bulk_create) pass `hideImport` explicitly — respect that as-is
+  // rather than layering the generic `imports` check on top of it.
+  const { can, isAdmin, roleId } = usePermissions();
+  const hasCrmRole = !isAdmin && !!roleId;
+  const canExport = !hasCrmRole || can("export_lists");
+  const effectiveHideImport = hideImport ?? (hasCrmRole && !can("imports"));
+
   // Step 1: Mapping
   const [mappingOpen, setMappingOpen] = useState(false);
   const [rawRows, setRawRows] = useState<Record<string, string>[]>([]);
@@ -311,11 +324,13 @@ export function ImportExportMenu({
             {entityLabel}
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
-          <DropdownMenuItem onClick={onExport} className="gap-2 text-sm">
-            <Download className="h-3.5 w-3.5" />
-            Export CSV
-          </DropdownMenuItem>
-          {!hideImport && (
+          {canExport && (
+            <DropdownMenuItem onClick={onExport} className="gap-2 text-sm">
+              <Download className="h-3.5 w-3.5" />
+              Export CSV
+            </DropdownMenuItem>
+          )}
+          {!effectiveHideImport && (
             <>
               <DropdownMenuItem
                 onClick={() => fileRef.current?.click()}

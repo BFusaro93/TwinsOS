@@ -29,13 +29,6 @@ export const PERMISSION_TABS: Record<string, PermissionTab> = {
       report_access: {
         label: "Report Access",
         permissions: {
-          sa_dashboard: "SA Dashboard",
-          company_reports: "Company Reports",
-          crm_reports_home: "CRM Reports",
-          scheduling_reports_home: "Scheduling Reports",
-          accounting_reports_home: "Accounting Reports",
-          sales_manager_reports: "Sales Manager Reports",
-          sales_rep_reports: "Sales Rep Reports",
           view_report_center: "View Report Center",
           manage_report_center: "Manage Report Center",
         },
@@ -44,18 +37,10 @@ export const PERMISSION_TABS: Record<string, PermissionTab> = {
         label: "Other Access",
         permissions: {
           allow_roles_access: "Allow Roles Access",
-          websites: "Websites",
           export_lists: "Export Lists",
           quickbooks_resync: "QuickBooks Resync",
           bulk_edit_products: "Bulk Edit Products",
-          estimate_accepted_alert: "Estimate Accepted Alert",
           imports: "Imports",
-        },
-      },
-      marketplace_access: {
-        label: "Marketplace Access",
-        permissions: {
-          view_marketplace: "View Marketplace",
         },
       },
     },
