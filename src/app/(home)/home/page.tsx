@@ -48,13 +48,13 @@ function usePendingPlanRedirect() {
 }
 
 const INTERNAL_BOX =
-  "group flex flex-col items-center gap-5 rounded-2xl border-2 border-slate-200 bg-white p-10 shadow-sm transition-all duration-150 hover:border-brand-400 hover:shadow-lg";
+  "group flex w-full flex-col items-center gap-5 rounded-2xl border-2 border-slate-200 bg-white p-10 shadow-sm transition-all duration-150 hover:border-brand-400 hover:shadow-lg sm:w-60";
 
 const CREW_BOX =
   "group flex flex-col items-center gap-5 rounded-2xl border-2 border-slate-200 bg-white p-10 shadow-sm transition-all duration-150 hover:border-brand-400 hover:shadow-lg";
 
 const EXTERNAL_BOX =
-  "group flex flex-col items-center gap-4 rounded-2xl border-2 border-slate-200 bg-white p-8 shadow-sm transition-all duration-150 hover:border-slate-400 hover:shadow-lg";
+  "group flex w-full flex-col items-center gap-4 rounded-2xl border-2 border-slate-200 bg-white p-8 shadow-sm transition-all duration-150 hover:border-slate-400 hover:shadow-lg sm:w-56";
 
 function CrewHome() {
   const { logoDataUrl, orgName } = useSettingsStore();
@@ -139,7 +139,7 @@ export default function HomePage() {
       </div>
 
       {/* Primary app boxes */}
-      <div className="grid w-full max-w-6xl grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="flex w-full max-w-6xl flex-wrap justify-center gap-5">
         <Link href="/dashboards" className={INTERNAL_BOX}>
           <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-brand-50 text-brand-500 transition-colors group-hover:bg-brand-100">
             <BarChart2 className="h-8 w-8" />
@@ -200,7 +200,7 @@ export default function HomePage() {
       </div>
 
       {/* External app shortcuts */}
-      <div className="mt-5 grid w-full max-w-5xl grid-cols-1 gap-5 sm:grid-cols-3">
+      <div className="mt-5 flex w-full max-w-5xl flex-wrap justify-center gap-5">
         <Link href="/settings" className={EXTERNAL_BOX}>
           <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-100 text-slate-500 transition-colors group-hover:bg-slate-200">
             <Settings className="h-6 w-6" />
