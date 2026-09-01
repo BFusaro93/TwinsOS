@@ -1,12 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, Minimize2, Maximize2 } from "lucide-react";
+import { Plus, Minimize2, Maximize2, UserSearch } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/shared/PageHeader";
+import { EmptyState } from "@/components/shared/EmptyState";
 import { LeadsList } from "@/components/crm/leads/LeadsList";
 import { LeadsListView } from "@/components/crm/leads/LeadsListView";
 import { ImportExportMenu } from "@/components/shared/ImportExportMenu";
+import { PermissionGate } from "@/components/shared/PermissionGate";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 import { exportCSV } from "@/lib/csv";
 import { useLeads, useBulkImportLeads } from "@/lib/hooks/use-clients";
 import { cn } from "@/lib/utils";
@@ -19,6 +22,7 @@ const LEAD_TEMPLATE_COLUMNS = [
 ];
 
 export default function LeadsPage() {
+  const { can, isLoading: permissionsLoading } = usePermissions();
   const { data: leads } = useLeads();
   const { mutateAsync: bulkImportLeads } = useBulkImportLeads();
   const [viewMode, setViewMode] = useState<"table" | "list">("list");
@@ -47,6 +51,16 @@ export default function LeadsPage() {
       </Button>
     </div>
   );
+
+  if (!permissionsLoading && !can("lead_list")) {
+    return (
+      <EmptyState
+        icon={UserSearch}
+        title="No access"
+        description="You don't have permission to view Leads."
+      />
+    );
+  }
 
   return (
     <div className="flex h-full flex-col gap-4">
@@ -84,11 +98,14 @@ export default function LeadsPage() {
                 if (skipped > 0) parts.push(`${skipped} row${skipped !== 1 ? "s" : ""} skipped (missing display name)`);
                 toast[skipped > 0 ? "warning" : "success"](parts.join(", ") + ".");
               }}
+              hideImport={!can("lead_bulk_create")}
             />
-            <Button size="sm" onClick={() => setNewOpen(true)}>
-              <Plus className="mr-1.5 h-4 w-4" />
-              New Lead
-            </Button>
+            <PermissionGate permission="lead_add">
+              <Button size="sm" onClick={() => setNewOpen(true)}>
+                <Plus className="mr-1.5 h-4 w-4" />
+                New Lead
+              </Button>
+            </PermissionGate>
           </div>
         }
       />

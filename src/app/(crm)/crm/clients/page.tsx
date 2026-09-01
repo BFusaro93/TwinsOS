@@ -16,6 +16,8 @@ import { useClients, useBulkImportClients } from "@/lib/hooks/use-clients";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import type { Client } from "@/types/crm";
+import { usePermissions } from "@/lib/hooks/use-permissions";
+import { PermissionGate } from "@/components/shared/PermissionGate";
 
 const CLIENT_TEMPLATE_COLUMNS = [
   "displayName", "accountType", "primaryPhone", "primaryEmail",
@@ -25,6 +27,7 @@ const CLIENT_TEMPLATE_COLUMNS = [
 ];
 
 export default function ClientsPage() {
+  const { can, isLoading: permissionsLoading } = usePermissions();
   const { data: clients } = useClients();
   const { mutateAsync: bulkImportClients } = useBulkImportClients();
   const [selected, setSelected] = useState<Client | null>(null);
@@ -54,6 +57,16 @@ export default function ClientsPage() {
       </Button>
     </div>
   );
+
+  if (!permissionsLoading && !can("client_list")) {
+    return (
+      <EmptyState
+        icon={Users}
+        title="No access"
+        description="You don't have permission to view Clients."
+      />
+    );
+  }
 
   return (
     <div className="flex h-full flex-col gap-4">
@@ -99,11 +112,14 @@ export default function ClientsPage() {
                   toast.success(`Successfully imported ${inserted} client${inserted !== 1 ? "s" : ""}.`);
                 }
               }}
+              hideImport={!can("client_bulk_create")}
             />
-            <Button size="sm" onClick={() => setNewOpen(true)}>
-              <Plus className="mr-1.5 h-4 w-4" />
-              New Client
-            </Button>
+            <PermissionGate permission="client_add">
+              <Button size="sm" onClick={() => setNewOpen(true)}>
+                <Plus className="mr-1.5 h-4 w-4" />
+                New Client
+              </Button>
+            </PermissionGate>
           </div>
         }
       />

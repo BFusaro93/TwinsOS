@@ -1829,10 +1829,12 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
           <span className="font-semibold text-sm text-slate-800">
             Estimates ({(estimates ?? []).length})
           </span>
-          <Button variant="ghost" size="sm" className="h-6 px-2 text-xs text-brand-600"
-            onClick={() => setNewEstimateOpen(true)}>
-            <Plus className="mr-0.5 h-3 w-3" /> Add an Estimate
-          </Button>
+          <PermissionGate permission="lead_estimates">
+            <Button variant="ghost" size="sm" className="h-6 px-2 text-xs text-brand-600"
+              onClick={() => setNewEstimateOpen(true)}>
+              <Plus className="mr-0.5 h-3 w-3" /> Add an Estimate
+            </Button>
+          </PermissionGate>
         </div>
         <div className="divide-y">
           {(estimates ?? []).length === 0 ? (
@@ -2169,10 +2171,12 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
               <span className="rounded-full bg-white/20 px-1.5 py-0.5 text-[10px] font-medium text-white">{(contracts ?? []).length}</span>
               <button className="text-[11px] text-white/70 hover:text-white" onClick={() => onSwitchTab?.("contracts")}>All</button>
             </div>
-            <Button variant="ghost" size="sm" className="h-6 px-2 text-xs text-white/80 hover:text-white hover:bg-white/10"
-              onClick={() => setAddingContract(true)}>
-              <Plus className="mr-0.5 h-3 w-3" /> Add a Contract
-            </Button>
+            <PermissionGate permission="client_add_contract">
+              <Button variant="ghost" size="sm" className="h-6 px-2 text-xs text-white/80 hover:text-white hover:bg-white/10"
+                onClick={() => setAddingContract(true)}>
+                <Plus className="mr-0.5 h-3 w-3" /> Add a Contract
+              </Button>
+            </PermissionGate>
           </div>
 
           <div className="divide-y">
@@ -3205,15 +3209,17 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
                   {expanded ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
                 </Button>
               )}
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-7 text-xs"
-                onClick={() => setEditOpen(true)}
-              >
-                <Pencil className="mr-1 h-3 w-3" />
-                Edit
-              </Button>
+              <PermissionGate permission={isLead ? "lead_allow_edit" : "client_allow_edit"}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={() => setEditOpen(true)}
+                >
+                  <Pencil className="mr-1 h-3 w-3" />
+                  Edit
+                </Button>
+              </PermissionGate>
 
               {/* Send split button */}
               <div className="flex items-center">
@@ -3523,12 +3529,14 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
         <div className="rounded-lg border border-slate-200 bg-white px-4 py-3">
           <div className="mb-2 flex items-center justify-between">
             <span className="text-xs font-semibold text-slate-600">Office Notes</span>
-            <button
-              className="text-[10px] text-brand-600 hover:underline"
-              onClick={() => setEditOpen(true)}
-            >
-              Edit
-            </button>
+            <PermissionGate permission={isLead ? "lead_allow_edit" : "client_allow_edit"}>
+              <button
+                className="text-[10px] text-brand-600 hover:underline"
+                onClick={() => setEditOpen(true)}
+              >
+                Edit
+              </button>
+            </PermissionGate>
           </div>
           {client.officeNotes ? (
             <p className="text-xs text-slate-700 whitespace-pre-line leading-relaxed">{client.officeNotes}</p>
@@ -3547,14 +3555,16 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
             <UserCheck className="h-4 w-4 shrink-0" />
             <span>This is a <strong>lead</strong>. Convert to a client to schedule jobs and create invoices.</span>
           </div>
-          <Button
-            size="sm"
-            className="h-7 shrink-0 bg-yellow-600 text-xs text-white hover:bg-yellow-700"
-            onClick={handleConvert}
-            disabled={converting}
-          >
-            {converting ? "Converting…" : "Convert to Client"}
-          </Button>
+          <PermissionGate permission="lead_convert_close">
+            <Button
+              size="sm"
+              className="h-7 shrink-0 bg-yellow-600 text-xs text-white hover:bg-yellow-700"
+              onClick={handleConvert}
+              disabled={converting}
+            >
+              {converting ? "Converting…" : "Convert to Client"}
+            </Button>
+          </PermissionGate>
         </div>
       )}
 

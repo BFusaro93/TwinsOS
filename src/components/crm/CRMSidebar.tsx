@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { useUIStore, useCurrentUserStore } from "@/stores";
 import { useSettingsStore } from "@/stores/settings-store";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 import { BrandMark } from "@/components/shared/BrandMark";
 import {
   ArrowLeft,
@@ -54,6 +55,9 @@ interface NavItem {
   href: string;
   icon: LucideIcon;
   comingSoon?: boolean;
+  /** Permission key gating this item — hidden entirely when the current
+   *  user lacks it (admins always pass, per usePermissions()). */
+  permission?: string;
 }
 
 interface NavSection {
@@ -71,8 +75,8 @@ export const CRM_NAV: NavSection[] = [
   {
     label: "CRM",
     items: [
-      { label: "Clients",   href: "/crm/clients",   icon: UserRound },
-      { label: "Leads",     href: "/crm/leads",     icon: UserSearch },
+      { label: "Clients",   href: "/crm/clients",   icon: UserRound, permission: "client_list" },
+      { label: "Leads",     href: "/crm/leads",     icon: UserSearch, permission: "lead_list" },
       { label: "Estimates",  href: "/crm/estimates",           icon: ClipboardSignature },
       { label: "Tickets",   href: "/crm/tickets",   icon: Ticket },
       { label: "Calls",     href: "/crm/calls",     icon: Phone },
@@ -151,6 +155,7 @@ export function CRMSidebar() {
   const { sidebarCollapsed } = useUIStore();
   const { logoDataUrl, orgName } = useSettingsStore();
   const { currentUser } = useCurrentUserStore();
+  const { can } = usePermissions();
 
   // Several nav items share a path prefix with siblings (e.g. "Settings" at
   // /crm/settings and "Documents" at /crm/settings/documents) — only the
@@ -203,7 +208,7 @@ export function CRMSidebar() {
                 {section.label}
               </p>
             )}
-            {section.items.map((item) => {
+            {section.items.filter((item) => !item.permission || can(item.permission)).map((item) => {
               const isActive = item.href === activeHref;
               const Icon = item.icon;
 

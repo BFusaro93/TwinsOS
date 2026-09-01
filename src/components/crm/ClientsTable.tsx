@@ -670,10 +670,12 @@ export function ClientsTable({ onSelect }: Props) {
                 <Tag className="h-3.5 w-3.5 text-slate-400" />
                 Add / Remove Tags
               </button>
-              <button className="flex w-full items-center gap-2 px-2 py-1.5 text-sm hover:bg-slate-50 rounded" onClick={() => setBulkEditOpen(true)}>
-                <Pencil className="h-3.5 w-3.5 text-slate-400" />
-                Bulk Edit Field
-              </button>
+              {can("client_bulk_edit") && (
+                <button className="flex w-full items-center gap-2 px-2 py-1.5 text-sm hover:bg-slate-50 rounded" onClick={() => setBulkEditOpen(true)}>
+                  <Pencil className="h-3.5 w-3.5 text-slate-400" />
+                  Bulk Edit Field
+                </button>
+              )}
               <DropdownMenuSeparator />
               {canActivateDeactivate && (
                 <>

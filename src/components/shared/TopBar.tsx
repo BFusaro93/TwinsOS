@@ -32,6 +32,7 @@ import { ImpersonationBanner } from "@/components/shared/ImpersonationBanner";
 import { SupportChatWidget } from "@/components/shared/SupportChatWidget";
 import { useUsers } from "@/lib/hooks/use-users";
 import { useSyncCurrentUser } from "@/lib/hooks/use-current-user";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 
 const ROLE_LABELS: Record<string, string> = {
   admin: "Admin",
@@ -128,13 +129,16 @@ function QuickAddMenu() {
   const pathname = usePathname();
   const { currentUser } = useCurrentUserStore();
   const { open: openQuickAdd } = useQuickAddStore();
+  const { can } = usePermissions();
   const isCRM = pathname.startsWith("/crm");
 
-  const items = currentUser.role === "crew"
-    ? CREW_QUICK_ADD
-    : isCRM
-      ? CRM_QUICK_ADD
-      : EQUIPT_QUICK_ADD;
+  const items = (
+    currentUser.role === "crew"
+      ? CREW_QUICK_ADD
+      : isCRM
+        ? CRM_QUICK_ADD
+        : EQUIPT_QUICK_ADD
+  ).filter((item) => item.quickAdd !== "client" || can("client_add"));
 
   return (
     <DropdownMenu>

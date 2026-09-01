@@ -322,6 +322,7 @@ export function LeadsList({ newDialogOpen, onNewDialogOpenChange, onSelect }: Le
   // delete action anywhere for leads (same reasoning as client_allow_delete
   // on ClientsTable.tsx).
   const canCloseLead = can("lead_allow_delete");
+  const canConvertLead = can("lead_convert_close");
   const { fields: FILTER_FIELDS } = useLeadFilterFields();
   const [search, setSearch] = useState("");
   const [internalDialogOpen, setInternalDialogOpen] = useState(false);
@@ -546,9 +547,11 @@ export function LeadsList({ newDialogOpen, onNewDialogOpenChange, onSelect }: Le
                     )}
                     <td className="px-4 py-2.5">
                       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100">
-                        <Button size="sm" variant="outline" className="h-6 gap-1 px-2 text-[11px]" onClick={(e) => { e.stopPropagation(); setConvertLead(lead); }}>
-                          <UserCheck className="h-3 w-3" /> Convert
-                        </Button>
+                        {canConvertLead && (
+                          <Button size="sm" variant="outline" className="h-6 gap-1 px-2 text-[11px]" onClick={(e) => { e.stopPropagation(); setConvertLead(lead); }}>
+                            <UserCheck className="h-3 w-3" /> Convert
+                          </Button>
+                        )}
                         {canCloseLead && (
                           <Button size="sm" variant="ghost" className="h-6 gap-1 px-2 text-[11px] text-red-500 hover:text-red-700" onClick={(e) => { e.stopPropagation(); setCloseLead(lead); }}>
                             <XCircle className="h-3 w-3" /> Close

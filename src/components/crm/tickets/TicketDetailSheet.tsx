@@ -48,6 +48,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
+import { PermissionGate } from "@/components/shared/PermissionGate";
 import { AlertTriangle, Download, Trash2, UserPlus, X } from "lucide-react";
 import { toast } from "sonner";
 import type { CRMTicket, TicketStatus, TicketPriority, TicketType, NewTicketFormValues } from "@/types/crm-tickets";
@@ -277,16 +278,18 @@ function EditForm({ ticket, onCancel, onSaved }: EditFormProps) {
                 ))}
               </SelectContent>
             </Select>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-9 shrink-0 px-2.5"
-              onClick={() => setNewClientOpen(true)}
-              title="Create a new client and link it to this ticket"
-            >
-              <UserPlus className="h-3.5 w-3.5" />
-            </Button>
+            <PermissionGate permission="client_add">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-9 shrink-0 px-2.5"
+                onClick={() => setNewClientOpen(true)}
+                title="Create a new client and link it to this ticket"
+              >
+                <UserPlus className="h-3.5 w-3.5" />
+              </Button>
+            </PermissionGate>
           </div>
           <NewClientDialog
             open={newClientOpen}

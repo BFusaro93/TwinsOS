@@ -42,6 +42,9 @@ interface ImportExportMenuProps {
   templateFilename: string;
   /** Expected column names for basic import validation */
   requiredColumns?: string[];
+  /** Hide the Import CSV / Download Template actions (e.g. the caller lacks
+   *  a bulk-create permission) while still allowing Export. */
+  hideImport?: boolean;
 }
 
 /** Normalize a header string for fuzzy matching: lowercase, strip spaces/punctuation, collapse */
@@ -172,6 +175,7 @@ export function ImportExportMenu({
   templateColumns,
   templateFilename,
   requiredColumns,
+  hideImport,
 }: ImportExportMenuProps) {
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -311,21 +315,25 @@ export function ImportExportMenu({
             <Download className="h-3.5 w-3.5" />
             Export CSV
           </DropdownMenuItem>
-          <DropdownMenuItem
-            onClick={() => fileRef.current?.click()}
-            className="gap-2 text-sm"
-          >
-            <Upload className="h-3.5 w-3.5" />
-            Import CSV
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem
-            onClick={() => exportCSVTemplate(templateColumns, templateFilename)}
-            className="gap-2 text-sm"
-          >
-            <FileDown className="h-3.5 w-3.5" />
-            Download Template
-          </DropdownMenuItem>
+          {!hideImport && (
+            <>
+              <DropdownMenuItem
+                onClick={() => fileRef.current?.click()}
+                className="gap-2 text-sm"
+              >
+                <Upload className="h-3.5 w-3.5" />
+                Import CSV
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onClick={() => exportCSVTemplate(templateColumns, templateFilename)}
+                className="gap-2 text-sm"
+              >
+                <FileDown className="h-3.5 w-3.5" />
+                Download Template
+              </DropdownMenuItem>
+            </>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
 
