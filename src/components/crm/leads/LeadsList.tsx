@@ -44,6 +44,7 @@ import { cn, formatCurrency } from "@/lib/utils";
 import { Plus, UserCheck, Search, XCircle, Building2, Home, ChevronDown, X } from "lucide-react";
 import { toast } from "sonner";
 import type { Client } from "@/types/crm";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 import { useEstimates } from "@/lib/hooks/use-estimates";
 import { ColumnSelector, type ColumnDef } from "@/components/crm/shared/ColumnSelector";
 import { useColumnPrefs } from "@/lib/hooks/use-column-prefs";
@@ -315,6 +316,12 @@ interface LeadsListProps {
 export function LeadsList({ newDialogOpen, onNewDialogOpenChange, onSelect }: LeadsListProps = {}) {
   const { data: leads, isLoading } = useLeads();
   const { mutateAsync: bulkClose } = useBulkCloseLeadsAsLost();
+  const { can } = usePermissions();
+  // lead_allow_delete doubles as the gate for this app's closest equivalent
+  // to deleting a lead — closing it as lost — since there's no actual
+  // delete action anywhere for leads (same reasoning as client_allow_delete
+  // on ClientsTable.tsx).
+  const canCloseLead = can("lead_allow_delete");
   const { fields: FILTER_FIELDS } = useLeadFilterFields();
   const [search, setSearch] = useState("");
   const [internalDialogOpen, setInternalDialogOpen] = useState(false);
@@ -390,13 +397,15 @@ export function LeadsList({ newDialogOpen, onNewDialogOpenChange, onSelect }: Le
             <DropdownMenuContent align="end" className="w-52">
               <DropdownMenuLabel className="text-xs text-slate-400 font-normal">{selectedCount} selected</DropdownMenuLabel>
               <DropdownMenuSeparator />
-              <button
-                className="flex w-full items-center gap-2 px-2 py-1.5 text-sm hover:bg-slate-50 rounded text-red-600"
-                onClick={() => setBulkCloseOpen(true)}
-              >
-                <XCircle className="h-3.5 w-3.5" />
-                Close as Lost
-              </button>
+              {canCloseLead && (
+                <button
+                  className="flex w-full items-center gap-2 px-2 py-1.5 text-sm hover:bg-slate-50 rounded text-red-600"
+                  onClick={() => setBulkCloseOpen(true)}
+                >
+                  <XCircle className="h-3.5 w-3.5" />
+                  Close as Lost
+                </button>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
         ) : (
@@ -540,9 +549,11 @@ export function LeadsList({ newDialogOpen, onNewDialogOpenChange, onSelect }: Le
                         <Button size="sm" variant="outline" className="h-6 gap-1 px-2 text-[11px]" onClick={(e) => { e.stopPropagation(); setConvertLead(lead); }}>
                           <UserCheck className="h-3 w-3" /> Convert
                         </Button>
-                        <Button size="sm" variant="ghost" className="h-6 gap-1 px-2 text-[11px] text-red-500 hover:text-red-700" onClick={(e) => { e.stopPropagation(); setCloseLead(lead); }}>
-                          <XCircle className="h-3 w-3" /> Close
-                        </Button>
+                        {canCloseLead && (
+                          <Button size="sm" variant="ghost" className="h-6 gap-1 px-2 text-[11px] text-red-500 hover:text-red-700" onClick={(e) => { e.stopPropagation(); setCloseLead(lead); }}>
+                            <XCircle className="h-3 w-3" /> Close
+                          </Button>
+                        )}
                       </div>
                     </td>
                   </tr>

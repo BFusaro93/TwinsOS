@@ -28,6 +28,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { BulkTagDialog } from "@/components/crm/BulkTagDialog";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 import { ColumnSelector, type ColumnDef } from "@/components/crm/shared/ColumnSelector";
 import { useColumnPrefs } from "@/lib/hooks/use-column-prefs";
 import {
@@ -253,6 +254,12 @@ export function ClientsTable({ onSelect }: Props) {
   const { mutateAsync: bulkCancel } = useBulkCancelClients();
   const { mutateAsync: bulkActivate, isPending: bulkActivating } = useBulkActivateClients();
   const { mutateAsync: bulkUpdate } = useBulkUpdateClients();
+  const { can } = usePermissions();
+  // client_allow_delete doubles as the gate for this app's closest
+  // equivalent to deleting a client — activating/cancelling it — since
+  // there's no actual delete action anywhere; client_activate_deactivate
+  // grants the same thing under its own, more literal name.
+  const canActivateDeactivate = can("client_allow_delete") || can("client_activate_deactivate");
 
   const { data: crmServices = [] } = useCRMServices();
 
@@ -668,24 +675,28 @@ export function ClientsTable({ onSelect }: Props) {
                 Bulk Edit Field
               </button>
               <DropdownMenuSeparator />
-              <button
-                className="flex w-full items-center gap-2 px-2 py-1.5 text-sm hover:bg-slate-50 rounded text-green-700 disabled:opacity-50 disabled:pointer-events-none"
-                disabled={bulkActivating}
-                onClick={async () => {
-                  try {
-                    await bulkActivate(selectedClientIds);
-                    toast.success(`${selectedCount} client${selectedCount !== 1 ? "s" : ""} activated`);
-                    clearSelection();
-                  } catch { toast.error("Failed to activate"); }
-                }}
-              >
-                <CheckCircle className="h-3.5 w-3.5" />
-                {bulkActivating ? "Activating…" : "Activate Clients"}
-              </button>
-              <button className="flex w-full items-center gap-2 px-2 py-1.5 text-sm hover:bg-slate-50 rounded text-red-600" onClick={() => setBulkCancelOpen(true)}>
-                <Ban className="h-3.5 w-3.5" />
-                Cancel Clients
-              </button>
+              {canActivateDeactivate && (
+                <>
+                  <button
+                    className="flex w-full items-center gap-2 px-2 py-1.5 text-sm hover:bg-slate-50 rounded text-green-700 disabled:opacity-50 disabled:pointer-events-none"
+                    disabled={bulkActivating}
+                    onClick={async () => {
+                      try {
+                        await bulkActivate(selectedClientIds);
+                        toast.success(`${selectedCount} client${selectedCount !== 1 ? "s" : ""} activated`);
+                        clearSelection();
+                      } catch { toast.error("Failed to activate"); }
+                    }}
+                  >
+                    <CheckCircle className="h-3.5 w-3.5" />
+                    {bulkActivating ? "Activating…" : "Activate Clients"}
+                  </button>
+                  <button className="flex w-full items-center gap-2 px-2 py-1.5 text-sm hover:bg-slate-50 rounded text-red-600" onClick={() => setBulkCancelOpen(true)}>
+                    <Ban className="h-3.5 w-3.5" />
+                    Cancel Clients
+                  </button>
+                </>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
         ) : (
