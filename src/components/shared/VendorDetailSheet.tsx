@@ -15,6 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
+import { PermissionGate } from "@/components/shared/PermissionGate";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -129,28 +130,30 @@ function DetailsTab({ vendor, onUpdateNotes }: { vendor: Vendor; onUpdateNotes: 
         />
       </dl>
 
-      <Separator className="my-4" />
-      <div>
-        <div className="mb-2 flex items-center justify-between">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Notes</p>
-          <span
-            className={cn(
-              "flex items-center gap-1 text-xs font-medium text-green-600 transition-opacity duration-300",
-              notesSaved ? "opacity-100" : "opacity-0"
-            )}
-          >
-            <Check className="h-3 w-3" /> Saved
-          </span>
+      <PermissionGate permission="vendor_view_resource_notes">
+        <Separator className="my-4" />
+        <div>
+          <div className="mb-2 flex items-center justify-between">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Notes</p>
+            <span
+              className={cn(
+                "flex items-center gap-1 text-xs font-medium text-green-600 transition-opacity duration-300",
+                notesSaved ? "opacity-100" : "opacity-0"
+              )}
+            >
+              <Check className="h-3 w-3" /> Saved
+            </span>
+          </div>
+          <textarea
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            onBlur={saveNotes}
+            placeholder="Add notes about this vendor…"
+            rows={4}
+            className="w-full resize-none rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 placeholder:text-slate-400 focus:border-brand-400 focus:outline-none focus:ring-1 focus:ring-brand-400"
+          />
         </div>
-        <textarea
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
-          onBlur={saveNotes}
-          placeholder="Add notes about this vendor…"
-          rows={4}
-          className="w-full resize-none rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 placeholder:text-slate-400 focus:border-brand-400 focus:outline-none focus:ring-1 focus:ring-brand-400"
-        />
-      </div>
+      </PermissionGate>
 
       {/* W9 */}
       <Separator className="my-4" />
