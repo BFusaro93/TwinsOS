@@ -1,0 +1,1027 @@
+[
+  {
+    "key": "forms-summary",
+    "section": "forms",
+    "name": "Forms Summary",
+    "description": "Shows forms and the number of responses received in any given time frame."
+  },
+  {
+    "key": "paused-services",
+    "section": "schedule_lists",
+    "name": "Paused Services",
+    "description": "Shows jobs that have been placed on hold.",
+    "dataset": "rpt_jobs",
+    "columns": [
+      "client_name",
+      "service_names",
+      "job_type",
+      "sub_status",
+      "scheduled_date",
+      "crew_name",
+      "rate_cents",
+      "budgeted_hours"
+    ]
+  },
+  {
+    "key": "sales-activity-detail",
+    "section": "revenue",
+    "name": "Sales Activity Detail",
+    "description": "Shows which sales rep sold what service and to whom, with per-visit revenue detail.",
+    "dataset": "rpt_job_visits",
+    "columns": [
+      "sales_rep",
+      "completed_at",
+      "client_name",
+      "service_names",
+      "revenue_cents",
+      "man_hours",
+      "rev_per_man_hr_cents",
+      "service_city",
+      "service_zip"
+    ]
+  },
+  {
+    "key": "custom-package-renewal",
+    "section": "service",
+    "name": "Custom Package Renewal Report",
+    "description": "A list of packages with a renewal setting, ready to renew."
+  },
+  {
+    "key": "over-under",
+    "section": "service",
+    "name": "Over / Under Report",
+    "description": "Contract budgeted-to-date vs. invoiced-to-date revenue for each active contract."
+  },
+  {
+    "key": "product-service-usage",
+    "section": "service",
+    "name": "Product and Service Usage",
+    "description": "Shows quantity and amount for each service across three stages: Estimate, Job, and Invoice."
+  },
+  {
+    "key": "revenue-projection",
+    "section": "service",
+    "name": "Revenue and Budgeted Hours Projection",
+    "description": "Projects budgeted man hours and revenue for the next 12 months from currently scheduled visits."
+  },
+  {
+    "key": "client-timeline",
+    "section": "audits",
+    "name": "Client Timeline Report",
+    "description": "Shows every activity on client accounts — notes, calls, emails, invoices, payments, and visits.",
+    "dataset": "rpt_client_activity",
+    "columns": [
+      "occurred_at",
+      "activity_type",
+      "client_name",
+      "subject",
+      "amount_cents",
+      "status"
+    ]
+  },
+  {
+    "key": "lead-timeline",
+    "section": "audits",
+    "name": "Lead Timeline Report",
+    "description": "Shows every activity on lead accounts — notes, calls, emails, and estimates.",
+    "dataset": "rpt_client_activity",
+    "columns": [
+      "occurred_at",
+      "activity_type",
+      "client_name",
+      "subject",
+      "amount_cents",
+      "status"
+    ]
+  },
+  {
+    "key": "income-not-invoiced",
+    "section": "audits",
+    "name": "Income Not Invoiced",
+    "description": "Shows draft invoices — revenue already entered on a job but not yet finalized and sent to the client.",
+    "notes": [
+      "Draft invoices only. A row drops off once the invoice is finalized/sent (or the underlying client_uninvoiced_cents balance clears)."
+    ],
+    "dataset": "rpt_invoices",
+    "columns": [
+      "invoice_number",
+      "invoice_date",
+      "client_name",
+      "description",
+      "service_address",
+      "total_cents"
+    ]
+  },
+  {
+    "key": "visits-client-balance-due",
+    "section": "audits",
+    "name": "Visits — Client Has Balance Due",
+    "description": "Shows completed and in-progress visits for clients who still have an outstanding balance."
+  },
+  {
+    "key": "unapplied-payments",
+    "section": "audits",
+    "name": "Unapplied Payments",
+    "description": "Shows payments with money still unapplied to an invoice, including prepayments and credits.",
+    "dataset": "rpt_payments",
+    "columns": [
+      "payment_date",
+      "client_name",
+      "method",
+      "reference",
+      "amount_cents",
+      "unused_amount_cents"
+    ]
+  },
+  {
+    "key": "sales-commission-export",
+    "section": "audits",
+    "name": "Sales Commission Export",
+    "description": "Shows finalized invoices by sales rep for commission calculations, excluding sales tax.",
+    "notes": [
+      "Rows appear once an invoice is finalized (not draft or void), regardless of payment status. Amounts exclude sales tax."
+    ],
+    "dataset": "rpt_invoices",
+    "columns": [
+      "invoice_number",
+      "invoice_date",
+      "client_name",
+      "sales_rep",
+      "subtotal_cents",
+      "amount_paid_cents",
+      "under_contract"
+    ]
+  },
+  {
+    "key": "chemical-tracking-report",
+    "section": "service",
+    "name": "Chemical Tracking Report",
+    "description": "Post-application compliance record of chemicals actually applied — date, EPA #, quantities, conditions, applicator, and license number.",
+    "notes": [
+      "Applicator Name populates whenever an applicator is assigned to the application. Applicator License Number only populates if that employee had a license on file at the time. Application Start/End Time populate only when entered on the application record, independent of licensing.",
+      "Chemical Amount is the concentrate used; Solution Amount is the total mixed solution actually applied."
+    ],
+    "dataset": "rpt_chemical_applications",
+    "columns": [
+      "service_date",
+      "client_name",
+      "service_address",
+      "service_city",
+      "chemical_name",
+      "epa_registration_number",
+      "re_entry_interval",
+      "restricted_product",
+      "chemical_amount",
+      "solution_amount",
+      "unit_of_measure",
+      "targets",
+      "areas_treated",
+      "application_method",
+      "application_rate_label",
+      "temperature",
+      "wind_speed",
+      "wind_direction",
+      "ph_level",
+      "applicator_name",
+      "applicator_license_number",
+      "application_start_time",
+      "application_end_time",
+      "budgeted_concentrate_amount",
+      "used"
+    ]
+  },
+  {
+    "key": "planned-chemical-usage-report",
+    "section": "service",
+    "name": "Planned Chemical Usage Report",
+    "description": "Chemical quantities needed for scheduled (not-yet-completed) visits — use to load the truck before the day's chemical jobs."
+  },
+  {
+    "key": "material-resource-planning-report",
+    "section": "service",
+    "name": "Materials Needed for Upcoming Jobs",
+    "description": "For every product (chemical or general material): quantity needed for outstanding scheduled and waiting-list jobs, amount on hand, amount on order, and the resulting shortfall — with the ability to create a Requisition or PO directly from a shortfall.",
+    "notes": [
+      "Chemical quantities require an Area Custom Field under Settings > Chemical Tracking and a default Application Rate on the product. General materials come from each job's Products section.",
+      "Amount on Order sums line-item quantities on open Requisitions (pending approval/approved) and Purchase Orders (requested through partially fulfilled) for that product."
+    ]
+  },
+  {
+    "key": "client-balance",
+    "section": "client",
+    "name": "Client Balance",
+    "description": "Shows the clients that owe you and how much.",
+    "dataset": "rpt_clients",
+    "columns": [
+      "display_name",
+      "billing_address",
+      "billing_city",
+      "billing_state",
+      "billing_zip",
+      "primary_phone",
+      "sales_rep",
+      "balance_outstanding_cents"
+    ]
+  },
+  {
+    "key": "client-contact-list",
+    "section": "client",
+    "name": "Client Contact List",
+    "description": "Shows a client contact list with the ability to sort by account balance and sales rep.",
+    "dataset": "rpt_client_contacts",
+    "columns": [
+      "client_name",
+      "first_name",
+      "last_name",
+      "contact_type",
+      "phone",
+      "email",
+      "is_primary",
+      "sales_rep",
+      "balance_outstanding_cents"
+    ]
+  },
+  {
+    "key": "client-phone-list",
+    "section": "client",
+    "name": "Client Phone List",
+    "description": "Shows clients and their phone numbers, filterable by sales rep.",
+    "dataset": "rpt_clients",
+    "columns": [
+      "display_name",
+      "primary_phone",
+      "primary_email",
+      "billing_city",
+      "status",
+      "sales_rep",
+      "client_since"
+    ]
+  },
+  {
+    "key": "client-method-of-payment",
+    "section": "client",
+    "name": "Client Method of Payment",
+    "description": "Shows if a client typically pays by check or card.",
+    "dataset": "rpt_clients",
+    "columns": [
+      "display_name",
+      "status",
+      "payment_method",
+      "invoice_frequency",
+      "billing_terms",
+      "balance_outstanding_cents"
+    ]
+  },
+  {
+    "key": "client-referral",
+    "section": "client",
+    "name": "Client Referral",
+    "description": "Shows word-of-mouth referrals — who referred each client.",
+    "dataset": "rpt_clients",
+    "columns": [
+      "display_name",
+      "referred_by",
+      "client_since",
+      "status",
+      "sales_rep",
+      "billing_city"
+    ]
+  },
+  {
+    "key": "new-clients",
+    "section": "client",
+    "name": "New Clients Report",
+    "description": "Shows new clients in any defined time frame.",
+    "dataset": "rpt_clients",
+    "columns": [
+      "display_name",
+      "client_since",
+      "source",
+      "sales_rep",
+      "status",
+      "billing_city",
+      "billing_zip",
+      "primary_phone"
+    ]
+  },
+  {
+    "key": "terminations",
+    "section": "client",
+    "name": "Terminations Report",
+    "description": "Shows a list of clients who cancelled service, the date, and reason stated.",
+    "dataset": "rpt_clients",
+    "columns": [
+      "display_name",
+      "closed_at",
+      "cancellation_reason",
+      "client_since",
+      "sales_rep",
+      "source",
+      "balance_outstanding_cents"
+    ]
+  },
+  {
+    "key": "cancellation-count",
+    "section": "client",
+    "name": "Cancellation Count Report",
+    "description": "Shows how many cancellations occurred, broken down by reason, source, and sales rep."
+  },
+  {
+    "key": "new-client-count",
+    "section": "client",
+    "name": "New Client Count Report",
+    "description": "Shows new clients grouped by postal code, source, and sales rep."
+  },
+  {
+    "key": "clients-by-completed-jobs",
+    "section": "client",
+    "name": "Clients Report by Completed Jobs",
+    "description": "Shows which clients were served in any defined time frame.",
+    "dataset": "rpt_job_visits",
+    "columns": []
+  },
+  {
+    "key": "client-contracts",
+    "section": "client",
+    "name": "Client Contracts",
+    "description": "Shows a single-line summary of all client contracts including billing day and monthly amounts."
+  },
+  {
+    "key": "clients-leads-monthly-matrix",
+    "section": "client",
+    "name": "Clients/Leads Monthly Matrix",
+    "description": "New clients, new leads, conversion rate, and terminations for the last 3 months."
+  },
+  {
+    "key": "clients-leads-stats",
+    "section": "client",
+    "name": "Clients and Leads",
+    "description": "New leads, converted leads, average days to convert, and cancellations for a date range, plus current totals."
+  },
+  {
+    "key": "contract-service-usage",
+    "section": "service",
+    "name": "Contract Service Usage",
+    "description": "Shows bundled services included on each contract (e.g. 25 mowings) against actual completed visits, so you can see which contracts are running over.",
+    "notes": [
+      "Visits used counts a completed visit only if it's linked to a job service matching this bundled service — same logic as the Included Services tab on the contract."
+    ],
+    "dataset": "rpt_contract_service_usage",
+    "columns": [
+      "client_name",
+      "contract_title",
+      "contract_status",
+      "service_name",
+      "visits_included",
+      "visits_used",
+      "visits_remaining",
+      "is_over"
+    ]
+  },
+  {
+    "key": "estimates-by-stage",
+    "section": "estimates",
+    "name": "Estimates by Stage",
+    "description": "Shows all estimates in the pipeline with their stage, value, probability, and age.",
+    "dataset": "rpt_estimates",
+    "columns": [
+      "stage",
+      "estimate_number",
+      "description",
+      "estimate_date",
+      "client_name",
+      "client_status",
+      "source",
+      "total_cents",
+      "probability_pct",
+      "age_days",
+      "sales_rep"
+    ]
+  },
+  {
+    "key": "won-estimates-by-service",
+    "section": "estimates",
+    "name": "Accepted Estimates by Service",
+    "description": "Shows every service line on accepted and invoiced estimates with hours, cost, and value.",
+    "dataset": "rpt_estimate_line_items",
+    "columns": [
+      "service_name",
+      "estimate_number",
+      "estimate_date",
+      "client_name",
+      "qty",
+      "rate_cents",
+      "visits",
+      "total_budgeted_hours",
+      "total_cost_cents",
+      "total_cents",
+      "sales_rep"
+    ]
+  },
+  {
+    "key": "won-estimates-service-summary",
+    "section": "estimates",
+    "name": "Accepted Estimates by Service (Summary)",
+    "description": "Totals accepted and invoiced estimate lines by service — line count, value, hours, and cost.",
+    "dataset": "rpt_estimate_line_items",
+    "columns": []
+  },
+  {
+    "key": "estimate-value-vs-actual",
+    "section": "estimates",
+    "name": "Accepted Estimates — Estimated vs Invoiced Value",
+    "description": "Compares each accepted estimate's value against what was actually invoiced and paid."
+  },
+  {
+    "key": "close-ratios-by-sales-rep",
+    "section": "estimates",
+    "name": "Close Ratios by Sales Rep",
+    "description": "Shows each sales rep's win rate by estimate count and by dollar value for a date range."
+  },
+  {
+    "key": "sales-activity-last-7-days",
+    "section": "estimates",
+    "name": "Sales Activity (Last 7 Days)",
+    "description": "Shows estimates created or sent per day over the last 7 days."
+  },
+  {
+    "key": "invoiced-income-by-client",
+    "section": "financial",
+    "name": "Invoiced Income by Client",
+    "description": "Totals invoiced income per client — subtotal, tax, total, and amount paid.",
+    "dataset": "rpt_invoices",
+    "columns": []
+  },
+  {
+    "key": "invoices-with-balances",
+    "section": "financial",
+    "name": "Invoices with Balances",
+    "description": "Shows every open invoice with a balance due and how many days overdue it is.",
+    "dataset": "rpt_invoices",
+    "columns": [
+      "invoice_number",
+      "invoice_date",
+      "due_date",
+      "client_name",
+      "total_cents",
+      "amount_paid_cents",
+      "balance_cents",
+      "status",
+      "days_overdue"
+    ]
+  },
+  {
+    "key": "pre-payments",
+    "section": "financial",
+    "name": "Pre-Payments",
+    "description": "Shows prepayments received, how much has been applied, and what remains.",
+    "dataset": "rpt_payments",
+    "columns": [
+      "payment_date",
+      "client_name",
+      "method",
+      "amount_cents",
+      "applied_amount_cents",
+      "unused_amount_cents"
+    ]
+  },
+  {
+    "key": "profit-loss-accrual",
+    "section": "financial",
+    "name": "Profit / Loss — Accrual Basis",
+    "description": "Income by invoiced line item (accrual basis) less job material and field labor costs."
+  },
+  {
+    "key": "profit-loss-cash",
+    "section": "financial",
+    "name": "Profit / Loss — Cash Basis",
+    "description": "Income by payments received (cash basis) less job material and field labor costs."
+  },
+  {
+    "key": "sales-tax",
+    "section": "financial",
+    "name": "Sales Tax Report",
+    "description": "Shows taxable, non-taxable, and collected sales tax totals by month."
+  },
+  {
+    "key": "avb-hours-custom",
+    "section": "job_hours",
+    "name": "Actual v. Budgeted Hours (Custom Range)",
+    "description": "Shows visits in any date range you pick — defaults to month to date — with budgeted vs actual hours and revenue, grouped by crew.",
+    "notes": [
+      "Grouped by crew (Assigned Resources), with a subtotal row per crew.",
+      "Hours Variance is Budgeted Hours minus Actual Hours; negative means the visit ran over budget.",
+      "Defaults to month to date (the 1st through today) — pick your own From/To dates to run any range."
+    ],
+    "dataset": "rpt_job_visits"
+  },
+  {
+    "key": "job-costing-report",
+    "section": "job_costing",
+    "name": "Job Costing Report",
+    "description": "Shows the material and labor cost of each job with budget vs actual detail."
+  },
+  {
+    "key": "cogs",
+    "section": "job_costing",
+    "name": "Cost of Goods Sold Report",
+    "description": "Shows revenue and cost by service in any defined time frame."
+  },
+  {
+    "key": "job-cost-summary",
+    "section": "job_costing",
+    "name": "Job Cost Summary",
+    "description": "Shows completed visits with budgeted vs actual hours, revenue, and labor cost per visit.",
+    "dataset": "rpt_job_visits",
+    "columns": [
+      "scheduled_date",
+      "client_name",
+      "service_names",
+      "budget_methods",
+      "crew_name",
+      "men_count",
+      "budgeted_hours",
+      "actual_hours",
+      "man_hours",
+      "revenue_cents",
+      "actual_labor_cost_cents",
+      "rev_per_man_hr_cents",
+      "variance_hours"
+    ]
+  },
+  {
+    "key": "service-profitability-summary",
+    "section": "job_costing",
+    "name": "Service Profitability Summary",
+    "description": "Shows visit count, revenue, labor cost, and man-hours grouped by service.",
+    "notes": [
+      "Visits with multiple services are grouped by the combined service list."
+    ],
+    "dataset": "rpt_job_visits",
+    "columns": []
+  },
+  {
+    "key": "production-rate-accuracy",
+    "section": "job_costing",
+    "name": "Production Rate Accuracy",
+    "description": "Compares each service's assumed production rate (sq ft per man-hour) against what crews actually achieved, to flag rates that need recalibrating.",
+    "notes": [
+      "Only includes services set to the 'production_rate' budget method — manual-rate services have nothing to compare against.",
+      "Rate Variance is actual vs. assumed, as a percentage. Negative means the job took longer than the assumed rate predicted (the rate may be set too aggressively); positive means it went faster (the rate may be too conservative)."
+    ],
+    "dataset": "rpt_job_services",
+    "columns": [
+      "scheduled_date",
+      "client_name",
+      "service_name",
+      "service_category",
+      "qty",
+      "service_unit",
+      "assumed_production_rate",
+      "actual_production_rate",
+      "rate_variance_bps",
+      "budgeted_hours",
+      "job_actual_hours",
+      "man_count"
+    ]
+  },
+  {
+    "key": "wip-schedule",
+    "section": "job_costing",
+    "name": "WIP Report",
+    "description": "Work-in-progress schedule for Projects: percent complete by cost-to-cost, earned revenue, and whether each job is over- or under-billed.",
+    "notes": [
+      "% Complete is cost-to-date ÷ EAC (estimated cost at completion) — not the manual progress field on the project.",
+      "Over/(Under) Billed is billed to date minus earned revenue. Positive means billings are ahead of the work (healthy); negative means the work is ahead of billing (you're financing the job).",
+      "EAC is seeded from the linked estimate when a job is converted, then re-forecastable on the project — projects with no EAC set show 0% complete."
+    ],
+    "dataset": "rpt_projects_wip",
+    "columns": [
+      "name",
+      "status",
+      "client_name",
+      "contract_cents",
+      "eac_cents",
+      "estimated_gp_pct",
+      "cost_to_date_cents",
+      "pct_complete",
+      "earned_revenue_cents",
+      "billed_cents",
+      "over_under_billed_cents",
+      "remaining_to_bill_cents"
+    ]
+  },
+  {
+    "key": "job-hours-summary",
+    "section": "job_hours",
+    "name": "Job Hours Summary",
+    "description": "Shows total hours worked and labor cost by employee in any defined time frame.",
+    "dataset": "rpt_timesheets",
+    "columns": []
+  },
+  {
+    "key": "crew-hours-summary",
+    "section": "job_hours",
+    "name": "Crew Hours Summary",
+    "description": "Shows total hours worked and labor cost by crew in any defined time frame.",
+    "dataset": "rpt_timesheets",
+    "columns": []
+  },
+  {
+    "key": "timesheet-detail",
+    "section": "job_hours",
+    "name": "Timesheet Detail",
+    "description": "Shows individual clock-in/out entries with breaks, hours, and labor cost per employee.",
+    "dataset": "rpt_timesheets",
+    "columns": [
+      "work_date",
+      "member_name",
+      "crew_name",
+      "client_name",
+      "clocked_in_at",
+      "clocked_out_at",
+      "break_minutes",
+      "lunch_minutes",
+      "hours",
+      "labor_cost_cents"
+    ]
+  },
+  {
+    "key": "new-leads",
+    "section": "lead",
+    "name": "New Leads Report",
+    "description": "Shows new leads received in any defined time frame.",
+    "dataset": "rpt_clients",
+    "columns": [
+      "display_name",
+      "source",
+      "sales_rep",
+      "created_at",
+      "billing_city",
+      "primary_phone",
+      "primary_email"
+    ]
+  },
+  {
+    "key": "lead-aging-summary",
+    "section": "lead",
+    "name": "Lead Aging Summary",
+    "description": "Shows how long open leads have been sitting, bucketed by age and source."
+  },
+  {
+    "key": "closed-leads-summary",
+    "section": "lead",
+    "name": "Closed Leads Summary",
+    "description": "Shows leads that were closed without converting, grouped by reason.",
+    "notes": [
+      "Leads closed without ever converting to a client."
+    ]
+  },
+  {
+    "key": "company-scorecard",
+    "section": "lead",
+    "name": "Company Scorecard",
+    "description": "Month-by-month view of new leads, conversions, terminations, and running client totals.",
+    "notes": [
+      "New Leads counts accounts created that month; totals are as of month end."
+    ]
+  },
+  {
+    "key": "sales-summary-by-source",
+    "section": "lead",
+    "name": "Sales Summary by Source",
+    "description": "Shows lead, client, and cancellation counts by source with conversion percentage."
+  },
+  {
+    "key": "ar-aging",
+    "section": "receivables",
+    "name": "A/R Aging Report",
+    "description": "Buckets each client's open invoice balances by how many days past due they are."
+  },
+  {
+    "key": "ar-aging-snapshot",
+    "section": "receivables",
+    "name": "A/R Aging Snapshot",
+    "description": "Shows each client's outstanding balance alongside their most recent invoice and payment."
+  },
+  {
+    "key": "invoice-audit-summary",
+    "section": "revenue",
+    "name": "Invoice Audit Summary",
+    "description": "Shows every invoice line item in the period — what was billed, to whom, and for how much.",
+    "dataset": "rpt_invoice_line_items",
+    "columns": [
+      "client_name",
+      "invoice_number",
+      "invoice_date",
+      "name",
+      "description",
+      "qty",
+      "rate_cents",
+      "total_cents",
+      "invoice_status"
+    ]
+  },
+  {
+    "key": "payment-audit-summary",
+    "section": "revenue",
+    "name": "Payment Audit Summary",
+    "description": "Shows payments received per day, broken out by payment method."
+  },
+  {
+    "key": "credit-card-processing-fees",
+    "section": "revenue",
+    "name": "Credit Card Processing Fees",
+    "description": "Processing fees collected from clients on card payments — this is company revenue, tracked separately from the invoice amount it was collected alongside.",
+    "notes": [
+      "Only card payments carry a fee — ACH payments are always fee-free by design.",
+      "A fee of $0 on a card payment means the fee was waived or the balance was under the settings threshold."
+    ]
+  },
+  {
+    "key": "revenue-by-postal-code",
+    "section": "revenue",
+    "name": "Revenue by Postal Code",
+    "description": "Totals invoiced revenue by billing postal code.",
+    "dataset": "rpt_invoices",
+    "columns": []
+  },
+  {
+    "key": "revenue-by-service-summary",
+    "section": "revenue",
+    "name": "Revenue by Service Summary",
+    "description": "Shows invoiced revenue per service line item, broken out by month."
+  },
+  {
+    "key": "daily-production",
+    "section": "revenue",
+    "name": "Daily Production",
+    "description": "Shows completed visits with budgeted vs actual hours, man-hours, and revenue.",
+    "dataset": "rpt_job_visits",
+    "columns": [
+      "scheduled_date",
+      "completed_at",
+      "client_name",
+      "service_names",
+      "crew_name",
+      "men_count",
+      "budgeted_hours",
+      "actual_hours",
+      "man_hours",
+      "variance_hours",
+      "revenue_cents",
+      "sales_rep"
+    ]
+  },
+  {
+    "key": "sales-activity-summary",
+    "section": "revenue",
+    "name": "Sales Activity Summary",
+    "description": "Totals completed-visit revenue and man-hours by sales rep.",
+    "dataset": "rpt_job_visits",
+    "columns": []
+  },
+  {
+    "key": "approved-sales-by-sales-rep",
+    "section": "revenue",
+    "name": "Approved Sales by Sales Rep",
+    "description": "Totals sold jobs per sales rep — job count, service, product, and job totals.",
+    "notes": [
+      "Based on the job's Date Sold."
+    ],
+    "dataset": "rpt_jobs",
+    "columns": []
+  },
+  {
+    "key": "sales-by-date-sold",
+    "section": "revenue",
+    "name": "Sales by Date Sold (Detail)",
+    "description": "Shows each job sold in the period with its services, sales rep, source, and total.",
+    "dataset": "rpt_jobs",
+    "columns": [
+      "date_sold",
+      "job_number",
+      "client_name",
+      "service_names",
+      "job_type",
+      "sales_rep",
+      "source",
+      "total_cents"
+    ]
+  },
+  {
+    "key": "invoices-and-payments",
+    "section": "revenue",
+    "name": "Invoices and Payments",
+    "description": "Compares invoiced revenue to payments collected, month by month."
+  },
+  {
+    "key": "credit-card-charges",
+    "section": "revenue",
+    "name": "Credit Card Charges",
+    "description": "Shows credit card payments received, including processing fees where applicable."
+  },
+  {
+    "key": "employee-directory",
+    "section": "schedule_lists",
+    "name": "Employee Directory",
+    "description": "Shows employee contact info, employment status, and emergency contacts.",
+    "dataset": "rpt_employees",
+    "columns": [
+      "full_name",
+      "employment_status",
+      "user_type",
+      "phone",
+      "cell_phone",
+      "email",
+      "city",
+      "state",
+      "emergency_contact",
+      "emergency_phone"
+    ]
+  },
+  {
+    "key": "contractor-phone-list",
+    "section": "schedule_lists",
+    "name": "Contractor Phone List",
+    "description": "Shows contact info for everyone with contractor employment status.",
+    "dataset": "rpt_employees",
+    "columns": [
+      "full_name",
+      "phone",
+      "cell_phone",
+      "email",
+      "city",
+      "state",
+      "is_active"
+    ]
+  },
+  {
+    "key": "vendor-contact-list",
+    "section": "schedule_lists",
+    "name": "Vendor Contact List",
+    "description": "Shows vendors and subcontractors with their contact information.",
+    "dataset": "rpt_vendors",
+    "columns": [
+      "name",
+      "contact_name",
+      "phone",
+      "email",
+      "address",
+      "vendor_type",
+      "is_active"
+    ]
+  },
+  {
+    "key": "inventory-product-list",
+    "section": "schedule_lists",
+    "name": "Inventory Product List",
+    "description": "Shows inventory products with cost, price, and stock levels.",
+    "dataset": "rpt_products",
+    "columns": [
+      "name",
+      "part_number",
+      "category",
+      "unit_cost",
+      "price",
+      "quantity_on_hand",
+      "minimum_stock",
+      "vendor_name"
+    ]
+  },
+  {
+    "key": "non-inventory-product-list",
+    "section": "schedule_lists",
+    "name": "Non-Inventory Product List",
+    "description": "Shows non-inventory products with cost and price.",
+    "dataset": "rpt_products",
+    "columns": [
+      "name",
+      "part_number",
+      "category",
+      "unit_cost",
+      "price",
+      "vendor_name"
+    ]
+  },
+  {
+    "key": "call-ahead-required",
+    "section": "schedule_lists",
+    "name": "Call Ahead Required",
+    "description": "Scheduled jobs that require a call-ahead reminder before the crew arrives.",
+    "dataset": "rpt_jobs",
+    "columns": [
+      "scheduled_date",
+      "client_name",
+      "client_phone",
+      "service_address",
+      "service_city",
+      "crew_name",
+      "service_names"
+    ]
+  },
+  {
+    "key": "service-price-list",
+    "section": "schedule_lists",
+    "name": "Service Price List",
+    "description": "Shows the service catalog with rates, production rates, and targets.",
+    "dataset": "rpt_services",
+    "columns": [
+      "name",
+      "code",
+      "category",
+      "unit",
+      "default_rate_cents",
+      "production_rate_sqft_per_hr",
+      "target_rate_cents_per_hr",
+      "is_taxable"
+    ]
+  },
+  {
+    "key": "visits-report",
+    "section": "service",
+    "name": "Visits Report",
+    "description": "Shows all visits in any defined time frame with hours, revenue, and location detail.",
+    "dataset": "rpt_job_visits",
+    "columns": [
+      "scheduled_date",
+      "client_name",
+      "service_names",
+      "crew_name",
+      "status",
+      "budgeted_hours",
+      "actual_hours",
+      "man_hours",
+      "revenue_cents",
+      "rev_per_man_hr_cents",
+      "service_city",
+      "service_zip"
+    ]
+  },
+  {
+    "key": "backlog-services",
+    "section": "service",
+    "name": "Backlog Services",
+    "description": "Shows scheduled visits that have not been completed as of a cutoff date.",
+    "notes": [
+      "Visits still in Scheduled status on or before the cutoff — work waiting to be completed."
+    ],
+    "dataset": "rpt_job_visits",
+    "columns": [
+      "scheduled_date",
+      "client_name",
+      "service_names",
+      "crew_name",
+      "budgeted_hours",
+      "revenue_cents",
+      "service_city"
+    ]
+  },
+  {
+    "key": "client-count-by-service",
+    "section": "service",
+    "name": "Client Count by Service",
+    "description": "Shows how many clients receive each service and the share of the client base."
+  },
+  {
+    "key": "client-services-report",
+    "section": "service",
+    "name": "Client Services Report",
+    "description": "Shows the active services each client is signed up for.",
+    "dataset": "rpt_jobs",
+    "columns": [
+      "client_name",
+      "job_type",
+      "service_names",
+      "scheduled_date",
+      "crew_name",
+      "rate_cents",
+      "budgeted_hours",
+      "service_address",
+      "service_city",
+      "service_zip"
+    ]
+  },
+  {
+    "key": "package-summary",
+    "section": "service",
+    "name": "Package Summary Report",
+    "description": "Shows visit progress and earned vs pending revenue for each service package."
+  },
+  {
+    "key": "skipped-visits",
+    "section": "service",
+    "name": "Skipped Visits Report",
+    "description": "Shows visits that were skipped in any defined time frame, with the reason.",
+    "dataset": "rpt_job_visits",
+    "columns": [
+      "scheduled_date",
+      "client_name",
+      "service_names",
+      "crew_name",
+      "skip_reason",
+      "budgeted_hours",
+      "revenue_cents"
+    ]
+  }
+]
