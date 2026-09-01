@@ -13,9 +13,13 @@ interface Props {
   onRemove: (tag: string) => void;
   disabled?: boolean;
   className?: string;
+  /** Whether the user may commit a tag that isn't already in `suggestions`
+   *  (gated by the `tags_create_tag` permission). Picking an existing
+   *  suggestion is always allowed. Defaults to true. */
+  canCreateNew?: boolean;
 }
 
-export function TagEditor({ tags, suggestions, onAdd, onRemove, disabled, className }: Props) {
+export function TagEditor({ tags, suggestions, onAdd, onRemove, disabled, className, canCreateNew = true }: Props) {
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
@@ -27,6 +31,7 @@ export function TagEditor({ tags, suggestions, onAdd, onRemove, disabled, classN
   function commit(value: string) {
     const trimmed = value.trim();
     if (!trimmed || tags.includes(trimmed)) return;
+    if (!canCreateNew && !suggestions.includes(trimmed)) return;
     onAdd(trimmed);
     setInput("");
   }
@@ -96,7 +101,9 @@ export function TagEditor({ tags, suggestions, onAdd, onRemove, disabled, classN
           )}
           {filtered.length === 0 && input.trim() && (
             <div className="absolute left-0 top-full z-50 mt-1 w-48 rounded-md border bg-white shadow-md px-3 py-2 text-xs text-slate-400">
-              No matching tags. Add tags in Settings.
+              {canCreateNew
+                ? "No matching tags. Add tags in Settings."
+                : "No matching tags. You don't have permission to create new tags."}
             </div>
           )}
         </div>

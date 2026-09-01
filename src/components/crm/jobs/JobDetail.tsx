@@ -90,6 +90,7 @@ import { AttachmentsSection } from "@/components/shared/AttachmentsSection";
 import { SnowRateTiersEditor } from "@/components/crm/jobs/SnowRateTiersEditor";
 import { SnowMonthlyBillingLink } from "@/components/crm/jobs/SnowMonthlyBillingLink";
 import { PermissionGate } from "@/components/shared/PermissionGate";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 
 const STATUS_COLOR: Record<string, string> = {
   scheduled:   "bg-blue-100 text-blue-700",
@@ -224,6 +225,7 @@ interface Props {
 
 export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }: Props) {
   const router = useRouter();
+  const { can } = usePermissions();
   const { data: job, isLoading, error: jobError } = useJobDetail(jobId);
   const { data: visits = [], isLoading: visitsLoading } = useJobVisits(jobId);
   const { data: linkedProject } = useProject(job?.projectId ?? "");
@@ -1338,20 +1340,22 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                               {s.rateCents != null ? formatCurrency((s.rateCents ?? 0) * (s.qty ?? 1)) : "—"}
                             </td>
                             <td className="px-4 py-3">
-                              <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100">
-                                <button
-                                  onClick={() => startEditSvc(s)}
-                                  className="rounded p-1 hover:bg-slate-100 text-slate-400 hover:text-slate-700"
-                                >
-                                  <Pencil className="h-3.5 w-3.5" />
-                                </button>
-                                <button
-                                  onClick={() => void handleDeleteSvc(s.id)}
-                                  className="rounded p-1 hover:bg-red-50 text-slate-400 hover:text-red-500"
-                                >
-                                  <Trash2 className="h-3.5 w-3.5" />
-                                </button>
-                              </div>
+                              {(job.jobType !== "package" || can("job_add_remove_custom_package_line_items")) && (
+                                <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100">
+                                  <button
+                                    onClick={() => startEditSvc(s)}
+                                    className="rounded p-1 hover:bg-slate-100 text-slate-400 hover:text-slate-700"
+                                  >
+                                    <Pencil className="h-3.5 w-3.5" />
+                                  </button>
+                                  <button
+                                    onClick={() => void handleDeleteSvc(s.id)}
+                                    className="rounded p-1 hover:bg-red-50 text-slate-400 hover:text-red-500"
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </button>
+                                </div>
+                              )}
                             </td>
                           </>
                         )}
@@ -1440,7 +1444,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                   )}
                 </table>
               </div>
-              {!addingSvc && (
+              {!addingSvc && (job.jobType !== "package" || can("job_add_remove_custom_package_line_items")) && (
                 <div>
                   <Button size="sm" variant="outline" className="h-7 text-xs"
                     onClick={() => { setAddingSvc(true); setNewSvcId(""); setNewSvcRate(""); setNewSvcQty("1"); setNewSvcBHrs("0"); }}>

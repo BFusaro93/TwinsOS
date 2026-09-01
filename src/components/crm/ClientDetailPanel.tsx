@@ -3181,6 +3181,7 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
                 suggestions={orgTags}
                 onAdd={(tag) => addTag({ clientId, tag })}
                 onRemove={(tag) => removeTag({ clientId, tag })}
+                canCreateNew={can("tags_create_tag")}
               />
               <div className="flex flex-wrap gap-x-6 gap-y-0.5">
                 {client.accountNumber && <InfoRow label="Account #" value={client.accountNumber} />}

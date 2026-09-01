@@ -44,7 +44,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
-import { ChevronDown, Plus, RotateCcw, Search, UserCheck, X } from "lucide-react";
+import { ChevronDown, Plus, RotateCcw, Search, Ticket as TicketIcon, UserCheck, X } from "lucide-react";
+import { EmptyState } from "@/components/shared/EmptyState";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 import { toast } from "sonner";
 import { useOrgList } from "@/lib/hooks/use-org-lists";
 import type {
@@ -450,6 +452,8 @@ export function TicketsList(props: Props) {
 }
 
 function TicketsListInner({ clientId, typeFilter, title = "Tickets", description = "Support and service tickets" }: Props) {
+  const { can, isLoading: permissionsLoading } = usePermissions();
+  const canAdd = typeFilter === "call" ? can("tickets_add_calls") : can("tickets_add_notes");
   const listTypeLabel = typeFilter === "call" ? "Call" : typeFilter === "event" ? "Event" : typeFilter === "text" ? "Text" : "Ticket";
   const { data: categoryOptions } = useOrgList("ticket_categories");
   const categories = categoryOptions && categoryOptions.length > 0
@@ -607,6 +611,16 @@ function TicketsListInner({ clientId, typeFilter, title = "Tickets", description
     setReassignId("");
   }
 
+  if (!permissionsLoading && !can("tickets_view_modify")) {
+    return (
+      <EmptyState
+        icon={TicketIcon}
+        title="No access"
+        description={`You don't have permission to view ${title}.`}
+      />
+    );
+  }
+
   return (
     <div className="flex h-full flex-col gap-4">
       {/* Page header */}
@@ -644,10 +658,12 @@ function TicketsListInner({ clientId, typeFilter, title = "Tickets", description
                 }
               }}
             />
-            <Button size="sm" className="h-8 text-xs" onClick={() => setDialogOpen(true)}>
-              <Plus className="mr-1 h-3.5 w-3.5" />
-              Add {typeFilter === "call" ? "Call" : typeFilter === "event" ? "Event" : typeFilter === "text" ? "Text" : "Ticket"}
-            </Button>
+            {canAdd && (
+              <Button size="sm" className="h-8 text-xs" onClick={() => setDialogOpen(true)}>
+                <Plus className="mr-1 h-3.5 w-3.5" />
+                Add {typeFilter === "call" ? "Call" : typeFilter === "event" ? "Event" : typeFilter === "text" ? "Text" : "Ticket"}
+              </Button>
+            )}
           </div>
         }
       />
@@ -737,11 +753,15 @@ function TicketsListInner({ clientId, typeFilter, title = "Tickets", description
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="w-48">
-              <DropdownMenuItem onSelect={() => setDialogOpen(true)}>
-                <Plus className="mr-2 h-3.5 w-3.5" />
-                Add {typeFilter === "call" ? "Call" : typeFilter === "event" ? "Event" : typeFilter === "text" ? "Text" : "Ticket"}
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
+              {canAdd && (
+                <>
+                  <DropdownMenuItem onSelect={() => setDialogOpen(true)}>
+                    <Plus className="mr-2 h-3.5 w-3.5" />
+                    Add {typeFilter === "call" ? "Call" : typeFilter === "event" ? "Event" : typeFilter === "text" ? "Text" : "Ticket"}
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                </>
+              )}
               <DropdownMenuItem
                 disabled={!someSelected}
                 onSelect={() => bulkSetStatus("open")}

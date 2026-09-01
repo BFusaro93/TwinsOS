@@ -140,14 +140,12 @@ export const PERMISSION_TABS: Record<string, PermissionTab> = {
           tickets_view_modify: "View/Modify Tickets",
           tickets_add_notes: "Add Notes",
           tickets_add_calls: "Add Calls",
-          tickets_view_modify_email_integrations: "View/Modify Email Integrations",
         },
       },
       tags: {
         label: "Tags",
         permissions: {
           tags_create_tag: "Create Tag",
-          tags_create_tag_category: "Create Tag Category",
         },
       },
       automation_access: {
@@ -242,17 +240,7 @@ export const PERMISSION_TABS: Record<string, PermissionTab> = {
           job_view: "View Jobs",
           job_add: "Add Job",
           job_cancel: "Cancel Job",
-          job_pause_restart: "Pause/Restart Job",
-          job_delete_comments: "Delete Job Comments",
-          job_edit_all_comments: "Edit All Job Comments",
           job_add_remove_custom_package_line_items: "Add/Remove Custom Package Line Items",
-        },
-      },
-      company_directory: {
-        label: "Company Directory",
-        permissions: {
-          company_dir_view: "View Company Directory",
-          company_dir_view_upcoming_schedule: "View Upcoming Schedule",
         },
       },
       employee_access: {

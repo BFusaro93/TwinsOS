@@ -18,6 +18,8 @@ import {
 import { formatCurrency, cn } from "@/lib/utils";
 import { Search, Calendar, ChevronRight, Plus } from "lucide-react";
 import { NewJobDialog } from "@/components/crm/jobs/NewJobDialog";
+import { EmptyState } from "@/components/shared/EmptyState";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 import type { CRMJob } from "@/types/crm-jobs";
 
 // One row per JOB, not per visit. Recurring/package jobs can have dozens of
@@ -122,6 +124,7 @@ const in30 = toLocalDateString(new Date(Date.now() + 30 * 86400_000));
 
 export function JobsList() {
   const router = useRouter();
+  const { can, isLoading: permissionsLoading } = usePermissions();
   const [search, setSearch] = useState("");
   const [viewMode, setViewMode] = useState<"active" | "unscheduled" | "completed">("active");
   const [typeFilter, setTypeFilter] = useState("all");
@@ -195,6 +198,16 @@ export function JobsList() {
     revenue:    filtered.reduce((s, o) => s + jobRevenueCents(o.job), 0),
   };
 
+  if (!permissionsLoading && !can("job_view")) {
+    return (
+      <EmptyState
+        icon={Calendar}
+        title="No access"
+        description="You don't have permission to view Jobs."
+      />
+    );
+  }
+
   return (
     <div className="flex flex-col gap-4">
       {/* Page header */}
@@ -203,10 +216,12 @@ export function JobsList() {
         description="All scheduled and completed jobs"
         action={
           <div className="flex flex-wrap items-center gap-2">
-            <Button size="sm" variant="outline" onClick={() => setNewJobOpen(true)}>
-              <Plus className="mr-1.5 h-4 w-4" />
-              Add Job
-            </Button>
+            {can("job_add") && (
+              <Button size="sm" variant="outline" onClick={() => setNewJobOpen(true)}>
+                <Plus className="mr-1.5 h-4 w-4" />
+                Add Job
+              </Button>
+            )}
             <Link href="/crm/scheduling/dispatch">
               <Button size="sm">
                 <Calendar className="mr-1.5 h-4 w-4" />
