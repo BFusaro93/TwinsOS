@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AlertCircle, CheckCircle2, ClipboardList, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,6 +28,80 @@ const PRIORITIES: { value: WorkOrderPriority; label: string; description: string
   { value: "high",     label: "High",     description: "Affecting work, needs prompt attention" },
   { value: "critical", label: "Critical", description: "Equipment down or safety concern" },
 ];
+
+/**
+ * Free-text input with a suggestions dropdown — replaces a native
+ * `<input list>` + `<datalist>`, whose browser-native rendering can't be
+ * styled or size-constrained (Chrome renders it as a huge full-row list;
+ * Safari renders it compactly). Typing anything not in `options` is still
+ * allowed; picking a suggestion just fills the field.
+ */
+function EquipmentAutocomplete({
+  id,
+  value,
+  onChange,
+  options,
+  placeholder,
+}: {
+  id: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: { id: string; name: string }[];
+  placeholder: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const filtered = value.trim()
+    ? options.filter((o) => o.name.toLowerCase().includes(value.trim().toLowerCase()))
+    : options;
+
+  useEffect(() => {
+    if (!open) return;
+    function handlePointerDown(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => document.removeEventListener("mousedown", handlePointerDown);
+  }, [open]);
+
+  return (
+    <div ref={containerRef} className="relative">
+      <Input
+        id={id}
+        placeholder={placeholder}
+        value={value}
+        autoComplete="off"
+        onChange={(e) => { onChange(e.target.value); setOpen(true); }}
+        onFocus={() => setOpen(true)}
+        onKeyDown={(e) => { if (e.key === "Escape") setOpen(false); }}
+      />
+      {open && filtered.length > 0 && (
+        <div className="absolute z-50 mt-1 max-h-[220px] w-full overflow-y-auto rounded-md border bg-popover p-1 text-popover-foreground shadow-md">
+          {filtered.map((o) => (
+            <button
+              key={o.id}
+              type="button"
+              className="flex w-full items-center rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent hover:text-accent-foreground"
+              // mousedown (not click) fires before the input's blur, so the
+              // selection registers before handlePointerDown/onBlur can close
+              // the dropdown out from under it.
+              onMouseDown={(e) => {
+                e.preventDefault();
+                onChange(o.name);
+                setOpen(false);
+              }}
+            >
+              {o.name}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function PriorityBadge({ priority }: { priority: WorkOrderPriority }) {
   const map: Record<WorkOrderPriority, string> = {
@@ -305,20 +379,13 @@ export function PortalForm({
                   <Label htmlFor="equipment" className="text-sm font-medium">
                     Equipment / Asset <span className="text-xs font-normal text-slate-400">(optional)</span>
                   </Label>
-                  <Input
+                  <EquipmentAutocomplete
                     id="equipment"
-                    list={equipmentOptions.length > 0 ? "equipment-options" : undefined}
                     placeholder="e.g. Toro Z-Master #3, Truck #12"
                     value={equipment}
-                    onChange={(e) => setEquipment(e.target.value)}
+                    onChange={setEquipment}
+                    options={equipmentOptions}
                   />
-                  {equipmentOptions.length > 0 && (
-                    <datalist id="equipment-options">
-                      {equipmentOptions.map((o) => (
-                        <option key={o.id} value={o.name} />
-                      ))}
-                    </datalist>
-                  )}
                 </div>
 
                 <div className="flex flex-col gap-1.5">
