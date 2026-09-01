@@ -29,6 +29,7 @@ import { NotificationsBell } from "@/components/shared/NotificationsBell";
 import { EditProfileDialog } from "@/components/shared/EditProfileDialog";
 import { HelpMenu } from "@/components/shared/HelpMenu";
 import { ImpersonationBanner } from "@/components/shared/ImpersonationBanner";
+import { SupportChatWidget } from "@/components/shared/SupportChatWidget";
 import { useUsers } from "@/lib/hooks/use-users";
 import { useSyncCurrentUser } from "@/lib/hooks/use-current-user";
 
@@ -309,6 +310,7 @@ export function TopBar() {
         </DropdownMenuContent>
       </DropdownMenu>
     </header>
+    <SupportChatWidget />
     </>
   );
 }

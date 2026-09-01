@@ -11942,6 +11942,51 @@ export type Database = {
         }
         Relationships: []
       }
+      support_messages: {
+        Row: {
+          body: string
+          created_at: string
+          id: string
+          org_id: string
+          sender_id: string | null
+          sender_name: string
+          sender_type: string
+        }
+        Insert: {
+          body: string
+          created_at?: string
+          id?: string
+          org_id?: string
+          sender_id?: string | null
+          sender_name: string
+          sender_type: string
+        }
+        Update: {
+          body?: string
+          created_at?: string
+          id?: string
+          org_id?: string
+          sender_id?: string | null
+          sender_name?: string
+          sender_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "support_messages_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "support_messages_sender_id_fkey"
+            columns: ["sender_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ticket_contributors: {
         Row: {
           added_at: string
