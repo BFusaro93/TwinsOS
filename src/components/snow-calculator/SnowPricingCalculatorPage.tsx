@@ -175,7 +175,6 @@ export function SnowPricingCalculatorPage() {
   const [mult3to6, setMult3to6] = useState("1.7");
   const [mult6to9, setMult6to9] = useState("1.5");
   const [mult9to12, setMult9to12] = useState("1.3");
-  const [mult12plus, setMult12plus] = useState("0.5");
 
   function updateMachine(key: string, patch: Partial<MachineRow>) {
     setMachines((rows) => rows.map((r) => (r.key === key ? { ...r, ...patch } : r)));
@@ -224,7 +223,7 @@ export function SnowPricingCalculatorPage() {
   const rate3to6 = rate1to3 * num(mult3to6);
   const rate6to9 = rate3to6 * num(mult6to9);
   const rate9to12 = rate6to9 * num(mult9to12);
-  const rate12plus = rate1to3 * num(mult12plus);
+  const rate12plus = perInchCost;
 
   // Shared export data — used by both the CSV and PDF downloads below
   const exportSections = [
@@ -345,6 +344,7 @@ export function SnowPricingCalculatorPage() {
         orgName,
         propertyName,
         propertyAddress,
+        propertySqFt: num(saltSqFt),
         generatedOn: new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }),
         sections: exportSections,
         subtotal,
@@ -536,15 +536,14 @@ export function SnowPricingCalculatorPage() {
               </div>
               <NumberField label="Markup %" value={markupPct} onChange={setMarkupPct} suffix="%" />
             </div>
-            <div className="grid grid-cols-4 gap-3">
+            <div className="grid grid-cols-3 gap-3">
               <NumberField label="× for 3-6&quot;" value={mult3to6} onChange={setMult3to6} />
               <NumberField label="× for 6-9&quot;" value={mult6to9} onChange={setMult6to9} />
               <NumberField label="× for 9-12&quot;" value={mult9to12} onChange={setMult9to12} />
-              <NumberField label="× for 12+&quot;" value={mult12plus} onChange={setMult12plus} />
             </div>
             <p className="text-xs text-muted-foreground">
-              Includes plowing, shoveling, and one salt/ice application. 12+&quot; is priced as a fraction of the
-              base rate, matching the source spreadsheet.
+              Includes plowing, shoveling, and one salt/ice application. 12+&quot; is priced at the per-inch
+              (÷{SEASON_INCHES_ASSUMED}) cost.
             </p>
           </div>
         </div>
