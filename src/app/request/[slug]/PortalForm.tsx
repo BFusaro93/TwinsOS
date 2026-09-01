@@ -13,7 +13,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { TurnstileWidget } from "@/components/shared/TurnstileWidget";
 import type { WorkOrderPriority } from "@/types";
+
+const PUBLIC_ENDPOINT = "/api/public/work-requests";
+
+// Unset in most environments — see .env.local.example. When unset, no widget
+// renders and no token is required, so existing portals are unaffected.
+const TURNSTILE_SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
 
 const PRIORITIES: { value: WorkOrderPriority; label: string; description: string }[] = [
   { value: "low",      label: "Low",      description: "Not urgent, can be scheduled" },
@@ -64,7 +71,7 @@ export function PortalForm({
   portalEnabled,
   woCategories = [],
   equipmentOptions = [],
-  endpoint = "/api/public/work-requests",
+  endpoint = PUBLIC_ENDPOINT,
 }: PortalFormProps) {
   const [name, setName]                     = useState("");
   const [title, setTitle]                   = useState("");
@@ -77,6 +84,18 @@ export function PortalForm({
   const [isPending, setIsPending]           = useState(false);
   const [submitted, setSubmitted]           = useState<SubmitResult | null>(null);
   const [serverError, setServerError]       = useState<string | null>(null);
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+  const [turnstileKey, setTurnstileKey]     = useState(0);
+  // Set when the widget itself reports it can't produce a token (script
+  // blocked, domain not registered, render error) — the server is still the
+  // real enforcement point, so it's safe to stop gating submit once the
+  // widget has told us it's broken. See TurnstileWidget for details.
+  const [turnstileUnavailable, setTurnstileUnavailable] = useState(false);
+
+  // Only the anonymous public portal needs bot protection — the internal
+  // field-crew endpoint already requires an authenticated session.
+  const isAnonymousPortal = endpoint === PUBLIC_ENDPOINT;
+  const requiresTurnstileToken = isAnonymousPortal && !!TURNSTILE_SITE_KEY && !turnstileUnavailable;
 
   function validate() {
     const e: Record<string, string> = {};
@@ -90,6 +109,10 @@ export function PortalForm({
   async function handleSubmit(ev: React.FormEvent) {
     ev.preventDefault();
     if (!validate()) return;
+    if (requiresTurnstileToken && !turnstileToken) {
+      setServerError("Please complete the verification check before submitting.");
+      return;
+    }
     setIsPending(true);
     setServerError(null);
     // If the typed equipment name exactly matches a known asset/vehicle,
@@ -113,6 +136,7 @@ export function PortalForm({
           assetId:        matchedEquipment?.id,
           repairCategory: repairCategory || undefined,
           hasRepairTag: hasRepairTag === "yes" ? true : hasRepairTag === "no" ? false : undefined,
+          turnstileToken,
         }),
       });
       const json = await res.json();
@@ -125,6 +149,9 @@ export function PortalForm({
       setServerError("Network error. Please check your connection and try again.");
     } finally {
       setIsPending(false);
+      // A Turnstile token is single-use — force a fresh solve on retry.
+      setTurnstileToken(null);
+      setTurnstileKey((k) => k + 1);
     }
   }
 
@@ -358,6 +385,16 @@ export function PortalForm({
                   ))}
                 </div>
               </div>
+
+              {isAnonymousPortal && TURNSTILE_SITE_KEY && !turnstileUnavailable && (
+                <TurnstileWidget
+                  key={turnstileKey}
+                  siteKey={TURNSTILE_SITE_KEY}
+                  onVerify={setTurnstileToken}
+                  onExpire={() => setTurnstileToken(null)}
+                  onError={() => setTurnstileUnavailable(true)}
+                />
+              )}
 
               {serverError && (
                 <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-600">{serverError}</p>
