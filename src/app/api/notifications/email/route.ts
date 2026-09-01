@@ -141,9 +141,22 @@ export async function POST(request: Request) {
   const directRecipientIds: string[] = [];
 
   if (notifType === "wo_assigned" || notifType === "wo_status_changed" || notifType === "wo_comment" || notifType === "wo_created") {
-    const ids: string[] = Array.isArray(entity.assigned_to_ids)
+    // work_orders.assigned_to_id/assigned_to_ids are crm_employees.id values
+    // (repointed from profiles.id) — resolve through crm_employees.user_id
+    // to get the login user(s) to notify, same as resolveAssigneeId() in
+    // ticket-notify.ts. Employees with no linked login are silently skipped.
+    const employeeIds: string[] = Array.isArray(entity.assigned_to_ids)
       ? (entity.assigned_to_ids as string[])
       : entity.assigned_to_id ? [entity.assigned_to_id as string] : [];
+    let ids: string[] = [];
+    if (employeeIds.length > 0) {
+      const { data: assignedEmployees } = await adminClient
+        .from("crm_employees")
+        .select("user_id")
+        .in("id", employeeIds)
+        .not("user_id", "is", null);
+      ids = (assignedEmployees ?? []).map((e: { user_id: string }) => e.user_id);
+    }
     directRecipientIds.push(...ids.filter((id) => id !== user.id));
 
   } else if (notifType === "approved" || notifType === "rejected") {

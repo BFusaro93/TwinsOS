@@ -24,13 +24,26 @@ export async function notifyStaffOfEstimateDecision(
   const { orgId, estimateId, estimateNumber, salesRepId, clientName, decision } = params;
 
   let recipients = await resolveBroadcastRecipients(supabase, orgId, "estimateDecisionRecipientIds");
-  if (salesRepId && !recipients.some((p) => p.id === salesRepId)) {
-    const { data: rep } = await supabase
-      .from("profiles")
-      .select("id, email, name, notification_prefs")
+  if (salesRepId) {
+    // estimates.sales_rep_id is a crm_employees.id (repointed from
+    // profiles.id) — resolve through crm_employees.user_id before querying
+    // profiles, same as resolveAssigneeId() in ticket-notify.ts.
+    const { data: employee } = await supabase
+      .from("crm_employees")
+      .select("user_id")
       .eq("id", salesRepId)
+      .eq("org_id", orgId)
+      .is("deleted_at", null)
       .single();
-    if (rep) recipients = [...recipients, rep];
+    const repUserId = employee?.user_id ?? null;
+    if (repUserId && !recipients.some((p) => p.id === repUserId)) {
+      const { data: rep } = await supabase
+        .from("profiles")
+        .select("id, email, name, notification_prefs")
+        .eq("id", repUserId)
+        .single();
+      if (rep) recipients = [...recipients, rep];
+    }
   }
   if (!recipients.length) return;
 
