@@ -59,7 +59,7 @@ export function HelpMenu() {
           <DropdownMenuItem asChild>
             <a href={`mailto:${SUPPORT_EMAIL}?subject=Support%20request`}>
               <Mail className="mr-2 h-4 w-4 text-slate-500" />
-              {SUPPORT_EMAIL}
+              Email Support
             </a>
           </DropdownMenuItem>
         </DropdownMenuContent>

@@ -4,9 +4,10 @@ import { useState } from "react";
 import { Sparkles } from "lucide-react";
 import { AskAIPanel } from "@/components/shared/AskAIPanel";
 
-/** Floating action button for the Ask AI support widget. Mounted on Home and
- *  Settings/Support/Docs, the only screens without the TopBar Help menu.
- *  Offset above FeedbackButton's bottom-5 right-5 since both appear together. */
+/** Floating action button for the Ask AI support widget. Mounted on Home
+ *  (no TopBar there) and, deliberately in addition to the TopBar Help menu,
+ *  on Settings/Support/Docs. Offset above FeedbackButton's bottom-5 right-5
+ *  since both appear together. */
 export function AskAIButton() {
   const [open, setOpen] = useState(false);
 
