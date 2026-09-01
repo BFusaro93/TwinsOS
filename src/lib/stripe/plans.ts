@@ -93,6 +93,11 @@ export function getSeatConfig(
   };
 }
 
+/** Trial orgs and anything unrecognized get every bundled add-on too, same
+ *  full-access trial policy as getModulesForPlan above — this was missing
+ *  its own trial special-case and silently denied every add-on (Job
+ *  Photos, client portal, etc.) to brand-new trial orgs. */
 export function planIncludesAddon(plan: string, addon: BundledAddonKey): boolean {
-  return isBillablePlan(plan) && (getPlanConfig(plan).bundledAddons as readonly string[]).includes(addon);
+  if (!isBillablePlan(plan)) return true;
+  return (getPlanConfig(plan).bundledAddons as readonly string[]).includes(addon);
 }
