@@ -50,6 +50,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ActivityTimeline } from "./ActivityTimeline";
 import { AuditTrailTab } from "@/components/shared/AuditTrailTab";
 import { PermissionGate } from "@/components/shared/PermissionGate";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 import { TicketDetailSheet } from "./tickets/TicketDetailSheet";
 import { TicketsList, NewTicketDialog } from "./tickets/TicketsList";
 import { NewEstimateDialog } from "./estimates/NewEstimateDialog";
@@ -2038,6 +2039,7 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
       <div className="hidden justify-center bg-white md:flex"><div className="w-px h-full bg-slate-200" /></div>
 
       {/* Middle — Accounting */}
+      <PermissionGate permission="client_view_billing">
       <div className="flex flex-col bg-white">
         <div className="flex flex-wrap items-center justify-between gap-y-1 bg-[#4a4a4a] px-4 py-2">
           <div className="flex min-w-0 flex-wrap items-center gap-1.5">
@@ -2104,6 +2106,7 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
           )}
         </div>
       </div>
+      </PermissionGate>
 
       {/* Divider column */}
       <div className="hidden justify-center bg-white md:flex"><div className="w-px h-full bg-slate-200" /></div>
@@ -3012,6 +3015,7 @@ interface Props {
 }
 
 export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }: Props) {
+  const { can } = usePermissions();
   const { data: client, isLoading } = useClient(clientId);
   const { data: contacts } = useClientContacts(clientId);
   const { data: properties } = useClientProperties(clientId);
@@ -3310,9 +3314,11 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
               </div>
             </div>
 
-            <div className="w-48 mt-4">
-              <BalanceCard client={client} revenuePotentialCents={revenuePotentialCents} />
-            </div>
+            <PermissionGate permission="client_view_balance">
+              <div className="w-48 mt-4">
+                <BalanceCard client={client} revenuePotentialCents={revenuePotentialCents} />
+              </div>
+            </PermissionGate>
           </div>
         </div>
 
@@ -3450,6 +3456,7 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
         </div>
 
         {/* Contacts */}
+        <PermissionGate permission="client_view_contacts">
         <div className="rounded-lg border border-slate-200 bg-white px-4 py-3">
           <div className="mb-2 flex items-center justify-between">
             <span className="text-xs font-semibold text-slate-600">
@@ -3509,8 +3516,10 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
             </div>
           )}
         </div>
+        </PermissionGate>
 
         {/* Office Notes */}
+        <PermissionGate permission="client_view_notes">
         <div className="rounded-lg border border-slate-200 bg-white px-4 py-3">
           <div className="mb-2 flex items-center justify-between">
             <span className="text-xs font-semibold text-slate-600">Office Notes</span>
@@ -3527,6 +3536,7 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
             <p className="text-xs text-slate-400 italic">No office notes</p>
           )}
         </div>
+        </PermissionGate>
         </div>{/* end grid */}
       </div>
 
@@ -3554,7 +3564,7 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
           {(
             [
               { value: "home",      label: "Home" },
-              { value: "activity",  label: "Activity" },
+              ...(can("client_view_history") ? [{ value: "activity", label: "Activity" }] : []),
               { value: "tickets",   label: "Tickets" },
               ...(!isLeadLike ? [{ value: "contracts", label: "Contracts" }] : []),
               { value: "projects",  label: "Projects" },
