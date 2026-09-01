@@ -250,12 +250,12 @@ export function NewWorkOrderDialog({ open, onOpenChange, initialData, onCreated,
         }
       );
     } else if (entityKeys.length > 1) {
-      // Multi-entity: create parent WO then sub-WOs sequentially
-      const parentNumber = `WO-${new Date().getFullYear()}-${Date.now().toString().slice(-6)}`;
+      // Multi-entity: create parent WO then sub-WOs sequentially. Numbers
+      // are generated server-side (an atomic per-org counter), not client
+      // Date.now() — two concurrent creates previously could collide.
       createWO.mutate(
         {
           ...commonFields,
-          workOrderNumber: parentNumber,
           assetId: null,
           assetName: null,
           linkedEntityType: null,
@@ -265,12 +265,10 @@ export function NewWorkOrderDialog({ open, onOpenChange, initialData, onCreated,
             // Create sub-WOs sequentially to avoid race conditions
             for (let i = 0; i < entityKeys.length; i++) {
               const key = entityKeys[i];
-              const subNumber = `WO-${new Date().getFullYear()}-${(Date.now() + i + 1).toString().slice(-6)}`;
               await new Promise<void>((resolve) => {
                 createWO.mutate(
                   {
                     ...commonFields,
-                    workOrderNumber: subNumber,
                     parentWorkOrderId: parent.id,
                     ...buildEntityFields(key),
                   },
@@ -285,12 +283,10 @@ export function NewWorkOrderDialog({ open, onOpenChange, initialData, onCreated,
         }
       );
     } else {
-      const workOrderNumber = `WO-${new Date().getFullYear()}-${Date.now().toString().slice(-6)}`;
       const singleEntityFields = buildEntityFields(entityKeys[0] ?? "none");
       createWO.mutate(
         {
           ...commonFields,
-          workOrderNumber,
           ...singleEntityFields,
         },
         {

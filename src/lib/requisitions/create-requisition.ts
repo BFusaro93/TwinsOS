@@ -94,7 +94,15 @@ export async function createRequisitionRecord(
   const salesTax = Math.round(subtotal * (taxRatePercent / 100));
   const shippingCost = input.shippingCostCents ?? 0;
   const grandTotal = subtotal + salesTax + shippingCost;
-  const requisitionNumber = `REQ-${new Date().getFullYear()}-${Date.now().toString().slice(-6)}`;
+  // Atomic per-org/year counter, not Date.now() — two requests in the same
+  // millisecond (concurrent submits, two automation runs) previously
+  // produced the same number with nothing to catch it.
+  const { data: requisitionNumber, error: numberErr } = await db.rpc("next_requisition_number", {
+    p_org_id_override: input.orgId,
+  });
+  if (numberErr || !requisitionNumber) {
+    return { requisition: null, error: numberErr?.message ?? "Failed to generate requisition number" };
+  }
 
   const { data: requisition, error } = await db
     .from("requisitions")

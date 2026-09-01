@@ -896,9 +896,14 @@ export async function deleteInvoiceLineItemAndRecalc(supabase: any, id: string, 
   const discountCents = inv?.discount_cents ?? 0;
   const taxRateBps = inv?.tax_rate_bps ?? 0;
   const afterDiscount = subtotalCents - discountCents;
-  // Tax only applies to taxable line items
+  // Tax only applies to taxable line items, net of the document-level
+  // discount (matches the PO module's taxableAfterDiscount pattern) — the
+  // discount must reduce the taxable base before tax is computed, not just
+  // the post-tax total, or the customer is overcharged tax on the
+  // discounted-away amount.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const taxableBase = (items ?? []).filter((li: any) => li.is_taxable).reduce((s: number, li: any) => s + netLineCents(li), 0);
+  const taxableSubtotal = (items ?? []).filter((li: any) => li.is_taxable).reduce((s: number, li: any) => s + netLineCents(li), 0);
+  const taxableBase = Math.max(0, taxableSubtotal - discountCents);
   const taxCents = Math.round((taxableBase * taxRateBps) / 10000);
   const totalCents = afterDiscount + taxCents;
   const paid = inv?.amount_paid_cents ?? 0;
@@ -963,8 +968,11 @@ export function useUpdateInvoiceFinancials() {
       const netLineCents = (li: InvoiceLineItem) => li.totalCents - li.discountCents;
       const subtotalCents = lineItems.reduce((s, li) => s + netLineCents(li), 0);
       const afterDiscount = subtotalCents - discountCents;
-      // Tax only applies to taxable line items
-      const taxableBase = lineItems.filter((li) => li.isTaxable).reduce((s, li) => s + netLineCents(li), 0);
+      // Tax only applies to taxable line items, net of the document-level
+      // discount (matches the PO module's taxableAfterDiscount pattern) —
+      // see deleteInvoiceLineItemAndRecalc above for why.
+      const taxableSubtotal = lineItems.filter((li) => li.isTaxable).reduce((s, li) => s + netLineCents(li), 0);
+      const taxableBase = Math.max(0, taxableSubtotal - discountCents);
       const taxCents = Math.round((taxableBase * taxRateBps) / 10000);
       const totalCents = afterDiscount + taxCents;
       const supabase = createClient();

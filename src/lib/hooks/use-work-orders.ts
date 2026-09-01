@@ -52,9 +52,18 @@ export function useWorkOrder(id: string) {
 export function useCreateWorkOrder() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (input: Omit<WorkOrder, "id" | "orgId" | "createdBy" | "createdAt" | "updatedAt" | "deletedAt">) => {
+    mutationFn: async (input: Omit<WorkOrder, "id" | "orgId" | "createdBy" | "createdAt" | "updatedAt" | "deletedAt" | "workOrderNumber"> & { workOrderNumber?: string }) => {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
+      // Atomic per-org/year counter, not Date.now() — two concurrent creates
+      // previously could silently produce the same number.
+      let workOrderNumber = input.workOrderNumber;
+      if (!workOrderNumber) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: generated, error: numErr } = await (supabase.rpc as any)("next_work_order_number");
+        if (numErr || !generated) throw numErr ?? new Error("Failed to generate work order number");
+        workOrderNumber = generated;
+      }
       const { data, error } = await supabase.from("work_orders").insert({
         created_by: user?.id ?? null,
         title: input.title,
@@ -76,7 +85,7 @@ export function useCreateWorkOrder() {
         category: input.category,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         categories: (input.categories ?? []) as any,
-        work_order_number: input.workOrderNumber,
+        work_order_number: workOrderNumber as string,
         parent_work_order_id: input.parentWorkOrderId,
         pm_schedule_id: input.pmScheduleId,
         is_recurring: input.isRecurring,

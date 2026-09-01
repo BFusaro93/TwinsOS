@@ -125,7 +125,11 @@ export async function POST(request: Request) {
   // ends up owing the discounted amount back.
   const combinedDiscountCents: number = inv.reduce((s, i) => s + (i.discount_cents ?? 0), 0);
   const afterDiscount = subtotal - combinedDiscountCents;
-  const taxableBase = items.filter((li) => li.is_taxable).reduce((s, li) => s + netLineCents(li), 0);
+  // Tax base is net of the combined discount — same fix as
+  // use-invoices.ts's useUpdateInvoiceFinancials (charging tax on the
+  // pre-discount amount overcharges the customer).
+  const taxableSubtotal = items.filter((li) => li.is_taxable).reduce((s, li) => s + netLineCents(li), 0);
+  const taxableBase = Math.max(0, taxableSubtotal - combinedDiscountCents);
   const taxCents = Math.round((taxableBase * taxRateBps) / 10000);
   const total = afterDiscount + taxCents;
 

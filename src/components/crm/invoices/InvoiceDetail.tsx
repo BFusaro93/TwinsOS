@@ -642,7 +642,11 @@ export function InvoiceDetail({
   // is a separate reduction stacked on top of that.
   const netLineCents = (li: InvoiceLineItem) => li.totalCents - li.discountCents;
   const subtotal = lineItems.reduce((s, li) => s + netLineCents(li), 0);
-  const taxableBase = lineItems.filter((li) => li.isTaxable).reduce((s, li) => s + netLineCents(li), 0);
+  // Tax base is net of the document-level discount — see
+  // use-invoices.ts's useUpdateInvoiceFinancials for why (charging tax on
+  // the pre-discount amount overcharges the customer).
+  const taxableSubtotal = lineItems.filter((li) => li.isTaxable).reduce((s, li) => s + netLineCents(li), 0);
+  const taxableBase = Math.max(0, taxableSubtotal - discountCents);
   const previewTax = hasTax ? Math.round((taxableBase * taxRateBps) / 10000) : 0;
   const previewTotal = subtotal - discountCents + previewTax;
   const previewBalance = Math.max(0, previewTotal - invoice.amountPaidCents);

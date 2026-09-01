@@ -55,7 +55,11 @@ async function executeAction(
   const orgId = ctx.orgId;
 
   if (auto.action_type === "create_work_order") {
-    const workOrderNumber = `WO-${new Date().getFullYear()}-${Date.now().toString().slice(-6)}`;
+    // Atomic per-org/year counter, not Date.now() — see next_work_order_number().
+    const { data: workOrderNumber, error: woNumErr } = await adminClient.rpc("next_work_order_number", {
+      p_org_id_override: orgId,
+    });
+    if (woNumErr || !workOrderNumber) return { skipReason: `failed to generate WO number: ${woNumErr?.message ?? "unknown"}` };
     const { data: wo, error: woErr } = await adminClient
       .from("work_orders")
       .insert({
@@ -140,7 +144,11 @@ async function executeAction(
   }
 
   if (auto.action_type === "create_requisition") {
-    const requisitionNumber = `REQ-${new Date().getFullYear()}-${Date.now()}`;
+    // Atomic per-org/year counter, not Date.now() — see next_requisition_number().
+    const { data: requisitionNumber, error: reqNumErr } = await adminClient.rpc("next_requisition_number", {
+      p_org_id_override: orgId,
+    });
+    if (reqNumErr || !requisitionNumber) return { skipReason: `failed to generate requisition number: ${reqNumErr?.message ?? "unknown"}` };
     const { data: req, error: reqErr } = await adminClient
       .from("requisitions")
       .insert({

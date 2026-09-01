@@ -107,7 +107,6 @@ export function SplitToPOsDialog({
     setCreating(true);
     const now = new Date().toISOString();
     const created: PurchaseOrder[] = [];
-    const base = Date.now();
 
     // The requisition's discount/shipping apply to the whole requisition, not
     // any one vendor's share — allocate both proportionally by each group's
@@ -138,7 +137,6 @@ export function SplitToPOsDialog({
         const grandTotal = subtotal - discountCost + salesTax + shippingCost;
 
         const result = await createPO({
-          poNumber: `PO-${new Date().getFullYear()}-${String(base).slice(-6)}-${i + 1}`,
           poDate: now.split("T")[0],
           invoiceNumber: null,
           status: "requested",

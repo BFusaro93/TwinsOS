@@ -94,16 +94,26 @@ export function useCreatePurchaseOrder() {
 
   return useMutation({
     mutationFn: async (
-      po: Omit<PurchaseOrder, "id" | "orgId" | "createdBy" | "createdAt" | "updatedAt" | "deletedAt">
+      po: Omit<PurchaseOrder, "id" | "orgId" | "createdBy" | "createdAt" | "updatedAt" | "deletedAt" | "poNumber"> & { poNumber?: string }
     ) => {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
+
+      // Atomic per-org/year counter, not Date.now() — two concurrent
+      // creates previously could silently produce the same PO number.
+      let poNumber = po.poNumber;
+      if (!poNumber) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: generated, error: numErr } = await (supabase.rpc as any)("next_po_number");
+        if (numErr || !generated) throw numErr ?? new Error("Failed to generate PO number");
+        poNumber = generated;
+      }
 
       const { data: created, error: poErr } = await supabase
         .from("purchase_orders")
         .insert({
           created_by: user?.id ?? null,
-          po_number: po.poNumber,
+          po_number: poNumber as string,
           po_date: po.poDate,
           invoice_number: po.invoiceNumber,
           status: po.status,

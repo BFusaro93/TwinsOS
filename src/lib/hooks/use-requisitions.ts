@@ -105,7 +105,10 @@ export function useCreateRequisition() {
       // Prefer profile.name (set during account setup) over auth metadata fallback
       const { data: profile } = await supabase.from("profiles").select("name").eq("id", user!.id).single();
       const requestedByName = profile?.name?.trim() || user?.user_metadata?.name || user?.email || "Unknown";
-      const requisitionNumber = `REQ-${new Date().getFullYear()}-${Date.now().toString().slice(-6)}`;
+      // Atomic per-org/year counter, not Date.now() — see next_requisition_number().
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: requisitionNumber, error: numberErr } = await (supabase.rpc as any)("next_requisition_number");
+      if (numberErr || !requisitionNumber) throw numberErr ?? new Error("Failed to generate requisition number");
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: req, error: reqErr } = await (supabase as any)

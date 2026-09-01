@@ -344,11 +344,9 @@ export function NewPODialog({ open, onOpenChange, initialData, prefillData, onCr
     const salesTaxCents = Math.round(taxableAfterDiscountCents * (taxRate / 100));
     const now = new Date().toISOString();
 
-    // Generate PO number: PO-{year}-{6-digit timestamp suffix}
-    const poNumber = `PO-${new Date().getFullYear()}-${Date.now().toString().slice(-6)}`;
-
-    const newPO: Omit<import("@/types").PurchaseOrder, "id" | "orgId" | "createdBy" | "createdAt" | "updatedAt" | "deletedAt"> = {
-      poNumber,
+    // PO number is generated server-side (an atomic per-org counter) — see
+    // useCreatePurchaseOrder.
+    const newPO: Omit<import("@/types").PurchaseOrder, "id" | "orgId" | "createdBy" | "createdAt" | "updatedAt" | "deletedAt" | "poNumber"> = {
       poDate: poDate || now.split("T")[0],
       invoiceNumber: invoiceNumber || null,
       status: "requested",
