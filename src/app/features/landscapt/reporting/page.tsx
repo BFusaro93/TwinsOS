@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { buildMetadata } from "@/lib/seo";
 import { Plus_Jakarta_Sans } from "next/font/google";
 import { PieChart, LayoutDashboard, Gauge, BarChart3, Clock } from "lucide-react";
 import { MarketingNav } from "@/components/marketing/MarketingNav";
@@ -16,10 +17,12 @@ const heading = Plus_Jakarta_Sans({
   variable: "--font-heading",
 });
 
-export const metadata: Metadata = {
+export const metadata: Metadata = buildMetadata({
   title: "Reporting & Dashboards | Landscapt",
   description: "About 100 built-in reports plus a drag-and-drop dashboard builder, a graphics library of reusable visuals, and a company-wide KPI scorecard.",
-};
+  path: "/features/landscapt/reporting",
+  image: "/screenshots/dispatch-board.png",
+});
 
 const ITEMS: DeepDiveItem[] = [
   {

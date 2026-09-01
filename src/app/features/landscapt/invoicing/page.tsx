@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { buildMetadata } from "@/lib/seo";
 import { Plus_Jakarta_Sans } from "next/font/google";
 import { Receipt, CreditCard, RefreshCw, Snowflake, FileStack } from "lucide-react";
 import { MarketingNav } from "@/components/marketing/MarketingNav";
@@ -16,10 +17,12 @@ const heading = Plus_Jakarta_Sans({
   variable: "--font-heading",
 });
 
-export const metadata: Metadata = {
+export const metadata: Metadata = buildMetadata({
   title: "Invoicing & Payments | Landscapt",
   description: "Draft-to-paid invoicing with Stripe-powered card and ACH payments built in, saved payment methods, and autopay.",
-};
+  path: "/features/landscapt/invoicing",
+  image: "/screenshots/dispatch-board.png",
+});
 
 const ITEMS: DeepDiveItem[] = [
   {

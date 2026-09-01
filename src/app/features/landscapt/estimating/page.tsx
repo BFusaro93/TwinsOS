@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { buildMetadata } from "@/lib/seo";
 import { Plus_Jakarta_Sans } from "next/font/google";
 import { Calculator, Sparkles, FileCheck2, TrendingUp, LineChart } from "lucide-react";
 import { MarketingNav } from "@/components/marketing/MarketingNav";
@@ -16,10 +17,12 @@ const heading = Plus_Jakarta_Sans({
   variable: "--font-heading",
 });
 
-export const metadata: Metadata = {
+export const metadata: Metadata = buildMetadata({
   title: "Estimating | Landscapt",
   description: "Build estimates from real production rates, labor burden, and overhead markup — not a guess. AI-drafted line items and client-facing proposals, no login required.",
-};
+  path: "/features/landscapt/estimating",
+  image: "/screenshots/dispatch-board.png",
+});
 
 const ITEMS: DeepDiveItem[] = [
   {

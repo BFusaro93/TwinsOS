@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { buildMetadata } from "@/lib/seo";
 import { Plus_Jakarta_Sans } from "next/font/google";
 import { Building2, Layers, Receipt } from "lucide-react";
 import { MarketingNav } from "@/components/marketing/MarketingNav";
@@ -16,10 +17,12 @@ const heading = Plus_Jakarta_Sans({
   variable: "--font-heading",
 });
 
-export const metadata: Metadata = {
+export const metadata: Metadata = buildMetadata({
   title: "Vendor Management | Equipt",
   description: "One vendor list shared across purchasing and maintenance — a vendor who supplies both parts and services shows up once, not twice.",
-};
+  path: "/features/equipt/vendors",
+  image: "/screenshots/equipt-dashboard.png",
+});
 
 const ITEMS: DeepDiveItem[] = [
   {

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { buildMetadata } from "@/lib/seo";
 import { Plus_Jakarta_Sans } from "next/font/google";
 import { Zap, Gauge, Boxes, CalendarClock } from "lucide-react";
 import { MarketingNav } from "@/components/marketing/MarketingNav";
@@ -15,10 +16,12 @@ const heading = Plus_Jakarta_Sans({
   variable: "--font-heading",
 });
 
-export const metadata: Metadata = {
+export const metadata: Metadata = buildMetadata({
   title: "Automations | Equipt",
   description: "Trigger → action rules fire on their own — a meter crossing a threshold creates a work order, a low-stock part creates a requisition.",
-};
+  path: "/features/equipt/automations",
+  image: "/screenshots/equipt-dashboard.png",
+});
 
 const ITEMS: DeepDiveItem[] = [
   {

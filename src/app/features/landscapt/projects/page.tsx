@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { buildMetadata } from "@/lib/seo";
 import { Plus_Jakarta_Sans } from "next/font/google";
 import { FolderKanban, TrendingUp, BookOpen, ClipboardCheck } from "lucide-react";
 import { MarketingNav } from "@/components/marketing/MarketingNav";
@@ -16,10 +17,12 @@ const heading = Plus_Jakarta_Sans({
   variable: "--font-heading",
 });
 
-export const metadata: Metadata = {
+export const metadata: Metadata = buildMetadata({
   title: "Projects | Landscapt",
   description: "A dedicated job type for larger landscaping projects, tracked separately from recurring and one-time visits, with materials and budget rolled up per project.",
-};
+  path: "/features/landscapt/projects",
+  image: "/screenshots/dispatch-board.png",
+});
 
 const ITEMS: DeepDiveItem[] = [
   {

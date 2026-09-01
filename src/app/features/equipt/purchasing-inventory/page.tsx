@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { buildMetadata } from "@/lib/seo";
 import { Plus_Jakarta_Sans } from "next/font/google";
 import { ClipboardCheck, PackageCheck, Boxes, Bell, BookOpen } from "lucide-react";
 import { MarketingNav } from "@/components/marketing/MarketingNav";
@@ -16,10 +17,12 @@ const heading = Plus_Jakarta_Sans({
   variable: "--font-heading",
 });
 
-export const metadata: Metadata = {
+export const metadata: Metadata = buildMetadata({
   title: "Purchasing, Requisitions & Inventory | Equipt",
   description: "Requisitions route through a configurable approval chain before becoming a formal PO, and receiving one automatically updates parts inventory.",
-};
+  path: "/features/equipt/purchasing-inventory",
+  image: "/screenshots/equipt-dashboard.png",
+});
 
 const ITEMS: DeepDiveItem[] = [
   {

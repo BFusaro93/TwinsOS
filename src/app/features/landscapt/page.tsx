@@ -25,6 +25,7 @@ import { MarketingFooter } from "@/components/marketing/MarketingFooter";
 import { Reveal } from "@/components/marketing/Reveal";
 import { LandscaptShowcase } from "@/components/marketing/LandscaptShowcase";
 import { FeatureDeepDive, type DeepDiveItem } from "@/components/marketing/FeatureDeepDive";
+import { buildMetadata, SITE_URL } from "@/lib/seo";
 
 const heading = Plus_Jakarta_Sans({
   subsets: ["latin"],
@@ -32,9 +33,22 @@ const heading = Plus_Jakarta_Sans({
   variable: "--font-heading",
 });
 
-export const metadata: Metadata = {
+export const metadata: Metadata = buildMetadata({
   title: "Landscapt | CRM & Field Service",
   description: "Landscapt runs estimating, dispatch, billing, and client relationships for landscaping and snow companies — built on a real budget engine, not guesswork.",
+  path: "/features/landscapt",
+  image: "/screenshots/dispatch-board.png",
+});
+
+const SOFTWARE_APPLICATION_JSON_LD = {
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  name: "Landscapt",
+  applicationCategory: "BusinessApplication",
+  operatingSystem: "Web",
+  description:
+    "CRM & field service management for landscaping and snow companies — estimating, dispatch, billing, and client relationships.",
+  url: `${SITE_URL}/features/landscapt`,
 };
 
 const ITEMS: DeepDiveItem[] = [
@@ -103,6 +117,10 @@ const DEEP_DIVE_PAGES = [
 export default function LandscaptFeaturesPage() {
   return (
     <div className={`${heading.variable} bg-[#fbfbf8] text-[#0a0a0a]`}>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(SOFTWARE_APPLICATION_JSON_LD) }}
+      />
       <MarketingNav />
 
       <div className="bg-[#005642] px-6 py-16 text-center sm:px-12">

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { buildMetadata } from "@/lib/seo";
 import { Plus_Jakarta_Sans } from "next/font/google";
 import { Truck, Gauge, History, Boxes } from "lucide-react";
 import { MarketingNav } from "@/components/marketing/MarketingNav";
@@ -16,10 +17,12 @@ const heading = Plus_Jakarta_Sans({
   variable: "--font-heading",
 });
 
-export const metadata: Metadata = {
+export const metadata: Metadata = buildMetadata({
   title: "Asset & Vehicle Registry | Equipt",
   description: "A full equipment and vehicle registry tracking meter readings and complete service history — the record every work order and PM schedule ties back to.",
-};
+  path: "/features/equipt/asset-registry",
+  image: "/screenshots/equipt-dashboard.png",
+});
 
 const ITEMS: DeepDiveItem[] = [
   {

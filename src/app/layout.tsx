@@ -1,13 +1,44 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import { Providers } from "@/components/providers";
+import { SITE_NAME, SITE_URL, DEFAULT_OG_IMAGE } from "@/lib/seo";
 import "./globals.css";
 
 const inter = Inter({ subsets: ["latin"] });
 
+const ORGANIZATION_JSON_LD = {
+  "@context": "https://schema.org",
+  "@type": "Organization",
+  name: SITE_NAME,
+  url: SITE_URL,
+  logo: `${SITE_URL}/icon.svg`,
+  brand: [
+    { "@type": "Brand", name: "Landscapt" },
+    { "@type": "Brand", name: "Equipt" },
+  ],
+};
+
 export const metadata: Metadata = {
-  title: "Landscapt",
+  metadataBase: new URL(SITE_URL),
+  title: {
+    default: "Landscapt & Equipt",
+    template: "%s",
+  },
   description: "CRM, field service, work orders, purchasing & asset management",
+  openGraph: {
+    title: "Landscapt & Equipt",
+    description: "CRM, field service, work orders, purchasing & asset management",
+    url: SITE_URL,
+    siteName: SITE_NAME,
+    images: [{ url: DEFAULT_OG_IMAGE }],
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Landscapt & Equipt",
+    description: "CRM, field service, work orders, purchasing & asset management",
+    images: [DEFAULT_OG_IMAGE],
+  },
   viewport: "width=device-width, initial-scale=1, maximum-scale=1",
   icons: {
     // Explicit list, not the app/icon.* file convention — Next only ever
@@ -36,6 +67,10 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={inter.className}>
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(ORGANIZATION_JSON_LD) }}
+        />
         <Providers>{children}</Providers>
       </body>
     </html>

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { buildMetadata } from "@/lib/seo";
 import Link from "next/link";
 import { Plus_Jakarta_Sans } from "next/font/google";
 import { Mail, CalendarClock, LifeBuoy, Building2 } from "lucide-react";
@@ -14,10 +15,11 @@ const heading = Plus_Jakarta_Sans({
   variable: "--font-heading",
 });
 
-export const metadata: Metadata = {
+export const metadata: Metadata = buildMetadata({
   title: "Contact | Landscapt & Equipt",
   description: "Talk to sales, book a demo, or get support for Landscapt & Equipt.",
-};
+  path: "/contact",
+});
 
 const CHANNELS = [
   {

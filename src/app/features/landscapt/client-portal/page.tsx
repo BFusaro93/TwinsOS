@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { buildMetadata } from "@/lib/seo";
 import { Plus_Jakarta_Sans } from "next/font/google";
 import { Receipt, FileCheck2, LifeBuoy, FileStack, Layers, KeyRound } from "lucide-react";
 import { MarketingNav } from "@/components/marketing/MarketingNav";
@@ -15,10 +16,12 @@ const heading = Plus_Jakarta_Sans({
   variable: "--font-heading",
 });
 
-export const metadata: Metadata = {
+export const metadata: Metadata = buildMetadata({
   title: "Client Portal | Landscapt",
   description: "A branded, self-serve site where clients pay invoices, act on estimates, and submit tickets — entirely separate from staff login.",
-};
+  path: "/features/landscapt/client-portal",
+  image: "/screenshots/dispatch-board.png",
+});
 
 const ITEMS: DeepDiveItem[] = [
   {

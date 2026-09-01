@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { buildMetadata } from "@/lib/seo";
 import { Plus_Jakarta_Sans } from "next/font/google";
 import { Gauge, TrendingUp, PieChart, BookOpen } from "lucide-react";
 import { MarketingNav } from "@/components/marketing/MarketingNav";
@@ -15,10 +16,12 @@ const heading = Plus_Jakarta_Sans({
   variable: "--font-heading",
 });
 
-export const metadata: Metadata = {
+export const metadata: Metadata = buildMetadata({
   title: "Reporting & Maintenance Costing | Equipt",
   description: "Track labor efficiency, PM compliance, and maintenance costing across your fleet with a built-in report library and a company-wide scorecard.",
-};
+  path: "/features/equipt/reporting",
+  image: "/screenshots/equipt-dashboard.png",
+});
 
 const ITEMS: DeepDiveItem[] = [
   {

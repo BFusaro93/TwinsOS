@@ -21,6 +21,7 @@ import { Reveal } from "@/components/marketing/Reveal";
 import { EquiptShowcase } from "@/components/marketing/EquiptShowcase";
 import { FeatureDeepDive, type DeepDiveItem } from "@/components/marketing/FeatureDeepDive";
 import { RealScreenshot } from "@/components/marketing/RealScreenshot";
+import { buildMetadata, SITE_URL } from "@/lib/seo";
 
 const heading = Plus_Jakarta_Sans({
   subsets: ["latin"],
@@ -28,9 +29,22 @@ const heading = Plus_Jakarta_Sans({
   variable: "--font-heading",
 });
 
-export const metadata: Metadata = {
+export const metadata: Metadata = buildMetadata({
   title: "Equipt | Asset Management & Maintenance",
   description: "Equipt is the CMMS side of the platform — work orders, preventive maintenance, asset registry, parts inventory, and purchasing in one procurement backbone.",
+  path: "/features/equipt",
+  image: "/screenshots/equipt-dashboard.png",
+});
+
+const SOFTWARE_APPLICATION_JSON_LD = {
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  name: "Equipt",
+  applicationCategory: "BusinessApplication",
+  operatingSystem: "Web",
+  description:
+    "CMMS for landscape & snow companies — work orders, preventive maintenance, asset registry, parts inventory, and purchasing.",
+  url: `${SITE_URL}/features/equipt`,
 };
 
 const ITEMS: DeepDiveItem[] = [
@@ -100,6 +114,10 @@ const DEEP_DIVE_PAGES = [
 export default function EquiptFeaturesPage() {
   return (
     <div className={`${heading.variable} bg-[#fbfbf8] text-[#0a0a0a]`}>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(SOFTWARE_APPLICATION_JSON_LD) }}
+      />
       <MarketingNav />
 
       <div className="bg-[#005642] px-6 py-16 text-center sm:px-12">

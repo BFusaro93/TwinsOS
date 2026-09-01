@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { buildMetadata } from "@/lib/seo";
 import { Plus_Jakarta_Sans } from "next/font/google";
 import { Snowflake, Truck, Receipt, FileSignature } from "lucide-react";
 import { MarketingNav } from "@/components/marketing/MarketingNav";
@@ -15,10 +16,12 @@ const heading = Plus_Jakarta_Sans({
   variable: "--font-heading",
 });
 
-export const metadata: Metadata = {
+export const metadata: Metadata = buildMetadata({
   title: "Snow Operations | Landscapt",
   description: "Storm-based scheduling that activates snow routes the moment a trigger depth hits, with seasonal contracts and snow-specific invoicing.",
-};
+  path: "/features/landscapt/snow",
+  image: "/screenshots/dispatch-board.png",
+});
 
 const ITEMS: DeepDiveItem[] = [
   {

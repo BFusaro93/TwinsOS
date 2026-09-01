@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { buildMetadata } from "@/lib/seo";
 import { Plus_Jakarta_Sans } from "next/font/google";
 import {
   MapPinned,
@@ -43,10 +44,11 @@ const heading = Plus_Jakarta_Sans({
   variable: "--font-heading",
 });
 
-export const metadata: Metadata = {
+export const metadata: Metadata = buildMetadata({
   title: "Features | Landscapt & Equipt",
   description: "Every module in Landscapt & Equipt — dispatch, estimating, work orders, tickets, job photos, automations, and more.",
-};
+  path: "/features",
+});
 
 const CATEGORIES = [
   {

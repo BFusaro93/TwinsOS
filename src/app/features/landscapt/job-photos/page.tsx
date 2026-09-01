@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { buildMetadata } from "@/lib/seo";
 import { Plus_Jakarta_Sans } from "next/font/google";
 import { Camera, PenLine, Tag, Archive } from "lucide-react";
 import { MarketingNav } from "@/components/marketing/MarketingNav";
@@ -15,10 +16,12 @@ const heading = Plus_Jakarta_Sans({
   variable: "--font-heading",
 });
 
-export const metadata: Metadata = {
+export const metadata: Metadata = buildMetadata({
   title: "Job Photos | Landscapt",
   description: "Before/during/after photo capture with on-image annotation, tagging, and an archive attached to every job.",
-};
+  path: "/features/landscapt/job-photos",
+  image: "/screenshots/dispatch-board.png",
+});
 
 const ITEMS: DeepDiveItem[] = [
   {

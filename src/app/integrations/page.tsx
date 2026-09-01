@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { buildMetadata } from "@/lib/seo";
 import Link from "next/link";
 import { Plus_Jakarta_Sans } from "next/font/google";
 import { MessageSquareText, Truck, FileSignature, Code2, Webhook } from "lucide-react";
@@ -14,10 +15,11 @@ const heading = Plus_Jakarta_Sans({
   variable: "--font-heading",
 });
 
-export const metadata: Metadata = {
+export const metadata: Metadata = buildMetadata({
   title: "Integrations | Landscapt & Equipt",
   description: "Everything Landscapt & Equipt connects to — QuickBooks, Zapier, Stripe, Twilio, Google Maps, Samsara, and the open API.",
-};
+  path: "/integrations",
+});
 
 type Status = "live" | "addon" | "soon";
 

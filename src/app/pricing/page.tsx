@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { buildMetadata } from "@/lib/seo";
 import Link from "next/link";
 import { Plus_Jakarta_Sans } from "next/font/google";
 import { Button } from "@/components/ui/button";
@@ -16,10 +17,11 @@ const heading = Plus_Jakarta_Sans({
   variable: "--font-heading",
 });
 
-export const metadata: Metadata = {
+export const metadata: Metadata = buildMetadata({
   title: "Pricing | Landscapt & Equipt",
   description: "Plans, add-ons, and a full feature comparison for Landscapt & Equipt. 30-day free trial, no credit card required.",
-};
+  path: "/pricing",
+});
 
 export default function PricingPage() {
   return (

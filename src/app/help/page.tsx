@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { buildMetadata } from "@/lib/seo";
 import { Plus_Jakarta_Sans } from "next/font/google";
 import { Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -14,10 +15,11 @@ const heading = Plus_Jakarta_Sans({
   variable: "--font-heading",
 });
 
-export const metadata: Metadata = {
+export const metadata: Metadata = buildMetadata({
   title: "Support | Landscapt & Equipt",
   description: "Search real how-to guides and answers pulled straight from the in-app documentation for Landscapt & Equipt.",
-};
+  path: "/help",
+});
 
 export default function SupportPage() {
   return (

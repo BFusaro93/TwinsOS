@@ -7,6 +7,7 @@ import { BrandMark } from "@/components/shared/BrandMark";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { createClient } from "@/lib/supabase/client";
 import type { BillablePlan } from "@/lib/stripe/plans";
 import { getHighlightsForPlan } from "@/lib/stripe/plan-features";
@@ -36,6 +37,7 @@ export default function SignupPage() {
   const [error, setError]             = useState<string | null>(null);
   const [loading, setLoading]         = useState(false);
   const [step, setStep]               = useState<Step>("plan");
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
 
   useEffect(() => {
     fetch("/api/billing/plans")
@@ -58,6 +60,7 @@ export default function SignupPage() {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) return "Enter a valid email address.";
     if (password.length < 8) return "Password must be at least 8 characters.";
     if (password !== confirm) return "Passwords do not match.";
+    if (!agreedToTerms) return "You must agree to the Terms of Service and Privacy Policy.";
     return null;
   }
 
@@ -316,6 +319,26 @@ export default function SignupPage() {
             />
           </div>
 
+          <div className="flex items-start gap-2.5 pt-1">
+            <Checkbox
+              id="agreedToTerms"
+              checked={agreedToTerms}
+              onCheckedChange={(checked) => setAgreedToTerms(checked === true)}
+              className="mt-0.5"
+            />
+            <Label htmlFor="agreedToTerms" className="text-xs font-normal leading-relaxed text-slate-600">
+              I agree to the{" "}
+              <a href="/legal/terms" target="_blank" rel="noopener noreferrer" className="text-brand-600 underline">
+                Terms of Service
+              </a>{" "}
+              and{" "}
+              <a href="/legal/privacy" target="_blank" rel="noopener noreferrer" className="text-brand-600 underline">
+                Privacy Policy
+              </a>
+              .
+            </Label>
+          </div>
+
           {error && (
             <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-600">
               {error}
@@ -325,7 +348,7 @@ export default function SignupPage() {
           <Button
             type="submit"
             className="mt-1 w-full bg-brand-500 hover:bg-brand-600"
-            disabled={loading}
+            disabled={loading || !agreedToTerms}
           >
             {loading ? (
               <>

@@ -55,8 +55,9 @@ const COLUMNS: { label: string; links: { href: string; label: string }[] }[] = [
     links: [
       { href: "/help", label: "Support" },
       { href: "/contact", label: "Contact" },
-      { href: "/legal/privacy-policy", label: "Privacy Policy" },
-      { href: "/legal/sms-terms", label: "SMS Terms" },
+      { href: "/legal/terms", label: "Terms of Service" },
+      { href: "/legal/privacy", label: "Privacy Policy" },
+      { href: "/legal/dpa", label: "Data Processing Addendum" },
     ],
   },
 ];

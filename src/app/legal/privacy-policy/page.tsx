@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
+import { buildMetadata } from "@/lib/seo";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = buildMetadata({
   title: "Privacy Policy | Twins Lawn Service",
   description: "How Twins Lawn Service collects, uses, and protects your information.",
-};
+  path: "/legal/privacy-policy",
+});
 
 export default function PrivacyPolicyPage() {
   return (
