@@ -41,10 +41,6 @@ import type { CRMCrew, CRMCrewMember } from "@/types/crm-employees";
 const DAYS_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const ALL_DAYS = [0, 1, 2, 3, 4, 5, 6];
 
-const MAP_ICON_OPTIONS = [
-  "Gold", "Silver", "Blue", "Green", "Red", "Orange", "Purple", "Teal", "Gray",
-];
-
 const ROUTE_SHEET_OPTIONS = [
   "Standard Route Sheet", "Custom Route Sheet 1", "Custom Route Sheet 2",
 ];
@@ -440,25 +436,6 @@ function TeamDetailsTab({
                 onCheckedChange={(c) => onChange("show_in_calendar", !!c)}
               />
             </Field>
-            <Field label="Map Icon / Calendar Color">
-              <Select
-                value={form.map_icon_color ?? "none"}
-                onValueChange={(v) => onChange("map_icon_color", v === "none" ? null : v)}
-              >
-                <SelectTrigger className="h-8 text-sm w-56">
-                  <SelectValue placeholder="Select color…" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">None</SelectItem>
-                  {MAP_ICON_OPTIONS.map((c) => (
-                    <SelectItem key={c} value={c}>
-                      {c}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </Field>
-  
             <Field label="Starting Address">
               <Input
                 className="h-8 text-sm"
@@ -545,7 +522,6 @@ function CrewDialog({
       name: c.name, code: c.code, tags: c.tags ?? [],
       route_sheet_format: c.routeSheetFormat,
       show_in_calendar: c.showInCalendar,
-      map_icon_color: c.mapIconColor, map_codes: c.mapCodes,
       starting_address: c.startingAddress, starting_city: c.startingCity,
       starting_state: c.startingState, starting_zip: c.startingZip,
       starting_lat: c.startingLat, starting_lng: c.startingLng,

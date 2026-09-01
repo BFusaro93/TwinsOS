@@ -45,6 +45,8 @@ import { PhoneInput } from "@/components/shared/PhoneInput";
 import { toast } from "sonner";
 import type { CRMEmployee, EmploymentStatus, UserType } from "@/types/crm-employees";
 
+const HEX_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
+
 // ── section header (SA-style dark bar) ────────────────────────────────────────
 
 function SectionBar({ title }: { title: string }) {
@@ -550,11 +552,30 @@ function UserSettingsTab({
               Only applies to non-admin logins — an account with the Admin user role always has full access, regardless of what&apos;s selected here.
             </p>
           </Field>
-          <Field label="Map Icon / Color">
-            <FieldInput value={form.map_icon_color ?? ""} onChange={(e) => onChange("map_icon_color", e.target.value)} placeholder="e.g. Gold" />
-          </Field>
-          <Field label="Map Codes">
-            <FieldInput value={form.map_codes ?? ""} onChange={(e) => onChange("map_codes", e.target.value)} />
+          <Field label="Sales Meeting Color">
+            <div className="flex items-center gap-2">
+              <input
+                type="color"
+                value={HEX_COLOR_RE.test(form.map_icon_color ?? "") ? form.map_icon_color : "#94a3b8"}
+                onChange={(e) => onChange("map_icon_color", e.target.value)}
+                className="h-9 w-14 cursor-pointer rounded border border-slate-200 p-0.5"
+              />
+              <span className="text-xs text-slate-500">{form.map_icon_color || "No color set"}</span>
+              {form.map_icon_color && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-2 text-xs text-slate-400 hover:text-slate-600"
+                  onClick={() => onChange("map_icon_color", null)}
+                >
+                  Clear
+                </Button>
+              )}
+            </div>
+            <p className="mt-1 text-[11px] text-slate-400">
+              Colors this rep&apos;s legend dot on the Sales Meetings calendar.
+            </p>
           </Field>
           <Field label="Is Sales Rep">
             <Checkbox checked={!!form.is_sales_rep} onCheckedChange={(c) => onChange("is_sales_rep", !!c)} />
@@ -686,7 +707,7 @@ function EmployeeDialog({
       show_in_calendar: e.showInCalendar, field_time_clock: e.fieldTimeClock,
       office_time_clock: e.officeTimeClock, send_text_alerts: e.sendTextAlerts,
       user_role: e.userRole, crm_role_id: e.crmRoleId, route_sheet_format: e.routeSheetFormat,
-      map_icon_color: e.mapIconColor, map_codes: e.mapCodes, is_sales_rep: e.isSalesRep,
+      map_icon_color: e.mapIconColor, is_sales_rep: e.isSalesRep,
     sales_goals: e.salesGoals,
       starting_address: e.startingAddress, starting_city: e.startingCity,
       starting_state: e.startingState, starting_zip: e.startingZip,
@@ -882,13 +903,47 @@ function EmployeeDetail({
         <p className="mb-3 mt-5 text-xs font-semibold uppercase tracking-wide text-slate-400">Employment</p>
         <DetailRow label="Type" value={employee.userType?.replace("_", " ")} />
         <DetailRow label="Manager" value={employee.managerName} />
-        <DetailRow label="Date Hired" value={
-          employee.dateHired
-            ? new Date(employee.dateHired + "T12:00:00").toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })
-            : null
-        } />
+        <DetailRow label="Date Hired" value={formatDetailDate(employee.dateHired)} />
+        {employee.dateReleased && <DetailRow label="Date Released" value={formatDetailDate(employee.dateReleased)} />}
+        {employee.rehireDate && <DetailRow label="Rehire Date" value={formatDetailDate(employee.rehireDate)} />}
         <DetailRow label="Hourly Rate" value={employee.hourlyRateCents > 0 ? formatCurrency(employee.hourlyRateCents) : null} />
         <DetailRow label="Overtime Rate" value={employee.overtimeRateCents > 0 ? formatCurrency(employee.overtimeRateCents) : null} />
+        <DetailRow label="Eligible for OT" value={employee.eligibleOvertime ? "Yes" : null} />
+        <DetailRow label="Compensation Type" value={employee.compensationType} />
+        <DetailRow label="Payment Frequency" value={employee.paymentFrequency} />
+        <DetailRow label="Commission %" value={employee.commissionPct > 0 ? `${employee.commissionPct}%` : null} />
+        <DetailRow label="Vacation Days" value={employee.vacationDays > 0 ? employee.vacationDays : null} />
+        <DetailRow label="Sick Days" value={employee.sickDays > 0 ? employee.sickDays : null} />
+        {employee.lastPayRaiseCents > 0 && (
+          <DetailRow
+            label="Last Pay Raise"
+            value={`${formatCurrency(employee.lastPayRaiseCents)}${employee.lastPayRaiseDate ? ` on ${formatDetailDate(employee.lastPayRaiseDate)}` : ""}`}
+          />
+        )}
+
+        {(employee.driverLicense || employee.applicatorLicense || employee.isCertifiedDriver || employee.coveredByInsurance) && (
+          <>
+            <p className="mb-3 mt-5 text-xs font-semibold uppercase tracking-wide text-slate-400">Certifications &amp; Licensing</p>
+            <DetailRow label="Driver License #" value={employee.driverLicense} />
+            <DetailRow label="License Expiration" value={formatDetailDate(employee.licenseExpiration)} />
+            <DetailRow label="Certified Driver" value={employee.isCertifiedDriver ? "Yes" : null} />
+            <DetailRow label="Applicator License" value={employee.applicatorLicense} />
+            <DetailRow label="Insurance Eligibility" value={employee.insuranceEligibility} />
+            <DetailRow label="Covered by Insurance" value={employee.coveredByInsurance ? "Yes" : null} />
+          </>
+        )}
+
+        {(employee.birthDate || employee.maritalStatus || employee.spouseName || employee.citizenship) && (
+          <>
+            <p className="mb-3 mt-5 text-xs font-semibold uppercase tracking-wide text-slate-400">Personal</p>
+            <DetailRow label="Birth Date" value={formatDetailDate(employee.birthDate)} />
+            <DetailRow label="Marital Status" value={employee.maritalStatus} />
+            <DetailRow label="Spouse Name" value={employee.spouseName} />
+            <DetailRow label="Spouse Phone" value={employee.spousePhone} />
+            <DetailRow label="Dependants" value={employee.numDependants > 0 ? employee.numDependants : null} />
+            <DetailRow label="Citizenship" value={employee.citizenship} />
+          </>
+        )}
 
         {(employee.emergencyContact || employee.emergencyPhone) && (
           <>
@@ -897,9 +952,30 @@ function EmployeeDetail({
             <DetailRow label="Phone" value={employee.emergencyPhone} />
           </>
         )}
+
+        <p className="mb-3 mt-5 text-xs font-semibold uppercase tracking-wide text-slate-400">App Access</p>
+        <DetailRow label="Landscapt Role" value={employee.userRole} />
+        <DetailRow label="Sales Rep" value={employee.isSalesRep ? "Yes" : null} />
+        <DetailRow label="Show in Calendar" value={employee.showInCalendar ? "Yes" : "No"} />
+        <DetailRow label="Time Clock" value={
+          [employee.fieldTimeClock && "Field", employee.officeTimeClock && "Office"].filter(Boolean).join(", ") || null
+        } />
+        <DetailRow label="Linked Login" value={employee.userId ? "Yes" : null} />
+
+        {employee.notes && (
+          <>
+            <p className="mb-3 mt-5 text-xs font-semibold uppercase tracking-wide text-slate-400">Notes</p>
+            <p className="whitespace-pre-wrap text-sm text-slate-700">{employee.notes}</p>
+          </>
+        )}
       </div>
     </div>
   );
+}
+
+function formatDetailDate(date: string | null | undefined): string | null {
+  if (!date) return null;
+  return new Date(date + "T12:00:00").toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
 }
 
 

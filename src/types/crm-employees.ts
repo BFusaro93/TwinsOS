@@ -75,8 +75,8 @@ export interface CRMEmployee {
   sendTextAlerts: boolean;
   userRole: string | null;
   routeSheetFormat: string | null;
+  /** Legend dot color for this rep on the Sales Meetings calendar. */
   mapIconColor: string | null;
-  mapCodes: string | null;
   isSalesRep: boolean;
   /** Monthly sales goal in cents, keyed jan..dec (current year only — no
    *  historical year dimension), same shape as crm_contracts.monthlyAmounts. */
@@ -112,8 +112,6 @@ export interface CRMCrew {
   // Team Details
   tags: string[];
   routeSheetFormat: string | null;
-  mapIconColor: string | null;
-  mapCodes: string | null;
   showInCalendar: boolean;
   startingAddress: string | null;
   startingCity: string | null;
