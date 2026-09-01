@@ -71,7 +71,7 @@ export const PERMISSION_TABS: Record<string, PermissionTab> = {
           client_activate_deactivate: "Activate/Deactivate",
           client_add: "Add Client",
           client_allow_edit: "Allow Edit",
-          client_allow_delete: "Allow Delete",
+          client_allow_delete: "Allow Cancel/Deactivate",
           client_bulk_edit: "Bulk Edit",
           client_bulk_schedule: "Bulk Schedule",
           client_bulk_create: "Bulk Create",
@@ -98,7 +98,7 @@ export const PERMISSION_TABS: Record<string, PermissionTab> = {
         permissions: {
           lead_list: "Lead List",
           lead_allow_edit: "Allow Edit",
-          lead_allow_delete: "Allow Delete",
+          lead_allow_delete: "Allow Close as Lost",
           lead_bulk_edit: "Bulk Edit",
           lead_bulk_create: "Bulk Create",
           lead_estimates: "Estimates",
