@@ -24,9 +24,14 @@ export function HelpMenu() {
     <>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="icon" className="shrink-0 text-slate-500" title="Help">
-            <HelpCircle className="h-5 w-5" />
-            <span className="sr-only">Help</span>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-9 shrink-0 gap-1.5 rounded-full border-slate-200 px-3 text-slate-600 hover:text-slate-900"
+            title="Help"
+          >
+            <HelpCircle className="h-4 w-4" />
+            Help
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-48">

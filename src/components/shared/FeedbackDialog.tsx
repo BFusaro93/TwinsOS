@@ -127,7 +127,20 @@ export function FeedbackDialog({ open, onOpenChange }: FeedbackDialogProps) {
           </div>
 
           <div className="space-y-2">
-            <Label>Screenshot (optional)</Label>
+            <div className="flex items-center justify-between">
+              <Label>Screenshot (optional)</Label>
+              {!screenshotPreview && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  <Paperclip className="mr-1.5 h-3.5 w-3.5" />
+                  Attach a screenshot
+                </Button>
+              )}
+            </div>
             <input
               ref={fileInputRef}
               type="file"
@@ -135,7 +148,7 @@ export function FeedbackDialog({ open, onOpenChange }: FeedbackDialogProps) {
               className="hidden"
               onChange={handleFileChange}
             />
-            {screenshotPreview ? (
+            {screenshotPreview && (
               <div className="relative w-fit">
                 <img
                   src={screenshotPreview}
@@ -150,18 +163,6 @@ export function FeedbackDialog({ open, onOpenChange }: FeedbackDialogProps) {
                 >
                   <X className="h-3.5 w-3.5" />
                 </button>
-              </div>
-            ) : (
-              <div className="flex justify-end">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => fileInputRef.current?.click()}
-                >
-                  <Paperclip className="mr-1.5 h-3.5 w-3.5" />
-                  Attach a screenshot
-                </Button>
               </div>
             )}
           </div>
