@@ -7,6 +7,8 @@ import { Input } from "@/components/ui/input";
 import { ALL_REPORTS } from "@/lib/reports/registry";
 import { REPORT_SECTIONS } from "@/types/crm-reports";
 import type { PrebuiltReportDef } from "@/lib/reports/definition-types";
+import { canViewReport } from "@/lib/reports/report-permissions";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 
 function reportHref(def: PrebuiltReportDef): string {
   return def.href ?? `/crm/admin/reports/r/${def.key}`;
@@ -14,6 +16,7 @@ function reportHref(def: PrebuiltReportDef): string {
 
 export function ReportCatalog() {
   const [search, setSearch] = useState("");
+  const { can } = usePermissions();
 
   const sections = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -22,10 +25,11 @@ export function ReportCatalog() {
       reports: ALL_REPORTS.filter(
         (r) =>
           r.section === section.key &&
+          canViewReport(r.key, can) &&
           (!q || `${r.name} ${r.description}`.toLowerCase().includes(q))
       ),
     })).filter((section) => section.reports.length > 0);
-  }, [search]);
+  }, [search, can]);
 
   return (
     <div className="flex flex-col gap-4">
