@@ -12,10 +12,18 @@ export async function DELETE(
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("org_id, role")
+    .select("org_id")
     .eq("id", user.id)
     .single();
-  if (!profile || !["admin", "manager"].includes(profile.role ?? "")) {
+  if (!profile) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  // Granular per-role permission (shared with portal-invite) — admins
+  // always pass, otherwise gated by crm_roles.permissions.client_reset_portal_password.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: allowed } = await (supabase.rpc as any)("has_settings_permission", {
+    p_key: "client_reset_portal_password",
+  });
+  if (!allowed) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
