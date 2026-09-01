@@ -1,7 +1,7 @@
 export type PlatformModule = "landscapt" | "equipt";
 
 /** Add-ons a plan already includes at no extra charge — see addons.ts for the full catalog. */
-export type BundledAddonKey = "job_photos" | "client_portal" | "route_optimization" | "advanced_reporting" | "api_access";
+export type BundledAddonKey = "job_photos" | "client_portal" | "route_optimization" | "advanced_reporting" | "api_access" | "chat_support";
 
 // Order here drives display order everywhere this list is rendered
 // (SubscriptionTab's plan cards, PlanComparisonTable's columns).
@@ -35,7 +35,7 @@ export const BILLABLE_PLANS = [
     modules: ["landscapt", "equipt"] as PlatformModule[],
     seatsIncluded: 10,
     seatOverageCents: 2000,
-    bundledAddons: ["job_photos", "client_portal"] as BundledAddonKey[],
+    bundledAddons: ["job_photos", "client_portal", "chat_support"] as BundledAddonKey[],
   },
   {
     plan: "enterprise",
@@ -44,7 +44,7 @@ export const BILLABLE_PLANS = [
     modules: ["landscapt", "equipt"] as PlatformModule[],
     seatsIncluded: 20,
     seatOverageCents: 2000,
-    bundledAddons: ["job_photos", "client_portal", "route_optimization", "advanced_reporting", "api_access"] as BundledAddonKey[],
+    bundledAddons: ["job_photos", "client_portal", "route_optimization", "advanced_reporting", "api_access", "chat_support"] as BundledAddonKey[],
   },
 ] as const;
 

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { MessageCircle } from "lucide-react";
 import { useCurrentUserStore, useChatStore } from "@/stores";
 import { useMyConversation, useSupportMessagesRealtime } from "@/lib/hooks/use-support-chat";
+import { useAddonAccess } from "@/lib/hooks/use-module-access";
 import { ChatDialog } from "@/components/shared/ChatDialog";
 
 const LAST_VIEWED_KEY_PREFIX = "support-chat-last-viewed:";
@@ -18,7 +19,10 @@ const LAST_VIEWED_KEY_PREFIX = "support-chat-last-viewed:";
 export function SupportChatWidget() {
   const { currentUser } = useCurrentUserStore();
   const { open, setOpen } = useChatStore();
-  const { data: messages = [], isLoading } = useMyConversation(currentUser.orgId || undefined);
+  const { allowed: hasChatSupport } = useAddonAccess("chat_support");
+  const { data: messages = [], isLoading } = useMyConversation(
+    hasChatSupport ? currentUser.orgId || undefined : undefined
+  );
   const [hasUnread, setHasUnread] = useState(false);
 
   useSupportMessagesRealtime(open ? null : currentUser.orgId || undefined);
@@ -49,7 +53,7 @@ export function SupportChatWidget() {
     }
   }
 
-  if (!currentUser.orgId) return null;
+  if (!currentUser.orgId || !hasChatSupport) return null;
 
   return (
     <>

@@ -15,6 +15,7 @@ import { FeedbackDialog } from "@/components/shared/FeedbackDialog";
 import { AskAIPanel } from "@/components/shared/AskAIPanel";
 import { SUPPORT_EMAIL } from "@/components/marketing/config";
 import { useChatStore } from "@/stores";
+import { useAddonAccess } from "@/lib/hooks/use-module-access";
 
 /** Single TopBar entry point for Ask AI + Send Feedback, replacing the two
  *  floating circles on every screen that already has a TopBar. Home and the
@@ -28,6 +29,7 @@ export function HelpMenu() {
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [askAiOpen, setAskAiOpen] = useState(false);
   const { setOpen: setChatOpen } = useChatStore();
+  const { allowed: hasChatSupport } = useAddonAccess("chat_support");
 
   return (
     <>
@@ -52,10 +54,12 @@ export function HelpMenu() {
             <MessageSquarePlus className="mr-2 h-4 w-4 text-slate-500" />
             Send Feedback
           </DropdownMenuItem>
-          <DropdownMenuItem onSelect={() => setChatOpen(true)}>
-            <MessageCircle className="mr-2 h-4 w-4 text-brand-600" />
-            Chat with us
-          </DropdownMenuItem>
+          {hasChatSupport && (
+            <DropdownMenuItem onSelect={() => setChatOpen(true)}>
+              <MessageCircle className="mr-2 h-4 w-4 text-brand-600" />
+              Chat with us
+            </DropdownMenuItem>
+          )}
           <DropdownMenuSeparator />
           <DropdownMenuItem onSelect={() => router.push("/settings/support")}>
             <LifeBuoy className="mr-2 h-4 w-4 text-slate-500" />
