@@ -41,6 +41,7 @@ import { formatCurrency, getAvatarColor } from "@/lib/utils";
 import { Plus, Search, MoreHorizontal, UserCog, ChevronDown, Pencil } from "lucide-react";
 import { MasterDetailLayout } from "@/components/shared/MasterDetailLayout";
 import { PermissionGate } from "@/components/shared/PermissionGate";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 import { PhoneInput } from "@/components/shared/PhoneInput";
 import { toast } from "sonner";
 import type { CRMEmployee, EmploymentStatus, UserType } from "@/types/crm-employees";
@@ -159,20 +160,22 @@ function PersonalTab({
         </div>
       </div>
 
-      <div className="rounded border">
-        <SectionBar title="Resource Tags" />
-        <div className="p-4 space-y-1.5">
-          <Input
-            className="h-8 text-sm"
-            value={(form.resource_tags ?? []).join(", ")}
-            onChange={(e) => onChange("resource_tags", e.target.value.split(",").map((t: string) => t.trim()).filter(Boolean))}
-            placeholder="e.g. snow, mowing, irrigation"
-          />
-          <p className="text-xs text-slate-400">
-            Type keywords or terms to group employees together. Then you can quickly select the group in the calendar.
-          </p>
+      <PermissionGate permission="emp_add_remove_tag">
+        <div className="rounded border">
+          <SectionBar title="Resource Tags" />
+          <div className="p-4 space-y-1.5">
+            <Input
+              className="h-8 text-sm"
+              value={(form.resource_tags ?? []).join(", ")}
+              onChange={(e) => onChange("resource_tags", e.target.value.split(",").map((t: string) => t.trim()).filter(Boolean))}
+              placeholder="e.g. snow, mowing, irrigation"
+            />
+            <p className="text-xs text-slate-400">
+              Type keywords or terms to group employees together. Then you can quickly select the group in the calendar.
+            </p>
+          </div>
         </div>
-      </div>
+      </PermissionGate>
     </div>
   );
 }
@@ -328,20 +331,22 @@ function PayrollTab({
         <div className="rounded border">
           <SectionBar title="Costing Information" />
           <div className="space-y-2.5 p-4">
-            <Field label="Hourly Rate ($)">
-              <FieldInput type="number" step="0.01" min="0"
-                value={form.hourly_rate_cents != null ? (form.hourly_rate_cents / 100).toFixed(2) : "0.00"}
-                onChange={(e) => onChange("hourly_rate_cents", Math.round(parseFloat(e.target.value || "0") * 100))}
-                className="h-8 w-28 text-sm"
-              />
-            </Field>
-            <Field label="Overtime Rate ($)">
-              <FieldInput type="number" step="0.01" min="0"
-                value={form.overtime_rate_cents != null ? (form.overtime_rate_cents / 100).toFixed(2) : "0.00"}
-                onChange={(e) => onChange("overtime_rate_cents", Math.round(parseFloat(e.target.value || "0") * 100))}
-                className="h-8 w-28 text-sm"
-              />
-            </Field>
+            <PermissionGate permission="payroll_show_pay_rate">
+              <Field label="Hourly Rate ($)">
+                <FieldInput type="number" step="0.01" min="0"
+                  value={form.hourly_rate_cents != null ? (form.hourly_rate_cents / 100).toFixed(2) : "0.00"}
+                  onChange={(e) => onChange("hourly_rate_cents", Math.round(parseFloat(e.target.value || "0") * 100))}
+                  className="h-8 w-28 text-sm"
+                />
+              </Field>
+              <Field label="Overtime Rate ($)">
+                <FieldInput type="number" step="0.01" min="0"
+                  value={form.overtime_rate_cents != null ? (form.overtime_rate_cents / 100).toFixed(2) : "0.00"}
+                  onChange={(e) => onChange("overtime_rate_cents", Math.round(parseFloat(e.target.value || "0") * 100))}
+                  className="h-8 w-28 text-sm"
+                />
+              </Field>
+            </PermissionGate>
             <Field label="Vacation Days / Year">
               <FieldInput type="number" min="0"
                 value={form.vacation_days ?? 0}
@@ -356,16 +361,18 @@ function PayrollTab({
                 className="h-8 w-20 text-sm"
               />
             </Field>
-            <Field label="Commission %">
-              <div className="flex items-center gap-1.5">
-                <FieldInput type="number" step="0.1" min="0" max="100"
-                  value={form.commission_pct ?? 0}
-                  onChange={(e) => onChange("commission_pct", parseFloat(e.target.value) || 0)}
-                  className="h-8 w-20 text-sm"
-                />
-                <span className="text-sm text-slate-500">%</span>
-              </div>
-            </Field>
+            <PermissionGate permission="payroll_show_pay_rate">
+              <Field label="Commission %">
+                <div className="flex items-center gap-1.5">
+                  <FieldInput type="number" step="0.1" min="0" max="100"
+                    value={form.commission_pct ?? 0}
+                    onChange={(e) => onChange("commission_pct", parseFloat(e.target.value) || 0)}
+                    className="h-8 w-20 text-sm"
+                  />
+                  <span className="text-sm text-slate-500">%</span>
+                </div>
+              </Field>
+            </PermissionGate>
           </div>
         </div>
       </div>
@@ -664,6 +671,7 @@ function EmployeeDialog({
   const { data: orgUsers } = useUsers();
   const { mutateAsync: create, isPending: creating } = useCreateEmployee();
   const { mutateAsync: update, isPending: updating } = useUpdateEmployee();
+  const { can } = usePermissions();
 
   const isNew = !employee;
 
@@ -777,8 +785,8 @@ function EmployeeDialog({
               { value: "employment", label: "Employment" },
               { value: "payroll", label: "Payroll / Job Costing" },
               ...(form.is_sales_rep ? [{ value: "sales_goals", label: "Sales Goals" }] : []),
-              { value: "user_settings", label: "User Settings" },
-              { value: "notes", label: "Notes" },
+              ...(can("emp_view_user_settings") ? [{ value: "user_settings", label: "User Settings" }] : []),
+              ...(can("emp_view_resource_notes") ? [{ value: "notes", label: "Notes" }] : []),
             ].map((tab) => (
               <TabsTrigger
                 key={tab.value}
@@ -805,18 +813,22 @@ function EmployeeDialog({
                 <SalesGoalsTab form={form} onChange={onChange} />
               </TabsContent>
             )}
-            <TabsContent value="user_settings" className="mt-0">
-              <UserSettingsTab form={form} onChange={onChange} roles={crmRoles ?? []} linkedAccountRole={linkedAccountRole} />
-            </TabsContent>
-            <TabsContent value="notes" className="mt-0">
-              <textarea
-                className="w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 resize-none"
-                rows={10}
-                value={form.notes ?? ""}
-                onChange={(e) => onChange("notes", e.target.value)}
-                placeholder="Add notes about this employee…"
-              />
-            </TabsContent>
+            {can("emp_view_user_settings") && (
+              <TabsContent value="user_settings" className="mt-0">
+                <UserSettingsTab form={form} onChange={onChange} roles={crmRoles ?? []} linkedAccountRole={linkedAccountRole} />
+              </TabsContent>
+            )}
+            {can("emp_view_resource_notes") && (
+              <TabsContent value="notes" className="mt-0">
+                <textarea
+                  className="w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 resize-none"
+                  rows={10}
+                  value={form.notes ?? ""}
+                  onChange={(e) => onChange("notes", e.target.value)}
+                  placeholder="Add notes about this employee…"
+                />
+              </TabsContent>
+            )}
           </div>
         </Tabs>
 
@@ -906,20 +918,22 @@ function EmployeeDetail({
         <DetailRow label="Date Hired" value={formatDetailDate(employee.dateHired)} />
         {employee.dateReleased && <DetailRow label="Date Released" value={formatDetailDate(employee.dateReleased)} />}
         {employee.rehireDate && <DetailRow label="Rehire Date" value={formatDetailDate(employee.rehireDate)} />}
-        <DetailRow label="Hourly Rate" value={employee.hourlyRateCents > 0 ? formatCurrency(employee.hourlyRateCents) : null} />
-        <DetailRow label="Overtime Rate" value={employee.overtimeRateCents > 0 ? formatCurrency(employee.overtimeRateCents) : null} />
         <DetailRow label="Eligible for OT" value={employee.eligibleOvertime ? "Yes" : null} />
         <DetailRow label="Compensation Type" value={employee.compensationType} />
         <DetailRow label="Payment Frequency" value={employee.paymentFrequency} />
-        <DetailRow label="Commission %" value={employee.commissionPct > 0 ? `${employee.commissionPct}%` : null} />
         <DetailRow label="Vacation Days" value={employee.vacationDays > 0 ? employee.vacationDays : null} />
         <DetailRow label="Sick Days" value={employee.sickDays > 0 ? employee.sickDays : null} />
-        {employee.lastPayRaiseCents > 0 && (
-          <DetailRow
-            label="Last Pay Raise"
-            value={`${formatCurrency(employee.lastPayRaiseCents)}${employee.lastPayRaiseDate ? ` on ${formatDetailDate(employee.lastPayRaiseDate)}` : ""}`}
-          />
-        )}
+        <PermissionGate permission="payroll_show_pay_rate">
+          <DetailRow label="Hourly Rate" value={employee.hourlyRateCents > 0 ? formatCurrency(employee.hourlyRateCents) : null} />
+          <DetailRow label="Overtime Rate" value={employee.overtimeRateCents > 0 ? formatCurrency(employee.overtimeRateCents) : null} />
+          <DetailRow label="Commission %" value={employee.commissionPct > 0 ? `${employee.commissionPct}%` : null} />
+          {employee.lastPayRaiseCents > 0 && (
+            <DetailRow
+              label="Last Pay Raise"
+              value={`${formatCurrency(employee.lastPayRaiseCents)}${employee.lastPayRaiseDate ? ` on ${formatDetailDate(employee.lastPayRaiseDate)}` : ""}`}
+            />
+          )}
+        </PermissionGate>
 
         {(employee.driverLicense || employee.applicatorLicense || employee.isCertifiedDriver || employee.coveredByInsurance) && (
           <PermissionGate permission="emp_view_license_info">
@@ -1000,6 +1014,8 @@ function EmployeeTable({
   onActivate: (id: string, name: string) => void;
   colSpan: number;
 }) {
+  const { can } = usePermissions();
+  const showPayRate = can("payroll_show_pay_rate");
   return (
     <table className="w-full text-sm">
       <thead className="sticky top-0 bg-slate-50 z-10">
@@ -1010,7 +1026,7 @@ function EmployeeTable({
           <th className="px-4 py-3">Type</th>
           <th className="px-4 py-3">Phone</th>
           <th className="px-4 py-3">Email</th>
-          <th className="px-4 py-3 text-right">Hourly Rate</th>
+          {showPayRate && <th className="px-4 py-3 text-right">Hourly Rate</th>}
           <th className="px-4 py-3">Date Hired</th>
           <th className="w-10 px-4 py-3" />
         </tr>
@@ -1059,9 +1075,11 @@ function EmployeeTable({
               <td className="px-4 py-2.5 capitalize text-slate-500 text-xs">{e.userType?.replace("_", " ") ?? "—"}</td>
               <td className="px-4 py-2.5 text-slate-600">{e.cellPhone ?? e.phone ?? "—"}</td>
               <td className="px-4 py-2.5 text-slate-500">{e.email ?? "—"}</td>
-              <td className="px-4 py-2.5 text-right font-medium text-slate-700">
-                {e.hourlyRateCents > 0 ? formatCurrency(e.hourlyRateCents) : "—"}
-              </td>
+              {showPayRate && (
+                <td className="px-4 py-2.5 text-right font-medium text-slate-700">
+                  {e.hourlyRateCents > 0 ? formatCurrency(e.hourlyRateCents) : "—"}
+                </td>
+              )}
               <td className="px-4 py-2.5 text-slate-500">
                 {e.dateHired ? new Date(e.dateHired + "T12:00:00").toLocaleDateString("en-US", {
                   month: "short", day: "numeric", year: "numeric",

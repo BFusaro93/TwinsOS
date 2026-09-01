@@ -234,20 +234,22 @@ function TeamAssignmentsTab({ crew }: { crew: CRMCrew }) {
                     value={m.daysOfWeek}
                     onChange={(days) => handleChangeDays(m, days)}
                   />
-                  <div className="flex items-center gap-1 shrink-0">
-                    <span className="text-xs text-slate-400">$</span>
-                    <Input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      defaultValue={m.laborBurdenCentsPerHour > 0 ? (m.laborBurdenCentsPerHour / 100).toFixed(2) : ""}
-                      placeholder="0.00"
-                      className="h-8 w-20 text-right text-xs"
-                      title="Labor burden rate ($/hr)"
-                      onBlur={(e) => handleChangeBurden(m, e.target.value)}
-                    />
-                    <span className="text-xs text-slate-400">/hr</span>
-                  </div>
+                  <PermissionGate permission="payroll_show_wage_burden">
+                    <div className="flex items-center gap-1 shrink-0">
+                      <span className="text-xs text-slate-400">$</span>
+                      <Input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        defaultValue={m.laborBurdenCentsPerHour > 0 ? (m.laborBurdenCentsPerHour / 100).toFixed(2) : ""}
+                        placeholder="0.00"
+                        className="h-8 w-20 text-right text-xs"
+                        title="Labor burden rate ($/hr)"
+                        onBlur={(e) => handleChangeBurden(m, e.target.value)}
+                      />
+                      <span className="text-xs text-slate-400">/hr</span>
+                    </div>
+                  </PermissionGate>
                   <button
                     className="shrink-0 text-red-400 hover:text-red-600 transition-colors"
                     onClick={() => handleRemove(m)}
