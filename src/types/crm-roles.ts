@@ -166,15 +166,10 @@ export const PERMISSION_TABS: Record<string, PermissionTab> = {
       scheduling_access: {
         label: "Scheduling Access",
         permissions: {
-          sched_calendar: "Calendar",
           sched_dispatch_board: "Dispatch Board",
           sched_waiting_list: "Waiting List",
           sched_teams: "Teams",
           sched_add_modify_projects: "Add/Modify Projects",
-          sched_asset_tracking: "Asset Tracking",
-          sched_view_edit_asset_purchase_info: "View/Edit Asset Purchase Info",
-          sched_view_edit_asset_forms: "View/Edit Asset Forms",
-          sched_get_schedule_alerts: "Get Schedule Alerts",
         },
       },
       scheduling_reports: {
@@ -247,10 +242,8 @@ export const PERMISSION_TABS: Record<string, PermissionTab> = {
         permissions: {
           chem_add_edit_usage: "Add | Edit Usage",
           chem_create_uom: "Create UoM",
-          chem_create_mix: "Create Mix",
           chem_create_application_method: "Create Application Method",
           chem_create_target: "Create Target",
-          chem_create_custom_field: "Create Custom Field",
         },
       },
     },
@@ -313,15 +306,6 @@ export const PERMISSION_TABS: Record<string, PermissionTab> = {
           acct_rpt_income_not_invoiced: "Income not Invoiced",
           acct_rpt_unapplied_payments: "Unapplied Payments",
           acct_rpt_sales_commission_export: "Sales Commission Export",
-        },
-      },
-      statistic_access: {
-        label: "Statistic Access",
-        permissions: {
-          stat_add_edit_type: "Add/Edit Statistic Type",
-          stat_add_edit: "Add/Edit Statistic",
-          stat_remove_type: "Remove Statistic Type",
-          stat_remove: "Remove Statistic",
         },
       },
       payroll_access: {

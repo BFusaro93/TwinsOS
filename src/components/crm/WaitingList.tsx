@@ -40,6 +40,8 @@ import { NewJobDialog } from "@/components/crm/jobs/NewJobDialog";
 import { formatCurrency, cn } from "@/lib/utils";
 import { Plus, ListOrdered, ChevronDown, RotateCcw, Search, Send, X } from "lucide-react";
 import { toast } from "sonner";
+import { EmptyState } from "@/components/shared/EmptyState";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 import type { CRMJob, CRMJobService } from "@/types/crm-jobs";
 
 function toLocalDateString(date: Date): string {
@@ -278,6 +280,7 @@ function WaitingJobRow({
 // ── main ─────────────────────────────────────────────────────────────────────
 
 export function WaitingList() {
+  const { can, isLoading: permissionsLoading } = usePermissions();
   const today = toLocalDateString(new Date());
   const thirtyOut = toLocalDateString(
     new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
@@ -376,6 +379,16 @@ export function WaitingList() {
   }
 
   const colCount = visibleKeys.length + 2; // +1 checkbox, +1 schedule action
+
+  if (!permissionsLoading && !can("sched_waiting_list")) {
+    return (
+      <EmptyState
+        icon={ListOrdered}
+        title="No access"
+        description="You don't have permission to view the Waiting List."
+      />
+    );
+  }
 
   return (
     <div className="flex h-full flex-col gap-4">

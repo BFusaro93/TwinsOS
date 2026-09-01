@@ -15,6 +15,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 import {
   useChemicalSettings,
   useUpdateChemicalSettings,
@@ -182,7 +183,19 @@ const DEFAULT_LOOKUP_ITEMS: Partial<Record<ChemicalLookupType, string[]>> = {
   area_unit: ["Square Foot", "1,000 Sq Ft", "Acre"],
 };
 
+/** Which chem_create_* permission key gates adding a new item to each lookup
+ *  list. `areas_treated` has no dedicated catalog key, so it's always allowed. */
+const LOOKUP_CREATE_PERMISSION: Partial<Record<ChemicalLookupType, string>> = {
+  application_method: "chem_create_application_method",
+  target: "chem_create_target",
+  volume_unit: "chem_create_uom",
+  area_unit: "chem_create_uom",
+};
+
 function LookupListEditor({ listType, addPlaceholder }: { listType: ChemicalLookupType; addPlaceholder: string }) {
+  const { can } = usePermissions();
+  const requiredKey = LOOKUP_CREATE_PERMISSION[listType];
+  const canCreate = !requiredKey || can(requiredKey);
   const { data: items = [], isLoading } = useChemicalLookupItems(listType);
   const create = useCreateChemicalLookupItem();
   const update = useUpdateChemicalLookupItem();
@@ -255,13 +268,13 @@ function LookupListEditor({ listType, addPlaceholder }: { listType: ChemicalLook
             <X className="h-4 w-4" />
           </button>
         </div>
-      ) : (
+      ) : canCreate ? (
         <div className="py-3">
           <button onClick={() => setAdding(true)} className="text-xs font-medium text-brand-600 hover:text-brand-700">
             + Add item
           </button>
         </div>
-      )}
+      ) : null}
     </div>
   );
 }

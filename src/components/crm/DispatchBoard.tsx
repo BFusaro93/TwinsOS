@@ -84,6 +84,8 @@ import { useCurrentUserStore } from "@/stores/current-user-store";
 import { useNearbyWaitingListJobs } from "@/lib/hooks/use-nearby-waiting-list";
 import { groupVisitsIntoStops } from "@/lib/utils/visit-stops";
 import { stripHtml } from "@/lib/utils/strip-html";
+import { EmptyState } from "@/components/shared/EmptyState";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 
 // ── status icon ───────────────────────────────────────────────────────────────
 
@@ -2443,6 +2445,7 @@ function formatDisplayDate(dateStr: string): string {
 // ── main board ─────────────────────────────────────────────────────────────────
 
 export function DispatchBoard() {
+  const { can, isLoading: permissionsLoading } = usePermissions();
   const [selectedDate,    setSelectedDate]    = useState(() => toLocalDateString(new Date()));
   const [endDate,         setEndDate]         = useState("");
   const [crewFilters,     setCrewFilters]     = useState<string[]>([]);
@@ -2836,6 +2839,16 @@ export function DispatchBoard() {
 
   const callAheadVisits = displayVisits.filter((v) => v.job?.callAhead && v.clientPhone);
 
+  if (!permissionsLoading && !can("sched_dispatch_board")) {
+    return (
+      <EmptyState
+        icon={Calendar}
+        title="No access"
+        description="You don't have permission to view the Dispatch Board."
+      />
+    );
+  }
+
   return (
     <div className="flex h-full flex-col gap-4">
       {/* Page header */}
@@ -3157,7 +3170,7 @@ export function DispatchBoard() {
         </Popover>
 
         {/* Chemical Tracking — day close-out wizard, only shown when relevant */}
-        {hasChemicalVisits && (
+        {hasChemicalVisits && can("chem_add_edit_usage") && (
           <button
             onClick={() => setChemicalWizardOpen(true)}
             title="Chemical Tracking"

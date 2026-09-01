@@ -24,9 +24,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, cn } from "@/lib/utils";
 import { Plus, Search, Pencil, FileText, TrendingUp, BarChart3 } from "lucide-react";
 import { toast } from "sonner";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 import type { Project, ProjectStatus } from "@/types/project";
 
 // ── constants ─────────────────────────────────────────────────────────────────
@@ -514,6 +515,8 @@ function NewProjectDialog({
 // ── main list ─────────────────────────────────────────────────────────────────
 
 export function CRMProjectsList() {
+  const { can } = usePermissions();
+  const canModify = can("sched_add_modify_projects");
   const { data: projects, isLoading } = useProjects(true);
   const [search, setSearch] = useState("");
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
@@ -533,9 +536,11 @@ export function CRMProjectsList() {
           <h1 className="text-xl font-semibold text-slate-900">Projects</h1>
           <p className="text-sm text-slate-500">Manage all client projects, milestones, and billing</p>
         </div>
-        <Button size="sm" onClick={() => setNewOpen(true)}>
-          <Plus className="mr-1.5 h-4 w-4" /> New Project
-        </Button>
+        {canModify && (
+          <Button size="sm" onClick={() => setNewOpen(true)}>
+            <Plus className="mr-1.5 h-4 w-4" /> New Project
+          </Button>
+        )}
       </div>
 
       {/* Search */}
@@ -589,8 +594,8 @@ export function CRMProjectsList() {
               filtered.map((p) => (
                 <tr
                   key={p.id}
-                  className="border-b hover:bg-slate-50 cursor-pointer"
-                  onClick={() => setSelectedProject(p)}
+                  className={cn("border-b hover:bg-slate-50", canModify && "cursor-pointer")}
+                  onClick={canModify ? () => setSelectedProject(p) : undefined}
                 >
                   <td className="px-4 py-3 font-medium text-brand-600">{p.name}</td>
                   <td className="px-4 py-3 text-slate-600">
@@ -613,13 +618,15 @@ export function CRMProjectsList() {
                     }) : "—"}
                   </td>
                   <td className="px-4 py-3">
-                    <button
-                      className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-brand-600"
-                      onClick={(e) => { e.stopPropagation(); setSelectedProject(p); }}
-                      title="Open project"
-                    >
-                      <Pencil className="h-3.5 w-3.5" />
-                    </button>
+                    {canModify && (
+                      <button
+                        className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-brand-600"
+                        onClick={(e) => { e.stopPropagation(); setSelectedProject(p); }}
+                        title="Open project"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))
