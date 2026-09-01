@@ -59,7 +59,10 @@ export async function updateSession(request: NextRequest) {
     pathname.startsWith("/features/") ||
     pathname === "/integrations" ||
     pathname === "/contact" ||
-    pathname === "/help";
+    pathname === "/help" ||
+    pathname === "/sitemap.xml" ||
+    pathname === "/robots.txt" ||
+    pathname === "/llms.txt";
 
   if (!user && !isPublicRoute) {
     const loginUrl = request.nextUrl.clone();
