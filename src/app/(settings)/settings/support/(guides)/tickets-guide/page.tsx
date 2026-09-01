@@ -195,17 +195,19 @@ export default function TicketsGuidePage() {
       <Section id="assignment" title="Assignment">
         <p>
           A ticket can be assigned to exactly one user at a time, via <code>assigned_to</code> (a
-          display-name string) and <code>assigned_to_id</code> (a real <code>profiles.id</code>,
+          display-name string) and <code>assigned_to_id</code> (a real <code>crm_employees.id</code>,
           resolved from the assignee-picker&apos;s selected employee). Both are set together whenever
           the UI&apos;s Assigned To dropdown is used — in the New Ticket dialog, the edit form, or the
           list&apos;s bulk <strong>Reassign</strong> action (select one or more rows → Actions →
           Reassign).
         </p>
         <Callout>
-          Tickets created before <code>assigned_to_id</code> existed, or created through a path that
-          never had a real user id (the public form path always leaves the assignee blank; the Zapier
-          &quot;Create Ticket&quot; action has no assignee field either), only have the name string.{" "}
-          <code>resolveAssigneeId()</code> falls back to
+          <code>resolveAssigneeId()</code> in <code>src/lib/ticket-notify.ts</code> turns that{" "}
+          <code>crm_employees.id</code> into a login user for notifications by looking up{" "}
+          <code>crm_employees.user_id</code>. Tickets created before <code>assigned_to_id</code>{" "}
+          existed, or created through a path that never had a real id (the public form path always
+          leaves the assignee blank; the Zapier &quot;Create Ticket&quot; action has no assignee field
+          either), only have the name string — <code>resolveAssigneeId()</code> falls back to
           fuzzy-matching that name against <code>crm_employees</code> so assignment notifications
           still work — but if the name doesn&apos;t match an employee exactly, assignment
           notifications are silently skipped rather than failing.
