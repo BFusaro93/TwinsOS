@@ -31,6 +31,26 @@ const POLL_TRIGGER_TYPES = ["meter_threshold", "part_low_stock", "pm_due", "wo_o
 // body param below, not by polling.
 const EVENT_TRIGGER_TYPES = ["request_submitted", "wo_status_change", "po_status_change"] as const;
 
+/** Today's date (YYYY-MM-DD) in America/New_York — same reference timezone
+ *  used by the report-schedules cron (src/app/api/cron/report-schedules/route.ts).
+ *  There's no per-org timezone column (organizations table has none), and this
+ *  runs on a server-side cron with no client request to source a local date
+ *  from, so pm_due/wo_overdue evaluation is anchored to this single reference
+ *  zone rather than the server's UTC date — which for a US-based org could put
+ *  "today" several hours into tomorrow and fire due/overdue automations early. */
+function todayEastern(): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(new Date());
+}
+
+/** Formats a Date (constructed from an America/New_York-anchored string) back
+ *  to YYYY-MM-DD for comparison against date-only DB columns. */
+function dateToLocalString(d: Date): string {
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
 interface ActionContext {
   orgId: string;
   assetId?: string | null;
@@ -231,7 +251,7 @@ async function evaluatePartLowStock(adminClient: AdminClient, orgId: string, par
 
 /** True if any active PM schedule is due within daysAhead days. */
 async function evaluatePmDue(adminClient: AdminClient, orgId: string, daysAhead: number): Promise<boolean> {
-  const cutoff = new Date();
+  const cutoff = new Date(`${todayEastern()}T00:00:00`);
   cutoff.setDate(cutoff.getDate() + daysAhead);
   const { data } = await adminClient
     .from("pm_schedules")
@@ -239,14 +259,14 @@ async function evaluatePmDue(adminClient: AdminClient, orgId: string, daysAhead:
     .eq("org_id", orgId)
     .eq("is_active", true)
     .is("deleted_at", null)
-    .lte("next_due_date", cutoff.toISOString().slice(0, 10))
+    .lte("next_due_date", dateToLocalString(cutoff))
     .limit(1);
   return (data ?? []).length > 0;
 }
 
 /** True if any open work order's due date is more than daysOverdue days in the past. */
 async function evaluateWoOverdue(adminClient: AdminClient, orgId: string, daysOverdue: number): Promise<boolean> {
-  const cutoff = new Date();
+  const cutoff = new Date(`${todayEastern()}T00:00:00`);
   cutoff.setDate(cutoff.getDate() - daysOverdue);
   const { data } = await adminClient
     .from("work_orders")
@@ -255,7 +275,7 @@ async function evaluateWoOverdue(adminClient: AdminClient, orgId: string, daysOv
     .is("deleted_at", null)
     .not("status", "in", '("done","skipped")')
     .not("due_date", "is", null)
-    .lte("due_date", cutoff.toISOString().slice(0, 10))
+    .lte("due_date", dateToLocalString(cutoff))
     .limit(1);
   return (data ?? []).length > 0;
 }

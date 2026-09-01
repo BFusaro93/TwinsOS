@@ -1,5 +1,17 @@
 import type { ZapierTriggerType } from "@/lib/integrations/zapier";
 
+/** Today's date (YYYY-MM-DD) in America/New_York — same reference timezone
+ *  used by the report-schedules cron and the automations poller (see
+ *  src/app/api/automations/run/route.ts's todayEastern()). There's no
+ *  per-org timezone column, so pm_schedule_due (a date-only column) is
+ *  compared against this single reference zone instead of an instant
+ *  comparison against the server's UTC "now" — which parsed next_due_date as
+ *  UTC midnight and could fire several hours before the org's actual local
+ *  due day began. */
+function todayEastern(): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(new Date());
+}
+
 /**
  * Polling-trigger definition for one ZapierTriggerType — the fallback path
  * Zapier uses to test a trigger and to backfill/dedupe around REST Hook
@@ -267,7 +279,7 @@ export const POLLING_TRIGGERS: Record<ZapierTriggerType, PollingTriggerConfig> =
     filters: { is_active: true },
     hasSoftDelete: true,
     orderBy: "next_due_date",
-    postFilter: (p) => !!p.next_due_date && new Date(p.next_due_date) <= new Date(),
+    postFilter: (p) => !!p.next_due_date && p.next_due_date <= todayEastern(),
     map: (p) => ({
       id: p.id, title: p.title, assetId: p.asset_id, assetName: p.asset_name, frequency: p.frequency,
       nextDueDate: p.next_due_date, lastCompletedDate: p.last_completed_date,
