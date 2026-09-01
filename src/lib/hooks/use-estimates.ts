@@ -333,10 +333,33 @@ export function useUpdateEstimate() {
       patch: Record<string, any>;
     }) => {
       const supabase = createClient();
+      let finalPatch = patch;
+      if ("client_id" in patch) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: current } = await (supabase as any)
+          .from("estimates")
+          .select("client_id, portal_accepted_at")
+          .eq("id", id)
+          .single();
+        if (current && current.client_id !== patch.client_id && current.portal_accepted_at) {
+          // Re-pointing an already-accepted estimate to a different client
+          // would otherwise keep the stale acceptance/signature attached to
+          // the new client with no new signature required — same class of
+          // bug as the signed-contract client reassignment fix
+          // (CONTRACT_FINANCIAL_FIELDS in use-contracts.ts).
+          finalPatch = {
+            ...patch,
+            stage: "sent",
+            portal_accepted_at: null,
+            portal_signature_name: null,
+            portal_user_id: null,
+          };
+        }
+      }
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any)
         .from("estimates")
-        .update(patch)
+        .update(finalPatch)
         .eq("id", id);
       if (error) throw error;
     },
