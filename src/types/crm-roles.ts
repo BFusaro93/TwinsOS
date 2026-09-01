@@ -281,16 +281,7 @@ export const PERMISSION_TABS: Record<string, PermissionTab> = {
       vendor_access: {
         label: "Vendor Access",
         permissions: {
-          vendor_manage: "Manage Vendors",
-          vendor_view_info: "View Vendor Information",
           vendor_view_resource_notes: "View Resource Notes",
-        },
-      },
-      vendor_access_cont: {
-        label: "Vendor Access (cont.)",
-        permissions: {
-          vendor_add: "Add Vendor",
-          vendor_edit: "Edit Vendor",
         },
       },
       chemical_tracking: {
