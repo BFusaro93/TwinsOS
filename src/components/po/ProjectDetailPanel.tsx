@@ -1174,17 +1174,17 @@ function DetailsTab({
               </div>
             </>
           )}
-          <div className="mt-2 pt-2 border-t border-slate-100 text-slate-500">Full Rate</div>
+          <div className="mt-2 pt-2 border-t border-slate-100 text-slate-500">Break-Even Rate</div>
           <div className="mt-2 pt-2 border-t border-slate-100">
             <RateField
-              label="Full Breakeven Rate"
+              label="Break-Even Rate"
               valueCents={effectiveFullRate}
               onSave={(cents) => onUpdateRates(cents, effectiveBurdenedRate)}
             />
           </div>
-          <div className="text-slate-500">Burdened Rate</div>
+          <div className="text-slate-500">Loaded Labor Rate (LLR)</div>
           <RateField
-            label="Burdened Rate"
+            label="Loaded Labor Rate (LLR)"
             valueCents={effectiveBurdenedRate}
             onSave={(cents) => onUpdateRates(effectiveFullRate, cents)}
           />
@@ -1209,13 +1209,13 @@ function DetailsTab({
           </div>
           {laborCostFull != null && (
             <div className="flex justify-between">
-              <span className="text-slate-500">Labor — Full Rate ({project.laborHours}h × {formatCurrency(effectiveFullRate)})</span>
+              <span className="text-slate-500">Labor — Break-Even Rate ({project.laborHours}h × {formatCurrency(effectiveFullRate)})</span>
               <span className="font-medium text-slate-900">{formatCurrency(laborCostFull)}</span>
             </div>
           )}
           {laborCostBurdened != null && laborCostBurdened !== laborCostFull && (
             <div className="flex justify-between">
-              <span className="text-slate-500">Labor — Burdened Rate ({project.laborHours}h × {formatCurrency(effectiveBurdenedRate)})</span>
+              <span className="text-slate-500">Labor — Loaded Labor Rate (LLR) ({project.laborHours}h × {formatCurrency(effectiveBurdenedRate)})</span>
               <span className="font-medium text-slate-900">{formatCurrency(laborCostBurdened)}</span>
             </div>
           )}
@@ -1223,7 +1223,7 @@ function DetailsTab({
           {/* Net profit rows */}
           {netFull != null && (
             <div className="flex justify-between border-t border-slate-200 pt-1.5">
-              <span className="font-semibold text-slate-700">Net Profit (Full Rate)</span>
+              <span className="font-semibold text-slate-700">Net Profit (Break-Even)</span>
               <span className={`font-semibold ${netFull >= 0 ? "text-green-600" : "text-red-600"}`}>
                 {netFull < 0 ? "-" : ""}{formatCurrency(Math.abs(netFull))}
                 {netFullPct != null && ` (${netFull < 0 ? "-" : ""}${Math.abs(netFullPct)}%)`}
@@ -1232,7 +1232,7 @@ function DetailsTab({
           )}
           {netBurdened != null && netBurdened !== netFull && (
             <div className="flex justify-between pt-0.5">
-              <span className="text-slate-500">Net Profit (Burdened Only)</span>
+              <span className="text-slate-500">Net Profit (LLR Only)</span>
               <span className={`font-medium ${netBurdened >= 0 ? "text-green-600" : "text-red-600"}`}>
                 {netBurdened < 0 ? "-" : ""}{formatCurrency(Math.abs(netBurdened))}
                 {netBurdenedPct != null && ` (${netBurdened < 0 ? "-" : ""}${Math.abs(netBurdenedPct)}%)`}

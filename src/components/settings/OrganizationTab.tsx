@@ -202,8 +202,8 @@ export function OrganizationTab() {
             </div>
           </SettingRow>
           <SettingRow
-            label="Breakeven Labor Rate"
-            description="Fully-loaded cost per labor hour — wages + burden + non-billable uplift + fixed overhead recovery. Used in Job Costing and Project net profit (full rate)."
+            label="Break-Even Labor Rate"
+            description="Fully-loaded cost per labor hour — wages + burden + non-billable uplift + fixed overhead recovery (LLR + Overhead). Used in Job Costing and Project net profit (break-even)."
           >
             <div className="flex items-center gap-2">
               <span className="text-sm text-slate-500">$</span>
@@ -231,7 +231,7 @@ export function OrganizationTab() {
             </div>
           </SettingRow>
           <SettingRow
-            label="Burdened Labor Rate"
+            label="Loaded Labor Rate (LLR)"
             description="Wages + burden + non-billable uplift only — no fixed overhead recovery. Shows project net profit before overhead absorption."
           >
             <div className="flex items-center gap-2">

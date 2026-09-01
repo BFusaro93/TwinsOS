@@ -49,13 +49,13 @@ export function LaborRatesEditor() {
     <div className="space-y-4 text-xs">
       <p className="text-slate-500">
         Used to auto-fill an estimate line item&apos;s Cost from its Budgeted Hours (Cost = Budgeted Hours ×
-        Breakeven Labor Rate) whenever Cost is left at $0. This is the same org-wide rate set in Equipt →
+        Break-Even Labor Rate) whenever Cost is left at $0. This is the same org-wide rate set in Equipt →
         Settings → General → Finance — editing it here updates that too.
       </p>
       <div className="flex flex-col gap-1.5">
-        <label className="text-xs font-medium text-slate-700">Breakeven Labor Rate</label>
+        <label className="text-xs font-medium text-slate-700">Break-Even Labor Rate</label>
         <p className="text-[11px] text-slate-400">
-          Fully-loaded cost per labor hour — wages + burden + non-billable uplift + fixed overhead recovery.
+          Fully-loaded cost per labor hour — wages + burden + non-billable uplift + fixed overhead recovery (LLR + Overhead).
         </p>
         <div className="flex items-center gap-2">
           <span className="text-sm text-slate-500">$</span>
@@ -83,7 +83,7 @@ export function LaborRatesEditor() {
         </div>
       </div>
       <div className="flex flex-col gap-1.5">
-        <label className="text-xs font-medium text-slate-700">Burdened Labor Rate</label>
+        <label className="text-xs font-medium text-slate-700">Loaded Labor Rate (LLR)</label>
         <p className="text-[11px] text-slate-400">
           Wages + burden + non-billable uplift only — no fixed overhead recovery.
         </p>
