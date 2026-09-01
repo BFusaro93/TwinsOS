@@ -15,10 +15,15 @@ export async function POST(
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("org_id")
+    .select("org_id, role")
     .eq("id", user.id)
     .single();
   if (!profile) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // Same role gate as portal-reset — granting portal access shouldn't be
+  // less restricted than revoking it.
+  if (!["admin", "manager"].includes(profile.role ?? "")) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   const { clientId } = await params;
   const { email } = await req.json();

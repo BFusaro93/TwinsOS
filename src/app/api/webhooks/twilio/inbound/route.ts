@@ -26,9 +26,10 @@ function last10Digits(phone: string): string {
  * POST /api/webhooks/twilio/inbound
  *
  * Twilio calls this when a client texts our number back. Logs every inbound
- * reply to client_activity (matched to a client by phone number — no
- * multi-org routing yet, see the comment below) and, as a backstop, applies
- * opt-out/opt-in keywords directly to clients.sms_opt_in.
+ * reply to client_activity (matched to a client by phone number, scoped to
+ * the org owning the inbound MessagingServiceSid when one is configured —
+ * see the comment below) and, as a backstop, applies opt-out/opt-in
+ * keywords directly to clients.sms_opt_in.
  */
 export async function POST(request: Request) {
   const authToken = process.env.TWILIO_AUTH_TOKEN;
@@ -55,16 +56,32 @@ export async function POST(request: Request) {
 
   const supabase = createServiceClient();
 
-  // Single shared Twilio account today (see org-scoped Twilio settings
-  // migration) — every org's inbound texts land on the same number, so
-  // there's no way yet to route this to the right org. Matches by phone
-  // across all orgs, which is correct as long as only one org is live.
-  // Revisit once a second org gets its own subaccount/number.
+  // Orgs can override their own Twilio Messaging Service SID (see
+  // organizations.twilio_messaging_service_sid, used by sendClientSms) —
+  // when the inbound webhook's MessagingServiceSid matches a configured
+  // org, scope the client lookup to that org so two orgs' clients can never
+  // collide on a reused/shared phone number. Falls back to matching across
+  // all orgs only when no org has that MessagingServiceSid configured
+  // (single shared platform number, e.g. local dev or a not-yet-configured
+  // org) — same as the prior behavior for that case.
+  const messagingServiceSid = params.MessagingServiceSid;
+  let ownerOrgId: string | null = null;
+  if (messagingServiceSid) {
+    const { data: owningOrg } = await supabase
+      .from("organizations")
+      .select("id")
+      .eq("twilio_messaging_service_sid", messagingServiceSid)
+      .maybeSingle();
+    ownerOrgId = owningOrg?.id ?? null;
+  }
+
   const digits = last10Digits(from);
-  const { data: clients } = await supabase
+  let clientQuery = supabase
     .from("clients")
     .select("id, org_id, primary_phone, display_name")
     .not("primary_phone", "is", null);
+  if (ownerOrgId) clientQuery = clientQuery.eq("org_id", ownerOrgId);
+  const { data: clients } = await clientQuery;
 
   const matched = (clients ?? []).find(
     (c: { primary_phone: string | null }) => c.primary_phone && last10Digits(c.primary_phone) === digits

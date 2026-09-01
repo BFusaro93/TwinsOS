@@ -23,6 +23,13 @@ export async function GET(
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  // Explicit org filter as defense-in-depth alongside RLS — same rationale
+  // as the invoice PDF route (per CLAUDE.md, org_id must always be scoped
+  // from the session, not implicit trust in a policy that could itself
+  // change, e.g. a future crew-role RLS carve-out).
+  const { data: profile } = await supabase.from("profiles").select("org_id").eq("id", user.id).single();
+  if (!profile) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
   // ── fetch estimate ──────────────────────────────────────────────────────────
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: est, error: estErr } = await (supabase as any)
@@ -34,6 +41,7 @@ export async function GET(
       estimate_milestones(name, amount_cents, sort_order, deleted_at)
     `)
     .eq("id", id)
+    .eq("org_id", profile.org_id)
     .single();
 
   if (estErr || !est) {
