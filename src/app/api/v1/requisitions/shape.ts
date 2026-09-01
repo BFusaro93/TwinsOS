@@ -33,7 +33,7 @@ export function shapeRequisitionLineItem(row: Record<string, unknown>) {
     productItemName: row.product_item_name,
     partNumber: row.part_number,
     quantity: row.quantity,
-    unitCostCents: row.unit_cost,
+    unitCostCents: Math.round(row.unit_cost as number),
     totalCostCents: row.total_cost,
     projectId: row.project_id,
     notes: row.notes,
