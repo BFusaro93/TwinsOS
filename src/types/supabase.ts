@@ -10064,6 +10064,7 @@ export type Database = {
           default_invoice_delivery: string
           default_invoice_frequency: string
           id: string
+          is_platform_staff_org: boolean
           name: string
           oauth_write_roles: string[]
           pending_plan: string | null
@@ -10104,6 +10105,7 @@ export type Database = {
           default_invoice_delivery?: string
           default_invoice_frequency?: string
           id?: string
+          is_platform_staff_org?: boolean
           name: string
           oauth_write_roles?: string[]
           pending_plan?: string | null
@@ -10144,6 +10146,7 @@ export type Database = {
           default_invoice_delivery?: string
           default_invoice_frequency?: string
           id?: string
+          is_platform_staff_org?: boolean
           name?: string
           oauth_write_roles?: string[]
           pending_plan?: string | null
@@ -11870,6 +11873,51 @@ export type Database = {
           },
         ]
       }
+      staff_impersonation_sessions: {
+        Row: {
+          ended_at: string | null
+          expires_at: string
+          id: string
+          reason: string | null
+          staff_user_id: string
+          started_at: string
+          target_org_id: string
+        }
+        Insert: {
+          ended_at?: string | null
+          expires_at?: string
+          id?: string
+          reason?: string | null
+          staff_user_id: string
+          started_at?: string
+          target_org_id: string
+        }
+        Update: {
+          ended_at?: string | null
+          expires_at?: string
+          id?: string
+          reason?: string | null
+          staff_user_id?: string
+          started_at?: string
+          target_org_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "staff_impersonation_sessions_staff_user_id_fkey"
+            columns: ["staff_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "staff_impersonation_sessions_target_org_id_fkey"
+            columns: ["target_org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       stripe_webhook_events: {
         Row: {
           event_created: string
@@ -13355,6 +13403,14 @@ export type Database = {
           p_record_type: string
         }
         Returns: undefined
+      }
+      is_staff: { Args: { uid: string }; Returns: boolean }
+      list_organizations_for_staff: {
+        Args: never
+        Returns: {
+          id: string
+          name: string
+        }[]
       }
       my_org_id: { Args: never; Returns: string }
       my_role: { Args: never; Returns: string }

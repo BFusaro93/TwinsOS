@@ -28,6 +28,7 @@ import { GlobalSearchDialog } from "@/components/shared/GlobalSearchDialog";
 import { NotificationsBell } from "@/components/shared/NotificationsBell";
 import { EditProfileDialog } from "@/components/shared/EditProfileDialog";
 import { HelpMenu } from "@/components/shared/HelpMenu";
+import { ImpersonationBanner } from "@/components/shared/ImpersonationBanner";
 import { useUsers } from "@/lib/hooks/use-users";
 import { useSyncCurrentUser } from "@/lib/hooks/use-current-user";
 
@@ -178,6 +179,7 @@ export function TopBar() {
   return (
     <>
     <EditProfileDialog open={profileOpen} onOpenChange={setProfileOpen} />
+    <ImpersonationBanner />
     <header className="flex h-14 shrink-0 items-center gap-4 border-b bg-white px-4">
       {/* Mobile hamburger — opens sidebar drawer */}
       <Button
