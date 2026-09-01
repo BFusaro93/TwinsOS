@@ -48,7 +48,7 @@ function usePendingPlanRedirect() {
 }
 
 const INTERNAL_BOX =
-  "group flex w-full flex-col items-center gap-5 rounded-2xl border-2 border-slate-200 bg-white p-10 shadow-sm transition-all duration-150 hover:border-brand-400 hover:shadow-lg sm:w-60";
+  "group flex w-full flex-col items-center gap-5 rounded-2xl border-2 border-slate-200 bg-white p-10 shadow-sm transition-all duration-150 hover:border-brand-400 hover:shadow-lg sm:w-52";
 
 const CREW_BOX =
   "group flex flex-col items-center gap-5 rounded-2xl border-2 border-slate-200 bg-white p-10 shadow-sm transition-all duration-150 hover:border-brand-400 hover:shadow-lg";
