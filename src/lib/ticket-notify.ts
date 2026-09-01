@@ -8,13 +8,16 @@ import { EMAIL_FROM } from "@/lib/email/send";
 // an authenticated session, since this also runs from the public/portal
 // ticket-submission path).
 //
-// crm_tickets now has a real assigned_to_id (profiles.id), set alongside the
-// display-name assigned_to whenever the UI's assignee dropdown is used — see
-// migration 20260811000002_crm_tickets_assigned_to_id.sql. resolveAssigneeId()
-// prefers that; the name-fuzzy-match against crm_employees is a fallback
-// only for rows written before that column existed (or third-party/portal
-// paths that never had an id to begin with). If neither resolves, assignee
-// notifications are silently skipped rather than failing the caller.
+// crm_tickets.assigned_to_id is a crm_employees.id (repointed from profiles.id
+// in migration 20260825134105_sales_rep_assigned_to_fk_target_employees.sql),
+// set alongside the display-name assigned_to whenever the UI's assignee
+// dropdown is used. Notifications need a profiles.id (login user) to look up
+// email/in-app prefs, so resolveAssigneeId() resolves assignedToId through
+// crm_employees.user_id first; the name-fuzzy-match against crm_employees is
+// a fallback for rows written before assigned_to_id existed (or third-party/
+// portal paths that never had an id to begin with), or an employee with no
+// linked login. If neither resolves, assignee notifications are silently
+// skipped rather than failing the caller.
 export async function resolveAssigneeId(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   supabase: any,
@@ -22,7 +25,16 @@ export async function resolveAssigneeId(
   assignedToId: string | null,
   assignedToName: string | null
 ): Promise<string | null> {
-  if (assignedToId) return assignedToId;
+  if (assignedToId) {
+    const { data: employee } = await supabase
+      .from("crm_employees")
+      .select("user_id")
+      .eq("id", assignedToId)
+      .eq("org_id", orgId)
+      .is("deleted_at", null)
+      .single();
+    if (employee?.user_id) return employee.user_id;
+  }
   if (!assignedToName?.trim()) return null;
 
   const { data: employees } = await supabase

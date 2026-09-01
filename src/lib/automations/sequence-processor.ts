@@ -325,11 +325,11 @@ export async function processDueEnrollment(
     let assignedToName: string | null = null;
     if (assignToId) {
       const { data: assignee } = await adminClient
-        .from("profiles")
-        .select("name")
+        .from("crm_employees")
+        .select("first_name, last_name")
         .eq("id", assignToId)
         .single();
-      assignedToName = assignee?.name ?? null;
+      assignedToName = assignee ? `${assignee.first_name} ${assignee.last_name}`.trim() : null;
     }
 
     const { data: ticket, error: ticketErr } = await adminClient

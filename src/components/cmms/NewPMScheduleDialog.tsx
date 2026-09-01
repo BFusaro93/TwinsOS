@@ -23,7 +23,7 @@ import {
 } from "@/components/ui/select";
 import { useAssets } from "@/lib/hooks/use-assets";
 import { useVehicles } from "@/lib/hooks/use-vehicles";
-import { useUsers } from "@/lib/hooks/use-users";
+import { useSelectableEmployees } from "@/lib/hooks/use-employees";
 import { EntityCombobox } from "@/components/shared/EntityCombobox";
 import { useCreatePMSchedule, useUpdatePMSchedule } from "@/lib/hooks/use-pm-schedules";
 import { useAddPMScheduleAsset, usePMScheduleAssets, useRemovePMScheduleAsset } from "@/lib/hooks/use-pm-schedule-assets";
@@ -57,7 +57,7 @@ export function NewPMScheduleDialog({ open, onOpenChange, initialData, onCreated
 
   const { data: assets } = useAssets();
   const { data: vehicles } = useVehicles();
-  const { data: users } = useUsers();
+  const { data: employees } = useSelectableEmployees();
 
   // When editing, load existing linked assets from the join table
   const { data: existingAssets } = usePMScheduleAssets(initialData?.id ?? "");
@@ -128,7 +128,7 @@ export function NewPMScheduleDialog({ open, onOpenChange, initialData, onCreated
     e.preventDefault();
     if (!isValid) return;
 
-    const resolvedAssignee = (users ?? []).find((u) => u.id === assignedToId);
+    const resolvedAssignee = (employees ?? []).find((e) => e.id === assignedToId);
     const payload = {
       title,
       assetId: null,
@@ -139,7 +139,9 @@ export function NewPMScheduleDialog({ open, onOpenChange, initialData, onCreated
       isActive: true,
       description: description || null,
       assignedToId: assignedToId || null,
-      assignedToName: resolvedAssignee?.name ?? null,
+      assignedToName: resolvedAssignee
+        ? `${resolvedAssignee.firstName} ${resolvedAssignee.lastName ?? ""}`.trim()
+        : null,
     };
 
     if (isEditing && initialData) {
@@ -301,12 +303,9 @@ export function NewPMScheduleDialog({ open, onOpenChange, initialData, onCreated
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">Unassigned</SelectItem>
-                  {(users ?? []).map((u) => (
-                    <SelectItem key={u.id} value={u.id}>
-                      {u.name}
-                      {u.role && (
-                        <span className="ml-1.5 text-xs capitalize text-slate-400">{u.role}</span>
-                      )}
+                  {(employees ?? []).map((e) => (
+                    <SelectItem key={e.id} value={e.id}>
+                      {e.firstName} {e.lastName}
                     </SelectItem>
                   ))}
                 </SelectContent>

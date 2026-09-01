@@ -282,7 +282,11 @@ export function useReceivePartCostLayer() {
         p_org_id: current.org_id as string,
         p_part_id: receipt.partId,
         p_quantity: Math.round(receipt.quantity),
-        p_layer_unit_cost: receipt.unitCost,
+        // po_line_items.unit_cost allows fractional-cent precision for case/
+        // bulk pricing (e.g. $50.495/unit), but parts.unit_cost and its cost
+        // layers stay whole-cent integers — round here before it hits the
+        // RPC's integer parameter.
+        p_layer_unit_cost: Math.round(receipt.unitCost),
         p_received_at: receipt.receivedAt,
         p_po_number: receipt.poNumber ?? "",
         p_cost_method: costMethod,
