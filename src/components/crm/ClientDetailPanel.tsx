@@ -49,6 +49,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ActivityTimeline } from "./ActivityTimeline";
 import { AuditTrailTab } from "@/components/shared/AuditTrailTab";
+import { PermissionGate } from "@/components/shared/PermissionGate";
 import { TicketDetailSheet } from "./tickets/TicketDetailSheet";
 import { TicketsList, NewTicketDialog } from "./tickets/TicketsList";
 import { NewEstimateDialog } from "./estimates/NewEstimateDialog";
@@ -261,6 +262,7 @@ function SavedPaymentMethodSection({ client }: { client: Client }) {
   return (
     <div className="space-y-2">
       {client.savedPaymentMethodSummary ? (
+        <PermissionGate permission="client_view_credit_card">
         <div className="flex items-center gap-2 text-sm">
           <span className="text-slate-700">{client.savedPaymentMethodSummary}</span>
           <span
@@ -292,6 +294,7 @@ function SavedPaymentMethodSection({ client }: { client: Client }) {
             Remove
           </Button>
         </div>
+        </PermissionGate>
       ) : (
         <div className="flex items-center gap-2">
           <span className="text-sm text-slate-400">No payment method on file</span>
@@ -3151,17 +3154,19 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
             {/* Tags + source/client since — bottom-aligned with the balance card */}
             <div className="flex flex-col gap-2">
               {client.savedPaymentMethodSummary && (
-                <div className="flex items-center gap-1.5 text-xs text-slate-500">
-                  <CreditCard className="h-3.5 w-3.5 text-slate-400" />
-                  {client.savedPaymentMethodSummary}
-                  <span
-                    className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${
-                      client.autopayEnabled ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"
-                    }`}
-                  >
-                    Autopay {client.autopayEnabled ? "On" : "Off"}
-                  </span>
-                </div>
+                <PermissionGate permission="client_view_credit_card">
+                  <div className="flex items-center gap-1.5 text-xs text-slate-500">
+                    <CreditCard className="h-3.5 w-3.5 text-slate-400" />
+                    {client.savedPaymentMethodSummary}
+                    <span
+                      className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${
+                        client.autopayEnabled ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"
+                      }`}
+                    >
+                      Autopay {client.autopayEnabled ? "On" : "Off"}
+                    </span>
+                  </div>
+                </PermissionGate>
               )}
               <TagEditor
                 tags={client.tags ?? []}

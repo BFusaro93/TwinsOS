@@ -86,6 +86,7 @@ interface InvoiceAllocation {
 }
 
 import type { CRMPayment } from "@/types/crm-invoices";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 
 // ── multi-invoice charge form (fresh card/bank entry) ───────────────────────
 
@@ -878,6 +879,10 @@ interface Props {
 const PAYMENT_TEMPLATE_COLUMNS = ["clientName", "amount", "paymentDate", "method", "reference", "memo", "invoiceNumber"];
 
 export function PaymentsList({ clientId }: Props) {
+  const { can } = usePermissions();
+  // Any of the three keys grants access — the catalog doesn't split this one
+  // action by payment method in practice.
+  const canRefund = can("acct_process_cc_refunds_voids") || can("acct_delete_card_payments") || can("acct_delete_ach_payments");
   const { data: payments, isLoading, refetch } = usePayments(clientId);
   const { mutateAsync: bulkImportPayments } = useBulkImportPayments();
   const searchParams = useSearchParams();
@@ -1141,12 +1146,14 @@ export function PaymentsList({ clientId }: Props) {
                       >
                         Edit
                       </button>
-                      <button
-                        className="rounded px-2 py-0.5 text-xs bg-red-50 hover:bg-red-100 text-red-600"
-                        onClick={(e) => { e.stopPropagation(); setRefundPayment(p); }}
-                      >
-                        Refund
-                      </button>
+                      {canRefund && (
+                        <button
+                          className="rounded px-2 py-0.5 text-xs bg-red-50 hover:bg-red-100 text-red-600"
+                          onClick={(e) => { e.stopPropagation(); setRefundPayment(p); }}
+                        >
+                          Refund
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -1230,10 +1237,12 @@ export function PaymentsList({ clientId }: Props) {
             <Button size="sm" variant="outline" onClick={() => { setEditPayment(viewPayment); setViewPayment(null); }}>
               Edit
             </Button>
-            <Button size="sm" variant="outline" className="text-red-600 border-red-200 hover:bg-red-50"
-              onClick={() => { setRefundPayment(viewPayment); setViewPayment(null); }}>
-              Refund
-            </Button>
+            {canRefund && (
+              <Button size="sm" variant="outline" className="text-red-600 border-red-200 hover:bg-red-50"
+                onClick={() => { setRefundPayment(viewPayment); setViewPayment(null); }}>
+                Refund
+              </Button>
+            )}
           </div>
         </DialogContent>
       </Dialog>

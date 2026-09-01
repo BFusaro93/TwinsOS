@@ -89,6 +89,7 @@ import { AuditTrailTab } from "@/components/shared/AuditTrailTab";
 import { AttachmentsSection } from "@/components/shared/AttachmentsSection";
 import { SnowRateTiersEditor } from "@/components/crm/jobs/SnowRateTiersEditor";
 import { SnowMonthlyBillingLink } from "@/components/crm/jobs/SnowMonthlyBillingLink";
+import { PermissionGate } from "@/components/shared/PermissionGate";
 
 const STATUS_COLOR: Record<string, string> = {
   scheduled:   "bg-blue-100 text-blue-700",
@@ -712,11 +713,13 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
             </Button>
           )}
           {effectiveStatus !== "cancelled" && !editing && (
-            <Button variant="outline" size="sm" className="h-8 text-xs"
-              onClick={() => handleStatus("cancelled")}>
-              <XCircle className="mr-1 h-3.5 w-3.5 text-red-400" />
-              Cancel Job
-            </Button>
+            <PermissionGate permission="job_cancel">
+              <Button variant="outline" size="sm" className="h-8 text-xs"
+                onClick={() => handleStatus("cancelled")}>
+                <XCircle className="mr-1 h-3.5 w-3.5 text-red-400" />
+                Cancel Job
+              </Button>
+            </PermissionGate>
           )}
           {job.jobType !== "recurring" && job.jobType !== "package" && (
             <Button variant="outline" size="sm" className="h-8 text-xs"

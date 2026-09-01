@@ -51,6 +51,20 @@ export async function POST(
     .single();
   if (!profile) return NextResponse.json({ error: "Profile not found" }, { status: 403 });
 
+  // Granular per-role permission — admins always pass. Any of the three
+  // card/ACH/refund-void keys grants access; the catalog doesn't split this
+  // one action by payment method in practice.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const permissionChecks = await Promise.all(
+    ["acct_process_cc_refunds_voids", "acct_delete_card_payments", "acct_delete_ach_payments"].map((key) =>
+      (supabase.rpc as any)("has_settings_permission", { p_key: key })
+    )
+  );
+  const allowed = permissionChecks.some((r) => r.data === true);
+  if (!allowed) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   const parsed = RefundSchema.safeParse(await request.json().catch(() => ({})));
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid input" }, { status: 400 });
   const { refundAmountCents } = parsed.data;

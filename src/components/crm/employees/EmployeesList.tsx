@@ -922,7 +922,7 @@ function EmployeeDetail({
         )}
 
         {(employee.driverLicense || employee.applicatorLicense || employee.isCertifiedDriver || employee.coveredByInsurance) && (
-          <>
+          <PermissionGate permission="emp_view_license_info">
             <p className="mb-3 mt-5 text-xs font-semibold uppercase tracking-wide text-slate-400">Certifications &amp; Licensing</p>
             <DetailRow label="Driver License #" value={employee.driverLicense} />
             <DetailRow label="License Expiration" value={formatDetailDate(employee.licenseExpiration)} />
@@ -930,7 +930,7 @@ function EmployeeDetail({
             <DetailRow label="Applicator License" value={employee.applicatorLicense} />
             <DetailRow label="Insurance Eligibility" value={employee.insuranceEligibility} />
             <DetailRow label="Covered by Insurance" value={employee.coveredByInsurance ? "Yes" : null} />
-          </>
+          </PermissionGate>
         )}
 
         {(employee.birthDate || employee.maritalStatus || employee.spouseName || employee.citizenship) && (
