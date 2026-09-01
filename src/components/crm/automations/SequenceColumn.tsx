@@ -12,6 +12,7 @@ import {
 } from "@/lib/hooks/use-crm-automations";
 import type { CRMSequence, CRMSequenceEvent } from "@/types/crm-automations";
 import { EventCard } from "./EventCard";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 import { toast } from "sonner";
 
 interface Props {
@@ -23,6 +24,10 @@ interface Props {
 }
 
 export function SequenceColumn({ sequence, isFocused, onFocus, onRulesClick, onEventClick }: Props) {
+  const { can } = usePermissions();
+  const canModify = can("automation_create_modify");
+  const canStop = can("automation_stop");
+  const canAddTags = can("automation_add_tags");
   const { data: events } = useSequenceEvents(sequence.id);
   const updateSequence = useUpdateSequence();
   const deleteEvent = useDeleteEvent();
@@ -41,6 +46,7 @@ export function SequenceColumn({ sequence, isFocused, onFocus, onRulesClick, onE
         </div>
         <Switch
           checked={sequence.isActive}
+          disabled={!canStop}
           onClick={(e) => e.stopPropagation()}
           onCheckedChange={(checked) =>
             updateSequence.mutate(
@@ -53,19 +59,21 @@ export function SequenceColumn({ sequence, isFocused, onFocus, onRulesClick, onE
             )
           }
         />
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-7 shrink-0 gap-1 px-2 text-xs"
-          onClick={(e) => {
-            e.stopPropagation();
-            onRulesClick();
-          }}
-          title="Sequence rules"
-        >
-          <Settings2 className="h-3.5 w-3.5" />
-          Rules
-        </Button>
+        {canModify && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 shrink-0 gap-1 px-2 text-xs"
+            onClick={(e) => {
+              e.stopPropagation();
+              onRulesClick();
+            }}
+            title="Sequence rules"
+          >
+            <Settings2 className="h-3.5 w-3.5" />
+            Rules
+          </Button>
+        )}
       </CardHeader>
 
       <CardContent className="flex flex-col gap-2 px-3 pb-3">
@@ -80,12 +88,15 @@ export function SequenceColumn({ sequence, isFocused, onFocus, onRulesClick, onE
             <EventCard
               key={ev.id}
               event={ev}
-              onClick={() => onEventClick(ev)}
-              onDelete={() =>
-                deleteEvent.mutate(
-                  { id: ev.id, sequenceId: ev.sequenceId },
-                  { onError: () => toast.error("Failed to delete event") }
-                )
+              onClick={canModify && (ev.eventType !== "tags" || canAddTags) ? () => onEventClick(ev) : undefined}
+              onDelete={
+                canModify
+                  ? () =>
+                      deleteEvent.mutate(
+                        { id: ev.id, sequenceId: ev.sequenceId },
+                        { onError: () => toast.error("Failed to delete event") }
+                      )
+                  : undefined
               }
             />
           ))

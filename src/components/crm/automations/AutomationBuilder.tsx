@@ -41,6 +41,7 @@ import { NoteEventDialog } from "./NoteEventDialog";
 import { UpdateEventDialog } from "./UpdateEventDialog";
 import { TagsEventDialog } from "./TagsEventDialog";
 import { IfBranchEventDialog } from "./IfBranchEventDialog";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 import { toast } from "sonner";
 
 interface Props {
@@ -67,6 +68,10 @@ const EVENT_PALETTE: EventPalette[] = [
 
 export function AutomationBuilder({ automationId }: Props) {
   const router = useRouter();
+  const { can } = usePermissions();
+  const canModify = can("automation_create_modify");
+  const canStop = can("automation_stop");
+  const canAddTags = can("automation_add_tags");
   const { data: automation, isLoading } = useAutomation(automationId);
   const { data: sequences } = useSequences(automationId);
   const updateAutomation = useUpdateAutomation();
@@ -82,6 +87,7 @@ export function AutomationBuilder({ automationId }: Props) {
   const [editingEvent, setEditingEvent] = useState<CRMSequenceEvent | null>(null);
 
   function startEditName() {
+    if (!canModify) return;
     setNameValue(automation?.name ?? "");
     setEditingName(true);
     setTimeout(() => nameInputRef.current?.focus(), 50);
@@ -100,7 +106,7 @@ export function AutomationBuilder({ automationId }: Props) {
   }
 
   async function handleAddSequence() {
-    if (createSequence.isPending) return;
+    if (!canModify || createSequence.isPending) return;
     try {
       const seq = await createSequence.mutateAsync({
         automationId,
@@ -114,6 +120,7 @@ export function AutomationBuilder({ automationId }: Props) {
   }
 
   async function handleAddEvent(type: EventType) {
+    if (!canModify || (type === "tags" && !canAddTags)) return;
     if (!focusedSequenceId || createEvent.isPending) return;
     try {
       await createEvent.mutateAsync({
@@ -169,13 +176,15 @@ export function AutomationBuilder({ automationId }: Props) {
               if (e.key === "Escape") setEditingName(false);
             }}
           />
-        ) : (
+        ) : canModify ? (
           <button
             onClick={startEditName}
             className="text-sm font-semibold text-slate-800 hover:text-brand-600 transition-colors"
           >
             {automation.name}
           </button>
+        ) : (
+          <span className="text-sm font-semibold text-slate-800">{automation.name}</span>
         )}
 
         <div className="ml-auto flex items-center gap-3">
@@ -183,6 +192,7 @@ export function AutomationBuilder({ automationId }: Props) {
             <Switch
               id="auto-active"
               checked={automation.isActive}
+              disabled={!canStop}
               onCheckedChange={(checked) =>
                 updateAutomation.mutate(
                   { id: automationId, updates: { isActive: checked } },
@@ -204,7 +214,7 @@ export function AutomationBuilder({ automationId }: Props) {
           <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-slate-400">
             Events
           </p>
-          {EVENT_PALETTE.map(({ type, label, icon: Icon }) => (
+          {canModify && EVENT_PALETTE.filter(({ type }) => type !== "tags" || canAddTags).map(({ type, label, icon: Icon }) => (
             <button
               key={type}
               onClick={() => handleAddEvent(type)}
@@ -216,9 +226,14 @@ export function AutomationBuilder({ automationId }: Props) {
               {label}
             </button>
           ))}
-          {!focusedSequenceId && (
+          {canModify && !focusedSequenceId && (
             <p className="mt-3 text-[10px] text-slate-400 leading-tight">
               Click a sequence to select it, then add events.
+            </p>
+          )}
+          {!canModify && (
+            <p className="mt-3 text-[10px] text-slate-400 leading-tight">
+              You don&apos;t have permission to modify automations.
             </p>
           )}
         </div>
@@ -237,14 +252,16 @@ export function AutomationBuilder({ automationId }: Props) {
           ))}
 
           {/* Add sequence */}
-          <button
-            onClick={handleAddSequence}
-            disabled={createSequence.isPending}
-            className="flex h-fit w-72 shrink-0 flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-slate-300 p-8 text-sm text-slate-400 transition-colors hover:border-brand-400 hover:text-brand-500 disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            <Plus className="h-5 w-5" />
-            Add Sequence
-          </button>
+          {canModify && (
+            <button
+              onClick={handleAddSequence}
+              disabled={createSequence.isPending}
+              className="flex h-fit w-72 shrink-0 flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-slate-300 p-8 text-sm text-slate-400 transition-colors hover:border-brand-400 hover:text-brand-500 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <Plus className="h-5 w-5" />
+              Add Sequence
+            </button>
+          )}
         </div>
       </div>
 

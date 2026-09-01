@@ -158,21 +158,11 @@ export const PERMISSION_TABS: Record<string, PermissionTab> = {
           automation_add_tags: "Add Automation Tags",
         },
       },
-      auto_assist_access: {
-        label: "Auto Assist Access",
-        permissions: {
-          auto_assist_create_modify_categories: "Create/Modify Assist Categories",
-          auto_assist_create_modify: "Create/Modify Assists",
-          auto_assist_view: "View Assists",
-        },
-      },
       forms: {
         label: "Forms",
         permissions: {
           forms_view_submit: "View/Submit Forms",
           forms_edit: "Edit Forms",
-          forms_view_office_only_fields: "View Office-Only Fields",
-          forms_get_alerts: "Get Form Alerts",
         },
       },
       email_activity: {

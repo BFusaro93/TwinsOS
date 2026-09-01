@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/table";
 import { formatDateTime } from "@/lib/utils";
 import { useSequenceExecutionLog } from "@/lib/hooks/use-sequence-execution-log";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 
 const ACTION_LABELS: Record<string, string> = {
   enrolled: "Enrolled",
@@ -62,6 +63,17 @@ const ACTION_COLORS: Record<string, string> = {
 
 export function AutomationActivityLog() {
   const { data: entries, isLoading } = useSequenceExecutionLog();
+  const { can, isLoading: permissionsLoading } = usePermissions();
+
+  if (!permissionsLoading && !can("automation_view")) {
+    return (
+      <EmptyState
+        icon={History}
+        title="No access"
+        description="You don't have permission to view Automations."
+      />
+    );
+  }
 
   return (
     <div className="flex h-full flex-col gap-4">

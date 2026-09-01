@@ -24,6 +24,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -130,6 +131,7 @@ const QUICK_FILTERS: { key: QuickFilter; label: string }[] = [
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export function EmailActivityList() {
+  const { can, isLoading: permissionsLoading } = usePermissions();
   const { data: emails = [] as EmailActivity[], isLoading, refetch } = useEmailActivity();
   const [search, setSearch] = useState("");
   const [activeColumnFilter, setActiveColumnFilter] = useState<ColumnFilterKey | null>(null);
@@ -241,6 +243,16 @@ export function EmailActivityList() {
     setSelectedIds(new Set());
   }
 
+  if (!permissionsLoading && !can("email_activity_view")) {
+    return (
+      <EmptyState
+        icon={Mail}
+        title="No access"
+        description="You don't have permission to view Email Activity."
+      />
+    );
+  }
+
   if (isLoading) {
     return (
       <div className="flex flex-col gap-2 pt-4">
@@ -333,13 +345,15 @@ export function EmailActivityList() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start">
-              <DropdownMenuItem
-                disabled={!someSelected}
-                onSelect={resendSelected}
-              >
-                <Send className="mr-2 h-3.5 w-3.5" />
-                Resend Email
-              </DropdownMenuItem>
+              {can("email_activity_send") && (
+                <DropdownMenuItem
+                  disabled={!someSelected}
+                  onSelect={resendSelected}
+                >
+                  <Send className="mr-2 h-3.5 w-3.5" />
+                  Resend Email
+                </DropdownMenuItem>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
 

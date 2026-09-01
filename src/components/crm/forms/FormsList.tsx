@@ -23,8 +23,10 @@ import {
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
-import { ChevronDown, ExternalLink, MoreHorizontal, Plus, RotateCcw, Search, Trash2, X } from "lucide-react";
+import { ChevronDown, ExternalLink, FormInput, MoreHorizontal, Plus, RotateCcw, Search, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
+import { EmptyState } from "@/components/shared/EmptyState";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 import type { CRMForm, FormStatus } from "@/types/crm-forms";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -116,6 +118,8 @@ function NewFormDialog({ open, onOpenChange }: NewFormDialogProps) {
 
 function FormRowMenu({ form }: { form: CRMForm }) {
   const router = useRouter();
+  const { can } = usePermissions();
+  const canEdit = can("forms_edit");
   const deleteForm = useDeleteForm();
   const updateForm = useUpdateForm(form.id);
   const toggleStatus = form.status === "published" ? "draft" : "published";
@@ -134,27 +138,31 @@ function FormRowMenu({ form }: { form: CRMForm }) {
           <ExternalLink className="mr-2 h-3.5 w-3.5" />
           View Responses
         </DropdownMenuItem>
-        <DropdownMenuItem
-          onSelect={() =>
-            updateForm.mutate(
-              { status: toggleStatus as FormStatus },
-              { onError: () => toast.error("Failed to update form status") }
-            )
-          }
-        >
-          {toggleStatus === "published" ? "Publish" : "Unpublish"}
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          className="text-red-600"
-          onSelect={() => {
-            if (confirm(`Delete "${form.name}"?`)) {
-              deleteForm.mutate(form.id, { onError: () => toast.error("Failed to delete form") });
-            }
-          }}
-        >
-          <Trash2 className="mr-2 h-3.5 w-3.5" />
-          Delete
-        </DropdownMenuItem>
+        {canEdit && (
+          <>
+            <DropdownMenuItem
+              onSelect={() =>
+                updateForm.mutate(
+                  { status: toggleStatus as FormStatus },
+                  { onError: () => toast.error("Failed to update form status") }
+                )
+              }
+            >
+              {toggleStatus === "published" ? "Publish" : "Unpublish"}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              className="text-red-600"
+              onSelect={() => {
+                if (confirm(`Delete "${form.name}"?`)) {
+                  deleteForm.mutate(form.id, { onError: () => toast.error("Failed to delete form") });
+                }
+              }}
+            >
+              <Trash2 className="mr-2 h-3.5 w-3.5" />
+              Delete
+            </DropdownMenuItem>
+          </>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );
@@ -164,6 +172,8 @@ function FormRowMenu({ form }: { form: CRMForm }) {
 
 export function FormsList() {
   const router = useRouter();
+  const { can, isLoading: permissionsLoading } = usePermissions();
+  const canEdit = can("forms_edit");
   const { data: forms = [], isLoading, refetch } = useForms();
   const [newOpen, setNewOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -205,16 +215,28 @@ export function FormsList() {
     return list;
   }, [forms, quickFilter, activeColFilter, colFilterValue, search]);
 
+  if (!permissionsLoading && !can("forms_view_submit")) {
+    return (
+      <EmptyState
+        icon={FormInput}
+        title="No access"
+        description="You don't have permission to view Forms."
+      />
+    );
+  }
+
   return (
     <div className="flex h-full flex-col gap-4">
       <PageHeader
         title="Forms"
         description="Build and manage forms for clients and prospects"
         action={
-          <Button size="sm" onClick={() => setNewOpen(true)}>
-            <Plus className="mr-1 h-3.5 w-3.5" />
-            Add Form
-          </Button>
+          canEdit ? (
+            <Button size="sm" onClick={() => setNewOpen(true)}>
+              <Plus className="mr-1 h-3.5 w-3.5" />
+              Add Form
+            </Button>
+          ) : undefined
         }
       />
 
@@ -281,9 +303,11 @@ export function FormsList() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start">
-              <DropdownMenuItem onSelect={() => setNewOpen(true)}>
-                <Plus className="mr-2 h-3.5 w-3.5" /> Add Form
-              </DropdownMenuItem>
+              {canEdit && (
+                <DropdownMenuItem onSelect={() => setNewOpen(true)}>
+                  <Plus className="mr-2 h-3.5 w-3.5" /> Add Form
+                </DropdownMenuItem>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
 

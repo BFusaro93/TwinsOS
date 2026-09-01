@@ -11,8 +11,10 @@ import { EmbedDialog } from "@/components/crm/forms/EmbedDialog";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ArrowLeft, Code2, PenLine } from "lucide-react";
+import { ArrowLeft, Code2, FormInput, PenLine } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { EmptyState } from "@/components/shared/EmptyState";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 
 type Tab = "builder" | "configure" | "responses";
 
@@ -20,6 +22,8 @@ export default function FormDetailPage({ params }: { params: Promise<{ id: strin
   const { id } = use(params);
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { can, isLoading: permissionsLoading } = usePermissions();
+  const canEdit = can("forms_edit");
   const { data: form, isLoading } = useForm(id);
   const initialTab = searchParams.get("tab");
   const [tab, setTab] = useState<Tab>(
@@ -27,6 +31,16 @@ export default function FormDetailPage({ params }: { params: Promise<{ id: strin
   );
   const [fillOpen, setFillOpen] = useState(false);
   const [embedOpen, setEmbedOpen] = useState(false);
+
+  if (!permissionsLoading && !can("forms_view_submit")) {
+    return (
+      <EmptyState
+        icon={FormInput}
+        title="No access"
+        description="You don't have permission to view Forms."
+      />
+    );
+  }
 
   if (isLoading) {
     return (
@@ -53,10 +67,15 @@ export default function FormDetailPage({ params }: { params: Promise<{ id: strin
   const publicUrl = `${publicBaseUrl}/forms/${form.slug}`;
 
   const tabs: { key: Tab; label: string }[] = [
-    { key: "builder",   label: "Design" },
-    { key: "configure", label: "Configure" },
+    ...(canEdit
+      ? [
+          { key: "builder" as const,   label: "Design" },
+          { key: "configure" as const, label: "Configure" },
+        ]
+      : []),
     { key: "responses", label: `Responses (${form.responseCount ?? 0})` },
   ];
+  const activeTab: Tab = canEdit ? tab : "responses";
 
   return (
     <div className="flex h-full flex-col gap-4">
@@ -65,15 +84,17 @@ export default function FormDetailPage({ params }: { params: Promise<{ id: strin
         description={form.description ?? "Form builder and responses"}
         action={
           <div className="flex flex-wrap items-center gap-2">
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setEmbedOpen(true)}
-              title="Get embed code"
-            >
-              <Code2 className="mr-1.5 h-3.5 w-3.5" />
-              Embed
-            </Button>
+            {canEdit && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setEmbedOpen(true)}
+                title="Get embed code"
+              >
+                <Code2 className="mr-1.5 h-3.5 w-3.5" />
+                Embed
+              </Button>
+            )}
             <Button
               size="sm"
               variant="outline"
@@ -98,12 +119,12 @@ export default function FormDetailPage({ params }: { params: Promise<{ id: strin
               onClick={() => setTab(key)}
               className={cn(
                 "flex items-center gap-2 text-sm font-medium transition-colors",
-                tab === key ? "text-brand-600" : "text-slate-400 hover:text-slate-600"
+                activeTab === key ? "text-brand-600" : "text-slate-400 hover:text-slate-600"
               )}
             >
               <span className={cn(
                 "flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold",
-                tab === key
+                activeTab === key
                   ? "bg-brand-600 text-white"
                   : "bg-slate-100 text-slate-400"
               )}>
@@ -120,13 +141,13 @@ export default function FormDetailPage({ params }: { params: Promise<{ id: strin
 
       {/* Tab content */}
       <div className="flex-1 overflow-auto">
-        {tab === "builder" && (
+        {activeTab === "builder" && (
           <FormBuilder form={form} publicBaseUrl={publicBaseUrl} />
         )}
-        {tab === "configure" && (
+        {activeTab === "configure" && (
           <FormConfigure form={form} />
         )}
-        {tab === "responses" && (
+        {activeTab === "responses" && (
           <FormResponses formId={id} />
         )}
       </div>

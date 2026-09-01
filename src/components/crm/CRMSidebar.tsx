@@ -108,9 +108,9 @@ export const CRM_NAV: NavSection[] = [
   {
     label: "Communication",
     items: [
-      { label: "Automations",     href: "/crm/communication/automations",  icon: Zap },
-      { label: "Forms",           href: "/crm/communication/forms",        icon: FormInput },
-      { label: "Message Activity", href: "/crm/communication/email",       icon: Mail },
+      { label: "Automations",     href: "/crm/communication/automations",  icon: Zap, permission: "automation_view" },
+      { label: "Forms",           href: "/crm/communication/forms",        icon: FormInput, permission: "forms_view_submit" },
+      { label: "Message Activity", href: "/crm/communication/email",       icon: Mail, permission: "email_activity_view" },
       { label: "Sales Campaigns", href: "/crm/communication/campaigns",    icon: Megaphone },
     ],
   },
