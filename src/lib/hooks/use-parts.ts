@@ -282,7 +282,7 @@ export function useReceivePartCostLayer() {
         p_org_id: current.org_id as string,
         p_part_id: receipt.partId,
         p_quantity: Math.round(receipt.quantity),
-        p_layer_unit_cost: receipt.unitCost,
+        p_layer_unit_cost: Math.round(receipt.unitCost),
         p_received_at: receipt.receivedAt,
         p_po_number: receipt.poNumber ?? "",
         p_cost_method: costMethod,
