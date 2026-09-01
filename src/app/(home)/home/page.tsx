@@ -54,7 +54,7 @@ const CREW_BOX =
   "group flex flex-col items-center gap-5 rounded-2xl border-2 border-slate-200 bg-white p-10 shadow-sm transition-all duration-150 hover:border-brand-400 hover:shadow-lg";
 
 const EXTERNAL_BOX =
-  "group flex w-full flex-col items-center gap-4 rounded-2xl border-2 border-slate-200 bg-white p-8 shadow-sm transition-all duration-150 hover:border-slate-400 hover:shadow-lg sm:w-56";
+  "group flex w-full flex-col items-center gap-4 rounded-2xl border-2 border-slate-200 bg-white p-8 shadow-sm transition-all duration-150 hover:border-slate-400 hover:shadow-lg sm:w-80";
 
 function CrewHome() {
   const { logoDataUrl, orgName } = useSettingsStore();
