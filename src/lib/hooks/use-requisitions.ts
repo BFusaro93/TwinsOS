@@ -284,11 +284,20 @@ export function useBulkImportRequisitions() {
       const { data: { user } } = await supabase.auth.getUser();
       const requestedByName = user?.user_metadata?.name ?? user?.email ?? "Unknown";
 
-      const inserts = rows
-        .filter((r) => r.title?.trim())
-        .map((r) => ({
+      const filteredRows = rows.filter((r) => r.title?.trim());
+      const inserts = [];
+      for (const r of filteredRows) {
+        let requisitionNumber = r.requisitionNumber?.trim();
+        if (!requisitionNumber) {
+          // Atomic per-org/year counter, not Date.now() — see next_requisition_number().
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { data, error: numberErr } = await (supabase.rpc as any)("next_requisition_number");
+          if (numberErr || !data) throw numberErr ?? new Error("Failed to generate requisition number");
+          requisitionNumber = data;
+        }
+        inserts.push({
           title: r.title.trim(),
-          requisition_number: r.requisitionNumber?.trim() || `REQ-${new Date().getFullYear()}-${Date.now().toString().slice(-6)}`,
+          requisition_number: requisitionNumber,
           requested_by_id: user?.id ?? null,
           requested_by_name: requestedByName,
           vendor_name: r.vendorName?.trim() || null,
@@ -298,7 +307,8 @@ export function useBulkImportRequisitions() {
           sales_tax: 0,
           shipping_cost: 0,
           grand_total: 0,
-        }));
+        });
+      }
       if (inserts.length === 0) return 0;
 
       // Insert one-by-one; on duplicate requisition_number, update the existing row
