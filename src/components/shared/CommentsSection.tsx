@@ -40,12 +40,12 @@ interface CommentsSectionProps {
 export function CommentsSection({ recordType, recordId, dark = false }: CommentsSectionProps) {
   const { data: comments, isLoading } = useComments(recordType, recordId);
   const { mutate: addComment, isPending: sending } = useAddComment();
-  const { currentUser } = useCurrentUserStore();
+  const { currentUser, currentUserLoaded } = useCurrentUserStore();
   const [draft, setDraft] = useState("");
 
   function handleSend() {
     const body = draft.trim();
-    if (!body) return;
+    if (!body || !currentUserLoaded) return;
     addComment(
       {
         recordType,
@@ -111,7 +111,7 @@ export function CommentsSection({ recordType, recordId, dark = false }: Comments
         />
         <Button
           size="sm"
-          disabled={!draft.trim() || sending}
+          disabled={!draft.trim() || sending || !currentUserLoaded}
           onClick={handleSend}
           title="Send (Shift+Enter)"
           className="self-end"

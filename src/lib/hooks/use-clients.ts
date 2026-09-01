@@ -55,7 +55,9 @@ function mapClient(row: any): Client {
     isTaxable: row.is_taxable ?? true,
     salesTaxCode: row.sales_tax_code,
     salesRepId: row.sales_rep_id,
-    salesRepName: row.profiles?.name ?? null,
+    salesRepName: row.sales_rep
+      ? `${row.sales_rep.first_name ?? ""} ${row.sales_rep.last_name ?? ""}`.trim() || null
+      : null,
     source: row.source,
     referredBy: row.referred_by,
     referredByClientId: row.referred_by_client_id ?? null,
@@ -184,7 +186,7 @@ export function useClients() {
       const supabase = createClient();
       const { data, error } = await supabase
         .from("clients")
-        .select("*, client_tags(tag)")
+        .select("*, client_tags(tag), sales_rep:crm_employees!clients_sales_rep_id_fkey(first_name,last_name)")
         .is("deleted_at", null)
         .order("display_name");
       if (error) throw error;
@@ -200,7 +202,7 @@ export function useChildClients(parentClientId: string) {
       const supabase = createClient();
       const { data, error } = await supabase
         .from("clients")
-        .select("*, client_tags(tag)")
+        .select("*, client_tags(tag), sales_rep:crm_employees!clients_sales_rep_id_fkey(first_name,last_name)")
         .eq("parent_client_id", parentClientId)
         .is("deleted_at", null)
         .order("display_name");
@@ -241,7 +243,7 @@ export function useClient(id: string) {
       const supabase = createClient();
       const { data, error } = await supabase
         .from("clients")
-        .select("*, client_tags(tag)")
+        .select("*, client_tags(tag), sales_rep:crm_employees!clients_sales_rep_id_fkey(first_name,last_name)")
         .eq("id", id)
         .is("deleted_at", null)
         .single();
