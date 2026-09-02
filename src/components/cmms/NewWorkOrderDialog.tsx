@@ -42,6 +42,12 @@ interface NewWorkOrderDialogProps {
   onCreated?: (wo: WorkOrder) => void;
   /** Pre-select an entity in create mode: "asset:<id>" | "vehicle:<id>" */
   defaultEntityKey?: string;
+  /** When set, creates one (or more, if multiple assets/vehicles are
+   *  selected) sub work order(s) under this existing work order instead of
+   *  a standalone/parent WO. Used by the "Add Sub Work Order" action on an
+   *  existing master WO's detail panel — sub-WOs are otherwise only
+   *  created inline when the parent itself is first created. */
+  parentWorkOrder?: WorkOrder | null;
 }
 
 // Combined option representing either an asset or vehicle
@@ -60,8 +66,9 @@ const ASSET_STATUS_OPTIONS: Array<{ value: string; label: string }> = [
   { value: "disposed", label: ASSET_STATUS_LABELS.disposed },
 ];
 
-export function NewWorkOrderDialog({ open, onOpenChange, initialData, onCreated, defaultEntityKey }: NewWorkOrderDialogProps) {
+export function NewWorkOrderDialog({ open, onOpenChange, initialData, onCreated, defaultEntityKey, parentWorkOrder }: NewWorkOrderDialogProps) {
   const isEditing = !!initialData;
+  const isAddingSub = !isEditing && !!parentWorkOrder;
 
   const [title, setTitle] = useState("");
   const [priority, setPriority] = useState("medium");
@@ -265,6 +272,31 @@ export function NewWorkOrderDialog({ open, onOpenChange, initialData, onCreated,
           onError: toastMutationError("update"),
         }
       );
+    } else if (isAddingSub && parentWorkOrder) {
+      // Adding sub-WO(s) to an already-existing parent — one create call
+      // per selected asset/vehicle (or a single asset-less sub-WO if none
+      // selected), sequentially, same as the initial multi-entity flow.
+      const keys = entityKeys.length > 0 ? entityKeys : ["none"];
+      (async () => {
+        let firstCreated: WorkOrder | null = null;
+        for (const key of keys) {
+          await new Promise<void>((resolve) => {
+            createWO.mutate(
+              {
+                ...commonFields,
+                parentWorkOrderId: parentWorkOrder.id,
+                ...buildEntityFields(key),
+              },
+              {
+                onSuccess: (created) => { firstCreated ??= created; resolve(); },
+                onError: (err) => { toastMutationError("create")(err); resolve(); },
+              }
+            );
+          });
+        }
+        handleClose();
+        if (firstCreated) onCreated?.(firstCreated);
+      })();
     } else if (entityKeys.length > 1) {
       // Multi-entity: create parent WO then sub-WOs sequentially. Numbers
       // are generated server-side (an atomic per-org counter), not client
@@ -328,10 +360,14 @@ export function NewWorkOrderDialog({ open, onOpenChange, initialData, onCreated,
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[580px]">
         <DialogHeader>
-          <DialogTitle>{isEditing ? "Edit Work Order" : "New Work Order"}</DialogTitle>
+          <DialogTitle>
+            {isEditing ? "Edit Work Order" : isAddingSub ? "Add Sub Work Order" : "New Work Order"}
+          </DialogTitle>
           <DialogDescription>
             {isEditing
               ? "Update work order details."
+              : isAddingSub
+              ? `Create a new sub work order under ${parentWorkOrder?.workOrderNumber}.`
               : "Create a new work order to track maintenance or repair tasks."}
           </DialogDescription>
         </DialogHeader>
@@ -449,12 +485,21 @@ export function NewWorkOrderDialog({ open, onOpenChange, initialData, onCreated,
               </div>
 
               {/* Multi-asset info banner */}
-              {!isEditing && entityKeys.length > 1 && (
+              {!isEditing && !isAddingSub && entityKeys.length > 1 && (
                 <div className="flex items-start gap-2 rounded-md border border-brand-200 bg-brand-50 px-3 py-2.5 text-sm text-brand-700">
                   <Info className="mt-0.5 h-4 w-4 shrink-0 text-brand-500" />
                   <span>
                     A <strong>parent work order</strong> will be created with{" "}
                     <strong>{entityKeys.length} sub work orders</strong>, one per selected asset / vehicle.
+                  </span>
+                </div>
+              )}
+              {isAddingSub && entityKeys.length > 1 && (
+                <div className="flex items-start gap-2 rounded-md border border-brand-200 bg-brand-50 px-3 py-2.5 text-sm text-brand-700">
+                  <Info className="mt-0.5 h-4 w-4 shrink-0 text-brand-500" />
+                  <span>
+                    <strong>{entityKeys.length} sub work orders</strong> will be added under{" "}
+                    <strong>{parentWorkOrder?.workOrderNumber}</strong>, one per selected asset / vehicle.
                   </span>
                 </div>
               )}
@@ -592,7 +637,13 @@ export function NewWorkOrderDialog({ open, onOpenChange, initialData, onCreated,
               Cancel
             </Button>
             <Button type="submit" disabled={!isValid || saving}>
-              {saving ? "Saving..." : isEditing ? "Save Changes" : "Create Work Order"}
+              {saving
+                ? "Saving..."
+                : isEditing
+                ? "Save Changes"
+                : isAddingSub
+                ? "Add Sub Work Order"
+                : "Create Work Order"}
             </Button>
           </DialogFooter>
         </form>

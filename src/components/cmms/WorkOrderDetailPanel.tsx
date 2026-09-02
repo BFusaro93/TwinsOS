@@ -29,7 +29,7 @@ import { printWO } from "@/lib/print";
 import { useComments } from "@/lib/hooks/use-comments";
 import { useWOParts, useWOLabor, useWOVendorCharges } from "@/lib/hooks/use-wo-costs";
 import { OverlayLevelContext, overlayZ, useOverlayLevel } from "@/lib/overlay-level";
-import { Download, GitBranch, CheckCircle2, Trash2, X } from "lucide-react";
+import { Download, GitBranch, CheckCircle2, Trash2, X, Plus } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -184,24 +184,40 @@ function WOLinkCard({ wo, onClick }: { wo: WorkOrder; onClick: () => void }) {
 function SubWorkOrdersSection({
   subWorkOrders,
   onSubWOClick,
+  canAddSub,
+  onAddSub,
 }: {
   subWorkOrders: WorkOrder[];
   onSubWOClick: (id: string) => void;
+  canAddSub: boolean;
+  onAddSub: () => void;
 }) {
-  if (subWorkOrders.length === 0) return null;
+  if (subWorkOrders.length === 0 && !canAddSub) return null;
   return (
     <>
       <Separator />
       <div>
-        <p className="mb-3 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-400">
-          <GitBranch className="h-3.5 w-3.5" />
-          Sub Work Orders
-        </p>
-        <div className="flex flex-col gap-1.5">
-          {subWorkOrders.map((sub) => (
-            <WOLinkCard key={sub.id} wo={sub} onClick={() => onSubWOClick(sub.id)} />
-          ))}
+        <div className="mb-3 flex items-center justify-between">
+          <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-400">
+            <GitBranch className="h-3.5 w-3.5" />
+            Sub Work Orders
+          </p>
+          {canAddSub && (
+            <Button size="sm" variant="outline" className="h-7 gap-1 px-2 text-xs" onClick={onAddSub}>
+              <Plus className="h-3.5 w-3.5" />
+              Add Sub Work Order
+            </Button>
+          )}
         </div>
+        {subWorkOrders.length > 0 ? (
+          <div className="flex flex-col gap-1.5">
+            {subWorkOrders.map((sub) => (
+              <WOLinkCard key={sub.id} wo={sub} onClick={() => onSubWOClick(sub.id)} />
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-slate-400">No sub work orders yet.</p>
+        )}
       </div>
     </>
   );
@@ -239,6 +255,7 @@ function DetailsTab({
   parentWorkOrder,
   onSubWOClick,
   onParentWOClick,
+  onAddSub,
   onAssigneeChange,
   isAssigneeSaving,
   onCategoryChange,
@@ -254,6 +271,7 @@ function DetailsTab({
   parentWorkOrder: WorkOrder | null;
   onSubWOClick: (id: string) => void;
   onParentWOClick: () => void;
+  onAddSub: () => void;
   onAssigneeChange: (ids: string[], names: string[]) => void;
   isAssigneeSaving: boolean;
   onCategoryChange: (categories: string[]) => void;
@@ -633,7 +651,12 @@ function DetailsTab({
         </>
       )}
 
-      <SubWorkOrdersSection subWorkOrders={subWorkOrders} onSubWOClick={onSubWOClick} />
+      <SubWorkOrdersSection
+        subWorkOrders={subWorkOrders}
+        onSubWOClick={onSubWOClick}
+        canAddSub={!parentWorkOrder}
+        onAddSub={onAddSub}
+      />
 
       {parentWorkOrder && (
         <ParentWorkOrderSection
@@ -677,6 +700,7 @@ export function WorkOrderDetailPanel({ workOrder }: WorkOrderDetailPanelProps) {
   const [vehicleSheetOpen, setVehicleSheetOpen] = useState(false);
   const [subWOSheetId, setSubWOSheetId] = useState<string | null>(null);
   const [parentWOSheetOpen, setParentWOSheetOpen] = useState(false);
+  const [addSubOpen, setAddSubOpen] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [status, setStatus] = useState<WorkOrderStatus>(workOrder.status);
   const level = useOverlayLevel();
@@ -796,6 +820,7 @@ export function WorkOrderDetailPanel({ workOrder }: WorkOrderDetailPanelProps) {
                 parentWorkOrder={parentWorkOrder}
                 onSubWOClick={(id) => setSubWOSheetId(id)}
                 onParentWOClick={() => setParentWOSheetOpen(true)}
+                onAddSub={() => setAddSubOpen(true)}
                 onAssigneeChange={(ids, names) => {
                   updateWO({
                     id: workOrder.id,
@@ -947,6 +972,7 @@ export function WorkOrderDetailPanel({ workOrder }: WorkOrderDetailPanelProps) {
       )}
 
       <NewWorkOrderDialog open={editOpen} onOpenChange={setEditOpen} initialData={workOrder} />
+      <NewWorkOrderDialog open={addSubOpen} onOpenChange={setAddSubOpen} parentWorkOrder={workOrder} />
     </div>
   );
 }
