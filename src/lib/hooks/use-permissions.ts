@@ -1,7 +1,8 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
+import { fetchCurrentProfile } from "@/lib/hooks/use-current-profile";
 import type { Permissions } from "@/types/crm-roles";
 
 interface PermissionsResult {
@@ -13,7 +14,7 @@ interface PermissionsResult {
   roleName: string | null;
 }
 
-async function fetchUserPermissions(): Promise<{
+async function fetchUserPermissions(queryClient: QueryClient): Promise<{
   permissions: Permissions;
   isAdmin: boolean;
   roleId: string | null;
@@ -21,27 +22,20 @@ async function fetchUserPermissions(): Promise<{
   profileRole: string | null;
   hasEmployeeLink: boolean;
 }> {
-  const supabase = createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) {
+  const profile = await fetchCurrentProfile(queryClient);
+  if (!profile) {
     return { permissions: {}, isAdmin: false, roleId: null, roleName: null, profileRole: null, hasEmployeeLink: false };
   }
 
-  // Check if user is org admin via profile role
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("role")
-    .eq("id", user.id)
-    .single();
+  const isAdmin = profile.role === "admin";
 
-  const isAdmin = profile?.role === "admin";
-
+  const supabase = createClient();
   // Get employee record linked to this auth user
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: employee } = await (supabase as any)
     .from("crm_employees")
     .select("crm_role_id, crm_roles(name, permissions, deleted_at)")
-    .eq("user_id", user.id)
+    .eq("user_id", profile.userId)
     .is("deleted_at", null)
     .maybeSingle();
 
@@ -50,7 +44,7 @@ async function fetchUserPermissions(): Promise<{
   // A soft-deleted role (crm_roles.deleted_at set) must stop granting access —
   // the join above doesn't filter deleted_at itself, so treat it as unassigned.
   if (!employee?.crm_role_id || !role || role.deleted_at) {
-    return { permissions: {}, isAdmin, roleId: null, roleName: null, profileRole: profile?.role ?? null, hasEmployeeLink: !!employee };
+    return { permissions: {}, isAdmin, roleId: null, roleName: null, profileRole: profile.role, hasEmployeeLink: !!employee };
   }
 
   return {
@@ -58,15 +52,16 @@ async function fetchUserPermissions(): Promise<{
     isAdmin,
     roleId: employee.crm_role_id,
     roleName: role.name ?? null,
-    profileRole: profile?.role ?? null,
+    profileRole: profile.role,
     hasEmployeeLink: true,
   };
 }
 
 export function usePermissions(): PermissionsResult {
+  const queryClient = useQueryClient();
   const { data, isLoading } = useQuery({
     queryKey: ["crm-permissions"],
-    queryFn: fetchUserPermissions,
+    queryFn: () => fetchUserPermissions(queryClient),
     staleTime: 5 * 60 * 1000, // cache 5 min — permissions don't change often
   });
 
@@ -95,9 +90,10 @@ export function usePermissions(): PermissionsResult {
  * crew logins confined to /crm/crew and out of the PO/CMMS dashboard shell.
  */
 export function useIsCrewOnly(): { isCrewOnly: boolean; isLoading: boolean } {
+  const queryClient = useQueryClient();
   const { data, isLoading } = useQuery({
     queryKey: ["crm-permissions"],
-    queryFn: fetchUserPermissions,
+    queryFn: () => fetchUserPermissions(queryClient),
     staleTime: 5 * 60 * 1000,
   });
   return { isCrewOnly: data?.profileRole === "crew", isLoading: isLoading || !data };
@@ -112,9 +108,10 @@ export function useIsCrewOnly(): { isCrewOnly: boolean; isLoading: boolean } {
  * by itself, grant CRM access.
  */
 export function useCrmAccess(pathname: string): { allowed: boolean; isLoading: boolean } {
+  const queryClient = useQueryClient();
   const { data, isLoading } = useQuery({
     queryKey: ["crm-permissions"],
-    queryFn: fetchUserPermissions,
+    queryFn: () => fetchUserPermissions(queryClient),
     staleTime: 5 * 60 * 1000,
   });
 

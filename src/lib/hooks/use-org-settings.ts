@@ -1,5 +1,6 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
+import { fetchCurrentProfile } from "@/lib/hooks/use-current-profile";
 import type { CostMethod } from "@/lib/cost-methods";
 import type { CompanyAddress } from "@/stores/settings-store";
 
@@ -80,28 +81,25 @@ function mapOrgSettings(row: Record<string, unknown>): OrgSettingsData {
   };
 }
 
+async function fetchOrgSettings(queryClient: QueryClient): Promise<OrgSettingsData> {
+  const profile = await fetchCurrentProfile(queryClient);
+  if (!profile) throw new Error("Not authenticated");
+
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("organizations")
+    .select("id, slug, name, brand_color, address, tax_rate_percent, cost_method, portal_enabled, customizations, account_number_prefix, account_number_next, account_number_suffix, default_billing_terms, default_invoice_frequency, default_invoice_delivery, cc_processing_fee_enabled, cc_processing_fee_bps, cc_processing_fee_threshold_cents, ach_payments_enabled")
+    .eq("id", profile.orgId)
+    .single();
+  if (error) throw error;
+  return mapOrgSettings(data as unknown as Record<string, unknown>);
+}
+
 export function useOrgSettings() {
+  const queryClient = useQueryClient();
   return useQuery<OrgSettingsData>({
     queryKey: ["org-settings"],
-    queryFn: async () => {
-      const supabase = createClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("Not authenticated");
-      const { data: profile, error: profileErr } = await supabase
-        .from("profiles")
-        .select("org_id")
-        .eq("id", user.id)
-        .single();
-      if (profileErr) throw profileErr;
-
-      const { data, error } = await supabase
-        .from("organizations")
-        .select("id, slug, name, brand_color, address, tax_rate_percent, cost_method, portal_enabled, customizations, account_number_prefix, account_number_next, account_number_suffix, default_billing_terms, default_invoice_frequency, default_invoice_delivery, cc_processing_fee_enabled, cc_processing_fee_bps, cc_processing_fee_threshold_cents, ach_payments_enabled")
-        .eq("id", profile.org_id)
-        .single();
-      if (error) throw error;
-      return mapOrgSettings(data as unknown as Record<string, unknown>);
-    },
+    queryFn: () => fetchOrgSettings(queryClient),
   });
 }
 
@@ -110,15 +108,9 @@ export function useUpdateOrgSettings() {
   return useMutation({
     mutationFn: async (rawInput: UpdateOrgSettingsInput) => {
       let input = rawInput;
+      const profile = await fetchCurrentProfile(queryClient);
+      if (!profile) throw new Error("Not authenticated");
       const supabase = createClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("Not authenticated");
-      const { data: profile, error: profileErr } = await supabase
-        .from("profiles")
-        .select("org_id")
-        .eq("id", user.id)
-        .single();
-      if (profileErr) throw profileErr;
 
       const patch: Record<string, unknown> = {};
       if (input.name !== undefined)          patch.name             = input.name;
@@ -155,7 +147,7 @@ export function useUpdateOrgSettings() {
         const { data: existing } = await supabase
           .from("organizations")
           .select("customizations")
-          .eq("id", profile.org_id)
+          .eq("id", profile.orgId)
           .single();
         const prev = (existing?.customizations as Record<string, unknown>) ?? {};
         patch.customizations = { ...prev, ...input.customizations };
@@ -164,7 +156,7 @@ export function useUpdateOrgSettings() {
       const { error } = await supabase
         .from("organizations")
         .update(patch)
-        .eq("id", profile.org_id);
+        .eq("id", profile.orgId);
       if (error) throw error;
     },
     onSuccess: () => {

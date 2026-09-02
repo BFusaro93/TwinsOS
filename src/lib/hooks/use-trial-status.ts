@@ -1,7 +1,8 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
+import { fetchCurrentProfile } from "@/lib/hooks/use-current-profile";
 
 export interface TrialStatus {
   isTrial: boolean;
@@ -17,23 +18,24 @@ export interface TrialStatus {
  * TrialExpiredGate) but Settings/Billing stay reachable so they can
  * actually subscribe.
  */
+async function fetchTrialStatus(queryClient: QueryClient) {
+  const profile = await fetchCurrentProfile(queryClient);
+  if (!profile) return null;
+  const supabase = createClient();
+  const { data: org, error } = await supabase
+    .from("organizations")
+    .select("plan, trial_ends_at")
+    .eq("id", profile.orgId)
+    .single();
+  if (error) throw error;
+  return { plan: org.plan, trialEndsAt: org.trial_ends_at };
+}
+
 export function useTrialStatus(): TrialStatus & { isLoading: boolean } {
+  const queryClient = useQueryClient();
   const { data, isLoading } = useQuery({
     queryKey: ["org-trial-status"],
-    queryFn: async () => {
-      const supabase = createClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return null;
-      const { data: profile } = await supabase.from("profiles").select("org_id").eq("id", user.id).single();
-      if (!profile) return null;
-      const { data: org, error } = await supabase
-        .from("organizations")
-        .select("plan, trial_ends_at")
-        .eq("id", profile.org_id)
-        .single();
-      if (error) throw error;
-      return { plan: org.plan, trialEndsAt: org.trial_ends_at };
-    },
+    queryFn: () => fetchTrialStatus(queryClient),
     staleTime: 5 * 60 * 1000,
   });
 
