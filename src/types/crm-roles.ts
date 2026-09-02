@@ -46,8 +46,8 @@ export const PERMISSION_TABS: Record<string, PermissionTab> = {
     },
   },
 
-  crm: {
-    label: "CRM",
+  clients_leads: {
+    label: "Clients & Leads",
     sections: {
       client_access: {
         label: "Client Access",
@@ -86,6 +86,12 @@ export const PERMISSION_TABS: Record<string, PermissionTab> = {
           lead_convert_close: "Convert/Close",
         },
       },
+    },
+  },
+
+  sales: {
+    label: "Sales",
+    sections: {
       estimate_access: {
         label: "Estimate Access",
         permissions: {
@@ -95,39 +101,40 @@ export const PERMISSION_TABS: Record<string, PermissionTab> = {
           estimate_send: "Send Estimate",
         },
       },
-      crm_reports: {
-        label: "CRM Reports",
+      contract_access: {
+        label: "Contract Access",
         permissions: {
-          crm_rpt_client_balance: "Client Balance",
-          crm_rpt_client_contracts: "Client Contracts",
-          crm_rpt_client_referral: "Client Referral",
-          crm_rpt_new_clients: "New Clients Report",
-          crm_rpt_new_client_count: "New Client Count Report",
-          crm_rpt_cancellation_count: "Cancellation Count Report",
-          crm_rpt_clients_by_completed_jobs: "Clients Report by Completed Jobs",
-          crm_rpt_client_method_of_payment: "Client Method of Payment",
-          crm_rpt_terminations: "Terminations Report",
-          crm_rpt_client_contact_list: "Client Contact List",
-          crm_rpt_client_phone_list: "Client Phone List",
-          crm_rpt_client_timeline: "Client Timeline Report",
-          crm_rpt_lead_timeline: "Lead Timeline Report",
+          contract_list: "View Contracts",
+          contract_add: "Add Contract",
+          contract_edit: "Edit Contract",
+          contract_delete: "Delete Contract",
+          contract_create_invoices: "Create Invoices from Contracts",
         },
       },
-      crm_reports_cont: {
-        label: "CRM Reports (cont.)",
+      campaign_access: {
+        label: "Sales Campaign Access",
         permissions: {
-          crm_rpt_sales_summary_by_source: "Sales Summary by Source",
-          crm_rpt_closed_leads_summary: "Closed Leads Summary",
-          crm_rpt_lead_aging_summary: "Lead Aging Summary",
-          crm_rpt_new_leads: "New Leads Report",
-          crm_rpt_estimates_by_stage: "Estimates by Stage",
-          crm_rpt_won_estimates_by_service: "Won Estimates by Service",
-          crm_rpt_won_estimates_service_products: "Won Estimates Service Products",
-          crm_rpt_won_estimates_service_value: "Won Estimates Service Value",
-          crm_rpt_forms_summary: "Forms Summary",
-          crm_rpt_company_scorecard: "Company Scorecard",
+          campaign_list: "View Campaigns",
+          campaign_add: "Add Campaign",
+          campaign_edit: "Edit Campaign",
+          campaign_delete: "Delete Campaign",
+          campaign_send: "Send/Launch Campaign",
         },
       },
+      sales_meeting_access: {
+        label: "Sales Meeting Access",
+        permissions: {
+          sales_meeting_list: "View Sales Meetings",
+          sales_meeting_add: "Add Sales Meeting",
+          sales_meeting_edit: "Edit Sales Meeting",
+        },
+      },
+    },
+  },
+
+  communication: {
+    label: "Tickets & Communication",
+    sections: {
       tickets_access: {
         label: "Tickets Access",
         permissions: {
@@ -175,44 +182,43 @@ export const PERMISSION_TABS: Record<string, PermissionTab> = {
           document_template_delete: "Delete Document Template",
         },
       },
-      campaign_access: {
-        label: "Sales Campaign Access",
-        permissions: {
-          campaign_list: "View Campaigns",
-          campaign_add: "Add Campaign",
-          campaign_edit: "Edit Campaign",
-          campaign_delete: "Delete Campaign",
-          campaign_send: "Send/Launch Campaign",
-        },
-      },
-      sales_meeting_access: {
-        label: "Sales Meeting Access",
-        permissions: {
-          sales_meeting_list: "View Sales Meetings",
-          sales_meeting_add: "Add Sales Meeting",
-          sales_meeting_edit: "Edit Sales Meeting",
-        },
-      },
     },
   },
 
-  scheduling: {
-    label: "Scheduling",
+  reports: {
+    label: "Reports",
     sections: {
-      scheduling_access: {
-        label: "Scheduling Access",
+      crm_reports: {
+        label: "CRM Reports",
         permissions: {
-          sched_dispatch_board: "Dispatch Board",
-          sched_waiting_list: "Waiting List",
-          sched_teams: "Teams",
-          sched_add_modify_projects: "Add/Modify Projects",
+          crm_rpt_client_balance: "Client Balance",
+          crm_rpt_client_contracts: "Client Contracts",
+          crm_rpt_client_referral: "Client Referral",
+          crm_rpt_new_clients: "New Clients Report",
+          crm_rpt_new_client_count: "New Client Count Report",
+          crm_rpt_cancellation_count: "Cancellation Count Report",
+          crm_rpt_clients_by_completed_jobs: "Clients Report by Completed Jobs",
+          crm_rpt_client_method_of_payment: "Client Method of Payment",
+          crm_rpt_terminations: "Terminations Report",
+          crm_rpt_client_contact_list: "Client Contact List",
+          crm_rpt_client_phone_list: "Client Phone List",
+          crm_rpt_client_timeline: "Client Timeline Report",
+          crm_rpt_lead_timeline: "Lead Timeline Report",
         },
       },
-      snow_dispatch_access: {
-        label: "Snow Dispatch Access",
+      crm_reports_cont: {
+        label: "CRM Reports (cont.)",
         permissions: {
-          snow_dispatch_view: "View Snow Dispatch",
-          snow_dispatch_manage: "Manage Snow Dispatch",
+          crm_rpt_sales_summary_by_source: "Sales Summary by Source",
+          crm_rpt_closed_leads_summary: "Closed Leads Summary",
+          crm_rpt_lead_aging_summary: "Lead Aging Summary",
+          crm_rpt_new_leads: "New Leads Report",
+          crm_rpt_estimates_by_stage: "Estimates by Stage",
+          crm_rpt_won_estimates_by_service: "Won Estimates by Service",
+          crm_rpt_won_estimates_service_products: "Won Estimates Service Products",
+          crm_rpt_won_estimates_service_value: "Won Estimates Service Value",
+          crm_rpt_forms_summary: "Forms Summary",
+          crm_rpt_company_scorecard: "Company Scorecard",
         },
       },
       scheduling_reports: {
@@ -247,113 +253,6 @@ export const PERMISSION_TABS: Record<string, PermissionTab> = {
           sched_rpt_custom_package_renewal: "Custom Package Renewal Report",
         },
       },
-      job_access: {
-        label: "Job Access",
-        permissions: {
-          job_view: "View Jobs",
-          job_add: "Add Job",
-          job_cancel: "Cancel Job",
-          job_add_remove_custom_package_line_items: "Add/Remove Custom Package Line Items",
-        },
-      },
-      service_access: {
-        label: "Service Access",
-        permissions: {
-          service_list: "View Services",
-          service_add: "Add Service",
-          service_edit: "Edit Service",
-          service_delete: "Delete Service",
-        },
-      },
-      package_access: {
-        label: "Package Access",
-        permissions: {
-          package_list: "View Packages",
-          package_add: "Add Package",
-          package_edit: "Edit Package",
-          package_delete: "Delete Package",
-        },
-      },
-      employee_access: {
-        label: "Employee Access",
-        permissions: {
-          emp_manage: "Manage Employees",
-          emp_view_info: "View Employee Information",
-          emp_view_resource_notes: "View Resource Notes",
-          emp_view_user_settings: "View User Settings",
-          emp_view_license_info: "View License Info",
-        },
-      },
-      employee_access_cont: {
-        label: "Employee Access (cont.)",
-        permissions: {
-          emp_add: "Add Employee",
-          emp_edit: "Edit Employee",
-          emp_add_remove_tag: "Add/Remove Tag",
-        },
-      },
-      vendor_access: {
-        label: "Vendor Access",
-        permissions: {
-          vendor_view_resource_notes: "View Resource Notes",
-        },
-      },
-      chemical_tracking: {
-        label: "Chemical Tracking",
-        permissions: {
-          chem_add_edit_usage: "Add | Edit Usage",
-          chem_create_uom: "Create UoM",
-          chem_create_application_method: "Create Application Method",
-          chem_create_target: "Create Target",
-        },
-      },
-    },
-  },
-
-  accounting: {
-    label: "Accounting",
-    sections: {
-      contract_access: {
-        label: "Contract Access",
-        permissions: {
-          contract_list: "View Contracts",
-          contract_add: "Add Contract",
-          contract_edit: "Edit Contract",
-          contract_delete: "Delete Contract",
-          contract_create_invoices: "Create Invoices from Contracts",
-        },
-      },
-      requisition_access: {
-        label: "Requisition Access",
-        permissions: {
-          requisition_list: "View Requisitions",
-          requisition_add: "Add Requisition",
-          requisition_edit: "Edit Requisition",
-          requisition_delete: "Delete Requisition",
-        },
-      },
-      snow_invoicing_access: {
-        label: "Snow Invoicing Access",
-        permissions: {
-          snow_invoicing_view: "View Snow Invoicing",
-          snow_invoicing_generate: "Generate Snow Invoices",
-        },
-      },
-      accounting_access: {
-        label: "Accounting Access",
-        permissions: {
-          acct_view_invoice_list: "View Invoice List",
-          acct_add_modify_invoices: "Add/Modify Invoices",
-          acct_view_payment_list: "View Payment List",
-          acct_add_modify_payments: "Add/Modify Payments",
-          acct_delete_card_payments: "Delete Card Payments",
-          acct_delete_ach_payments: "Delete ACH Payments",
-          acct_process_cc_refunds_voids: "Process CC Payment Refunds/Voids",
-          acct_add_modify_credits: "Add/Modify Credits",
-          acct_qb_reconciliation: "QB Reconciliation",
-          acct_add_modify_purchase_orders: "Add/Modify Purchase Orders",
-        },
-      },
       accounting_reports: {
         label: "Accounting Reports",
         permissions: {
@@ -384,11 +283,136 @@ export const PERMISSION_TABS: Record<string, PermissionTab> = {
           acct_rpt_sales_commission_export: "Sales Commission Export",
         },
       },
+    },
+  },
+
+  scheduling: {
+    label: "Scheduling",
+    sections: {
+      scheduling_access: {
+        label: "Scheduling Access",
+        permissions: {
+          sched_dispatch_board: "Dispatch Board",
+          sched_waiting_list: "Waiting List",
+          sched_teams: "Teams",
+          sched_add_modify_projects: "Add/Modify Projects",
+        },
+      },
+      snow_dispatch_access: {
+        label: "Snow Dispatch Access",
+        permissions: {
+          snow_dispatch_view: "View Snow Dispatch",
+          snow_dispatch_manage: "Manage Snow Dispatch",
+        },
+      },
+      job_access: {
+        label: "Job Access",
+        permissions: {
+          job_view: "View Jobs",
+          job_add: "Add Job",
+          job_cancel: "Cancel Job",
+          job_add_remove_custom_package_line_items: "Add/Remove Custom Package Line Items",
+        },
+      },
+      service_access: {
+        label: "Service Access",
+        permissions: {
+          service_list: "View Services",
+          service_add: "Add Service",
+          service_edit: "Edit Service",
+          service_delete: "Delete Service",
+        },
+      },
+      package_access: {
+        label: "Package Access",
+        permissions: {
+          package_list: "View Packages",
+          package_add: "Add Package",
+          package_edit: "Edit Package",
+          package_delete: "Delete Package",
+        },
+      },
+      chemical_tracking: {
+        label: "Chemical Tracking",
+        permissions: {
+          chem_add_edit_usage: "Add | Edit Usage",
+          chem_create_uom: "Create UoM",
+          chem_create_application_method: "Create Application Method",
+          chem_create_target: "Create Target",
+        },
+      },
+    },
+  },
+
+  team: {
+    label: "Team",
+    sections: {
+      employee_access: {
+        label: "Employee Access",
+        permissions: {
+          emp_manage: "Manage Employees",
+          emp_view_info: "View Employee Information",
+          emp_view_resource_notes: "View Resource Notes",
+          emp_view_user_settings: "View User Settings",
+          emp_view_license_info: "View License Info",
+        },
+      },
+      employee_access_cont: {
+        label: "Employee Access (cont.)",
+        permissions: {
+          emp_add: "Add Employee",
+          emp_edit: "Edit Employee",
+          emp_add_remove_tag: "Add/Remove Tag",
+        },
+      },
+      vendor_access: {
+        label: "Vendor Access",
+        permissions: {
+          vendor_view_resource_notes: "View Resource Notes",
+        },
+      },
       payroll_access: {
         label: "Payroll Access",
         permissions: {
           payroll_show_pay_rate: "Show Pay Rate",
           payroll_show_wage_burden: "Show Wage Burden",
+        },
+      },
+    },
+  },
+
+  accounting: {
+    label: "Accounting",
+    sections: {
+      requisition_access: {
+        label: "Requisition Access",
+        permissions: {
+          requisition_list: "View Requisitions",
+          requisition_add: "Add Requisition",
+          requisition_edit: "Edit Requisition",
+          requisition_delete: "Delete Requisition",
+        },
+      },
+      snow_invoicing_access: {
+        label: "Snow Invoicing Access",
+        permissions: {
+          snow_invoicing_view: "View Snow Invoicing",
+          snow_invoicing_generate: "Generate Snow Invoices",
+        },
+      },
+      accounting_access: {
+        label: "Accounting Access",
+        permissions: {
+          acct_view_invoice_list: "View Invoice List",
+          acct_add_modify_invoices: "Add/Modify Invoices",
+          acct_view_payment_list: "View Payment List",
+          acct_add_modify_payments: "Add/Modify Payments",
+          acct_delete_card_payments: "Delete Card Payments",
+          acct_delete_ach_payments: "Delete ACH Payments",
+          acct_process_cc_refunds_voids: "Process CC Payment Refunds/Voids",
+          acct_add_modify_credits: "Add/Modify Credits",
+          acct_qb_reconciliation: "QB Reconciliation",
+          acct_add_modify_purchase_orders: "Add/Modify Purchase Orders",
         },
       },
     },

@@ -44,9 +44,9 @@ function PermSection({
   }
 
   return (
-    <div className="min-w-[200px]">
+    <div className="rounded-lg border bg-white p-4 shadow-sm">
       {/* Section header with select-all checkbox */}
-      <div className="flex items-center gap-2 mb-2 border-b pb-1">
+      <div className="flex items-center gap-2 mb-3 border-b pb-2">
         <Checkbox
           checked={allChecked}
           data-state={someChecked && !allChecked ? "indeterminate" : undefined}
@@ -55,7 +55,7 @@ function PermSection({
         />
         <span className="text-sm font-semibold text-slate-700">{section.label}</span>
       </div>
-      <div className="space-y-1">
+      <div className="space-y-1.5">
         {Object.entries(section.permissions).map(([key, label]) => (
           <label key={key} className="flex items-start gap-2 cursor-pointer group">
             <Checkbox
@@ -101,9 +101,9 @@ function PermTab({
           onCheckedChange={toggleAll}
           className="h-3.5 w-3.5"
         />
-        Select all items on current tab
+        Select all items on this tab
       </label>
-      <div className="flex flex-wrap gap-6">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {Object.keys(tab.sections).map((sectionKey) => (
           <PermSection
             key={sectionKey}
@@ -161,7 +161,7 @@ function RoleDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-5xl p-0 gap-0 max-h-[92vh] flex flex-col">
+      <DialogContent className="max-w-6xl p-0 gap-0 max-h-[92vh] flex flex-col">
         <DialogHeader className="shrink-0 px-6 py-4 border-b">
           <DialogTitle className="text-xl font-bold">
             {isNew ? "New Role" : `Edit - ${role?.name}`}
@@ -186,13 +186,13 @@ function RoleDialog({
 
         {/* Permission tabs */}
         <Tabs defaultValue={tabKeys[0]} className="flex flex-1 flex-col overflow-hidden">
-          <div className="shrink-0 overflow-x-auto border-b border-t bg-white px-6">
-            <TabsList className="rounded-none justify-start h-10 gap-0 min-w-max">
+          <div className="shrink-0 border-b border-t bg-white px-6">
+            <TabsList className="h-auto flex-wrap justify-start gap-0 rounded-none bg-transparent p-0">
               {tabKeys.map((tabKey) => (
                 <TabsTrigger
                   key={tabKey}
                   value={tabKey}
-                  className="h-full rounded-none border-b-2 border-transparent px-5 py-0 text-sm data-[state=active]:border-brand-500 data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+                  className="rounded-none border-b-2 border-transparent px-4 py-2.5 text-sm font-medium text-slate-600 data-[state=active]:border-brand-500 data-[state=active]:bg-transparent data-[state=active]:text-brand-600 data-[state=active]:shadow-none"
                 >
                   {PERMISSION_TABS[tabKey].label}
                 </TabsTrigger>
