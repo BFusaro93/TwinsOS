@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import {
   Dialog,
   DialogContent,
@@ -123,8 +123,24 @@ export function NewWorkOrderDialog({ open, onOpenChange, initialData, onCreated,
     : null;
   const statusChangeEntity = isEditing ? selectedEntity : singleCreateEntity;
 
+  // Guards against a realtime-driven refetch of ANY work order (unfiltered
+  // subscription in RealtimeSync) silently wiping in-progress edits: every
+  // "work-orders" query refetch produces a brand-new initialData object
+  // (mapWorkOrder never preserves identity), which used to re-run this whole
+  // init block — including resetting the asset/vehicle picker back to
+  // whatever's still saved in the DB — while the user was mid-edit and
+  // hadn't hit Save yet. Only (re)initialize once per record per dialog
+  // open, not on every reference change of initialData.
+  const initializedForIdRef = useRef<string | null>(null);
+
   useEffect(() => {
+    if (!open) {
+      initializedForIdRef.current = null;
+      return;
+    }
+    if (initialData && initializedForIdRef.current === initialData.id) return;
     if (open && initialData) {
+      initializedForIdRef.current = initialData.id;
       setTitle(initialData.title);
       setPriority(initialData.priority);
       setWoType(initialData.woType ?? "none");
