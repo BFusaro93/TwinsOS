@@ -302,28 +302,6 @@ export const PERMISSION_TABS: Record<string, PermissionTab> = {
         permissions: {
           payroll_show_pay_rate: "Show Pay Rate",
           payroll_show_wage_burden: "Show Wage Burden",
-          payroll_view_report: "View Payroll Report",
-          payroll_employee_view_payroll: "Employee - View Payroll",
-          payroll_vendor_view_payroll: "Vendor - View Payroll",
-        },
-      },
-    },
-  },
-
-  mobile: {
-    label: "Mobile",
-    sections: {
-      mobile_access: {
-        label: "Mobile Access",
-        permissions: {
-          mobile_view_jobs: "View Jobs",
-          mobile_complete_jobs: "Complete Jobs",
-          mobile_add_notes: "Add Notes",
-          mobile_add_photos: "Add Photos",
-          mobile_time_clock: "Time Clock",
-          mobile_view_client_info: "View Client Info",
-          mobile_view_route: "View Route",
-          mobile_gps_tracking: "GPS Tracking",
         },
       },
     },
