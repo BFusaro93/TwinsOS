@@ -10,6 +10,7 @@ import type { CRMService } from "@/types/crm-jobs";
 import { formatCurrency } from "@/lib/utils";
 import { ImportExportMenu } from "@/components/shared/ImportExportMenu";
 import { exportCSV } from "@/lib/csv";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 import { toast } from "sonner";
 
 const SERVICE_TEMPLATE_COLUMNS = [
@@ -53,6 +54,10 @@ interface Props {
 }
 
 export function ServicesList({ onAdd, onEdit }: Props) {
+  const { can } = usePermissions();
+  const canAdd = can("service_add");
+  const canEdit = can("service_edit");
+  const canDelete = can("service_delete");
   const { data: services = [], isLoading } = useAllCRMServices();
   const deleteService = useDeleteCRMService();
   const { mutateAsync: bulkImportServices } = useBulkImportCRMServices();
@@ -130,10 +135,12 @@ export function ServicesList({ onAdd, onEdit }: Props) {
               toast[skipped > 0 ? "warning" : "success"](`Services import: ${parts.join(", ")}.`);
             }}
           />
-          <Button size="sm" onClick={onAdd}>
-            <Plus className="mr-1.5 h-4 w-4" />
-            Add Service
-          </Button>
+          {canAdd && (
+            <Button size="sm" onClick={onAdd}>
+              <Plus className="mr-1.5 h-4 w-4" />
+              Add Service
+            </Button>
+          )}
         </div>
       </div>
 
@@ -170,8 +177,8 @@ export function ServicesList({ onAdd, onEdit }: Props) {
             {groupServices(filtered).map(({ service: s, depth }) => (
               <tr
                 key={s.id}
-                className="border-b last:border-0 hover:bg-slate-50 cursor-pointer"
-                onClick={() => onEdit(s)}
+                className={`border-b last:border-0 hover:bg-slate-50 ${canEdit ? "cursor-pointer" : ""}`}
+                onClick={canEdit ? () => onEdit(s) : undefined}
               >
                 <td className="px-4 py-3 font-medium text-slate-800">
                   <span style={depth > 0 ? { paddingLeft: depth * 20 } : undefined} className="inline-flex items-center gap-1.5">
@@ -200,20 +207,24 @@ export function ServicesList({ onAdd, onEdit }: Props) {
                   onClick={(e) => e.stopPropagation()}
                 >
                   <div className="flex items-center justify-center gap-1">
-                    <button
-                      onClick={() => onEdit(s)}
-                      className="rounded p-1 hover:bg-slate-100"
-                      title="Edit"
-                    >
-                      <Pencil className="h-3.5 w-3.5 text-slate-400" />
-                    </button>
-                    <button
-                      onClick={() => handleDelete(s)}
-                      className="rounded p-1 hover:bg-red-50"
-                      title="Delete"
-                    >
-                      <Trash2 className="h-3.5 w-3.5 text-red-400" />
-                    </button>
+                    {canEdit && (
+                      <button
+                        onClick={() => onEdit(s)}
+                        className="rounded p-1 hover:bg-slate-100"
+                        title="Edit"
+                      >
+                        <Pencil className="h-3.5 w-3.5 text-slate-400" />
+                      </button>
+                    )}
+                    {canDelete && (
+                      <button
+                        onClick={() => handleDelete(s)}
+                        className="rounded p-1 hover:bg-red-50"
+                        title="Delete"
+                      >
+                        <Trash2 className="h-3.5 w-3.5 text-red-400" />
+                      </button>
+                    )}
                   </div>
                 </td>
               </tr>

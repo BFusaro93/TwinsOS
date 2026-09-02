@@ -86,6 +86,15 @@ export const PERMISSION_TABS: Record<string, PermissionTab> = {
           lead_convert_close: "Convert/Close",
         },
       },
+      estimate_access: {
+        label: "Estimate Access",
+        permissions: {
+          estimate_list: "View Estimates",
+          estimate_add: "Add Estimate",
+          estimate_edit: "Edit Estimate",
+          estimate_send: "Send Estimate",
+        },
+      },
       crm_reports: {
         label: "CRM Reports",
         permissions: {
@@ -157,6 +166,33 @@ export const PERMISSION_TABS: Record<string, PermissionTab> = {
           email_activity_send: "Send Emails",
         },
       },
+      document_template_access: {
+        label: "Document Template Access",
+        permissions: {
+          document_template_list: "View Document Templates",
+          document_template_add: "Add Document Template",
+          document_template_edit: "Edit Document Template",
+          document_template_delete: "Delete Document Template",
+        },
+      },
+      campaign_access: {
+        label: "Sales Campaign Access",
+        permissions: {
+          campaign_list: "View Campaigns",
+          campaign_add: "Add Campaign",
+          campaign_edit: "Edit Campaign",
+          campaign_delete: "Delete Campaign",
+          campaign_send: "Send/Launch Campaign",
+        },
+      },
+      sales_meeting_access: {
+        label: "Sales Meeting Access",
+        permissions: {
+          sales_meeting_list: "View Sales Meetings",
+          sales_meeting_add: "Add Sales Meeting",
+          sales_meeting_edit: "Edit Sales Meeting",
+        },
+      },
     },
   },
 
@@ -170,6 +206,13 @@ export const PERMISSION_TABS: Record<string, PermissionTab> = {
           sched_waiting_list: "Waiting List",
           sched_teams: "Teams",
           sched_add_modify_projects: "Add/Modify Projects",
+        },
+      },
+      snow_dispatch_access: {
+        label: "Snow Dispatch Access",
+        permissions: {
+          snow_dispatch_view: "View Snow Dispatch",
+          snow_dispatch_manage: "Manage Snow Dispatch",
         },
       },
       scheduling_reports: {
@@ -213,6 +256,24 @@ export const PERMISSION_TABS: Record<string, PermissionTab> = {
           job_add_remove_custom_package_line_items: "Add/Remove Custom Package Line Items",
         },
       },
+      service_access: {
+        label: "Service Access",
+        permissions: {
+          service_list: "View Services",
+          service_add: "Add Service",
+          service_edit: "Edit Service",
+          service_delete: "Delete Service",
+        },
+      },
+      package_access: {
+        label: "Package Access",
+        permissions: {
+          package_list: "View Packages",
+          package_add: "Add Package",
+          package_edit: "Edit Package",
+          package_delete: "Delete Package",
+        },
+      },
       employee_access: {
         label: "Employee Access",
         permissions: {
@@ -252,6 +313,32 @@ export const PERMISSION_TABS: Record<string, PermissionTab> = {
   accounting: {
     label: "Accounting",
     sections: {
+      contract_access: {
+        label: "Contract Access",
+        permissions: {
+          contract_list: "View Contracts",
+          contract_add: "Add Contract",
+          contract_edit: "Edit Contract",
+          contract_delete: "Delete Contract",
+          contract_create_invoices: "Create Invoices from Contracts",
+        },
+      },
+      requisition_access: {
+        label: "Requisition Access",
+        permissions: {
+          requisition_list: "View Requisitions",
+          requisition_add: "Add Requisition",
+          requisition_edit: "Edit Requisition",
+          requisition_delete: "Delete Requisition",
+        },
+      },
+      snow_invoicing_access: {
+        label: "Snow Invoicing Access",
+        permissions: {
+          snow_invoicing_view: "View Snow Invoicing",
+          snow_invoicing_generate: "Generate Snow Invoices",
+        },
+      },
       accounting_access: {
         label: "Accounting Access",
         permissions: {

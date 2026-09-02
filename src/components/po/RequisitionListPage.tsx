@@ -31,6 +31,7 @@ import { useSort } from "@/lib/hooks/use-sort";
 import { SortableTableHead } from "@/components/shared/SortableTableHead";
 import { APPROVAL_STATUS_LABELS } from "@/lib/constants";
 import { cn, formatCurrency, formatDate, matchesFilter } from "@/lib/utils";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 import type { ApprovalStatus, Requisition } from "@/types";
 
 const STATUS_OPTIONS = (Object.keys(APPROVAL_STATUS_LABELS) as ApprovalStatus[]).map((k) => ({
@@ -50,6 +51,13 @@ const REQ_COLUMNS: ColumnDef[] = [
 ];
 
 export function RequisitionListPage() {
+  // Shared with Equipt (/po/requisitions) — an Equipt-only user has no
+  // crm_role at all, so these checks only restrict users who actually have
+  // a Landscapt CRM role; everyone else keeps their existing access.
+  const { can, isAdmin, roleId } = usePermissions();
+  const hasCrmRole = !isAdmin && !!roleId;
+  const canViewRequisitions = !hasCrmRole || can("requisition_list");
+  const canAddRequisitions = !hasCrmRole || can("requisition_add");
   const { data: requisitions, isLoading } = useRequisitions();
   const { selectedRequisitionId, setSelectedRequisitionId } = usePOStore();
   const searchParams = useSearchParams();
@@ -244,6 +252,16 @@ export function RequisitionListPage() {
     </div>
   );
 
+  if (!canViewRequisitions) {
+    return (
+      <EmptyState
+        icon={FileText}
+        title="No access"
+        description="You don't have permission to view Requisitions."
+      />
+    );
+  }
+
   return (
     <div className="flex h-full flex-col gap-4">
       <PageHeader
@@ -258,10 +276,12 @@ export function RequisitionListPage() {
                 <Maximize2 className="mr-1.5 h-3.5 w-3.5" />Table
               </Button>
             </div>
-            <Button size="sm" onClick={() => setDialogOpen(true)}>
-              <Plus className="mr-1.5 h-4 w-4" />
-              New Requisition
-            </Button>
+            {canAddRequisitions && (
+              <Button size="sm" onClick={() => setDialogOpen(true)}>
+                <Plus className="mr-1.5 h-4 w-4" />
+                New Requisition
+              </Button>
+            )}
           </div>
         }
       />

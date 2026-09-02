@@ -1760,6 +1760,7 @@ function jobBorderColor(job: CRMJob): string {
 // ── HomeTab ───────────────────────────────────────────────────────────────────
 
 function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; isLead?: boolean; onSwitchTab?: (tab: string) => void }) {
+  const { can } = usePermissions();
   const [jobFilter, setJobFilter] = useState<"active" | "completed">("active");
   const [clientVisitsModal, setClientVisitsModal] = useState<"upcoming" | "history" | null>(null);
   const [newEstimateOpen, setNewEstimateOpen] = useState(false);
@@ -2186,8 +2187,8 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
               (contracts ?? []).map((contract) => (
                 <div
                   key={contract.id}
-                  className="cursor-pointer px-4 py-3 hover:bg-slate-50"
-                  onClick={() => setEditingContract(contract)}
+                  className={`px-4 py-3 hover:bg-slate-50 ${can("contract_edit") ? "cursor-pointer" : ""}`}
+                  onClick={can("contract_edit") ? () => setEditingContract(contract) : undefined}
                 >
                   <div className="flex items-start justify-between gap-2">
                     <p className="truncate text-xs font-semibold text-slate-700">{contract.title}</p>
@@ -3577,7 +3578,7 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
               { value: "home",      label: "Home" },
               ...(can("client_view_history") ? [{ value: "activity", label: "Activity" }] : []),
               { value: "tickets",   label: "Tickets" },
-              ...(!isLeadLike ? [{ value: "contracts", label: "Contracts" }] : []),
+              ...(!isLeadLike && can("contract_list") ? [{ value: "contracts", label: "Contracts" }] : []),
               { value: "projects",  label: "Projects" },
               { value: "photos",    label: "Photos" },
               { value: "files",     label: "Files" },

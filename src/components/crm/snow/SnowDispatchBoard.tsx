@@ -16,6 +16,8 @@ import {
 import { useCRMCrews, useUpdateVisit, useUpdateVisitStatus } from "@/lib/hooks/use-crm-jobs";
 import { JobDetailSheet } from "@/components/crm/jobs/JobDetailSheet";
 import { PageHeader } from "@/components/shared/PageHeader";
+import { EmptyState } from "@/components/shared/EmptyState";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -88,9 +90,12 @@ function StatusIcon({ status }: { status: VisitStatus }) {
 }
 
 function StatusCycleButton({ visit }: { visit: CRMJobVisit }) {
+  const { can } = usePermissions();
+  const canManage = can("snow_dispatch_manage");
   const { mutateAsync: updateStatus, isPending } = useUpdateVisitStatus();
   async function cycle(e: React.MouseEvent) {
     e.stopPropagation();
+    if (!canManage) return;
     const i = STATUS_CYCLE.indexOf(visit.status);
     const next = STATUS_CYCLE[(i + 1) % STATUS_CYCLE.length];
     try {
@@ -100,7 +105,7 @@ function StatusCycleButton({ visit }: { visit: CRMJobVisit }) {
     }
   }
   return (
-    <button onClick={cycle} disabled={isPending} title={visit.status} className={cn("flex items-center justify-center", isPending && "opacity-50")}>
+    <button onClick={cycle} disabled={isPending || !canManage} title={visit.status} className={cn("flex items-center justify-center", isPending && "opacity-50")}>
       <StatusIcon status={visit.status} />
     </button>
   );
@@ -728,6 +733,8 @@ const STATUS_PILL: Record<StormEventStatus, string> = {
 };
 
 export function SnowDispatchBoard() {
+  const { can, isLoading: permissionsLoading } = usePermissions();
+  const canManage = can("snow_dispatch_manage");
   const { data: events = [], isLoading: eventsLoading, refetch: refetchEvents } = useStormEvents();
   const { data: crews = [] } = useCRMCrews();
   const { mutateAsync: updateStormEvent } = useUpdateStormEvent();
@@ -799,6 +806,16 @@ export function SnowDispatchBoard() {
     [amountByVisitId]
   );
 
+  if (!permissionsLoading && !can("snow_dispatch_view")) {
+    return (
+      <EmptyState
+        icon={Snowflake}
+        title="No access"
+        description="You don't have permission to view Snow Dispatch."
+      />
+    );
+  }
+
   return (
     <div className="flex h-full flex-col gap-4">
       <PageHeader title="Snow Jobs" description="Storm-based scheduling and service entry" />
@@ -814,25 +831,33 @@ export function SnowDispatchBoard() {
             ))}
           </SelectContent>
         </Select>
-        <Button size="sm" variant="outline" className="h-9 text-xs gap-1.5" onClick={() => setNewEventOpen(true)}>
-          <Plus className="h-3.5 w-3.5" />New Storm Event
-        </Button>
+        {canManage && (
+          <Button size="sm" variant="outline" className="h-9 text-xs gap-1.5" onClick={() => setNewEventOpen(true)}>
+            <Plus className="h-3.5 w-3.5" />New Storm Event
+          </Button>
+        )}
 
         {activeEvent && (
           <>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button className={cn("h-7 rounded-full px-3 text-xs font-medium flex items-center gap-1", STATUS_PILL[activeEvent.dispatchStatus])}>
-                  {activeEvent.dispatchStatus === "pending" ? "Pending" : activeEvent.dispatchStatus === "working" ? "Working" : "Complete"}
-                  <ChevronDown className="h-3 w-3" />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start">
-                <DropdownMenuItem onSelect={() => advanceStatus("pending")}>Pending</DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => advanceStatus("working")}>Working (Dispatch)</DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => advanceStatus("complete")}>Complete</DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            {canManage ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button className={cn("h-7 rounded-full px-3 text-xs font-medium flex items-center gap-1", STATUS_PILL[activeEvent.dispatchStatus])}>
+                    {activeEvent.dispatchStatus === "pending" ? "Pending" : activeEvent.dispatchStatus === "working" ? "Working" : "Complete"}
+                    <ChevronDown className="h-3 w-3" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start">
+                  <DropdownMenuItem onSelect={() => advanceStatus("pending")}>Pending</DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => advanceStatus("working")}>Working (Dispatch)</DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => advanceStatus("complete")}>Complete</DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : (
+              <span className={cn("h-7 rounded-full px-3 text-xs font-medium flex items-center gap-1", STATUS_PILL[activeEvent.dispatchStatus])}>
+                {activeEvent.dispatchStatus === "pending" ? "Pending" : activeEvent.dispatchStatus === "working" ? "Working" : "Complete"}
+              </span>
+            )}
             {activeEvent.forecastDepthInches != null && (
               <Badge variant="secondary" className="text-xs">{activeEvent.forecastDepthInches}&quot; forecast</Badge>
             )}
@@ -847,15 +872,19 @@ export function SnowDispatchBoard() {
           >
             <RefreshCw className="h-4 w-4" />
           </button>
-          <Button size="sm" variant="outline" className="h-9 text-xs gap-1.5" onClick={() => setCrewAssignOpen(true)} disabled={!activeEvent}>
-            <Users className="h-3.5 w-3.5" />Team Assign
-          </Button>
+          {canManage && (
+            <Button size="sm" variant="outline" className="h-9 text-xs gap-1.5" onClick={() => setCrewAssignOpen(true)} disabled={!activeEvent}>
+              <Users className="h-3.5 w-3.5" />Team Assign
+            </Button>
+          )}
           <Button size="sm" variant="outline" className="h-9 text-xs gap-1.5" onClick={() => setPrintOpen(true)} disabled={!activeEvent}>
             <Printer className="h-3.5 w-3.5" />Print
           </Button>
-          <Button size="sm" className="h-9 text-xs gap-1.5 bg-brand-500 hover:bg-brand-600 text-white" onClick={() => setAddJobsOpen(true)} disabled={!activeEvent}>
-            <Plus className="h-3.5 w-3.5" />Add Jobs
-          </Button>
+          {canManage && (
+            <Button size="sm" className="h-9 text-xs gap-1.5 bg-brand-500 hover:bg-brand-600 text-white" onClick={() => setAddJobsOpen(true)} disabled={!activeEvent}>
+              <Plus className="h-3.5 w-3.5" />Add Jobs
+            </Button>
+          )}
         </div>
       </div>
 
@@ -864,9 +893,11 @@ export function SnowDispatchBoard() {
         <div className="mx-4 flex items-center gap-2 rounded border bg-brand-50 px-3 py-2 shrink-0">
           <ListChecks className="h-4 w-4 text-brand-600" />
           <span className="text-xs font-medium text-brand-700">{selectedVisitIds.size} selected</span>
-          <Button size="sm" className="h-7 text-xs ml-2" onClick={() => setCloseOutIds(new Set(selectedVisitIds))}>
-            Close Out…
-          </Button>
+          {canManage && (
+            <Button size="sm" className="h-7 text-xs ml-2" onClick={() => setCloseOutIds(new Set(selectedVisitIds))}>
+              Close Out…
+            </Button>
+          )}
           <button className="ml-auto text-xs text-slate-400 hover:text-slate-600" onClick={() => setSelectedVisitIds(new Set())}>Clear</button>
         </div>
       )}

@@ -58,8 +58,10 @@ import type { ColumnDef } from "@/components/shared/ColumnChooser";
 import { AttachmentsSection } from "@/components/shared/AttachmentsSection";
 import { ClientCombobox } from "@/components/shared/ClientCombobox";
 import { AuditTrailTab } from "@/components/shared/AuditTrailTab";
+import { EmptyState } from "@/components/shared/EmptyState";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 import { cn, formatCurrency } from "@/lib/utils";
-import { Plus, Pencil, ChevronDown, Trash2, X, ArrowUp, ArrowDown, Search } from "lucide-react";
+import { Plus, Pencil, ChevronDown, Trash2, X, ArrowUp, ArrowDown, Search, FileSignature } from "lucide-react";
 import { toast } from "sonner";
 import type { CRMContract, MonthlyAmounts, ContractStatus } from "@/types/crm-invoices";
 
@@ -1202,6 +1204,11 @@ interface Props { clientId?: string; }
 type ActiveFilter = "active" | "inactive" | "all";
 
 export function ContractsList({ clientId }: Props) {
+  const { can, isLoading: permissionsLoading } = usePermissions();
+  const canAdd = can("contract_add");
+  const canEdit = can("contract_edit");
+  const canDelete = can("contract_delete");
+  const canCreateInvoices = can("contract_create_invoices");
   const [filter, setFilter] = useState<ActiveFilter>("active");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -1329,6 +1336,16 @@ export function ContractsList({ clientId }: Props) {
     all:      allContracts.length,
   };
 
+  if (!permissionsLoading && !can("contract_list")) {
+    return (
+      <EmptyState
+        icon={FileSignature}
+        title="No access"
+        description="You don't have permission to view Contracts."
+      />
+    );
+  }
+
   return (
     <div className="flex h-full flex-col gap-4">
       {/* Page header */}
@@ -1337,9 +1354,11 @@ export function ContractsList({ clientId }: Props) {
           title="Contracts"
           description={!isLoading ? `${allContracts.length} contracts` : "Service agreements and recurring billing"}
           action={
-            <Button size="sm" onClick={openNew}>
-              <Plus className="mr-1.5 h-4 w-4" /> Add Contract
-            </Button>
+            canAdd ? (
+              <Button size="sm" onClick={openNew}>
+                <Plus className="mr-1.5 h-4 w-4" /> Add Contract
+              </Button>
+            ) : undefined
           }
         />
       )}
@@ -1362,17 +1381,23 @@ export function ContractsList({ clientId }: Props) {
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" sideOffset={4} className="w-52 z-50">
             <DropdownMenuLabel className="text-xs text-slate-500">Actions</DropdownMenuLabel>
-            <DropdownMenuItem onSelect={openNew}>Add Contract</DropdownMenuItem>
+            {canAdd && <DropdownMenuItem onSelect={openNew}>Add Contract</DropdownMenuItem>}
             <DropdownMenuItem onSelect={() => { setSearch(""); clearSelection(); }}>Clear Filters</DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuLabel className="text-xs text-slate-500">Active/Inactive</DropdownMenuLabel>
-            <DropdownMenuItem onSelect={() => bulkSetActive(true)} disabled={selected.size === 0}>Make Active</DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => bulkSetActive(false)} disabled={selected.size === 0}>Make Inactive</DropdownMenuItem>
+            {canEdit && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuLabel className="text-xs text-slate-500">Active/Inactive</DropdownMenuLabel>
+                <DropdownMenuItem onSelect={() => bulkSetActive(true)} disabled={selected.size === 0}>Make Active</DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => bulkSetActive(false)} disabled={selected.size === 0}>Make Inactive</DropdownMenuItem>
+              </>
+            )}
             <DropdownMenuSeparator />
             <DropdownMenuLabel className="text-xs text-slate-500">Invoice/Export</DropdownMenuLabel>
-            <DropdownMenuItem onSelect={handleCreateInvoices} disabled={generatingInvoices || selected.size === 0}>
-              {generatingInvoices ? "Creating…" : "Create Invoices"}
-            </DropdownMenuItem>
+            {canCreateInvoices && (
+              <DropdownMenuItem onSelect={handleCreateInvoices} disabled={generatingInvoices || selected.size === 0}>
+                {generatingInvoices ? "Creating…" : "Create Invoices"}
+              </DropdownMenuItem>
+            )}
             <DropdownMenuItem onSelect={handleExport}>Export</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -1423,7 +1448,7 @@ export function ContractsList({ clientId }: Props) {
 
         {/* Right side */}
         <div className="ml-auto flex items-center gap-2">
-          {clientId && (
+          {clientId && canAdd && (
             <Button size="sm" className="h-7 text-xs bg-[#5a5a5a] border-[#6a6a6a] text-white hover:bg-[#6a6a6a]" onClick={openNew}>
               <Plus className="mr-1 h-3.5 w-3.5" /> Add Contract
             </Button>
@@ -1482,9 +1507,10 @@ export function ContractsList({ clientId }: Props) {
               filtered.map((c) => (
                 <tr
                   key={c.id}
-                  onClick={() => openEdit(c)}
+                  onClick={canEdit ? () => openEdit(c) : undefined}
                   className={cn(
-                    "group cursor-pointer border-b hover:bg-slate-50",
+                    "group border-b hover:bg-slate-50",
+                    canEdit && "cursor-pointer",
                     selected.has(c.id) && "bg-brand-50"
                   )}
                 >
@@ -1497,12 +1523,14 @@ export function ContractsList({ clientId }: Props) {
                     />
                   </td>
                   <td className="px-2 py-2.5" onClick={(e) => e.stopPropagation()}>
-                    <button
-                      onClick={() => openEdit(c)}
-                      className="text-slate-400 hover:text-slate-700"
-                    >
-                      <Pencil className="h-3.5 w-3.5" />
-                    </button>
+                    {canEdit && (
+                      <button
+                        onClick={() => openEdit(c)}
+                        className="text-slate-400 hover:text-slate-700"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </button>
+                    )}
                   </td>
                   {!clientId && visibleKeys.includes("client") && (
                     <td className="px-3 py-2.5" onClick={(e) => e.stopPropagation()}>
@@ -1542,12 +1570,14 @@ export function ContractsList({ clientId }: Props) {
                     <td className="px-3 py-2.5 text-xs text-slate-500">{fmtDate(c.lastBilledDate)}</td>
                   )}
                   <td className="px-3 py-2.5" onClick={(e) => e.stopPropagation()}>
-                    <button
-                      onClick={() => handleDelete(c)}
-                      className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-500"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
+                    {canDelete && (
+                      <button
+                        onClick={() => handleDelete(c)}
+                        className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-500"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))

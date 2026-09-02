@@ -22,6 +22,8 @@ import { DEFAULT_SUBJECT, DEFAULT_TEMPLATE_BODY } from "./SendEstimateDialog";
 import { useEmailTemplates } from "@/lib/hooks/use-email-templates";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/shared/PageHeader";
+import { EmptyState } from "@/components/shared/EmptyState";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 import { ColumnChooser } from "@/components/shared/ColumnChooser";
 import type { ColumnDef } from "@/components/shared/ColumnChooser";
 import {
@@ -106,6 +108,10 @@ const ESTIMATE_TEMPLATE_COLUMNS = [
 
 export function EstimatesList({ clientId }: Props) {
   const router = useRouter();
+  const { can, isLoading: permissionsLoading } = usePermissions();
+  const canAdd = can("estimate_add");
+  const canEdit = can("estimate_edit");
+  const canSend = can("estimate_send");
   const { data: estimates, isLoading, refetch } = useEstimates(clientId);
   const { mutateAsync: updateStage } = useUpdateEstimateStage();
   const { mutateAsync: bulkImportEstimates } = useBulkImportEstimates();
@@ -261,6 +267,16 @@ export function EstimatesList({ clientId }: Props) {
 
   const colSpan = visibleColumns.length + 2; // +checkbox +actions
 
+  if (!permissionsLoading && !can("estimate_list")) {
+    return (
+      <EmptyState
+        icon={FileText}
+        title="No access"
+        description="You don't have permission to view Estimates."
+      />
+    );
+  }
+
   return (
     <div className="flex h-full flex-col gap-4">
 
@@ -298,9 +314,11 @@ export function EstimatesList({ clientId }: Props) {
                   }
                 }}
               />
-              <Button size="sm" onClick={() => setDialogOpen(true)}>
-                <Plus className="mr-1.5 h-4 w-4" /> New Estimate
-              </Button>
+              {canAdd && (
+                <Button size="sm" onClick={() => setDialogOpen(true)}>
+                  <Plus className="mr-1.5 h-4 w-4" /> New Estimate
+                </Button>
+              )}
             </div>
           }
         />
@@ -342,7 +360,7 @@ export function EstimatesList({ clientId }: Props) {
             </>
           )}
         </div>
-        {clientId && (
+        {clientId && canAdd && (
           <div className="ml-auto">
             <Button size="sm" className="h-7 text-xs" onClick={() => setDialogOpen(true)}>
               <Plus className="mr-1 h-3 w-3" /> New Estimate
@@ -366,44 +384,58 @@ export function EstimatesList({ clientId }: Props) {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start">
-              <DropdownMenuItem
-                disabled={!someSelected || emailingSelected}
-                onSelect={() => void bulkEmailSelected()}
-              >
-                {emailingSelected ? "Emailing…" : "Email Selected"}
-              </DropdownMenuItem>
+              {canSend && (
+                <DropdownMenuItem
+                  disabled={!someSelected || emailingSelected}
+                  onSelect={() => void bulkEmailSelected()}
+                >
+                  {emailingSelected ? "Emailing…" : "Email Selected"}
+                </DropdownMenuItem>
+              )}
               <DropdownMenuItem
                 disabled={!someSelected}
                 onSelect={() => { toast.info("Opening print view…"); window.print(); }}
               >
                 Print Selected
               </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem disabled={!someSelected} onSelect={() => bulkSetStage("sent")}>
-                Mark as Sent
-              </DropdownMenuItem>
-              <DropdownMenuItem disabled={!someSelected} onSelect={() => bulkSetStage("accepted")}>
-                Mark as Accepted
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                disabled={selectedIds.size !== 1}
-                onSelect={() => {
-                  const id = Array.from(selectedIds)[0];
-                  const est = filtered.find((e) => e.id === id);
-                  if (est) setDuplicateTarget({ id: est.id, description: est.description ?? "" });
-                }}
-              >
-                <Copy className="mr-2 h-3.5 w-3.5" /> Copy Estimate
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                disabled={!someSelected}
-                className="text-red-600 focus:text-red-600"
-                onSelect={() => bulkSetStage("lost")}
-              >
-                Mark as Lost
-              </DropdownMenuItem>
+              {canEdit && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem disabled={!someSelected} onSelect={() => bulkSetStage("sent")}>
+                    Mark as Sent
+                  </DropdownMenuItem>
+                  <DropdownMenuItem disabled={!someSelected} onSelect={() => bulkSetStage("accepted")}>
+                    Mark as Accepted
+                  </DropdownMenuItem>
+                </>
+              )}
+              {canAdd && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    disabled={selectedIds.size !== 1}
+                    onSelect={() => {
+                      const id = Array.from(selectedIds)[0];
+                      const est = filtered.find((e) => e.id === id);
+                      if (est) setDuplicateTarget({ id: est.id, description: est.description ?? "" });
+                    }}
+                  >
+                    <Copy className="mr-2 h-3.5 w-3.5" /> Copy Estimate
+                  </DropdownMenuItem>
+                </>
+              )}
+              {canEdit && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    disabled={!someSelected}
+                    className="text-red-600 focus:text-red-600"
+                    onSelect={() => bulkSetStage("lost")}
+                  >
+                    Mark as Lost
+                  </DropdownMenuItem>
+                </>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
           <button
@@ -494,7 +526,7 @@ export function EstimatesList({ clientId }: Props) {
         <EstimatesPipelineView
           estimates={filtered}
           stages={estimateStages}
-          onEstimateClick={(id) => router.push(`/crm/estimates/${id}`)}
+          onEstimateClick={(id) => { if (canEdit) router.push(`/crm/estimates/${id}`); }}
           onStageChange={(id, stage) => updateStage({ id, stage })}
         />
       )}
@@ -550,9 +582,10 @@ export function EstimatesList({ clientId }: Props) {
                   : 0;
                 return (
                   <tr key={e.id} className={cn(
-                    "group cursor-pointer border-b hover:bg-slate-50",
+                    "group border-b hover:bg-slate-50",
+                    canEdit && "cursor-pointer",
                     selectedIds.has(e.id) && "bg-brand-50"
-                  )} onClick={() => router.push(`/crm/estimates/${e.id}`)}>
+                  )} onClick={canEdit ? () => router.push(`/crm/estimates/${e.id}`) : undefined}>
 
                     <td className="w-10 px-3 py-2.5" onClick={(e) => e.stopPropagation()}>
                       <input

@@ -1,12 +1,14 @@
 "use client";
 
 import { useMemo, useState, type ReactNode } from "react";
-import { Plus } from "lucide-react";
+import { Plus, CalendarCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { WeekStrip } from "@/components/crm/WeekStrip";
 import { useSalesReps, useSalesMeetings, type SalesMeetingWithClient } from "@/lib/hooks/use-sales-meetings";
 import type { SalesRepOption } from "@/types/crm-sales-meetings";
 import { SalesMeetingDialog } from "./SalesMeetingDialog";
+import { EmptyState } from "@/components/shared/EmptyState";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 import { cn } from "@/lib/utils";
 
 const DAY_START_HOUR = 7;
@@ -55,6 +57,9 @@ const VIEW_OPTIONS: { value: ViewMode; label: string }[] = [
 ];
 
 export function SalesMeetingsCalendar() {
+  const { can, isLoading: permissionsLoading } = usePermissions();
+  const canAdd = can("sales_meeting_add");
+  const canEdit = can("sales_meeting_edit");
   const [viewMode, setViewMode] = useState<ViewMode>("day");
   const [selectedDate, setSelectedDate] = useState(todayLocalString());
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -91,6 +96,7 @@ export function SalesMeetingsCalendar() {
   const { data: meetings, isLoading: meetingsLoading } = useSalesMeetings(rangeStartIso, rangeEndIso);
 
   function openNewMeeting(opts: { repId?: string; date?: string; hour?: number } = {}) {
+    if (!canAdd) return;
     setEditingMeeting(null);
     setSlotDefaults({
       repId: opts.repId,
@@ -101,6 +107,7 @@ export function SalesMeetingsCalendar() {
   }
 
   function openEditMeeting(meeting: SalesMeetingWithClient) {
+    if (!canEdit) return;
     setEditingMeeting(meeting);
     setSlotDefaults({});
     setDialogOpen(true);
@@ -108,6 +115,16 @@ export function SalesMeetingsCalendar() {
 
   const loading = repsLoading || meetingsLoading;
   const noReps = !reps || reps.length === 0;
+
+  if (!permissionsLoading && !can("sales_meeting_list")) {
+    return (
+      <EmptyState
+        icon={CalendarCheck}
+        title="No access"
+        description="You don't have permission to view Sales Meetings."
+      />
+    );
+  }
 
   return (
     <div className="flex flex-col gap-4">
@@ -130,10 +147,12 @@ export function SalesMeetingsCalendar() {
             ))}
           </div>
         </div>
-        <Button onClick={() => openNewMeeting()} className="shrink-0 gap-1.5">
-          <Plus className="h-4 w-4" />
-          Book Meeting
-        </Button>
+        {canAdd && (
+          <Button onClick={() => openNewMeeting()} className="shrink-0 gap-1.5">
+            <Plus className="h-4 w-4" />
+            Book Meeting
+          </Button>
+        )}
       </div>
 
       {loading ? (

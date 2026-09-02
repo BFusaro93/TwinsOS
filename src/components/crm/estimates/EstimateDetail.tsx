@@ -22,6 +22,8 @@ import { useCRMServices } from "@/lib/hooks/use-crm-jobs";
 import { useApprovalFlow } from "@/lib/hooks/use-approval-flows";
 import { useSubmitForApproval } from "@/lib/hooks/use-approval-requests";
 import { ApprovalChain } from "@/components/shared/ApprovalChain";
+import { EmptyState } from "@/components/shared/EmptyState";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 import { CommentsSection } from "@/components/shared/CommentsSection";
 import { useEstimateTemplates } from "@/lib/hooks/use-estimate-templates";
 import { useClients } from "@/lib/hooks/use-clients";
@@ -335,6 +337,8 @@ interface Props {
 
 export function EstimateDetail({ estimateId, onClose, compact = false }: Props) {
   const router = useRouter();
+  const { can, isLoading: permissionsLoading } = usePermissions();
+  const canSend = can("estimate_send");
   const searchParams = useSearchParams();
   const backClientId = searchParams.get("clientId");
   const qc = useQueryClient();
@@ -669,6 +673,16 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
     return <div className="p-6 text-sm text-slate-500">Estimate not found.</div>;
   }
 
+  if (!permissionsLoading && !can("estimate_edit")) {
+    return (
+      <EmptyState
+        icon={FileText}
+        title="No access"
+        description="You don't have permission to edit Estimates."
+      />
+    );
+  }
+
   const effectiveStage = (headerEdits.stage ?? estimate.stage) as EstimateStage;
 
   const visibleLineItems = (estimate.lineItems ?? []).filter((li) => {
@@ -735,14 +749,16 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
             onClick={() => handleStage("draft")}>
             <Pencil className="mr-1 h-3.5 w-3.5 text-slate-400" />Draft
           </Button>
-          <Button variant="outline" size="sm" className="h-8 text-xs"
-            disabled={estimate.approvalStatus === "pending" || submittingForApproval}
-            onClick={handleSendClick}>
-            <Send className="mr-1 h-3.5 w-3.5 text-yellow-500" />
-            {estimate.approvalStatus === "pending" ? "Awaiting Approval"
-              : estimate.approvalStatus === "rejected" ? "Resubmit for Approval"
-              : "Send"}
-          </Button>
+          {canSend && (
+            <Button variant="outline" size="sm" className="h-8 text-xs"
+              disabled={estimate.approvalStatus === "pending" || submittingForApproval}
+              onClick={handleSendClick}>
+              <Send className="mr-1 h-3.5 w-3.5 text-yellow-500" />
+              {estimate.approvalStatus === "pending" ? "Awaiting Approval"
+                : estimate.approvalStatus === "rejected" ? "Resubmit for Approval"
+                : "Send"}
+            </Button>
+          )}
           <Button
             variant="outline"
             size="sm"

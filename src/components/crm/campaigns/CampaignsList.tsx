@@ -12,6 +12,7 @@ import { useClients } from "@/lib/hooks/use-clients";
 import { useDocumentTemplates, useDocumentTemplate } from "@/lib/hooks/use-crm-documents";
 import { renderBlocksToHtml, SAMPLE_MERGE_VALUES } from "@/lib/utils/document-template-renderer";
 import { CampaignAudiencePicker } from "./CampaignAudiencePicker";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 import type { CRMCampaign, CampaignStatus, NewCampaignFormValues } from "@/types/crm-campaigns";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { EmptyState } from "@/components/shared/EmptyState";
@@ -414,6 +415,10 @@ function CampaignRow({
   onStatusChange: (id: string, status: CampaignStatus, campaign: CRMCampaign) => void;
   onSend: (c: CRMCampaign) => void;
 }) {
+  const { can } = usePermissions();
+  const canEdit = can("campaign_edit");
+  const canDelete = can("campaign_delete");
+  const canSend = can("campaign_send");
   const openRate =
     campaign.deliveredCount > 0
       ? Math.round((campaign.openedCount / campaign.deliveredCount) * 100)
@@ -425,8 +430,8 @@ function CampaignRow({
 
   return (
     <tr
-      className="cursor-pointer border-b transition-colors hover:bg-slate-50"
-      onClick={() => onEdit(campaign)}
+      className={cn("border-b transition-colors hover:bg-slate-50", canEdit && "cursor-pointer")}
+      onClick={canEdit ? () => onEdit(campaign) : undefined}
     >
       <td className="px-4 py-3">
         <div className="flex items-center gap-2.5">
@@ -493,17 +498,19 @@ function CampaignRow({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={() => onEdit(campaign)}>
-              <Pencil className="mr-2 h-3.5 w-3.5" />
-              Edit
-            </DropdownMenuItem>
-            {campaign.type === "email" && (campaign.status === "draft" || campaign.status === "scheduled") && (
+            {canEdit && (
+              <DropdownMenuItem onClick={() => onEdit(campaign)}>
+                <Pencil className="mr-2 h-3.5 w-3.5" />
+                Edit
+              </DropdownMenuItem>
+            )}
+            {canSend && campaign.type === "email" && (campaign.status === "draft" || campaign.status === "scheduled") && (
               <DropdownMenuItem onClick={() => onSend(campaign)}>
                 <Send className="mr-2 h-3.5 w-3.5" />
                 Send Now
               </DropdownMenuItem>
             )}
-            {campaign.status === "draft" && (
+            {canSend && campaign.status === "draft" && (
               <DropdownMenuItem
                 onClick={() => onStatusChange(campaign.id, "scheduled", campaign)}
               >
@@ -511,7 +518,7 @@ function CampaignRow({
                 Mark Scheduled
               </DropdownMenuItem>
             )}
-            {campaign.status === "active" && (
+            {canSend && campaign.status === "active" && (
               <DropdownMenuItem
                 onClick={() => onStatusChange(campaign.id, "paused", campaign)}
               >
@@ -519,7 +526,7 @@ function CampaignRow({
                 Pause
               </DropdownMenuItem>
             )}
-            {campaign.status === "paused" && (
+            {canSend && campaign.status === "paused" && (
               <DropdownMenuItem
                 onClick={() => onStatusChange(campaign.id, "active", campaign)}
               >
@@ -527,14 +534,18 @@ function CampaignRow({
                 Resume
               </DropdownMenuItem>
             )}
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              className="text-red-600"
-              onClick={() => onDelete(campaign)}
-            >
-              <Trash2 className="mr-2 h-3.5 w-3.5" />
-              Delete
-            </DropdownMenuItem>
+            {canDelete && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  className="text-red-600"
+                  onClick={() => onDelete(campaign)}
+                >
+                  <Trash2 className="mr-2 h-3.5 w-3.5" />
+                  Delete
+                </DropdownMenuItem>
+              </>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
       </td>
@@ -545,6 +556,11 @@ function CampaignRow({
 // ── Main Component ────────────────────────────────────────────────────────────
 
 export function CampaignsList() {
+  const { can, isLoading: permissionsLoading } = usePermissions();
+  const canAdd = can("campaign_add");
+  const canEdit = can("campaign_edit");
+  const canDelete = can("campaign_delete");
+  const canSend = can("campaign_send");
   const [statusTab, setStatusTab] = useState<"all" | CampaignStatus>("all");
   const [search, setSearch] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -617,19 +633,31 @@ export function CampaignsList() {
     }
   }
 
+  if (!permissionsLoading && !can("campaign_list")) {
+    return (
+      <EmptyState
+        icon={Megaphone}
+        title="No access"
+        description="You don't have permission to view Sales Campaigns."
+      />
+    );
+  }
+
   return (
     <div className="flex h-full flex-col gap-4">
       <PageHeader
         title="Sales Campaigns"
         description={!isLoading ? `${campaigns.length} campaigns` : undefined}
         action={
-          <Button
-            size="sm"
-            onClick={() => { setEditing(null); setDialogOpen(true); }}
-          >
-            <Plus className="mr-1.5 h-4 w-4" />
-            New Campaign
-          </Button>
+          canAdd ? (
+            <Button
+              size="sm"
+              onClick={() => { setEditing(null); setDialogOpen(true); }}
+            >
+              <Plus className="mr-1.5 h-4 w-4" />
+              New Campaign
+            </Button>
+          ) : undefined
         }
       />
 
@@ -703,13 +731,15 @@ export function CampaignsList() {
             title="No campaigns yet"
             description="Create a campaign to send targeted emails or SMS messages to your clients and leads."
             action={
-              <Button
-                size="sm"
-                onClick={() => { setEditing(null); setDialogOpen(true); }}
-              >
-                <Plus className="mr-1.5 h-4 w-4" />
-                New Campaign
-              </Button>
+              canAdd ? (
+                <Button
+                  size="sm"
+                  onClick={() => { setEditing(null); setDialogOpen(true); }}
+                >
+                  <Plus className="mr-1.5 h-4 w-4" />
+                  New Campaign
+                </Button>
+              ) : undefined
             }
           />
         ) : (

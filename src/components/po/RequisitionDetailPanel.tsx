@@ -20,6 +20,7 @@ import { ProductDetailSheet } from "./ProductDetailSheet";
 import { ProjectDetailSheet } from "./ProjectDetailSheet";
 import { PartDetailSheet } from "@/components/cmms/PartDetailSheet";
 import { CatalogItemCombobox } from "@/components/shared/CatalogItemCombobox";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -510,6 +511,11 @@ function FilesTab({ req }: { req: Requisition }) {
 }
 
 export function RequisitionDetailPanel({ requisition }: RequisitionDetailPanelProps) {
+  // Shared with Equipt — only restrict users who actually have a Landscapt CRM role.
+  const { can, isAdmin, roleId } = usePermissions();
+  const hasCrmRole = !isAdmin && !!roleId;
+  const canEditRequisitions = !hasCrmRole || can("requisition_edit");
+  const canDeleteRequisitions = !hasCrmRole || can("requisition_delete");
   const [editOpen, setEditOpen] = useState(false);
   const [convertOpen, setConvertOpen] = useState(false);
   const [poSheetOpen, setPoSheetOpen] = useState(false);
@@ -601,15 +607,17 @@ export function RequisitionDetailPanel({ requisition }: RequisitionDetailPanelPr
         </div>
         <div className="flex items-center gap-2">
           <StatusBadge variant={status} label={APPROVAL_STATUS_LABELS[status]} />
-          <EditButton onClick={() => setEditOpen(true)} />
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 text-slate-400 hover:bg-red-50 hover:text-red-500"
-            onClick={() => setDeleteConfirmOpen(true)}
-          >
-            <Trash2 className="h-4 w-4" />
-          </Button>
+          {canEditRequisitions && <EditButton onClick={() => setEditOpen(true)} />}
+          {canDeleteRequisitions && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 text-slate-400 hover:bg-red-50 hover:text-red-500"
+              onClick={() => setDeleteConfirmOpen(true)}
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          )}
         </div>
       </div>
 

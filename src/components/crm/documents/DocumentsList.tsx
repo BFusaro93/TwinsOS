@@ -35,8 +35,10 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
-import { MoreHorizontal, Plus, Search, Trash2 } from "lucide-react";
+import { MoreHorizontal, Plus, Search, Trash2, FileEdit } from "lucide-react";
 import { toast } from "sonner";
+import { EmptyState } from "@/components/shared/EmptyState";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 import { DOC_TYPE_LABELS, PLAIN_TEXT_DOC_TYPES } from "@/types/crm-documents";
 import type { DocStatus, DocType, DocumentTemplate } from "@/types/crm-documents";
 
@@ -140,6 +142,8 @@ function NewDocumentDialog({
 
 export function DocumentsList() {
   const router = useRouter();
+  const { can, isLoading: permissionsLoading } = usePermissions();
+  const canAdd = can("document_template_add");
   const { data: templates = [], isLoading } = useDocumentTemplates();
   const deleteDoc = useDeleteDocumentTemplate();
 
@@ -161,6 +165,16 @@ export function DocumentsList() {
     }
     return list;
   }, [templates, tab, typeFilter, search]);
+
+  if (!permissionsLoading && !can("document_template_list")) {
+    return (
+      <EmptyState
+        icon={FileEdit}
+        title="No access"
+        description="You don't have permission to view Document Templates."
+      />
+    );
+  }
 
   return (
     <div className="flex flex-col gap-4">
@@ -204,9 +218,11 @@ export function DocumentsList() {
           </SelectContent>
         </Select>
 
-        <Button size="sm" onClick={() => setNewOpen(true)} className="ml-auto">
-          <Plus className="mr-1.5 h-4 w-4" /> Add Document
-        </Button>
+        {canAdd && (
+          <Button size="sm" onClick={() => setNewOpen(true)} className="ml-auto">
+            <Plus className="mr-1.5 h-4 w-4" /> Add Document
+          </Button>
+        )}
       </div>
 
       {/* Table */}
@@ -272,6 +288,9 @@ function DocumentRow({
   onEdit: () => void;
   onDelete: () => void;
 }) {
+  const { can } = usePermissions();
+  const canEdit = can("document_template_edit");
+  const canDelete = can("document_template_delete");
   const updateDoc = useUpdateDocumentTemplate(doc.id);
 
   async function toggleStatus() {
@@ -282,8 +301,8 @@ function DocumentRow({
 
   return (
     <tr
-      className="cursor-pointer border-b hover:bg-slate-50"
-      onClick={onEdit}
+      className={cn("border-b hover:bg-slate-50", canEdit && "cursor-pointer")}
+      onClick={canEdit ? onEdit : undefined}
     >
       <td className="px-4 py-2.5">
         <span className="font-medium text-brand-600 hover:underline">{doc.name}</span>
@@ -304,17 +323,25 @@ function DocumentRow({
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={onEdit}>Edit</DropdownMenuItem>
-            <DropdownMenuItem onClick={toggleStatus}>
-              {doc.status === "active" ? "Deactivate" : "Activate"}
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              className="text-red-600 focus:text-red-600"
-              onClick={() => { if (confirm("Delete this document template?")) onDelete(); }}
-            >
-              <Trash2 className="mr-2 h-3.5 w-3.5" /> Delete
-            </DropdownMenuItem>
+            {canEdit && (
+              <>
+                <DropdownMenuItem onClick={onEdit}>Edit</DropdownMenuItem>
+                <DropdownMenuItem onClick={toggleStatus}>
+                  {doc.status === "active" ? "Deactivate" : "Activate"}
+                </DropdownMenuItem>
+              </>
+            )}
+            {canDelete && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  className="text-red-600 focus:text-red-600"
+                  onClick={() => { if (confirm("Delete this document template?")) onDelete(); }}
+                >
+                  <Trash2 className="mr-2 h-3.5 w-3.5" /> Delete
+                </DropdownMenuItem>
+              </>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
       </td>

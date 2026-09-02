@@ -1,11 +1,15 @@
 "use client";
 
 import { useState } from "react";
+import { Layers } from "lucide-react";
 import { ServicesList } from "@/components/crm/services/ServicesList";
 import { ServiceDialog } from "@/components/crm/services/ServiceDialog";
+import { EmptyState } from "@/components/shared/EmptyState";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 import type { CRMService } from "@/types/crm-jobs";
 
 export default function ServicesPage() {
+  const { can, isLoading: permissionsLoading } = usePermissions();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<CRMService | null>(null);
 
@@ -22,6 +26,16 @@ export default function ServicesPage() {
   function handleClose() {
     setDialogOpen(false);
     setEditing(null);
+  }
+
+  if (!permissionsLoading && !can("service_list")) {
+    return (
+      <EmptyState
+        icon={Layers}
+        title="No access"
+        description="You don't have permission to view Services."
+      />
+    );
   }
 
   return (

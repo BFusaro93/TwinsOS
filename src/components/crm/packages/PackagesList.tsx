@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Plus, Search, Pencil, Trash2 } from "lucide-react";
 import { usePackages, useDeletePackage } from "@/lib/hooks/use-packages";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 import type { CRMPackage } from "@/types/crm-packages";
 import { toast } from "sonner";
 
@@ -15,6 +16,10 @@ interface Props {
 }
 
 export function PackagesList({ onAdd, onEdit }: Props) {
+  const { can } = usePermissions();
+  const canAdd = can("package_add");
+  const canEdit = can("package_edit");
+  const canDelete = can("package_delete");
   const { data: packages = [], isLoading } = usePackages(true);
   const deletePackage = useDeletePackage();
   const [tab, setTab] = useState<"active" | "inactive" | "all">("active");
@@ -43,9 +48,11 @@ export function PackagesList({ onAdd, onEdit }: Props) {
               }`}>{t}</button>
           ))}
         </div>
-        <Button size="sm" onClick={onAdd} className="ml-auto">
-          <Plus className="mr-1.5 h-4 w-4" /> New Package
-        </Button>
+        {canAdd && (
+          <Button size="sm" onClick={onAdd} className="ml-auto">
+            <Plus className="mr-1.5 h-4 w-4" /> New Package
+          </Button>
+        )}
       </div>
 
       <div className="rounded-lg border bg-white shadow-sm overflow-x-auto">
@@ -68,8 +75,8 @@ export function PackagesList({ onAdd, onEdit }: Props) {
               <tr><td colSpan={6} className="px-4 py-8 text-center text-slate-400">No packages found.</td></tr>
             )}
             {filtered.map((pkg) => (
-              <tr key={pkg.id} onClick={() => onEdit(pkg)}
-                className="border-b last:border-0 hover:bg-slate-50 cursor-pointer">
+              <tr key={pkg.id} onClick={canEdit ? () => onEdit(pkg) : undefined}
+                className={`border-b last:border-0 hover:bg-slate-50 ${canEdit ? "cursor-pointer" : ""}`}>
                 <td className="px-4 py-3">
                   <p className="font-medium text-slate-800">{pkg.name}</p>
                   {pkg.description && (
@@ -91,20 +98,24 @@ export function PackagesList({ onAdd, onEdit }: Props) {
                 </td>
                 <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                   <div className="flex items-center justify-center gap-1">
-                    <button onClick={() => onEdit(pkg)} className="rounded p-1 hover:bg-slate-100" title="Edit">
-                      <Pencil className="h-3.5 w-3.5 text-slate-400" />
-                    </button>
-                    <button
-                      onClick={() => {
-                        if (confirm(`Delete "${pkg.name}"?`)) {
-                          deletePackage.mutate(pkg.id, {
-                            onError: () => toast.error(`Failed to delete "${pkg.name}"`),
-                          });
-                        }
-                      }}
-                      className="rounded p-1 hover:bg-red-50" title="Delete">
-                      <Trash2 className="h-3.5 w-3.5 text-red-400" />
-                    </button>
+                    {canEdit && (
+                      <button onClick={() => onEdit(pkg)} className="rounded p-1 hover:bg-slate-100" title="Edit">
+                        <Pencil className="h-3.5 w-3.5 text-slate-400" />
+                      </button>
+                    )}
+                    {canDelete && (
+                      <button
+                        onClick={() => {
+                          if (confirm(`Delete "${pkg.name}"?`)) {
+                            deletePackage.mutate(pkg.id, {
+                              onError: () => toast.error(`Failed to delete "${pkg.name}"`),
+                            });
+                          }
+                        }}
+                        className="rounded p-1 hover:bg-red-50" title="Delete">
+                        <Trash2 className="h-3.5 w-3.5 text-red-400" />
+                      </button>
+                    )}
                   </div>
                 </td>
               </tr>

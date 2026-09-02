@@ -29,10 +29,14 @@ import {
 import { formatCurrency, cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { Snowflake, FileText } from "lucide-react";
+import { EmptyState } from "@/components/shared/EmptyState";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 import type { CRMJobVisit } from "@/types/crm-jobs";
 
 
 export function SnowInvoicing() {
+  const { can, isLoading: permissionsLoading } = usePermissions();
+  const canGenerate = can("snow_invoicing_generate");
   const router = useRouter();
   const { data: events = [] } = useStormEvents();
   const [stormEventId, setStormEventId] = useState("");
@@ -152,6 +156,16 @@ export function SnowInvoicing() {
     }
   }
 
+  if (!permissionsLoading && !can("snow_invoicing_view")) {
+    return (
+      <EmptyState
+        icon={Snowflake}
+        title="No access"
+        description="You don't have permission to view Snow Invoicing."
+      />
+    );
+  }
+
   return (
     <div className="flex h-full flex-col gap-4">
       <PageHeader title="Snow Invoicing" description="Storm-based invoice generation" />
@@ -178,16 +192,18 @@ export function SnowInvoicing() {
             <span className="text-sm text-slate-600">
               {selectedIds.size} selected · <span className="font-semibold">{formatCurrency(selectedTotal)}</span>
             </span>
-            <Button
-              size="sm"
-              className="h-9 text-xs gap-1.5 bg-brand-500 hover:bg-brand-600 text-white"
-              onClick={handleGenerate}
-              disabled={generateInvoices.isPending || tiersLoading || tiersError}
-              title={tiersLoading ? "Loading storm-depth rate tiers…" : undefined}
-            >
-              <FileText className="h-3.5 w-3.5" />
-              {generateInvoices.isPending ? "Generating…" : tiersLoading ? "Loading rates…" : "Generate Invoices"}
-            </Button>
+            {canGenerate && (
+              <Button
+                size="sm"
+                className="h-9 text-xs gap-1.5 bg-brand-500 hover:bg-brand-600 text-white"
+                onClick={handleGenerate}
+                disabled={generateInvoices.isPending || tiersLoading || tiersError}
+                title={tiersLoading ? "Loading storm-depth rate tiers…" : undefined}
+              >
+                <FileText className="h-3.5 w-3.5" />
+                {generateInvoices.isPending ? "Generating…" : tiersLoading ? "Loading rates…" : "Generate Invoices"}
+              </Button>
+            )}
           </div>
         )}
       </div>

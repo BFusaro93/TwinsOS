@@ -6,11 +6,14 @@ import { useDocumentTemplate } from "@/lib/hooks/use-crm-documents";
 import { DocumentBuilder } from "@/components/crm/documents/DocumentBuilder";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, FileEdit } from "lucide-react";
+import { EmptyState } from "@/components/shared/EmptyState";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 
 export default function DocumentDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
+  const { can, isLoading: permissionsLoading } = usePermissions();
   const { data: template, isLoading } = useDocumentTemplate(id);
 
   if (isLoading) {
@@ -31,6 +34,16 @@ export default function DocumentDetailPage({ params }: { params: Promise<{ id: s
           Back to Documents
         </Button>
       </div>
+    );
+  }
+
+  if (!permissionsLoading && !can("document_template_edit")) {
+    return (
+      <EmptyState
+        icon={FileEdit}
+        title="No access"
+        description="You don't have permission to edit Document Templates."
+      />
     );
   }
 
