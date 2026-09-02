@@ -240,6 +240,7 @@ function DetailsTab({
   onSubWOClick,
   onParentWOClick,
   onAssigneeChange,
+  isAssigneeSaving,
   onCategoryChange,
   users,
   woCategories,
@@ -254,6 +255,7 @@ function DetailsTab({
   onSubWOClick: (id: string) => void;
   onParentWOClick: () => void;
   onAssigneeChange: (ids: string[], names: string[]) => void;
+  isAssigneeSaving: boolean;
   onCategoryChange: (categories: string[]) => void;
   users: Array<{ id: string; name: string }>;
   woCategories: Array<{ id: string; label: string; enabled: boolean }>;
@@ -535,8 +537,16 @@ function DetailsTab({
                             key={u.id}
                             role="option"
                             aria-selected={isChecked}
-                            className="flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-xs hover:bg-accent"
+                            aria-disabled={isAssigneeSaving}
+                            className="flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-xs hover:bg-accent aria-disabled:pointer-events-none aria-disabled:opacity-50"
                             onClick={() => {
+                              // Guard against a fast double-click firing this
+                              // twice before `workOrder` (and so selectedIds/
+                              // displayNames, both derived from it) refreshes
+                              // from the first save — without this, both
+                              // clicks compute the same "next" value and
+                              // fire two identical updates.
+                              if (isAssigneeSaving) return;
                               const nextIds = isChecked
                                 ? selectedIds.filter((id) => id !== u.id)
                                 : [...selectedIds, u.id];
@@ -686,7 +696,7 @@ export function WorkOrderDetailPanel({ workOrder }: WorkOrderDetailPanelProps) {
   const { data: woVendorCharges = [] } = useWOVendorCharges(workOrder.id);
   const { data: comments = [] } = useComments("work_order", workOrder.id);
   const { woCategories } = useSettingsStore();
-  const { mutate: updateWO } = useUpdateWorkOrder();
+  const { mutate: updateWO, isPending: isUpdatingWO } = useUpdateWorkOrder();
   const { mutate: updateWOStatus } = useUpdateWorkOrderStatus();
   const linkedAsset =
     workOrder.assetId && workOrder.linkedEntityType !== "vehicle"
@@ -795,6 +805,7 @@ export function WorkOrderDetailPanel({ workOrder }: WorkOrderDetailPanelProps) {
                     assignedToNames: names,
                   });
                 }}
+                isAssigneeSaving={isUpdatingWO}
                 onCategoryChange={(categories) => {
                   updateWO({
                     id: workOrder.id,
