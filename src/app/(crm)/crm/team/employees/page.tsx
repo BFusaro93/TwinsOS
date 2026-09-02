@@ -11,6 +11,7 @@ import { PermissionGate } from "@/components/shared/PermissionGate";
 import { ImportExportMenu } from "@/components/shared/ImportExportMenu";
 import { exportCSV } from "@/lib/csv";
 import { useEmployees, useBulkImportEmployees } from "@/lib/hooks/use-employees";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import {
@@ -27,6 +28,7 @@ const EMPLOYEE_TEMPLATE_COLUMNS = [
 ];
 
 export default function EmployeesPage() {
+  const { can, isLoading: permissionsLoading } = usePermissions();
   const { data: employees } = useEmployees(false);
   const { mutateAsync: bulkImportEmployees } = useBulkImportEmployees();
   const [selected, setSelected] = useState<CRMEmployee | null>(null);
@@ -59,6 +61,16 @@ export default function EmployeesPage() {
       </Button>
     </div>
   );
+
+  if (!permissionsLoading && !can("emp_view_info")) {
+    return (
+      <EmptyState
+        icon={UserCog}
+        title="No access"
+        description="You don't have permission to view Employees."
+      />
+    );
+  }
 
   return (
     <div className="flex h-full flex-col gap-4">

@@ -118,7 +118,7 @@ export const CRM_NAV: NavSection[] = [
     label: "Team",
     items: [
       { label: "Crews",     href: "/crm/team/crews",     icon: HardHat },
-      { label: "Employees", href: "/crm/team/employees", icon: UserCog },
+      { label: "Employees", href: "/crm/team/employees", icon: UserCog, permission: "emp_view_info" },
       { label: "Vendors",   href: "/crm/vendors",        icon: Building2 },
     ],
   },
