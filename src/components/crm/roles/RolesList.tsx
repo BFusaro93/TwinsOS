@@ -161,7 +161,7 @@ function RoleDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-6xl p-0 gap-0 max-h-[92vh] flex flex-col">
+      <DialogContent className="max-w-6xl p-0 gap-0 h-[92vh] flex flex-col">
         <DialogHeader className="shrink-0 px-6 py-4 border-b">
           <DialogTitle className="text-xl font-bold">
             {isNew ? "New Role" : `Edit - ${role?.name}`}
