@@ -5,6 +5,8 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useInvoices, useUpdateInvoiceStatus, useBulkImportInvoices } from "@/lib/hooks/use-invoices";
 import { PermissionGate } from "@/components/shared/PermissionGate";
+import { EmptyState } from "@/components/shared/EmptyState";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -159,6 +161,7 @@ const INVOICE_TEMPLATE_COLUMNS = [
 ];
 
 export function InvoicesList({ clientId }: Props) {
+  const { can, isLoading: permissionsLoading } = usePermissions();
   const searchParams = useSearchParams();
   // Lets the standalone /crm/accounting/invoices page be deep-linked scoped to
   // one client (e.g. clicking "Uninvoiced" on that client's Balance card) —
@@ -394,6 +397,16 @@ export function InvoicesList({ clientId }: Props) {
     ? INVOICE_COLUMNS.filter((c) => c.key !== "client" && visibleKeys.includes(c.key))
     : INVOICE_COLUMNS.filter((c) => visibleKeys.includes(c.key));
   const colSpan = visibleColumns.length + 2; // +checkbox +actions
+
+  if (!permissionsLoading && !can("acct_view_invoice_list")) {
+    return (
+      <EmptyState
+        icon={FileText}
+        title="No access"
+        description="You don't have permission to view Invoices."
+      />
+    );
+  }
 
   return (
     <div className="flex h-full flex-col gap-4">

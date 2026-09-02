@@ -1322,11 +1322,12 @@ function QuickBooksConnectSection() {
 function QuickBooksSyncStatusSection() {
   const { can } = usePermissions();
   const canResync = can("quickbooks_resync");
+  const canViewReconciliation = can("acct_qb_reconciliation");
   const { data, isLoading } = useQuickBooksSyncStatus();
   const { mutateAsync: retryInvoice, isPending: retryingInvoice, variables: retryingInvoiceId } = useRetryQuickBooksInvoiceSync();
   const { mutateAsync: retryPayment, isPending: retryingPayment, variables: retryingPaymentId } = useRetryQuickBooksPaymentSync();
 
-  if (isLoading || !data?.connected) return null;
+  if (isLoading || !data?.connected || !canViewReconciliation) return null;
 
   const hasFailures = data.failedInvoices.length > 0 || data.failedPayments.length > 0;
 

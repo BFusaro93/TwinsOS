@@ -38,6 +38,7 @@ import {
 import { formatCurrency } from "@/lib/utils";
 import { Plus, RotateCcw, Search, X, Loader2, Check, CreditCard } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
+import { EmptyState } from "@/components/shared/EmptyState";
 import { ClientCombobox } from "@/components/shared/ClientCombobox";
 import { ColumnChooser } from "@/components/shared/ColumnChooser";
 import type { ColumnDef } from "@/components/shared/ColumnChooser";
@@ -879,10 +880,11 @@ interface Props {
 const PAYMENT_TEMPLATE_COLUMNS = ["clientName", "amount", "paymentDate", "method", "reference", "memo", "invoiceNumber"];
 
 export function PaymentsList({ clientId }: Props) {
-  const { can } = usePermissions();
+  const { can, isLoading: permissionsLoading } = usePermissions();
   // Any of the three keys grants access — the catalog doesn't split this one
   // action by payment method in practice.
   const canRefund = can("acct_process_cc_refunds_voids") || can("acct_delete_card_payments") || can("acct_delete_ach_payments");
+  const canModify = can("acct_add_modify_payments");
   const { data: payments, isLoading, refetch } = usePayments(clientId);
   const { mutateAsync: bulkImportPayments } = useBulkImportPayments();
   const searchParams = useSearchParams();
@@ -941,6 +943,16 @@ export function PaymentsList({ clientId }: Props) {
     return list;
   }, [payments, activeTab, activeFilter, filterValue, search]);
 
+  if (!permissionsLoading && !can("acct_view_payment_list")) {
+    return (
+      <EmptyState
+        icon={CreditCard}
+        title="No access"
+        description="You don't have permission to view Payments."
+      />
+    );
+  }
+
   return (
     <div className="flex h-full flex-col gap-4">
       {/* Page header */}
@@ -978,9 +990,11 @@ export function PaymentsList({ clientId }: Props) {
                   }
                 }}
               />
-              <Button size="sm" onClick={() => setDialogOpen(true)}>
-                <Plus className="mr-1.5 h-4 w-4" /> Add Payment
-              </Button>
+              {canModify && (
+                <Button size="sm" onClick={() => setDialogOpen(true)}>
+                  <Plus className="mr-1.5 h-4 w-4" /> Add Payment
+                </Button>
+              )}
             </div>
           }
         />
@@ -1021,12 +1035,16 @@ export function PaymentsList({ clientId }: Props) {
         </div>
         {clientId && (
           <div className="ml-auto flex items-center gap-1.5">
-            <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setCreditDialogOpen(true)}>
-              <Plus className="mr-1 h-3 w-3" /> Issue Credit
-            </Button>
-            <Button size="sm" className="h-7 text-xs" onClick={() => setDialogOpen(true)}>
-              <Plus className="mr-1 h-3 w-3" /> Record Payment
-            </Button>
+            {can("acct_add_modify_credits") && (
+              <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setCreditDialogOpen(true)}>
+                <Plus className="mr-1 h-3 w-3" /> Issue Credit
+              </Button>
+            )}
+            {canModify && (
+              <Button size="sm" className="h-7 text-xs" onClick={() => setDialogOpen(true)}>
+                <Plus className="mr-1 h-3 w-3" /> Record Payment
+              </Button>
+            )}
           </div>
         )}
       </div>
@@ -1140,12 +1158,14 @@ export function PaymentsList({ clientId }: Props) {
                   </td>
                   <td className="px-3 py-2.5 text-right">
                     <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button
-                        className="rounded px-2 py-0.5 text-xs bg-slate-100 hover:bg-slate-200 text-slate-600"
-                        onClick={(e) => { e.stopPropagation(); setEditPayment(p); }}
-                      >
-                        Edit
-                      </button>
+                      {(p.isCredit ? can("acct_add_modify_credits") : canModify) && (
+                        <button
+                          className="rounded px-2 py-0.5 text-xs bg-slate-100 hover:bg-slate-200 text-slate-600"
+                          onClick={(e) => { e.stopPropagation(); setEditPayment(p); }}
+                        >
+                          Edit
+                        </button>
+                      )}
                       {canRefund && (
                         <button
                           className="rounded px-2 py-0.5 text-xs bg-red-50 hover:bg-red-100 text-red-600"

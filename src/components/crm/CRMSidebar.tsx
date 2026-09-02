@@ -97,8 +97,8 @@ export const CRM_NAV: NavSection[] = [
   {
     label: "Accounting",
     items: [
-      { label: "Invoices",        href: "/crm/accounting/invoices",        icon: Receipt },
-      { label: "Payments",        href: "/crm/accounting/payments",        icon: CreditCard },
+      { label: "Invoices",        href: "/crm/accounting/invoices",        icon: Receipt, permission: "acct_view_invoice_list" },
+      { label: "Payments",        href: "/crm/accounting/payments",        icon: CreditCard, permission: "acct_view_payment_list" },
       { label: "Requisitions",    href: "/crm/accounting/requisitions",    icon: ClipboardList },
       { label: "Purchase Orders", href: "/crm/accounting/purchase-orders", icon: ShoppingCart },
       { label: "Contracts",       href: "/crm/accounting/contracts",       icon: FileSignature },
