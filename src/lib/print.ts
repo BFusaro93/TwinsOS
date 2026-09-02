@@ -1,6 +1,7 @@
 import type { PurchaseOrder, Project } from "@/types";
 import type { WorkOrder } from "@/types";
 import { useSettingsStore } from "@/stores/settings-store";
+import { stripMentionTokens } from "@/lib/mentions";
 
 function openPrintWindow(html: string) {
   const win = window.open("", "_blank", "width=900,height=700");
@@ -426,7 +427,7 @@ function buildCommentsHtml(comments?: Array<{ authorName: string; body: string; 
         <span class="comment-author">${escapeHtml(c.authorName)}</span>
         <span class="comment-date">${formatDateTimeStr(c.createdAt)}</span>
       </div>
-      <div class="comment-body">${escapeHtml(c.body)}</div>
+      <div class="comment-body">${escapeHtml(stripMentionTokens(c.body))}</div>
     </div>
   `
     )

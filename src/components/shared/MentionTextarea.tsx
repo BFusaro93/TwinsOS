@@ -1,8 +1,8 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useUsers } from "@/lib/hooks/use-users";
-import { mentionToken } from "@/lib/mentions";
+import { mentionToken, toDisplay, applyDisplayEdit, displayPositionToRaw } from "@/lib/mentions";
 import { getInitials, getAvatarColor } from "@/lib/utils";
 
 interface MentionTextareaProps {
@@ -36,8 +36,10 @@ function findActiveMentionQuery(text: string, cursor: number): MentionQuery | nu
   return { start: at, text: query };
 }
 
-/** Textarea with @-mention autocomplete. Selecting a user inserts a
- *  `@[Name](userId)` token (see src/lib/mentions.ts) into the plain-text value. */
+/** Textarea with @-mention autocomplete. The visible text always shows just
+ *  "@Name" for a mention — the underlying value (passed to onChange) embeds
+ *  the full `@[Name](userId)` token (see src/lib/mentions.ts) so the id
+ *  survives for storage/notifications, without ever showing in the UI. */
 export function MentionTextarea({
   value, onChange, placeholder, rows = 2, dark = false, className, onKeyDown,
 }: MentionTextareaProps) {
@@ -46,15 +48,18 @@ export function MentionTextarea({
   const [query, setQuery] = useState<MentionQuery | null>(null);
   const [highlighted, setHighlighted] = useState(0);
 
+  const { display, ranges } = useMemo(() => toDisplay(value), [value]);
+
   const matches = query
     ? (users ?? []).filter((u) => u.name.toLowerCase().includes(query.text.toLowerCase())).slice(0, 6)
     : [];
 
   function handleChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
-    const next = e.target.value;
-    onChange(next);
-    const cursor = e.target.selectionStart ?? next.length;
-    const active = findActiveMentionQuery(next, cursor);
+    const nextDisplay = e.target.value;
+    const nextRaw = applyDisplayEdit(value, display, ranges, nextDisplay);
+    onChange(nextRaw);
+    const cursor = e.target.selectionStart ?? nextDisplay.length;
+    const active = findActiveMentionQuery(nextDisplay, cursor);
     setQuery(active);
     setHighlighted(0);
   }
@@ -62,17 +67,18 @@ export function MentionTextarea({
   function pick(user: { id: string; name: string }) {
     if (!query) return;
     const el = ref.current;
-    const cursor = el?.selectionStart ?? value.length;
-    const before = value.slice(0, query.start);
-    const after = value.slice(cursor);
+    const cursor = el?.selectionStart ?? display.length;
+    const rawStart = displayPositionToRaw(query.start, ranges);
+    const rawCursor = displayPositionToRaw(cursor, ranges);
     const token = mentionToken(user.name, user.id) + " ";
-    const next = before + token + after;
+    const next = value.slice(0, rawStart) + token + value.slice(rawCursor);
     onChange(next);
     setQuery(null);
+    const displayToken = `@${user.name} `;
     requestAnimationFrame(() => {
       if (!el) return;
       el.focus();
-      const pos = before.length + token.length;
+      const pos = query.start + displayToken.length;
       el.setSelectionRange(pos, pos);
     });
   }
@@ -91,7 +97,7 @@ export function MentionTextarea({
     <div className="relative flex-1">
       <textarea
         ref={ref}
-        value={value}
+        value={display}
         onChange={handleChange}
         onKeyDown={handleKeyDown}
         onBlur={() => setTimeout(() => setQuery(null), 150)}

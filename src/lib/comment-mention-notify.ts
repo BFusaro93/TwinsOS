@@ -1,6 +1,7 @@
 import { Resend } from "resend";
 import { EMAIL_FROM } from "@/lib/email/send";
 import { sendPushToUser } from "@/lib/notifications/send-push";
+import { stripMentionTokens } from "@/lib/mentions";
 
 // Notifies every @mentioned user on a comment — works for any CommentRecordType
 // (ticket, work_order, po, requisition, receiving, project, damage_case,
@@ -33,7 +34,8 @@ export async function notifyMentions(
     .in("id", recipientIds);
   if (!recipients?.length) return;
 
-  const snippet = commentBody.length > 120 ? `${commentBody.slice(0, 120)}…` : commentBody;
+  const plainBody = stripMentionTokens(commentBody);
+  const snippet = plainBody.length > 120 ? `${plainBody.slice(0, 120)}…` : plainBody;
   const title = `${commenterName} mentioned you`;
   const message = `${commenterName} mentioned you in a comment: "${snippet}"`;
 
