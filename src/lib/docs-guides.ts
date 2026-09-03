@@ -42,6 +42,7 @@ import {
   ClipboardCheck,
   CreditCard,
   Handshake,
+  MessageSquare,
   type LucideIcon,
 } from "lucide-react";
 
@@ -267,6 +268,13 @@ export const DOC_GUIDES: DocGuide[] = [
     title: "Samsara Integration",
     description: "What actually syncs, how vehicles get matched, and where to look when a reading doesn't show up.",
     icon: Radio,
+  },
+  {
+    slug: "sms-onboarding-guide",
+    kicker: "Integrations",
+    title: "Setting Up Your Own Texting Number",
+    description: "How to fill out the business info and consent wording so carriers approve your A2P 10DLC registration on the first pass.",
+    icon: MessageSquare,
   },
   {
     slug: "inventory-costing-guide",

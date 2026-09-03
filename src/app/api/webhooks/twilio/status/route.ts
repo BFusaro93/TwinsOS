@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { verifyTwilioRequest, parseTwilioForm } from "@/lib/sms/verify-twilio-request";
+import { getOrgTwilioAuthToken } from "@/lib/twilio/client";
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://landscapt.com";
 
@@ -16,15 +17,33 @@ const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://landscapt.com";
  * send-time "accepted" status.
  */
 export async function POST(request: Request) {
-  const authToken = process.env.TWILIO_AUTH_TOKEN;
-  if (!authToken) {
-    return NextResponse.json({ error: "Webhook not configured" }, { status: 400 });
-  }
-
   const rawBody = await request.text();
   const params = parseTwilioForm(rawBody);
   const signature = request.headers.get("X-Twilio-Signature");
   const url = `${SITE_URL}/api/webhooks/twilio/status`;
+
+  const supabase = createServiceClient();
+
+  // Same reasoning as the inbound webhook: an org on its own Twilio
+  // subaccount gets its status callbacks signed with that subaccount's own
+  // Auth Token, not the legacy platform-wide one — resolve the owning org via
+  // MessagingServiceSid (present on status callbacks for messages sent
+  // through a Messaging Service, which every send in this app is) first.
+  const messagingServiceSid = params.MessagingServiceSid;
+  let ownerOrgId: string | null = null;
+  if (messagingServiceSid) {
+    const { data: owningOrg } = await supabase
+      .from("organizations")
+      .select("id")
+      .eq("twilio_messaging_service_sid", messagingServiceSid)
+      .maybeSingle();
+    ownerOrgId = owningOrg?.id ?? null;
+  }
+
+  const authToken = (ownerOrgId && (await getOrgTwilioAuthToken(supabase, ownerOrgId))) || process.env.TWILIO_AUTH_TOKEN;
+  if (!authToken) {
+    return NextResponse.json({ error: "Webhook not configured" }, { status: 400 });
+  }
 
   if (!verifyTwilioRequest(authToken, signature, url, params)) {
     console.error("[twilio status webhook] signature verification failed");
@@ -36,8 +55,6 @@ export async function POST(request: Request) {
   if (!messageSid || !messageStatus) {
     return NextResponse.json({ received: true });
   }
-
-  const supabase = createServiceClient();
 
   const patch: Record<string, string> = { status: messageStatus };
   if (messageStatus === "delivered") patch.delivered_at = new Date().toISOString();

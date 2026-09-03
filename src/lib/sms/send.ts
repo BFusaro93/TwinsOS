@@ -22,21 +22,40 @@ export async function sendClientSms(
     if (!client?.sms_opt_in) return { ok: false, reason: "client has not opted in to SMS" };
   }
 
-  // Every org can override its Account SID / Messaging Service SID (for when
-  // a licensed org gets its own Twilio subaccount) — org_id is looked up
-  // first, falling back to the platform-wide shared account. The auth token
-  // is always the platform-wide one for now; see the migration that added
-  // these columns for why.
+  // Every org can override its Account SID / Messaging Service SID — set
+  // once an org has been given its own Twilio subaccount (see
+  // src/lib/twilio/provisioning.ts). org_id is looked up first, falling back
+  // to the platform-wide shared account (Twins Lawn Service's own, today).
+  //
+  // A subaccount override means the accountSid is a subaccount of
+  // TWILIO_PLATFORM_ACCOUNT_SID (the Landscapt ISV/reseller account, a
+  // SEPARATE Twilio account from the legacy fallback below) — the classic
+  // /2010-04-01 Messages API accepts the PARENT's own credentials with the
+  // target subaccount SID substituted into the URL path, so sending never
+  // needs that subaccount's own stored secrets. An org with no override is
+  // presumed to be its own full account (not a subaccount of anything), so
+  // its own SID must be paired with the legacy fallback token that account
+  // actually belongs to.
   const { data: org } = await supabase
     .from("organizations")
     .select("twilio_account_sid, twilio_messaging_service_sid")
     .eq("id", params.orgId)
     .single();
 
+  const hasSubaccountOverride = !!org?.twilio_account_sid;
   const accountSid = org?.twilio_account_sid || process.env.TWILIO_ACCOUNT_SID;
-  const authToken = process.env.TWILIO_AUTH_TOKEN;
   const messagingServiceSid = org?.twilio_messaging_service_sid || process.env.TWILIO_MESSAGING_SERVICE_SID;
-  if (!accountSid || !authToken || !messagingServiceSid) {
+
+  // Basic Auth must be a genuinely matching (sid, token) pair — Twilio checks
+  // the token against the USERNAME's own account, not the URL path. A
+  // subaccount override sends as accountSid (the subaccount, in the URL
+  // path) authenticated as its PARENT (the Landscapt platform account,
+  // TWILIO_PLATFORM_ACCOUNT_SID/TOKEN) — never the subaccount's own SID
+  // paired with someone else's token. An org with no override IS its own
+  // full account, so it authenticates as itself via the legacy fallback pair.
+  const authSid = hasSubaccountOverride ? process.env.TWILIO_PLATFORM_ACCOUNT_SID : process.env.TWILIO_ACCOUNT_SID;
+  const authToken = hasSubaccountOverride ? process.env.TWILIO_PLATFORM_AUTH_TOKEN : process.env.TWILIO_AUTH_TOKEN;
+  if (!accountSid || !authSid || !authToken || !messagingServiceSid) {
     return { ok: false, reason: "Twilio not configured (env vars or org override)" };
   }
 
@@ -51,7 +70,7 @@ export async function sendClientSms(
   const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`, {
     method: "POST",
     headers: {
-      Authorization: `Basic ${Buffer.from(`${accountSid}:${authToken}`).toString("base64")}`,
+      Authorization: `Basic ${Buffer.from(`${authSid}:${authToken}`).toString("base64")}`,
       "Content-Type": "application/x-www-form-urlencoded",
     },
     body: form,

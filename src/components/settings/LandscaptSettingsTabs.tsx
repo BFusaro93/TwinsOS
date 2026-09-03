@@ -78,6 +78,7 @@ import { LaborRatesEditor } from "@/components/crm/settings/LaborRatesEditor";
 import { ClientPortalTab } from "@/components/crm/settings/ClientPortalSettings";
 import { SnowRoutesEditor } from "@/components/crm/settings/SnowRoutesEditor";
 import { ChemicalTrackingTab } from "@/components/crm/settings/ChemicalTrackingSettings";
+import { SmsOnboardingSettings } from "@/components/crm/settings/SmsOnboardingSettings";
 import { InvoiceTemplatesEditor } from "@/components/crm/settings/InvoiceTemplatesEditor";
 import { useInvoicePDFTemplates } from "@/lib/hooks/use-invoice-pdf-templates";
 import { ApprovalFlowsPage } from "@/components/settings/ApprovalFlowsPage";
@@ -1844,6 +1845,11 @@ function IntegrationsTab() {
 
       {/* Google Maps */}
       <GoogleMapsCard />
+
+      {/* SMS / Text Messaging — per-org Twilio number + A2P 10DLC campaign */}
+      <div className="rounded-lg border bg-white">
+        <SmsOnboardingSettings />
+      </div>
 
     </div>
   );

@@ -9968,6 +9968,7 @@ export type Database = {
           support_phone: string | null
           twilio_api_key_sid: string | null
           twilio_api_secret_vault_id: string | null
+          twilio_auth_token_vault_id: string | null
           twilio_brand_failure_reason: string | null
           twilio_brand_sid: string | null
           twilio_campaign_failure_reason: string | null
@@ -10005,6 +10006,7 @@ export type Database = {
           support_phone?: string | null
           twilio_api_key_sid?: string | null
           twilio_api_secret_vault_id?: string | null
+          twilio_auth_token_vault_id?: string | null
           twilio_brand_failure_reason?: string | null
           twilio_brand_sid?: string | null
           twilio_campaign_failure_reason?: string | null
@@ -10042,6 +10044,7 @@ export type Database = {
           support_phone?: string | null
           twilio_api_key_sid?: string | null
           twilio_api_secret_vault_id?: string | null
+          twilio_auth_token_vault_id?: string | null
           twilio_brand_failure_reason?: string | null
           twilio_brand_sid?: string | null
           twilio_campaign_failure_reason?: string | null
@@ -13529,6 +13532,23 @@ export type Database = {
       }
     }
     Functions: {
+      add_snow_route_stop: {
+        Args: { p_job_id: string; p_route_id: string }
+        Returns: {
+          created_at: string
+          id: string
+          job_id: string
+          org_id: string
+          route_id: string
+          sort_order: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "crm_snow_route_stops"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       adjust_part_quantity:
         | {
             Args: {
@@ -13625,6 +13645,7 @@ export type Database = {
         Returns: undefined
       }
       get_org_twilio_api_secret: { Args: { p_org_id: string }; Returns: string }
+      get_org_twilio_auth_token: { Args: { p_org_id: string }; Returns: string }
       has_settings_permission: { Args: { p_key: string }; Returns: boolean }
       increment_api_key_rate_limit: {
         Args: { p_api_key_id: string; p_window_start: string }
@@ -13712,6 +13733,10 @@ export type Database = {
         Returns: {
           new_refunded_amount_cents: number
         }[]
+      }
+      reorder_snow_route_stops: {
+        Args: { p_route_id: string; p_stops: Json }
+        Returns: undefined
       }
       set_job_product_status: {
         Args: { p_job_product_id: string; p_new_status: string }

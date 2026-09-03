@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { verifyTwilioRequest, parseTwilioForm } from "@/lib/sms/verify-twilio-request";
 import { notifyStaffOfNewTicket, notifyTicketComment } from "@/lib/ticket-notify";
+import { getOrgTwilioAuthToken } from "@/lib/twilio/client";
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://landscapt.com";
 
@@ -32,15 +33,45 @@ function last10Digits(phone: string): string {
  * keywords directly to clients.sms_opt_in.
  */
 export async function POST(request: Request) {
-  const authToken = process.env.TWILIO_AUTH_TOKEN;
-  if (!authToken) {
-    return NextResponse.json({ error: "Webhook not configured" }, { status: 400 });
-  }
-
   const rawBody = await request.text();
   const params = parseTwilioForm(rawBody);
   const signature = request.headers.get("X-Twilio-Signature");
   const url = `${SITE_URL}/api/webhooks/twilio/inbound`;
+
+  const supabase = createServiceClient();
+
+  // Orgs can override their own Twilio Messaging Service SID (see
+  // organizations.twilio_messaging_service_sid, used by sendClientSms) —
+  // when the inbound webhook's MessagingServiceSid matches a configured
+  // org, scope the client lookup to that org so two orgs' clients can never
+  // collide on a reused/shared phone number. Falls back to matching across
+  // all orgs only when no org has that MessagingServiceSid configured
+  // (single shared platform number, e.g. local dev or a not-yet-configured
+  // org) — same as the prior behavior for that case. Resolved before
+  // signature verification (a plain lookup, no side effects) because which
+  // Auth Token verifies the signature depends on the answer — see below.
+  const messagingServiceSid = params.MessagingServiceSid;
+  let ownerOrgId: string | null = null;
+  if (messagingServiceSid) {
+    const { data: owningOrg } = await supabase
+      .from("organizations")
+      .select("id")
+      .eq("twilio_messaging_service_sid", messagingServiceSid)
+      .maybeSingle();
+    ownerOrgId = owningOrg?.id ?? null;
+  }
+
+  // Twilio signs a webhook with the Auth Token of whichever account actually
+  // owns the resource that triggered it — for a number on an org's own
+  // Twilio subaccount, that's the SUBACCOUNT's own token, never the parent's
+  // or the legacy platform-wide TWILIO_AUTH_TOKEN. Orgs with no subaccount
+  // (the legacy fallback path, e.g. Twins Lawn Service today) have no stored
+  // token, so getOrgTwilioAuthToken() returns null and this falls back to
+  // the shared env var exactly as before.
+  const authToken = (ownerOrgId && (await getOrgTwilioAuthToken(supabase, ownerOrgId))) || process.env.TWILIO_AUTH_TOKEN;
+  if (!authToken) {
+    return NextResponse.json({ error: "Webhook not configured" }, { status: 400 });
+  }
 
   if (!verifyTwilioRequest(authToken, signature, url, params)) {
     console.error("[twilio inbound webhook] signature verification failed");
@@ -52,27 +83,6 @@ export async function POST(request: Request) {
   const messageSid = params.MessageSid;
   if (!from || !messageSid) {
     return new NextResponse(EMPTY_TWIML, { headers: { "Content-Type": "text/xml" } });
-  }
-
-  const supabase = createServiceClient();
-
-  // Orgs can override their own Twilio Messaging Service SID (see
-  // organizations.twilio_messaging_service_sid, used by sendClientSms) —
-  // when the inbound webhook's MessagingServiceSid matches a configured
-  // org, scope the client lookup to that org so two orgs' clients can never
-  // collide on a reused/shared phone number. Falls back to matching across
-  // all orgs only when no org has that MessagingServiceSid configured
-  // (single shared platform number, e.g. local dev or a not-yet-configured
-  // org) — same as the prior behavior for that case.
-  const messagingServiceSid = params.MessagingServiceSid;
-  let ownerOrgId: string | null = null;
-  if (messagingServiceSid) {
-    const { data: owningOrg } = await supabase
-      .from("organizations")
-      .select("id")
-      .eq("twilio_messaging_service_sid", messagingServiceSid)
-      .maybeSingle();
-    ownerOrgId = owningOrg?.id ?? null;
   }
 
   const digits = last10Digits(from);
