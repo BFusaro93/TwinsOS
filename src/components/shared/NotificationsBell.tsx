@@ -97,6 +97,8 @@ function NotifIcon({ type }: { type: AppNotification["type"] }) {
       return <CalendarClock className={cn(cls, "text-amber-500")} />;
     case "automation_alert":
       return <Bell className={cn(cls, "text-amber-500")} />;
+    case "sales_meeting_reminder":
+      return <CalendarClock className={cn(cls, "text-sky-500")} />;
     case "comment_mention":
       return <AtSign className={cn(cls, "text-brand-500")} />;
     default:
@@ -328,6 +330,7 @@ export function NotificationsBell() {
       contract_expiring:          { href: () => "/crm/accounting/contracts", title: "Contract Expiring Soon" },
       automation_alert:           { href: () => "/crm/communication/automations", title: "Automation Alert" },
       wo_status_changed:          { href: () => "/cmms/work-orders", title: "Status Changed" },
+      sales_meeting_reminder:     { href: () => "/crm/sales-meetings", title: "Meeting Reminder" },
     };
     dbNotifications.filter((n) => {
       if (n.type === "wo_comment" && notifPrefs?.inAppWorkOrderComment === false) return false;

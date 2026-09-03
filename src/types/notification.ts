@@ -8,6 +8,7 @@ export type NotificationEntityType =
   | "ticket"
   | "contract"
   | "client"
+  | "sales_meeting"
   | null;
 
 export interface AppNotification {
@@ -30,7 +31,8 @@ export interface AppNotification {
     | "ticket_comment"
     | "contract_expiring"
     | "automation_alert"
-    | "comment_mention";
+    | "comment_mention"
+    | "sales_meeting_reminder";
   title: string;
   body: string;
   href: string;

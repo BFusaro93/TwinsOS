@@ -177,7 +177,15 @@ async function executeAction(
       return { skipReason: `no profiles found for role "${recipientRole}"` };
     }
 
-    const rows = profiles.map((p: { id: string }) => ({ org_id: orgId, user_id: p.id, message }));
+    const rows = profiles.map((p: { id: string }) => ({
+      org_id: orgId,
+      user_id: p.id,
+      type: "automation_alert",
+      title: "Automation Alert",
+      message,
+      entity_id: null,
+      entity_type: null,
+    }));
     const { error: notifErr } = await adminClient.from("notifications").insert(rows);
     if (notifErr) return { skipReason: `failed to insert notifications: ${notifErr.message}` };
     return { result: `notified ${profiles.length} user${profiles.length === 1 ? "" : "s"}` };

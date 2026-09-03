@@ -194,7 +194,7 @@ const COL_DEFS: { key: ColKey; label: string }[] = [
 // ── job detail sheet ──────────────────────────────────────────────────────────
 
 const STATUS_OPTIONS: { value: VisitStatus; label: string }[] = [
-  { value: "scheduled",   label: "Pending" },
+  { value: "scheduled",   label: "Scheduled" },
   { value: "dispatched",  label: "Dispatched" },
   { value: "in_progress", label: "In Progress" },
   { value: "completed",   label: "Completed" },
