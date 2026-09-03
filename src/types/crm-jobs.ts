@@ -201,6 +201,8 @@ export interface NewClientJobFormValues {
   packageName: string | null;
   packageRenewal: string | null;
   packageDiscount: string | null;
+  /** Total visits included in the package program — caps recurring-visit generation. */
+  packageTotalSteps: number | null;
   conflictDays: string[];
   inchTrigger: number | null;
   invoiceType: string | null;

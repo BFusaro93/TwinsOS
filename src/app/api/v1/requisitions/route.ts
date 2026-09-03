@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { adminClient, authenticateApiRequest } from "@/lib/api/auth";
-import { jsonError, parsePagination } from "@/lib/api/route-helpers";
+import { jsonError, jsonServerError, parsePagination } from "@/lib/api/route-helpers";
 import { createRequisitionRecord } from "@/lib/requisitions/create-requisition";
 import { REQUISITION_SELECT, shapeRequisition } from "./shape";
 import { createRequisitionSchema } from "./validation";
@@ -20,7 +20,7 @@ export async function GET(request: Request) {
     .order("created_at", { ascending: false })
     .range(offset, offset + limit - 1);
 
-  if (error) return jsonError(error.message, 500);
+  if (error) return jsonServerError("GET /api/v1/requisitions", error);
   return NextResponse.json({ data: (data ?? []).map(shapeRequisition), limit, offset });
 }
 
@@ -110,7 +110,7 @@ export async function POST(request: Request) {
     productMap as unknown as Map<string, { name: string; part_number?: string | null; unit_cost: number }>
   );
 
-  if (createError || !requisition) return jsonError(createError ?? "create failed", 500);
+  if (createError || !requisition) return jsonServerError("POST /api/v1/requisitions", createError);
 
   return NextResponse.json(shapeRequisition(requisition), { status: 201 });
 }

@@ -133,7 +133,13 @@ export async function createRequisitionRecord(
     .from("requisition_line_items")
     .insert(lineItemRows.map((li) => ({ ...li, requisition_id: requisition.id })));
 
-  if (lineItemsError) return { requisition: null, error: lineItemsError.message };
+  if (lineItemsError) {
+    // Line items failed after the header was committed — delete the
+    // just-created draft header (hard delete: it's a fresh row with no
+    // dependents yet) so it doesn't leak an orphaned requisition_number.
+    await db.from("requisitions").delete().eq("id", requisition.id);
+    return { requisition: null, error: lineItemsError.message };
+  }
 
   return { requisition, error: null };
 }

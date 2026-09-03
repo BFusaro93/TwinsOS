@@ -262,6 +262,27 @@ export async function GET(request: Request) {
     )
   );
 
+  // ── package visit cap: count ALL-TIME (not just window) non-deleted visits
+  // per package job so we can stop generating once package_total_steps is hit,
+  // even if recurrence_end is null/far in the future. ────────────────────────
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const packageJobIds = (jobs as any[])
+    .filter((j) => j.package_total_steps != null)
+    .map((j) => j.id as string);
+
+  const visitCountByJob = new Map<string, number>();
+  if (packageJobIds.length > 0) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: pkgVisits } = await (supabase as any)
+      .from("crm_job_visits")
+      .select("job_id")
+      .in("job_id", packageJobIds)
+      .is("deleted_at", null);
+    for (const v of (pkgVisits ?? []) as { job_id: string }[]) {
+      visitCountByJob.set(v.job_id, (visitCountByJob.get(v.job_id) ?? 0) + 1);
+    }
+  }
+
   const toInsert: {
     org_id: string;
     job_id: string;
@@ -297,7 +318,16 @@ export async function GET(request: Request) {
       ? monthlyOccurrencesInRange(monthlySchedule.dayIndex, monthlySchedule.weekOfMonth, today, effectiveEnd, monthlySchedule.season)
       : parseSchedule(job.schedule, job.schedule_days ?? []).flatMap((rule) => occurrencesInRange(rule, today, effectiveEnd));
 
+    // Package visit cap: stop generating once package_total_steps has been
+    // reached, regardless of recurrence_end. visitsSoFar starts at the
+    // all-time count of existing (non-deleted) visits for this job and is
+    // incremented as new ones are queued below.
+    const packageCap = job.package_total_steps;
+    let visitsSoFar = packageCap != null ? (visitCountByJob.get(job.id) ?? 0) : null;
+
     for (const d of dates) {
+      if (visitsSoFar != null && packageCap != null && visitsSoFar >= packageCap) break;
+
       const dateStr = toISODate(d);
       const key = `${job.id}|${dateStr}`;
       if (!existingSet.has(key)) {
@@ -312,6 +342,7 @@ export async function GET(request: Request) {
         });
         // Mark as pending so parallel rules on the same job don't duplicate
         existingSet.add(key);
+        if (visitsSoFar != null) visitsSoFar++;
       }
     }
   }

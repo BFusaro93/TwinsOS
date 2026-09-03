@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { adminClient, authenticateApiRequest } from "@/lib/api/auth";
-import { jsonError } from "@/lib/api/route-helpers";
+import { jsonError, jsonServerError } from "@/lib/api/route-helpers";
 import { CONTRACT_SELECT, shapeContract } from "../shape";
 
 /** GET /api/v1/contracts/[id] — fetch one contract. Requires scope "contracts:read". */
@@ -18,7 +18,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     .is("deleted_at", null)
     .maybeSingle();
 
-  if (error) return jsonError(error.message, 500);
+  if (error) return jsonServerError("GET /api/v1/contracts/[id]", error);
   if (!data) return jsonError("Contract not found", 404);
   return NextResponse.json(shapeContract(data));
 }

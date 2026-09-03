@@ -22,8 +22,8 @@ interface GeocodeResult {
 /** Finds waiting-list jobs within `radiusMiles` of any of today's scheduled visits —
  *  a free local proximity check (see src/lib/geo.ts), distinct from the paid
  *  Distance Matrix route-optimize endpoint which sequences stops already on the board. */
-export function useNearbyWaitingListJobs(radiusMiles = 3) {
-  const { data: waitingListJobs } = useWaitingListJobs();
+export function useNearbyWaitingListJobs(radiusMiles = 3, targetDate?: string) {
+  const { data: waitingListJobs } = useWaitingListJobs(targetDate, targetDate);
   const [matches, setMatches] = useState<NearbyWaitingListMatch[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);

@@ -238,9 +238,18 @@ export function useDeleteAsset() {
   return useMutation({
     mutationFn: async (id: string) => {
       const supabase = createClient();
-      const { error } = await supabase.from("assets").update({ deleted_at: new Date().toISOString() }).eq("id", id);
+      const deletedAt = new Date().toISOString();
+      const { error } = await supabase.from("assets").update({ deleted_at: deletedAt }).eq("id", id);
       if (error) throw error;
+
+      // asset_parts rows cache the asset↔part link; without cleaning them up
+      // here they go stale (and, since (asset_id, part_id) is UNIQUE, can
+      // block re-linking the same part if the asset is ever restored/re-added).
+      await supabase.from("asset_parts").update({ deleted_at: deletedAt }).eq("asset_id", id).is("deleted_at", null);
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["assets"] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["assets"] });
+      queryClient.invalidateQueries({ queryKey: ["asset-parts"] });
+    },
   });
 }

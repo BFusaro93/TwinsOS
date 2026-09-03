@@ -236,14 +236,21 @@ export function useDeletePart() {
   return useMutation({
     mutationFn: async (id: string) => {
       const supabase = createClient();
+      const deletedAt = new Date().toISOString();
       const { error } = await supabase
         .from("parts")
-        .update({ deleted_at: new Date().toISOString() })
+        .update({ deleted_at: deletedAt })
         .eq("id", id);
       if (error) throw error;
+
+      // asset_parts rows cache the asset↔part link; without cleaning them up
+      // here they go stale (and, since (asset_id, part_id) is UNIQUE, can
+      // block re-linking the same part if it's ever restored/re-added).
+      await supabase.from("asset_parts").update({ deleted_at: deletedAt }).eq("part_id", id).is("deleted_at", null);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["parts"] });
+      queryClient.invalidateQueries({ queryKey: ["asset-parts"] });
     },
   });
 }
@@ -262,6 +269,10 @@ export function useReceivePartCostLayer() {
       unitCost: number; // cents — from PO line item at time of receipt
       receivedAt: string;
       poNumber?: string;
+      /** PO line item this receipt is against — when given, the RPC enforces
+       *  that cumulative goods_receipt_lines quantity for this line never
+       *  exceeds what was ordered (see the 20260901150000 migration). */
+      poLineItemId?: string;
     }) => {
       const supabase = createClient();
       const { costMethod } = useSettingsStore.getState();
@@ -290,6 +301,7 @@ export function useReceivePartCostLayer() {
         p_received_at: receipt.receivedAt,
         p_po_number: receipt.poNumber ?? "",
         p_cost_method: costMethod,
+        p_po_line_item_id: receipt.poLineItemId ?? null,
       });
       if (updateErr) throw updateErr;
     },

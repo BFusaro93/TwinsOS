@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { adminClient, authenticateApiRequest } from "@/lib/api/auth";
-import { jsonError, parsePagination } from "@/lib/api/route-helpers";
+import { jsonError, jsonServerError, parsePagination } from "@/lib/api/route-helpers";
 import { INVOICE_SELECT, shapeInvoice } from "./shape";
 
 /**
@@ -23,6 +23,6 @@ export async function GET(request: Request) {
     .order("created_at", { ascending: false })
     .range(offset, offset + limit - 1);
 
-  if (error) return jsonError(error.message, 500);
+  if (error) return jsonServerError("GET /api/v1/invoices", error);
   return NextResponse.json({ data: (data ?? []).map(shapeInvoice), limit, offset });
 }

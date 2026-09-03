@@ -1010,9 +1010,14 @@ export function ContractDialog({
   async function handleStatusChange(status: ContractStatus) {
     if (!contract) return;
     try {
-      await updateStatus({ id: contract.id, status });
-      toast.success(`Contract marked as ${status}`);
-    } catch { toast.error("Failed to update contract status"); }
+      const result = await updateStatus({ id: contract.id, status });
+      if (!result.skipped) toast.success(`Contract marked as ${status}`);
+    } catch (err) {
+      // Invalid state-machine transitions (e.g. cancelled -> active) throw a
+      // descriptive Error from useUpdateContractStatus — surface that instead
+      // of a generic failure message.
+      toast.error(err instanceof Error ? err.message : "Failed to update contract status");
+    }
   }
 
   function patchDetails(patch: Partial<DetailsState>) {

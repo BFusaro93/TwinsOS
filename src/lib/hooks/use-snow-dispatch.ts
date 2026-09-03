@@ -71,6 +71,12 @@ export function useSnowJobs() {
         `)
         .eq("job_type", "snow")
         .is("deleted_at", null)
+        // Exclude terminal statuses — a cancelled or on-hold snow job
+        // shouldn't keep showing up as a candidate for "Add Jobs to
+        // Dispatch" / Master Routes. Same convention as the activeOnly
+        // filter in useCRMJobs (use-crm-jobs.ts).
+        .neq("status", "cancelled")
+        .neq("status", "hold")
         .order("priority", { ascending: true });
       if (error) throw error;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -263,19 +269,38 @@ export function useAddRouteStop() {
   return useMutation({
     mutationFn: async ({ routeId, jobId }: { routeId: string; jobId: string }) => {
       const supabase = createClient();
+      // Atomic RPC: locks the route (advisory lock) and computes
+      // MAX(sort_order)+1 server-side, so two concurrent "Add Stop" calls
+      // for the same route can never race on sort_order (see
+      // 20260902161000_snow_route_stop_unique_and_atomic_rpcs.sql). It also
+      // relies on the crm_snow_route_stops_job_unique index to reject a job
+      // already assigned to any route (including this one).
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: existing } = await (supabase as any)
-        .from("crm_snow_route_stops")
-        .select("sort_order")
-        .eq("route_id", routeId)
-        .order("sort_order", { ascending: false })
-        .limit(1);
-      const nextOrder = ((existing as { sort_order: number }[] | null)?.[0]?.sort_order ?? -1) + 1;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error } = await (supabase as any)
-        .from("crm_snow_route_stops")
-        .insert({ route_id: routeId, job_id: jobId, sort_order: nextOrder });
-      if (error) throw error;
+      const { data, error } = await (supabase as any).rpc("add_snow_route_stop", {
+        p_route_id: routeId,
+        p_job_id: jobId,
+      });
+      if (error) {
+        if (error.code === "23505") {
+          // Cheap best-effort lookup of which route already has this job,
+          // so the toast can be specific instead of just "already assigned".
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { data: existing } = await (supabase as any)
+            .from("crm_snow_route_stops")
+            .select("crm_snow_routes(name)")
+            .eq("job_id", jobId)
+            .limit(1)
+            .maybeSingle();
+          const routeName = existing?.crm_snow_routes?.name as string | undefined;
+          throw new Error(
+            routeName
+              ? `This job is already on route "${routeName}".`
+              : "This job is already assigned to another route."
+          );
+        }
+        throw error;
+      }
+      return data;
     },
     onSuccess: (_d, vars) => {
       qc.invalidateQueries({ queryKey: ["snow-route-stops", vars.routeId] });
@@ -287,14 +312,19 @@ export function useAddRouteStop() {
 export function useReorderRouteStops() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ orderedStopIds }: { routeId: string; orderedStopIds: string[] }) => {
+    mutationFn: async ({ routeId, orderedStopIds }: { routeId: string; orderedStopIds: string[] }) => {
       const supabase = createClient();
-      await Promise.all(
-        orderedStopIds.map((id, i) =>
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (supabase as any).from("crm_snow_route_stops").update({ sort_order: i }).eq("id", id)
-        )
-      );
+      // Single atomic RPC (one UPDATE statement) instead of N independent
+      // Promise.all updates, so a reorder can't be observed or persisted
+      // half-applied (see
+      // 20260902161000_snow_route_stop_unique_and_atomic_rpcs.sql).
+      const stops = orderedStopIds.map((id, i) => ({ id, sort_order: i }));
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase as any).rpc("reorder_snow_route_stops", {
+        p_route_id: routeId,
+        p_stops: stops,
+      });
+      if (error) throw error;
     },
     onSuccess: (_d, vars) => qc.invalidateQueries({ queryKey: ["snow-route-stops", vars.routeId] }),
   });

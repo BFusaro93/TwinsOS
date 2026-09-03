@@ -31,6 +31,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { CheckCircle2, PackageCheck } from "lucide-react";
 import { toast } from "sonner";
+import { createClient } from "@/lib/supabase/client";
 import { useUsers } from "@/lib/hooks/use-users";
 import { useProducts, useReceiveProductCostLayer } from "@/lib/hooks/use-products";
 import { useParts } from "@/lib/hooks/use-parts";
@@ -249,6 +250,12 @@ export function ReceiveGoodsDialog({
     }
 
     setApplyingInventory(true);
+    // Tracks which lines' inventory RPCs already succeeded in this submission
+    // so a later line's failure can reverse them — otherwise a partial failure
+    // mid-loop would leave earlier lines' increments applied with no receipt
+    // surviving to account for them, and retrying the submission would then
+    // double-increment inventory.
+    const succeeded: Array<{ productId: string; partId: string | null; quantity: number }> = [];
     try {
       for (const line of linesToReceive) {
         // Find the PO line item to look up the productItemId
@@ -259,6 +266,7 @@ export function ReceiveGoodsDialog({
           throw new Error(`No catalog product found for "${line.productItemName}" — cannot update inventory for this line.`);
         }
 
+        let linkedPartId: string | null = null;
         if (matchedProduct.category === "maintenance_part") {
           // Also update the Parts inventory record if one is linked
           const linkedPart = parts.find((pt) => pt.productItemId === matchedProduct.id) ??
@@ -270,30 +278,58 @@ export function ReceiveGoodsDialog({
               unitCost: line.unitCost,
               receivedAt,
               poNumber: po.poNumber,
+              poLineItemId: line.lineItemId,
             });
+            linkedPartId = linkedPart.id;
           }
-          await receiveProductLayer({
-            productId: matchedProduct.id,
-            quantity: line.quantityReceived,
-            unitCost: line.unitCost,
-            receivedAt,
-            poNumber: po.poNumber,
-          });
-        } else {
-          await receiveProductLayer({
-            productId: matchedProduct.id,
-            quantity: line.quantityReceived,
-            unitCost: line.unitCost,
-            receivedAt,
-            poNumber: po.poNumber,
-          });
         }
+        await receiveProductLayer({
+          productId: matchedProduct.id,
+          quantity: line.quantityReceived,
+          unitCost: line.unitCost,
+          receivedAt,
+          poNumber: po.poNumber,
+          poLineItemId: line.lineItemId,
+        });
+        succeeded.push({ productId: matchedProduct.id, partId: linkedPartId, quantity: line.quantityReceived });
       }
     } catch (err) {
+      // Reverse the inventory adjustments that already succeeded earlier in
+      // this same loop before rolling back the receipt, so the whole receipt
+      // attempt is atomic — all-or-nothing — from the user's perspective.
+      if (succeeded.length > 0) {
+        const supabase = createClient();
+        for (const applied of succeeded) {
+          if (applied.partId) {
+            const { error: partRevertErr } = await supabase.rpc("adjust_part_quantity", {
+              p_org_id: po.orgId,
+              p_part_id: applied.partId,
+              p_delta: -applied.quantity,
+              p_po_number: po.poNumber,
+            });
+            if (partRevertErr) {
+              toast.error(`Failed to reverse part inventory during rollback: ${errMsg(partRevertErr)}. Please review this PO's receipts manually.`);
+            }
+          }
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { error: prodRevertErr } = await (supabase.rpc as any)("adjust_product_item_quantity", {
+            p_org_id: po.orgId,
+            p_product_id: applied.productId,
+            p_delta: -applied.quantity,
+            p_reason: "Receipt submission failed partway through — reversing already-applied inventory",
+          });
+          if (prodRevertErr) {
+            toast.error(`Failed to reverse product inventory during rollback: ${errMsg(prodRevertErr)}. Please review this PO's receipts manually.`);
+          }
+        }
+      }
       setApplyingInventory(false);
-      // Inventory never moved, so the receipt that says it did is now wrong —
-      // roll it back rather than leaving a receipt on record with no matching
-      // inventory change (which alreadyReceivedMap would then treat as real).
+      // Inventory never moved (now reversed above if it had), so the receipt
+      // that says it did is now wrong — roll it back rather than leaving a
+      // receipt on record with no matching inventory change (which
+      // alreadyReceivedMap would then treat as real). The header delete
+      // cascades to goods_receipt_lines, including any rows for lines that
+      // succeeded before the failure.
       try {
         await deleteReceipt(receipt.id);
       } catch (cleanupErr) {

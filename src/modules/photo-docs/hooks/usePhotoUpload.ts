@@ -10,6 +10,23 @@ import { compressPhoto, getImageDimensions, extractGPS } from "../lib/imageCompr
 import { buildPhotoPath, uploadOriginalPhoto } from "../lib/photoStorage";
 import type { PhotoUploadInput, PhotoUploadProgress } from "../types/photo.types";
 
+// Keep in sync with the job-photos-original / job-photos-annotated Storage
+// bucket limits set in supabase/migrations/20260902120000_job_photos_bucket_size_and_mime_limits.sql
+export const MAX_PHOTO_UPLOAD_BYTES = 500 * 1024 * 1024; // 500MB
+export const ALLOWED_PHOTO_UPLOAD_MIME_TYPES = [
+  "image/jpeg", "image/png", "image/webp", "image/gif", "image/heic", "image/heif",
+  "video/mp4", "video/quicktime", "video/webm", "video/x-m4v",
+  "application/pdf",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "application/vnd.ms-powerpoint",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  "text/plain",
+  "text/csv",
+];
+
 export function usePhotoUpload(projectId: string) {
   const qc = useQueryClient();
   const { currentUser } = useCurrentUserStore();
@@ -53,6 +70,21 @@ export function usePhotoUpload(projectId: string) {
           );
 
         try {
+          // 0. Validate size/type client-side so the user gets a clear
+          // message instead of a generic Storage API rejection. Limits
+          // must match the job-photos-* bucket config (see the constants
+          // above and the migration they reference).
+          if (inp.file.size > MAX_PHOTO_UPLOAD_BYTES) {
+            throw new Error(
+              `"${inp.file.name}" is too large (${(inp.file.size / (1024 * 1024)).toFixed(1)}MB). Max file size is ${MAX_PHOTO_UPLOAD_BYTES / (1024 * 1024)}MB.`,
+            );
+          }
+          if (inp.file.type && !ALLOWED_PHOTO_UPLOAD_MIME_TYPES.includes(inp.file.type)) {
+            throw new Error(
+              `"${inp.file.name}" has an unsupported file type (${inp.file.type}). Allowed: photos, short videos, and common documents.`,
+            );
+          }
+
           const isImage = inp.file.type.startsWith("image/");
 
           // 1. Compress images only; pass other file types straight through

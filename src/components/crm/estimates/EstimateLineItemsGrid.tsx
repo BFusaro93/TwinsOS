@@ -403,7 +403,7 @@ function LineItemRow({
   // caused — a stale derived rate silently re-multiplied by qty again).
   const isAutoCost = !costFocused && row.costCents === 0 && !!breakevenRateCents && row.budgetedHours > 0;
   const autoCostPerUnitCents = isAutoCost
-    ? (row.qty > 0 ? row.totalCostCents / row.qty / row.visits : row.totalCostCents / row.visits)
+    ? row.totalCostCents / (row.qty > 0 ? row.qty : 1) / (row.visits > 0 ? row.visits : 1)
     : 0;
 
   return (

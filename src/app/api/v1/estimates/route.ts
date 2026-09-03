@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { adminClient, authenticateApiRequest } from "@/lib/api/auth";
-import { jsonError, parsePagination } from "@/lib/api/route-helpers";
+import { jsonError, jsonServerError, parsePagination } from "@/lib/api/route-helpers";
 import { computeLineItem, getBreakevenRateCents, recalcEstimateTotals } from "@/lib/estimate-calc";
 import { ESTIMATE_SELECT, ESTIMATE_LINE_ITEM_SELECT, shapeEstimate, shapeEstimateLineItem } from "./shape";
 import { createEstimateSchema } from "./validation";
@@ -23,7 +23,7 @@ export async function GET(request: Request) {
     .order("created_at", { ascending: false })
     .range(offset, offset + limit - 1);
 
-  if (error) return jsonError(error.message, 500);
+  if (error) return jsonServerError("GET /api/v1/estimates", error);
   return NextResponse.json({ data: (data ?? []).map(shapeEstimate), limit, offset });
 }
 
@@ -86,7 +86,7 @@ export async function POST(request: Request) {
     .select(ESTIMATE_SELECT)
     .single();
 
-  if (estimateError || !estimate) return jsonError(estimateError?.message ?? "create failed", 500);
+  if (estimateError || !estimate) return jsonServerError("POST /api/v1/estimates (header insert)", estimateError);
 
   const visits = body.visits ?? 1;
   const computed = computeLineItem(
@@ -129,7 +129,13 @@ export async function POST(request: Request) {
     markup_bps: computed.markupBps,
   });
 
-  if (lineItemError) return jsonError(lineItemError.message, 500);
+  if (lineItemError) {
+    // Line item failed after the header was committed — delete the
+    // just-created draft estimate (hard delete: it's a fresh row with no
+    // dependents yet) so it doesn't leak an orphaned empty draft.
+    await db.from("estimates").delete().eq("id", estimate.id);
+    return jsonServerError("POST /api/v1/estimates (line item insert)", lineItemError);
+  }
 
   await recalcEstimateTotals(db, estimate.id);
 

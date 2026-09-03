@@ -590,10 +590,26 @@ async function importDenormalized(supabase: SupabaseClient, rows: Record<string,
 }
 
 async function importFlat(supabase: SupabaseClient, rows: Record<string, string>[]): Promise<number> {
-  const inserts = rows
-    .filter((r) => r.vendorName?.trim())
-    .map((r) => ({
-      po_number: r.poNumber?.trim() || `PO-${Date.now().toString().slice(-6)}-${Math.random().toString(36).slice(2, 5)}`,
+  const filtered = rows.filter((r) => r.vendorName?.trim());
+  if (filtered.length === 0) return 0;
+
+  let count = 0;
+  for (const r of filtered) {
+    // Same atomic per-org/year counter useCreatePurchaseOrder uses — a
+    // client-side `Date.now()` + random-suffix generator here could still
+    // collide with a PO created (or another row imported) in the same
+    // request, since nothing serializes the generated numbers against each
+    // other or against next_po_number()'s own counter.
+    let poNumber = r.poNumber?.trim() || "";
+    if (!poNumber) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: generated, error: numErr } = await (supabase.rpc as any)("next_po_number");
+      if (numErr || !generated) throw numErr ?? new Error("Failed to generate PO number");
+      poNumber = generated;
+    }
+
+    const row = {
+      po_number: poNumber,
       vendor_name: r.vendorName.trim(),
       po_date: r.poDate?.trim() || null,
       invoice_number: r.invoiceNumber?.trim() || null,
@@ -608,11 +624,8 @@ async function importFlat(supabase: SupabaseClient, rows: Record<string, string>
       sales_tax: 0,
       shipping_cost: 0,
       grand_total: 0,
-    }));
-  if (inserts.length === 0) return 0;
+    };
 
-  let count = 0;
-  for (const row of inserts) {
     const { error } = await supabase.from("purchase_orders").insert(row);
     if (error?.code === "23505") {
       continue; // duplicate — skip, not counted as imported
@@ -718,27 +731,36 @@ export function useAddPOLineItem() {
       grandTotal: number;
     }) => {
       const supabase = createClient();
-      const [{ error: lineErr }, { error: poErr }] = await Promise.all([
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (supabase as any).from("po_line_items").insert({
-          id: item.id,          // anchor DB row to the client-generated UUID so edits
-          // can target the row immediately without waiting for a refetch
-          po_id: poId,
-          product_item_id: item.productItemId || null,
-          part_id: item.partId ?? null,
-          product_item_name: item.productItemName,
-          part_number: item.partNumber,
-          quantity: item.quantity,
-          unit_cost: item.unitCost,
-          total_cost: item.totalCost,
-          project_id: item.projectId ?? null,
-          notes: item.notes ?? null,
-          taxable: item.taxable,
-        }),
-        supabase.from("purchase_orders").update({ subtotal, sales_tax: salesTax, grand_total: grandTotal }).eq("id", poId),
-      ]);
+      // Sequential, not Promise.all: the header total update must only run
+      // after the line-item write succeeds, and if it fails afterward the
+      // line item is rolled back — otherwise a header-update failure would
+      // leave a permanently-committed line item with a stale header total.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error: lineErr } = await (supabase as any).from("po_line_items").insert({
+        id: item.id,          // anchor DB row to the client-generated UUID so edits
+        // can target the row immediately without waiting for a refetch
+        po_id: poId,
+        product_item_id: item.productItemId || null,
+        part_id: item.partId ?? null,
+        product_item_name: item.productItemName,
+        part_number: item.partNumber,
+        quantity: item.quantity,
+        unit_cost: item.unitCost,
+        total_cost: item.totalCost,
+        project_id: item.projectId ?? null,
+        notes: item.notes ?? null,
+        taxable: item.taxable,
+      });
       if (lineErr) throw lineErr;
-      if (poErr) throw poErr;
+      const { error: poErr } = await supabase
+        .from("purchase_orders")
+        .update({ subtotal, sales_tax: salesTax, grand_total: grandTotal })
+        .eq("id", poId);
+      if (poErr) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (supabase as any).from("po_line_items").delete().eq("id", item.id);
+        throw poErr;
+      }
       await resubmitPOForApprovalIfNeeded(supabase, poId, grandTotal);
     },
     onError: (err) => {
@@ -766,32 +788,52 @@ export function useUpdatePOLineItem() {
       grandTotal: number;
     }) => {
       const supabase = createClient();
-      const [{ data: lineData, error: lineErr }, { error: poErr }] = await Promise.all([
-        supabase
-          .from("po_line_items")
-          .update({
-            quantity: item.quantity,
-            unit_cost: item.unitCost,
-            total_cost: item.totalCost,
-            project_id: item.projectId ?? null,
-            notes: item.notes ?? null,
-            taxable: item.taxable,
-          })
-          .eq("id", item.id)
-          .select(),          // needed to detect silent 0-row updates
-        supabase
-          .from("purchase_orders")
-          .update({ subtotal, sales_tax: salesTax, grand_total: grandTotal })
-          .eq("id", poId),
-      ]);
+      // Capture the pre-update row so the line item can be reverted if the
+      // header total update below fails after this write already committed.
+      const { data: previousLine, error: fetchErr } = await supabase
+        .from("po_line_items")
+        .select("quantity, unit_cost, total_cost, project_id, notes, taxable")
+        .eq("id", item.id)
+        .single();
+      if (fetchErr) throw fetchErr;
+      // Sequential, not Promise.all — see useAddPOLineItem for why.
+      const { data: lineData, error: lineErr } = await supabase
+        .from("po_line_items")
+        .update({
+          quantity: item.quantity,
+          unit_cost: item.unitCost,
+          total_cost: item.totalCost,
+          project_id: item.projectId ?? null,
+          notes: item.notes ?? null,
+          taxable: item.taxable,
+        })
+        .eq("id", item.id)
+        .select();          // needed to detect silent 0-row updates
       if (lineErr) throw lineErr;
-      if (poErr) throw poErr;
       // If the update silently matched 0 rows the row either doesn't exist or RLS
       // filtered it out — surface this as an explicit error so onError can roll back.
       if (!lineData || lineData.length === 0) {
         throw new Error(
           `Line item ${item.id} was not updated — it may not exist or you may not have permission.`
         );
+      }
+      const { error: poErr } = await supabase
+        .from("purchase_orders")
+        .update({ subtotal, sales_tax: salesTax, grand_total: grandTotal })
+        .eq("id", poId);
+      if (poErr) {
+        await supabase
+          .from("po_line_items")
+          .update({
+            quantity: previousLine.quantity,
+            unit_cost: previousLine.unit_cost,
+            total_cost: previousLine.total_cost,
+            project_id: previousLine.project_id,
+            notes: previousLine.notes,
+            taxable: previousLine.taxable,
+          })
+          .eq("id", item.id);
+        throw poErr;
       }
       await resubmitPOForApprovalIfNeeded(supabase, poId, grandTotal);
     },
@@ -838,9 +880,12 @@ export function useUpdatePOLineItem() {
 }
 
 /** Hard-deletes a line item row and syncs the PO totals.
- *  Unlinks any goods_receipt_lines that reference this line item before
- *  deleting — otherwise the FK constraint silently blocks the delete and
- *  the item reappears after the next refetch. */
+ *  If any quantity was already received against this line (goods_receipt_lines
+ *  rows referencing it), reverses that inventory increment first — otherwise
+ *  deleting a received line silently leaves the extra stock on hand with
+ *  nothing to show where it came from. Unlinks the goods_receipt_lines rows
+ *  before deleting — otherwise the FK constraint would block the delete and
+ *  the item would reappear after the next refetch. */
 export function useDeletePOLineItem() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -859,7 +904,99 @@ export function useDeletePOLineItem() {
     }) => {
       const supabase = createClient();
 
-      // Unlink receipt lines first — the FK on goods_receipt_lines.po_line_item_id
+      // Capture the full row up front — needed both to resolve the catalog
+      // product for inventory reversal and to restore the row if the header
+      // update fails after the delete below already committed.
+      const { data: lineItem, error: lineFetchErr } = await supabase
+        .from("po_line_items")
+        .select("*")
+        .eq("id", lineItemId)
+        .single();
+      if (lineFetchErr) throw lineFetchErr;
+
+      // Find any goods receipt lines that received quantity against this line.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: receiptLines, error: receiptLinesErr } = await (supabase as any)
+        .from("goods_receipt_lines")
+        .select("id, quantity_received, is_maint_part")
+        .eq("po_line_item_id", lineItemId);
+      if (receiptLinesErr) throw receiptLinesErr;
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const totalReceived = (receiptLines ?? []).reduce((sum: number, r: any) => sum + (r.quantity_received ?? 0), 0);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const isMaintPart = (receiptLines ?? []).some((r: any) => r.is_maint_part);
+
+      let reversedPartId: string | null = null;
+      let reversedProductId: string | null = null;
+
+      if (totalReceived > 0) {
+        // Resolve the catalog product the same way ReceiveGoodsDialog does:
+        // by product_item_id first, then part number, then exact name.
+        const { data: matchedProduct } = lineItem.product_item_id
+          ? await supabase.from("product_items").select("id, category").eq("id", lineItem.product_item_id).maybeSingle()
+          : { data: null as { id: string; category: string } | null };
+        let productId = matchedProduct?.id ?? null;
+        let productCategory = matchedProduct?.category ?? null;
+        if (!productId && lineItem.part_number) {
+          const { data: byPartNumber } = await supabase
+            .from("product_items")
+            .select("id, category")
+            .eq("part_number", lineItem.part_number)
+            .is("deleted_at", null)
+            .maybeSingle();
+          productId = byPartNumber?.id ?? null;
+          productCategory = byPartNumber?.category ?? null;
+        }
+        if (!productId && lineItem.product_item_name) {
+          const { data: byName } = await supabase
+            .from("product_items")
+            .select("id, category")
+            .eq("name", lineItem.product_item_name)
+            .is("deleted_at", null)
+            .maybeSingle();
+          productId = byName?.id ?? null;
+          productCategory = byName?.category ?? null;
+        }
+
+        if (!productId) {
+          throw new Error(
+            `Cannot delete line item "${lineItem.product_item_name}" — it has ${totalReceived} unit(s) received but no matching catalog product was found to reverse the inventory increment.`
+          );
+        }
+
+        if (isMaintPart || productCategory === "maintenance_part") {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { data: linkedPart } = await (supabase as any)
+            .from("parts")
+            .select("id")
+            .eq("product_item_id", productId)
+            .is("deleted_at", null)
+            .maybeSingle();
+          if (linkedPart) {
+            const { error: partAdjustErr } = await supabase.rpc("adjust_part_quantity", {
+              p_org_id: lineItem.org_id,
+              p_part_id: linkedPart.id,
+              p_delta: -totalReceived,
+              p_po_number: "",
+            });
+            if (partAdjustErr) throw partAdjustErr;
+            reversedPartId = linkedPart.id;
+          }
+        }
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error: prodAdjustErr } = await (supabase.rpc as any)("adjust_product_item_quantity", {
+          p_org_id: lineItem.org_id,
+          p_product_id: productId,
+          p_delta: -totalReceived,
+          p_reason: "PO line item deleted — received quantity reversed",
+        });
+        if (prodAdjustErr) throw prodAdjustErr;
+        reversedProductId = productId;
+      }
+
+      // Unlink receipt lines — the FK on goods_receipt_lines.po_line_item_id
       // would block the delete if we skip this step.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error: unlinkErr } = await (supabase as any)
@@ -868,13 +1005,44 @@ export function useDeletePOLineItem() {
         .eq("po_line_item_id", lineItemId);
       if (unlinkErr) throw unlinkErr;
 
-      const [{ error: lineErr }, { error: poErr }] = await Promise.all([
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (supabase as any).from("po_line_items").delete().eq("id", lineItemId),
-        supabase.from("purchase_orders").update({ subtotal, sales_tax: salesTax, grand_total: grandTotal }).eq("id", poId),
-      ]);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error: lineErr } = await (supabase as any).from("po_line_items").delete().eq("id", lineItemId);
       if (lineErr) throw lineErr;
-      if (poErr) throw poErr;
+
+      const { error: poErr } = await supabase
+        .from("purchase_orders")
+        .update({ subtotal, sales_tax: salesTax, grand_total: grandTotal })
+        .eq("id", poId);
+      if (poErr) {
+        // Header total update failed after the line item (and any inventory
+        // reversal) already committed — undo everything so nothing drifts.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (supabase as any).from("po_line_items").insert(lineItem);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (supabase as any)
+          .from("goods_receipt_lines")
+          .update({ po_line_item_id: lineItemId })
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          .in("id", (receiptLines ?? []).map((r: any) => r.id));
+        if (reversedPartId) {
+          await supabase.rpc("adjust_part_quantity", {
+            p_org_id: lineItem.org_id,
+            p_part_id: reversedPartId,
+            p_delta: totalReceived,
+            p_po_number: "",
+          });
+        }
+        if (reversedProductId) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          await (supabase.rpc as any)("adjust_product_item_quantity", {
+            p_org_id: lineItem.org_id,
+            p_product_id: reversedProductId,
+            p_delta: totalReceived,
+            p_reason: "PO line item delete rolled back — header update failed",
+          });
+        }
+        throw poErr;
+      }
       await resubmitPOForApprovalIfNeeded(supabase, poId, grandTotal);
     },
     onMutate: async ({ poId, lineItemId, subtotal, salesTax, grandTotal }) => {

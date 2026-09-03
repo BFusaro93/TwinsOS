@@ -2,6 +2,13 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { sendCampaignEmails } from "@/lib/campaigns/send-campaign";
 
+// A large campaign can take longer than the platform's default route
+// timeout to send every recipient; extend the ceiling so more campaigns
+// finish (and reach the "completed" status update) within one invocation.
+// Does not eliminate the possibility of a mid-send timeout — see
+// isStaleSending in send-campaign.ts for the recovery path when it happens.
+export const maxDuration = 300;
+
 export async function POST(
   req: Request,
   { params }: { params: Promise<{ id: string }> }

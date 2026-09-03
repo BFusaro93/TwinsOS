@@ -87,7 +87,17 @@ export async function GET(request: Request) {
       ?? (meeting.lead_name as string | null)
       ?? "a new lead";
     const scheduledAt = new Date(meeting.scheduled_at as string);
-    const timeStr = scheduledAt.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+    // The Node runtime's default timezone is UTC on Vercel — without an
+    // explicit timeZone, this would display a 2pm Eastern meeting as "6pm"
+    // (or "7pm" outside DST) in both the in-app notification and the
+    // reminder email below. This codebase hardcodes America/New_York as the
+    // org's operating timezone everywhere date/time display accounts for it
+    // (see src/lib/reports/ny-date.ts).
+    const timeStr = scheduledAt.toLocaleTimeString("en-US", {
+      hour: "numeric",
+      minute: "2-digit",
+      timeZone: "America/New_York",
+    });
     const meetingUrl = `${process.env.NEXT_PUBLIC_SITE_URL ?? "https://landscapt.com"}/crm/sales-meetings`;
 
     if (rep) {

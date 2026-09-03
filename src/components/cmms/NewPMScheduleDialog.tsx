@@ -244,9 +244,12 @@ export function NewPMScheduleDialog({ open, onOpenChange, initialData, onCreated
                 </div>
               )}
 
-              {/* Picker — resets to placeholder after each selection */}
+              {/* Picker — resets to placeholder after each selection.
+                  Disposed assets are excluded, same as NewWorkOrderDialog's
+                  entityOptions filter, so a disposed asset can't be picked
+                  for a PM schedule. */}
               <EntityCombobox
-                assets={assets ?? []}
+                assets={(assets ?? []).filter((a) => a.status !== "disposed")}
                 vehicles={vehicles ?? []}
                 value={pickerKey || "none"}
                 onValueChange={(val) => {

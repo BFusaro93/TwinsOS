@@ -607,7 +607,8 @@ export function VendorDetailSheet({ vendor, open, onOpenChange }: VendorDetailSh
         setDeleteConfirmOpen(false);
         onOpenChange(false);
       },
-      onError: () => toast.error("Failed to delete vendor"),
+      onError: (error) =>
+        toast.error(error instanceof Error ? error.message : "Failed to delete vendor"),
     });
   }
 

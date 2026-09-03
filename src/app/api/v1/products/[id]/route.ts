@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { adminClient, authenticateApiRequest } from "@/lib/api/auth";
-import { jsonError } from "@/lib/api/route-helpers";
+import { jsonError, jsonServerError } from "@/lib/api/route-helpers";
 import { PRODUCT_SELECT, shapeProduct } from "../shape";
 import { updateProductSchema } from "../validation";
 
@@ -19,7 +19,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     .is("deleted_at", null)
     .maybeSingle();
 
-  if (error) return jsonError(error.message, 500);
+  if (error) return jsonServerError("GET /api/v1/products/[id]", error);
   if (!data) return jsonError("Product not found", 404);
   return NextResponse.json(shapeProduct(data));
 }
@@ -62,7 +62,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     .select(PRODUCT_SELECT)
     .maybeSingle();
 
-  if (error) return jsonError(error.message, 500);
+  if (error) return jsonServerError("PATCH /api/v1/products/[id]", error);
   if (!data) return jsonError("Product not found", 404);
   return NextResponse.json(shapeProduct(data));
 }

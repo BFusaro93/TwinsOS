@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { adminClient, authenticateApiRequest } from "@/lib/api/auth";
-import { jsonError } from "@/lib/api/route-helpers";
+import { jsonError, jsonServerError } from "@/lib/api/route-helpers";
 import { REQUISITION_SELECT, REQ_LINE_ITEM_SELECT, shapeRequisition, shapeRequisitionLineItem } from "../shape";
 
 /** GET /api/v1/requisitions/[id] — fetch one requisition with its line items. Requires scope "requisitions:read". */
@@ -18,7 +18,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     .is("deleted_at", null)
     .maybeSingle();
 
-  if (error) return jsonError(error.message, 500);
+  if (error) return jsonServerError("GET /api/v1/requisitions/[id]", error);
   if (!data) return jsonError("Requisition not found", 404);
 
   const { data: lineItems, error: lineItemsError } = await db
@@ -27,7 +27,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     .eq("org_id", auth.orgId)
     .eq("requisition_id", id);
 
-  if (lineItemsError) return jsonError(lineItemsError.message, 500);
+  if (lineItemsError) return jsonServerError("GET /api/v1/requisitions/[id]", lineItemsError);
 
   return NextResponse.json({
     ...shapeRequisition(data),

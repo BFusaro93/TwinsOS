@@ -194,9 +194,18 @@ export function useUpdateTicket() {
       let wasReopened = false;
       let clientId: string | null = null;
       let effectiveCategory: string | null = null;
-      if (updates.status !== undefined && updates.status !== "closed") {
+      // Guard against a TOCTOU race: another user could change the status
+      // between this SELECT and the UPDATE below, making wasReopened reflect
+      // stale state. beforeStatus is carried into the update itself as an
+      // .eq("status", beforeStatus) guard (see below) so the update only
+      // applies if nothing changed it in the meantime; a 0-row result means
+      // a race happened and we refetch + retry once.
+      let beforeStatus: string | null = null;
+      const checkReopen = updates.status !== undefined && updates.status !== "closed";
+      if (checkReopen) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data: before } = await (supabase as any).from("crm_tickets").select("status, client_id, category").eq("id", id).single();
+        beforeStatus = before?.status ?? null;
         wasReopened = before?.status === "closed";
         clientId = before?.client_id ?? null;
         effectiveCategory = updates.category !== undefined ? updates.category : before?.category ?? null;
@@ -223,9 +232,44 @@ export function useUpdateTicket() {
       if (updates.dueDate !== undefined) payload.due_date = updates.dueDate || null;
       if (updates.priority !== undefined) payload.priority = updates.priority;
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error } = await (supabase as any).from("crm_tickets").update(payload).eq("id", id);
-      if (error) throw error;
+      if (checkReopen) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data, error } = await (supabase as any)
+          .from("crm_tickets")
+          .update(payload)
+          .eq("id", id)
+          .eq("status", beforeStatus)
+          .select("id");
+        if (error) throw error;
+        if (!data || data.length === 0) {
+          // Status changed underneath us between the SELECT and this UPDATE —
+          // refetch fresh state and retry the reopen-detection + update once.
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { data: fresh } = await (supabase as any).from("crm_tickets").select("status, client_id, category").eq("id", id).single();
+          beforeStatus = fresh?.status ?? null;
+          wasReopened = fresh?.status === "closed";
+          clientId = fresh?.client_id ?? clientId;
+          effectiveCategory = updates.category !== undefined ? updates.category : fresh?.category ?? effectiveCategory;
+
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const retry = await (supabase as any)
+            .from("crm_tickets")
+            .update(payload)
+            .eq("id", id)
+            .eq("status", beforeStatus)
+            .select("id");
+          if (retry.error) throw retry.error;
+          if (!retry.data || retry.data.length === 0) {
+            throw new Error(
+              "This ticket was just changed by someone else. Please try again."
+            );
+          }
+        }
+      } else {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error } = await (supabase as any).from("crm_tickets").update(payload).eq("id", id);
+        if (error) throw error;
+      }
       return { wasReopened, clientId, effectiveCategory };
     },
     onSuccess: (result, { id, updates }) => {

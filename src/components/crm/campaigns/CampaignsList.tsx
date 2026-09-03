@@ -110,6 +110,19 @@ const SEGMENT_LABELS: Record<string, string> = {
   custom: "Custom",
 };
 
+// A campaign's updated_at is set to the moment it's claimed into "sending"
+// (see the claim UPDATE in src/lib/campaigns/send-campaign.ts) and nothing
+// touches it again until the final "completed" update — so a "sending" row
+// whose updated_at is older than this is a route that died mid-send (e.g.
+// hit the platform's function timeout), not one genuinely still in flight.
+// Keep this in sync with STUCK_SENDING_THRESHOLD_MS in send-campaign.ts.
+const STUCK_SENDING_THRESHOLD_MS = 15 * 60 * 1000;
+
+function isStuckSending(campaign: CRMCampaign): boolean {
+  if (campaign.status !== "sending") return false;
+  return Date.now() - new Date(campaign.updatedAt).getTime() > STUCK_SENDING_THRESHOLD_MS;
+}
+
 // ── Campaign Dialog ───────────────────────────────────────────────────────────
 
 function CampaignDialog({
@@ -508,6 +521,12 @@ function CampaignRow({
               <DropdownMenuItem onClick={() => onSend(campaign)}>
                 <Send className="mr-2 h-3.5 w-3.5" />
                 Send Now
+              </DropdownMenuItem>
+            )}
+            {canSend && campaign.type === "email" && isStuckSending(campaign) && (
+              <DropdownMenuItem onClick={() => onSend(campaign)}>
+                <Send className="mr-2 h-3.5 w-3.5" />
+                Retry Send (stuck)
               </DropdownMenuItem>
             )}
             {canSend && campaign.status === "draft" && (

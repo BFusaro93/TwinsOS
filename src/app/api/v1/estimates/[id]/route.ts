@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { adminClient, authenticateApiRequest } from "@/lib/api/auth";
-import { jsonError } from "@/lib/api/route-helpers";
+import { jsonError, jsonServerError } from "@/lib/api/route-helpers";
 import { ESTIMATE_SELECT, ESTIMATE_LINE_ITEM_SELECT, shapeEstimate, shapeEstimateLineItem } from "../shape";
 
 /** GET /api/v1/estimates/[id] — fetch one estimate with its line items. Requires scope "estimates:read". */
@@ -18,7 +18,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     .is("deleted_at", null)
     .maybeSingle();
 
-  if (error) return jsonError(error.message, 500);
+  if (error) return jsonServerError("GET /api/v1/estimates/[id]", error);
   if (!data) return jsonError("Estimate not found", 404);
 
   const { data: lineItems, error: lineItemsError } = await db
@@ -28,7 +28,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     .eq("estimate_id", id)
     .is("deleted_at", null);
 
-  if (lineItemsError) return jsonError(lineItemsError.message, 500);
+  if (lineItemsError) return jsonServerError("GET /api/v1/estimates/[id]", lineItemsError);
 
   return NextResponse.json({
     ...shapeEstimate(data),

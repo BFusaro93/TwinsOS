@@ -27,10 +27,17 @@ type StepGroup = {
 function groupByStep(requests: ApprovalRequest[]): StepGroup[] {
   const map = new Map<string, StepGroup>();
   for (const r of requests) {
-    if (!map.has(r.flowStepId)) {
-      map.set(r.flowStepId, { flowStepId: r.flowStepId, order: r.order, requests: [] });
+    // A request whose flow step was deleted comes back with flowStepId ""
+    // (see mapApprovalRequest). Bucketing every such orphan together would
+    // collapse two unrelated, independently-required approvals into one
+    // group that reads as resolved the moment either one is approved — key
+    // each orphan by its own row id instead so it stays its own group. Must
+    // match the identical logic in use-approval-requests.ts's stepGroups.
+    const groupKey = r.flowStepId || `orphan-${r.id}`;
+    if (!map.has(groupKey)) {
+      map.set(groupKey, { flowStepId: groupKey, order: r.order, requests: [] });
     }
-    map.get(r.flowStepId)!.requests.push(r);
+    map.get(groupKey)!.requests.push(r);
   }
   return Array.from(map.values()).sort((a, b) => a.order - b.order);
 }
@@ -387,21 +394,16 @@ export function ApprovalChain({ entityId, onApproved, onRejected }: ApprovalChai
           // The hook already wrote the entity status to the DB when allResolved is true.
           // The component callbacks only need to update local UI state.
           if (!result) return;
-          const { allResolved, freshMapped } = result;
-          if (!allResolved || !freshMapped) return;
+          const { allResolved } = result;
+          if (!allResolved) return;
 
-          const anyRejected = Array.from(
-            freshMapped.reduce((m, r) => {
-              if (!m.has(r.flowStepId)) m.set(r.flowStepId, []);
-              m.get(r.flowStepId)!.push(r);
-              return m;
-            }, new Map<string, typeof freshMapped>())
-            .values()
-          ).some((reqs) => {
-            if (reqs.every((r) => r.status === "skipped")) return false;
-            if (reqs.some((r) => r.status === "approved")) return false;
-            return reqs.filter((r) => r.status !== "skipped").some((r) => r.status === "rejected");
-          });
+          // The mutation itself now decides "rejected" immediately (Bug 1 —
+          // a rejection halts the whole chain right away rather than
+          // waiting for every step group to resolve), so the decision the
+          // user just made IS the outcome — no need to re-derive it by
+          // re-grouping freshMapped by flowStepId (which used to risk the
+          // same orphan-collapsing issue as Bug 2).
+          const anyRejected = status === "rejected";
 
           if (anyRejected) {
             onRejected?.();

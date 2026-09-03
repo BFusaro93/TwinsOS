@@ -74,6 +74,35 @@ export function useUpdateApprovalFlow() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({ flowId, steps }: { flowId: string; steps: ApprovalFlowStep[] }) => {
+      // Bug 5 — the same approver cannot be listed in more than one step of
+      // a chain: a user-specific step (assignedUserId set) means only that
+      // person can act, so re-using their id in another step is a duplicate
+      // approver; a role-wide step (assignedUserId null, dispatched to every
+      // profile/employee holding requiredRole) means re-using the same role
+      // in another step would ask the same set of people to approve twice.
+      // Check whichever the step actually is.
+      const seenUserIds = new Map<string, number>();
+      const seenRoles = new Map<string, number>();
+      steps.forEach((s, idx) => {
+        if (s.assignedUserId) {
+          const firstIdx = seenUserIds.get(s.assignedUserId);
+          if (firstIdx !== undefined) {
+            throw new Error(
+              `This approver is already assigned to step ${firstIdx + 1} — the same approver cannot be listed as an approver in more than one step.`
+            );
+          }
+          seenUserIds.set(s.assignedUserId, idx);
+        } else {
+          const firstIdx = seenRoles.get(s.requiredRole);
+          if (firstIdx !== undefined) {
+            throw new Error(
+              `"${s.requiredRole}" is already used as the approver for step ${firstIdx + 1} — the same role cannot be listed as an approver in more than one step.`
+            );
+          }
+          seenRoles.set(s.requiredRole, idx);
+        }
+      });
+
       const supabase = createClient();
 
       const { data: existingSteps } = await supabase

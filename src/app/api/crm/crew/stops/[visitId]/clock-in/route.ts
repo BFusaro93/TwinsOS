@@ -3,6 +3,7 @@ import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { z } from "zod";
 import { stopKeyForVisit, type StopKeyInput } from "@/lib/utils/visit-stops";
+import { assertCallerOwnsVisit } from "@/lib/supabase/route-auth";
 
 const Body = z.object({
   // HH:mm in the crew member's local time — the server (Vercel) runs in UTC,
@@ -12,6 +13,7 @@ const Body = z.object({
 
 interface VisitRow {
   id: string;
+  org_id: string;
   client_id: string;
   scheduled_date: string;
   crew_id: string | null;
@@ -31,7 +33,7 @@ function toStopKeyInput(row: VisitRow): StopKeyInput {
   };
 }
 
-const VISIT_SELECT = "id, client_id, scheduled_date, crew_id, status, clocked_in_at, crm_jobs(property_id, service_address, service_city)";
+const VISIT_SELECT = "id, org_id, client_id, scheduled_date, crew_id, status, clocked_in_at, crm_jobs(property_id, service_address, service_city)";
 
 /**
  * Clocks in every visit that makes up "this stop" (same client/day/crew/
@@ -68,20 +70,34 @@ export async function POST(
     .is("deleted_at", null)
     .single();
   if (anchorErr || !anchorRow) return NextResponse.json({ error: "Visit not found" }, { status: 404 });
+  const anchor = anchorRow as VisitRow;
+
+  // Guard against clocking in another crew's visit — RLS on crm_job_visits
+  // only checks org_id, not crew_id, so a caller who obtains another crew's
+  // visitId could otherwise still act on it. See assertCallerOwnsVisit().
+  if (!(await assertCallerOwnsVisit(supabase, user.id, anchor.org_id, anchor.crew_id))) {
+    return NextResponse.json({ error: "Not assigned to this visit" }, { status: 403 });
+  }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: candidateRows, error: candErr } = await (supabase as any)
     .from("crm_job_visits")
     .select(VISIT_SELECT)
-    .eq("client_id", (anchorRow as VisitRow).client_id)
-    .eq("scheduled_date", (anchorRow as VisitRow).scheduled_date)
+    .eq("client_id", anchor.client_id)
+    .eq("scheduled_date", anchor.scheduled_date)
     .is("deleted_at", null)
     .not("status", "in", "(cancelled,skipped)");
   if (candErr) return NextResponse.json({ error: candErr.message }, { status: 500 });
 
-  const anchorKey = stopKeyForVisit(toStopKeyInput(anchorRow as VisitRow));
+  const anchorKey = stopKeyForVisit(toStopKeyInput(anchor));
   const siblingIds = (candidateRows as VisitRow[])
     .filter((r) => stopKeyForVisit(toStopKeyInput(r)) === anchorKey)
+    // Defense in depth: stopKeyForVisit already encodes crew_id, so a match
+    // on anchorKey mathematically implies r.crew_id === anchor.crew_id (the
+    // crew whose ownership was just verified above) — this filter makes that
+    // invariant explicit rather than implicit, so no row outside the caller's
+    // crew can ever enter the mutation set below.
+    .filter((r) => r.crew_id === anchor.crew_id)
     .filter((r) => !r.clocked_in_at) // already clocked in — idempotent/double-tap safe
     .map((r) => r.id);
 

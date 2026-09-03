@@ -5,6 +5,32 @@ import { isZapierTriggerType, notifyZapierSubscribers } from "@/lib/integrations
 type AnyClient = any;
 
 /**
+ * Converts a `wait` event's config (`{days, hours, minutes}`, any subset
+ * present) into an absolute fire-at Date offset from `from` (defaults to
+ * now). This is the single source of truth for wait-delay math — every call
+ * site that consumes a wait step's own delay (initial enrollment landing on
+ * a leading wait, `advanceEnrollmentPastStep` chaining into a following
+ * wait, and the cron sweep's `processDueEnrollment` consuming a wait that is
+ * itself the due step) must go through this function so a stack of
+ * consecutive `wait` steps advances one delay at a time, correctly, instead
+ * of any one of them reimplementing (and risking drifting from) the
+ * config-to-delay conversion.
+ */
+export function computeWaitFireAt(
+  config: Record<string, number> | null | undefined,
+  from: Date = new Date()
+): Date {
+  const days = config?.days ?? 0;
+  const hours = config?.hours ?? 0;
+  const minutes = config?.minutes ?? 0;
+  const d = new Date(from);
+  d.setDate(d.getDate() + days);
+  d.setHours(d.getHours() + hours);
+  d.setMinutes(d.getMinutes() + minutes);
+  return d;
+}
+
+/**
  * Whether a client/estimate pair may be (re-)enrolled into a sequence, given
  * the sequence's allow_reentry/reentry_after_minutes settings. Looks at the
  * most recent enrollment row (any status) for this sequence, matched by
@@ -128,14 +154,7 @@ export async function enrollClientInSequence(
   let nextFireAt = new Date().toISOString();
   if (firstEvent?.event_type === "wait") {
     const cfg = firstEvent.config as Record<string, number> | null;
-    const days = cfg?.days ?? 0;
-    const hours = cfg?.hours ?? 0;
-    const minutes = cfg?.minutes ?? 0;
-    const d = new Date();
-    d.setDate(d.getDate() + days);
-    d.setHours(d.getHours() + hours);
-    d.setMinutes(d.getMinutes() + minutes);
-    nextFireAt = d.toISOString();
+    nextFireAt = computeWaitFireAt(cfg).toISOString();
   }
 
   const { data: inserted, error } = await supabase

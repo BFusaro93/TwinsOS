@@ -170,13 +170,14 @@ export function useUpdateGoodsReceipt() {
 
       // Collect quantity changes for audit entries + inventory adjustment
       const qtyChanges: Array<{
-        name: string; oldQty: number; newQty: number; delta: number;
+        lineId: string; name: string; oldQty: number; newQty: number; delta: number;
         poLineItemId: string | null; partNumber: string; isMaintPart: boolean;
       }> = [];
       for (const line of input.lines) {
         const old = oldByLineId.get(line.id);
         if (old !== undefined && old.quantity_received !== line.quantityReceived) {
           qtyChanges.push({
+            lineId: line.id,
             name: line.productItemName,
             oldQty: old.quantity_received,
             newQty: line.quantityReceived,
@@ -185,6 +186,57 @@ export function useUpdateGoodsReceipt() {
             partNumber: old.part_number,
             isMaintPart: old.is_maint_part,
           });
+        }
+      }
+
+      // ── Bounds-check corrected quantities against quantity_ordered ──────
+      // The RPCs below only apply THIS line's delta to catalog inventory —
+      // nothing previously checked that the corrected value, plus whatever
+      // was already received against the same PO line on OTHER receipts
+      // (partial receipts happen across multiple goods_receipts rows), still
+      // fits within what was actually ordered. Without this, editing a
+      // receipt's quantity up (e.g. fixing a typo) could push the PO line's
+      // true cumulative received total past quantity_ordered with nothing to
+      // catch it — the same class of bug as an uncapped initial receipt,
+      // just via the correction path instead.
+      if (qtyChanges.length > 0) {
+        const editedLineIds = qtyChanges.map((c) => c.lineId);
+        const poLineItemIds = [...new Set(qtyChanges.map((c) => c.poLineItemId).filter((v): v is string => !!v))];
+
+        const { data: orderedRows } = poLineItemIds.length > 0
+          ? await supabase.from("po_line_items").select("id, quantity").in("id", poLineItemIds)
+          : { data: [] as { id: string; quantity: number }[] };
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: otherLines } = poLineItemIds.length > 0
+          ? await (supabase as any)
+              .from("goods_receipt_lines")
+              .select("po_line_item_id, quantity_received")
+              .in("po_line_item_id", poLineItemIds)
+              .not("id", "in", `(${editedLineIds.join(",")})`)
+          : { data: [] as { po_line_item_id: string | null; quantity_received: number }[] };
+
+        const orderedByLineId = new Map((orderedRows ?? []).map((r) => [r.id as string, r.quantity as number]));
+        const otherReceivedByLineId = new Map<string, number>();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        for (const row of (otherLines ?? []) as any[]) {
+          if (!row.po_line_item_id) continue;
+          otherReceivedByLineId.set(
+            row.po_line_item_id,
+            (otherReceivedByLineId.get(row.po_line_item_id) ?? 0) + (row.quantity_received ?? 0)
+          );
+        }
+
+        for (const chg of qtyChanges) {
+          if (!chg.poLineItemId) continue;
+          const ordered = orderedByLineId.get(chg.poLineItemId);
+          if (ordered === undefined) continue; // no PO line to bound against — leave as-is
+          const otherReceived = otherReceivedByLineId.get(chg.poLineItemId) ?? 0;
+          if (chg.newQty < 0 || otherReceived + chg.newQty > ordered) {
+            const maxAllowed = Math.max(0, ordered - otherReceived);
+            throw new Error(
+              `"${chg.name}": ${chg.newQty} would bring the total received to ${otherReceived + chg.newQty}, but only ${ordered} was ordered (${otherReceived} already recorded on other receipts). Enter ${maxAllowed} or less.`
+            );
+          }
         }
       }
 

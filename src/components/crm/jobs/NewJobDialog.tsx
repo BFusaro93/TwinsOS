@@ -236,7 +236,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
   // Is this row's budgeted hours auto-calculated from the service's production rate?
   function rowIsAutoHrs(serviceId: string): boolean {
     const svc = (crmServices ?? []).find((s) => s.id === serviceId);
-    return !!svc && svc.budgetMethod === "production_rate" && !!svc.productionRateSqftPerHr && svc.productionRateSqftPerHr > 0 && svc.unit !== "hour";
+    return !!svc && svc.budgetMethod === "production_rate" && !!svc.productionRateSqftPerHr && svc.productionRateSqftPerHr > 0 && svc.unit !== "hr" && svc.unit !== "each";
   }
 
   // Recompute budgeted hours when qty changes, if this row's service uses production rate
@@ -291,6 +291,12 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
   const marginPct = serviceTotalCents > 0 ? (grossProfitCents / serviceTotalCents) * 100 : 0;
 
   const selectedPackage = (crmPackages ?? []).find((p) => p.id === packageId) ?? null;
+  // Total included visits for the selected package = sum of each service row's
+  // visits_included (defaulting to 1 per row), not the number of service rows —
+  // matches the same aggregation used in PackageDialog when saving visits_per_season.
+  const selectedPackageTotalSteps = selectedPackage
+    ? (selectedPackage.services?.reduce((sum, s) => sum + (s.visitsIncluded || 1), 0) || 1)
+    : null;
 
   async function handleSubmit() {
     if (!effectiveClientId) { toast.error("Client is required"); return; }
@@ -299,6 +305,10 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
     if (services.some((s) => !s.serviceName)) { toast.error("Select a service for each row"); return; }
     if (rf.isRequired("crew") && !crewId) { toast.error("Crew is required"); return; }
     if (rf.isRequired("sales_rep") && !salesRepId) { toast.error("Sales Rep is required"); return; }
+    if (jobType === "waiting_list" && startDate && completeByDate && completeByDate < startDate) {
+      toast.error("End date cannot be before start date");
+      return;
+    }
 
     setIsPending(true);
     try {
@@ -314,6 +324,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
         packageName: jobType === "package" ? (selectedPackage?.name ?? null) : null,
         packageRenewal: null,
         packageDiscount: null,
+        packageTotalSteps: jobType === "package" ? selectedPackageTotalSteps : null,
         conflictDays: [],
         inchTrigger: jobType === "snow" ? inchTrigger : null,
         invoiceType: jobType === "snow" ? invoiceType : null,

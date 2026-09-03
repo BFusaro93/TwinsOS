@@ -125,7 +125,16 @@ function ActivityRow({
             <p className="text-[10px] text-slate-400">{formatTime(item.occurredAt)}</p>
           </div>
         </div>
-        {item.createdByName && <p className="mt-0.5 text-[11px] text-slate-400">{item.createdByName}</p>}
+        {(item.createdByName || item.sourceClientName) && (
+          <p className="mt-0.5 text-[11px] text-slate-400">
+            {item.sourceClientName && (
+              <span className="mr-1.5 rounded bg-slate-100 px-1 py-0.5 font-medium text-slate-500">
+                {item.sourceClientName}
+              </span>
+            )}
+            {item.createdByName}
+          </p>
+        )}
       </div>
     </div>
   );

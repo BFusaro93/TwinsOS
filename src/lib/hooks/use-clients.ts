@@ -297,14 +297,38 @@ export function useClientActivity(clientId: string) {
     queryKey: ["clients", clientId, "activity"],
     queryFn: async () => {
       const supabase = createClient();
+      // Parent/property-manager accounts should see a unified timeline that
+      // rolls up their children's activity too — hierarchy is capped at one
+      // level deep (see prevent_client_hierarchy_cycle), so a direct-children
+      // lookup is enough, no recursion needed.
+      const { data: children, error: childrenError } = await supabase
+        .from("clients")
+        .select("id, display_name")
+        .eq("parent_client_id", clientId)
+        .is("deleted_at", null);
+      if (childrenError) throw childrenError;
+      const childIds = (children ?? []).map((c) => c.id);
+      const childNameById = new Map((children ?? []).map((c) => [c.id, c.display_name as string]));
+      const activityClientIds = [clientId, ...childIds];
+
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
         .from("client_activity")
         .select("*, profiles(name)")
-        .eq("client_id", clientId)
+        .in("client_id", activityClientIds)
         .order("occurred_at", { ascending: false });
       if (error) throw error;
-      return (data.map(mapActivity)) as ClientActivity[];
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return (data.map((row: any) => {
+        const activity = mapActivity(row);
+        // Tag entries that belong to a child account so the timeline can
+        // label which sub-account they came from — the parent's own rows
+        // are left unlabeled.
+        activity.sourceClientName = row.client_id !== clientId
+          ? (childNameById.get(row.client_id) ?? null)
+          : null;
+        return activity;
+      })) as ClientActivity[];
     },
     enabled: !!clientId,
   });
@@ -390,10 +414,10 @@ export function useUpdateClientPropertyZones() {
       const supabase = createClient();
       const sums = zones.reduce(
         (acc, z) => {
-          acc.gross += z.sqft;
-          if (z.type === "turf") acc.turf += z.sqft;
-          if (z.type === "mulch_bed") acc.mulch += z.sqft;
-          if (z.type === "parking_lot") acc.parking += z.sqft;
+          acc.gross += z.sqft || 0;
+          if (z.type === "turf") acc.turf += z.sqft || 0;
+          if (z.type === "mulch_bed") acc.mulch += z.sqft || 0;
+          if (z.type === "parking_lot") acc.parking += z.sqft || 0;
           return acc;
         },
         { gross: 0, turf: 0, mulch: 0, parking: 0 }

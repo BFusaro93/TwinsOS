@@ -190,25 +190,35 @@ export function useAddRequisitionLineItem() {
     }) => {
       const supabase = createClient();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error: lineErr } = await (supabase as any).from("requisition_line_items").insert({
-        requisition_id: requisitionId,
-        product_item_id: lineItem.productItemId || null,
-        part_id: lineItem.partId ?? null,
-        product_item_name: lineItem.productItemName,
-        part_number: lineItem.partNumber,
-        quantity: lineItem.quantity,
-        unit_cost: lineItem.unitCost,
-        total_cost: lineItem.totalCost,
-        project_id: lineItem.projectId ?? null,
-        notes: lineItem.notes ?? null,
-      });
+      const { data: inserted, error: lineErr } = await (supabase as any)
+        .from("requisition_line_items")
+        .insert({
+          requisition_id: requisitionId,
+          product_item_id: lineItem.productItemId || null,
+          part_id: lineItem.partId ?? null,
+          product_item_name: lineItem.productItemName,
+          part_number: lineItem.partNumber,
+          quantity: lineItem.quantity,
+          unit_cost: lineItem.unitCost,
+          total_cost: lineItem.totalCost,
+          project_id: lineItem.projectId ?? null,
+          notes: lineItem.notes ?? null,
+        })
+        .select()
+        .single();
       if (lineErr) throw lineErr;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error: reqErr } = await (supabase as any)
         .from("requisitions")
         .update({ subtotal: newSubtotal, sales_tax: newSalesTax, grand_total: newGrandTotal })
         .eq("id", requisitionId);
-      if (reqErr) throw reqErr;
+      if (reqErr) {
+        // Header total update failed after the line item was already committed —
+        // roll back the line item so the two never drift out of sync.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (supabase as any).from("requisition_line_items").delete().eq("id", inserted.id);
+        throw reqErr;
+      }
       await resubmitReqForApprovalIfNeeded(supabase, requisitionId, newGrandTotal);
     },
     onError: (err) => {
@@ -406,6 +416,15 @@ export function useUpdateRequisitionLineItem() {
       newGrandTotal: number;
     }) => {
       const supabase = createClient();
+      // Capture the pre-update row so the line item can be reverted if the
+      // header total update below fails after this write already committed.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: previousLine, error: fetchErr } = await (supabase as any)
+        .from("requisition_line_items")
+        .select("quantity, unit_cost, total_cost, project_id")
+        .eq("id", lineItemId)
+        .single();
+      if (fetchErr) throw fetchErr;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error: lineErr } = await (supabase as any)
         .from("requisition_line_items")
@@ -422,7 +441,21 @@ export function useUpdateRequisitionLineItem() {
         .from("requisitions")
         .update({ subtotal: newSubtotal, sales_tax: newSalesTax, grand_total: newGrandTotal })
         .eq("id", requisitionId);
-      if (reqErr) throw reqErr;
+      if (reqErr) {
+        // Header total update failed after the line item was already committed —
+        // revert the line item to its previous values so the two never drift.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (supabase as any)
+          .from("requisition_line_items")
+          .update({
+            quantity: previousLine.quantity,
+            unit_cost: previousLine.unit_cost,
+            total_cost: previousLine.total_cost,
+            project_id: previousLine.project_id,
+          })
+          .eq("id", lineItemId);
+        throw reqErr;
+      }
       await resubmitReqForApprovalIfNeeded(supabase, requisitionId, newGrandTotal);
     },
     onError: (err) => {
@@ -453,18 +486,28 @@ export function useDeleteRequisitionLineItem() {
       newGrandTotal: number;
     }) => {
       const supabase = createClient();
+      // Capture the full row before deleting so it can be restored if the
+      // header total update below fails after the delete already committed.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error: lineErr } = await (supabase as any)
+      const { data: deletedLine, error: lineErr } = await (supabase as any)
         .from("requisition_line_items")
         .delete()
-        .eq("id", lineItemId);
+        .eq("id", lineItemId)
+        .select()
+        .single();
       if (lineErr) throw lineErr;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error: reqErr } = await (supabase as any)
         .from("requisitions")
         .update({ subtotal: newSubtotal, sales_tax: newSalesTax, grand_total: newGrandTotal })
         .eq("id", requisitionId);
-      if (reqErr) throw reqErr;
+      if (reqErr) {
+        // Header total update failed after the line item was already deleted —
+        // restore the deleted row so the two never drift out of sync.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (supabase as any).from("requisition_line_items").insert(deletedLine);
+        throw reqErr;
+      }
       await resubmitReqForApprovalIfNeeded(supabase, requisitionId, newGrandTotal);
     },
     onError: (err) => {

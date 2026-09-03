@@ -1875,11 +1875,17 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                         onDispatch={async (date, crewId) => {
                           // eslint-disable-next-line @typescript-eslint/no-explicit-any
                           const updates: Record<string, any> = { scheduled_date: date, crew_id: crewId };
-                          // Only flip status/dispatched_at the first time this visit
-                          // actually goes out — reassigning an already-dispatched (or
-                          // in-progress) visit to a different date/crew shouldn't
-                          // regress or re-stamp its status.
-                          const isFirstDispatch = v.status === "scheduled";
+                          // Flip status/dispatched_at on any transition INTO
+                          // "dispatched" — not just from "scheduled". This
+                          // matches DispatchBoard's local JobDetailSheet: a
+                          // dispatcher may legitimately reactivate a
+                          // previously-cancelled/skipped visit through this
+                          // same action, and that should count as a real
+                          // dispatch (restamping dispatched_at) rather than
+                          // silently leaving status/timestamp untouched.
+                          // Reassigning an already-dispatched visit to a
+                          // different date/crew still leaves status alone.
+                          const isFirstDispatch = v.status !== "dispatched";
                           if (isFirstDispatch) {
                             updates.status = "dispatched";
                             updates.dispatched_at = new Date().toISOString();

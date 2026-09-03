@@ -55,6 +55,10 @@ export function useReceiveProductCostLayer() {
       unitCost: number;
       receivedAt: string;
       poNumber?: string;
+      /** PO line item this receipt is against — when given, the RPC enforces
+       *  that cumulative goods_receipt_lines quantity for this line never
+       *  exceeds what was ordered (see the 20260901150000 migration). */
+      poLineItemId?: string;
     }) => {
       const supabase = createClient();
       const { costMethod } = useSettingsStore.getState();
@@ -83,6 +87,7 @@ export function useReceiveProductCostLayer() {
         p_received_at: receipt.receivedAt,
         p_po_number: receipt.poNumber ?? "",
         p_cost_method: costMethod,
+        p_po_line_item_id: receipt.poLineItemId ?? null,
       });
       if (updateErr) throw updateErr;
 
@@ -211,10 +216,20 @@ export function useCreateProduct() {
   });
 }
 
+/**
+ * Fields useUpdateProduct is never allowed to write directly. quantity_on_hand
+ * must only change through the audited adjust_product_item_quantity() RPC
+ * (see useAdjustProductQuantityManual / useReceiveProductCostLayer) — a plain
+ * field update here would bypass the audit trail and the parts-table mirror.
+ * Omitted from the input type below so passing it is a compile error; callers
+ * that need to change quantity should call useAdjustProductQuantityManual.
+ */
+type ProductUpdateInput = Omit<Partial<ProductItem>, "quantityOnHand"> & { id: string };
+
 export function useUpdateProduct() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, ...input }: Partial<ProductItem> & { id: string }) => {
+    mutationFn: async ({ id, ...input }: ProductUpdateInput) => {
       const supabase = createClient();
       const { data, error } = await supabase
         .from("product_items")
@@ -228,7 +243,6 @@ export function useUpdateProduct() {
           ...(input.vendorId !== undefined && { vendor_id: input.vendorId || null }),
           ...(input.vendorName !== undefined && { vendor_name: input.vendorName }),
           ...(input.isInventory !== undefined && { is_inventory: input.isInventory }),
-          ...(input.quantityOnHand !== undefined && { quantity_on_hand: input.quantityOnHand }),
           ...(input.pictureUrl !== undefined && { picture_url: input.pictureUrl }),
           ...(input.minimumStock !== undefined && { minimum_stock: input.minimumStock }),
           ...(input.partCategory !== undefined && { part_category: input.partCategory }),
@@ -254,7 +268,6 @@ export function useUpdateProduct() {
       if (input.partNumber !== undefined) syncFields.part_number = input.partNumber;
       if (input.description !== undefined) syncFields.description = input.description;
       if (input.unitCost !== undefined) syncFields.unit_cost = input.unitCost;
-      if (input.quantityOnHand !== undefined) syncFields.quantity_on_hand = input.quantityOnHand;
       if (input.minimumStock !== undefined) syncFields.minimum_stock = input.minimumStock;
       if (input.partCategory !== undefined) syncFields.category = input.partCategory;
       if (input.pictureUrl !== undefined) syncFields.picture_url = input.pictureUrl;
@@ -462,11 +475,53 @@ export function useBulkImportProducts() {
   });
 }
 
+/** Purchase Order statuses that represent a PO still in flight. Kept in sync
+ *  with POStatus in src/types/purchase-order.ts. */
+const OPEN_PO_STATUSES = ["requested", "pending", "approved", "ordered", "partially_fulfilled"];
+
+/** Requisition statuses that represent a requisition still in flight — once
+ *  "ordered" or "closed" it has handed off to its own PO (checked separately
+ *  via OPEN_PO_STATUSES). Kept in sync with ApprovalStatus in src/types/common.ts. */
+const OPEN_REQUISITION_STATUSES = ["draft", "pending_approval", "approved"];
+
 export function useDeleteProduct() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => {
       const supabase = createClient();
+
+      // Every line_items row references a product_items.id (see CLAUDE.md).
+      // po_line_items / requisition_line_items have no deleted_at of their
+      // own — deletion happens via the parent PO/requisition — so check the
+      // parent's status through a join to find still-open references.
+      const [{ data: poLines, error: poErr }, { data: reqLines, error: reqErr }] = await Promise.all([
+        supabase
+          .from("po_line_items")
+          .select("id, purchase_orders!inner(status, deleted_at)")
+          .eq("product_item_id", id)
+          .is("purchase_orders.deleted_at", null)
+          .in("purchase_orders.status", OPEN_PO_STATUSES),
+        supabase
+          .from("requisition_line_items")
+          .select("id, requisitions!inner(status, deleted_at)")
+          .eq("product_item_id", id)
+          .is("requisitions.deleted_at", null)
+          .in("requisitions.status", OPEN_REQUISITION_STATUSES),
+      ]);
+      if (poErr) throw poErr;
+      if (reqErr) throw reqErr;
+
+      const blockers: string[] = [];
+      if (poLines && poLines.length > 0) {
+        blockers.push(`${poLines.length} open purchase order line item${poLines.length === 1 ? "" : "s"}`);
+      }
+      if (reqLines && reqLines.length > 0) {
+        blockers.push(`${reqLines.length} open requisition line item${reqLines.length === 1 ? "" : "s"}`);
+      }
+      if (blockers.length > 0) {
+        throw new Error(`Cannot delete product — it has ${blockers.join(" and ")}`);
+      }
+
       const { error } = await supabase
         .from("product_items")
         .update({ deleted_at: new Date().toISOString() })

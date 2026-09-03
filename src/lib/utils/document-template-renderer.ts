@@ -1,8 +1,34 @@
 import type { BlockType } from "@/types/crm-documents";
+import { escapeHtml } from "@/lib/email/send";
 
 // ── Merge tag resolution ─────────────────────────────────────────────────────
 // Matches the pattern used by the estimate/invoice send routes so preview and
 // test-send output matches what a real send would produce.
+
+// Tags whose value is always a trusted, pre-built HTML fragment constructed
+// server-side (a link/button anchor, a logo <img>, the signature block's
+// <br>-joined lines, or a future rendered line-items grid) — never raw
+// freeform client/org data. These must NOT be HTML-escaped or the markup
+// renders as literal text instead of a link/button. Every other merge tag
+// (name, email, phone, address, notes, etc.) can end up holding real
+// client/org-controlled text once a "send to real client" flow exists, so
+// those get escaped at the substitution point below, matching how
+// buildClientMergeVars() in lib/email/send.ts escapes freeform values before
+// they reach outbound HTML.
+const HTML_SAFE_MERGE_TAG_KEYS = new Set([
+  "[invoicelogo]",
+  "[estimatelogo]",
+  "[signatureline]",
+  "[formlink]",
+  "[optinlink]",
+  "[optoutlink]",
+  "[clientportallink]",
+  "[clientportalsignup]",
+  "[estimatelink]",
+  "[estimategrid]",
+  "[paymentlink]",
+  "[invoicegrid]",
+]);
 
 export function resolveMergeTags(
   template: string,
@@ -10,7 +36,9 @@ export function resolveMergeTags(
 ): string {
   return template.replace(/\[(\w+)\]/g, (match) => {
     const key = match.toLowerCase();
-    if (key in vars) return vars[key];
+    if (key in vars) {
+      return HTML_SAFE_MERGE_TAG_KEYS.has(key) ? vars[key] : escapeHtml(vars[key]);
+    }
     // A recognized Documents merge-tag name this call just didn't provide a
     // value for (e.g. a send path that only resolves a handful of tags, fed
     // a template built with the full picker) — degrade to blank so it never

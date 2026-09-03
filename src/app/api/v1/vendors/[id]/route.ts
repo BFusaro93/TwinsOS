@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { adminClient, authenticateApiRequest } from "@/lib/api/auth";
-import { jsonError } from "@/lib/api/route-helpers";
+import { jsonError, jsonServerError } from "@/lib/api/route-helpers";
 import { VENDOR_SELECT, shapeVendor } from "../shape";
 import { updateVendorSchema } from "../validation";
 
@@ -19,7 +19,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     .is("deleted_at", null)
     .maybeSingle();
 
-  if (error) return jsonError(error.message, 500);
+  if (error) return jsonServerError("GET /api/v1/vendors/[id]", error);
   if (!data) return jsonError("Vendor not found", 404);
   return NextResponse.json(shapeVendor(data));
 }
@@ -56,7 +56,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     .select(VENDOR_SELECT)
     .maybeSingle();
 
-  if (error) return jsonError(error.message, 500);
+  if (error) return jsonServerError("PATCH /api/v1/vendors/[id]", error);
   if (!data) return jsonError("Vendor not found", 404);
   return NextResponse.json(shapeVendor(data));
 }

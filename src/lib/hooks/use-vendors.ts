@@ -159,11 +159,56 @@ export function useBulkImportVendors() {
   });
 }
 
+/**
+ * Purchase Order statuses that represent a PO still in flight (not yet
+ * finalized). Kept in sync with POStatus in src/types/purchase-order.ts.
+ */
+const OPEN_PO_STATUSES = ["requested", "pending", "approved", "ordered", "partially_fulfilled"];
+
+/**
+ * Requisition statuses that represent a requisition still in flight. Once a
+ * requisition is "ordered" or "closed" it has handed off to its own
+ * Purchase Order (checked separately via OPEN_PO_STATUSES), so those two —
+ * plus "rejected" — are terminal here. Kept in sync with ApprovalStatus in
+ * src/types/common.ts.
+ */
+const OPEN_REQUISITION_STATUSES = ["draft", "pending_approval", "approved"];
+
 export function useDeleteVendor() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => {
       const supabase = createClient();
+
+      // Vendors are shared between PO and CMMS (see CLAUDE.md) — a vendor
+      // still tied to an open Purchase Order or Requisition would silently
+      // vanish from any query that filters vendors by deleted_at, blanking
+      // its name on in-flight records the user still needs to see. Block
+      // the delete instead of letting that happen.
+      const [{ count: openPOCount, error: poErr }, { count: openReqCount, error: reqErr }] = await Promise.all([
+        supabase
+          .from("purchase_orders")
+          .select("id", { count: "exact", head: true })
+          .eq("vendor_id", id)
+          .is("deleted_at", null)
+          .in("status", OPEN_PO_STATUSES),
+        supabase
+          .from("requisitions")
+          .select("id", { count: "exact", head: true })
+          .eq("vendor_id", id)
+          .is("deleted_at", null)
+          .in("status", OPEN_REQUISITION_STATUSES),
+      ]);
+      if (poErr) throw poErr;
+      if (reqErr) throw reqErr;
+
+      const blockers: string[] = [];
+      if (openPOCount) blockers.push(`${openPOCount} open purchase order${openPOCount === 1 ? "" : "s"}`);
+      if (openReqCount) blockers.push(`${openReqCount} open requisition${openReqCount === 1 ? "" : "s"}`);
+      if (blockers.length > 0) {
+        throw new Error(`Cannot delete vendor — it has ${blockers.join(" and ")}`);
+      }
+
       const { error } = await supabase
         .from("vendors")
         .update({ deleted_at: new Date().toISOString() })

@@ -210,11 +210,13 @@ export function useUpdateContract() {
           .select("status")
           .eq("id", id)
           .single();
-        if (current?.status === "signed") {
+        if (current?.status === "signed" || current?.status === "active") {
           // Revert to "sent" and clear the signature — the daily
-          // contract-invoices cron bills off these same fields, so a
-          // signed contract's price/dates must never change without the
-          // client re-agreeing to the new terms first.
+          // contract-invoices cron bills off these same fields, and treats
+          // "signed" and "active" contracts identically for billing
+          // eligibility (see useGenerateContractInvoices below), so either
+          // status's price/dates must never change without the client
+          // re-agreeing to the new terms first.
           finalUpdates = { ...updates, status: "sent", signed_at: null, signed_by: null };
         }
       }
@@ -233,6 +235,69 @@ export function useUpdateContract() {
   });
 }
 
+// Contract lifecycle state machine: draft -> sent -> signed -> active ->
+// expired | cancelled. "expired" and "cancelled" are terminal — neither can
+// transition anywhere else. Cancellation is allowed from any non-terminal
+// stage (a contract can be called off before it's fully progressed).
+const CONTRACT_STATUS_TRANSITIONS: Record<ContractStatus, ContractStatus[]> = {
+  draft: ["sent", "cancelled"],
+  sent: ["signed", "cancelled"],
+  signed: ["active", "cancelled"],
+  active: ["expired", "cancelled"],
+  expired: [],
+  cancelled: [],
+};
+
+/** A same-status "transition" is always allowed — it's a harmless no-op,
+ *  not an invalid one — the caller is responsible for skipping any
+ *  side-effecting work (e.g. not re-stamping signed_at) when from === to. */
+export function isValidContractStatusTransition(from: ContractStatus, to: ContractStatus): boolean {
+  if (from === to) return true;
+  return CONTRACT_STATUS_TRANSITIONS[from]?.includes(to) ?? false;
+}
+
+/**
+ * Cancels every not-yet-completed, today-or-future visit on jobs linked to
+ * this contract (crm_jobs.contract_id) — otherwise cancelling a contract
+ * leaves its recurring visits scheduled and the crew still shows up.
+ * Scoped to visits only (not the parent job's own status) — a job can carry
+ * visits from more than one billing cycle and deciding how to represent
+ * "this job's contract was cancelled" at the job level is a bigger design
+ * question than this fix covers.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function cancelFutureContractVisits(supabase: any, contractId: string) {
+  const todayStr = new Date().toISOString().split("T")[0];
+  const { data: visits, error } = await supabase
+    .from("crm_job_visits")
+    .select("id, job_comments, status, crm_jobs!inner(contract_id)")
+    .eq("crm_jobs.contract_id", contractId)
+    .gte("scheduled_date", todayStr)
+    .neq("status", "completed")
+    .neq("status", "cancelled")
+    .is("deleted_at", null);
+  if (error || !visits?.length) return;
+
+  const now = new Date().toISOString();
+  for (const visit of visits as { id: string; job_comments: unknown }[]) {
+    const existingComments = Array.isArray(visit.job_comments) ? visit.job_comments : [];
+    const newComments = [
+      ...existingComments,
+      {
+        id: crypto.randomUUID(),
+        authorName: "System",
+        authorId: "",
+        text: "Visit cancelled — the linked contract was cancelled.",
+        createdAt: now,
+      },
+    ];
+    await supabase
+      .from("crm_job_visits")
+      .update({ status: "cancelled", job_comments: newComments, updated_at: now })
+      .eq("id", visit.id);
+  }
+}
+
 export function useUpdateContractStatus() {
   const qc = useQueryClient();
   return useMutation({
@@ -246,6 +311,28 @@ export function useUpdateContractStatus() {
       signedBy?: string;
     }) => {
       const supabase = createClient();
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: current, error: currentErr } = await (supabase as any)
+        .from("crm_contracts")
+        .select("status")
+        .eq("id", id)
+        .single();
+      if (currentErr) throw currentErr;
+      const currentStatus = current?.status as ContractStatus | undefined;
+
+      if (currentStatus && !isValidContractStatusTransition(currentStatus, status)) {
+        throw new Error(`Cannot change contract status from "${currentStatus}" to "${status}".`);
+      }
+
+      // Same-status "transition" is a no-op — most often hit by re-selecting
+      // the currently-active option in the status dropdown. Skip the write
+      // entirely so re-marking an already-signed contract as "signed" can't
+      // overwrite signed_at/signed_by a second time.
+      if (currentStatus === status) {
+        return { clientId: undefined as string | undefined, status, skipped: true as const };
+      }
+
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
         .from("crm_contracts")
@@ -259,10 +346,19 @@ export function useUpdateContractStatus() {
         .select("client_id")
         .single();
       if (error) throw error;
-      return { clientId: data?.client_id as string | undefined, status };
+
+      if (status === "cancelled") {
+        await cancelFutureContractVisits(supabase, id);
+      }
+
+      return { clientId: data?.client_id as string | undefined, status, skipped: false as const };
     },
     onSuccess: (data) => {
+      if (data.skipped) return;
       qc.invalidateQueries({ queryKey: ["crm-contracts"] });
+      if (data.status === "cancelled") {
+        qc.invalidateQueries({ queryKey: ["crm-jobs"] });
+      }
       if (data.status === "signed" && data.clientId) {
         fireAutomationTrigger({ triggerType: "contract_signed", clientId: data.clientId });
       }

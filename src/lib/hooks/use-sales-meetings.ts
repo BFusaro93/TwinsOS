@@ -133,7 +133,6 @@ export function useUpdateSalesMeeting() {
     mutationFn: async ({ id, values }: { id: string; values: Partial<NewSalesMeetingInput> & { status?: string } }) => {
       const supabase = createClient();
       const patch: Record<string, unknown> = {};
-      if (values.salesRepId !== undefined) patch.sales_rep_id = values.salesRepId;
       if (values.clientId !== undefined) patch.client_id = values.clientId;
       if (values.leadName !== undefined) patch.lead_name = values.leadName;
       if (values.title !== undefined) patch.title = values.title;
@@ -141,20 +140,35 @@ export function useUpdateSalesMeeting() {
       if (values.location !== undefined) patch.location = values.location;
       if (values.scheduledAt !== undefined) {
         patch.scheduled_at = values.scheduledAt;
+      }
+      if (values.salesRepId !== undefined) {
+        patch.sales_rep_id = values.salesRepId;
+      }
+      if (values.scheduledAt !== undefined || values.salesRepId !== undefined) {
         // The edit dialog always resubmits scheduledAt (recomputed from its
         // date/time fields) even when the user only changed something else
-        // like notes — so only reset the reminder if the time is ACTUALLY
-        // changing, or every unrelated edit would also re-arm (and
-        // duplicate-send) the reminder. The cron only selects rows where
-        // reminder_sent_at is null, so a genuine reschedule after the
-        // reminder already fired for the old time needs this reset or
-        // nothing ever re-fires for the new time.
+        // like notes — so only reset the reminder if the time or the
+        // assigned rep is ACTUALLY changing, or every unrelated edit would
+        // also re-arm (and duplicate-send) the reminder. The cron only
+        // selects rows where reminder_sent_at is null, so a genuine
+        // reschedule after the reminder already fired for the old time (or
+        // a reassignment to a different rep after the original rep's
+        // reminder already fired) needs this reset or nothing ever re-fires
+        // for the new time / the new rep never gets notified.
         const { data: existing } = await supabase
           .from("crm_sales_meetings")
-          .select("scheduled_at")
+          .select("scheduled_at, sales_rep_id")
           .eq("id", id)
           .maybeSingle();
-        if (existing && new Date(existing.scheduled_at).getTime() !== new Date(values.scheduledAt).getTime()) {
+        const timeChanged =
+          values.scheduledAt !== undefined &&
+          existing &&
+          new Date(existing.scheduled_at).getTime() !== new Date(values.scheduledAt).getTime();
+        const repChanged =
+          values.salesRepId !== undefined &&
+          existing &&
+          existing.sales_rep_id !== values.salesRepId;
+        if (timeChanged || repChanged) {
           patch.reminder_sent_at = null;
         }
       }

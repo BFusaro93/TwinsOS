@@ -111,7 +111,7 @@ export async function GET(request: Request) {
           user_id: rep.user_id,
           type: "contract_expiring",
           title: `Contract Expiring Soon — ${contract.title}`,
-          message: `${contract.title} for ${clientName} ends on ${new Date(endDate).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })} and isn't set to auto-renew.`,
+          message: `${contract.title} for ${clientName} ends on ${new Date(endDate).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}. Renew it or follow up with the client before it lapses.`,
           entity_id: contract.id,
           entity_type: "contract",
         });
@@ -127,7 +127,7 @@ export async function GET(request: Request) {
         html: `<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px 24px">
           <h2 style="margin:0 0 8px;font-size:20px;color:#0f172a">Contract Expiring Soon</h2>
           <p style="margin:0 0 4px;color:#475569">Hi ${repName || "there"},</p>
-          <p style="margin:0 0 24px;color:#475569"><strong>${contract.title}</strong> for ${clientName} ends on ${new Date(endDate).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })} and isn't set to auto-renew.</p>
+          <p style="margin:0 0 24px;color:#475569"><strong>${contract.title}</strong> for ${clientName} ends on ${new Date(endDate).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}. Renew it or follow up with the client before it lapses.</p>
           <a href="${contractUrl}" style="display:inline-block;padding:12px 24px;background:#60ab45;color:#fff;text-decoration:none;border-radius:6px;font-weight:600">View Contracts</a>
         </div>`,
       });

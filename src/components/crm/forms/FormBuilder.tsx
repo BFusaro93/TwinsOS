@@ -395,6 +395,13 @@ export function FormBuilder({ form, publicBaseUrl }: Props) {
     try {
       const savedFieldData = await saveFields.mutateAsync(
         fieldsToSave.map((f, i) => ({
+          // Preserve the real DB id for fields that already exist so the
+          // server can update in place instead of delete+reinsert — that
+          // reinsert churned field ids on every save, silently orphaning any
+          // crm_form_rules row keyed to the old id (source_field_id /
+          // actionValue). Omitted for brand-new fields so the server assigns
+          // a fresh id.
+          ...(f._savedId ? { id: f._savedId } : {}),
           fieldType: f.fieldType,
           label: f.label.trim(),
           placeholder: f.placeholder || null,

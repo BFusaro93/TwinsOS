@@ -1098,6 +1098,7 @@ export function useCreateClientJob() {
           package_name: values.packageName || null,
           package_renewal: values.packageRenewal || null,
           package_discount: values.packageDiscount || null,
+          package_total_steps: values.packageTotalSteps ?? null,
           conflict_days: values.conflictDays,
           inch_trigger: values.inchTrigger ?? null,
           invoice_type: values.invoiceType || null,

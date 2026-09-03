@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { adminClient, authenticateApiRequest } from "@/lib/api/auth";
-import { jsonError } from "@/lib/api/route-helpers";
+import { jsonError, jsonServerError } from "@/lib/api/route-helpers";
 import { PM_SCHEDULE_SELECT, shapePmSchedule } from "../shape";
 import { updatePmScheduleSchema } from "../validation";
 
@@ -19,7 +19,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     .is("deleted_at", null)
     .maybeSingle();
 
-  if (error) return jsonError(error.message, 500);
+  if (error) return jsonServerError("GET /api/v1/pm-schedules/[id]", error);
   if (!data) return jsonError("PM schedule not found", 404);
   return NextResponse.json(shapePmSchedule(data));
 }
@@ -53,7 +53,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     .select(PM_SCHEDULE_SELECT)
     .maybeSingle();
 
-  if (error) return jsonError(error.message, 500);
+  if (error) return jsonServerError("PATCH /api/v1/pm-schedules/[id]", error);
   if (!data) return jsonError("PM schedule not found", 404);
   return NextResponse.json(shapePmSchedule(data));
 }

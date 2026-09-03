@@ -173,7 +173,8 @@ export function computeJobServiceBudgetedHours(
     service.budgetMethod === "production_rate" &&
     service.productionRateSqftPerHr &&
     service.productionRateSqftPerHr > 0 &&
-    service.unit !== "hour" &&
+    service.unit !== "hr" &&
+    service.unit !== "each" &&
     qty > 0
   ) {
     return qty / service.productionRateSqftPerHr;
@@ -198,6 +199,7 @@ export function budgetedHoursFromLineItem(
     li.productionRateSqftPerHr &&
     li.productionRateSqftPerHr > 0 &&
     li.unitType !== "hr" &&
+    li.unitType !== "each" &&
     li.qty > 0
   ) {
     return li.qty / li.productionRateSqftPerHr;
@@ -388,9 +390,13 @@ export async function recalcEstimateTotals(supabase: AnySupabaseClient, estimate
   // it stays in sync every time line items change, instead of trusting the
   // stored discount_cents snapshot (which only `applyNamedDiscount` in
   // EstimateSummaryPanel writes, and only at the moment a discount is picked).
-  const discountCents = est.discount_type === "percent"
+  const rawDiscountCents = est.discount_type === "percent"
     ? Math.round(subtotalCents * ((est.discount_value ?? 0) / 10000))
     : (est.discount_cents ?? 0);
+  // Clamp to the subtotal — a flat discount larger than the subtotal (or a
+  // stale percent snapshot) must never drive revenue/tax/total negative,
+  // matching the line-item discount clamp in EstimateLineItemsGrid.
+  const discountCents = Math.max(0, Math.min(rawDiscountCents, subtotalCents));
   const revenueCents = subtotalCents - discountCents;
   const taxCents = Math.round((revenueCents * (est.tax_rate_bps ?? 0)) / 10000);
   const totalCents = revenueCents + taxCents;

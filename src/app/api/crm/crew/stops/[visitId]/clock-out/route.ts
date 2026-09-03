@@ -5,6 +5,7 @@ import { z } from "zod";
 import { recalcNextPackageVisitDate } from "@/lib/package-visit-recalc";
 import { stopKeyForVisit, type StopKeyInput } from "@/lib/utils/visit-stops";
 import { allocateStopHours } from "@/lib/utils/visit-hours";
+import { assertCallerOwnsVisit } from "@/lib/supabase/route-auth";
 
 const Body = z.object({
   notes: z.string().optional(),
@@ -15,6 +16,7 @@ const Body = z.object({
 
 interface VisitRow {
   id: string;
+  org_id: string;
   job_id: string;
   client_id: string;
   scheduled_date: string;
@@ -45,7 +47,7 @@ function toStopKeyInput(row: VisitRow): StopKeyInput {
 }
 
 const VISIT_SELECT = `
-  id, job_id, client_id, scheduled_date, crew_id, job_service_id, status,
+  id, org_id, job_id, client_id, scheduled_date, crew_id, job_service_id, status,
   men_count, clocked_in_at, clocked_out_at, start_time,
   crm_jobs(property_id, service_address, service_city, crm_job_services(id, budgeted_hours, team_size))
 `;
@@ -88,6 +90,13 @@ export async function POST(
   if (anchorErr || !anchorRow) return NextResponse.json({ error: "Visit not found" }, { status: 404 });
   const anchor = anchorRow as VisitRow;
 
+  // Guard against clocking out another crew's visit — RLS on crm_job_visits
+  // only checks org_id, not crew_id, so a caller who obtains another crew's
+  // visitId could otherwise still act on it. See assertCallerOwnsVisit().
+  if (!(await assertCallerOwnsVisit(supabase, user.id, anchor.org_id, anchor.crew_id))) {
+    return NextResponse.json({ error: "Not assigned to this visit" }, { status: 403 });
+  }
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: candidateRows, error: candErr } = await (supabase as any)
     .from("crm_job_visits")
@@ -102,10 +111,22 @@ export async function POST(
   // A crew/date reassignment mid-stop changes the stop key for one visit —
   // also catch anything that was clocked in at the exact same instant as the
   // anchor so it isn't orphaned in "in_progress" forever.
+  //
+  // Security: stopKeyForVisit encodes crew_id, so an anchorKey match already
+  // guarantees r.crew_id === anchor.crew_id (whose ownership was verified
+  // above). The clocked_in_at fallback clause does NOT carry that guarantee —
+  // a mid-stop reassignment can leave a row with a different crew_id than the
+  // caller's — so it is intersected with an explicit crew_id check. This
+  // means a visit reassigned away from the caller's crew is no longer swept
+  // into this batch clock-out (it stays "in_progress" for the office to
+  // resolve) rather than letting the caller mutate another crew's visit.
   const allRows = candidateRows as VisitRow[];
   const stopRows = allRows.filter((r) =>
-    stopKeyForVisit(toStopKeyInput(r)) === anchorKey
-    || (anchor.clocked_in_at && r.clocked_in_at === anchor.clocked_in_at)
+    r.crew_id === anchor.crew_id
+    && (
+      stopKeyForVisit(toStopKeyInput(r)) === anchorKey
+      || (anchor.clocked_in_at && r.clocked_in_at === anchor.clocked_in_at)
+    )
   );
 
   // Already-completed siblings (e.g. an office user closed one out manually)

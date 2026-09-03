@@ -1,6 +1,6 @@
 import { Resend } from "resend";
 import { resolveBroadcastRecipients } from "@/lib/notify-shared";
-import { EMAIL_FROM } from "@/lib/email/send";
+import { EMAIL_FROM, escapeHtml } from "@/lib/email/send";
 
 // Notifies staff about CRM ticket events (created / assigned / commented).
 // Mirrors src/lib/estimate-client-notify.ts's shape: per-recipient pref
@@ -118,10 +118,17 @@ export function ticketLink(ticketId: string): string {
   return `${siteUrl}/crm/tickets?open=${ticketId}`;
 }
 
+// `heading` is always a hardcoded string literal from the call sites below —
+// never freeform data — so it's not escaped. `name` (a profile display name)
+// and `bodyHtml` (built by each caller, which is responsible for escaping
+// any freeform data it interpolates — e.g. ticket subject, commenter name,
+// comment body) both originate from user-controlled data and must be safe
+// before reaching here; escape `name` here since every caller passes it
+// through unescaped.
 function emailShell(heading: string, name: string | null, bodyHtml: string, ticketId: string): string {
   return `<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px 24px">
     <h2 style="margin:0 0 8px;font-size:20px;color:#0f172a">${heading}</h2>
-    <p style="margin:0 0 4px;color:#475569">Hi ${name ?? "there"},</p>
+    <p style="margin:0 0 4px;color:#475569">Hi ${name ? escapeHtml(name) : "there"},</p>
     ${bodyHtml}
     <a href="${ticketLink(ticketId)}" style="display:inline-block;padding:12px 24px;background:#60ab45;color:#fff;text-decoration:none;border-radius:6px;font-weight:600;margin-top:16px">View Ticket</a>
   </div>`;
@@ -161,7 +168,7 @@ export async function notifyStaffOfNewTicket(
     emailHtml: (name) => emailShell(
       "New Ticket",
       name,
-      `<p style="margin:0 0 24px;color:#475569">A new ticket was created: <strong>${label}</strong>.</p>`,
+      `<p style="margin:0 0 24px;color:#475569">A new ticket was created: <strong>${escapeHtml(label)}</strong>.</p>`,
       ticketId
     ),
   });
@@ -196,7 +203,7 @@ export async function notifyTicketAssigned(
     emailHtml: (name) => emailShell(
       "Ticket Assigned to You",
       name,
-      `<p style="margin:0 0 24px;color:#475569">You were assigned ticket <strong>${label}</strong>.</p>`,
+      `<p style="margin:0 0 24px;color:#475569">You were assigned ticket <strong>${escapeHtml(label)}</strong>.</p>`,
       ticketId
     ),
   });
@@ -230,8 +237,8 @@ export async function notifyTicketComment(
     emailHtml: (name) => emailShell(
       "New Comment on Your Ticket",
       name,
-      `<p style="margin:0 0 8px;color:#475569">${commenterName} commented on <strong>${label}</strong>:</p>
-       <blockquote style="margin:0 0 24px;padding:12px 16px;background:#f8fafc;border-left:4px solid #e2e8f0;border-radius:4px;color:#374151;font-style:italic">${snippet}</blockquote>`,
+      `<p style="margin:0 0 8px;color:#475569">${escapeHtml(commenterName)} commented on <strong>${escapeHtml(label)}</strong>:</p>
+       <blockquote style="margin:0 0 24px;padding:12px 16px;background:#f8fafc;border-left:4px solid #e2e8f0;border-radius:4px;color:#374151;font-style:italic">${escapeHtml(snippet)}</blockquote>`,
       ticketId
     ),
   });

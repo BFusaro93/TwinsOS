@@ -87,6 +87,7 @@ function PackageServiceRow({
   const [minDays, setMinDays] = useState(svc.minDays != null ? String(svc.minDays) : "");
   const [defaultBHrs, setDefaultBHrs] = useState(svc.defaultBHrs != null ? String(svc.defaultBHrs) : "");
   const [defaultRate, setDefaultRate] = useState(svc.defaultRateCents != null ? (svc.defaultRateCents / 100).toFixed(2) : "");
+  const [visitsIncluded, setVisitsIncluded] = useState(String(svc.visitsIncluded ?? 1));
 
   // Sync local drafts when the underlying row changes from elsewhere (e.g. after save)
   useEffect(() => {
@@ -97,11 +98,12 @@ function PackageServiceRow({
     setMinDays(svc.minDays != null ? String(svc.minDays) : "");
     setDefaultBHrs(svc.defaultBHrs != null ? String(svc.defaultBHrs) : "");
     setDefaultRate(svc.defaultRateCents != null ? (svc.defaultRateCents / 100).toFixed(2) : "");
+    setVisitsIncluded(String(svc.visitsIncluded ?? 1));
   }, [svc]);
 
   function save(overrides: Partial<{
     name: string; serviceId: string; startDate: string; endDate: string;
-    minDays: string; defaultBHrs: string; defaultRate: string;
+    minDays: string; defaultBHrs: string; defaultRate: string; visitsIncluded: string;
   }>) {
     const next = {
       name: overrides.name ?? name,
@@ -111,6 +113,7 @@ function PackageServiceRow({
       minDays: overrides.minDays ?? minDays,
       defaultBHrs: overrides.defaultBHrs ?? defaultBHrs,
       defaultRate: overrides.defaultRate ?? defaultRate,
+      visitsIncluded: overrides.visitsIncluded ?? visitsIncluded,
     };
     const selected = services.find((s) => s.id === next.serviceId);
     upsertSvc.mutate({
@@ -120,7 +123,7 @@ function PackageServiceRow({
         name: next.name.trim() || null,
         service_id: next.serviceId || null,
         service_name: selected?.name ?? svc.serviceName,
-        visits_included: svc.visitsIncluded,
+        visits_included: parseInt(next.visitsIncluded) || 1,
         sort_order: svc.sortOrder,
         start_date: next.startDate || null,
         end_date: next.endDate || null,
@@ -160,6 +163,11 @@ function PackageServiceRow({
         <Input type="date" value={endDate}
           onChange={(e) => { setEndDate(e.target.value); save({ endDate: e.target.value }); }}
           className={cellInput} />
+      </td>
+      <td className="px-1 py-1.5">
+        <Input type="number" min="1" value={visitsIncluded}
+          onChange={(e) => setVisitsIncluded(e.target.value)} onBlur={() => save({ visitsIncluded })}
+          className={`${cellInput} text-center`} />
       </td>
       <td className="px-1 py-1.5">
         <Input type="number" min="0" value={minDays}
@@ -240,7 +248,9 @@ export function PackageDialog({ open, packageId, onClose }: Props) {
       description: form.description.trim() || null,
       description_on_estimate: form.descriptionOnEstimate.trim() || null,
       invoice_description: form.invoiceDescription.trim() || null,
-      visits_per_season: pkg ? (pkg.services?.length || 1) : (parseInt(form.visitsPerSeason) || 1),
+      visits_per_season: pkg
+        ? (pkg.services?.reduce((sum, s) => sum + (s.visitsIncluded || 1), 0) || 1)
+        : (parseInt(form.visitsPerSeason) || 1),
       is_active: form.isActive,
     };
     try {
@@ -347,7 +357,7 @@ export function PackageDialog({ open, packageId, onClose }: Props) {
                 <Label className="text-xs text-slate-500">Visits per Season</Label>
                 {pkg ? (
                   <p className="text-sm font-semibold text-slate-800 mt-1.5">
-                    {pkg.services?.length ?? 0} <span className="font-normal text-slate-400">(from Services tab)</span>
+                    {pkg.services?.reduce((sum, s) => sum + (s.visitsIncluded || 1), 0) ?? 0} <span className="font-normal text-slate-400">(from Services tab)</span>
                   </p>
                 ) : (
                   <p className="text-xs text-slate-400 mt-1.5">Add services after creating the package</p>
@@ -380,6 +390,7 @@ export function PackageDialog({ open, packageId, onClose }: Props) {
                     <th className="px-3 py-2.5 text-left">Service</th>
                     <th className="px-3 py-2.5 text-left">Start</th>
                     <th className="px-3 py-2.5 text-left">End</th>
+                    <th className="px-3 py-2.5 text-center w-20">Visits Included</th>
                     <th className="px-3 py-2.5 text-center w-20">Min Days</th>
                     <th className="px-3 py-2.5 text-center w-24">Def. B. Hrs</th>
                     <th className="px-3 py-2.5 text-center w-24">Def. Rate</th>
@@ -389,7 +400,7 @@ export function PackageDialog({ open, packageId, onClose }: Props) {
                 </thead>
                 <tbody>
                   {(pkg.services ?? []).length === 0 && (
-                    <tr><td colSpan={9} className="px-4 py-6 text-center text-slate-400 text-sm">No visits added yet.</td></tr>
+                    <tr><td colSpan={10} className="px-4 py-6 text-center text-slate-400 text-sm">No visits added yet.</td></tr>
                   )}
                   {(pkg.services ?? []).map((s) => (
                     <PackageServiceRow

@@ -174,6 +174,10 @@ export interface ClientActivity {
   createdBy: string | null;
   // joined
   createdByName?: string | null;
+  // Set when this row was rolled up from a child account into a parent's
+  // unified timeline — the child client's display name, or null for the
+  // parent's own activity.
+  sourceClientName?: string | null;
 }
 
 // ── form schemas ──────────────────────────────────────────────────────────────

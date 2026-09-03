@@ -37,11 +37,31 @@ export function useAddMeterReading() {
         notes: input.notes,
       }).select().single();
       if (error) throw error;
+
+      // meters.current_value / last_reading_at are denormalized off the
+      // most recent reading by reading_at, not off whichever reading was
+      // most recently inserted. A backdated reading (readingAt earlier than
+      // an existing reading) must NOT clobber the meter's current value —
+      // recompute from the actual latest remaining reading, same pattern as
+      // useDeleteMeterReading below.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (supabase as any).from("meters").update({
-        current_value: input.value,
-        last_reading_at: input.readingAt,
-      }).eq("id", input.meterId);
+      const db = supabase as any;
+      const { data: latest, error: latestError } = await db
+        .from("meter_readings")
+        .select("value, reading_at")
+        .eq("meter_id", input.meterId)
+        .is("deleted_at", null)
+        .order("reading_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (latestError) throw latestError;
+      if (latest) {
+        const { error: updateError } = await db
+          .from("meters")
+          .update({ current_value: latest.value, last_reading_at: latest.reading_at })
+          .eq("id", input.meterId);
+        if (updateError) throw updateError;
+      }
       return mapMeterReading(data);
     },
     onSuccess: (_, input) => {

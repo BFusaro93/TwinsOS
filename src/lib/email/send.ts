@@ -13,7 +13,7 @@ export const EMAIL_FROM_EQUIPT = "Equipt <noreply@landscapt.com>";
  * markup/script into an email actually delivered to a real recipient (same
  * class of bug fixed for form-submission notification emails).
  */
-function escapeHtml(text: string): string {
+export function escapeHtml(text: string): string {
   return text
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
@@ -46,11 +46,23 @@ interface OrgForMergeVars {
   addressPhone?: string | null;
 }
 
-/** Shared merge vars available to any client-facing email (individual or bulk). */
+/**
+ * Shared merge vars available to any client-facing email (individual or bulk).
+ *
+ * Pass `{ escape: false }` when the resolved output is going somewhere that
+ * is never rendered as HTML (e.g. a plain-text email `subject` line) — HTML-
+ * escaping there is not just unnecessary, it's wrong: it leaks literal
+ * `&amp;`/`&#39;` etc. into text the recipient reads verbatim. Defaults to
+ * `true` (escaped) because the common case is substituting into an HTML body.
+ */
 export function buildClientMergeVars(
   client: ClientForMergeVars,
-  org: OrgForMergeVars
+  org: OrgForMergeVars,
+  opts: { escape?: boolean } = {}
 ): Record<string, string> {
+  const shouldEscape = opts.escape ?? true;
+  const esc = shouldEscape ? escapeHtml : (text: string) => text;
+
   // Compute names/split from the raw value, then escape only at the point
   // of exposure below — escaping first would corrupt the split (e.g. an
   // embedded "&" becoming "&amp;" before the space-split runs).
@@ -60,11 +72,11 @@ export function buildClientMergeVars(
   const balance = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" })
     .format((client.balanceOutstandingCents ?? 0) / 100);
 
-  const displayName = escapeHtml(rawDisplayName);
-  const firstName = escapeHtml(rawFirstName);
-  const lastName = escapeHtml(rawLastName);
-  const companyName = escapeHtml(org.name ?? "Your Service Provider");
-  const companyPhone = escapeHtml(org.addressPhone ?? "");
+  const displayName = esc(rawDisplayName);
+  const firstName = esc(rawFirstName);
+  const lastName = esc(rawLastName);
+  const companyName = esc(org.name ?? "Your Service Provider");
+  const companyPhone = esc(org.addressPhone ?? "");
 
   return {
     "[clientfirstname]": firstName,

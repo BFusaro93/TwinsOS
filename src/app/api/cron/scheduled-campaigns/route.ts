@@ -3,6 +3,11 @@ import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/supabase";
 import { sendCampaignEmails } from "@/lib/campaigns/send-campaign";
 
+// This loops over every due campaign (potentially several, each with its own
+// full recipient list) in one invocation — extend the ceiling so it has room
+// to finish. See the manual-send route for the same setting and rationale.
+export const maxDuration = 300;
+
 /**
  * GET /api/cron/scheduled-campaigns — called hourly by Vercel Cron.
  *

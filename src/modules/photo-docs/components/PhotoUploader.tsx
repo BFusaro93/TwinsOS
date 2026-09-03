@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
-import { usePhotoUpload } from "../hooks/usePhotoUpload";
+import { usePhotoUpload, MAX_PHOTO_UPLOAD_BYTES, ALLOWED_PHOTO_UPLOAD_MIME_TYPES } from "../hooks/usePhotoUpload";
 import { usePhotoAccess } from "../hooks/usePhotoAccess";
 import { fileToDataUrl } from "../lib/imageCompression";
 import { PHOTO_TAGS } from "../types/photo.types";
@@ -41,6 +41,7 @@ export function PhotoUploader({ projectId }: PhotoUploaderProps) {
   const [pending, setPending] = useState<PendingFile[]>([]);
   const [globalBeforeAfter, setGlobalBeforeAfter] = useState<BeforeAfterFlag>("none");
   const [globalTags, setGlobalTags] = useState<string[]>([]);
+  const [rejectedFiles, setRejectedFiles] = useState<string[]>([]);
 
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const photoInputRef  = useRef<HTMLInputElement>(null);
@@ -51,8 +52,27 @@ export function PhotoUploader({ projectId }: PhotoUploaderProps) {
 
   const addFiles = useCallback(async (files: File[]) => {
     if (!files.length) return;
+
+    // Validate size/type up front so the user gets an immediate, specific
+    // error instead of a generic Storage API rejection at upload time.
+    // Limits must match the job-photos-* bucket config (see
+    // usePhotoUpload.ts and the migration it references).
+    const accepted: File[] = [];
+    const rejected: string[] = [];
+    for (const file of files) {
+      if (file.size > MAX_PHOTO_UPLOAD_BYTES) {
+        rejected.push(`${file.name} (too large — max ${MAX_PHOTO_UPLOAD_BYTES / (1024 * 1024)}MB)`);
+      } else if (file.type && !ALLOWED_PHOTO_UPLOAD_MIME_TYPES.includes(file.type)) {
+        rejected.push(`${file.name} (unsupported file type)`);
+      } else {
+        accepted.push(file);
+      }
+    }
+    setRejectedFiles(rejected);
+    if (!accepted.length) return;
+
     const newPending = await Promise.all(
-      files.map(async (file) => {
+      accepted.map(async (file) => {
         const type = getFileType(file);
         return {
           file,
@@ -168,6 +188,18 @@ export function PhotoUploader({ projectId }: PhotoUploaderProps) {
       <input ref={photoInputRef}  type="file" accept="image/*" multiple className="hidden" onChange={handleInput(photoInputRef)} />
       <input ref={videoInputRef}  type="file" accept="video/*" multiple className="hidden" onChange={handleInput(videoInputRef)} />
       <input ref={fileInputRef}   type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv" multiple className="hidden" onChange={handleInput(fileInputRef)} />
+
+      {rejectedFiles.length > 0 && (
+        <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-700">
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+          <div>
+            <p className="font-medium">Some files couldn&apos;t be added:</p>
+            <ul className="mt-1 list-disc pl-4">
+              {rejectedFiles.map((r) => <li key={r}>{r}</li>)}
+            </ul>
+          </div>
+        </div>
+      )}
 
       {/* Global defaults (images only) */}
       {pending.length === 0 && (

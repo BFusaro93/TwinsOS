@@ -427,6 +427,15 @@ function LaborSection({ workOrderId }: { workOrderId: string }) {
     // explain why the dialog just did nothing.
     if (!form.technicianName || Number.isNaN(hours) || Number.isNaN(rate)) return;
 
+    // Reject negative hours/rate — e.g. -10 hours * $50/hr would silently
+    // record a -$500 labor line with no validation error to explain why.
+    if (hours < 0 || rate < 0) {
+      toast.error("Invalid labor entry", {
+        description: "Hours and hourly rate cannot be negative.",
+      });
+      return;
+    }
+
     if (isEditing && editingId) {
       updateLabor(
         { id: editingId, workOrderId, technicianName: form.technicianName, description: form.description, hours, hourlyRate: rate },
@@ -440,7 +449,12 @@ function LaborSection({ workOrderId }: { workOrderId: string }) {
     }
   }
 
-  const total = items.reduce((sum, l) => sum + l.hours * l.hourlyRate, 0);
+  // Round each line's cost to the nearest whole cent before summing —
+  // decimal hours times integer-cents hourlyRate can produce fractional
+  // cents (e.g. 1.33 * 7550 = 10041.5), and formatCurrency only rounds at
+  // display time, so an unrounded per-line figure and this total could
+  // disagree by ±1 cent.
+  const total = items.reduce((sum, l) => sum + Math.round(l.hours * l.hourlyRate), 0);
 
   return (
     <div className="flex flex-col gap-3">
@@ -476,7 +490,7 @@ function LaborSection({ workOrderId }: { workOrderId: string }) {
                   <td className="px-3 py-2 text-right text-slate-700">{l.hours}</td>
                   <td className="px-3 py-2 text-right text-slate-700">{formatCurrency(l.hourlyRate)}</td>
                   <td className="px-3 py-2 text-right font-medium text-slate-900">
-                    {formatCurrency(l.hours * l.hourlyRate)}
+                    {formatCurrency(Math.round(l.hours * l.hourlyRate))}
                   </td>
                   <RowActions
                     onEdit={() => openEdit(l)}
@@ -614,6 +628,15 @@ function VendorSection({ workOrderId }: { workOrderId: string }) {
     // $0 charge (e.g. a warranty repair), with no toast or error to explain
     // why the dialog just did nothing.
     if (!form.vendorName || Number.isNaN(costCents)) return;
+
+    // Reject a negative cost — silently recording a negative vendor charge
+    // would understate the work order's total cost with no validation error.
+    if (costCents < 0) {
+      toast.error("Invalid vendor charge", {
+        description: "Cost cannot be negative.",
+      });
+      return;
+    }
 
     if (isEditing && editingId) {
       updateCharge(
@@ -798,7 +821,9 @@ function CostSummary({
   vendors: WOVendorCharge[];
 }) {
   const partsTotal = parts.reduce((s, p) => s + p.quantity * p.unitCost, 0);
-  const laborTotal = labor.reduce((s, l) => s + l.hours * l.hourlyRate, 0);
+  // See LaborSection's `total` above — round each line before summing so
+  // this total always agrees with the per-line figures shown in the Labor tab.
+  const laborTotal = labor.reduce((s, l) => s + Math.round(l.hours * l.hourlyRate), 0);
   const vendorTotal = vendors.reduce((s, v) => s + v.cost, 0);
   const grandTotal = partsTotal + laborTotal + vendorTotal;
 

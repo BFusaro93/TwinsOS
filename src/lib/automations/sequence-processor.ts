@@ -1,7 +1,7 @@
 import { resolveEmailStepContent, sendResolvedSequenceEmail, advanceEnrollmentPastStep } from "./sequence-email";
 import { resolveSmsStepContent, sendResolvedSequenceSms } from "./sequence-sms";
 import { notifyStaffOfNewTicket, notifyTicketAssigned } from "@/lib/ticket-notify";
-import { shouldStopSequence, logSequenceExecution, evaluateConditionSet } from "./sequence-enrollment";
+import { shouldStopSequence, logSequenceExecution, evaluateConditionSet, computeWaitFireAt } from "./sequence-enrollment";
 import type { ConditionField, ConditionOperator } from "@/types/crm-automations";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -76,20 +76,17 @@ export async function processDueEnrollment(
   const eventConfig = (currentEvent.config ?? {}) as Record<string, any>;
 
   if (currentEvent.event_type === "wait") {
+    // `currentEvent` here IS the due wait step (this branch is only reached
+    // when a wait becomes "current" — i.e. two or more `wait` steps are
+    // stacked back-to-back, since a single wait's delay is normally
+    // pre-consumed when *stepping into* it via computeWaitFireAt in
+    // enrollClientInSequence/advanceEnrollmentPastStep). So the delay for
+    // advancing past it must come from currentEvent's OWN config, not the
+    // event that follows it — using the next event's config here skipped
+    // this wait's delay entirely for any chain of 2+ consecutive waits.
     const nextPos = next_event_position + 1;
-    const nextEvent = (events ?? []).find((e: { position: number }) => e.position === nextPos);
-    let newFireAt = nowIso;
-    if (nextEvent?.event_type === "wait") {
-      const waitConfig = (nextEvent.config as Record<string, number>) ?? {};
-      const days = waitConfig.days ?? 0;
-      const hours = waitConfig.hours ?? 0;
-      const minutes = waitConfig.minutes ?? 0;
-      const d = new Date();
-      d.setDate(d.getDate() + days);
-      d.setHours(d.getHours() + hours);
-      d.setMinutes(d.getMinutes() + minutes);
-      newFireAt = d.toISOString();
-    }
+    const waitConfig = (currentEvent.config as Record<string, number>) ?? {};
+    const newFireAt = computeWaitFireAt(waitConfig).toISOString();
     await adminClient
       .from("crm_sequence_enrollments")
       .update({ next_event_position: nextPos, next_fire_at: newFireAt, updated_at: nowIso })

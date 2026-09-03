@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { adminClient, authenticateApiRequest } from "@/lib/api/auth";
-import { jsonError, parsePagination } from "@/lib/api/route-helpers";
+import { jsonError, jsonServerError, parsePagination } from "@/lib/api/route-helpers";
 import { CLIENT_SELECT, shapeClient } from "./shape";
 import { createClientSchema } from "./validation";
 
@@ -19,7 +19,7 @@ export async function GET(request: Request) {
     .order("created_at", { ascending: false })
     .range(offset, offset + limit - 1);
 
-  if (error) return jsonError(error.message, 500);
+  if (error) return jsonServerError("GET /api/v1/clients", error);
   return NextResponse.json({ data: (data ?? []).map(shapeClient), limit, offset });
 }
 
@@ -61,6 +61,6 @@ export async function POST(request: Request) {
     .select(CLIENT_SELECT)
     .single();
 
-  if (error || !data) return jsonError(error?.message ?? "create failed", 500);
+  if (error || !data) return jsonServerError("POST /api/v1/clients", error);
   return NextResponse.json(shapeClient(data), { status: 201 });
 }

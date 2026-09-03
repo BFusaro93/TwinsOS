@@ -764,11 +764,28 @@ export function SnowDispatchBoard() {
 
   async function advanceStatus(next: StormEventStatus) {
     if (!activeEvent) return;
+    // Client-side check first (fast feedback, matches the count of stops
+    // already loaded for this storm event) — the DB trigger
+    // (enforce_storm_event_completion_gate, see
+    // 20260902160000_snow_storm_completion_gate.sql) is the authoritative
+    // backstop in case this check is ever bypassed (stale visits list,
+    // direct write, future code path).
+    if (next === "complete") {
+      const openVisits = visits.filter(
+        (v) => v.status !== "completed" && v.status !== "skipped" && v.status !== "cancelled"
+      );
+      if (openVisits.length > 0) {
+        toast.error(
+          `${openVisits.length} stop${openVisits.length > 1 ? "s" : ""} still need to be completed or skipped before closing this storm event.`
+        );
+        return;
+      }
+    }
     try {
       await updateStormEvent({ id: activeEvent.id, patch: { dispatch_status: next } });
       toast.success(`Storm event marked ${next}`);
-    } catch {
-      toast.error("Failed to update status");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to update status");
     }
   }
 

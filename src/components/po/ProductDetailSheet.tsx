@@ -1,5 +1,6 @@
 "use client";
 
+import { toast } from "sonner";
 import {
   LineChart,
   Line,
@@ -729,6 +730,8 @@ export function ProductDetailSheet({ product, open, onOpenChange }: ProductDetai
                     setDeleteConfirmOpen(false);
                     onOpenChange(false);
                   },
+                  onError: (error) =>
+                    toast.error(error instanceof Error ? error.message : "Failed to delete product"),
                 })
               }
             >

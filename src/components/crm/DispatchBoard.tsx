@@ -428,6 +428,15 @@ function JobDetailSheet({
   const amt = visit.rateCents ?? rateFallbackCents ?? 0;
 
   async function handleSave() {
+    // A blank/invalid men-count parses to NaN, and `NaN || 0` would silently
+    // coerce that to 0 — which then corrupts effectiveCrewSize-based labor
+    // cost/hours math downstream. Block the save instead, same as the
+    // Start/End time validation above.
+    const parsedMenCount = parseInt(menCount, 10);
+    if (!Number.isInteger(parsedMenCount) || parsedMenCount <= 0) {
+      toast.error("Men count must be a valid positive number");
+      return;
+    }
     const updates: Parameters<typeof updateVisit>[0]["updates"] = {
       status,
       sub_status: subStatus || null,
@@ -436,7 +445,7 @@ function JobDetailSheet({
       end_time: endTime || null,
       actual_hours: actualHours ? parseFloat(actualHours) : null,
       budgeted_hours: budgetedHoursInput ? parseFloat(budgetedHoursInput) : null,
-      men_count: parseInt(menCount) || 0,
+      men_count: parsedMenCount,
       qty: qty ? parseFloat(qty) : null,
       rate_cents: rateCents ? Math.round(parseFloat(rateCents) * 100) : null,
       notes_to_client: notesToClient || null,
@@ -2534,7 +2543,7 @@ export function DispatchBoard() {
   const qc = useQueryClient();
   const createVisit = useCreateVisit();
   const { mutateAsync: returnToWaitingList } = useReturnVisitToWaitingList();
-  const { matches: nearbyMatches, loading: nearbyLoading, error: nearbyError, findNearby } = useNearbyWaitingListJobs(3);
+  const { matches: nearbyMatches, loading: nearbyLoading, error: nearbyError, findNearby } = useNearbyWaitingListJobs(3, selectedDate);
 
   // Derived fresh from the live query every render (not stored as its own
   // state) so the sheet/dialog can never go stale relative to the table.

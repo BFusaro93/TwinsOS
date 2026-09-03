@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { adminClient, authenticateApiRequest } from "@/lib/api/auth";
-import { jsonError, parsePagination } from "@/lib/api/route-helpers";
+import { jsonError, jsonServerError, parsePagination } from "@/lib/api/route-helpers";
 import { PM_SCHEDULE_SELECT, shapePmSchedule } from "./shape";
 import { createPmScheduleSchema } from "./validation";
 
@@ -19,7 +19,7 @@ export async function GET(request: Request) {
     .order("next_due_date", { ascending: true })
     .range(offset, offset + limit - 1);
 
-  if (error) return jsonError(error.message, 500);
+  if (error) return jsonServerError("GET /api/v1/pm-schedules", error);
   return NextResponse.json({ data: (data ?? []).map(shapePmSchedule), limit, offset });
 }
 
@@ -54,6 +54,6 @@ export async function POST(request: Request) {
     .select(PM_SCHEDULE_SELECT)
     .single();
 
-  if (error || !data) return jsonError(error?.message ?? "create failed", 500);
+  if (error || !data) return jsonServerError("POST /api/v1/pm-schedules", error);
   return NextResponse.json(shapePmSchedule(data), { status: 201 });
 }

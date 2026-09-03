@@ -6,6 +6,26 @@ import { fireAutomationTrigger } from "@/lib/automations/fire-trigger-client";
 import { fireQuickBooksInvoiceSync, fireQuickBooksPaymentSync } from "@/lib/integrations/quickbooks-client";
 import type { CRMInvoice, InvoiceLineItem, CRMPayment } from "@/types/crm-invoices";
 
+// ── locked-invoice error handling ───────────────────────────────────────────────
+
+// The crm_invoices / crm_invoice_line_items triggers added in
+// 20260901130000_crm_invoice_lock_server_enforcement.sql raise a plain
+// Postgres exception when a financial column or line item is written while
+// the invoice is locked. Postgrest surfaces that RAISE EXCEPTION message
+// verbatim as error.message, so detect it here and re-throw a normalized
+// Error — callers that only show `err.message` (or a generic toast) get a
+// clear, user-facing reason instead of depending on the raw driver text.
+const LOCKED_INVOICE_MESSAGE = "This invoice is locked and cannot be edited. Unlock it first.";
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function throwIfLockedInvoiceError(error: any): never {
+  const message: string = error?.message ?? "";
+  if (message.toLowerCase().includes("locked and cannot be edited")) {
+    throw new Error(LOCKED_INVOICE_MESSAGE);
+  }
+  throw error;
+}
+
 // ── mappers ───────────────────────────────────────────────────────────────────
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -851,13 +871,13 @@ export function useUpsertInvoiceLineItem() {
           .from("crm_invoice_line_items")
           .update(patch)
           .eq("id", id);
-        if (error) throw error;
+        if (error) throwIfLockedInvoiceError(error);
       } else {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { error } = await (supabase as any)
           .from("crm_invoice_line_items")
           .insert({ invoice_id: invoiceId, ...item });
-        if (error) throw error;
+        if (error) throwIfLockedInvoiceError(error);
       }
     },
     onSuccess: (_d, vars) =>
@@ -874,7 +894,7 @@ export async function deleteInvoiceLineItemAndRecalc(supabase: any, id: string, 
     .from("crm_invoice_line_items")
     .delete()
     .eq("id", id);
-  if (error) throw error;
+  if (error) throwIfLockedInvoiceError(error);
 
   // Recalculate invoice totals from remaining line items
   const { data: inv } = await supabase
@@ -998,7 +1018,7 @@ export function useUpdateInvoiceFinancials() {
       if (terms !== undefined) patch.terms = terms;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any).from("crm_invoices").update(patch).eq("id", id);
-      if (error) throw error;
+      if (error) throwIfLockedInvoiceError(error);
 
       // Sync client's outstanding balance
       if (inv?.client_id) {
@@ -1339,7 +1359,12 @@ export function useSetInvoiceLock() {
         .from("crm_invoices")
         .update({ locked, locked_at: locked ? new Date().toISOString() : null })
         .eq("id", id);
-      if (error) throw error;
+      // Toggling `locked` is always allowed by the trigger — this can only
+      // fail here if a concurrent request changed a financial column
+      // between this mutation reading invoice state and this write landing.
+      // Surfacing the same clear message keeps the UI honest about why the
+      // lock/unlock didn't take instead of showing a raw driver error.
+      if (error) throwIfLockedInvoiceError(error);
     },
     onSuccess: (_d, vars) => {
       qc.invalidateQueries({ queryKey: ["crm-invoices", "detail", vars.id] });

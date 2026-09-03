@@ -1,5 +1,6 @@
 import { Resend } from "resend";
 import { KNOWN_MERGE_TAG_KEYS } from "@/lib/utils/document-template-renderer";
+import { computeWaitFireAt } from "./sequence-enrollment";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = any;
@@ -279,10 +280,7 @@ export async function advanceEnrollmentPastStep(
     const days = waitConfig.days ?? 0;
     const hours = waitConfig.hours ?? 0;
     const minutes = waitConfig.minutes ?? 0;
-    const d = new Date();
-    d.setDate(d.getDate() + days);
-    d.setHours(d.getHours() + hours);
-    d.setMinutes(d.getMinutes() + minutes);
+    const d = computeWaitFireAt(waitConfig);
     await supabase
       .from("crm_sequence_enrollments")
       .update({ next_event_position: nextEvent.position + 1, next_fire_at: d.toISOString(), updated_at: params.nowIso })
