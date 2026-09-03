@@ -12,31 +12,6 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "14.5"
   }
-  graphql_public: {
-    Tables: {
-      [_ in never]: never
-    }
-    Views: {
-      [_ in never]: never
-    }
-    Functions: {
-      graphql: {
-        Args: {
-          extensions?: Json
-          operationName?: string
-          query?: string
-          variables?: Json
-        }
-        Returns: Json
-      }
-    }
-    Enums: {
-      [_ in never]: never
-    }
-    CompositeTypes: {
-      [_ in never]: never
-    }
-  }
   public: {
     Tables: {
       api_key_rate_limits: {
@@ -651,6 +626,24 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      auth_rate_limit_counters: {
+        Row: {
+          count: number
+          key: string
+          window_start: string
+        }
+        Insert: {
+          count?: number
+          key: string
+          window_start: string
+        }
+        Update: {
+          count?: number
+          key?: string
+          window_start?: string
+        }
+        Relationships: []
       }
       automations: {
         Row: {
@@ -5072,6 +5065,27 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "crm_job_visits_assigned_employee_id_fkey"
+            columns: ["assigned_employee_id"]
+            isOneToOne: false
+            referencedRelation: "crm_employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_job_visits_assigned_employee_id_fkey"
+            columns: ["assigned_employee_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_job_visits_assigned_employee_id_fkey"
+            columns: ["assigned_employee_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_sales_rep_month"
+            referencedColumns: ["employee_id"]
+          },
+          {
             foreignKeyName: "crm_job_visits_client_id_fkey"
             columns: ["client_id"]
             isOneToOne: false
@@ -7750,6 +7764,35 @@ export type Database = {
           },
         ]
       }
+      entity_number_counters: {
+        Row: {
+          count: number
+          entity_type: string
+          org_id: string
+          period: string
+        }
+        Insert: {
+          count?: number
+          entity_type: string
+          org_id: string
+          period: string
+        }
+        Update: {
+          count?: number
+          entity_type?: string
+          org_id?: string
+          period?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "entity_number_counters_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       estimate_change_requests: {
         Row: {
           client_id: string | null
@@ -9899,6 +9942,135 @@ export type Database = {
           },
         ]
       }
+      org_sms_registrations: {
+        Row: {
+          business_address: Json | null
+          business_industry: string | null
+          business_regions_of_operation: string | null
+          business_type: string | null
+          business_website: string | null
+          contact_email: string | null
+          contact_first_name: string | null
+          contact_last_name: string | null
+          contact_phone: string | null
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          ein: string | null
+          id: string
+          last_synced_at: string | null
+          legal_business_name: string | null
+          opt_in_checkbox_label: string | null
+          opt_in_website_url: string | null
+          org_id: string
+          status: string
+          support_email: string | null
+          support_phone: string | null
+          twilio_api_key_sid: string | null
+          twilio_api_secret_vault_id: string | null
+          twilio_brand_failure_reason: string | null
+          twilio_brand_sid: string | null
+          twilio_campaign_failure_reason: string | null
+          twilio_campaign_sid: string | null
+          twilio_customer_profile_sid: string | null
+          twilio_messaging_service_sid: string | null
+          twilio_phone_number: string | null
+          twilio_phone_number_sid: string | null
+          twilio_subaccount_sid: string | null
+          updated_at: string
+          verbal_opt_in_script: string | null
+        }
+        Insert: {
+          business_address?: Json | null
+          business_industry?: string | null
+          business_regions_of_operation?: string | null
+          business_type?: string | null
+          business_website?: string | null
+          contact_email?: string | null
+          contact_first_name?: string | null
+          contact_last_name?: string | null
+          contact_phone?: string | null
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          ein?: string | null
+          id?: string
+          last_synced_at?: string | null
+          legal_business_name?: string | null
+          opt_in_checkbox_label?: string | null
+          opt_in_website_url?: string | null
+          org_id: string
+          status?: string
+          support_email?: string | null
+          support_phone?: string | null
+          twilio_api_key_sid?: string | null
+          twilio_api_secret_vault_id?: string | null
+          twilio_brand_failure_reason?: string | null
+          twilio_brand_sid?: string | null
+          twilio_campaign_failure_reason?: string | null
+          twilio_campaign_sid?: string | null
+          twilio_customer_profile_sid?: string | null
+          twilio_messaging_service_sid?: string | null
+          twilio_phone_number?: string | null
+          twilio_phone_number_sid?: string | null
+          twilio_subaccount_sid?: string | null
+          updated_at?: string
+          verbal_opt_in_script?: string | null
+        }
+        Update: {
+          business_address?: Json | null
+          business_industry?: string | null
+          business_regions_of_operation?: string | null
+          business_type?: string | null
+          business_website?: string | null
+          contact_email?: string | null
+          contact_first_name?: string | null
+          contact_last_name?: string | null
+          contact_phone?: string | null
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          ein?: string | null
+          id?: string
+          last_synced_at?: string | null
+          legal_business_name?: string | null
+          opt_in_checkbox_label?: string | null
+          opt_in_website_url?: string | null
+          org_id?: string
+          status?: string
+          support_email?: string | null
+          support_phone?: string | null
+          twilio_api_key_sid?: string | null
+          twilio_api_secret_vault_id?: string | null
+          twilio_brand_failure_reason?: string | null
+          twilio_brand_sid?: string | null
+          twilio_campaign_failure_reason?: string | null
+          twilio_campaign_sid?: string | null
+          twilio_customer_profile_sid?: string | null
+          twilio_messaging_service_sid?: string | null
+          twilio_phone_number?: string | null
+          twilio_phone_number_sid?: string | null
+          twilio_subaccount_sid?: string | null
+          updated_at?: string
+          verbal_opt_in_script?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "org_sms_registrations_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "org_sms_registrations_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: true
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       organization_addons: {
         Row: {
           addon_key: string
@@ -10767,6 +10939,27 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "pm_schedules_assigned_to_id_fkey"
+            columns: ["assigned_to_id"]
+            isOneToOne: false
+            referencedRelation: "crm_employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pm_schedules_assigned_to_id_fkey"
+            columns: ["assigned_to_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pm_schedules_assigned_to_id_fkey"
+            columns: ["assigned_to_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_sales_rep_month"
+            referencedColumns: ["employee_id"]
+          },
           {
             foreignKeyName: "pm_schedules_created_by_fkey"
             columns: ["created_by"]
@@ -13383,6 +13576,10 @@ export type Database = {
         }[]
       }
       assign_invoice_number: { Args: { p_invoice_id: string }; Returns: number }
+      auth_rate_limit_hit: {
+        Args: { p_key: string; p_limit: number; p_window_start: string }
+        Returns: boolean
+      }
       create_invoice_from_milestone: {
         Args: {
           p_client_id: string
@@ -13393,6 +13590,10 @@ export type Database = {
         Returns: {
           invoice_id: string
         }[]
+      }
+      create_secret_for_org_twilio_key: {
+        Args: { p_secret: string }
+        Returns: string
       }
       crm_recompute_job_actual_hours: {
         Args: { p_job_id: string }
@@ -13423,6 +13624,7 @@ export type Database = {
         Args: { p_job_product_id: string }
         Returns: undefined
       }
+      get_org_twilio_api_secret: { Args: { p_org_id: string }; Returns: string }
       has_settings_permission: { Args: { p_key: string }; Returns: boolean }
       increment_api_key_rate_limit: {
         Args: { p_api_key_id: string; p_window_start: string }
@@ -13460,12 +13662,30 @@ export type Database = {
       my_org_id: { Args: never; Returns: string }
       my_role: { Args: never; Returns: string }
       next_damage_case_number: { Args: never; Returns: string }
+      next_entity_number: {
+        Args: {
+          p_entity_type: string
+          p_org_id_override?: string
+          p_prefix: string
+        }
+        Returns: string
+      }
+      next_po_number: { Args: { p_org_id_override?: string }; Returns: string }
+      next_requisition_number: {
+        Args: { p_org_id_override?: string }
+        Returns: string
+      }
+      next_work_order_number: {
+        Args: { p_org_id_override?: string }
+        Returns: string
+      }
       receive_part_quantity: {
         Args: {
           p_cost_method: string
           p_layer_unit_cost: number
           p_org_id: string
           p_part_id: string
+          p_po_line_item_id?: string
           p_po_number: string
           p_quantity: number
           p_received_at: string
@@ -13478,6 +13698,7 @@ export type Database = {
           p_layer_quantity: number
           p_layer_unit_cost: number
           p_org_id: string
+          p_po_line_item_id?: string
           p_po_number: string
           p_product_id: string
           p_received_at: string
@@ -13535,12 +13756,12 @@ export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -13564,11 +13785,11 @@ export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -13589,11 +13810,11 @@ export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -13614,11 +13835,11 @@ export type Enums<
   DefaultSchemaEnumNameOrOptions extends
     | keyof DefaultSchema["Enums"]
     | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -13631,11 +13852,11 @@ export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never = never,
+    : never) = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -13645,9 +13866,6 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
-  graphql_public: {
-    Enums: {},
-  },
   public: {
     Enums: {},
   },

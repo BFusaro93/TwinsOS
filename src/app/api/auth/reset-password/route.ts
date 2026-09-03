@@ -9,6 +9,15 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { Resend } from "resend";
+import { checkAuthRateLimit, getClientIp } from "@/lib/auth/rate-limit";
+
+// This route generates the link + sends the email itself (see comment
+// below), which bypasses Supabase's own email rate limits entirely — so it
+// needs its own. Limited on both email (stop repeat spam to one inbox) and
+// IP (stop one client from enumerating/spamming many emails).
+const EMAIL_LIMIT = 5;
+const IP_LIMIT = 15;
+const WINDOW_SECONDS = 15 * 60;
 
 export async function POST(request: Request) {
   let body: { email?: string };
@@ -21,6 +30,18 @@ export async function POST(request: Request) {
   const { email } = body;
   if (!email) {
     return NextResponse.json({ error: "email is required" }, { status: 400 });
+  }
+
+  const ip = getClientIp(request);
+  const [emailOk, ipOk] = await Promise.all([
+    checkAuthRateLimit(`reset:email:${email.trim().toLowerCase()}`, EMAIL_LIMIT, WINDOW_SECONDS),
+    checkAuthRateLimit(`reset:ip:${ip}`, IP_LIMIT, WINDOW_SECONDS),
+  ]);
+
+  if (!emailOk || !ipOk) {
+    // Same "success" shape as every other path here — don't reveal that
+    // this request was throttled vs. the email just not existing.
+    return NextResponse.json({ success: true });
   }
 
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://landscapt.com";

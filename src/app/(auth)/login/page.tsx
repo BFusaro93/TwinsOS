@@ -6,7 +6,6 @@ import { BrandMark } from "@/components/shared/BrandMark";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { createClient } from "@/lib/supabase/client";
 
 /** Only ever follow `redirectTo` back into our own app — a same-origin
  *  relative path set by middleware.ts. Rejects absolute/protocol-relative
@@ -39,14 +38,15 @@ function LoginForm() {
     setLoading(true);
     setError(null);
 
-    const supabase = createClient();
-    const { error: authError } = await supabase.auth.signInWithPassword({
-      email,
-      password,
+    const res = await fetch("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password }),
     });
+    const data = await res.json();
 
-    if (authError) {
-      setError(authError.message);
+    if (!res.ok) {
+      setError(data.error ?? "Something went wrong. Please try again.");
       setLoading(false);
       return;
     }
