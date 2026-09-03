@@ -92,7 +92,7 @@ export function PricingSection({ showHeader = true }: { showHeader?: boolean }) 
                 ))}
               </div>
               <div className="mt-4 text-2xl font-extrabold text-[#0a0a0a]">{priceLabel ?? "Contact us"}</div>
-              <div className="mt-0.5 text-xs text-slate-500">{p.seatsIncluded} office/admin seats included</div>
+              <div className="mt-0.5 text-xs text-slate-500">{p.seatsIncluded} seats included</div>
               <div className="mt-0.5 text-xs text-slate-400">
                 +{(p.seatOverageCents / 100).toLocaleString(undefined, { style: "currency", currency: "USD" })}/seat after included seats
               </div>

@@ -51,7 +51,7 @@ export const PLAN_FEATURE_CATEGORIES: PlanFeatureCategory[] = [
       },
       {
         key: "seats",
-        label: "Office/admin seats included",
+        label: "Seats included",
         description: "Named logins for staff who need their own account and permissions.",
         highlight: true,
         values: { starter: "5", cmms: "5", growth: "10", enterprise: "20" },
@@ -242,7 +242,7 @@ export const PLAN_FEATURE_CATEGORIES: PlanFeatureCategory[] = [
         label: "Advanced reporting & job costing analytics",
         description: "Deeper financial and operational analysis beyond the standard report library.",
         highlight: false,
-        values: { starter: "Add-on", cmms: "Add-on", growth: "Add-on", enterprise: true },
+        values: { starter: "Add-on", cmms: false, growth: "Add-on", enterprise: true },
       },
       {
         key: "route_optimization",

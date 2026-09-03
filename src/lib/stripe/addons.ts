@@ -9,7 +9,10 @@ export const ADDON_CATALOG = [
   { key: "job_photos", label: "Job Photos", envVar: "STRIPE_PRICE_ADDON_JOB_PHOTOS", metered: false, modules: ["landscapt"] as PlatformModule[] },
   { key: "client_portal", label: "Client Portal", envVar: "STRIPE_PRICE_ADDON_CLIENT_PORTAL", metered: false, modules: ["landscapt"] as PlatformModule[] },
   { key: "route_optimization", label: "Route Optimization", envVar: "STRIPE_PRICE_ADDON_ROUTE_OPTIMIZATION", metered: false, modules: ["landscapt"] as PlatformModule[] },
-  { key: "advanced_reporting", label: "Advanced Reporting", envVar: "STRIPE_PRICE_ADDON_ADVANCED_REPORTING", metered: false, modules: ["landscapt", "equipt"] as PlatformModule[] },
+  // Equipt has no distinct "advanced" report tier — every CMMS report is
+  // already in the standard library, so this add-on has nothing to unlock
+  // for an Equipt-only org. Landscapt-only for now.
+  { key: "advanced_reporting", label: "Advanced Reporting", envVar: "STRIPE_PRICE_ADDON_ADVANCED_REPORTING", metered: false, modules: ["landscapt"] as PlatformModule[] },
   { key: "api_access", label: "API Access", envVar: "STRIPE_PRICE_ADDON_API_ACCESS", metered: false, modules: ["landscapt", "equipt"] as PlatformModule[] },
 ] as const;
 
