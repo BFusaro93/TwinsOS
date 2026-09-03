@@ -630,12 +630,14 @@ function MaterialsTab({ project }: { project: Project }) {
 const COST_TYPE_LABELS: Record<SubcontractCostType, string> = {
   materials: "Materials",
   labor: "Labor",
+  subcontractor: "Subcontractor",
   other: "Other",
 };
 
 const COST_TYPE_COLORS: Record<SubcontractCostType, string> = {
   materials: "border-orange-200 bg-orange-50 text-orange-700",
   labor: "border-blue-200 bg-blue-50 text-blue-700",
+  subcontractor: "border-purple-200 bg-purple-50 text-purple-700",
   other: "border-slate-200 bg-slate-50 text-slate-600",
 };
 
@@ -714,6 +716,7 @@ function SubcontractsTab({ project }: { project: Project }) {
 
   const materialTotal = costs.reduce((s, c) => c.costType === "materials" ? s + c.amount : s, 0);
   const laborTotal = costs.reduce((s, c) => c.costType === "labor" ? s + c.amount : s, 0);
+  const subcontractorTotal = costs.reduce((s, c) => c.costType === "subcontractor" ? s + c.amount : s, 0);
   const otherTotal = costs.reduce((s, c) => c.costType === "other" ? s + c.amount : s, 0);
   const grandTotal = costs.reduce((s, c) => s + c.amount, 0);
 
@@ -792,6 +795,11 @@ function SubcontractsTab({ project }: { project: Project }) {
                 <span>Labor</span><span>{formatCurrency(laborTotal)}</span>
               </div>
             )}
+            {subcontractorTotal > 0 && (
+              <div className="flex justify-between py-1 text-slate-600">
+                <span>Subcontractor</span><span>{formatCurrency(subcontractorTotal)}</span>
+              </div>
+            )}
             {otherTotal > 0 && (
               <div className="flex justify-between py-1 text-slate-600">
                 <span>Other</span><span>{formatCurrency(otherTotal)}</span>
@@ -851,6 +859,7 @@ function SubcontractsTab({ project }: { project: Project }) {
                 >
                   <option value="materials">Materials</option>
                   <option value="labor">Labor</option>
+                  <option value="subcontractor">Subcontractor</option>
                   <option value="other">Other</option>
                 </select>
               </div>

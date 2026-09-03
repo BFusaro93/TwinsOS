@@ -34,7 +34,7 @@ export interface Project extends BaseRecord {
   clientName?: string;
 }
 
-export type SubcontractCostType = "materials" | "labor" | "other";
+export type SubcontractCostType = "materials" | "labor" | "subcontractor" | "other";
 
 export interface ProjectSubcontractCost extends BaseRecord {
   projectId: string;
