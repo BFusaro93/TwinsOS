@@ -1,5 +1,6 @@
 import type { PrebuiltReportDef, ReportHeaderVisual } from "@/lib/reports/definition-types";
 import { dateRangeFilterDef, dateRangeFilters, eqFilter } from "@/lib/reports/helpers";
+import { isoNy, mondayOfYmd, nyDateParts, shiftYmd, ymd } from "@/lib/reports/ny-date";
 import type { AnalysisFilter } from "@/types/crm-reports";
 
 // ============================================================
@@ -9,26 +10,11 @@ import type { AnalysisFilter } from "@/types/crm-reports";
 // production reports pulled daily/weekly from the old SA setup. Each
 // variant is a fixed date window (not a date-range filter) grouped by
 // crew with per-crew subtotal rows, same shape as the legacy exports.
+//
+// All "today"/week/month boundaries are computed against the calendar date
+// as it appears in America/New_York (this org's operating timezone), not
+// the server's local/UTC date — see `src/lib/reports/ny-date.ts`.
 // ============================================================
-
-function iso(d: Date): string {
-  return d.toISOString().slice(0, 10);
-}
-
-/** Monday of the week containing `d` (local time, week starts Monday). */
-function mondayOf(d: Date): Date {
-  const day = d.getDay(); // 0 = Sun .. 6 = Sat
-  const diff = day === 0 ? -6 : 1 - day;
-  const monday = new Date(d);
-  monday.setDate(d.getDate() + diff);
-  return monday;
-}
-
-function addDays(d: Date, days: number): Date {
-  const copy = new Date(d);
-  copy.setDate(copy.getDate() + days);
-  return copy;
-}
 
 // Matches the color-coding on the legacy SA export: over-budget (actual ran
 // longer than budgeted, negative variance) in red, under-budget (finished
@@ -149,7 +135,7 @@ export const HOURS_VARIANCE_REPORTS: PrebuiltReportDef[] = [
     "Today",
     "Shows today's visits with budgeted vs actual hours and revenue, grouped by crew.",
     () => {
-      const today = iso(new Date());
+      const today = isoNy(new Date());
       return { from: today, to: today };
     }
   ),
@@ -158,7 +144,7 @@ export const HOURS_VARIANCE_REPORTS: PrebuiltReportDef[] = [
     "Yesterday",
     "Shows yesterday's visits with budgeted vs actual hours and revenue, grouped by crew.",
     () => {
-      const yesterday = iso(addDays(new Date(), -1));
+      const yesterday = shiftYmd(isoNy(new Date()), -1);
       return { from: yesterday, to: yesterday };
     }
   ),
@@ -167,8 +153,8 @@ export const HOURS_VARIANCE_REPORTS: PrebuiltReportDef[] = [
     "Week to Date",
     "Shows this week's visits (Monday through today) with budgeted vs actual hours and revenue, grouped by crew.",
     () => {
-      const now = new Date();
-      return { from: iso(mondayOf(now)), to: iso(now) };
+      const today = isoNy(new Date());
+      return { from: mondayOfYmd(today), to: today };
     }
   ),
   avbReport(
@@ -176,8 +162,8 @@ export const HOURS_VARIANCE_REPORTS: PrebuiltReportDef[] = [
     "Last Week",
     "Shows last week's visits (Monday through Sunday) with budgeted vs actual hours and revenue, grouped by crew.",
     () => {
-      const lastMonday = addDays(mondayOf(new Date()), -7);
-      return { from: iso(lastMonday), to: iso(addDays(lastMonday, 6)) };
+      const lastMonday = shiftYmd(mondayOfYmd(isoNy(new Date())), -7);
+      return { from: lastMonday, to: shiftYmd(lastMonday, 6) };
     }
   ),
   avbReport(
@@ -186,7 +172,8 @@ export const HOURS_VARIANCE_REPORTS: PrebuiltReportDef[] = [
     "Shows this month's visits (the 1st through today) with budgeted vs actual hours and revenue, grouped by crew.",
     () => {
       const now = new Date();
-      return { from: iso(new Date(now.getFullYear(), now.getMonth(), 1)), to: iso(now) };
+      const { year, month } = nyDateParts(now);
+      return { from: ymd(year, month, 1), to: isoNy(now) };
     }
   ),
   {

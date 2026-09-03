@@ -5,6 +5,7 @@ import {
   dateRangeFilterDef,
   dateRangeFilters,
 } from "@/lib/reports/helpers";
+import { isoNy, nyDateParts, ymd } from "@/lib/reports/ny-date";
 
 // ============================================================
 // Chemical Tracking section — pesticide/fertilizer application
@@ -69,12 +70,12 @@ export const CHEMICAL_REPORTS: PrebuiltReportDef[] = [
     run: async ({ supabase, params }) => {
       const { from, to } = (() => {
         const now = new Date();
-        const iso = (d: Date) => d.toISOString().slice(0, 10);
         let f = params.from || null;
         let t = params.to || null;
         if (!f && !t) {
-          t = iso(now);
-          f = iso(new Date(now.getFullYear(), now.getMonth(), 1));
+          t = isoNy(now);
+          const { year, month } = nyDateParts(now);
+          f = ymd(year, month, 1);
         }
         return { from: f, to: t };
       })();

@@ -6,6 +6,7 @@ import type {
 } from "@/types/crm-reports";
 import { computeTotals } from "@/lib/reports/engine";
 import type { ReportParams } from "@/lib/reports/definition-types";
+import { isoNy, nyDateParts, ymd } from "@/lib/reports/ny-date";
 
 // ============================================================
 // Shared helpers for report definitions.
@@ -19,11 +20,12 @@ export type DateRangePreset =
   | "this_year"
   | "all_time";
 
-function iso(d: Date): string {
-  return d.toISOString().slice(0, 10);
-}
-
-/** Resolve `from`/`to` params, falling back to a preset window. */
+/** Resolve `from`/`to` params, falling back to a preset window.
+ *
+ * All "today"/month/year boundaries are computed against the calendar date
+ * as it appears in America/New_York (this org's operating timezone), not
+ * the server's local/UTC date — see `src/lib/reports/ny-date.ts`.
+ */
 export function resolveDateRange(
   params: ReportParams,
   preset: DateRangePreset = "this_month"
@@ -32,18 +34,19 @@ export function resolveDateRange(
   let to = params.to || null;
   if (!from && !to && preset !== "all_time") {
     const now = new Date();
-    to = iso(now);
+    to = isoNy(now);
+    const { year, month } = nyDateParts(now);
     if (preset === "this_month") {
-      from = iso(new Date(now.getFullYear(), now.getMonth(), 1));
+      from = ymd(year, month, 1);
     } else if (preset === "last_month") {
-      from = iso(new Date(now.getFullYear(), now.getMonth() - 1, 1));
-      to = iso(new Date(now.getFullYear(), now.getMonth(), 0));
+      from = ymd(year, month - 1, 1);
+      to = ymd(year, month, 0);
     } else if (preset === "last_30") {
-      from = iso(new Date(now.getTime() - 30 * 86400000));
+      from = isoNy(new Date(now.getTime() - 30 * 86400000));
     } else if (preset === "last_90") {
-      from = iso(new Date(now.getTime() - 90 * 86400000));
+      from = isoNy(new Date(now.getTime() - 90 * 86400000));
     } else if (preset === "this_year") {
-      from = iso(new Date(now.getFullYear(), 0, 1));
+      from = ymd(year, 0, 1);
     }
   }
   return { from, to };
