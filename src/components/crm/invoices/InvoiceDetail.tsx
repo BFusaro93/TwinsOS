@@ -47,7 +47,6 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn, formatCurrency } from "@/lib/utils";
-import { centsToDisplay } from "@/lib/estimate-calc";
 import { Plus, Trash2, Save, DollarSign, CreditCard, ChevronDown, Mail, Printer, Lock, Unlock, Search, MoreVertical, Ban } from "lucide-react";
 import { toast } from "sonner";
 import type { InvoiceStatus, InvoiceLineItem, PaymentMethod, CRMPayment } from "@/types/crm-invoices";
@@ -393,11 +392,11 @@ function LineItemRow({
       <td className="w-24 px-2 py-2 text-right tabular-nums align-middle">
         {row.discountCents > 0 ? (
           <div className="flex flex-col items-end leading-tight">
-            <span className="text-[10px] text-slate-300 line-through">{centsToDisplay(row.totalCents)}</span>
-            <span className="font-medium text-slate-700">{centsToDisplay(row.totalCents - row.discountCents)}</span>
+            <span className="text-[10px] text-slate-300 line-through">{formatCurrency(row.totalCents)}</span>
+            <span className="font-medium text-slate-700">{formatCurrency(row.totalCents - row.discountCents)}</span>
           </div>
         ) : (
-          <span className="font-medium text-slate-700">{centsToDisplay(row.totalCents)}</span>
+          <span className="font-medium text-slate-700">{formatCurrency(row.totalCents)}</span>
         )}
       </td>
       {/* Discount / Delete / save indicator */}
@@ -634,7 +633,10 @@ export function InvoiceDetail({
     </div>
   );
 
-  const lineItems = invoice.lineItems ?? [];
+  // The nested crm_invoice_line_items embed in useInvoice() has no .order()
+  // applied, so PostgREST returns rows in unspecified order — sort explicitly
+  // by sort_order to match the printed PDF (src/app/api/crm/invoices/[id]/pdf/route.ts).
+  const lineItems = [...(invoice.lineItems ?? [])].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
   const payments = invoice.payments ?? [];
   const hasTax = taxRateBps > 0;
 
@@ -1380,14 +1382,39 @@ export function InvoiceDetail({
                   </tr>
                 </thead>
                 <tbody>
-                  {payments.map((p) => (
-                    <tr key={p.id} className="border-b hover:bg-brand-50 cursor-pointer" onClick={() => setSelectedPayment(p)}>
-                      <td className="px-4 py-2.5 text-brand-700 hover:underline font-medium">{fmtDate(p.paymentDate)}</td>
-                      <td className="px-4 py-2.5 capitalize">{p.method}</td>
-                      <td className="px-4 py-2.5 text-slate-500">{p.reference ?? "—"}</td>
-                      <td className="px-4 py-2.5 text-right font-medium text-green-600">{formatCurrency(p.amountCents)}</td>
-                    </tr>
-                  ))}
+                  {payments.map((p) => {
+                    // Split (multi-invoice) payments carry this invoice's actual
+                    // allocated share separately from the payment's full amount —
+                    // see useInvoice() in use-invoices.ts.
+                    const displayAmount = p.displayAmountCents ?? p.amountCents;
+                    const fullyRefunded = p.refundedAmountCents > 0 && p.refundedAmountCents >= p.amountCents;
+                    const partiallyRefunded = p.refundedAmountCents > 0 && !fullyRefunded;
+                    return (
+                      <tr key={p.id} className="border-b hover:bg-brand-50 cursor-pointer" onClick={() => setSelectedPayment(p)}>
+                        <td className="px-4 py-2.5 text-brand-700 hover:underline font-medium">{fmtDate(p.paymentDate)}</td>
+                        <td className="px-4 py-2.5 capitalize">
+                          {p.method}
+                          {p.isSplitAllocation && <span className="ml-1 text-slate-400">(split)</span>}
+                        </td>
+                        <td className="px-4 py-2.5 text-slate-500">{p.reference ?? "—"}</td>
+                        <td className="px-4 py-2.5 text-right font-medium">
+                          <div className="flex items-center justify-end gap-1.5">
+                            {(fullyRefunded || partiallyRefunded) && (
+                              <span className={cn(
+                                "rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase",
+                                fullyRefunded ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-700"
+                              )}>
+                                {fullyRefunded ? "Refunded" : "Partially Refunded"}
+                              </span>
+                            )}
+                            <span className={cn(fullyRefunded ? "text-slate-400 line-through" : "text-green-600")}>
+                              {formatCurrency(displayAmount)}
+                            </span>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

@@ -29,6 +29,13 @@ interface FeedbackDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
+// Pragmatic client-side throttle to deter accidental/rapid-fire submissions.
+// This is not a substitute for server-side rate limiting, but a proportionate
+// low-effort guard for a low-severity, authenticated-only feedback form.
+// Module-level (not per-component) so it persists even if the dialog unmounts.
+const FEEDBACK_THROTTLE_MS = 15_000;
+let lastFeedbackSubmitAt = 0;
+
 export function FeedbackDialog({ open, onOpenChange }: FeedbackDialogProps) {
   const pathname = usePathname();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -69,7 +76,14 @@ export function FeedbackDialog({ open, onOpenChange }: FeedbackDialogProps) {
       toast.error("Please describe the issue or idea before submitting.");
       return;
     }
+    const elapsedSinceLastSubmit = Date.now() - lastFeedbackSubmitAt;
+    if (elapsedSinceLastSubmit < FEEDBACK_THROTTLE_MS) {
+      const waitSeconds = Math.ceil((FEEDBACK_THROTTLE_MS - elapsedSinceLastSubmit) / 1000);
+      toast.error(`Please wait a moment before submitting again (${waitSeconds}s).`);
+      return;
+    }
     try {
+      lastFeedbackSubmitAt = Date.now();
       await submitFeedback.mutateAsync({
         category,
         message: message.trim(),
@@ -81,6 +95,8 @@ export function FeedbackDialog({ open, onOpenChange }: FeedbackDialogProps) {
     } catch (err) {
       console.error("[FeedbackDialog]", err);
       toast.error("Couldn't submit feedback. Please try again.");
+      // Allow an immediate retry after a failed submission.
+      lastFeedbackSubmitAt = 0;
     }
   }
 

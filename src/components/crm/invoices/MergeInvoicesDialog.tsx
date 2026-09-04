@@ -7,6 +7,7 @@ import { GitMerge } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { formatCurrency } from "@/lib/utils";
+import { computeMergedInvoiceTotals } from "@/lib/invoice-merge";
 import type { CRMInvoice } from "@/types/crm-invoices";
 
 interface Props {
@@ -38,7 +39,20 @@ export function MergeInvoicesDialog({ invoices, onClose }: Props) {
 
   const parent = invoices.find((i) => i.id === parentId);
   const children = invoices.filter((i) => i.id !== parentId);
-  const mergedTotal = invoices.reduce((s, i) => s + i.totalCents, 0);
+  // Mirror the server's exact recomputation (src/app/api/crm/invoices/merge/route.ts)
+  // via the shared src/lib/invoice-merge.ts helper — naively summing each
+  // invoice's own totalCents disagreed with the server whenever merged
+  // invoices had different tax rates or discount types.
+  const allLineItems = invoices.flatMap((i) =>
+    (i.lineItems ?? []).map((li) => ({ totalCents: li.totalCents, discountCents: li.discountCents, isTaxable: li.isTaxable }))
+  );
+  const mergedTotal = parent
+    ? computeMergedInvoiceTotals(
+        allLineItems,
+        invoices.map((i) => ({ discountCents: i.discountCents, amountPaidCents: i.amountPaidCents })),
+        parent.taxRateBps
+      ).totalCents
+    : 0;
 
   async function handleMerge() {
     if (!parentId || children.length === 0 || hasLocked) return;

@@ -19,13 +19,16 @@ export function useSubmitFeedback() {
 
       let screenshotPath: string | null = null;
       if (input.screenshotFile) {
-        const { data: profile } = await supabase
+        const { data: profile, error: profileError } = await supabase
           .from("profiles")
           .select("org_id")
           .eq("id", user.id)
           .single();
+        if (profileError || !profile?.org_id) {
+          throw new Error("Couldn't verify your organization — please try again");
+        }
         const ext = input.screenshotFile.name.split(".").pop() ?? "png";
-        const path = `${profile?.org_id}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+        const path = `${profile.org_id}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
         const { error: uploadError } = await supabase.storage
           .from("feedback-screenshots")
           .upload(path, input.screenshotFile);

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { z } from "zod";
+import { computeMergedInvoiceTotals } from "@/lib/invoice-merge";
 
 const MergeSchema = z.object({
   parentId: z.string().uuid(),
@@ -116,29 +117,28 @@ export async function POST(request: Request) {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const items = (allItems ?? []) as { total_cents: number; discount_cents: number | null; is_taxable: boolean }[];
-  const netLineCents = (li: { total_cents: number; discount_cents: number | null }) => li.total_cents - (li.discount_cents ?? 0);
-  const subtotal = items.reduce((s, li) => s + netLineCents(li), 0);
   const parentInv = inv.find((i) => i.id === parentId);
   const taxRateBps: number = parentInv?.tax_rate_bps ?? 0;
-  // Combine every merged invoice's own document-level discount — otherwise a
-  // child's (or the parent's) discount is silently dropped and the client
-  // ends up owing the discounted amount back.
-  const combinedDiscountCents: number = inv.reduce((s, i) => s + (i.discount_cents ?? 0), 0);
-  const afterDiscount = subtotal - combinedDiscountCents;
-  // Tax base is net of the combined discount — same fix as
-  // use-invoices.ts's useUpdateInvoiceFinancials (charging tax on the
-  // pre-discount amount overcharges the customer).
-  const taxableSubtotal = items.filter((li) => li.is_taxable).reduce((s, li) => s + netLineCents(li), 0);
-  const taxableBase = Math.max(0, taxableSubtotal - combinedDiscountCents);
-  const taxCents = Math.round((taxableBase * taxRateBps) / 10000);
-  const total = afterDiscount + taxCents;
 
-  // Sum paid amounts across ALL merged invoices, not just the parent's own —
-  // a child invoice that was already paid off would otherwise have that
-  // payment vanish from the merged balance (the child's own row is about to
-  // be voided below).
-  const alreadyPaid: number = inv.reduce((s, i) => s + (i.amount_paid_cents ?? 0), 0);
-  const newBalance = Math.max(0, total - alreadyPaid);
+  // Shared with MergeInvoicesDialog.tsx's preview so the number shown before
+  // confirming a merge always matches what actually gets saved: net line
+  // items summed across every merged invoice, every invoice's own
+  // document-level discount combined, and tax applied only at the PARENT's
+  // rate against the combined net-of-discount taxable base (same fix as
+  // use-invoices.ts's useUpdateInvoiceFinancials — charging tax on the
+  // pre-discount amount overcharges the customer).
+  const {
+    subtotalCents: subtotal,
+    discountCents: combinedDiscountCents,
+    taxCents,
+    totalCents: total,
+    amountPaidCents: alreadyPaid,
+    balanceCents: newBalance,
+  } = computeMergedInvoiceTotals(
+    items.map((li) => ({ totalCents: li.total_cents, discountCents: li.discount_cents, isTaxable: li.is_taxable })),
+    inv.map((i) => ({ discountCents: i.discount_cents, amountPaidCents: i.amount_paid_cents })),
+    taxRateBps
+  );
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { error: parentErr } = await (supabase as any)

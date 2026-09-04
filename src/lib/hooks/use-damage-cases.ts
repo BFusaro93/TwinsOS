@@ -147,11 +147,50 @@ export function useCreateDamageCase() {
   });
 }
 
+// Fields that describe the case's substance / liability — editing these once
+// a case is resolved/closed would let its cost or story silently change
+// after the fact. A status change (including reopening) is always allowed;
+// only these fields are gated on the CURRENT (pre-update) status.
+// `linkedPoId` is intentionally excluded: unlinking a dangling/deleted PO
+// reference is cleanup, not a re-billing risk, and should stay available
+// even on a closed case (see DamageCaseDetailPanel's dangling-PO handling).
+const SUBSTANTIVE_DAMAGE_CASE_FIELDS = [
+  "caseType",
+  "customerName",
+  "propertyAddress",
+  "dateOfIncident",
+  "description",
+  "resolutionNotes",
+] as const;
+
+const CLOSED_DAMAGE_CASE_STATUSES: DamageCaseStatus[] = ["resolved", "closed"];
+
 export function useUpdateDamageCase() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({ id, ...input }: Partial<DamageCase> & { id: string }) => {
       const supabase = createClient();
+
+      const editsSubstantiveField = SUBSTANTIVE_DAMAGE_CASE_FIELDS.some(
+        (field) => input[field] !== undefined,
+      );
+      if (editsSubstantiveField) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: current, error: fetchError } = await (supabase as any)
+          .from("damage_cases")
+          .select("status")
+          .eq("id", id)
+          .single();
+        if (fetchError) throw fetchError;
+        const currentStatus = current?.status as DamageCaseStatus | undefined;
+        // If the caller is also moving the case to an open status in this
+        // same update, that's a reopen — allow it through.
+        const reopening = input.status !== undefined && !CLOSED_DAMAGE_CASE_STATUSES.includes(input.status);
+        if (currentStatus && CLOSED_DAMAGE_CASE_STATUSES.includes(currentStatus) && !reopening) {
+          throw new Error("This case is resolved/closed. Reopen it before editing its details, linked PO, or adding expenses.");
+        }
+      }
+
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
         .from("damage_cases")
@@ -201,6 +240,18 @@ export function useCreateDamageCaseExpense() {
   return useMutation({
     mutationFn: async (input: Omit<DamageCaseExpense, "id" | "orgId" | "createdBy" | "createdAt" | "updatedAt" | "deletedAt">) => {
       const supabase = createClient();
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: parentCase, error: parentError } = await (supabase as any)
+        .from("damage_cases")
+        .select("status")
+        .eq("id", input.damageCaseId)
+        .single();
+      if (parentError) throw parentError;
+      if (CLOSED_DAMAGE_CASE_STATUSES.includes(parentCase?.status as DamageCaseStatus)) {
+        throw new Error("This case is resolved/closed. Reopen it before adding expenses.");
+      }
+
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
         .from("damage_case_expenses")

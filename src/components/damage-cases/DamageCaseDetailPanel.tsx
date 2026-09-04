@@ -66,6 +66,9 @@ export function DamageCaseDetailPanel({ caseId, onClose }: Props) {
   if (!data) return null;
 
   const expenses = (data as { expenses?: import("@/types").DamageCaseExpense[] }).expenses ?? [];
+  const isClosed = data.status === "resolved" || data.status === "closed";
+  const linkedPo = data.linkedPoId ? allPOs.find((p) => p.id === data.linkedPoId) : undefined;
+  const linkedPoDangling = !!data.linkedPoId && !linkedPo;
 
   return (
     <div className="flex flex-col h-full overflow-y-auto">
@@ -106,7 +109,11 @@ export function DamageCaseDetailPanel({ caseId, onClose }: Props) {
             <Download className="h-3.5 w-3.5" />
             PDF
           </Button>
-          <EditButton onClick={() => setEditOpen(true)} />
+          <EditButton
+            onClick={() => setEditOpen(true)}
+            disabled={isClosed}
+            title={isClosed ? "Reopen this case before editing its details" : undefined}
+          />
           <Button
             variant="ghost"
             size="icon"
@@ -149,16 +156,21 @@ export function DamageCaseDetailPanel({ caseId, onClose }: Props) {
         <span className="text-sm text-muted-foreground shrink-0">Linked PO</span>
         {data.linkedPoId ? (
           <>
-            <span className="text-sm font-mono font-medium">
-              {allPOs.find((p) => p.id === data.linkedPoId)?.poNumber ?? data.linkedPoId}
-            </span>
-            <span className="text-sm text-muted-foreground">
-              {allPOs.find((p) => p.id === data.linkedPoId)?.vendorName}
-            </span>
+            {linkedPoDangling ? (
+              <span className="text-sm italic text-amber-600">
+                Linked PO no longer exists (it may have been deleted)
+              </span>
+            ) : (
+              <>
+                <span className="text-sm font-mono font-medium">{linkedPo?.poNumber}</span>
+                <span className="text-sm text-muted-foreground">{linkedPo?.vendorName}</span>
+              </>
+            )}
             <Button
               size="icon"
               variant="ghost"
               className="h-6 w-6 ml-auto text-muted-foreground hover:text-destructive"
+              title={linkedPoDangling ? "Clear this dangling PO reference" : "Unlink PO"}
               onClick={() => updateCase.mutate(
                 { id: data.id, linkedPoId: null },
                 { onError: () => toast.error("Failed to unlink PO") },
@@ -225,7 +237,13 @@ export function DamageCaseDetailPanel({ caseId, onClose }: Props) {
         <TabsContent value="expenses" className="flex-1 overflow-y-auto p-6 space-y-4 mt-0">
           <div className="flex items-center justify-between">
             <h3 className="font-semibold text-sm">Expenses</h3>
-            <Button size="sm" variant="outline" onClick={() => setAddExpenseOpen(true)}>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setAddExpenseOpen(true)}
+              disabled={isClosed}
+              title={isClosed ? "Reopen this case before adding expenses" : undefined}
+            >
               <Plus className="h-3.5 w-3.5 mr-1" />
               Add Expense
             </Button>

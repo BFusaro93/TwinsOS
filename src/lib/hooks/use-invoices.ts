@@ -143,7 +143,7 @@ export function useInvoices(clientId?: string) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let q = (supabase as any)
         .from("crm_invoices")
-        .select("*, clients(display_name, billing_address, billing_city, billing_state, billing_zip, invoice_delivery, saved_payment_method_type, saved_payment_method_summary, autopay_enabled), sales_rep:crm_employees!crm_invoices_sales_rep_id_fkey(first_name,last_name), crm_invoice_line_items(id, name, description, total_cents, is_taxable)")
+        .select("*, clients(display_name, billing_address, billing_city, billing_state, billing_zip, invoice_delivery, saved_payment_method_type, saved_payment_method_summary, autopay_enabled), sales_rep:crm_employees!crm_invoices_sales_rep_id_fkey(first_name,last_name), crm_invoice_line_items(id, name, description, total_cents, discount_cents, is_taxable)")
         .is("deleted_at", null)
         .order("invoice_date", { ascending: false });
       if (clientId) q = q.eq("client_id", clientId);
@@ -167,7 +167,43 @@ export function useInvoice(id: string) {
         .is("deleted_at", null)
         .single();
       if (error) throw error;
-      return mapInvoice(data);
+      const invoice = mapInvoice(data);
+
+      // A payment split across multiple invoices stores crm_payments.invoice_id
+      // = null and records its exact per-invoice share in
+      // crm_payment_allocations instead — the FK-based crm_payments(*) embed
+      // above only ever matches a payment applied to exactly one invoice, so
+      // a split payment silently never showed up in Payment History on
+      // either invoice it was actually applied to. Fetch this invoice's
+      // allocation rows (joined back to the full payment) and merge in any
+      // payment not already present via the direct FK match, displaying the
+      // ALLOCATED amount rather than the payment's full amount.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: allocRows, error: allocErr } = await (supabase as any)
+        .from("crm_payment_allocations")
+        .select("amount_cents, crm_payments(*)")
+        .eq("invoice_id", id);
+      if (allocErr) throw allocErr;
+
+      const existingPaymentIds = new Set((invoice.payments ?? []).map((p) => p.id));
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const allocatedPayments: CRMPayment[] = (allocRows ?? [])
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .filter((row: any) => row.crm_payments && !existingPaymentIds.has(row.crm_payments.id))
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .map((row: any) => ({
+          ...mapPayment(row.crm_payments),
+          displayAmountCents: row.amount_cents,
+          isSplitAllocation: true,
+        }));
+
+      if (allocatedPayments.length > 0) {
+        invoice.payments = [...(invoice.payments ?? []), ...allocatedPayments].sort(
+          (a, b) => new Date(b.paymentDate).getTime() - new Date(a.paymentDate).getTime()
+        );
+      }
+
+      return invoice;
     },
     enabled: !!id,
   });

@@ -149,6 +149,14 @@ export interface CRMPayment {
   clientName?: string;
   clientAddress?: string;
   invoiceNumber?: number;
+  // Present only for a split (multi-invoice) payment's entry in a single
+  // invoice's Payment History — see useInvoice() in use-invoices.ts.
+  // crm_payments.invoice_id is null for a split payment, so the payment's
+  // own amountCents is the FULL payment (across all invoices it was applied
+  // to); displayAmountCents is this invoice's actual allocated share and is
+  // what should be shown in that invoice's history.
+  displayAmountCents?: number;
+  isSplitAllocation?: boolean;
 }
 
 // ── contract ──────────────────────────────────────────────────────────────────

@@ -34,6 +34,16 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  // Mirrors the client-side gate in ReportsHub.tsx, but this is the actual
+  // boundary — the UI gate only hides the nav link.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: canView } = await (supabase.rpc as any)("has_settings_permission", {
+    p_key: "view_report_center",
+  });
+  if (!canView) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   await ensureSystemDashboardsSeeded(supabase);
 
   // crm_dashboards is newer than the generated Database types
@@ -59,6 +69,16 @@ export async function POST(request: Request) {
   } = await supabase.auth.getUser();
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  // Mirrors the client-side gate in DashboardBuilder.tsx, but this is the
+  // actual boundary — the UI gate only hides the builder controls.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: canManage } = await (supabase.rpc as any)("has_settings_permission", {
+    p_key: "manage_report_center",
+  });
+  if (!canManage) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   let body: unknown;
