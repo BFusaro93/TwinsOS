@@ -4,8 +4,9 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { format } from "date-fns";
-import { MapPin, Clock, Users, ChevronRight, CheckCircle2, XCircle, AlertCircle } from "lucide-react";
+import { MapPin, Clock, Users, ChevronRight, CheckCircle2, XCircle, AlertCircle, Home, UserCircle2 } from "lucide-react";
 import { useMyCrewStops, useMyCrewInfo } from "@/lib/hooks/use-crew-app";
+import { useCurrentUserStore } from "@/stores";
 import { EditCrewDialog } from "@/components/crm/crew/EditCrewDialog";
 import { Button } from "@/components/ui/button";
 import { visitServiceNames } from "@/lib/utils/visit-stops";
@@ -84,6 +85,7 @@ export default function CrewSchedulePage() {
   const today = format(new Date(), "yyyy-MM-dd");
   const { data: stops = [], isLoading } = useMyCrewStops(today);
   const { data: crewInfo } = useMyCrewInfo();
+  const { currentUser, currentUserLoaded } = useCurrentUserStore();
   const [editCrewOpen, setEditCrewOpen] = useState(false);
 
   const completed = stops.filter(s => s.derivedStatus === "completed").length;
@@ -93,11 +95,29 @@ export default function CrewSchedulePage() {
     <div className="flex flex-col min-h-dvh">
       {/* Header */}
       <div className="bg-white border-b border-slate-200 px-4 pt-safe-top pb-3 sticky top-0 z-10">
-        <div className="flex items-center justify-between">
-          <div>
-            <Link href="/home" className="text-xs font-medium text-brand-600 hover:underline">
-              &larr; Home
+        {/* Top row: way back to the crew home page + which crew login this
+            tablet is signed in as (shared crew accounts — easy to grab the
+            wrong tablet, so make it obvious). */}
+        <div className="flex items-center justify-between gap-3 py-2">
+          <Button variant="outline" size="sm" className="gap-1.5" asChild>
+            <Link href="/home">
+              <Home className="h-4 w-4" />
+              Home
             </Link>
+          </Button>
+          {currentUserLoaded && (
+            <div className="flex min-w-0 items-center gap-2 rounded-lg bg-brand-50 px-3 py-1.5 text-right">
+              <UserCircle2 className="h-5 w-5 shrink-0 text-brand-600" />
+              <div className="min-w-0 leading-tight">
+                <p className="text-[10px] font-medium uppercase tracking-wide text-brand-600/70">Signed in as</p>
+                <p className="break-words text-sm font-bold text-brand-800">{currentUser.name}</p>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="flex items-center justify-between mt-1">
+          <div>
             <p className="text-xs text-slate-400 uppercase tracking-wide font-medium">
               {format(new Date(), "EEEE, MMMM d")}
             </p>
