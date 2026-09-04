@@ -31,11 +31,15 @@ export const COMPETITORS: Competitor[] = [
       "Mature CRM, routing, and dispatch built specifically for lawn care and snow operations",
       "Strong automated email/text marketing and follow-up campaigns",
       "QuickBooks-centric accounting workflow",
+      "Chemical/fertilization application tracking",
     ],
     considerations: [
       "Deepest automation tools are gated behind the top pricing tier",
       "No self-serve free trial, plus an unpublished sign-up fee",
       "Setup complexity can be a lot for smaller crews",
+      "Crew/mobile field logins are billed as additional users, not included free",
+      "No Zapier, open API, or MCP server for custom integrations",
+      "Credit card and ACH processing fees run higher than typical",
     ],
     pricingNote: "Tiered plans have historically ranged roughly $49–$499/mo depending on tier, plus a sign-up fee — confirm current pricing directly with Service Autopilot.",
     switchReasons: [
@@ -44,19 +48,22 @@ export const COMPETITORS: Competitor[] = [
         body: "Service Autopilot tracks assets as a field, not a maintenance system. Equipt runs preventive maintenance schedules, work orders, and parts inventory for your fleet — under the same account as your CRM, not a separate purchase.",
       },
       {
-        title: "No sign-up fee, real free trial",
-        body: "Start on a 30-day free trial with no card required and no unpublished setup fee.",
+        title: "Free crew logins, real free trial",
+        body: "Field crew mobile access doesn't count as a billable seat, and you start on a 30-day free trial with no card required — no unpublished setup fee, and no per-crew-member charge just to check a route.",
       },
       {
-        title: "Budget-engine estimating built in",
-        body: "Estimates price off production rates, labor burden, and overhead markup from day one, not as an upsell.",
+        title: "Open API, Zapier, and MCP included",
+        body: "Connect Zapier, build against the REST API, or use the MCP server for custom integrations — none of those are available in Service Autopilot today.",
       },
     ],
     comparisonRows: [
       { label: "CRM, scheduling & dispatch", landscapt: "Included", competitor: "Included" },
       { label: "Snow operations", landscapt: "Included", competitor: "Included" },
+      { label: "Chemical / fertilization tracking", landscapt: "Included", competitor: "Included" },
       { label: "Equipment / asset maintenance (CMMS)", landscapt: "Included (Equipt)", competitor: "Not offered" },
       { label: "Budget-based estimating engine", landscapt: "Included", competitor: "Manual/template-based" },
+      { label: "Crew / field mobile logins", landscapt: "Free, unlimited", competitor: "Billed as additional users" },
+      { label: "Zapier / open API / MCP", landscapt: "Included", competitor: "Not offered" },
       { label: "Free trial", landscapt: "30 days, no card", competitor: "None published" },
       { label: "Sign-up fee", landscapt: "None", competitor: "Unpublished fee reported" },
     ],
@@ -76,8 +83,9 @@ export const COMPETITORS: Competitor[] = [
       "No crew-level profitability or job-costing depth",
       "Route optimization doesn't account for equipment requirements",
       "Not built specifically for landscaping — no production-rate estimating or snow operations",
+      "Every Individual plan — even paid ones — includes just 1 user; a Team plan is required to add more",
     ],
-    pricingNote: "Individual plans have historically started around $39/mo, with team plans and a Marketing Suite add-on priced separately — confirm current pricing directly with Jobber.",
+    pricingNote: "Individual plans have historically started around $39/mo but include only 1 user regardless of tier; Team plans start higher and bundle more seats, with additional users billed on top — confirm current pricing directly with Jobber.",
     switchReasons: [
       {
         title: "Built for landscaping, not general trades",
@@ -88,8 +96,8 @@ export const COMPETITORS: Competitor[] = [
         body: "See actual vs. budgeted cost per job and per crew, not just invoiced totals.",
       },
       {
-        title: "Snow and asset maintenance in one platform",
-        body: "Storm-based snow dispatch and equipment/fleet maintenance (Equipt) live in the same account — Jobber has neither.",
+        title: "More than one seat from day one",
+        body: "Jobber's paid Individual plans include a single login no matter the tier — you need a separate Team plan just to add a second user. Landscapt plans include multiple seats from the start.",
       },
     ],
     comparisonRows: [
@@ -98,7 +106,7 @@ export const COMPETITORS: Competitor[] = [
       { label: "Snow operations", landscapt: "Included", competitor: "Not available" },
       { label: "Crew-level job costing", landscapt: "Included", competitor: "Limited" },
       { label: "Equipment / asset maintenance (CMMS)", landscapt: "Included (Equipt)", competitor: "Not offered" },
-      { label: "Additional users", landscapt: "Included in seat count", competitor: "Billed per additional user" },
+      { label: "Users on entry-level plan", landscapt: "Multiple seats included", competitor: "1 user, even on paid Individual plans" },
     ],
   },
   {
@@ -111,13 +119,14 @@ export const COMPETITORS: Competitor[] = [
       "Budget-based estimating and detailed job costing",
       "Time tracking and payroll via a dedicated crew app",
       "Industry-specific cost modeling for landscape and hardscape work",
+      "Zapier integration for connecting other tools",
     ],
     considerations: [
       "Built primarily around construction/install workflows, less depth on recurring maintenance CRM",
       "No native equipment/asset maintenance system",
       "Pricing scales with office + crew license counts",
     ],
-    pricingNote: "Plans have historically started around $297/mo for a small office+crew bundle, scaling up for larger teams — confirm current pricing directly with LMN.",
+    pricingNote: "Plans have historically started around $297/mo, with the mid-range Professional tier around $648/mo, scaling up for larger teams — confirm current pricing directly with LMN.",
     switchReasons: [
       {
         title: "One platform for maintenance and install",
@@ -150,34 +159,35 @@ export const COMPETITORS: Competitor[] = [
     strengths: [
       "Real-time reporting and multi-branch visibility",
       "Purchase orders with inventory tracking",
-      "Drag-and-drop recurring scheduling built for commercial contract volume",
     ],
     considerations: [
       "Priced and built for contractors above $1M in annual revenue — heavy for smaller operations",
       "Acquired by ServiceTitan in 2023, shifting long-term product direction",
-      "No dedicated equipment/fleet maintenance (CMMS) module",
+      "Equipment/asset maintenance tools are limited, not a full CMMS",
+      "No visual drag-and-drop dispatch board for day-to-day scheduling",
     ],
-    pricingNote: "Historically priced in the $300–500+/user/month range as a single license fee model — confirm current pricing directly with Aspire.",
+    pricingNote: "Typically $2,500+/mo as a single license priced against company revenue rather than per user — confirm current pricing directly with Aspire.",
     switchReasons: [
       {
         title: "Commercial-grade without the $1M floor",
         body: "The same estimating rigor and purchasing controls, without a pricing model built around enterprise contractors only.",
       },
       {
-        title: "Equipment maintenance built in, not bolted on",
-        body: "Equipt handles preventive maintenance, work orders, and parts inventory for the fleet Aspire only tracks financially.",
+        title: "A real dispatch board",
+        body: "Plan and reschedule the day visually with drag-and-drop — Aspire has no dispatch board for day-to-day scheduling.",
       },
       {
-        title: "One vendor table across both products",
-        body: "The same vendors used for landscape materials also supply CMMS parts — no duplicate vendor management between systems.",
+        title: "A more complete equipment maintenance system",
+        body: "Equipt handles preventive maintenance, work orders, and parts inventory for the fleet — Aspire's equipment tracking is limited by comparison.",
       },
     ],
     comparisonRows: [
       { label: "Target company size", landscapt: "Any size", competitor: "$1M+ commercial contractors" },
       { label: "Purchase orders & inventory", landscapt: "Included", competitor: "Included" },
       { label: "Real-time reporting", landscapt: "Included", competitor: "Included" },
-      { label: "Equipment / asset maintenance (CMMS)", landscapt: "Included (Equipt)", competitor: "Not offered" },
-      { label: "Licensing model", landscapt: "Per-seat", competitor: "Per-user, premium tier" },
+      { label: "Dispatch board", landscapt: "Included", competitor: "Not offered" },
+      { label: "Equipment / asset maintenance (CMMS)", landscapt: "Included (Equipt)", competitor: "Limited" },
+      { label: "Licensing model", landscapt: "Per-seat", competitor: "Single license, priced against revenue" },
       { label: "Free trial", landscapt: "30 days, no card", competitor: "Demo-gated" },
     ],
   },
@@ -231,21 +241,23 @@ export const COMPETITORS: Competitor[] = [
       "Sales, scheduling, estimating, invoicing, and automation combined for growing businesses",
       "Reporting built for visibility into financial performance",
       "Active recent investment following the Copilot-to-Homeworks rebrand",
+      "Zapier integration for connecting other tools",
+      "Free entry-level plan",
     ],
     considerations: [
       "Recently rebranded (from Copilot CRM) — a newer product identity with a shorter track record under the new name",
       "Price book and chemical/fertilization features are still on the near-term roadmap rather than fully built out",
-      "No dedicated equipment/fleet maintenance (CMMS) module",
+      "Equipment maintenance features exist but are limited compared to a full CMMS",
     ],
-    pricingNote: "Public pricing wasn't consistently available at the time of writing — confirm current plans directly with Homeworks.",
+    pricingNote: "Plans have historically ranged from a free tier up to roughly $379/mo — confirm current pricing directly with Homeworks.",
     switchReasons: [
       {
         title: "Built past the $3M ceiling too",
         body: "The same platform scales from a first hire to a multi-crew operation, budget engine and job costing included, not a tier you outgrow.",
       },
       {
-        title: "Equipment maintenance already built",
-        body: "Equipt's preventive maintenance, work orders, and parts inventory are live today, not on a future roadmap.",
+        title: "A more complete equipment maintenance system",
+        body: "Equipt's preventive maintenance, work orders, and parts inventory go further than Homeworks' current equipment features.",
       },
       {
         title: "Snow operations included",
@@ -257,7 +269,7 @@ export const COMPETITORS: Competitor[] = [
       { label: "Budget-based estimating", landscapt: "Included", competitor: "Limited" },
       { label: "Snow operations", landscapt: "Included", competitor: "Not available" },
       { label: "Chemical / fertilization tracking", landscapt: "Included", competitor: "On roadmap" },
-      { label: "Equipment / asset maintenance (CMMS)", landscapt: "Included (Equipt)", competitor: "Not offered" },
+      { label: "Equipment / asset maintenance (CMMS)", landscapt: "Included (Equipt)", competitor: "Limited" },
       { label: "Product track record under current name", landscapt: "—", competitor: "Recently rebranded from Copilot CRM" },
     ],
   },
