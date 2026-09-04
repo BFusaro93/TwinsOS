@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import { BarChart2, Wrench, NotepadText, ExternalLink, Settings, Camera, Sprout } from "lucide-react";
+import { BarChart2, Wrench, NotepadText, ExternalLink, Settings, Camera, Sprout, CalendarCheck } from "lucide-react";
 import { BrandMark } from "@/components/shared/BrandMark";
 import { useCurrentUserStore } from "@/stores";
 import { useSettingsStore } from "@/stores/settings-store";
@@ -79,7 +79,19 @@ function CrewHome() {
       </div>
 
       {/* Primary tiles */}
-      <div className="grid w-full max-w-lg grid-cols-1 gap-5 sm:grid-cols-2">
+      <div className="grid w-full max-w-3xl grid-cols-1 gap-5 sm:grid-cols-3">
+        {/* Crew field app (/crm/crew) — the CRM crew rollout is being tested;
+            useCrmAccess scopes crew logins to this one CRM surface. */}
+        <Link href="/crm/crew" className={CREW_BOX}>
+          <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-brand-50 text-brand-500 transition-colors group-hover:bg-brand-100">
+            <CalendarCheck className="h-8 w-8" />
+          </div>
+          <div className="text-center">
+            <p className="text-lg font-semibold text-slate-900">My Schedule</p>
+            <p className="mt-1 text-sm text-slate-500">Today&apos;s stops &amp; job visits</p>
+          </div>
+        </Link>
+
         <Link href="/dashboards" className={CREW_BOX}>
           <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-brand-50 text-brand-500 transition-colors group-hover:bg-brand-100">
             <BarChart2 className="h-8 w-8" />
