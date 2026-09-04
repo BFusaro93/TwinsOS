@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { dashboardInputSchema } from "@/types/crm-reports";
+import { isCrewCaller } from "@/lib/reports/crew-dashboard-access";
 
 interface DashboardRow {
   id: string;
@@ -8,6 +9,7 @@ interface DashboardRow {
   description: string | null;
   config: unknown;
   is_system_seeded: boolean | null;
+  visible_to_crew: boolean | null;
   created_at: string;
   updated_at: string;
 }
@@ -19,6 +21,7 @@ function mapRow(row: DashboardRow) {
     description: row.description,
     config: row.config,
     isSystemSeeded: row.is_system_seeded ?? false,
+    visibleToCrew: row.visible_to_crew ?? false,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -42,23 +45,29 @@ export async function GET(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  // Mirrors the client-side gate in ReportsHub.tsx, but this is the actual
-  // boundary — the UI gate only hides the nav link.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: canView } = await (supabase.rpc as any)("has_settings_permission", {
-    p_key: "view_report_center",
-  });
-  if (!canView) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  // Crew logins may open only dashboards flagged visible_to_crew — see
+  // crew-dashboard-access.ts. Everyone else needs Report Center access.
+  const isCrew = await isCrewCaller(supabase, user.id);
+  if (!isCrew) {
+    // Mirrors the client-side gate in ReportsHub.tsx, but this is the actual
+    // boundary — the UI gate only hides the nav link.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: canView } = await (supabase.rpc as any)("has_settings_permission", {
+      p_key: "view_report_center",
+    });
+    if (!canView) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data, error } = await (supabase as any)
+  let query = (supabase as any)
     .from("crm_dashboards")
-    .select("id, name, description, config, is_system_seeded, created_at, updated_at")
+    .select("id, name, description, config, is_system_seeded, visible_to_crew, created_at, updated_at")
     .eq("id", id)
-    .is("deleted_at", null)
-    .single();
+    .is("deleted_at", null);
+  if (isCrew) query = query.eq("visible_to_crew", true);
+  const { data, error } = await query.single();
 
   if (error || !data) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -105,6 +114,7 @@ export async function PATCH(
   if (parsed.data.name !== undefined) patch.name = parsed.data.name;
   if (parsed.data.description !== undefined) patch.description = parsed.data.description;
   if (parsed.data.config !== undefined) patch.config = parsed.data.config;
+  if (parsed.data.visibleToCrew !== undefined) patch.visible_to_crew = parsed.data.visibleToCrew;
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data, error } = await (supabase as any)
@@ -112,7 +122,7 @@ export async function PATCH(
     .update(patch)
     .eq("id", id)
     .is("deleted_at", null)
-    .select("id, name, description, config, is_system_seeded, created_at, updated_at")
+    .select("id, name, description, config, is_system_seeded, visible_to_crew, created_at, updated_at")
     .single();
 
   if (error || !data) {

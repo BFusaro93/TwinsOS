@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getReport } from "@/lib/reports/registry";
 import { runAnalysis } from "@/lib/reports/engine";
 import { REPORT_PERMISSION_KEYS } from "@/lib/reports/report-permissions";
+import { getCrewRunnableScope, isCrewCaller } from "@/lib/reports/crew-dashboard-access";
 
 /**
  * Executes a pre-built Report Center report by key. Filter values arrive as
@@ -31,8 +32,17 @@ export async function GET(
   // mirrors the client-side gate in ReportCatalog.tsx, but this is the
   // actual boundary since the catalog only hides the link. A report with
   // no entry here has no catalog-defined permission and is left ungated.
+  //
+  // Crew logins never hold any of these keys; they may run a report only when
+  // it's embedded in a dashboard an admin flagged visible_to_crew — see
+  // crew-dashboard-access.ts.
   const permissionKeys = REPORT_PERMISSION_KEYS[reportKey];
-  if (permissionKeys) {
+  if (await isCrewCaller(supabase, user.id)) {
+    const { reportKeys } = await getCrewRunnableScope(supabase);
+    if (!reportKeys.has(reportKey)) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+  } else if (permissionKeys) {
     const checks = await Promise.all(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       permissionKeys.map((key) => (supabase.rpc as any)("has_settings_permission", { p_key: key }))

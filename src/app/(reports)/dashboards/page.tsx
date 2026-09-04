@@ -48,6 +48,9 @@ function DashboardCard({
 
 export default function DashboardsHomePage() {
   const { currentUser } = useCurrentUserStore();
+  // Crew logins only get custom dashboards an admin flagged "Show to crew"
+  // (the /api/crm/dashboards list is already filtered server-side for them);
+  // the built-in Equipt / My Day / Reports dashboards are office tools.
   const isCrew = currentUser.role === "crew";
   const { allowed: hasEquipt } = useModuleAccess("equipt");
   const { allowed: hasLandscapt } = useModuleAccess("landscapt");
@@ -59,7 +62,7 @@ export default function DashboardsHomePage() {
       <PageHeader title="Dashboards" description="Every dashboard available to you, in one place." />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {hasEquipt && (
+        {hasEquipt && !isCrew && (
           <DashboardCard
             href="/dashboards/equipt"
             icon={Wrench}
@@ -68,7 +71,7 @@ export default function DashboardsHomePage() {
           />
         )}
 
-        {hasLandscapt && (
+        {hasLandscapt && !isCrew && (
           <DashboardCard
             href="/dashboards/myday"
             icon={CalendarCheck}
@@ -77,7 +80,7 @@ export default function DashboardsHomePage() {
           />
         )}
 
-        {hasLandscapt && (
+        {hasLandscapt && !isCrew && (
           <DashboardCard
             href="/dashboards/landscapt-reports"
             icon={BarChart2}

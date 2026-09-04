@@ -325,6 +325,9 @@ export const dashboardInputSchema = z.object({
   name: z.string().min(1).max(120),
   description: z.string().max(500).nullish(),
   config: dashboardConfigSchema,
+  /** Opt this dashboard in for crew-role logins, who otherwise have no
+   *  Report Center access at all — see crew-dashboard-access.ts. */
+  visibleToCrew: z.boolean().optional(),
 });
 export type DashboardInput = z.infer<typeof dashboardInputSchema>;
 
@@ -357,6 +360,9 @@ export interface Dashboard {
    *  (see ensureSystemDashboardsSeeded) rather than created by a user.
    *  Purely informational — the row is a normal, fully editable dashboard. */
   isSystemSeeded: boolean;
+  /** Crew-role logins can open this dashboard (and only dashboards with this
+   *  set) — admin-controlled toggle in DashboardBuilder. */
+  visibleToCrew: boolean;
   createdAt: string;
   updatedAt: string;
 }

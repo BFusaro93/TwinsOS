@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { analysisConfigSchema } from "@/types/crm-reports";
 import { runAnalysis } from "@/lib/reports/engine";
+import { getCrewRunnableScope, isCrewCaller } from "@/lib/reports/crew-dashboard-access";
 
 /**
  * Executes an ad-hoc custom analysis (the Custom Analysis builder's
@@ -24,14 +25,22 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  // Mirrors the client-side gate in ReportsHub.tsx/ReportCatalog.tsx, but
-  // this is the actual boundary — the UI gate only hides the builder.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: canView } = await (supabase.rpc as any)("has_settings_permission", {
-    p_key: "view_report_center",
-  });
-  if (!canView) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  // Crew logins have no Report Center permission; they may query only the
+  // datasets used by panels of a dashboard flagged visible_to_crew (the
+  // dashboard viewer adds tab date/rep filters on top of the saved panel
+  // config, so matching the exact config isn't practical — the dataset is
+  // the meaningful boundary). See crew-dashboard-access.ts.
+  const isCrew = await isCrewCaller(supabase, user.id);
+  if (!isCrew) {
+    // Mirrors the client-side gate in ReportsHub.tsx/ReportCatalog.tsx, but
+    // this is the actual boundary — the UI gate only hides the builder.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: canView } = await (supabase.rpc as any)("has_settings_permission", {
+      p_key: "view_report_center",
+    });
+    if (!canView) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
   }
 
   let body: unknown;
@@ -47,6 +56,13 @@ export async function POST(request: Request) {
       { error: parsed.error.issues[0]?.message ?? "Invalid analysis config" },
       { status: 400 }
     );
+  }
+
+  if (isCrew) {
+    const { datasets } = await getCrewRunnableScope(supabase);
+    if (!datasets.has(parsed.data.dataset)) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
   }
 
   try {

@@ -77,6 +77,7 @@ export function DashboardsList() {
       name: `${dashboard.name} (Copy)`,
       description: dashboard.description,
       config: dashboard.config,
+      visibleToCrew: dashboard.visibleToCrew,
     });
   };
 
@@ -144,6 +145,11 @@ export function DashboardsList() {
                       {dashboard.isSystemSeeded && (
                         <Badge variant="secondary" className="ml-2 align-middle text-[10px]">
                           Built-in
+                        </Badge>
+                      )}
+                      {dashboard.visibleToCrew && (
+                        <Badge variant="outline" className="ml-2 align-middle text-[10px]">
+                          Crew
                         </Badge>
                       )}
                     </td>

@@ -35,9 +35,9 @@ interface ReportsNavItem {
 
 export const DASHBOARDS_NAV: ReportsNavItem[] = [
   { label: "Overview",            href: "/dashboards",                 icon: LayoutDashboard },
-  { label: "Equipt Dashboard",    href: "/dashboards/equipt",          icon: Wrench,      requiresModule: "equipt" },
-  { label: "Landscapt My Day",    href: "/dashboards/myday",           icon: CalendarCheck, requiresModule: "landscapt" },
-  { label: "Reports Dashboard",   href: "/dashboards/landscapt-reports", icon: BarChart2, requiresModule: "landscapt" },
+  { label: "Equipt Dashboard",    href: "/dashboards/equipt",          icon: Wrench,      requiresModule: "equipt",    hideFromCrew: true },
+  { label: "Landscapt My Day",    href: "/dashboards/myday",           icon: CalendarCheck, requiresModule: "landscapt", hideFromCrew: true },
+  { label: "Reports Dashboard",   href: "/dashboards/landscapt-reports", icon: BarChart2, requiresModule: "landscapt", hideFromCrew: true },
   { label: "KPI Scorecard",       href: "/dashboards/kpis",            icon: Target,      hideFromCrew: true },
   { label: "Financial",           href: "/dashboards/financials",      icon: DollarSign,  hideFromCrew: true, internalOnly: true },
   { label: "Labor Efficiency",    href: "/dashboards/avb",             icon: TrendingUp,                      internalOnly: true },

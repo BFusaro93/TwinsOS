@@ -180,6 +180,7 @@ export function DashboardBuilder({ dashboardId }: { dashboardId?: string }) {
 
   const [name, setName] = useState("Untitled Dashboard");
   const [description, setDescription] = useState("");
+  const [visibleToCrew, setVisibleToCrew] = useState(false);
   const [tabs, setTabs] = useState<DashboardTab[]>(() => defaultTabs());
   const [activeTabId, setActiveTabId] = useState("tab-1");
   const [editingPanel, setEditingPanel] = useState<DashboardPanel | null>(null);
@@ -211,6 +212,7 @@ export function DashboardBuilder({ dashboardId }: { dashboardId?: string }) {
     if (!existing || hydrated) return;
     setName(existing.name);
     setDescription(existing.description ?? "");
+    setVisibleToCrew(existing.visibleToCrew);
     const nextTabs = existing.config.tabs.length > 0 ? existing.config.tabs : defaultTabs();
     setTabs(nextTabs);
     setActiveTabId(nextTabs[0].id);
@@ -296,12 +298,14 @@ export function DashboardBuilder({ dashboardId }: { dashboardId?: string }) {
           name: name.trim(),
           description: description.trim() || null,
           config: { tabs },
+          visibleToCrew,
         });
       } else {
         const created = await createDashboard.mutateAsync({
           name: name.trim(),
           description: description.trim() || null,
           config: { tabs },
+          visibleToCrew,
         });
         router.push(`/crm/admin/reports/dashboards/${created.id}`);
       }
@@ -360,6 +364,14 @@ export function DashboardBuilder({ dashboardId }: { dashboardId?: string }) {
               className="h-8 w-full sm:w-80 text-sm"
               placeholder="Description (optional)"
             />
+            <label className="flex items-center gap-2 text-xs text-slate-600">
+              <Checkbox
+                checked={visibleToCrew}
+                onCheckedChange={(v) => setVisibleToCrew(v === true)}
+              />
+              Show to crew logins
+              <span className="text-slate-400">— crew can open this dashboard from their home page</span>
+            </label>
           </div>
           <div className="flex items-center gap-2">
             <Button size="sm" onClick={() => void handleSave()} disabled={saving || !name.trim()}>
