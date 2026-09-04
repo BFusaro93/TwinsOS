@@ -20,8 +20,9 @@ export function generateStaticParams() {
   return COMPETITORS.map((c) => ({ slug: c.slug }));
 }
 
-export function generateMetadata({ params }: { params: { slug: string } }): Metadata {
-  const competitor = getCompetitor(params.slug);
+export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
+  const { slug } = await params;
+  const competitor = getCompetitor(slug);
   if (!competitor) return {};
   return buildMetadata({
     title: `Landscapt vs. ${competitor.name} | Landscaping Software Comparison`,
@@ -30,8 +31,9 @@ export function generateMetadata({ params }: { params: { slug: string } }): Meta
   });
 }
 
-export default function ComparePage({ params }: { params: { slug: string } }) {
-  const competitor = getCompetitor(params.slug);
+export default async function ComparePage({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params;
+  const competitor = getCompetitor(slug);
   if (!competitor) notFound();
 
   const breadcrumbJsonLd = {
