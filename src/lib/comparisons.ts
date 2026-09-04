@@ -7,6 +7,8 @@ export type ComparisonRow = {
 export type Competitor = {
   slug: string;
   name: string;
+  /** Which of our own products this competitor should be compared against — "Landscapt" for CRM/FSM tools, "Equipt" for CMMS/asset-maintenance tools. Drives the page hero, table column header, and metadata. */
+  product: "Landscapt" | "Equipt";
   /** Short category label shown under the name, e.g. "Landscape-specific FSM". */
   category: string;
   tagline: string;
@@ -15,7 +17,7 @@ export type Competitor = {
   considerations: string[];
   /** Soft, hedged pricing note — competitor pricing changes often, so this is framed as a ballpark, not a current quote. */
   pricingNote: string;
-  /** Why a team evaluating this competitor might prefer Landscapt & Equipt instead. */
+  /** Why a team evaluating this competitor might prefer our product instead. */
   switchReasons: { title: string; body: string }[];
   comparisonRows: ComparisonRow[];
 };
@@ -24,6 +26,7 @@ export const COMPETITORS: Competitor[] = [
   {
     slug: "service-autopilot",
     name: "Service Autopilot",
+    product: "Landscapt",
     category: "Landscape & lawn care software",
     tagline: "A deep automation engine built for larger recurring-route operations.",
     bestFor: "Lawn and landscape companies past ~10 crews investing heavily in marketing/follow-up automation.",
@@ -71,6 +74,7 @@ export const COMPETITORS: Competitor[] = [
   {
     slug: "jobber",
     name: "Jobber",
+    product: "Landscapt",
     category: "General field service software",
     tagline: "Fast to onboard, built broadly for home service trades rather than landscaping specifically.",
     bestFor: "Small crews (2–50 employees) that want scheduling, quoting, and invoicing working out of the box within a week.",
@@ -112,6 +116,7 @@ export const COMPETITORS: Competitor[] = [
   {
     slug: "lmn",
     name: "LMN",
+    product: "Landscapt",
     category: "Landscape & hardscape business software",
     tagline: "Strong budgeting and job-costing tools for design-build and install-heavy landscape businesses.",
     bestFor: "Small-to-mid landscape and hardscape contractors with significant install/build revenue.",
@@ -153,6 +158,7 @@ export const COMPETITORS: Competitor[] = [
   {
     slug: "aspire",
     name: "Aspire",
+    product: "Landscapt",
     category: "Commercial landscape software (ServiceTitan)",
     tagline: "A premium operating system for commercial landscape contractors over $1M in revenue.",
     bestFor: "Established commercial landscape contractors needing multi-branch visibility and deep purchasing/inventory controls.",
@@ -194,6 +200,7 @@ export const COMPETITORS: Competitor[] = [
   {
     slug: "housecall-pro",
     name: "Housecall Pro",
+    product: "Landscapt",
     category: "General home service software",
     tagline: "A broad home-service platform with strong marketing tools, not landscaping-specific.",
     bestFor: "General trades (HVAC, plumbing, electrical, landscaping) wanting review-generation and marketing built in.",
@@ -234,6 +241,7 @@ export const COMPETITORS: Competitor[] = [
   {
     slug: "homeworks",
     name: "Homeworks (formerly Copilot)",
+    product: "Landscapt",
     category: "Home service CRM (rebranded from Copilot CRM)",
     tagline: "A CRM for home service businesses scaling from roughly $250K to $3M in revenue.",
     bestFor: "Smaller, fast-growing lawn and landscape businesses wanting sales, scheduling, and invoicing in one system.",
@@ -271,6 +279,132 @@ export const COMPETITORS: Competitor[] = [
       { label: "Chemical / fertilization tracking", landscapt: "Included", competitor: "On roadmap" },
       { label: "Equipment / asset maintenance (CMMS)", landscapt: "Included (Equipt)", competitor: "Limited" },
       { label: "Product track record under current name", landscapt: "—", competitor: "Recently rebranded from Copilot CRM" },
+    ],
+  },
+  {
+    slug: "maintainx",
+    name: "MaintainX",
+    product: "Equipt",
+    category: "General CMMS (asset-agnostic)",
+    tagline: "A flexible, mobile-first CMMS for general maintenance work — not built for landscaping or snow operations.",
+    bestFor: "Multi-industry maintenance teams that want a simple, mobile-first work order and PM tool.",
+    strengths: [
+      "Clean, easy-to-use mobile app with offline support and QR/barcode scanning",
+      "Broad automation and growing AI/IoT features",
+      "Fast to deploy across many industries",
+    ],
+    considerations: [
+      "Parts inventory and purchase orders are locked behind the Premium tier (historically $59+/user/mo)",
+      "Pricing scales per user quickly — a 10-person team on Premium can run into the thousands per year",
+      "Not built for landscaping or snow — no fleet-specific asset types, dispatch, or CRM tie-in",
+      "Asset hierarchy depth and cross-site reporting get thin at scale, per reviewers managing multi-site portfolios",
+    ],
+    pricingNote: "Plans have historically ranged from a free Basic tier up to roughly $59–65/user/month for Premium (where parts and purchase orders live), plus custom Enterprise pricing — confirm current pricing directly with MaintainX.",
+    switchReasons: [
+      {
+        title: "Purchasing and parts included, not gated",
+        body: "Purchase orders, vendor management, and parts inventory are part of the base platform — not locked behind a premium per-user tier.",
+      },
+      {
+        title: "Built for landscape & snow fleets",
+        body: "Equipt models trucks, mowers, and snow equipment specifically, and ties directly into a CRM built for the same industry — MaintainX is asset-agnostic with no landscaping or dispatch context at all.",
+      },
+      {
+        title: "One vendor table, one login",
+        body: "The same vendors that supply landscape materials also supply CMMS parts — no separate system to manage vendors twice.",
+      },
+    ],
+    comparisonRows: [
+      { label: "Work orders & PM scheduling", landscapt: "Included", competitor: "Included" },
+      { label: "Parts inventory & purchase orders", landscapt: "Included in base plan", competitor: "Gated to Premium tier" },
+      { label: "Vendor management", landscapt: "Included, shared with CRM", competitor: "Not offered" },
+      { label: "Asset types modeled for landscaping", landscapt: "Included", competitor: "Generic, not industry-specific" },
+      { label: "Bundled CRM & dispatch (optional)", landscapt: "Available (Landscapt)", competitor: "Not offered" },
+      { label: "Free trial", landscapt: "30 days, no card", competitor: "Free tier available (limited features)" },
+    ],
+  },
+  {
+    slug: "upkeep",
+    name: "UpKeep",
+    product: "Equipt",
+    category: "General CMMS (asset-agnostic)",
+    tagline: "A mobile-first CMMS for general maintenance teams — parts, purchase orders, and full reporting sit behind higher tiers.",
+    bestFor: "General facilities/maintenance teams wanting a straightforward, mobile-first work order tool.",
+    strengths: [
+      "Clean mobile-first work order and PM experience",
+      "Nova AI assistant for work order summaries and checklist generation",
+      "Free entry tier for basic evaluation",
+    ],
+    considerations: [
+      "Starter plan excludes parts inventory and purchase orders entirely — Professional tier required",
+      "Requester users are capped on Starter; reporting history is limited to 30 days on lower tiers",
+      "No fleet management or landscaping-specific asset types — pure maintenance workflow only",
+      "No CRM, dispatch, or client-facing tools of any kind",
+    ],
+    pricingNote: "Plans have historically run from a limited free Lite tier to about $20/user/month (Starter, no parts/PO) up to $45/user/month (Professional) — confirm current pricing directly with UpKeep.",
+    switchReasons: [
+      {
+        title: "Parts and purchasing from day one",
+        body: "No tier wall between work orders and actually ordering the parts to complete them — purchasing and vendor management are part of the base plan.",
+      },
+      {
+        title: "Landscape & snow fleets, modeled correctly",
+        body: "Assets are trucks, mowers, and snow equipment, not generic facility equipment — and Equipt ties into a CRM built for the same trade.",
+      },
+      {
+        title: "No reporting time limit",
+        body: "Full maintenance history and reporting aren't capped at 30 days behind a paywall.",
+      },
+    ],
+    comparisonRows: [
+      { label: "Work orders & PM scheduling", landscapt: "Included", competitor: "Included" },
+      { label: "Parts inventory & purchase orders", landscapt: "Included in base plan", competitor: "Requires Professional tier" },
+      { label: "Reporting history", landscapt: "Unlimited", competitor: "Capped at 30 days on lower tiers" },
+      { label: "Asset types modeled for landscaping", landscapt: "Included", competitor: "Generic, not industry-specific" },
+      { label: "Bundled CRM & dispatch (optional)", landscapt: "Available (Landscapt)", competitor: "Not offered" },
+      { label: "Free trial", landscapt: "30 days, no card", competitor: "Limited free tier (no PM, no parts, no reporting)" },
+    ],
+  },
+  {
+    slug: "fleetio",
+    name: "Fleetio",
+    product: "Equipt",
+    category: "Fleet maintenance software",
+    tagline: "Strong vehicle-specific fleet maintenance, but not a full CMMS for non-vehicle equipment — and priced per vehicle.",
+    bestFor: "Fleet-heavy operations wanting dedicated vehicle inspections, service reminders, and fuel tracking.",
+    strengths: [
+      "Purpose-built vehicle inspections, service reminders, and fuel tracking",
+      "Clean mobile experience for drivers and technicians",
+      "Frequent product updates and broad integrations",
+    ],
+    considerations: [
+      "Priced per vehicle (historically $4–10/vehicle/mo, 5-vehicle minimum) — work orders, parts, and custom reports require Professional or Premium tiers",
+      "Built around vehicles specifically — mowers, attachments, and other non-vehicle equipment don't fit its model well",
+      "Inventory management is basic, without detailed parts tracking or reorder alerts",
+      "No landscaping CRM, estimating, or dispatch — fleet maintenance only",
+    ],
+    pricingNote: "Historically priced per vehicle at roughly $4–10/vehicle/month depending on tier, with a 5-vehicle minimum — confirm current pricing directly with Fleetio.",
+    switchReasons: [
+      {
+        title: "One system for vehicles and everything else",
+        body: "Trucks, mowers, snow equipment, and small tools all live in the same asset registry and PM schedule — not just vehicles.",
+      },
+      {
+        title: "Priced per seat, not per vehicle",
+        body: "A growing fleet doesn't mean a growing per-asset bill — Equipt is priced per user, not per vehicle.",
+      },
+      {
+        title: "Real parts inventory, not basic tracking",
+        body: "Detailed parts tracking with reorder thresholds and PO-driven replenishment, included from the start.",
+      },
+    ],
+    comparisonRows: [
+      { label: "Vehicle inspections & fuel tracking", landscapt: "Included", competitor: "Included" },
+      { label: "Non-vehicle equipment (mowers, attachments, tools)", landscapt: "Included", competitor: "Not designed for this" },
+      { label: "Parts inventory depth", landscapt: "Detailed, with reorder thresholds", competitor: "Basic" },
+      { label: "Pricing model", landscapt: "Per seat", competitor: "Per vehicle (5-vehicle minimum)" },
+      { label: "Bundled CRM & dispatch (optional)", landscapt: "Available (Landscapt)", competitor: "Not offered" },
+      { label: "Free trial", landscapt: "30 days, no card", competitor: "Free trial available" },
     ],
   },
 ];

@@ -25,8 +25,8 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   const competitor = getCompetitor(slug);
   if (!competitor) return {};
   return buildMetadata({
-    title: `Landscapt vs. ${competitor.name} | Landscaping Software Comparison`,
-    description: `${competitor.tagline} See how Landscapt & Equipt compares to ${competitor.name} on estimating, snow operations, job costing, and equipment maintenance.`,
+    title: `${competitor.product} vs. ${competitor.name} | Landscaping Software Comparison`,
+    description: `${competitor.tagline} See how ${competitor.product} compares to ${competitor.name} on estimating, snow operations, job costing, and equipment maintenance.`,
     path: `/compare/${competitor.slug}`,
   });
 }
@@ -56,7 +56,7 @@ export default async function ComparePage({ params }: { params: Promise<{ slug: 
 
       <div className="bg-[#005642] px-6 py-16 text-center sm:px-12">
         <div className="mb-3 text-[13px] font-bold uppercase tracking-[0.1em] text-[#b7d433]">
-          Landscapt vs. {competitor.name}
+          {competitor.product} vs. {competitor.name}
         </div>
         <h1 className="mx-auto max-w-2xl font-[family-name:var(--font-heading)] text-4xl font-extrabold text-white sm:text-5xl">
           {competitor.tagline}
@@ -69,7 +69,7 @@ export default async function ComparePage({ params }: { params: Promise<{ slug: 
           <h2 className="font-[family-name:var(--font-heading)] mb-5 text-2xl font-bold text-[#0a0a0a]">
             At a glance
           </h2>
-          <CompareTable rows={competitor.comparisonRows} competitorName={competitor.name} />
+          <CompareTable rows={competitor.comparisonRows} ourProduct={competitor.product} competitorName={competitor.name} />
         </Reveal>
 
         <div className="mt-14 grid grid-cols-1 gap-8 sm:grid-cols-2">
@@ -105,7 +105,7 @@ export default async function ComparePage({ params }: { params: Promise<{ slug: 
 
         <div className="mt-16">
           <h2 className="font-[family-name:var(--font-heading)] mb-6 text-2xl font-bold text-[#0a0a0a]">
-            Why teams switch to Landscapt &amp; Equipt
+            Why teams switch to {competitor.product}
           </h2>
           <div className="flex flex-col divide-y divide-[#eceae3]">
             {competitor.switchReasons.map((r) => (

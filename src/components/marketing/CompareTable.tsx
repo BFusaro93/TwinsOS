@@ -8,14 +8,22 @@ function cellIcon(value: string) {
   return null;
 }
 
-export function CompareTable({ rows, competitorName }: { rows: ComparisonRow[]; competitorName: string }) {
+export function CompareTable({
+  rows,
+  ourProduct,
+  competitorName,
+}: {
+  rows: ComparisonRow[];
+  ourProduct: string;
+  competitorName: string;
+}) {
   return (
     <div className="overflow-x-auto rounded-lg border border-[#e6e6e0]">
       <table className="w-full min-w-[560px] border-collapse text-left text-sm">
         <thead>
           <tr className="bg-[#fbfbf8]">
             <th className="px-5 py-3.5 font-semibold text-slate-500">&nbsp;</th>
-            <th className="px-5 py-3.5 font-[family-name:var(--font-heading)] font-bold text-[#005642]">Landscapt</th>
+            <th className="px-5 py-3.5 font-[family-name:var(--font-heading)] font-bold text-[#005642]">{ourProduct}</th>
             <th className="px-5 py-3.5 font-[family-name:var(--font-heading)] font-bold text-slate-600">{competitorName}</th>
           </tr>
         </thead>

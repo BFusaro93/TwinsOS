@@ -15,8 +15,8 @@ const heading = Plus_Jakarta_Sans({
 });
 
 export const metadata: Metadata = buildMetadata({
-  title: "Compare Landscapt & Equipt to Other Landscaping Software",
-  description: "See how Landscapt & Equipt compares to Service Autopilot, Jobber, LMN, Aspire, Housecall Pro, and Homeworks on estimating, snow ops, and equipment maintenance.",
+  title: "Compare Landscapt & Equipt to Other Landscaping & Maintenance Software",
+  description: "See how Landscapt compares to Service Autopilot, Jobber, LMN, Aspire, Housecall Pro, and Homeworks, and how Equipt compares to MaintainX, UpKeep, and Fleetio.",
   path: "/compare",
 });
 
@@ -36,28 +36,39 @@ export default function ComparePage() {
       </div>
 
       <div className="mx-auto max-w-[900px] px-6 py-20 sm:px-12">
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          {COMPETITORS.map((c, i) => (
-            <Reveal key={c.slug} delayMs={Math.min(i, 4) * 60}>
-              <Link
-                href={`/compare/${c.slug}`}
-                className="group flex h-full flex-col rounded-lg border border-[#e6e6e0] bg-white p-6 transition-colors hover:border-[#60ab45]"
-              >
-                <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">{c.category}</div>
-                <div className="font-[family-name:var(--font-heading)] mb-2 text-lg font-bold text-[#0a0a0a]">
-                  Landscapt vs. {c.name}
-                </div>
-                <p className="mb-4 flex-1 text-[13.5px] leading-relaxed text-[#5a5a56]">{c.tagline}</p>
-                <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-[#005642]">
-                  See the comparison
-                  <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
-                </span>
-              </Link>
-            </Reveal>
-          ))}
-        </div>
+        {(["Landscapt", "Equipt"] as const).map((product) => {
+          const group = COMPETITORS.filter((c) => c.product === product);
+          if (group.length === 0) return null;
+          return (
+            <div key={product} className="mb-14 last:mb-0">
+              <h2 className="font-[family-name:var(--font-heading)] mb-5 text-xl font-bold text-[#005642]">
+                {product} vs. {product === "Landscapt" ? "CRM & field service software" : "CMMS & fleet maintenance software"}
+              </h2>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                {group.map((c, i) => (
+                  <Reveal key={c.slug} delayMs={Math.min(i, 4) * 60}>
+                    <Link
+                      href={`/compare/${c.slug}`}
+                      className="group flex h-full flex-col rounded-lg border border-[#e6e6e0] bg-white p-6 transition-colors hover:border-[#60ab45]"
+                    >
+                      <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">{c.category}</div>
+                      <div className="font-[family-name:var(--font-heading)] mb-2 text-lg font-bold text-[#0a0a0a]">
+                        {c.product} vs. {c.name}
+                      </div>
+                      <p className="mb-4 flex-1 text-[13.5px] leading-relaxed text-[#5a5a56]">{c.tagline}</p>
+                      <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-[#005642]">
+                        See the comparison
+                        <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
+                      </span>
+                    </Link>
+                  </Reveal>
+                ))}
+              </div>
+            </div>
+          );
+        })}
 
-        <p className="mt-12 text-center text-xs text-slate-400">
+        <p className="mt-2 text-center text-xs text-slate-400">
           Feature and pricing information is drawn from public sources and may change — always confirm current details
           directly with each vendor.
         </p>
