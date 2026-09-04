@@ -33,10 +33,11 @@ export default function DashboardLayout({
     setSidebarOpen(false);
   }, [pathname, setSidebarOpen]);
 
-  // Crew field-clock-in logins have no seat in the PO/CMMS module — keep them
-  // confined to /crm/crew, same as useCrmAccess does for the CRM module.
+  // Crew field-clock-in logins have no seat in the PO/CMMS module — send them
+  // back to /home (CrewHome: Dashboards + Job Photos) rather than into the
+  // CRM shell, which they also have no access to.
   useEffect(() => {
-    if (!isLoading && isCrewOnly) router.replace("/crm/crew");
+    if (!isLoading && isCrewOnly) router.replace("/home");
   }, [isLoading, isCrewOnly, router]);
 
   if (isCrewOnly) return null;

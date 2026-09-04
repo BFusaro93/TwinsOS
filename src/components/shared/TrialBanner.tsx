@@ -11,14 +11,18 @@ function todayKey(): string {
 
 /** Persistent (dismissible-per-day) trial countdown, shown above the app shell — see (crm)/layout.tsx and (dashboard)/layout.tsx. */
 export function TrialBanner() {
-  const { isTrial, isExpired, daysRemaining, isLoading } = useTrialStatus();
+  const { isTrial, isExpired, trialEndsAt, daysRemaining, isLoading } = useTrialStatus();
   const [dismissed, setDismissed] = useState(true); // avoid a flash before we know today's dismiss state
 
   useEffect(() => {
     setDismissed(typeof window !== "undefined" && localStorage.getItem(todayKey()) === "1");
   }, []);
 
-  if (isLoading || !isTrial || isExpired || dismissed) return null;
+  // An open-ended trial (plan = "trial" with no trial_ends_at — e.g. the
+  // internal Twins org) has nothing to count down to; useTrialStatus reports
+  // Infinity days remaining, which used to render as "Infinity days left".
+  // SubscriptionTab already hides the end date in that case — match it here.
+  if (isLoading || !isTrial || isExpired || dismissed || trialEndsAt == null) return null;
 
   return (
     <div className="flex items-center justify-between gap-3 bg-brand-500 px-4 py-2 text-sm text-white">

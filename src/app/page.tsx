@@ -24,7 +24,10 @@ export default async function RootPage() {
     data: { user },
   } = await supabase.auth.getUser();
 
-  if (user) redirect("/dashboard");
+  // /home branches by role (crew get CrewHome) — sending everyone to the
+  // Equipt shell first bounced crew accounts into /crm/crew via the
+  // dashboard layout's crew guard, landing them in the CRM sidebar.
+  if (user) redirect("/home");
 
   return (
     <>

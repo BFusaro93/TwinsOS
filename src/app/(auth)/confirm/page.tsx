@@ -51,7 +51,7 @@ function ConfirmContent() {
         }
 
         setStatus("success");
-        setTimeout(() => router.push("/dashboard"), 2500);
+        setTimeout(() => router.push("/home"), 2500);
       });
   }, [searchParams, router]);
 
