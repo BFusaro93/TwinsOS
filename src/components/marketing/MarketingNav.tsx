@@ -10,6 +10,7 @@ import { DEMO_URL } from "@/components/marketing/config";
 const LINKS = [
   { href: "/pricing", label: "Pricing" },
   { href: "/integrations", label: "Integrations" },
+  { href: "/compare", label: "Compare" },
   { href: "/help", label: "Support" },
   { href: "/contact", label: "Contact" },
 ];

@@ -1,5 +1,6 @@
 import type { MetadataRoute } from "next";
 import { SITE_URL } from "@/lib/seo";
+import { COMPETITORS } from "@/lib/comparisons";
 
 const FEATURE_SUBPAGES = [
   "equipt/api-integrations",
@@ -36,7 +37,15 @@ export default function sitemap(): MetadataRoute.Sitemap {
     { url: `${SITE_URL}/integrations`, lastModified: now, changeFrequency: "monthly", priority: 0.6 },
     { url: `${SITE_URL}/help`, lastModified: now, changeFrequency: "monthly", priority: 0.5 },
     { url: `${SITE_URL}/contact`, lastModified: now, changeFrequency: "monthly", priority: 0.5 },
+    { url: `${SITE_URL}/compare`, lastModified: now, changeFrequency: "monthly", priority: 0.8 },
   ];
+
+  const comparePages: MetadataRoute.Sitemap = COMPETITORS.map((c) => ({
+    url: `${SITE_URL}/compare/${c.slug}`,
+    lastModified: now,
+    changeFrequency: "monthly",
+    priority: 0.8,
+  }));
 
   const featurePages: MetadataRoute.Sitemap = FEATURE_SUBPAGES.map((slug) => ({
     url: `${SITE_URL}/features/${slug}`,
@@ -55,5 +64,5 @@ export default function sitemap(): MetadataRoute.Sitemap {
     { url: `${SITE_URL}/legal/dpa`, lastModified: now, changeFrequency: "yearly", priority: 0.2 },
   ];
 
-  return [...topLevel, ...featurePages, ...legalPages];
+  return [...topLevel, ...comparePages, ...featurePages, ...legalPages];
 }

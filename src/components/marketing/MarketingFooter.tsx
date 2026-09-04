@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { BrandMark } from "@/components/marketing/BrandMark";
+import { COMPETITORS } from "@/lib/comparisons";
 
 const COLUMNS: { label: string; links: { href: string; label: string }[] }[] = [
   {
@@ -51,6 +52,10 @@ const COLUMNS: { label: string; links: { href: string; label: string }[] }[] = [
     ],
   },
   {
+    label: "Compare",
+    links: COMPETITORS.map((c) => ({ href: `/compare/${c.slug}`, label: `vs. ${c.name}` })),
+  },
+  {
     label: "Company",
     links: [
       { href: "/help", label: "Support" },
@@ -66,7 +71,7 @@ export function MarketingFooter() {
   return (
     <div className="border-t border-[#eceae3] bg-[#fbfbf8]">
       <div className="mx-auto max-w-[1440px] px-6 py-16 sm:px-12">
-        <div className="grid grid-cols-2 gap-6 sm:grid-cols-3 lg:grid-cols-[160px_repeat(5,minmax(0,1fr))] lg:gap-5">
+        <div className="grid grid-cols-2 gap-6 sm:grid-cols-3 lg:grid-cols-[160px_repeat(6,minmax(0,1fr))] lg:gap-5">
           <div className="col-span-2 sm:col-span-3 lg:col-span-1">
             <Link href="/" className="flex items-center gap-2">
               <BrandMark size={26} />
