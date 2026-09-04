@@ -105,7 +105,13 @@ function useBreadcrumbs() {
   });
 }
 
-const CRM_QUICK_ADD: { label: string; quickAdd: QuickAddType }[] = [
+/** A quick-add entry either opens a QuickAdd overlay dialog (`quickAdd`) or
+ *  navigates to a page (`href`). Overlay dialogs are mounted only by the
+ *  Equipt and CRM shells — a shell without them (Photos, Dashboards) must use
+ *  `href` entries or the menu item silently does nothing. */
+type QuickAddItem = { label: string; quickAdd?: NonNullable<QuickAddType>; href?: string };
+
+const CRM_QUICK_ADD: QuickAddItem[] = [
   { label: "Client",   quickAdd: "client" },
   { label: "Estimate", quickAdd: "estimate" },
   { label: "Ticket",   quickAdd: "ticket" },
@@ -113,20 +119,24 @@ const CRM_QUICK_ADD: { label: string; quickAdd: QuickAddType }[] = [
   { label: "Payment",  quickAdd: "payment" },
 ];
 
-const EQUIPT_QUICK_ADD: { label: string; quickAdd: QuickAddType }[] = [
+const EQUIPT_QUICK_ADD: QuickAddItem[] = [
   { label: "Requisition",    quickAdd: "requisition" },
   { label: "Purchase Order", quickAdd: "purchase_order" },
   { label: "Work Order",     quickAdd: "work_order" },
   { label: "Vendor",         quickAdd: "vendor" },
 ];
 
-const CREW_QUICK_ADD: { label: string; quickAdd: QuickAddType }[] = [
-  { label: "Requisition", quickAdd: "requisition" },
-  { label: "Work Order",  quickAdd: "work_order" },
+// Crew live in the Photos/Dashboards shells, which don't mount the Equipt
+// quick-add dialogs (the old Requisition / Work Order entries here opened
+// nothing). Crew don't create work orders — they file a repair request, which
+// the office turns into one.
+const CREW_QUICK_ADD: QuickAddItem[] = [
+  { label: "Repair Request", href: "/photos/field/repair-request" },
 ];
 
 function QuickAddMenu() {
   const pathname = usePathname();
+  const router = useRouter();
   const { currentUser } = useCurrentUserStore();
   const { open: openQuickAdd } = useQuickAddStore();
   const { can } = usePermissions();
@@ -156,7 +166,13 @@ function QuickAddMenu() {
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
         {items.map((item) => (
-          <DropdownMenuItem key={item.label} onSelect={() => openQuickAdd(item.quickAdd!)}>
+          <DropdownMenuItem
+            key={item.label}
+            onSelect={() => {
+              if (item.href) router.push(item.href);
+              else if (item.quickAdd) openQuickAdd(item.quickAdd);
+            }}
+          >
             {item.label}
           </DropdownMenuItem>
         ))}
@@ -299,7 +315,11 @@ export function TopBar() {
 
           <DropdownMenuSeparator />
           <DropdownMenuItem onSelect={() => setProfileOpen(true)}>Profile</DropdownMenuItem>
-          <DropdownMenuItem onSelect={() => router.push("/settings")}>Settings</DropdownMenuItem>
+          {/* /settings shows non-admins only their OAuth Connected Apps — meaningless
+              for a shared crew tablet login, so don't offer it. */}
+          {currentUser.role !== "crew" && (
+            <DropdownMenuItem onSelect={() => router.push("/settings")}>Settings</DropdownMenuItem>
+          )}
           <DropdownMenuSeparator />
           <DropdownMenuItem
             className="text-red-600"
