@@ -8,7 +8,7 @@ import { TopBar } from "@/components/shared/TopBar";
 import { RealtimeSync } from "@/components/shared/RealtimeSync";
 import { SettingsLoader } from "@/components/shared/SettingsLoader";
 import { QuickAddOverlay } from "@/components/crm/QuickAddOverlay";
-import { useUIStore } from "@/stores";
+import { useUIStore, useCurrentUserStore } from "@/stores";
 import { useCrmAccess } from "@/lib/hooks/use-permissions";
 import { useModuleAccess } from "@/lib/hooks/use-module-access";
 import { useTrialStatus } from "@/lib/hooks/use-trial-status";
@@ -18,6 +18,13 @@ import { usePageTitle } from "@/lib/hooks/use-page-title";
 export default function CRMLayout({ children }: { children: React.ReactNode }) {
   const { sidebarOpen, setSidebarOpen } = useUIStore();
   const pathname = usePathname();
+  const { currentUser } = useCurrentUserStore();
+  // The crew field app (/crm/crew) is the only CRM surface a crew login can
+  // reach (useCrmAccess). It's a mobile-first shell with its own header, so
+  // don't wrap it in the office CRM sidebar — every link there is a section
+  // crew can't open anyway. TopBar stays (Repair Request quick-add, Help,
+  // Profile / Sign out).
+  const isCrewApp = currentUser.role === "crew" && pathname.startsWith("/crm/crew");
   const { allowed, isLoading } = useCrmAccess(pathname);
   const { allowed: planAllowed, isLoading: planLoading } = useModuleAccess("landscapt");
   const { isExpired: trialExpired, isLoading: trialLoading } = useTrialStatus();
@@ -90,12 +97,14 @@ export default function CRMLayout({ children }: { children: React.ReactNode }) {
       <SettingsLoader />
 
       {/* Desktop sidebar */}
-      <div className="hidden h-full md:flex">
-        <CRMSidebar />
-      </div>
+      {!isCrewApp && (
+        <div className="hidden h-full md:flex">
+          <CRMSidebar />
+        </div>
+      )}
 
       {/* Mobile sidebar drawer */}
-      {sidebarOpen && (
+      {!isCrewApp && sidebarOpen && (
         <div className="fixed inset-0 z-50 md:hidden">
           <div
             className="absolute inset-0 bg-black/50 touch-none"
@@ -109,7 +118,7 @@ export default function CRMLayout({ children }: { children: React.ReactNode }) {
 
       <div className="flex flex-1 flex-col overflow-hidden">
         <TrialBanner />
-        <TopBar />
+        <TopBar sidebarToggle={!isCrewApp} />
         <QuickAddOverlay />
         <main className="flex-1 overflow-auto p-4 md:p-6">{children}</main>
       </div>

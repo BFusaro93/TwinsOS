@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { format } from "date-fns";
 import { MapPin, Clock, Users, ChevronRight, CheckCircle2, XCircle, AlertCircle } from "lucide-react";
 import { useMyCrewStops, useMyCrewInfo } from "@/lib/hooks/use-crew-app";
@@ -94,6 +95,9 @@ export default function CrewSchedulePage() {
       <div className="bg-white border-b border-slate-200 px-4 pt-safe-top pb-3 sticky top-0 z-10">
         <div className="flex items-center justify-between">
           <div>
+            <Link href="/home" className="text-xs font-medium text-brand-600 hover:underline">
+              &larr; Home
+            </Link>
             <p className="text-xs text-slate-400 uppercase tracking-wide font-medium">
               {format(new Date(), "EEEE, MMMM d")}
             </p>

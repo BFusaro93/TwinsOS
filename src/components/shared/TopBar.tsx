@@ -181,7 +181,9 @@ function QuickAddMenu() {
   );
 }
 
-export function TopBar() {
+/** `sidebarToggle={false}` hides the hamburger / collapse buttons for shells
+ *  that render no sidebar (the crew field app inside the CRM layout). */
+export function TopBar({ sidebarToggle = true }: { sidebarToggle?: boolean } = {}) {
   const { toggleSidebar, setSidebarOpen } = useUIStore();
   const { currentUser, setCurrentUser } = useCurrentUserStore();
   const { data: orgUsers = [] } = useUsers();
@@ -198,24 +200,28 @@ export function TopBar() {
     <EditProfileDialog open={profileOpen} onOpenChange={setProfileOpen} />
     <ImpersonationBanner />
     <header className="flex h-14 shrink-0 items-center gap-4 border-b bg-white px-4">
-      {/* Mobile hamburger — opens sidebar drawer */}
-      <Button
-        variant="ghost"
-        size="icon"
-        onClick={() => setSidebarOpen(true)}
-        className="shrink-0 text-slate-500 md:hidden"
-      >
-        <Menu className="h-5 w-5" />
-      </Button>
-      {/* Desktop collapse toggle */}
-      <Button
-        variant="ghost"
-        size="icon"
-        onClick={toggleSidebar}
-        className="hidden shrink-0 text-slate-500 md:inline-flex"
-      >
-        <PanelLeftClose className="h-5 w-5" />
-      </Button>
+      {sidebarToggle && (
+        <>
+          {/* Mobile hamburger — opens sidebar drawer */}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setSidebarOpen(true)}
+            className="shrink-0 text-slate-500 md:hidden"
+          >
+            <Menu className="h-5 w-5" />
+          </Button>
+          {/* Desktop collapse toggle */}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={toggleSidebar}
+            className="hidden shrink-0 text-slate-500 md:inline-flex"
+          >
+            <PanelLeftClose className="h-5 w-5" />
+          </Button>
+        </>
+      )}
 
       {/* Breadcrumbs */}
       <nav className="hidden items-center gap-1 text-sm text-slate-500 sm:flex lowercase">
