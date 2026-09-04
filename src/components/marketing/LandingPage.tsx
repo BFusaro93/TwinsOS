@@ -109,7 +109,7 @@ export function LandingPage() {
             Two systems, one login
           </div>
           <h2 className="font-[family-name:var(--font-heading)] text-4xl font-extrabold text-[#005642]">
-            Run the business. Run the fleet.
+            Run the business. Manage the fleet.
           </h2>
         </Reveal>
 
