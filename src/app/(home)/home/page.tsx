@@ -12,6 +12,7 @@ import { createClient } from "@/lib/supabase/client";
 import { isBillablePlan } from "@/lib/stripe/plans";
 import { useModuleAccess, useAddonAccess } from "@/lib/hooks/use-module-access";
 import { useOrgSettings } from "@/lib/hooks/use-org-settings";
+import { useSyncCurrentUser } from "@/lib/hooks/use-current-user";
 import { parseHomeShortcuts, getHomeShortcutIcon } from "@/lib/home-shortcuts";
 
 /**
@@ -107,7 +108,13 @@ function CrewHome() {
 }
 
 export default function HomePage() {
-  const { currentUser } = useCurrentUserStore();
+  // Every other shell loads the current user via TopBar, which this page
+  // doesn't render — so on a hard refresh of /home the store sat on its
+  // "viewer" placeholder and crew briefly (or, with nothing else to sync it,
+  // permanently) saw the full staff home instead of CrewHome. Sync here and
+  // hold rendering until the real role is known.
+  useSyncCurrentUser();
+  const { currentUser, currentUserLoaded } = useCurrentUserStore();
   const { logoDataUrl, orgName } = useSettingsStore();
   const { allowed: hasEquipt } = useModuleAccess("equipt");
   const { allowed: hasLandscapt } = useModuleAccess("landscapt");
@@ -115,6 +122,10 @@ export default function HomePage() {
   const { data: orgSettings } = useOrgSettings();
   const shortcuts = parseHomeShortcuts(orgSettings?.customizations);
   usePendingPlanRedirect();
+
+  if (!currentUserLoaded) {
+    return <div className="min-h-dvh bg-slate-50" />;
+  }
 
   if (currentUser.role === "crew") {
     return <CrewHome />;
