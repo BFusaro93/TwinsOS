@@ -1085,7 +1085,7 @@ export const DOC_SECTIONS: DocSection[] = [
       {
         id: "report-center",
         title: "Report Center & Dashboards",
-        summary: "75 reports across 12 categories, plus curated and custom dashboards.",
+        summary: "75 reports across 12 categories, curated and custom dashboards, and a customizable KPI Scorecard.",
         icon: BarChart3,
         steps: [
           {
@@ -1102,6 +1102,11 @@ export const DOC_SECTIONS: DocSection[] = [
             step: "Exporting",
             detail:
               "CSV, Excel, PDF, and print are all available on demand. There is no scheduled or emailed report delivery today.",
+          },
+          {
+            step: "KPI Scorecard",
+            detail:
+              "Dashboards > KPI Scorecard scores annual targets by category. Metrics tagged auto are computed live from Landscapt data (invoices, payments, visits, estimates, clients, employees); the rest are typed in. Click Customize to add metrics from the catalog, add your own manual metrics, set weights, or remove any row.",
           },
           {
             step: "Full guide",

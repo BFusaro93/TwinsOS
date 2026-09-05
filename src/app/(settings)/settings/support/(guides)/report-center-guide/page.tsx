@@ -35,11 +35,12 @@ const CURATED_DASHBOARDS: [string, string, string][] = [
   ["Equipt Dashboard", "/dashboards/equipt", "Requires the Equipt module"],
   ["Landscapt My Day", "/dashboards/myday", "Requires the Landscapt module"],
   ["Reports Dashboard", "/dashboards/landscapt-reports", "Requires the Landscapt module"],
-  ["KPI Scorecard", "/dashboards/kpis", "Hidden from crew role"],
+  ["KPI Scorecard", "/dashboards/kpis", "Requires the Landscapt module, hidden from crew role"],
   ["Financial", "/dashboards/financials", "Internal org only"],
   ["Labor Efficiency", "/dashboards/avb", "Internal org only"],
   ["Driver Safety Scores", "/dashboards/safety", "Internal org only"],
   ["CRM Report", "/dashboards/crm", "Internal org only, hidden from crew"],
+  ["Twins KPI Scorecard", "/dashboards/twins-kpis", "Internal org only, hidden from crew"],
 ];
 
 export default function ReportCenterGuidePage() {
@@ -63,6 +64,7 @@ export default function ReportCenterGuidePage() {
           <TOCLink href="#custom-analysis">Custom analyses (&quot;My Reports&quot;)</TOCLink>
           <TOCLink href="#dashboards-vs-reports">Dashboards vs. individual reports</TOCLink>
           <TOCLink href="#curated-dashboards">The curated, top-level dashboards</TOCLink>
+          <TOCLink href="#kpi-scorecard">The KPI Scorecard</TOCLink>
           <TOCLink href="#export">Exporting and printing</TOCLink>
           <TOCLink href="#permissions">Permissions and gating</TOCLink>
         </div>
@@ -293,6 +295,69 @@ export default function ReportCenterGuidePage() {
         </p>
       </Section>
 
+      <Section id="kpi-scorecard" title="The KPI Scorecard">
+        <p>
+          <code>/dashboards/kpis</code> is an annual goals card: metrics grouped into categories
+          (Financial, Operations, Sales, People by default), each with a <strong>Target</strong>,
+          an <strong>Actual</strong>, a progress bar, and a percent weight. Every org gets one
+          scorecard, created from the default layout the first time someone opens the page, and
+          the year selector in the header switches which calendar year you are scoring.
+        </p>
+        <p>
+          Metrics come in two kinds, and the badge on the Actual cell tells you which:
+        </p>
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            <strong>Auto</strong> — computed live from Landscapt data every time the page loads
+            (invoices, payments, jobs, visits, timesheets, estimates, clients, employees, tickets).
+            Nothing is cached, so the number is never stale. Hover the <em>auto</em> badge for the
+            exact definition. A dash means there was nothing to compute from for that year — for
+            example Revenue (Sold) needs jobs with a Date Sold, and Maintenance Retention needs
+            recurring or package jobs that existed before January&nbsp;1.
+          </li>
+          <li>
+            <strong>Manual</strong> — click the Actual cell and type the value. These are things
+            Landscapt has no source for: NOI and net margin, overhead ratio, AP days, labor
+            efficiency against payroll hours, fleet safety score, eNPS, training hours, training
+            completion, accident-free workdays, absenteeism, plus any custom metric you add.
+          </li>
+        </ul>
+        <p>
+          Targets are always editable (click the cell). Some auto metrics are point-in-time
+          snapshots rather than year totals — AR Outstanding, Open Pipeline, Active Clients,
+          Contract MRR, Open Tickets — and say so in their badge tooltip.
+        </p>
+        <p>
+          <strong>Scoring.</strong> Progress is actual ÷ target, capped at 100%. Metrics flagged
+          &quot;lower is better&quot; (AR Days, OT %, Skipped Visit %, …) invert that: meeting or
+          beating the target is 100%, and progress degrades the further you are above it. A
+          category&apos;s score is the weight-averaged progress of its metrics that have both a
+          target and an actual; the Overall pill is the plain average of the category scores.
+        </p>
+        <p>
+          <strong>Customize.</strong> The Customize button switches the card into an editor where
+          you can:
+        </p>
+        <ul className="list-disc space-y-2 pl-5">
+          <li>Add a metric from the catalog dropdown (grouped by suggested category, each tagged auto or manual) — about sixty are available, including Cash Collected, Gross Profit, Labor % of Revenue, Revenue per Man-Hour, AR Over 60 Days, Visit Completion Rate, Budget vs Actual Hours, Maintenance Retention (overall, residential, commercial), Client Retention, New Hires, Average Tenure, Days Since Last Damage Case.</li>
+          <li>Add your own manual metric (name + unit) for anything you track outside the app.</li>
+          <li>Remove any metric, including the defaults — it goes back into the dropdown so it can be re-added later.</li>
+          <li>Change weights, toggle lower-is-better, reorder rows, rename or add categories, or Reset to default.</li>
+        </ul>
+        <p>
+          The layout is saved per org in <code>crm_kpi_scorecards</code>; targets and manual
+          actuals are saved per year in <code>crm_kpi_scorecard_entries</code>. Both are RLS-scoped
+          to the org. The page and its API routes require the <code>view_report_center</code>
+          permission, so crew logins cannot reach it.
+        </p>
+        <Callout>
+          <strong>Twins KPI Scorecard</strong> (<code>/dashboards/twins-kpis</code>) is the older,
+          internal-only card that Twins Lawn Service still runs from Service Autopilot, QuickBooks,
+          Gusto and Samsara uploads. It uses a separate table (<code>kpi_actuals</code>) and never
+          shares values with the platform-wide scorecard. Other orgs never see it.
+        </Callout>
+      </Section>
+
       <Section id="export" title="Exporting and printing">
         <p>
           Every pre-built report and custom analysis runs through the same viewer chrome
@@ -323,20 +388,22 @@ export default function ReportCenterGuidePage() {
             &quot;landscapt&quot;)</code> checks the org&apos;s
             Stripe plan against <code>planIncludesModule</code>; it hides the Equipt Dashboard,
             Landscapt My Day, and Reports Dashboard cards/links when the org&apos;s plan doesn&apos;t
-            include that module.
+            include that module. The KPI Scorecard card/link requires the Landscapt module too.
           </li>
           <li>
             <strong>Internal-only dashboards</strong> — Financial, Labor Efficiency, Driver
-            Safety Scores, and CRM Report are gated by <code>useIsInternalOrg()</code> both in the
+            Safety Scores, CRM Report, and the Twins KPI Scorecard are gated by <code>useIsInternalOrg()</code> both in the
             nav (hidden entirely) and by an <code>InternalOnlyGuard</code> wrapping{" "}
             <code>{"{children}"}</code> in the reports layout itself for the paths listed in{" "}
             <code>INTERNAL_ONLY_PATHS</code> —
             so even a direct URL hit is blocked, not just hidden from the nav.
           </li>
           <li>
-            <strong>Crew role</strong> — the KPI Scorecard, Financial, and CRM Report nav entries
-            set <code>hideFromCrew</code>, and <code>DashboardsHomePage</code> independently
-            checks <code>currentUser.role === &quot;crew&quot;</code> to hide the same cards.
+            <strong>Crew role</strong> — the KPI Scorecard, Twins KPI Scorecard, Financial, and
+            CRM Report nav entries set <code>hideFromCrew</code>, <code>DashboardsHomePage</code>
+            independently checks <code>currentUser.role === &quot;crew&quot;</code> to hide the
+            same cards, and <code>CrewBlockedGuard</code> in the reports layout blocks the office
+            dashboards by URL as well.
           </li>
           <li>
             <strong>Custom Dashboards module gate</strong> — both{" "}
