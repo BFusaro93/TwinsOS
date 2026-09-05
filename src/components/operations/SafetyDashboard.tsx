@@ -15,6 +15,7 @@ import {
 } from "@/lib/hooks/use-safety-weeks";
 import type { DriverData, SafetyWeekData } from "@/lib/hooks/use-safety-weeks";
 import { useIsInternalOrg } from "@/lib/hooks/use-internal-org";
+import { useCurrentUserStore } from "@/stores";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 type Tab = "overview" | "history" | "import";
@@ -194,6 +195,10 @@ export function SafetyDashboard() {
   const { isInternalOrg } = useIsInternalOrg();
   const excludeVehicles = isInternalOrg ? TWINS_EXCLUDE_VEHICLES : NO_EXCLUDED_VEHICLES;
 
+  // Everyone (including crew) can view; only admins/managers can import/edit/delete a week.
+  const { currentUser } = useCurrentUserStore();
+  const canManageWeeks = currentUser.role === "admin" || currentUser.role === "manager";
+
   const { data: weeks = [], isLoading } = useSafetyWeeks();
   const upsert = useUpsertSafetyWeek();
   const del = useDeleteSafetyWeek();
@@ -224,6 +229,7 @@ export function SafetyDashboard() {
 
   // Save week
   const saveWeek = async (drivers: DriverData[]) => {
+    if (!canManageWeeks) return;
     if (!importWeekEnd || !importLabel.trim()) {
       alert("Please fill in both the Week Label and Week End date.");
       return;
@@ -261,10 +267,14 @@ export function SafetyDashboard() {
       <div className="flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-slate-200 py-16 text-center">
         <ShieldCheck className="mb-3 h-8 w-8 text-slate-300" />
         <p className="text-sm font-medium text-slate-500">No safety data yet</p>
-        <p className="mt-1 text-xs text-slate-400">Import a week to get started</p>
-        <button onClick={() => setTab("import")} className="mt-4 rounded-md bg-brand-500 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-600">
-          Import Week
-        </button>
+        <p className="mt-1 text-xs text-slate-400">
+          {canManageWeeks ? "Import a week to get started" : "An admin or manager needs to import a week first"}
+        </p>
+        {canManageWeeks && (
+          <button onClick={() => setTab("import")} className="mt-4 rounded-md bg-brand-500 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-600">
+            Import Week
+          </button>
+        )}
       </div>
     );
 
@@ -334,19 +344,21 @@ export function SafetyDashboard() {
             </>);
           })()}
           <div className="ml-auto flex gap-2">
-            <button
-              onClick={() => {
-                if (!curWeek) return;
-                setImportLabel(curWeek.data.label);
-                setImportWeekEnd(curWeek.weekEnd);
-                setPendingDrivers([...curWeek.data.drivers]);
-                setImportMode("manual");
-                setTab("import");
-              }}
-              className="flex items-center gap-1.5 text-xs font-medium text-brand-600 hover:underline"
-            >
-              <Pencil className="h-3 w-3" /> Edit Week
-            </button>
+            {canManageWeeks && (
+              <button
+                onClick={() => {
+                  if (!curWeek) return;
+                  setImportLabel(curWeek.data.label);
+                  setImportWeekEnd(curWeek.weekEnd);
+                  setPendingDrivers([...curWeek.data.drivers]);
+                  setImportMode("manual");
+                  setTab("import");
+                }}
+                className="flex items-center gap-1.5 text-xs font-medium text-brand-600 hover:underline"
+              >
+                <Pencil className="h-3 w-3" /> Edit Week
+              </button>
+            )}
           </div>
         </div>
 
@@ -589,23 +601,25 @@ export function SafetyDashboard() {
                       <Td right cls="text-green-600 font-semibold">{perfect}</Td>
                       <Td right cls={attn > 0 ? "text-red-600 font-semibold" : "text-slate-400"}>{attn > 0 ? attn : "—"}</Td>
                       <td className="px-4 py-3 pr-4 text-right">
-                        <div className="flex items-center justify-end gap-3">
-                          <button
-                            onClick={() => {
-                              setImportLabel(w.data.label);
-                              setImportWeekEnd(w.weekEnd);
-                              setPendingDrivers([...w.data.drivers]);
-                              setImportMode("manual");
-                              setTab("import");
-                            }}
-                            className="text-slate-400 hover:text-brand-600"
-                            title="Edit week"
-                          ><Pencil className="h-4 w-4" /></button>
-                          <button
-                            onClick={() => { if (confirm("Delete " + (w.data.label || fmtDate(w.weekEnd)) + "?")) del.mutate(w.weekEnd); }}
-                            className="text-red-400 hover:text-red-600"
-                          ><Trash2 className="h-4 w-4" /></button>
-                        </div>
+                        {canManageWeeks && (
+                          <div className="flex items-center justify-end gap-3">
+                            <button
+                              onClick={() => {
+                                setImportLabel(w.data.label);
+                                setImportWeekEnd(w.weekEnd);
+                                setPendingDrivers([...w.data.drivers]);
+                                setImportMode("manual");
+                                setTab("import");
+                              }}
+                              className="text-slate-400 hover:text-brand-600"
+                              title="Edit week"
+                            ><Pencil className="h-4 w-4" /></button>
+                            <button
+                              onClick={() => { if (confirm("Delete " + (w.data.label || fmtDate(w.weekEnd)) + "?")) del.mutate(w.weekEnd); }}
+                              className="text-red-400 hover:text-red-600"
+                            ><Trash2 className="h-4 w-4" /></button>
+                          </div>
+                        )}
                       </td>
                     </tr>
                   );
@@ -834,7 +848,7 @@ export function SafetyDashboard() {
   const TABS: { key: Tab; label: string }[] = [
     { key: "overview", label: "Overview" },
     { key: "history", label: "History & Trends" },
-    { key: "import", label: "Import Week" },
+    ...(canManageWeeks ? [{ key: "import" as Tab, label: "Import Week" }] : []),
   ];
 
   return (
@@ -843,12 +857,14 @@ export function SafetyDashboard() {
         title="Driver Safety Scores"
         description="Weekly Samsara safety scores by vehicle — fleet average, rankings, and trends"
         action={
-          <button
-            onClick={() => { setImportLabel(""); setImportWeekEnd(""); setUploadedDrivers([]); setPendingDrivers([]); setXlsxSt(""); setTab("import"); }}
-            className="flex items-center gap-2 rounded-md bg-brand-500 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-600"
-          >
-            <Upload className="h-4 w-4" /> Import Week
-          </button>
+          canManageWeeks ? (
+            <button
+              onClick={() => { setImportLabel(""); setImportWeekEnd(""); setUploadedDrivers([]); setPendingDrivers([]); setXlsxSt(""); setTab("import"); }}
+              className="flex items-center gap-2 rounded-md bg-brand-500 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-600"
+            >
+              <Upload className="h-4 w-4" /> Import Week
+            </button>
+          ) : undefined
         }
       />
 
@@ -870,7 +886,7 @@ export function SafetyDashboard() {
         <>
           {tab === "overview" && Overview()}
           {tab === "history" && History()}
-          {tab === "import" && Import()}
+          {tab === "import" && canManageWeeks && Import()}
         </>
       )}
     </div>
