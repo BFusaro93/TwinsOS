@@ -93,7 +93,7 @@ export default function DashboardsHomePage() {
         {hasLandscapt && !isCrew && (
           <DashboardCard
             href="/dashboards/kpis"
-            icon={Target}
+            icon={Gauge}
             title="KPI Scorecard"
             description="Customizable KPIs computed live from Landscapt data"
           />
@@ -127,7 +127,7 @@ export default function DashboardsHomePage() {
             />
             <DashboardCard
               href="/dashboards/twins-kpis"
-              icon={Gauge}
+              icon={Target}
               title="Twins KPI Scorecard"
               description="Legacy scorecard (AvB, QBO, Samsara sources)"
             />
