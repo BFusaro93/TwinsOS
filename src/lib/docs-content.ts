@@ -605,7 +605,17 @@ export const DOC_SECTIONS: DocSection[] = [
           {
             step: "Adding a property",
             detail:
-              "On a client's detail page, click 'Add Property' under Related Properties. Enter the property name/label, street address, city/state/zip, gate code, and notes to crew. Turf sq ft, mulch bed sq ft, gross sq ft, and linear ft measurements are entered on the client's Custom Fields tab and feed the estimating engine's production-rate calculations.",
+              "On a client's detail page, open the More menu and click 'Add Property'. Enter the property name/label, street address, city/state/zip, gate code, and notes to crew. Properties are address-only — a second billed-together location on the same account, not a separate jobs/invoicing record. Turf sq ft, mulch bed sq ft, gross sq ft, and linear ft measurements are entered on the client's Custom Fields tab and feed the estimating engine's production-rate calculations.",
+          },
+          {
+            step: "A location that needs its own jobs/invoices",
+            detail:
+              "If a location genuinely needs independent scheduling and billing — not just a second address on the same account — use the Commercial parent/child hierarchy above instead of a property.",
+          },
+          {
+            step: "Open Tickets card",
+            detail:
+              "The client detail page shows a compact Open Tickets card (count plus the most recent few) alongside Contacts and Office Notes, with a link to the full Tickets tab and an Add Ticket shortcut.",
           },
           {
             step: "Contacts",
@@ -827,6 +837,11 @@ export const DOC_SECTIONS: DocSection[] = [
               "Invoices move Draft → Sent → Viewed → Partial → Paid, with Overdue and Void as side states. Payments can be recorded against an invoice with a specific method — Cash, Check, ACH/E-Check, AutoPay, Credit Card by network, AR Write-off, or Other.",
           },
           {
+            step: "Paying across sub-accounts",
+            detail:
+              "Recording a payment against a commercial parent with sub-accounts shows open invoices from the parent AND every sub-account, grouped by account — covers a property manager sending one check for several HOAs' invoices at once. A sub-account's own invoice list tags that payment 'via [Parent Name]'.",
+          },
+          {
             step: "Contracts",
             detail:
               "CRM > Accounting > Contracts covers ongoing agreements: a monthly amount, billing frequency (weekly through annual, or one-time), auto-renew, billing day of month, and whether the contract bills a month in advance. Month-by-month amount overrides are supported for seasonal pricing.",
@@ -1011,7 +1026,7 @@ export const DOC_SECTIONS: DocSection[] = [
           {
             step: "Status",
             detail:
-              "Open, In Progress, Resolved, or Closed. Creating a case can fire both an internal automation and a Zapier trigger.",
+              "Open, In Progress, Resolved, or Closed. Creating a case can fire both an internal automation and a Zapier trigger. Once Resolved or Closed, adding an expense or editing the description/resolution notes is blocked until the case is reopened.",
           },
           {
             step: "Full guide",
@@ -1225,7 +1240,7 @@ export const DOC_SECTIONS: DocSection[] = [
           {
             step: "Vendor history",
             detail:
-              "Open a vendor to see all POs issued to them, total spend, and contact history. Use this for vendor performance reviews and negotiations.",
+              "Open a vendor to see its Spend History — POs issued to them AND direct CMMS work-order vendor charges, both counted in Total Spend — plus contact history. Use this for vendor performance reviews and negotiations.",
           },
         ],
       },
