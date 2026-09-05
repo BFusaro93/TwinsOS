@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { ChevronDown, ChevronUp, Plus, RotateCcw, Settings2, Trash2, X } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -176,16 +177,27 @@ function resolveValues(
   return { target, actual };
 }
 
+function ReadOnlyValue({ value, unit }: { value: number | null; unit: KpiUnit }) {
+  return (
+    <span className={`block text-right text-sm ${value !== null ? "font-medium text-slate-800" : "text-slate-400"}`}>
+      {value !== null ? formatKpiValue(value, unit) : "—"}
+    </span>
+  );
+}
+
 function CategoryCard({
   category,
   entries,
   computed,
+  canEdit,
   onSaveTarget,
   onSaveActual,
 }: {
   category: KpiScorecardCategory;
   entries: EntryMap;
   computed: Record<string, number | null>;
+  /** manage_report_center — without it targets and manual actuals are read-only. */
+  canEdit: boolean;
   onSaveTarget: (metricKey: string, value: number | null) => void;
   onSaveActual: (metricKey: string, value: number | null) => void;
 }) {
@@ -237,7 +249,11 @@ function CategoryCard({
                       )}
                     </td>
                     <td className="border-l border-slate-100 px-4 py-3">
-                      <EditableCell value={target} unit={metric.unit} onSave={(v) => onSaveTarget(metric.key, v)} />
+                      {canEdit ? (
+                        <EditableCell value={target} unit={metric.unit} onSave={(v) => onSaveTarget(metric.key, v)} />
+                      ) : (
+                        <ReadOnlyValue value={target} unit={metric.unit} />
+                      )}
                     </td>
                     <td className="border-l border-slate-100 px-4 py-3">
                       {metric.auto ? (
@@ -247,8 +263,10 @@ function CategoryCard({
                           </span>
                           <AutoBadge source={metric.source} snapshot={metric.snapshot} />
                         </div>
-                      ) : (
+                      ) : canEdit ? (
                         <EditableCell value={actual} unit={metric.unit} onSave={(v) => onSaveActual(metric.key, v)} />
+                      ) : (
+                        <ReadOnlyValue value={actual} unit={metric.unit} />
                       )}
                     </td>
                     <td className="border-l border-slate-100 px-4 py-3">
@@ -501,6 +519,8 @@ export function LandscaptKpiScorecard() {
   const [draft, setDraft] = useState<KpiScorecardConfig | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
 
+  const { can } = usePermissions();
+  const canManage = can("manage_report_center");
   const { data: scorecard, isLoading: loadingScorecard, error: scorecardError } = useLandscaptKpiScorecard();
   const { data: actuals, isLoading: loadingActuals } = useLandscaptKpiActuals(period);
   const { data: entries = [] } = useLandscaptKpiEntries(scorecard?.id, period);
@@ -525,12 +545,13 @@ export function LandscaptKpiScorecard() {
     return !latest || e.updatedAt > latest ? e.updatedAt : latest;
   }, null);
 
+  const canEdit = canManage && !!scorecard?.id;
   function saveTarget(metricKey: string, value: number | null) {
-    if (!scorecard) return;
+    if (!scorecard?.id) return;
     upsertEntry({ scorecardId: scorecard.id, period, metricKey, targetValue: value });
   }
   function saveActual(metricKey: string, value: number | null) {
-    if (!scorecard) return;
+    if (!scorecard?.id) return;
     upsertEntry({ scorecardId: scorecard.id, period, metricKey, actualValue: value });
   }
 
@@ -592,9 +613,11 @@ export function LandscaptKpiScorecard() {
                 <span>Overall</span>
                 <span className="rounded-full bg-white/20 px-2 py-0.5">{overallScore}%</span>
               </div>
-              <Button variant="outline" size="sm" onClick={() => setDraft(structuredClone(config))} disabled={!scorecard}>
-                <Settings2 className="mr-1 h-3.5 w-3.5" /> Customize
-              </Button>
+              {canManage && (
+                <Button variant="outline" size="sm" onClick={() => setDraft(structuredClone(config))} disabled={!scorecard}>
+                  <Settings2 className="mr-1 h-3.5 w-3.5" /> Customize
+                </Button>
+              )}
             </>
           )
         }
@@ -649,12 +672,15 @@ export function LandscaptKpiScorecard() {
               category={cat}
               entries={entryMap}
               computed={computed}
+              canEdit={canEdit}
               onSaveTarget={saveTarget}
               onSaveActual={saveActual}
             />
           ))}
           <p className="text-center text-xs text-slate-400">
-            Click any Target (or a manual Actual) to edit — changes save automatically.{" "}
+            {canEdit
+              ? "Click any Target (or a manual Actual) to edit — changes save automatically. "
+              : "Editing targets, manual actuals, and the layout requires the Manage Report Center permission. "}
             <span className="rounded-full bg-blue-50 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-blue-500">auto</span>{" "}
             values are computed from Landscapt data for {period}
             {loadingActuals ? " (refreshing…)" : actuals ? ` as of ${new Date(actuals.computedAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}` : ""}

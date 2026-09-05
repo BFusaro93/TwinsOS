@@ -45,7 +45,8 @@ export const kpiScorecardInputSchema = z.object({
 export type KpiScorecardInput = z.infer<typeof kpiScorecardInputSchema>;
 
 export interface KpiScorecard {
-  id: string;
+  /** null = no layout saved for this org yet and the caller may not create one (view-only). */
+  id: string | null;
   name: string;
   config: KpiScorecardConfig;
   createdAt: string;

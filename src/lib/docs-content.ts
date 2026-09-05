@@ -1106,7 +1106,7 @@ export const DOC_SECTIONS: DocSection[] = [
           {
             step: "KPI Scorecard",
             detail:
-              "Dashboards > KPI Scorecard scores annual targets by category. Metrics tagged auto are computed live from Landscapt data (invoices, payments, visits, estimates, clients, employees); the rest are typed in. Click Customize to add metrics from the catalog, add your own manual metrics, set weights, or remove any row.",
+              "Dashboards > KPI Scorecard scores annual targets by category. Metrics tagged auto are computed live from Landscapt data (invoices, payments, visits, estimates, clients, employees); the rest are typed in. Click Customize to add metrics from the catalog, add your own manual metrics, set weights, or remove any row. Viewing needs the View Report Center permission; editing targets, manual actuals, or the layout needs Manage Report Center.",
           },
           {
             step: "Full guide",

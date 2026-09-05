@@ -40,7 +40,6 @@ const CURATED_DASHBOARDS: [string, string, string][] = [
   ["Labor Efficiency", "/dashboards/avb", "Internal org only"],
   ["Driver Safety Scores", "/dashboards/safety", "Internal org only"],
   ["CRM Report", "/dashboards/crm", "Internal org only, hidden from crew"],
-  ["Twins KPI Scorecard", "/dashboards/twins-kpis", "Internal org only, hidden from crew"],
 ];
 
 export default function ReportCenterGuidePage() {
@@ -345,17 +344,22 @@ export default function ReportCenterGuidePage() {
           <li>Change weights, toggle lower-is-better, reorder rows, rename or add categories, or Reset to default.</li>
         </ul>
         <p>
+          <strong>Who can do what.</strong> Anyone whose role has <strong>View Report Center</strong>
+          can open the scorecard and see every number. Changing it — editing a target, typing a
+          manual actual, or anything in Customize — requires <strong>Manage Report Center</strong>,
+          the same permission that gates building Custom Dashboards and custom analyses. Org admins
+          always have it; of the default roles, Owner and Operations Manager have it and the rest
+          (Accounting, Office Admin, Sales / Account Mgr, Scheduler, Customer Support Rep) are
+          view-only. Without it the Customize button is hidden and the cells are read-only, and the
+          database policies reject the write regardless of the UI. Crew logins have neither
+          permission, so they cannot reach the page at all. Roles are managed under Settings &gt;
+          CRM Settings &gt; Roles.
+        </p>
+        <p>
           The layout is saved per org in <code>crm_kpi_scorecards</code>; targets and manual
           actuals are saved per year in <code>crm_kpi_scorecard_entries</code>. Both are RLS-scoped
-          to the org. The page and its API routes require the <code>view_report_center</code>
-          permission, so crew logins cannot reach it.
+          to the org.
         </p>
-        <Callout>
-          <strong>Twins KPI Scorecard</strong> (<code>/dashboards/twins-kpis</code>) is the older,
-          internal-only card that Twins Lawn Service still runs from Service Autopilot, QuickBooks,
-          Gusto and Samsara uploads. It uses a separate table (<code>kpi_actuals</code>) and never
-          shares values with the platform-wide scorecard. Other orgs never see it.
-        </Callout>
       </Section>
 
       <Section id="export" title="Exporting and printing">
@@ -392,15 +396,15 @@ export default function ReportCenterGuidePage() {
           </li>
           <li>
             <strong>Internal-only dashboards</strong> — Financial, Labor Efficiency, Driver
-            Safety Scores, CRM Report, and the Twins KPI Scorecard are gated by <code>useIsInternalOrg()</code> both in the
+            Safety Scores, and CRM Report are gated by <code>useIsInternalOrg()</code> both in the
             nav (hidden entirely) and by an <code>InternalOnlyGuard</code> wrapping{" "}
             <code>{"{children}"}</code> in the reports layout itself for the paths listed in{" "}
             <code>INTERNAL_ONLY_PATHS</code> —
             so even a direct URL hit is blocked, not just hidden from the nav.
           </li>
           <li>
-            <strong>Crew role</strong> — the KPI Scorecard, Twins KPI Scorecard, Financial, and
-            CRM Report nav entries set <code>hideFromCrew</code>, <code>DashboardsHomePage</code>
+            <strong>Crew role</strong> — the KPI Scorecard, Financial, and CRM Report nav
+            entries set <code>hideFromCrew</code>, <code>DashboardsHomePage</code>
             independently checks <code>currentUser.role === &quot;crew&quot;</code> to hide the
             same cards, and <code>CrewBlockedGuard</code> in the reports layout blocks the office
             dashboards by URL as well.
@@ -413,6 +417,11 @@ export default function ReportCenterGuidePage() {
             <code>hasLandscapt</code> checks — Custom Dashboards are a Landscapt-only feature.
           </li>
         </ul>
+        <p>
+          The KPI Scorecard is the one reporting surface with a view/edit split: View Report
+          Center to open it, Manage Report Center to change targets, manual actuals, or the
+          layout (see the KPI Scorecard section above).
+        </p>
         <p>
           No per-report role or per-report visibility list was found — every report in{" "}
           <code>ALL_REPORTS</code> is visible to any authenticated user who can reach{" "}

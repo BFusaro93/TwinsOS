@@ -34,29 +34,39 @@ function mapRow(row: ScorecardRow): KpiScorecard {
   };
 }
 
+async function hasPermission(supabase: SupabaseClient, key: string): Promise<boolean> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data } = await (supabase.rpc as any)("has_settings_permission", { p_key: key });
+  return !!data;
+}
+
 /**
- * Resolves the caller's user + Report Center permission. The Landscapt KPI
- * scorecard is an office reporting tool, gated the same way as the rest of
- * the Report Center (crew logins have no view_report_center permission).
+ * Resolves the caller's user + Report Center permission. Viewing the KPI
+ * scorecard needs view_report_center (same as the rest of the Report Center;
+ * crew logins never hold it). Changing it — layout, targets, manual actuals —
+ * needs manage_report_center, the same key that gates building Custom
+ * Dashboards. The tables' RLS policies enforce the same split.
  */
-async function authorize(supabase: SupabaseClient): Promise<NextResponse | null> {
+async function authorize(
+  supabase: SupabaseClient,
+  key: "view_report_center" | "manage_report_center"
+): Promise<NextResponse | null> {
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: canView } = await (supabase.rpc as any)("has_settings_permission", {
-    p_key: "view_report_center",
-  });
-  if (!canView) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (!(await hasPermission(supabase, key))) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
   return null;
 }
 
-/** GET — the org's scorecard, created from the default layout on first visit. */
+/** GET — the org's scorecard, created from the default layout on first visit
+ *  (by the first visitor allowed to write; view-only callers get the default
+ *  layout back unsaved, with id null). */
 export async function GET() {
   const supabase = await createClient();
-  const denied = await authorize(supabase);
+  const denied = await authorize(supabase, "view_report_center");
   if (denied) return denied;
 
   // crm_kpi_scorecards is newer than the generated Database types
@@ -74,6 +84,18 @@ export async function GET() {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
   if (existing) return NextResponse.json({ scorecard: mapRow(existing as ScorecardRow) });
+
+  if (!(await hasPermission(supabase, "manage_report_center"))) {
+    const now = new Date().toISOString();
+    const unsaved: KpiScorecard = {
+      id: null,
+      name: "KPI Scorecard",
+      config: DEFAULT_KPI_SCORECARD_CONFIG,
+      createdAt: now,
+      updatedAt: now,
+    };
+    return NextResponse.json({ scorecard: unsaved });
+  }
 
   // org_id / created_by default from my_org_id() / auth.uid() in the table.
   const { data: created, error: insertError } = await table()
@@ -98,7 +120,7 @@ export async function GET() {
 /** PUT — replace the scorecard layout (categories, metrics, weights). */
 export async function PUT(request: Request) {
   const supabase = await createClient();
-  const denied = await authorize(supabase);
+  const denied = await authorize(supabase, "manage_report_center");
   if (denied) return denied;
 
   let body: unknown;
