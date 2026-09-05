@@ -6,6 +6,7 @@ import { recalcNextPackageVisitDate } from "@/lib/package-visit-recalc";
 import { stopKeyForVisit, type StopKeyInput } from "@/lib/utils/visit-stops";
 import { allocateStopHours } from "@/lib/utils/visit-hours";
 import { assertCallerOwnsVisit } from "@/lib/supabase/route-auth";
+import { isoNy } from "@/lib/reports/ny-date";
 
 const Body = z.object({
   notes: z.string().optional(),
@@ -199,7 +200,7 @@ export async function POST(
   // completed later than its static schedule assumed. Non-fatal.
   for (const row of openRows) {
     try {
-      await recalcNextPackageVisitDate(supabase, row.job_service_id, now.slice(0, 10));
+      await recalcNextPackageVisitDate(supabase, row.job_service_id, isoNy(new Date(now)));
     } catch (err) {
       console.error("[crew/stops/clock-out] package min_days recalc failed:", err);
     }

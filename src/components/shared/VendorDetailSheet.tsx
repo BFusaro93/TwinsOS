@@ -41,6 +41,8 @@ import { usePurchaseOrders } from "@/lib/hooks/use-purchase-orders";
 import { useParts, useUpdatePart } from "@/lib/hooks/use-parts";
 import { useUpdateVendor, useDeleteVendor } from "@/lib/hooks/use-vendors";
 import { useProducts } from "@/lib/hooks/use-products";
+import { useWOVendorChargesByVendor } from "@/lib/hooks/use-wo-costs";
+import { useWorkOrders } from "@/lib/hooks/use-work-orders";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { PartDetailSheet } from "@/components/cmms/PartDetailSheet";
 import { ProductDetailSheet } from "@/components/po/ProductDetailSheet";
@@ -501,15 +503,31 @@ function PartsProductsTab({ vendor }: { vendor: Vendor }) {
   );
 }
 
-function POHistoryTab({ vendor }: { vendor: Vendor }) {
-  const { data: purchaseOrders, isLoading } = usePurchaseOrders();
+function SpendHistoryTab({ vendor }: { vendor: Vendor }) {
+  const { data: purchaseOrders, isLoading: poLoading } = usePurchaseOrders();
+  const { data: vendorCharges, isLoading: chargesLoading } = useWOVendorChargesByVendor(vendor.id);
+  const { data: workOrders, isLoading: woLoading } = useWorkOrders();
   const [selectedPO, setSelectedPO] = useState<PurchaseOrder | null>(null);
+
+  const isLoading = poLoading || chargesLoading || woLoading;
 
   const vendorPOs = (purchaseOrders ?? [])
     .filter((po) => po.vendorId === vendor.id)
     .sort((a, b) => new Date(b.poDate ?? b.createdAt).getTime() - new Date(a.poDate ?? a.createdAt).getTime());
 
-  const totalSpend = vendorPOs.reduce((sum, po) => sum + po.grandTotal, 0);
+  const woNumberById = new Map((workOrders ?? []).map((wo) => [wo.id, wo.workOrderNumber]));
+
+  const cmmsCharges = (vendorCharges ?? [])
+    .slice()
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+  // Honest total spend across BOTH the PO flow and CMMS direct vendor
+  // charges (wo_vendor_charges) — a Work Order can log a charge against a
+  // vendor without ever going through a Purchase Order, and that spend was
+  // previously silently excluded here.
+  const poSpend = vendorPOs.reduce((sum, po) => sum + po.grandTotal, 0);
+  const cmmsSpend = cmmsCharges.reduce((sum, c) => sum + c.cost, 0);
+  const totalSpend = poSpend + cmmsSpend;
 
   if (isLoading) {
     return (
@@ -519,10 +537,10 @@ function POHistoryTab({ vendor }: { vendor: Vendor }) {
     );
   }
 
-  if (vendorPOs.length === 0) {
+  if (vendorPOs.length === 0 && cmmsCharges.length === 0) {
     return (
       <div className="flex h-48 items-center justify-center p-6">
-        <p className="text-sm text-slate-400">No purchase orders found for this vendor.</p>
+        <p className="text-sm text-slate-400">No purchase orders or work order charges found for this vendor.</p>
       </div>
     );
   }
@@ -531,10 +549,14 @@ function POHistoryTab({ vendor }: { vendor: Vendor }) {
     <>
       <div className="p-6">
         {/* Summary */}
-        <div className="mb-6 grid grid-cols-2 gap-3">
+        <div className="mb-6 grid grid-cols-3 gap-3">
           <div className="rounded-md border bg-slate-50 p-3">
             <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Total Orders</p>
             <p className="mt-1 text-xl font-bold text-slate-900">{vendorPOs.length}</p>
+          </div>
+          <div className="rounded-md border bg-slate-50 p-3">
+            <p className="text-xs font-medium uppercase tracking-wide text-slate-400">WO Charges</p>
+            <p className="mt-1 text-xl font-bold text-slate-900">{cmmsCharges.length}</p>
           </div>
           <div className="rounded-md border bg-slate-50 p-3">
             <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Total Spend</p>
@@ -543,39 +565,84 @@ function POHistoryTab({ vendor }: { vendor: Vendor }) {
         </div>
 
         {/* PO list */}
-        <div className="overflow-hidden rounded-md border">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-slate-50">
-                <th className="px-3 py-2 text-left text-xs font-medium text-slate-500">PO #</th>
-                <th className="px-3 py-2 text-left text-xs font-medium text-slate-500">Date</th>
-                <th className="px-3 py-2 text-left text-xs font-medium text-slate-500">Status</th>
-                <th className="px-3 py-2 text-right text-xs font-medium text-slate-500">Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              {vendorPOs.map((po) => (
-                <tr key={po.id} className="border-t border-slate-100 hover:bg-slate-50">
-                  <td className="px-3 py-2">
-                    <button
-                      onClick={() => setSelectedPO(po)}
-                      className="font-mono text-xs font-medium text-brand-600 hover:underline"
-                    >
-                      {po.poNumber}
-                    </button>
-                  </td>
-                  <td className="px-3 py-2 text-slate-500">{formatDate(po.poDate ?? po.createdAt)}</td>
-                  <td className="px-3 py-2">
-                    <StatusBadge variant={po.status} label={po.status.replace(/_/g, " ")} />
-                  </td>
-                  <td className="px-3 py-2 text-right font-medium text-slate-900">
-                    {formatCurrency(po.grandTotal)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        {vendorPOs.length > 0 && (
+          <div className="mb-6">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+              Purchase Orders
+              <span className="ml-1.5 font-normal normal-case text-slate-300">({formatCurrency(poSpend)})</span>
+            </p>
+            <div className="overflow-hidden rounded-md border">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-slate-50">
+                    <th className="px-3 py-2 text-left text-xs font-medium text-slate-500">PO #</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-slate-500">Date</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-slate-500">Status</th>
+                    <th className="px-3 py-2 text-right text-xs font-medium text-slate-500">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {vendorPOs.map((po) => (
+                    <tr key={po.id} className="border-t border-slate-100 hover:bg-slate-50">
+                      <td className="px-3 py-2">
+                        <button
+                          onClick={() => setSelectedPO(po)}
+                          className="font-mono text-xs font-medium text-brand-600 hover:underline"
+                        >
+                          {po.poNumber}
+                        </button>
+                      </td>
+                      <td className="px-3 py-2 text-slate-500">{formatDate(po.poDate ?? po.createdAt)}</td>
+                      <td className="px-3 py-2">
+                        <StatusBadge variant={po.status} label={po.status.replace(/_/g, " ")} />
+                      </td>
+                      <td className="px-3 py-2 text-right font-medium text-slate-900">
+                        {formatCurrency(po.grandTotal)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* CMMS direct vendor charges — logged on a Work Order's Costs tab,
+            bypasses the PO flow entirely. */}
+        {cmmsCharges.length > 0 && (
+          <div>
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+              Work Order Charges (CMMS)
+              <span className="ml-1.5 font-normal normal-case text-slate-300">({formatCurrency(cmmsSpend)})</span>
+            </p>
+            <div className="overflow-hidden rounded-md border">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-slate-50">
+                    <th className="px-3 py-2 text-left text-xs font-medium text-slate-500">Work Order</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-slate-500">Description</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-slate-500">Date</th>
+                    <th className="px-3 py-2 text-right text-xs font-medium text-slate-500">Cost</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {cmmsCharges.map((charge) => (
+                    <tr key={charge.id} className="border-t border-slate-100 hover:bg-slate-50">
+                      <td className="px-3 py-2 font-mono text-xs font-medium text-slate-700">
+                        {woNumberById.get(charge.workOrderId) ?? charge.workOrderId}
+                      </td>
+                      <td className="px-3 py-2 text-slate-500">{charge.description || "—"}</td>
+                      <td className="px-3 py-2 text-slate-500">{formatDate(charge.createdAt)}</td>
+                      <td className="px-3 py-2 text-right font-medium text-slate-900">
+                        {formatCurrency(charge.cost)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* PO detail overlay */}
@@ -618,7 +685,7 @@ export function VendorDetailSheet({ vendor, open, onOpenChange }: VendorDetailSh
   const TABS = [
     { value: "details", label: "Details" },
     { value: "parts-products", label: "Parts & Products" },
-    { value: "po-history", label: "PO History" },
+    { value: "po-history", label: "Spend History" },
   ];
 
   return (
@@ -681,7 +748,7 @@ export function VendorDetailSheet({ vendor, open, onOpenChange }: VendorDetailSh
             <PartsProductsTab vendor={vendor} />
           </TabsContent>
           <TabsContent value="po-history" className="mt-0 flex-1 overflow-y-auto">
-            <POHistoryTab vendor={vendor} />
+            <SpendHistoryTab vendor={vendor} />
           </TabsContent>
         </Tabs>
       </SheetContent>

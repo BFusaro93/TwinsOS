@@ -42,8 +42,67 @@ function colorForType(type: PropertyZone["type"]): string {
   return ZONE_TYPES.find((t) => t.value === type)?.color ?? "#6366f1";
 }
 
+type LatLngLiteral = { lat: number; lng: number };
+
+/** Cross-product-sign orientation test used by the segment-intersection check below. */
+function orientation(a: LatLngLiteral, b: LatLngLiteral, c: LatLngLiteral): 0 | 1 | 2 {
+  const val = (b.lng - a.lng) * (c.lat - a.lat) - (b.lat - a.lat) * (c.lng - a.lng);
+  if (Math.abs(val) < 1e-12) return 0;
+  return val > 0 ? 1 : 2;
+}
+
+/** Is point b on segment a-c, given a,b,c are already known to be collinear? */
+function onSegment(a: LatLngLiteral, b: LatLngLiteral, c: LatLngLiteral): boolean {
+  return (
+    Math.min(a.lng, c.lng) - 1e-12 <= b.lng &&
+    b.lng <= Math.max(a.lng, c.lng) + 1e-12 &&
+    Math.min(a.lat, c.lat) - 1e-12 <= b.lat &&
+    b.lat <= Math.max(a.lat, c.lat) + 1e-12
+  );
+}
+
+function segmentsIntersect(p1: LatLngLiteral, p2: LatLngLiteral, p3: LatLngLiteral, p4: LatLngLiteral): boolean {
+  const o1 = orientation(p1, p2, p3);
+  const o2 = orientation(p1, p2, p4);
+  const o3 = orientation(p3, p4, p1);
+  const o4 = orientation(p3, p4, p2);
+
+  if (o1 !== o2 && o3 !== o4) return true;
+
+  // Collinear special cases (one endpoint lies exactly on the other segment).
+  if (o1 === 0 && onSegment(p1, p3, p2)) return true;
+  if (o2 === 0 && onSegment(p1, p4, p2)) return true;
+  if (o3 === 0 && onSegment(p3, p1, p4)) return true;
+  if (o4 === 0 && onSegment(p3, p2, p4)) return true;
+
+  return false;
+}
+
+/**
+ * A hand-traced polygon is invalid ("bowtie") if any two non-adjacent edges cross.
+ * O(n^2) pairwise edge check — fine for the small vertex counts a traced zone has.
+ */
+function isSelfIntersecting(path: LatLngLiteral[]): boolean {
+  const n = path.length;
+  if (n < 4) return false; // a triangle can never self-intersect
+  for (let i = 0; i < n; i++) {
+    const a1 = path[i];
+    const a2 = path[(i + 1) % n];
+    for (let j = i + 1; j < n; j++) {
+      const isAdjacent = (j + 1) % n === i || (i + 1) % n === j;
+      if (isAdjacent) continue;
+      const b1 = path[j];
+      const b2 = path[(j + 1) % n];
+      if (segmentsIntersect(a1, a2, b1, b2)) return true;
+    }
+  }
+  return false;
+}
+
 interface DraftZone extends PropertyZone {
   _id: string;
+  /** Local-only flag (never persisted) — true when this zone's traced path crosses itself. */
+  invalid?: boolean;
 }
 
 export function AerialMeasurementDialog({
@@ -145,6 +204,12 @@ export function AerialMeasurementDialog({
   function finishDrawing() {
     const path = draftPathRef.current;
     if (path.length < 3 || !mapRef.current) return;
+
+    if (isSelfIntersecting(path)) {
+      toast.error("This shape crosses itself — please retrace it.");
+      return; // leave the draft in place so the user can keep adjusting or hit Cancel
+    }
+
     draftPolygonRef.current?.setMap(null);
     draftPolygonRef.current = null;
 
@@ -174,7 +239,8 @@ export function AerialMeasurementDialog({
     const recompute = () => {
       const sqft = Math.round(google.maps.geometry.spherical.computeArea(polygon.getPath()) * SQFT_PER_SQMETER);
       const path = polygon.getPath().getArray().map((p) => ({ lat: p.lat(), lng: p.lng() }));
-      setZones((prev) => prev.map((z) => (z._id === id ? { ...z, sqft, path } : z)));
+      const invalid = isSelfIntersecting(path);
+      setZones((prev) => prev.map((z) => (z._id === id ? { ...z, sqft, path, invalid } : z)));
     };
     polygon.getPath().addListener("set_at", recompute);
     polygon.getPath().addListener("insert_at", recompute);
@@ -231,6 +297,19 @@ export function AerialMeasurementDialog({
 
   // Seed zones + redraw saved shapes whenever the selected property (or map readiness) changes
   useEffect(() => {
+    // Switching properties mid-trace would otherwise silently orphan the in-progress
+    // shape (it stays drawn against the old property's map view but its data is discarded
+    // the moment `zones` is reseeded below) — cancel the draft and warn instead.
+    if (isDrawingRef.current) {
+      draftPolygonRef.current?.setMap(null);
+      draftPolygonRef.current = null;
+      draftPathRef.current = [];
+      isDrawingRef.current = false;
+      setIsDrawing(false);
+      setDraftPointCount(0);
+      toast.warning("Switched property — the shape you were tracing was discarded.");
+    }
+
     if (!property) {
       setZones([]);
       return;
@@ -297,32 +376,58 @@ export function AerialMeasurementDialog({
 
   async function handleSave() {
     if (!property) return;
+
+    if (isDrawing) {
+      toast.error("You have an unfinished shape — finish or cancel it before saving.");
+      return;
+    }
+    if (zones.some((z) => z.invalid)) {
+      toast.error("One or more zones cross themselves — please retrace them before saving.");
+      return;
+    }
+
     try {
       await updateZones.mutateAsync({
         clientId,
         propertyId: property.id,
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        zones: zones.map(({ _id, ...z }) => z),
+        zones: zones.map(({ _id, invalid, ...z }) => z),
       });
+    } catch {
+      toast.error("Failed to save measurements");
+      return;
+    }
 
-      const syncs = numberFieldDefs
-        .map((f) => ({ f, mapping: fieldMappings[f.id] ?? "none" }))
-        .filter(({ mapping }) => mapping !== "none");
-      for (const { f, mapping } of syncs) {
+    // Zone save succeeded at this point — report custom-field sync problems separately
+    // so a sync failure doesn't read as "nothing was saved" when the zones did save.
+    const syncs = numberFieldDefs
+      .map((f) => ({ f, mapping: fieldMappings[f.id] ?? "none" }))
+      .filter(({ mapping }) => mapping !== "none");
+    let syncFailures = 0;
+    for (const { f, mapping } of syncs) {
+      try {
         await upsertCustomField.mutateAsync({
           clientId,
           fieldDefId: f.id,
           valueNumber: totalsByType[mapping],
         });
+      } catch {
+        syncFailures++;
       }
-
-      toast.success(
-        syncs.length > 0 ? `Measurements saved — synced ${syncs.length} custom field${syncs.length === 1 ? "" : "s"}` : "Measurements saved to property"
-      );
-      onOpenChange(false);
-    } catch {
-      toast.error("Failed to save measurements");
     }
+
+    if (syncFailures > 0) {
+      toast.warning(
+        `Measurements saved, but ${syncFailures} custom field${syncFailures === 1 ? "" : "s"} failed to sync`
+      );
+    } else {
+      toast.success(
+        syncs.length > 0
+          ? `Measurements saved — synced ${syncs.length} custom field${syncs.length === 1 ? "" : "s"}`
+          : "Measurements saved to property"
+      );
+    }
+    onOpenChange(false);
   }
 
   return (
@@ -397,12 +502,22 @@ export function AerialMeasurementDialog({
                 </div>
                 <div className="max-h-48 divide-y overflow-y-auto">
                   {zones.map((z) => (
-                    <div key={z._id} className="grid grid-cols-[1fr_10rem_6rem_2.5rem] items-center gap-2 px-3 py-1.5">
-                      <Input
-                        value={z.name}
-                        onChange={(e) => updateZone(z._id, { name: e.target.value })}
-                        className="h-7 text-sm"
-                      />
+                    <div
+                      key={z._id}
+                      className={`grid grid-cols-[1fr_10rem_6rem_2.5rem] items-center gap-2 px-3 py-1.5 ${z.invalid ? "bg-red-50" : ""}`}
+                    >
+                      <div className="min-w-0">
+                        <Input
+                          value={z.name}
+                          onChange={(e) => updateZone(z._id, { name: e.target.value })}
+                          className="h-7 text-sm"
+                        />
+                        {z.invalid && (
+                          <p className="mt-0.5 text-[11px] text-red-600">
+                            This shape crosses itself — retrace it before saving.
+                          </p>
+                        )}
+                      </div>
                       <Select value={z.type} onValueChange={(v) => updateZone(z._id, { type: v as PropertyZone["type"] })}>
                         <SelectTrigger className="h-7 text-xs">
                           <SelectValue />

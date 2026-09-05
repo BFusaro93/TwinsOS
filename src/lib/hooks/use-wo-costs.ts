@@ -484,6 +484,30 @@ export function useWOVendorCharges(workOrderId: string) {
   });
 }
 
+/**
+ * Fetches all CMMS vendor charges logged against ANY work order for a given
+ * vendor — these bypass the PO flow entirely (a direct charge from a vendor
+ * logged on a Work Order's Costs tab), so they never show up in
+ * usePurchaseOrders(). Used by VendorDetailSheet so vendor spend/history
+ * reflects both POs and this CMMS-side path instead of silently omitting it.
+ */
+export function useWOVendorChargesByVendor(vendorId: string) {
+  return useQuery({
+    queryKey: ["wo-vendors", "by-vendor", vendorId],
+    queryFn: async () => {
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from("wo_vendor_charges")
+        .select("*")
+        .eq("vendor_id", vendorId)
+        .is("deleted_at", null);
+      if (error) throw error;
+      return (data.map(mapWOVendorCharge)) as WOVendorCharge[];
+    },
+    enabled: !!vendorId,
+  });
+}
+
 export function useAddWOVendorCharge() {
   const queryClient = useQueryClient();
   return useMutation({

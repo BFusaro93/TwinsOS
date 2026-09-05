@@ -1395,6 +1395,16 @@ export function InvoiceDetail({
                         <td className="px-4 py-2.5 capitalize">
                           {p.method}
                           {p.isSplitAllocation && <span className="ml-1 text-slate-400">(split)</span>}
+                          {/* Payment recorded against a parent client_id (e.g. one
+                              check from a property manager covering several
+                              sub-accounts) but allocated to THIS invoice, whose
+                              own client is a child — make that origin explicit
+                              rather than implying the child paid directly. */}
+                          {p.clientId !== invoice.clientId && (
+                            <span className="ml-1 text-slate-400 normal-case">
+                              (via {p.clientName ?? "parent account"})
+                            </span>
+                          )}
                         </td>
                         <td className="px-4 py-2.5 text-slate-500">{p.reference ?? "—"}</td>
                         <td className="px-4 py-2.5 text-right font-medium">

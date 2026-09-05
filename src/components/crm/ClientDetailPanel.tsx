@@ -7,7 +7,6 @@ import {
   useClient,
   useClients,
   useClientContacts,
-  useClientProperties,
   useChildClients,
   useSetParentClient,
   useConvertLeadToClient,
@@ -24,7 +23,7 @@ import {
   useActivateClient,
 } from "@/lib/hooks/use-clients";
 import { TagEditor } from "@/components/crm/TagEditor";
-import { useTicket } from "@/lib/hooks/use-tickets";
+import { useTicket, useTickets } from "@/lib/hooks/use-tickets";
 import { useClientJobs, useUpdateJobStatus, useJobVisits, useClientAllVisits, useAllCRMServices } from "@/lib/hooks/use-crm-jobs";
 import { useInvoices, usePayments, usePayment, usePaymentAllocations } from "@/lib/hooks/use-invoices";
 import { useEstimates } from "@/lib/hooks/use-estimates";
@@ -3023,7 +3022,7 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
   const { can } = usePermissions();
   const { data: client, isLoading } = useClient(clientId);
   const { data: contacts } = useClientContacts(clientId);
-  const { data: properties } = useClientProperties(clientId);
+  const { data: clientTickets } = useTickets({ clientId });
   const { data: childClients } = useChildClients(clientId);
   const { data: parentClient } = useClient(client?.parentClientId ?? "");
   const [activeTab, setActiveTab] = useState("home");
@@ -3033,8 +3032,6 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
   const [editContact, setEditContact] = useState<ClientContact | null>(null);
   const [allContactsOpen, setAllContactsOpen] = useState(false);
   const [addPropertyOpen, setAddPropertyOpen] = useState(false);
-  const [editProperty, setEditProperty] = useState<ClientProperty | null>(null);
-  const [allPropertiesOpen, setAllPropertiesOpen] = useState(false);
   const [aerialMeasurementOpen, setAerialMeasurementOpen] = useState(false);
   const [linkParentOpen, setLinkParentOpen] = useState(false);
   const [newTicketOpen, setNewTicketOpen] = useState(false);
@@ -3069,6 +3066,9 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
   const revenuePotentialCents = (leadEstimates ?? [])
     .filter((e) => e.stage !== "accepted" && e.stage !== "lost")
     .reduce((sum, e) => sum + e.totalCents, 0);
+  // "Open" = anything not yet closed (open/pending/on_hold) — the client-detail
+  // summary box cares about "still needs attention", not the literal "open" status.
+  const openTickets = (clientTickets ?? []).filter((t) => t.status !== "closed");
 
   if (isLoading) {
     return (
@@ -3403,60 +3403,61 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
         </div>
       )}
 
-      {/* Sub-panels: Properties + Contacts + Office Notes */}
+      {/* Sub-panels: Open Tickets + Contacts + Office Notes */}
       <div className="border-b bg-slate-50/60 px-6 py-4">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        {/* Properties */}
+        {/* Open Tickets */}
         <div className="rounded-lg border border-slate-200 bg-white px-4 py-3">
           <div className="mb-2 flex items-center justify-between">
             <span className="text-xs font-semibold text-slate-600">
-              Related Properties
-              {(properties ?? []).length > 0 && (
-                <span className="ml-1.5 text-slate-400">({(properties ?? []).length})</span>
+              Open Tickets
+              {openTickets.length > 0 && (
+                <span className="ml-1.5 text-slate-400">({openTickets.length})</span>
               )}
             </span>
             <div className="flex items-center gap-1">
-              {(properties ?? []).length > 0 && (
-                <button className="text-[10px] text-brand-600 hover:underline" onClick={() => setAllPropertiesOpen(true)}>All</button>
+              {openTickets.length > 0 && (
+                <button className="text-[10px] text-brand-600 hover:underline" onClick={() => setActiveTab("tickets")}>All</button>
               )}
               <Button
                 variant="ghost"
                 size="sm"
                 className="h-6 px-1.5 text-xs text-brand-600 hover:bg-brand-50"
-                onClick={() => setAddPropertyOpen(true)}
+                onClick={() => setNewTicketOpen(true)}
               >
-                <Plus className="mr-0.5 h-3 w-3" /> Add Property
+                <Plus className="mr-0.5 h-3 w-3" /> Add Ticket
               </Button>
             </div>
           </div>
-          {(properties ?? []).length === 0 ? (
-            <p className="text-xs text-slate-400 italic">No properties yet</p>
+          {openTickets.length === 0 ? (
+            <p className="text-xs text-slate-400 italic">No open tickets</p>
           ) : (
             <div className="space-y-1.5">
-              {(properties ?? []).slice(0, 4).map((p) => (
+              {openTickets.slice(0, 3).map((t) => (
                 <button
-                  key={p.id}
+                  key={t.id}
                   type="button"
-                  onClick={() => setEditProperty(p)}
+                  onClick={() => setOpenTicketId(t.id)}
                   className="flex w-full items-center justify-between rounded border border-slate-200 bg-white px-2.5 py-1.5 text-left text-xs shadow-sm hover:border-brand-300 hover:bg-brand-50/30"
                 >
                   <div className="min-w-0">
-                    {p.name && <p className="text-[10px] font-medium text-slate-400 uppercase tracking-wide">{p.name}</p>}
+                    <p className="text-[10px] font-medium text-slate-400 uppercase tracking-wide">
+                      #{t.ticketNumber}{t.category ? ` · ${t.category}` : ""}
+                    </p>
                     <span className="truncate text-slate-700">
-                      {p.address || "Unnamed property"}
-                      {p.city && `, ${p.city}`}
+                      {t.subject || "(no subject)"}
                     </span>
                   </div>
                   <ChevronRight className="h-3 w-3 shrink-0 text-slate-300" />
                 </button>
               ))}
-              {(properties ?? []).length > 4 && (
+              {openTickets.length > 3 && (
                 <button
                   type="button"
                   className="text-xs text-brand-600 hover:underline"
-                  onClick={() => setAllPropertiesOpen(true)}
+                  onClick={() => setActiveTab("tickets")}
                 >
-                  +{(properties ?? []).length - 4} more
+                  +{openTickets.length - 3} more
                 </button>
               )}
             </div>
@@ -3718,21 +3719,14 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
           onAddContact={() => { setAllContactsOpen(false); setAddContactOpen(true); }}
         />
       )}
+      {/* Property creation is preserved via the "More" menu's "Add Property" item (above) —
+          this is now the only in-app path to create a client_properties row, since the
+          Aerial Measurement tool below only lets you pick among existing properties and
+          cannot create one itself. Editing/browsing the full property list was only reachable
+          from the "Related Properties" box that this row replaced with Open Tickets, so that
+          list/edit UI (AddPropertyDialog's edit mode, AllPropertiesModal) is no longer wired up
+          here; the components remain defined above in case they're needed again. */}
       <AddPropertyDialog clientId={clientId} open={addPropertyOpen} onOpenChange={setAddPropertyOpen} />
-      <AddPropertyDialog
-        clientId={clientId}
-        open={!!editProperty}
-        onOpenChange={(o) => { if (!o) setEditProperty(null); }}
-        property={editProperty}
-      />
-      {allPropertiesOpen && (
-        <AllPropertiesModal
-          properties={properties ?? []}
-          onClose={() => setAllPropertiesOpen(false)}
-          onOpenProperty={(p) => { setAllPropertiesOpen(false); setEditProperty(p); }}
-          onAddProperty={() => { setAllPropertiesOpen(false); setAddPropertyOpen(true); }}
-        />
-      )}
       <AerialMeasurementDialog clientId={clientId} open={aerialMeasurementOpen} onOpenChange={setAerialMeasurementOpen} />
       <NewTicketDialog open={newTicketOpen} onOpenChange={setNewTicketOpen} defaultClientId={clientId} />
       <LinkParentDialog

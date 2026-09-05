@@ -1,12 +1,12 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, Fragment } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { Elements, PaymentElement, useStripe, useElements } from "@stripe/react-stripe-js";
 import { usePayments, useRecordPayment, useUpdatePayment, useRefundPayment, useInvoices, usePaymentAllocations, useBulkImportPayments } from "@/lib/hooks/use-invoices";
-import { useClients } from "@/lib/hooks/use-clients";
+import { useClients, useChildClients } from "@/lib/hooks/use-clients";
 import { useConnectStatus } from "@/lib/hooks/use-crm-card-payments";
 import { useOrgSettings } from "@/lib/hooks/use-org-settings";
 import {
@@ -84,6 +84,11 @@ interface InvoiceAllocation {
   invoiceDate: string;
   payInFull: boolean;
   amountCents: number;
+  // Which client (parent or child sub-account) this invoice actually belongs
+  // to — used to group rows by account when the selected client has children.
+  clientId: string;
+  clientName: string | null;
+  clientAddress: string | null;
 }
 
 import type { CRMPayment } from "@/types/crm-invoices";
@@ -194,7 +199,16 @@ export function AddPaymentDialog({
     }
   }, [payment?.id]);
 
-  const { data: invoices } = useInvoices(clientId || undefined);
+  // When the selected client is a commercial parent with sub-accounts, a
+  // single payment (e.g. one check from a property manager) can be
+  // allocated across the parent's own invoices AND its children's — pull
+  // in every child's open invoices too, grouped visually by account below.
+  const { data: childClients } = useChildClients(clientId || "");
+  const childClientIds = useMemo(() => (childClients ?? []).map((c) => c.id), [childClients]);
+  const hasChildAccounts = childClientIds.length > 0;
+  const { data: invoices } = useInvoices(
+    clientId ? (hasChildAccounts ? [clientId, ...childClientIds] : clientId) : undefined
+  );
   const { data: existingAllocations } = usePaymentAllocations(isEdit ? payment?.id : undefined);
 
   // In create mode: only show unpaid invoices.
@@ -259,6 +273,9 @@ export function AddPaymentDialog({
           invoiceDate: inv.invoiceDate,
           payInFull: prefilledCents > 0 && prefilledCents >= balCents,
           amountCents: prefilledCents,
+          clientId: inv.clientId,
+          clientName: inv.clientName ?? null,
+          clientAddress: inv.clientAddress ?? null,
         };
       })
     );
@@ -285,21 +302,21 @@ export function AddPaymentDialog({
     runAllocation();
   }
 
-  function togglePayInFull(idx: number, checked: boolean) {
+  function togglePayInFull(invoiceId: string, checked: boolean) {
     setAllocations((prev) =>
-      prev.map((a, i) =>
-        i === idx
+      prev.map((a) =>
+        a.invoiceId === invoiceId
           ? { ...a, payInFull: checked, amountCents: checked ? a.balanceCents : 0 }
           : a
       )
     );
   }
 
-  function setAllocationAmount(idx: number, val: string) {
+  function setAllocationAmount(invoiceId: string, val: string) {
     const cents = Math.round(parseFloat(val || "0") * 100);
     setAllocations((prev) =>
-      prev.map((a, i) =>
-        i === idx ? { ...a, amountCents: cents, payInFull: cents >= a.balanceCents } : a
+      prev.map((a) =>
+        a.invoiceId === invoiceId ? { ...a, amountCents: cents, payInFull: cents >= a.balanceCents } : a
       )
     );
   }
@@ -441,6 +458,29 @@ export function AddPaymentDialog({
   }
 
   const selectedClient = (clients ?? []).find((c) => c.id === clientId);
+
+  // When the client has sub-accounts, split the allocation rows into one
+  // group per account (parent first, then children in the same order as
+  // useChildClients()) so the picker reads as "Ridgeline Property
+  // Management" / its invoices, then "Oakview HOA" / its invoices, etc.
+  // With no children this collapses to a single unlabeled group so the
+  // common case renders exactly as it did before.
+  const allocationGroups = useMemo(() => {
+    if (!hasChildAccounts) {
+      return [{ clientId, clientName: null as string | null, rows: allocations }];
+    }
+    const accountOrder = [
+      { id: clientId, name: selectedClient?.displayName ?? null },
+      ...(childClients ?? []).map((c) => ({ id: c.id, name: c.displayName })),
+    ];
+    return accountOrder
+      .map((acct) => ({
+        clientId: acct.id,
+        clientName: acct.name,
+        rows: allocations.filter((a) => a.clientId === acct.id),
+      }))
+      .filter((g) => g.rows.length > 0);
+  }, [hasChildAccounts, allocations, childClients, clientId, selectedClient]);
 
   const chargeStripeJs = chargeIntent ? getScopedStripeJs(chargeIntent.connectedAccountId) : null;
 
@@ -717,43 +757,55 @@ export function AddPaymentDialog({
                       </td>
                     </tr>
                   ) : (
-                    allocations.map((a, idx) => (
-                      <tr key={a.invoiceId} className="border-b last:border-0">
-                        <td className="px-3 py-2 font-medium text-slate-700">
-                          #{a.invoiceNumber}
-                        </td>
-                        <td className="px-3 py-2 text-center">
-                          <Checkbox
-                            checked={a.payInFull}
-                            onCheckedChange={(c) => togglePayInFull(idx, !!c)}
-                          />
-                        </td>
-                        <td className="px-3 py-2">
-                          <Input
-                            type="number"
-                            step="0.01"
-                            min="0"
-                            className="h-6 w-20 text-xs px-1.5"
-                            value={a.amountCents > 0 ? (a.amountCents / 100).toFixed(2) : ""}
-                            onChange={(e) => setAllocationAmount(idx, e.target.value)}
-                            placeholder="0.00"
-                          />
-                        </td>
-                        <td className="px-3 py-2 text-right font-medium">
-                          {formatCurrency(a.balanceCents)}
-                        </td>
-                        <td className="px-3 py-2 text-right text-slate-500">
-                          {new Date(a.invoiceDate + "T12:00:00").toLocaleDateString("en-US", {
-                            month: "2-digit", day: "2-digit", year: "numeric",
-                          })}
-                        </td>
-                        <td className="px-3 py-2 text-slate-500">
-                          {selectedClient?.displayName ?? ""}
-                          {selectedClient?.billingAddress && (
-                            <div>{selectedClient.billingAddress}</div>
-                          )}
-                        </td>
-                      </tr>
+                    allocationGroups.map((group) => (
+                      <Fragment key={group.clientId}>
+                        {/* Sub-account grouping header — only shown when this
+                            client has child accounts, so a single-client
+                            payment renders exactly as before. */}
+                        {hasChildAccounts && (
+                          <tr className="bg-slate-100">
+                            <td colSpan={6} className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                              {group.clientName ?? "Account"}
+                            </td>
+                          </tr>
+                        )}
+                        {group.rows.map((a) => (
+                          <tr key={a.invoiceId} className="border-b last:border-0">
+                            <td className="px-3 py-2 font-medium text-slate-700">
+                              #{a.invoiceNumber}
+                            </td>
+                            <td className="px-3 py-2 text-center">
+                              <Checkbox
+                                checked={a.payInFull}
+                                onCheckedChange={(c) => togglePayInFull(a.invoiceId, !!c)}
+                              />
+                            </td>
+                            <td className="px-3 py-2">
+                              <Input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                className="h-6 w-20 text-xs px-1.5"
+                                value={a.amountCents > 0 ? (a.amountCents / 100).toFixed(2) : ""}
+                                onChange={(e) => setAllocationAmount(a.invoiceId, e.target.value)}
+                                placeholder="0.00"
+                              />
+                            </td>
+                            <td className="px-3 py-2 text-right font-medium">
+                              {formatCurrency(a.balanceCents)}
+                            </td>
+                            <td className="px-3 py-2 text-right text-slate-500">
+                              {new Date(a.invoiceDate + "T12:00:00").toLocaleDateString("en-US", {
+                                month: "2-digit", day: "2-digit", year: "numeric",
+                              })}
+                            </td>
+                            <td className="px-3 py-2 text-slate-500">
+                              {a.clientName ?? selectedClient?.displayName ?? ""}
+                              {a.clientAddress && <div>{a.clientAddress}</div>}
+                            </td>
+                          </tr>
+                        ))}
+                      </Fragment>
                     ))
                   )}
                 </tbody>

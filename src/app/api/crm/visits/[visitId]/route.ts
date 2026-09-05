@@ -3,6 +3,7 @@ import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { z } from "zod";
 import { notifyVisitAssigned, notifyVisitNote } from "@/lib/notifications/visit-notify";
+import { checkPackageMinDaysViolation } from "@/lib/package-visit-recalc";
 
 const PatchSchema = z.object({
   scheduled_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
@@ -33,6 +34,19 @@ export async function PATCH(
   const parsed = PatchSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+  }
+
+  // A direct edit can reschedule a package-sequenced visit closer to its
+  // predecessor's actual completion than that service's min_days allows —
+  // the completion-time recalc (recalcNextPackageVisitDate) only pushes dates
+  // OUT on completion, it never guards a manual edit. This is a
+  // data-integrity floor, not an advisory warning, so a violation blocks the
+  // write outright.
+  if (parsed.data.scheduled_date) {
+    const violation = await checkPackageMinDaysViolation(supabase, visitId, parsed.data.scheduled_date);
+    if (violation) {
+      return NextResponse.json({ error: violation }, { status: 409 });
+    }
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

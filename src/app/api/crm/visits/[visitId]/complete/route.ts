@@ -4,6 +4,7 @@ import { createClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
 import type { Database } from "@/types/supabase";
 import { recalcNextPackageVisitDate } from "@/lib/package-visit-recalc";
+import { isoNy } from "@/lib/reports/ny-date";
 import { stripHtml } from "@/lib/utils/strip-html";
 import { fireServiceVisitCompletedTriggers, fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
 import { processEnrollmentImmediately } from "@/lib/automations/sequence-processor";
@@ -87,7 +88,7 @@ export async function POST(
     await recalcNextPackageVisitDate(
       supabase,
       (visit as { job_service_id: string | null }).job_service_id,
-      new Date().toISOString().slice(0, 10)
+      isoNy(new Date())
     );
   } catch (err) {
     console.error("[visits/complete] package min_days recalc failed:", err);

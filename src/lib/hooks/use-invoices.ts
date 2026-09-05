@@ -75,6 +75,11 @@ function mapPayment(row: any): CRMPayment {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     createdBy: row.created_by,
+    // Only populated when the query joins `clients` (e.g. useInvoice()'s
+    // Payment History embed) — used to detect and label a cross-account
+    // payment (recorded against a parent client_id) shown on a child
+    // sub-account's invoice.
+    clientName: row.clients?.display_name ?? null,
   };
 }
 
@@ -135,9 +140,14 @@ export function mapInvoice(row: any): CRMInvoice {
 
 // ── queries ───────────────────────────────────────────────────────────────────
 
-export function useInvoices(clientId?: string) {
+// `clientId` also accepts an array — used by the payment invoice-picker to
+// pull open invoices for a parent client AND its child sub-accounts in one
+// query (a property-manager parent can record one payment allocated across
+// several sub-accounts' invoices).
+export function useInvoices(clientId?: string | string[]) {
+  const clientIds = Array.isArray(clientId) ? clientId : clientId ? [clientId] : [];
   return useQuery({
-    queryKey: ["crm-invoices", clientId ?? "all"],
+    queryKey: ["crm-invoices", clientIds.length > 0 ? [...clientIds].sort() : "all"],
     queryFn: async () => {
       const supabase = createClient();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -146,7 +156,8 @@ export function useInvoices(clientId?: string) {
         .select("*, clients(display_name, billing_address, billing_city, billing_state, billing_zip, invoice_delivery, saved_payment_method_type, saved_payment_method_summary, autopay_enabled), sales_rep:crm_employees!crm_invoices_sales_rep_id_fkey(first_name,last_name), crm_invoice_line_items(id, name, description, total_cents, discount_cents, is_taxable)")
         .is("deleted_at", null)
         .order("invoice_date", { ascending: false });
-      if (clientId) q = q.eq("client_id", clientId);
+      if (clientIds.length === 1) q = q.eq("client_id", clientIds[0]);
+      else if (clientIds.length > 1) q = q.in("client_id", clientIds);
       const { data, error } = await q;
       if (error) throw error;
       return data.map(mapInvoice) as CRMInvoice[];
@@ -162,7 +173,7 @@ export function useInvoice(id: string) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
         .from("crm_invoices")
-        .select("*, clients(display_name, primary_email, billing_address, billing_city, billing_state, billing_zip, default_tax_rate_bps, default_terms, default_payment_method, saved_payment_method_type, saved_payment_method_summary, autopay_enabled), sales_rep:crm_employees!crm_invoices_sales_rep_id_fkey(first_name,last_name), crm_invoice_line_items(*), crm_payments(*)")
+        .select("*, clients(display_name, primary_email, billing_address, billing_city, billing_state, billing_zip, default_tax_rate_bps, default_terms, default_payment_method, saved_payment_method_type, saved_payment_method_summary, autopay_enabled), sales_rep:crm_employees!crm_invoices_sales_rep_id_fkey(first_name,last_name), crm_invoice_line_items(*), crm_payments(*, clients(display_name))")
         .eq("id", id)
         .is("deleted_at", null)
         .single();
@@ -181,7 +192,7 @@ export function useInvoice(id: string) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: allocRows, error: allocErr } = await (supabase as any)
         .from("crm_payment_allocations")
-        .select("amount_cents, crm_payments(*)")
+        .select("amount_cents, crm_payments(*, clients(display_name))")
         .eq("invoice_id", id);
       if (allocErr) throw allocErr;
 
