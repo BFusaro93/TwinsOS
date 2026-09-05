@@ -20,6 +20,7 @@ import { useUIStore, useCurrentUserStore } from "@/stores";
 import { useSettingsStore } from "@/stores/settings-store";
 import { BrandMark } from "./BrandMark";
 import { useIsInternalOrg } from "@/lib/hooks/use-internal-org";
+import { useHasDrivingScoreAccess } from "@/lib/hooks/use-driving-score-access";
 import { useModuleAccess } from "@/lib/hooks/use-module-access";
 import { useDashboards } from "@/lib/hooks/use-report-center";
 import type { PlatformModule } from "@/lib/stripe/plans";
@@ -43,7 +44,7 @@ export const DASHBOARDS_NAV: ReportsNavItem[] = [
   { label: "Twins KPI Scorecard", href: "/dashboards/twins-kpis",      icon: Target,      hideFromCrew: true, internalOnly: true },
   { label: "Financial",           href: "/dashboards/financials",      icon: DollarSign,  hideFromCrew: true, internalOnly: true },
   { label: "Labor Efficiency",    href: "/dashboards/avb",             icon: TrendingUp,                      internalOnly: true },
-  { label: "Driver Safety Scores",href: "/dashboards/safety",          icon: ShieldCheck,                     internalOnly: true },
+  { label: "Driver Safety Scores",href: "/dashboards/safety",          icon: ShieldCheck },
   { label: "CRM Report",          href: "/dashboards/crm",             icon: FileText,    hideFromCrew: true, internalOnly: true },
 ];
 
@@ -86,6 +87,7 @@ export function ReportsSidebar() {
   const isAdmin = currentUser.role === "admin";
   const isCrew = currentUser.role === "crew";
   const { isInternalOrg } = useIsInternalOrg();
+  const { allowed: hasDrivingScoreAccess } = useHasDrivingScoreAccess();
   const { allowed: hasEquipt } = useModuleAccess("equipt");
   const { allowed: hasLandscapt } = useModuleAccess("landscapt");
   const { data: customDashboards = [] } = useDashboards();
@@ -141,6 +143,7 @@ export function ReportsSidebar() {
           {DASHBOARDS_NAV.filter((item) => item.href !== "/dashboards/financials" || isAdmin)
             .filter((item) => !item.hideFromCrew || !isCrew)
             .filter((item) => !item.internalOnly || isInternalOrg)
+            .filter((item) => item.href !== "/dashboards/safety" || hasDrivingScoreAccess)
             .filter((item) => hasModule(item.requiresModule))
             .map((item) => (
               <NavLink

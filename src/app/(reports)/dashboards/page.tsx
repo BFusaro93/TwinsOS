@@ -18,6 +18,7 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { useCurrentUserStore } from "@/stores";
 import { useModuleAccess } from "@/lib/hooks/use-module-access";
 import { useIsInternalOrg } from "@/lib/hooks/use-internal-org";
+import { useHasDrivingScoreAccess } from "@/lib/hooks/use-driving-score-access";
 import { useDashboards } from "@/lib/hooks/use-report-center";
 
 const CARD =
@@ -56,6 +57,7 @@ export default function DashboardsHomePage() {
   const { allowed: hasEquipt } = useModuleAccess("equipt");
   const { allowed: hasLandscapt } = useModuleAccess("landscapt");
   const { isInternalOrg } = useIsInternalOrg();
+  const { allowed: hasDrivingScoreAccess } = useHasDrivingScoreAccess();
   const { data: customDashboards = [] } = useDashboards();
 
   return (
@@ -114,12 +116,6 @@ export default function DashboardsHomePage() {
               description="Budget vs. actual labor hours"
             />
             <DashboardCard
-              href="/dashboards/safety"
-              icon={ShieldCheck}
-              title="Driver Safety Scores"
-              description="Samsara driver safety scoring"
-            />
-            <DashboardCard
               href="/dashboards/crm"
               icon={FileText}
               title="CRM Report"
@@ -132,6 +128,15 @@ export default function DashboardsHomePage() {
               description="Legacy scorecard (AvB, QBO, Samsara sources)"
             />
           </>
+        )}
+
+        {hasDrivingScoreAccess && (
+          <DashboardCard
+            href="/dashboards/safety"
+            icon={ShieldCheck}
+            title="Driver Safety Scores"
+            description="Samsara driver safety scoring"
+          />
         )}
 
         {hasLandscapt &&

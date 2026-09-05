@@ -7,16 +7,21 @@ import { TopBar } from "@/components/shared/TopBar";
 import { RealtimeSync } from "@/components/shared/RealtimeSync";
 import { SettingsLoader } from "@/components/shared/SettingsLoader";
 import { InternalOnlyGuard } from "@/components/shared/InternalOnlyGuard";
+import { FeatureGuard } from "@/components/shared/FeatureGuard";
 import { useUIStore, useCurrentUserStore } from "@/stores";
 import { usePageTitle } from "@/lib/hooks/use-page-title";
+import { useHasDrivingScoreAccess } from "@/lib/hooks/use-driving-score-access";
 
 const INTERNAL_ONLY_PATHS = [
   "/dashboards/financials",
   "/dashboards/avb",
-  "/dashboards/safety",
   "/dashboards/crm",
   "/dashboards/twins-kpis",
 ];
+
+/** Twins-only by default, but any org can unlock it via the Samsara
+ *  integration toggle — see useHasDrivingScoreAccess. */
+const DRIVING_SCORE_PATHS = ["/dashboards/safety"];
 
 /** Built-in office dashboards crew logins must not reach by URL — the
  *  sidebar/overview already hide the links (hideFromCrew). Custom dashboards
@@ -53,6 +58,7 @@ export default function ReportsLayout({
 }) {
   const { sidebarOpen, setSidebarOpen } = useUIStore();
   const pathname = usePathname();
+  const { allowed: hasDrivingScoreAccess, isLoading: drivingScoreLoading } = useHasDrivingScoreAccess();
 
   usePageTitle(pathname, [{ items: DASHBOARDS_NAV }], "Landscapt");
 
@@ -88,7 +94,13 @@ export default function ReportsLayout({
         <TopBar />
         <main className="flex-1 overflow-auto p-4 md:p-6">
           <InternalOnlyGuard restrictedPaths={INTERNAL_ONLY_PATHS}>
-            <CrewBlockedGuard>{children}</CrewBlockedGuard>
+            <FeatureGuard
+              restrictedPaths={DRIVING_SCORE_PATHS}
+              allowed={hasDrivingScoreAccess}
+              isLoading={drivingScoreLoading}
+            >
+              <CrewBlockedGuard>{children}</CrewBlockedGuard>
+            </FeatureGuard>
           </InternalOnlyGuard>
         </main>
       </div>

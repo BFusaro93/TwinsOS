@@ -1161,6 +1161,14 @@ function IntegrationsTab() {
     );
   }
 
+  const drivingScoreEnabled = Boolean(samsara?.config?.driving_score_enabled);
+  function handleToggleDrivingScore() {
+    upsertIntegration({
+      provider: "samsara",
+      config: { ...samsara?.config, driving_score_enabled: !drivingScoreEnabled },
+    });
+  }
+
   async function handleManualSync() {
     setSyncing(true);
     setSyncResult(null);
@@ -1274,6 +1282,18 @@ function IntegrationsTab() {
               for the most reliable match. A reading is only written if the new odometer value is greater
               than the current value (odometers don&apos;t go backwards).
             </p>
+          </div>
+
+          {/* Driver Safety Scores toggle */}
+          <div className="flex items-center justify-between gap-4 border-t pt-4">
+            <div>
+              <p className="text-sm font-medium text-slate-700">Driver Safety Scores dashboard</p>
+              <p className="text-xs text-slate-400">
+                Turn this on to upload your weekly Samsara Vehicle Safety Excel export and see fleet
+                safety scores, rankings, and trends under Dashboards.
+              </p>
+            </div>
+            <Toggle enabled={drivingScoreEnabled} onToggle={handleToggleDrivingScore} />
           </div>
 
           {/* Last sync status */}
