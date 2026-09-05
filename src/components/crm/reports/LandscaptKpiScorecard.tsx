@@ -545,13 +545,13 @@ export function LandscaptKpiScorecard() {
     return !latest || e.updatedAt > latest ? e.updatedAt : latest;
   }, null);
 
-  const canEdit = canManage && !!scorecard?.id;
+  const canEdit = canManage && !!scorecard;
   function saveTarget(metricKey: string, value: number | null) {
-    if (!scorecard?.id) return;
+    if (!scorecard) return;
     upsertEntry({ scorecardId: scorecard.id, period, metricKey, targetValue: value });
   }
   function saveActual(metricKey: string, value: number | null) {
-    if (!scorecard?.id) return;
+    if (!scorecard) return;
     upsertEntry({ scorecardId: scorecard.id, period, metricKey, actualValue: value });
   }
 

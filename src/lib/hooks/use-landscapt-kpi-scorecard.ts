@@ -29,7 +29,7 @@ async function readError(res: Response): Promise<string> {
 
 const SCORECARD_QK = ["landscapt-kpi-scorecard"] as const;
 const ACTUALS_QK = (period: string) => ["landscapt-kpi-actuals", period] as const;
-const ENTRIES_QK = (scorecardId: string | null | undefined, period: string) =>
+const ENTRIES_QK = (scorecardId: string | undefined, period: string) =>
   ["landscapt-kpi-entries", scorecardId ?? "", period] as const;
 
 export function useLandscaptKpiScorecard() {
@@ -90,7 +90,7 @@ function toNumber(value: number | string | null): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-export function useLandscaptKpiEntries(scorecardId: string | null | undefined, period: string) {
+export function useLandscaptKpiEntries(scorecardId: string | undefined, period: string) {
   return useQuery<KpiScorecardEntry[]>({
     queryKey: ENTRIES_QK(scorecardId, period),
     enabled: !!scorecardId,

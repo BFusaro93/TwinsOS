@@ -61,9 +61,10 @@ async function authorize(
   return null;
 }
 
-/** GET — the org's scorecard, created from the default layout on first visit
- *  (by the first visitor allowed to write; view-only callers get the default
- *  layout back unsaved, with id null). */
+/** GET — the org's scorecard, created from the default layout on first visit.
+ *  Seeding goes through the crm_kpi_scorecard_ensure() SECURITY DEFINER RPC
+ *  so it happens for whoever visits first — view-only users included — while
+ *  the org still comes from the session and view_report_center is enforced. */
 export async function GET() {
   const supabase = await createClient();
   const denied = await authorize(supabase, "view_report_center");
@@ -85,36 +86,18 @@ export async function GET() {
   }
   if (existing) return NextResponse.json({ scorecard: mapRow(existing as ScorecardRow) });
 
-  if (!(await hasPermission(supabase, "manage_report_center"))) {
-    const now = new Date().toISOString();
-    const unsaved: KpiScorecard = {
-      id: null,
-      name: "KPI Scorecard",
-      config: DEFAULT_KPI_SCORECARD_CONFIG,
-      createdAt: now,
-      updatedAt: now,
-    };
-    return NextResponse.json({ scorecard: unsaved });
+  // First visit for this org: seed the default layout (insert-if-missing, so a
+  // concurrent first visit is harmless) and return the row.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: seeded, error: seedError } = await (supabase.rpc as any)("crm_kpi_scorecard_ensure", {
+    p_config: DEFAULT_KPI_SCORECARD_CONFIG,
+  });
+  const row = Array.isArray(seeded) ? (seeded[0] as ScorecardRow | undefined) : undefined;
+  if (seedError || !row) {
+    log.error("seed default scorecard failed", { error: seedError?.message ?? "no row returned" });
+    return NextResponse.json({ error: seedError?.message ?? "Failed to create scorecard" }, { status: 500 });
   }
-
-  // org_id / created_by default from my_org_id() / auth.uid() in the table.
-  const { data: created, error: insertError } = await table()
-    .insert({ name: "KPI Scorecard", config: DEFAULT_KPI_SCORECARD_CONFIG })
-    .select(SELECT)
-    .single();
-  if (insertError) {
-    // A concurrent first visit may have won the unique-per-org race.
-    const { data: retry } = await table()
-      .select(SELECT)
-      .is("deleted_at", null)
-      .order("created_at", { ascending: true })
-      .limit(1)
-      .maybeSingle();
-    if (retry) return NextResponse.json({ scorecard: mapRow(retry as ScorecardRow) });
-    log.error("create default scorecard failed", { error: insertError.message });
-    return NextResponse.json({ error: insertError.message }, { status: 500 });
-  }
-  return NextResponse.json({ scorecard: mapRow(created as ScorecardRow) });
+  return NextResponse.json({ scorecard: mapRow(row) });
 }
 
 /** PUT — replace the scorecard layout (categories, metrics, weights). */
