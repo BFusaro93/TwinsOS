@@ -3,7 +3,6 @@ import type { Database } from "@/types/supabase";
 import type { AnalysisConfig, AnalysisFilter, ReportResultRow } from "@/types/crm-reports";
 import type { KpiComputedActuals } from "@/types/crm-kpi-scorecard";
 import { runAnalysis } from "@/lib/reports/engine";
-import { cashPaymentFilter, issuedInvoiceFilter } from "@/lib/reports/helpers";
 import { loadVisitCosting, weightedTargetRate, type CostedVisit } from "@/lib/visit-costing";
 import { logger } from "@/lib/logger";
 
@@ -92,6 +91,20 @@ function num(value: unknown): number {
     return Number.isFinite(n) ? n : 0;
   }
   return 0;
+}
+
+// ── Report Center accounting rules (kept inline so this module only depends
+//    on dataset columns that exist on every environment) ───────────────────
+//
+// Rule A — Issued invoices: everything except draft and void.
+// Rule B — Cash received: crm_payments rows that are not account credits and
+//          not "AR Write-off", net of refunds.
+
+const ISSUED_INVOICE_STATUSES = ["printed", "sent", "viewed", "partial", "paid", "overdue"];
+const AR_WRITE_OFF_METHOD = "AR Write-off";
+
+function issuedInvoiceFilter(): AnalysisFilter[] {
+  return [{ column: "status", op: "in", value: ISSUED_INVOICE_STATUSES }];
 }
 
 // ── Engine wrappers ──────────────────────────────────────────────────────────
@@ -204,18 +217,28 @@ async function computeInvoices(supabase: Client, w: YearWindow): Promise<Values>
   };
 }
 
+interface PaymentRow {
+  amount_cents: number | null;
+  refunded_amount_cents: number | null;
+}
+
 async function computePayments(supabase: Client, w: YearWindow): Promise<Values> {
-  const row = await total(
-    supabase,
-    "rpt_payments",
-    [...cashPaymentFilter(), ...dateFilters("payment_date", w)],
-    [
-      { column: "net_amount_cents", fn: "sum" },
-      { column: "net_amount_cents", fn: "count" },
-    ]
+  // Rule B applied on the base table (see header comment).
+  const rows = await fetchAll<PaymentRow>((from, to) =>
+    supabase
+      .from("crm_payments")
+      .select("amount_cents, refunded_amount_cents")
+      .is("deleted_at", null)
+      .eq("is_credit", false)
+      .neq("method", AR_WRITE_OFF_METHOD)
+      .gte("payment_date", w.from)
+      .lte("payment_date", w.to)
+      .order("payment_date", { ascending: true })
+      .range(from, to)
   );
-  const count = num(row?.count_net_amount_cents);
-  return { cash_collected_ytd: count > 0 ? dollars(num(row?.sum_net_amount_cents)) : null };
+  if (rows.length === 0) return { cash_collected_ytd: null };
+  const netCents = rows.reduce((s, r) => s + (r.amount_cents ?? 0) - (r.refunded_amount_cents ?? 0), 0);
+  return { cash_collected_ytd: dollars(netCents) };
 }
 
 async function computeJobsSold(supabase: Client, w: YearWindow): Promise<Values> {
