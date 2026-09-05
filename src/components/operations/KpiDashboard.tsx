@@ -453,7 +453,7 @@ export function KpiDashboard() {
       {/* Page header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">KPI Scorecard</h1>
+          <h1 className="text-2xl font-bold text-slate-900">Twins KPI Scorecard</h1>
           <p className="text-sm text-slate-500">
             Track progress toward your annual goals
             {lastUpdated && (

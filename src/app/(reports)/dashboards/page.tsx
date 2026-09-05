@@ -11,6 +11,7 @@ import {
   ShieldCheck,
   FileText,
   Target,
+  Gauge,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -89,12 +90,12 @@ export default function DashboardsHomePage() {
           />
         )}
 
-        {!isCrew && (
+        {hasLandscapt && !isCrew && (
           <DashboardCard
             href="/dashboards/kpis"
             icon={Target}
             title="KPI Scorecard"
-            description="Company-wide KPI tracking"
+            description="Customizable KPIs computed live from Landscapt data"
           />
         )}
 
@@ -123,6 +124,12 @@ export default function DashboardsHomePage() {
               icon={FileText}
               title="CRM Report"
               description="Landscapt performance report"
+            />
+            <DashboardCard
+              href="/dashboards/twins-kpis"
+              icon={Gauge}
+              title="Twins KPI Scorecard"
+              description="Legacy scorecard (AvB, QBO, Samsara sources)"
             />
           </>
         )}

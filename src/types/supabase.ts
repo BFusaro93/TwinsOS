@@ -12,6 +12,31 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "14.5"
   }
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
   public: {
     Tables: {
       api_key_rate_limits: {
@@ -3346,6 +3371,7 @@ export type Database = {
           org_id: string
           source_template_key: string | null
           updated_at: string
+          visible_to_crew: boolean
         }
         Insert: {
           config?: Json
@@ -3359,6 +3385,7 @@ export type Database = {
           org_id?: string
           source_template_key?: string | null
           updated_at?: string
+          visible_to_crew?: boolean
         }
         Update: {
           config?: Json
@@ -3372,6 +3399,7 @@ export type Database = {
           org_id?: string
           source_template_key?: string | null
           updated_at?: string
+          visible_to_crew?: boolean
         }
         Relationships: [
           {
@@ -5481,6 +5509,101 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "rpt_sales_rep_month"
             referencedColumns: ["employee_id"]
+          },
+        ]
+      }
+      crm_kpi_scorecard_entries: {
+        Row: {
+          actual_value: number | null
+          created_at: string
+          created_by: string | null
+          id: string
+          metric_key: string
+          org_id: string
+          period: string
+          scorecard_id: string
+          target_value: number | null
+          updated_at: string
+        }
+        Insert: {
+          actual_value?: number | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          metric_key: string
+          org_id?: string
+          period: string
+          scorecard_id: string
+          target_value?: number | null
+          updated_at?: string
+        }
+        Update: {
+          actual_value?: number | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          metric_key?: string
+          org_id?: string
+          period?: string
+          scorecard_id?: string
+          target_value?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_kpi_scorecard_entries_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_kpi_scorecard_entries_scorecard_id_fkey"
+            columns: ["scorecard_id"]
+            isOneToOne: false
+            referencedRelation: "crm_kpi_scorecards"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      crm_kpi_scorecards: {
+        Row: {
+          config: Json
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          id: string
+          name: string
+          org_id: string
+          updated_at: string
+        }
+        Insert: {
+          config?: Json
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          name?: string
+          org_id?: string
+          updated_at?: string
+        }
+        Update: {
+          config?: Json
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          name?: string
+          org_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_kpi_scorecards_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -13171,6 +13294,7 @@ export type Database = {
           invoice_date: string | null
           invoice_number: number | null
           invoice_status: string | null
+          is_issued: boolean | null
           is_taxable: boolean | null
           men: number | null
           name: string | null
@@ -13196,6 +13320,7 @@ export type Database = {
           id: string | null
           invoice_date: string | null
           invoice_number: number | null
+          is_issued: boolean | null
           payment_method: string | null
           po_number: string | null
           sales_rep: string | null
@@ -13342,10 +13467,14 @@ export type Database = {
           created_at: string | null
           id: string | null
           invoice_number: number | null
+          is_cash: boolean | null
+          is_credit: boolean | null
           is_prepayment: boolean | null
           memo: string | null
           method: string | null
+          net_amount_cents: number | null
           payment_date: string | null
+          processing_fee_cents: number | null
           reference: string | null
           refunded_amount_cents: number | null
           unused_amount_cents: number | null
@@ -13891,6 +14020,9 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {},
   },

@@ -13,6 +13,7 @@ import {
   Wrench,
   CalendarCheck,
   BarChart2,
+  Gauge,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useUIStore, useCurrentUserStore } from "@/stores";
@@ -38,7 +39,8 @@ export const DASHBOARDS_NAV: ReportsNavItem[] = [
   { label: "Equipt Dashboard",    href: "/dashboards/equipt",          icon: Wrench,      requiresModule: "equipt",    hideFromCrew: true },
   { label: "Landscapt My Day",    href: "/dashboards/myday",           icon: CalendarCheck, requiresModule: "landscapt", hideFromCrew: true },
   { label: "Reports Dashboard",   href: "/dashboards/landscapt-reports", icon: BarChart2, requiresModule: "landscapt", hideFromCrew: true },
-  { label: "KPI Scorecard",       href: "/dashboards/kpis",            icon: Target,      hideFromCrew: true },
+  { label: "KPI Scorecard",       href: "/dashboards/kpis",            icon: Target,      requiresModule: "landscapt", hideFromCrew: true },
+  { label: "Twins KPI Scorecard", href: "/dashboards/twins-kpis",      icon: Gauge,       hideFromCrew: true, internalOnly: true },
   { label: "Financial",           href: "/dashboards/financials",      icon: DollarSign,  hideFromCrew: true, internalOnly: true },
   { label: "Labor Efficiency",    href: "/dashboards/avb",             icon: TrendingUp,                      internalOnly: true },
   { label: "Driver Safety Scores",href: "/dashboards/safety",          icon: ShieldCheck,                     internalOnly: true },

@@ -10,12 +10,24 @@ import { InternalOnlyGuard } from "@/components/shared/InternalOnlyGuard";
 import { useUIStore, useCurrentUserStore } from "@/stores";
 import { usePageTitle } from "@/lib/hooks/use-page-title";
 
-const INTERNAL_ONLY_PATHS = ["/dashboards/financials", "/dashboards/avb", "/dashboards/safety", "/dashboards/crm"];
+const INTERNAL_ONLY_PATHS = [
+  "/dashboards/financials",
+  "/dashboards/avb",
+  "/dashboards/safety",
+  "/dashboards/crm",
+  "/dashboards/twins-kpis",
+];
 
 /** Built-in office dashboards crew logins must not reach by URL — the
  *  sidebar/overview already hide the links (hideFromCrew). Custom dashboards
  *  aren't listed here: /api/crm/dashboards/[id] enforces visible_to_crew. */
-const CREW_BLOCKED_PATHS = ["/dashboards/equipt", "/dashboards/myday", "/dashboards/landscapt-reports", "/dashboards/kpis"];
+const CREW_BLOCKED_PATHS = [
+  "/dashboards/equipt",
+  "/dashboards/myday",
+  "/dashboards/landscapt-reports",
+  "/dashboards/kpis",
+  "/dashboards/twins-kpis",
+];
 
 function CrewBlockedGuard({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
