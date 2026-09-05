@@ -69,12 +69,13 @@ const LEAD_DEFAULT_VISIBLE: Record<string, boolean> = {
   zip: false,
 };
 
-function LeadRevenuePotential({ leadId }: { leadId: string }) {
+/** Sum of open (not accepted/lost) estimate totals for a lead. Shared by the table and list views. */
+export function LeadRevenuePotential({ leadId, className, hideEmpty }: { leadId: string; className?: string; hideEmpty?: boolean }) {
   const { data: estimates } = useEstimates(leadId);
   const open = (estimates ?? []).filter((e) => e.stage !== "accepted" && e.stage !== "lost");
   const total = open.reduce((sum, e) => sum + e.totalCents, 0);
-  if (total <= 0) return <span className="text-slate-300">—</span>;
-  return <span className="font-medium text-green-700">{formatCurrency(total)}</span>;
+  if (total <= 0) return hideEmpty ? null : <span className="text-slate-300">—</span>;
+  return <span className={cn("font-medium text-green-700", className)}>{formatCurrency(total)}</span>;
 }
 
 const SOURCE_OPTIONS = [

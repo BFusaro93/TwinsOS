@@ -4,10 +4,11 @@ import { useState } from "react";
 import { useLeads } from "@/lib/hooks/use-clients";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Search, UserPlus } from "lucide-react";
+import { Search, UserPlus, Building2, Home } from "lucide-react";
 import { MasterDetailLayout } from "@/components/shared/MasterDetailLayout";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { ClientDetailPanel } from "@/components/crm/ClientDetailPanel";
+import { LeadRevenuePotential } from "@/components/crm/leads/LeadsList";
 import { cn } from "@/lib/utils";
 import type { Client } from "@/types/crm";
 
@@ -31,7 +32,19 @@ function LeadItem({ lead, isSelected, onSelect }: { lead: Client; isSelected: bo
       )}
     >
       <div className="flex items-center justify-between gap-2">
-        <span className="truncate text-sm font-medium text-slate-900">{lead.displayName}</span>
+        <div className="flex items-center gap-1.5 min-w-0">
+          {lead.accountType === "commercial"
+            ? <Building2 className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+            : <Home className="h-3.5 w-3.5 shrink-0 text-slate-400" />}
+          <span className="truncate text-sm font-medium text-slate-900">{lead.displayName}</span>
+        </div>
+        <LeadRevenuePotential leadId={lead.id} hideEmpty className="shrink-0 text-xs font-semibold" />
+      </div>
+      <div className="flex items-center justify-between gap-2">
+        <span className="truncate text-xs text-slate-500">
+          {[lead.serviceAddress, lead.serviceCity, lead.serviceState].filter(Boolean).join(", ") ||
+            lead.primaryPhone || lead.primaryEmail || "—"}
+        </span>
         {lead.source && (
           <span className={cn(
             "shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium",
@@ -41,10 +54,6 @@ function LeadItem({ lead, isSelected, onSelect }: { lead: Client; isSelected: bo
           </span>
         )}
       </div>
-      <span className="truncate text-xs text-slate-500">
-        {[lead.serviceAddress, lead.serviceCity, lead.serviceState].filter(Boolean).join(", ") ||
-          lead.primaryPhone || lead.primaryEmail || "—"}
-      </span>
     </button>
   );
 }
