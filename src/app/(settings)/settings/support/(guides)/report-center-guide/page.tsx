@@ -39,7 +39,7 @@ const CURATED_DASHBOARDS: [string, string, string][] = [
   ["Financial", "/dashboards/financials", "Internal org only"],
   ["Labor Efficiency", "/dashboards/avb", "Internal org only"],
   ["Driver Safety Scores", "/dashboards/safety", "Internal org only"],
-  ["CRM Report", "/dashboards/crm", "Internal org only, hidden from crew"],
+  ["Company Report", "/dashboards/crm", "Requires the Landscapt module, hidden from crew role"],
 ];
 
 export default function ReportCenterGuidePage() {
@@ -64,6 +64,7 @@ export default function ReportCenterGuidePage() {
           <TOCLink href="#dashboards-vs-reports">Dashboards vs. individual reports</TOCLink>
           <TOCLink href="#curated-dashboards">The curated, top-level dashboards</TOCLink>
           <TOCLink href="#kpi-scorecard">The KPI Scorecard</TOCLink>
+          <TOCLink href="#company-report">The Company Report</TOCLink>
           <TOCLink href="#export">Exporting and printing</TOCLink>
           <TOCLink href="#permissions">Permissions and gating</TOCLink>
         </div>
@@ -362,6 +363,64 @@ export default function ReportCenterGuidePage() {
         </p>
       </Section>
 
+      <Section id="company-report" title="The Company Report">
+        <p>
+          <code>/dashboards/crm</code> is a live, always-current sales and operations snapshot,
+          computed entirely from Landscapt data. It has no filters or date picker — it&apos;s
+          always &quot;as of now&quot;: year-to-date figures run from January 1 of the current
+          year, and the monthly tables cover the trailing three calendar months, the current one
+          as month-to-date.
+        </p>
+        <p>
+          Every number comes from the same <code>crm_run_report</code> RPC and{" "}
+          <code>rpt_*</code> views the rest of the Report Center uses (<code>rpt_clients</code>,{" "}
+          <code>rpt_estimates</code>, <code>rpt_invoices</code>), plus direct queries against
+          payments, invoices, and tickets for the handful of figures — per-client aging buckets,
+          cash-only payment totals, ticket assignee counts — that a simple group-by can&apos;t
+          express.
+        </p>
+        <p>The page has four sections:</p>
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            <strong>KPI row</strong> — Invoiced Revenue, Outstanding A/R, New Clients, and New
+            Leads, year-to-date. The progress bars under Invoiced Revenue, New Clients, and New
+            Leads read the matching Target from that org&apos;s KPI Scorecard (same metric keys)
+            — set a target there and it shows up here automatically.
+          </li>
+          <li>
+            <strong>Sales Dashboard</strong> — monthly new-client/lead trend, close ratios and
+            open pipeline by sales rep, a won-estimates leaderboard, and this month&apos;s new
+            clients by rep and source.
+          </li>
+          <li>
+            <strong>Operations</strong> — invoices, sales tax, and payments over the trailing
+            three months, open tickets by category and assignee, and unapplied/pre-payment
+            totals.
+          </li>
+          <li>
+            <strong>Collections / A/R</strong> — the standard five-bucket aging breakdown and
+            the ten largest outstanding balances, each tagged OK / Monitor / Action / Escalate by
+            a fixed dollar-threshold rule (see below).
+          </li>
+        </ul>
+        <Callout>
+          <strong>Flags &amp; Priority Actions</strong> are rule-based, not AI-generated. The old
+          screenshot workflow included hand-written commentary on specific accounts; this version
+          instead evaluates a fixed set of thresholds against the same numbers on the page —
+          e.g. any client with a large balance over 90 days past due, more than 30% of A/R in the
+          two oldest buckets, a meaningful pile of unused pre-payments, several unassigned
+          tickets, revenue running behind a pace-adjusted annual target. No account gets
+          free-form judgment or a narrative explanation; a flag either fires past its threshold
+          or it doesn&apos;t. The thresholds live in{" "}
+          <code>src/lib/company-report/flags.ts</code> and are easy to retune.
+        </Callout>
+        <p>
+          Gated the same as the rest of the Report Center: <code>view_report_center</code> to
+          open it, Landscapt module required, hidden from crew. There&apos;s nothing to edit on
+          this page — no Manage Report Center split, unlike the KPI Scorecard.
+        </p>
+      </Section>
+
       <Section id="export" title="Exporting and printing">
         <p>
           Every pre-built report and custom analysis runs through the same viewer chrome
@@ -392,18 +451,19 @@ export default function ReportCenterGuidePage() {
             &quot;landscapt&quot;)</code> checks the org&apos;s
             Stripe plan against <code>planIncludesModule</code>; it hides the Equipt Dashboard,
             Landscapt My Day, and Reports Dashboard cards/links when the org&apos;s plan doesn&apos;t
-            include that module. The KPI Scorecard card/link requires the Landscapt module too.
+            include that module. The KPI Scorecard and Company Report cards/links require the Landscapt
+            module too.
           </li>
           <li>
-            <strong>Internal-only dashboards</strong> — Financial, Labor Efficiency, Driver
-            Safety Scores, and CRM Report are gated by <code>useIsInternalOrg()</code> both in the
+            <strong>Internal-only dashboards</strong> — Financial, Labor Efficiency, and Driver
+            Safety Scores are gated by <code>useIsInternalOrg()</code> both in the
             nav (hidden entirely) and by an <code>InternalOnlyGuard</code> wrapping{" "}
             <code>{"{children}"}</code> in the reports layout itself for the paths listed in{" "}
             <code>INTERNAL_ONLY_PATHS</code> —
             so even a direct URL hit is blocked, not just hidden from the nav.
           </li>
           <li>
-            <strong>Crew role</strong> — the KPI Scorecard, Financial, and CRM Report nav
+            <strong>Crew role</strong> — the KPI Scorecard, Company Report, and Financial nav
             entries set <code>hideFromCrew</code>, <code>DashboardsHomePage</code>
             independently checks <code>currentUser.role === &quot;crew&quot;</code> to hide the
             same cards, and <code>CrewBlockedGuard</code> in the reports layout blocks the office

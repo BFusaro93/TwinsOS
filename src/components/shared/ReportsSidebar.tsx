@@ -45,7 +45,8 @@ export const DASHBOARDS_NAV: ReportsNavItem[] = [
   { label: "Financial",           href: "/dashboards/financials",      icon: DollarSign,  hideFromCrew: true, internalOnly: true },
   { label: "Labor Efficiency",    href: "/dashboards/avb",             icon: TrendingUp,                      internalOnly: true },
   { label: "Driver Safety Scores",href: "/dashboards/safety",          icon: ShieldCheck },
-  { label: "CRM Report",          href: "/dashboards/crm",             icon: FileText,    hideFromCrew: true, internalOnly: true },
+  { label: "Company Report",      href: "/dashboards/crm",             icon: FileText,    requiresModule: "landscapt", hideFromCrew: true },
+  { label: "Twins CRM Report",     href: "/dashboards/twins-crm-report", icon: FileText,   hideFromCrew: true, internalOnly: true },
 ];
 
 function NavLink({

@@ -101,6 +101,15 @@ export default function DashboardsHomePage() {
           />
         )}
 
+        {hasLandscapt && !isCrew && (
+          <DashboardCard
+            href="/dashboards/crm"
+            icon={FileText}
+            title="Company Report"
+            description="Sales, operations, and A/R computed live from Landscapt data"
+          />
+        )}
+
         {isInternalOrg && (
           <>
             <DashboardCard
@@ -116,16 +125,16 @@ export default function DashboardsHomePage() {
               description="Budget vs. actual labor hours"
             />
             <DashboardCard
-              href="/dashboards/crm"
-              icon={FileText}
-              title="CRM Report"
-              description="Landscapt performance report"
-            />
-            <DashboardCard
               href="/dashboards/twins-kpis"
               icon={Target}
               title="Twins KPI Scorecard"
               description="Legacy scorecard (AvB, QBO, Samsara sources)"
+            />
+            <DashboardCard
+              href="/dashboards/twins-crm-report"
+              icon={FileText}
+              title="Twins CRM Report"
+              description="Legacy Service Autopilot summary"
             />
           </>
         )}

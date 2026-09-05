@@ -1124,6 +1124,11 @@ export const DOC_SECTIONS: DocSection[] = [
               "Dashboards > KPI Scorecard scores annual targets by category. Metrics tagged auto are computed live from Landscapt data (invoices, payments, visits, estimates, clients, employees); the rest are typed in. Click Customize to add metrics from the catalog, add your own manual metrics, set weights, or remove any row. Viewing needs the View Report Center permission; editing targets, manual actuals, or the layout needs Manage Report Center.",
           },
           {
+            step: "Company Report",
+            detail:
+              "Dashboards > Company Report is a live sales/operations/A-R snapshot, always \"as of now\" (YTD from Jan 1, trailing 3 months for the monthly tables). Progress bars on the KPI row read Targets from that org's KPI Scorecard. The flags section is rule-based (fixed dollar/percent thresholds), not AI-generated commentary.",
+          },
+          {
             step: "Full guide",
             detail:
               "A deeper walkthrough — a worked example running the Production Rate Accuracy report end to end, and the distinction between curated and custom dashboards.",

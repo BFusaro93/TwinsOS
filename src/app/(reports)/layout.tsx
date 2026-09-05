@@ -15,8 +15,8 @@ import { useHasDrivingScoreAccess } from "@/lib/hooks/use-driving-score-access";
 const INTERNAL_ONLY_PATHS = [
   "/dashboards/financials",
   "/dashboards/avb",
-  "/dashboards/crm",
   "/dashboards/twins-kpis",
+  "/dashboards/twins-crm-report",
 ];
 
 /** Twins-only by default, but any org can unlock it via the Samsara
@@ -32,6 +32,7 @@ const CREW_BLOCKED_PATHS = [
   "/dashboards/landscapt-reports",
   "/dashboards/kpis",
   "/dashboards/twins-kpis",
+  "/dashboards/crm",
 ];
 
 function CrewBlockedGuard({ children }: { children: React.ReactNode }) {
