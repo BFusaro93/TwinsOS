@@ -1,9 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, Trash2, Link2, Download } from "lucide-react";
+import { Plus, Trash2, Link2, Download, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { EditButton } from "@/components/shared/EditButton";
 import { StatusBadge } from "@/components/shared/StatusBadge";
@@ -52,6 +55,11 @@ export function DamageCaseDetailPanel({ caseId, onClose }: Props) {
   const [addExpenseOpen, setAddExpenseOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [poPickerOpen, setPoPickerOpen] = useState(false);
+  // Resolution-notes dialog: opened when the status is changed to Resolved
+  // (saves notes + status together) or from the pencil next to the notes
+  // while the case is resolved/closed (notes only).
+  const [notesDialog, setNotesDialog] = useState<{ nextStatus: DamageCaseStatus | null } | null>(null);
+  const [notesDraft, setNotesDraft] = useState("");
 
   if (isLoading) {
     return (
@@ -67,6 +75,7 @@ export function DamageCaseDetailPanel({ caseId, onClose }: Props) {
 
   const expenses = (data as { expenses?: import("@/types").DamageCaseExpense[] }).expenses ?? [];
   const isClosed = data.status === "resolved" || data.status === "closed";
+  const lockTitle = "Reopen this case before making changes";
   const linkedPo = data.linkedPoId ? allPOs.find((p) => p.id === data.linkedPoId) : undefined;
   const linkedPoDangling = !!data.linkedPoId && !linkedPo;
 
@@ -94,10 +103,21 @@ export function DamageCaseDetailPanel({ caseId, onClose }: Props) {
               {Object.entries(DAMAGE_CASE_STATUS_LABELS).map(([value, label]) => (
                 <DropdownMenuItem
                   key={value}
-                  onSelect={() => updateCase.mutate(
-                    { id: data.id, status: value as DamageCaseStatus },
-                    { onError: () => toast.error("Failed to update status") },
-                  )}
+                  onSelect={() => {
+                    const next = value as DamageCaseStatus;
+                    if (next === data.status) return;
+                    if (next === "resolved") {
+                      // Prompt for resolution notes at resolve time and save
+                      // them together with the status change.
+                      setNotesDraft(data.resolutionNotes ?? "");
+                      setNotesDialog({ nextStatus: next });
+                      return;
+                    }
+                    updateCase.mutate(
+                      { id: data.id, status: next },
+                      { onError: () => toast.error("Failed to update status") },
+                    );
+                  }}
                   className={value === data.status ? "font-medium text-brand-600" : ""}
                 >
                   {label}
@@ -118,12 +138,14 @@ export function DamageCaseDetailPanel({ caseId, onClose }: Props) {
             variant="ghost"
             size="icon"
             className="h-8 w-8 text-slate-400 hover:bg-red-50 hover:text-red-500"
+            disabled={isClosed}
+            title={isClosed ? lockTitle : "Delete case"}
             onClick={async () => {
               try {
                 await deleteCase.mutateAsync(data.id);
                 onClose?.();
-              } catch {
-                toast.error("Failed to delete case");
+              } catch (err) {
+                toast.error(err instanceof Error ? err.message : "Failed to delete case");
               }
             }}
           >
@@ -142,10 +164,27 @@ export function DamageCaseDetailPanel({ caseId, onClose }: Props) {
           <span className="text-muted-foreground">Description: </span>
           <span>{data.description}</span>
         </div>
-        {data.resolutionNotes && (
-          <div className="text-sm">
-            <span className="text-muted-foreground">Resolution Notes: </span>
-            <span>{data.resolutionNotes}</span>
+        {(data.resolutionNotes || isClosed) && (
+          <div className="flex items-start gap-2 text-sm">
+            <div className="min-w-0 flex-1">
+              <span className="text-muted-foreground">Resolution Notes: </span>
+              {data.resolutionNotes
+                ? <span className="whitespace-pre-wrap">{data.resolutionNotes}</span>
+                : <span className="italic text-muted-foreground">None recorded</span>}
+            </div>
+            {/* Resolution notes are the one field that belongs to the resolved
+                state, so they stay editable while the case is locked. */}
+            {isClosed && (
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-6 w-6 shrink-0 text-muted-foreground"
+                title="Edit resolution notes"
+                onClick={() => { setNotesDraft(data.resolutionNotes ?? ""); setNotesDialog({ nextStatus: null }); }}
+              >
+                <Pencil className="h-3.5 w-3.5" />
+              </Button>
+            )}
           </div>
         )}
       </div>
@@ -166,6 +205,9 @@ export function DamageCaseDetailPanel({ caseId, onClose }: Props) {
                 <span className="text-sm text-muted-foreground">{linkedPo?.vendorName}</span>
               </>
             )}
+            {/* Deliberately NOT gated on isClosed: unlinking a (possibly
+                dangling/deleted) PO reference is cleanup, not re-billing —
+                the hook's substantive-field lock excludes linkedPoId too. */}
             <Button
               size="icon"
               variant="ghost"
@@ -274,9 +316,11 @@ export function DamageCaseDetailPanel({ caseId, onClose }: Props) {
                         size="icon"
                         variant="ghost"
                         className="h-7 w-7 text-destructive hover:text-destructive"
+                        disabled={isClosed}
+                        title={isClosed ? lockTitle : "Delete expense"}
                         onClick={() => deleteExpense.mutate(
                           { id: exp.id, damageCaseId: data.id },
-                          { onError: () => toast.error("Failed to delete expense") },
+                          { onError: (err) => toast.error(err instanceof Error ? err.message : "Failed to delete expense") },
                         )}
                       >
                         <Trash2 className="h-3.5 w-3.5" />
@@ -311,6 +355,55 @@ export function DamageCaseDetailPanel({ caseId, onClose }: Props) {
           <AuditTrailTab recordType="damage_case" recordId={data.id} />
         </TabsContent>
       </Tabs>
+
+      <Dialog open={!!notesDialog} onOpenChange={(o) => { if (!o) setNotesDialog(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{notesDialog?.nextStatus === "resolved" ? "Resolve Case" : "Resolution Notes"}</DialogTitle>
+            <DialogDescription>
+              {notesDialog?.nextStatus === "resolved"
+                ? "Add a note about how this case was resolved. Optional, but it's the record that outlives the case."
+                : "Update the resolution notes for this case."}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-1.5">
+            <Label>Resolution Notes <span className="text-muted-foreground text-xs">(optional)</span></Label>
+            <Textarea
+              autoFocus
+              rows={4}
+              value={notesDraft}
+              onChange={(e) => setNotesDraft(e.target.value)}
+              placeholder="How was this case resolved?"
+            />
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setNotesDialog(null)}>Cancel</Button>
+            <Button
+              type="button"
+              disabled={updateCase.isPending}
+              onClick={() => {
+                if (!notesDialog) return;
+                updateCase.mutate(
+                  {
+                    id: data.id,
+                    resolutionNotes: notesDraft.trim() || null,
+                    ...(notesDialog.nextStatus ? { status: notesDialog.nextStatus } : {}),
+                  },
+                  {
+                    onSuccess: () => {
+                      setNotesDialog(null);
+                      toast.success(notesDialog.nextStatus ? "Case resolved" : "Resolution notes saved");
+                    },
+                    onError: (err) => toast.error(err instanceof Error ? err.message : "Failed to save"),
+                  },
+                );
+              }}
+            >
+              {updateCase.isPending ? "Saving…" : notesDialog?.nextStatus === "resolved" ? "Mark Resolved" : "Save Notes"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <AddExpenseDialog damageCaseId={data.id} open={addExpenseOpen} onOpenChange={setAddExpenseOpen} />
       <NewDamageCaseDialog

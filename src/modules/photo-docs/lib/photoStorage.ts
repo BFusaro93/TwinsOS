@@ -35,9 +35,12 @@ export async function uploadOriginalPhoto(
   file: File,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   supabaseClient?: any,
+  /** Explicit content type — pass the effective MIME (see lib/fileType.ts)
+   *  so a HEIC the browser reported as octet-stream isn't stored that way. */
+  contentTypeOverride?: string,
 ): Promise<string> {
   const supabase = supabaseClient ?? createClient();
-  const contentType = file.type || "application/octet-stream";
+  const contentType = contentTypeOverride || file.type || "application/octet-stream";
 
   // Safari rejects fetch uploads with File objects directly (StorageUnknownError: Load failed).
   // Converting to ArrayBuffer first works around this Safari bug.

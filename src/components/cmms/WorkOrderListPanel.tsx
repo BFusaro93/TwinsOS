@@ -1,6 +1,6 @@
 "use client";
 
-import { cn, formatDate, getInitials, getAvatarColor } from "@/lib/utils";
+import { cn, formatDate, getInitials, getAvatarColor, todayLocalISODate } from "@/lib/utils";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -126,7 +126,7 @@ export function WorkOrderListPanel({ workOrders, selectedId, onSelect }: WorkOrd
         const label = wo.assetName ?? wo.title;
         const initials = getInitials(label);
         const avatarColor = getAvatarColor(label);
-        const todayStr = new Date().toISOString().split("T")[0];
+        const todayStr = todayLocalISODate();
         const isFutureWO = !!wo.startDate && wo.startDate > todayStr && wo.status !== "done" && wo.status !== "skipped";
 
         return (

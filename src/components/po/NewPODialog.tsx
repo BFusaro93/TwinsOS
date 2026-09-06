@@ -29,7 +29,7 @@ import { useParts } from "@/lib/hooks/use-parts";
 import { useProjects } from "@/lib/hooks/use-projects";
 import { useCreatePurchaseOrder, useUpdatePurchaseOrder } from "@/lib/hooks/use-purchase-orders";
 import { useRequiredFields } from "@/lib/hooks/use-required-fields";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, todayLocalISODate } from "@/lib/utils";
 import { getCatalogCost } from "@/lib/cost-methods";
 import { useSettingsStore } from "@/stores/settings-store";
 import { VendorCombobox } from "@/components/shared/VendorCombobox";
@@ -51,8 +51,6 @@ interface DraftLineItem {
   projectId: string; // "none" = no project
   taxable: boolean;
 }
-
-const today = new Date().toISOString().split("T")[0];
 
 export interface POPrefillItem {
   productKey: string;
@@ -126,7 +124,7 @@ export function NewPODialog({ open, onOpenChange, initialData, prefillData, onCr
   const allParts = [...parts, ...extraParts];
 
   const [vendorId, setVendorId] = useState("none");
-  const [poDate, setPoDate] = useState(today);
+  const [poDate, setPoDate] = useState(() => todayLocalISODate());
   const [paymentType, setPaymentType] = useState("");
   const [invoiceNumber, setInvoiceNumber] = useState("");
   const [notes, setNotes] = useState("");
@@ -168,7 +166,7 @@ export function NewPODialog({ open, onOpenChange, initialData, prefillData, onCr
   useEffect(() => {
     if (open && initialData) {
       setVendorId(initialData.vendorId);
-      setPoDate(initialData.poDate ?? today);
+      setPoDate(initialData.poDate ?? todayLocalISODate());
       setPaymentType(initialData.paymentType ?? "");
       setInvoiceNumber(initialData.invoiceNumber ?? "");
       setNotes(initialData.notes ?? "");
@@ -227,7 +225,7 @@ export function NewPODialog({ open, onOpenChange, initialData, prefillData, onCr
   function handleClose() {
     onOpenChange(false);
     setVendorId("none");
-    setPoDate(today);
+    setPoDate(todayLocalISODate());
     setPaymentType("");
     setInvoiceNumber("");
     setNotes("");

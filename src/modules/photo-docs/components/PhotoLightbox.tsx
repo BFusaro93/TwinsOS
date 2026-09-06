@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import { formatDate } from "@/lib/utils";
 import { useUpdatePhoto } from "../hooks/useJobPhotos";
 import { useClearAnnotation } from "../hooks/useAnnotations";
+import { isHeicMimeType } from "../lib/fileType";
 import type { JobPhoto } from "../types/photo.types";
 
 interface PhotoLightboxProps {
@@ -77,10 +78,15 @@ export function PhotoLightbox({
   // imgSrc degrades to publicUrl if the annotated composite fails to load.
   const activeUrl = photo.annotatedUrl ?? photo.publicUrl;
   const [imgSrc, setImgSrc] = useState(activeUrl);
+  // Set once both the annotated composite and the original fail to decode —
+  // e.g. a stored HEIC outside Safari. Render an explicit placeholder rather
+  // than the browser's broken-image icon.
+  const [imgFailed, setImgFailed] = useState(false);
+  const isHeic = isHeicMimeType(photo.mimeType);
 
   const backdropRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => { setImgSrc(activeUrl); }, [activeUrl]);
+  useEffect(() => { setImgSrc(activeUrl); setImgFailed(false); }, [activeUrl]);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -124,13 +130,34 @@ export function PhotoLightbox({
             </button>
           )}
 
-          {isImage && imgSrc ? (
+          {isImage && imgSrc && imgFailed ? (
+            <div className="flex flex-col items-center gap-4 rounded-xl bg-slate-800 px-12 py-16 text-center shadow-2xl">
+              <FileText className="h-16 w-16 text-slate-400" />
+              <p className="text-sm font-medium text-slate-300">
+                {isHeic ? "Preview not available for HEIC in this browser" : "This image couldn't be loaded"}
+              </p>
+              <p className="text-xs text-slate-400">{photo.fileName}</p>
+              {activeUrl && (
+                <a
+                  href={activeUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="rounded-md bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600"
+                >
+                  Open / Download
+                </a>
+              )}
+            </div>
+          ) : isImage && imgSrc ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={imgSrc}
               alt={photo.fileName}
               className="max-h-[80vh] max-w-full rounded-md object-contain shadow-2xl"
-              onError={() => { if (photo.publicUrl && imgSrc !== photo.publicUrl) setImgSrc(photo.publicUrl); }}
+              onError={() => {
+                if (photo.publicUrl && imgSrc !== photo.publicUrl) setImgSrc(photo.publicUrl);
+                else setImgFailed(true);
+              }}
             />
           ) : isVideo ? (
             <video

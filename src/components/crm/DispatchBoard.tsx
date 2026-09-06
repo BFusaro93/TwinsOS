@@ -34,7 +34,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { formatCurrency, cn, relativeTime, formatDateShort } from "@/lib/utils";
+import { formatCurrency, cn, relativeTime, formatDateShort, todayLocalISODate } from "@/lib/utils";
 import { computeActualHours, computeBudgetedHours } from "@/lib/utils/visit-hours";
 import { toast } from "sonner";
 import {
@@ -489,7 +489,7 @@ function JobDetailSheet({
 
   async function handleInvoice() {
     try {
-      const serviceDate = visit.scheduledDate ?? new Date().toISOString().slice(0, 10);
+      const serviceDate = visit.scheduledDate ?? todayLocalISODate();
       // invoiceDescription is authored via a rich-text editor on the Service
       // (and carried down onto the job/visit) — stripHtml() it before it
       // reaches an actual generated invoice, or a client-facing invoice
@@ -508,7 +508,7 @@ function JobDetailSheet({
         jobId: visit.jobId,
         clientId: visit.clientId,
         description: masterDescription ?? serviceName,
-        invoiceDate: visit.scheduledDate ?? new Date().toISOString().slice(0, 10),
+        invoiceDate: visit.scheduledDate ?? todayLocalISODate(),
         lineItems,
         subtotalCents,
         taxRateBps: 0,

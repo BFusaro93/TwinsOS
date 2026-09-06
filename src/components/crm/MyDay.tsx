@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { Ticket, ClipboardSignature, Receipt, UserRound, Plus, Inbox } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
-import { cn, formatCurrency, formatDate } from "@/lib/utils";
+import { cn, formatCurrency, formatDate, todayLocalISODate } from "@/lib/utils";
 import { useCurrentUserStore } from "@/stores";
 import { useTickets } from "@/lib/hooks/use-tickets";
 import { useEstimates } from "@/lib/hooks/use-estimates";
@@ -72,7 +72,7 @@ export function MyDay() {
   const { data: allClients, isLoading: clientsLoading } = useClients();
   const { data: pendingApprovals, isLoading: approvalsLoading } = usePendingSequenceApprovals();
 
-  const today = new Date().toISOString().split("T")[0];
+  const today = todayLocalISODate();
   const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
 
   const overdueCount = (openTickets ?? []).filter(

@@ -8,24 +8,23 @@ import { useCurrentUserStore } from "@/stores";
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { compressPhoto, getImageDimensions, extractGPS } from "../lib/imageCompression";
 import { buildPhotoPath, uploadOriginalPhoto } from "../lib/photoStorage";
+import {
+  MAX_PHOTO_UPLOAD_BYTES,
+  ALLOWED_PHOTO_UPLOAD_MIME_TYPES,
+  getEffectiveMimeType,
+  isAllowedUploadMimeType,
+  isHeicMimeType,
+  withEffectiveMimeType,
+  convertHeicToJpeg,
+} from "../lib/fileType";
+import { logger } from "@/lib/logger";
 import type { PhotoUploadInput, PhotoUploadProgress } from "../types/photo.types";
 
-// Keep in sync with the job-photos-original / job-photos-annotated Storage
-// bucket limits set in supabase/migrations/20260902120000_job_photos_bucket_size_and_mime_limits.sql
-export const MAX_PHOTO_UPLOAD_BYTES = 500 * 1024 * 1024; // 500MB
-export const ALLOWED_PHOTO_UPLOAD_MIME_TYPES = [
-  "image/jpeg", "image/png", "image/webp", "image/gif", "image/heic", "image/heif",
-  "video/mp4", "video/quicktime", "video/webm", "video/x-m4v",
-  "application/pdf",
-  "application/msword",
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  "application/vnd.ms-excel",
-  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-  "application/vnd.ms-powerpoint",
-  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-  "text/plain",
-  "text/csv",
-];
+// Re-exported so existing imports keep working; the source of truth (and the
+// extension-based MIME fallback) lives in ../lib/fileType.ts.
+export { MAX_PHOTO_UPLOAD_BYTES, ALLOWED_PHOTO_UPLOAD_MIME_TYPES };
+
+const log = logger.child("photo-upload");
 
 export function usePhotoUpload(projectId: string) {
   const qc = useQueryClient();
@@ -79,17 +78,43 @@ export function usePhotoUpload(projectId: string) {
               `"${inp.file.name}" is too large (${(inp.file.size / (1024 * 1024)).toFixed(1)}MB). Max file size is ${MAX_PHOTO_UPLOAD_BYTES / (1024 * 1024)}MB.`,
             );
           }
-          if (inp.file.type && !ALLOWED_PHOTO_UPLOAD_MIME_TYPES.includes(inp.file.type)) {
+          // Validate against the EFFECTIVE type: Chrome reports HEIC as
+          // application/octet-stream (or "") on several platforms, so the
+          // raw file.type can't be trusted — fall back to the extension.
+          const effectiveType = getEffectiveMimeType(inp.file);
+          if (!effectiveType || !isAllowedUploadMimeType(effectiveType)) {
             throw new Error(
-              `"${inp.file.name}" has an unsupported file type (${inp.file.type}). Allowed: photos, short videos, and common documents.`,
+              `"${inp.file.name}" has an unsupported file type (${inp.file.type || "unknown"}). Allowed: photos, short videos, and common documents.`,
             );
           }
 
-          const isImage = inp.file.type.startsWith("image/");
+          // Normalise file.type so compression / dimension probing / storage
+          // contentType all see the real MIME instead of octet-stream.
+          let workingFile = withEffectiveMimeType(inp.file);
+          const isImage = effectiveType.startsWith("image/");
 
-          // 1. Compress images only; pass other file types straight through
+          // 0b. HEIC/HEIF → JPEG in the browser. Only Safari can decode HEIC,
+          // so a raw HEIC in storage renders as a broken image for everyone
+          // else. If conversion fails we still upload the original (the
+          // gallery/lightbox show a "preview not available" placeholder for
+          // image/heic rather than a broken <img>).
+          if (isHeicMimeType(effectiveType)) {
+            updateStatus("compressing");
+            try {
+              workingFile = await convertHeicToJpeg(workingFile);
+            } catch (convErr) {
+              log.warn("HEIC conversion failed; uploading original", {
+                fileName: inp.file.name,
+                error: convErr instanceof Error ? convErr.message : String(convErr),
+              });
+            }
+          }
+
+          // 1. Compress images only; pass other file types straight through.
+          //    Runs on the converted JPEG when a HEIC was converted above.
           updateStatus("compressing");
-          const compressed = isImage ? await compressPhoto(inp.file) : inp.file;
+          const compressed = isImage ? await compressPhoto(workingFile) : workingFile;
+          const uploadContentType = compressed.type || workingFile.type || effectiveType;
 
           // 2. Dimensions — images only
           const dims = isImage ? await getImageDimensions(compressed).catch(() => null) : null;
@@ -105,8 +130,10 @@ export function usePhotoUpload(projectId: string) {
 
           // 4. Upload to storage
           updateStatus("uploading");
-          const path = buildPhotoPath(orgId, projectId, inp.file.name);
-          await uploadOriginalPhoto(path, compressed, supabase);
+          // Path extension follows the file we actually store (.jpg after a
+          // HEIC conversion); file_name below keeps the user's original name.
+          const path = buildPhotoPath(orgId, projectId, compressed.name);
+          await uploadOriginalPhoto(path, compressed, supabase, uploadContentType);
 
           // 5. Save metadata to DB
           updateStatus("saving");
@@ -120,7 +147,7 @@ export function usePhotoUpload(projectId: string) {
             storage_path: path,
             file_name: inp.file.name,
             file_size: compressed.size,
-            mime_type: compressed.type || inp.file.type,
+            mime_type: uploadContentType,
             width: dims?.width ?? null,
             height: dims?.height ?? null,
             before_after: inp.beforeAfter,

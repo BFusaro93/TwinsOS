@@ -23,6 +23,7 @@ import { useJobPhotoComparisons, useCreatePhotoComparison, useDeletePhotoCompari
 import { usePhotoAccess } from "../hooks/usePhotoAccess";
 import { PhotoLightbox } from "./PhotoLightbox";
 import { BeforeAfterSlider } from "./BeforeAfterSlider";
+import { isHeicMimeType } from "../lib/fileType";
 import type { GalleryTab, GalleryFileType, JobPhoto, BeforeAfterFlag } from "../types/photo.types";
 
 interface PhotoGalleryProps {
@@ -327,7 +328,7 @@ export function PhotoGallery({ projectId }: PhotoGalleryProps) {
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Pair as Before/After</DialogTitle>
-            <DialogDescription>Choose which selected photo is "before" and which is "after".</DialogDescription>
+            <DialogDescription>Choose which selected photo is &ldquo;before&rdquo; and which is &ldquo;after&rdquo;.</DialogDescription>
           </DialogHeader>
           {selectedPhotos.length === 2 && (
             <div className="flex flex-col gap-3">
@@ -506,14 +507,19 @@ function PhotoThumbnail({
             alt={photo.fileName}
             className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-105"
             onError={(e) => {
-              // Hide broken image and show fallback placeholder
+              // Hide broken image and show fallback placeholder. A stored
+              // HEIC (upload where the in-browser JPEG conversion failed)
+              // only decodes in Safari — say so instead of "Failed to load".
               (e.currentTarget as HTMLImageElement).style.display = "none";
               const parent = e.currentTarget.parentElement;
               if (parent && !parent.querySelector("[data-img-error]")) {
                 const fb = document.createElement("div");
                 fb.setAttribute("data-img-error", "1");
-                fb.className = "flex h-full w-full flex-col items-center justify-center gap-1 bg-slate-200";
-                fb.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-slate-400"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg><span style="font-size:10px;color:#94a3b8;">Failed to load</span>`;
+                fb.className = "flex h-full w-full flex-col items-center justify-center gap-1 bg-slate-200 px-2 text-center";
+                const label = isHeicMimeType(photo.mimeType)
+                  ? "Preview not available for HEIC in this browser"
+                  : "Failed to load";
+                fb.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-slate-400"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg><span style="font-size:10px;color:#94a3b8;">${label}</span>`;
                 parent.appendChild(fb);
               }
             }}

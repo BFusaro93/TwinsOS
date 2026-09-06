@@ -194,3 +194,29 @@ export function relativeTime(isoString: string): string {
   if (diffDays < 7) return `${diffDays}d ago`;
   return formatDate(isoString);
 }
+
+/**
+ * "YYYY-MM-DD" for a Date as it appears on the *browser's local* calendar.
+ * `new Date().toISOString().slice(0, 10)` is the UTC date, which after ~8 PM
+ * Eastern is already tomorrow — every `<input type="date">` default and every
+ * client-side "today" comparison must use this instead. (Server/report code
+ * uses the America/New_York helpers in src/lib/reports/ny-date.ts.)
+ */
+export function toLocalISODate(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+/** Today's local calendar date as "YYYY-MM-DD" — use for date-input defaults. */
+export function todayLocalISODate(): string {
+  return toLocalISODate(new Date());
+}
+
+/** Local calendar date `days` from today (negative = past) as "YYYY-MM-DD". */
+export function localISODateFromToday(days: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  return toLocalISODate(d);
+}

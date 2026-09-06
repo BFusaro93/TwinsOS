@@ -55,7 +55,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { cn, formatCurrency } from "@/lib/utils";
+import { cn, formatCurrency, todayLocalISODate } from "@/lib/utils";
 import { stripHtml } from "@/lib/utils/strip-html";
 import { BILLING_TERMS_OPTIONS } from "@/lib/constants";
 import { toast } from "sonner";
@@ -767,7 +767,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
             onClick={async () => {
               if (!estimate) return;
               try {
-                const today = new Date().toISOString().slice(0, 10);
+                const today = todayLocalISODate();
                 const invoice = await createInvoice({
                   estimateId: estimate.id,
                   clientId: estimate.clientId,

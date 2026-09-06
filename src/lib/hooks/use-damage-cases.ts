@@ -72,12 +72,11 @@ export function useCreateDamageCase() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: { user } } = await supabase.auth.getUser();
 
-      // next_damage_case_number() derives the next number from a plain
-      // COUNT(*) — two concurrent "New Damage Case" submissions in the same
-      // org/year can compute the same number, so the insert can collide on
-      // the UNIQUE(org_id, case_number) constraint. Retry with a freshly
-      // generated number rather than surfacing a raw DB error and losing
-      // the user's form input.
+      // next_damage_case_number() hands out DC-YYYY-NNN from an atomic
+      // per-org/year counter (damage_case_counters, see 20260829100000).
+      // The RPC and the INSERT are still two separate requests, so keep the
+      // retry on a UNIQUE(org_id, case_number) collision rather than
+      // surfacing a raw DB error and losing the user's form input.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let data: any = null;
       let lastError: { code?: string; message?: string } | null = null;
@@ -154,16 +153,36 @@ export function useCreateDamageCase() {
 // `linkedPoId` is intentionally excluded: unlinking a dangling/deleted PO
 // reference is cleanup, not a re-billing risk, and should stay available
 // even on a closed case (see DamageCaseDetailPanel's dangling-PO handling).
+// `resolutionNotes` is also excluded: it's the one field that legitimately
+// belongs to the resolved state (written at/after resolve time), so it stays
+// editable while the case is resolved/closed.
 const SUBSTANTIVE_DAMAGE_CASE_FIELDS = [
   "caseType",
   "customerName",
   "propertyAddress",
   "dateOfIncident",
   "description",
-  "resolutionNotes",
 ] as const;
 
 const CLOSED_DAMAGE_CASE_STATUSES: DamageCaseStatus[] = ["resolved", "closed"];
+
+/** Throws if the case is resolved/closed — server-side mirror of the UI lock. */
+async function assertDamageCaseOpen(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  damageCaseId: string,
+  action: string,
+): Promise<void> {
+  const { data, error } = await supabase
+    .from("damage_cases")
+    .select("status")
+    .eq("id", damageCaseId)
+    .single();
+  if (error) throw error;
+  if (CLOSED_DAMAGE_CASE_STATUSES.includes(data?.status as DamageCaseStatus)) {
+    throw new Error(`This case is resolved/closed. Reopen it before ${action}.`);
+  }
+}
 
 export function useUpdateDamageCase() {
   const queryClient = useQueryClient();
@@ -222,6 +241,10 @@ export function useDeleteDamageCase() {
   return useMutation({
     mutationFn: async (id: string) => {
       const supabase = createClient();
+      // A resolved/closed case is a finished liability record — deleting it
+      // (and its expense total) after the fact is exactly what the lock exists
+      // to prevent. Reopen first.
+      await assertDamageCaseOpen(supabase, id, "deleting it");
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any)
         .from("damage_cases")
@@ -240,17 +263,7 @@ export function useCreateDamageCaseExpense() {
   return useMutation({
     mutationFn: async (input: Omit<DamageCaseExpense, "id" | "orgId" | "createdBy" | "createdAt" | "updatedAt" | "deletedAt">) => {
       const supabase = createClient();
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: parentCase, error: parentError } = await (supabase as any)
-        .from("damage_cases")
-        .select("status")
-        .eq("id", input.damageCaseId)
-        .single();
-      if (parentError) throw parentError;
-      if (CLOSED_DAMAGE_CASE_STATUSES.includes(parentCase?.status as DamageCaseStatus)) {
-        throw new Error("This case is resolved/closed. Reopen it before adding expenses.");
-      }
+      await assertDamageCaseOpen(supabase, input.damageCaseId, "adding expenses");
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
@@ -281,6 +294,9 @@ export function useDeleteDamageCaseExpense() {
   return useMutation({
     mutationFn: async ({ id, damageCaseId }: { id: string; damageCaseId: string }) => {
       const supabase = createClient();
+      // Deleting an expense changes a resolved case's Total Cost — same lock
+      // as adding one.
+      await assertDamageCaseOpen(supabase, damageCaseId, "deleting expenses");
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any)
         .from("damage_case_expenses")

@@ -7,9 +7,18 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
-import { usePhotoUpload, MAX_PHOTO_UPLOAD_BYTES, ALLOWED_PHOTO_UPLOAD_MIME_TYPES } from "../hooks/usePhotoUpload";
+import { usePhotoUpload } from "../hooks/usePhotoUpload";
 import { usePhotoAccess } from "../hooks/usePhotoAccess";
-import { fileToDataUrl } from "../lib/imageCompression";
+import { fileToDataUrl, getImageDimensions } from "../lib/imageCompression";
+import {
+  MAX_PHOTO_UPLOAD_BYTES,
+  getEffectiveMimeType,
+  getUploadFileKind,
+  isAllowedUploadMimeType,
+  isHeicMimeType,
+  looksLikeICloudPlaceholder,
+  withEffectiveMimeType,
+} from "../lib/fileType";
 import { PHOTO_TAGS } from "../types/photo.types";
 import type { BeforeAfterFlag, UploadContext, PhotoUploadInput } from "../types/photo.types";
 
@@ -21,17 +30,32 @@ interface PendingFile {
   file: File;
   preview: string | null; // null for non-images
   fileType: "image" | "video" | "other";
+  /** HEIC/HEIF — browsers other than Safari can't preview it; converted to JPEG at upload. */
+  isHeic: boolean;
+  /** Suspiciously small for an image — likely an iCloud proxy that was never downloaded. */
+  suspectPlaceholder: boolean;
   displayName: string;
   beforeAfter: BeforeAfterFlag;
   tags: string[];
   notes: string;
 }
 
-function getFileType(file: File): PendingFile["fileType"] {
-  if (file.type.startsWith("image/")) return "image";
-  if (file.type.startsWith("video/")) return "video";
-  return "other";
-}
+/** Which picker a batch of files came from — each enforces its own kind. */
+type PickerSource = "camera" | "photo" | "video" | "file";
+
+const PICKER_ALLOWED_KIND: Record<PickerSource, PendingFile["fileType"] | null> = {
+  camera: "image",
+  photo: "image",
+  video: "video",
+  file: null, // Files picker: anything on the allowlist
+};
+
+const PICKER_REJECTION_REASON: Record<PickerSource, string> = {
+  camera: "photos only",
+  photo: "photos only",
+  video: "videos only",
+  file: "unsupported file type",
+};
 
 export function PhotoUploader({ projectId }: PhotoUploaderProps) {
   const router = useRouter();
@@ -50,34 +74,51 @@ export function PhotoUploader({ projectId }: PhotoUploaderProps) {
 
   const uploadContext: UploadContext = isCrew ? "progress" : "site_documentation";
 
-  const addFiles = useCallback(async (files: File[]) => {
+  const addFiles = useCallback(async (files: File[], source: PickerSource) => {
     if (!files.length) return;
 
     // Validate size/type up front so the user gets an immediate, specific
     // error instead of a generic Storage API rejection at upload time.
     // Limits must match the job-photos-* bucket config (see
-    // usePhotoUpload.ts and the migration it references).
+    // lib/fileType.ts and the migration it references).
+    //
+    // Type checks use the EFFECTIVE MIME (extension fallback) — Chrome
+    // reports iPhone .heic files as application/octet-stream on several
+    // platforms, which used to be rejected while an empty type slipped by.
+    // The per-picker `accept` attribute is only a hint to the OS dialog, so
+    // the Library/Camera/Videos pickers enforce their kind here too.
     const accepted: File[] = [];
     const rejected: string[] = [];
-    for (const file of files) {
-      if (file.size > MAX_PHOTO_UPLOAD_BYTES) {
-        rejected.push(`${file.name} (too large — max ${MAX_PHOTO_UPLOAD_BYTES / (1024 * 1024)}MB)`);
-      } else if (file.type && !ALLOWED_PHOTO_UPLOAD_MIME_TYPES.includes(file.type)) {
-        rejected.push(`${file.name} (unsupported file type)`);
+    const requiredKind = PICKER_ALLOWED_KIND[source];
+    for (const raw of files) {
+      const effectiveType = getEffectiveMimeType(raw);
+      if (raw.size > MAX_PHOTO_UPLOAD_BYTES) {
+        rejected.push(`${raw.name} (too large — max ${MAX_PHOTO_UPLOAD_BYTES / (1024 * 1024)}MB)`);
+      } else if (!effectiveType || !isAllowedUploadMimeType(effectiveType)) {
+        rejected.push(`${raw.name} (unsupported file type)`);
+      } else if (requiredKind && getUploadFileKind(effectiveType) !== requiredKind) {
+        rejected.push(`${raw.name} (${PICKER_REJECTION_REASON[source]})`);
       } else {
-        accepted.push(file);
+        accepted.push(withEffectiveMimeType(raw));
       }
     }
     setRejectedFiles(rejected);
     if (!accepted.length) return;
 
     const newPending = await Promise.all(
-      accepted.map(async (file) => {
-        const type = getFileType(file);
+      accepted.map(async (file): Promise<PendingFile> => {
+        const type = getUploadFileKind(file.type);
+        const isHeic = isHeicMimeType(file.type);
+        // Chrome/Firefox/Edge can't decode HEIC, so skip the (broken) preview;
+        // the hook converts it to JPEG before upload.
+        const preview = type === "image" && !isHeic ? await fileToDataUrl(file).catch(() => null) : null;
+        const dims = type === "image" && !isHeic ? await getImageDimensions(file).catch(() => null) : null;
         return {
           file,
-          preview: type === "image" ? await fileToDataUrl(file).catch(() => null) : null,
+          preview,
           fileType: type,
+          isHeic,
+          suspectPlaceholder: type === "image" && looksLikeICloudPlaceholder(file, dims),
           displayName: "",
           beforeAfter: type !== "other" ? globalBeforeAfter : "none" as BeforeAfterFlag,
           tags: type !== "other" ? [...globalTags] : [],
@@ -88,9 +129,9 @@ export function PhotoUploader({ projectId }: PhotoUploaderProps) {
     setPending((prev) => [...prev, ...newPending]);
   }, [globalBeforeAfter, globalTags]);
 
-  function handleInput(ref: React.RefObject<HTMLInputElement | null>) {
+  function handleInput(ref: React.RefObject<HTMLInputElement | null>, source: PickerSource) {
     return async (e: React.ChangeEvent<HTMLInputElement>) => {
-      await addFiles(Array.from(e.target.files ?? []));
+      await addFiles(Array.from(e.target.files ?? []), source);
       if (ref.current) ref.current.value = "";
     };
   }
@@ -183,11 +224,11 @@ export function PhotoUploader({ projectId }: PhotoUploaderProps) {
 
       {/* Hidden file inputs */}
       {/* capture="environment" opens the rear camera directly on Android/iOS */}
-      <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" multiple className="hidden" onChange={handleInput(cameraInputRef)} />
+      <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" multiple className="hidden" onChange={handleInput(cameraInputRef, "camera")} />
       {/* No capture — opens library/file picker on all platforms */}
-      <input ref={photoInputRef}  type="file" accept="image/*" multiple className="hidden" onChange={handleInput(photoInputRef)} />
-      <input ref={videoInputRef}  type="file" accept="video/*" multiple className="hidden" onChange={handleInput(videoInputRef)} />
-      <input ref={fileInputRef}   type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv" multiple className="hidden" onChange={handleInput(fileInputRef)} />
+      <input ref={photoInputRef}  type="file" accept="image/*" multiple className="hidden" onChange={handleInput(photoInputRef, "photo")} />
+      <input ref={videoInputRef}  type="file" accept="video/*" multiple className="hidden" onChange={handleInput(videoInputRef, "video")} />
+      <input ref={fileInputRef}   type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv" multiple className="hidden" onChange={handleInput(fileInputRef, "file")} />
 
       {rejectedFiles.length > 0 && (
         <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-700">
@@ -227,6 +268,11 @@ export function PhotoUploader({ projectId }: PhotoUploaderProps) {
                     {isImage && p.preview ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img src={p.preview} alt="" className="h-full w-full object-cover" />
+                    ) : isImage && p.isHeic ? (
+                      <div className="flex h-full w-full flex-col items-center justify-center gap-1" title="HEIC preview isn't available in this browser — it will be converted to JPEG on upload">
+                        <Images className="h-7 w-7 text-slate-400" />
+                        <span className="text-[10px] text-slate-400">HEIC</span>
+                      </div>
                     ) : p.fileType === "video" ? (
                       <div className="flex h-full w-full flex-col items-center justify-center gap-1">
                         <Film className="h-7 w-7 text-slate-400" />
@@ -259,8 +305,14 @@ export function PhotoUploader({ projectId }: PhotoUploaderProps) {
                       {p.fileType === "image" ? "Photo" : p.fileType === "video" ? "Video" : "File"} ·{" "}
                       {(p.file.size / 1024).toFixed(0)} KB
                     </p>
-                    {/* Warn if iOS gave us an iCloud proxy (very small file for a full-res image) */}
-                    {p.fileType === "image" && p.file.size < 100 * 1024 && (
+                    {p.isHeic && (
+                      <p className="text-[10px] text-slate-500">
+                        HEIC — will be converted to JPEG on upload (preview not available in this browser).
+                      </p>
+                    )}
+                    {/* Warn if iOS gave us an iCloud proxy: only for genuinely tiny files or an
+                        implausibly low bytes-per-pixel ratio (see looksLikeICloudPlaceholder). */}
+                    {p.suspectPlaceholder && (
                       <p className="text-[10px] font-medium text-amber-600">
                         ⚠️ This photo may not be fully downloaded from iCloud. Open it in your Photos app first, then re-add it.
                       </p>

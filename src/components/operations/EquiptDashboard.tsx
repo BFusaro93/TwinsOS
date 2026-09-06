@@ -33,7 +33,7 @@ import { usePMSchedules } from "@/lib/hooks/use-pm-schedules";
 import { useProducts } from "@/lib/hooks/use-products";
 import { useRecentActivityFeed } from "@/lib/hooks/use-audit-log";
 import { useOrgSettings } from "@/lib/hooks/use-org-settings";
-import { formatCurrency, getInitials, getAvatarColor, relativeTime } from "@/lib/utils";
+import { formatCurrency, getInitials, getAvatarColor, relativeTime, toLocalISODate } from "@/lib/utils";
 
 const ACTIVITY_TYPE_LABELS: Record<string, string> = {
   work_order: "Work Order",
@@ -70,7 +70,7 @@ function monthKey(date: Date): { key: string; label: string } {
 
 export function EquiptDashboard() {
   const today = new Date();
-  const todayIso = today.toISOString().slice(0, 10);
+  const todayIso = toLocalISODate(today);
 
   const { data: requisitions = [] } = useRequisitions();
   const { data: purchaseOrders = [] } = usePurchaseOrders();

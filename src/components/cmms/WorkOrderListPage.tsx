@@ -44,7 +44,7 @@ import { useCMMSStore } from "@/stores";
 import { useSort } from "@/lib/hooks/use-sort";
 import { SortableTableHead } from "@/components/shared/SortableTableHead";
 import { WO_STATUS_LABELS, WO_PRIORITY_LABELS } from "@/lib/constants";
-import { cn, formatDate, matchesFilter } from "@/lib/utils";
+import { cn, formatDate, matchesFilter, todayLocalISODate, localISODateFromToday } from "@/lib/utils";
 import type { WorkOrder, WorkOrderStatus, WorkOrderPriority } from "@/types";
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -155,11 +155,9 @@ function UpcomingMaintenanceView({
   isLoading: boolean;
   onRowClick: (wo: WorkOrder) => void;
 }) {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const todayStr   = today.toISOString().split("T")[0];
-  const weekOut    = new Date(today.getTime() + 7  * 86400000).toISOString().split("T")[0];
-  const monthOut   = new Date(today.getTime() + 30 * 86400000).toISOString().split("T")[0];
+  const todayStr   = todayLocalISODate();
+  const weekOut    = localISODateFromToday(7);
+  const monthOut   = localISODateFromToday(30);
 
   const recurring = workOrders.filter((wo) => wo.isRecurring);
   const active    = recurring.filter((wo) => wo.status !== "done");
@@ -386,7 +384,7 @@ export function WorkOrderListPage() {
   const all = workOrders ?? [];
 
   // Today's date string (YYYY-MM-DD) for future WO filtering
-  const todayDateStr = new Date().toISOString().split("T")[0];
+  const todayDateStr = todayLocalISODate();
   const sheetWO = sheetWOId ? (all.find((wo) => wo.id === sheetWOId) ?? null) : null;
 
   // Derive filter options from live data

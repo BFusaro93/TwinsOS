@@ -49,7 +49,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { cn, formatCurrency } from "@/lib/utils";
+import { cn, formatCurrency, todayLocalISODate } from "@/lib/utils";
 import { computeActualHours } from "@/lib/utils/visit-hours";
 import { stripHtml } from "@/lib/utils/strip-html";
 import { toast } from "sonner";
@@ -258,9 +258,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
   const [edits, setEdits] = useState<Record<string, unknown>>({});
   const [saving, setSaving] = useState(false);
   const [addingVisit, setAddingVisit] = useState(false);
-  const [newVisitDate, setNewVisitDate] = useState(
-    new Date().toISOString().slice(0, 10)
-  );
+  const [newVisitDate, setNewVisitDate] = useState(() => todayLocalISODate());
   const [newVisitCrew, setNewVisitCrew] = useState("");
   const [newVisitServiceId, setNewVisitServiceId] = useState("");
   const [newVisitInvoiceDesc, setNewVisitInvoiceDesc] = useState("");
@@ -392,7 +390,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
       // Auto-create a draft invoice when a one-time job is completed
       if (status === "completed" && job.jobType === "one_time") {
         try {
-          const today = new Date().toISOString().slice(0, 10);
+          const today = todayLocalISODate();
           const serviceDate = job.scheduledDate ?? today;
           const svcs = job.services ?? [];
           const productLineItems = buildPendingProductLineItems(serviceDate);
@@ -535,7 +533,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
     if (!job) return;
     setInvoicing(true);
     try {
-      const today = new Date().toISOString().slice(0, 10);
+      const today = todayLocalISODate();
       const serviceDate = job.scheduledDate ?? today;
       const services = job.services ?? [];
       const productLineItems = buildPendingProductLineItems(serviceDate);

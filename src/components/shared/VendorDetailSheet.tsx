@@ -36,7 +36,7 @@ import {
 import { AttachmentsSection } from "@/components/shared/AttachmentsSection";
 import { EditButton } from "@/components/shared/EditButton";
 import { NewVendorDialog } from "./NewVendorDialog";
-import { getInitials, getAvatarColor, formatDate, formatCurrency } from "@/lib/utils";
+import { getInitials, getAvatarColor, formatDate, formatCurrency, todayLocalISODate } from "@/lib/utils";
 import { usePurchaseOrders } from "@/lib/hooks/use-purchase-orders";
 import { useParts, useUpdatePart } from "@/lib/hooks/use-parts";
 import { useUpdateVendor, useDeleteVendor } from "@/lib/hooks/use-vendors";
@@ -88,7 +88,7 @@ function DetailsTab({ vendor, onUpdateNotes }: { vendor: Vendor; onUpdateNotes: 
   // select (it only offers not_requested/requested/received) and nothing
   // ever flips it automatically either — derive it here instead of trusting
   // the stored status, so a lapsed expiration date actually shows as expired.
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayLocalISODate();
   const isPastExpiration = !!vendor.w9ExpirationDate && vendor.w9ExpirationDate < today;
   const effectiveW9Status: W9Status = vendor.w9Status === "received" && isPastExpiration ? "expired" : vendor.w9Status;
   const w9Config = W9_STATUS_CONFIG[effectiveW9Status];

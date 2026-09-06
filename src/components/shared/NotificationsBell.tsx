@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { cn } from "@/lib/utils";
+import { cn, todayLocalISODate, localISODateFromToday } from "@/lib/utils";
 import { usePOStore, useCMMSStore, useCurrentUserStore } from "@/stores";
 import { useParts } from "@/lib/hooks/use-parts";
 import { useWorkOrders } from "@/lib/hooks/use-work-orders";
@@ -148,10 +148,8 @@ export function NotificationsBell() {
   const { readIds, markRead, markAllRead: markAllReadIds } = useNotificationReads(
     useMemo(() => {
       // We only need the IDs list for pruning — compute cheaply without full objects
-      const todayIso = new Date().toISOString().slice(0, 10);
-      const weekFromNow = new Date();
-      weekFromNow.setDate(weekFromNow.getDate() + 7);
-      const weekFromNowIso = weekFromNow.toISOString().slice(0, 10);
+      const todayIso = todayLocalISODate();
+      const weekFromNowIso = localISODateFromToday(7);
       return [
         ...(notifPrefs?.inAppApprovalRequired !== false ? requisitions.filter((r) => r.status === "pending_approval").map((r) => `req-approval-${r.id}`) : []),
         ...(notifPrefs?.inAppPoApprovalRequired !== false ? purchaseOrders.filter((po) => po.status === "pending").map((po) => `po-approval-${po.id}`) : []),
@@ -168,10 +166,8 @@ export function NotificationsBell() {
 
   // Derive notifications from live data
   const notifications = useMemo<AppNotification[]>(() => {
-    const todayIso = new Date().toISOString().slice(0, 10);
-    const weekFromNow = new Date();
-    weekFromNow.setDate(weekFromNow.getDate() + 7);
-    const weekFromNowIso = weekFromNow.toISOString().slice(0, 10);
+    const todayIso = todayLocalISODate();
+    const weekFromNowIso = localISODateFromToday(7);
 
     const items: AppNotification[] = [];
 

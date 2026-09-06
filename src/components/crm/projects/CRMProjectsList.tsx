@@ -24,7 +24,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { formatCurrency, cn } from "@/lib/utils";
+import { formatCurrency, cn, todayLocalISODate } from "@/lib/utils";
+import { useSettingsStore } from "@/stores/settings-store";
 import { Plus, Search, Pencil, FileText, TrendingUp, BarChart3 } from "lucide-react";
 import { toast } from "sonner";
 import { usePermissions } from "@/lib/hooks/use-permissions";
@@ -192,6 +193,15 @@ function AnalysisTab({ project }: { project: Project }) {
   const totalPayments = (payments ?? []).reduce((s, p) => s + p.amountCents, 0);
   const amountDue = totalInvoiced - totalPayments;
 
+  // Budgeted labor cost = budgeted hours × the fully-loaded (burdened) rate
+  // captured on the project, falling back to the plain labor rate. Never the
+  // PO/material total (project.totalCost) — that's a different number.
+  const budgetRateCents = project.burdenedRateCents ?? project.laborRateCents;
+  const budgetedLaborCostCents =
+    project.budgetHours != null && budgetRateCents != null
+      ? Math.round(project.budgetHours * budgetRateCents)
+      : null;
+
   return (
     <div className="space-y-6">
       {/* Project Overview */}
@@ -221,9 +231,9 @@ function AnalysisTab({ project }: { project: Project }) {
         <h3 className="mb-3 text-sm font-semibold text-slate-700">Job / Activity Overview</h3>
         <div className="grid grid-cols-2 gap-px rounded border overflow-hidden bg-slate-100">
           {[
-            { label: "Budgeted Man Hours", value: project.laborHours != null ? `${project.laborHours} Hrs` : "—" },
-            { label: "Actual Man Hours", value: "—" },
-            { label: "Budgeted Labor Cost", value: formatCurrency(project.totalCost) },
+            { label: "Budgeted Man Hours", value: project.budgetHours != null ? `${project.budgetHours} Hrs` : "—" },
+            { label: "Actual Man Hours", value: project.laborHours != null ? `${project.laborHours} Hrs` : "—" },
+            { label: "Budgeted Labor Cost", value: budgetedLaborCostCents != null ? formatCurrency(budgetedLaborCostCents) : "—" },
             { label: "Actual Labor Cost", value: "—" },
           ].map((row) => (
             <div key={row.label} className="flex items-center justify-between bg-white px-4 py-2.5 text-sm">
@@ -381,14 +391,22 @@ function NewProjectDialog({
   const { data: clients } = useClients();
   const { mutateAsync: create, isPending: creating } = useCreateProject();
   const { mutateAsync: update, isPending: updating } = useUpdateProject();
+  const { breakevenLaborRateCents, burdenedLaborRateCents } = useSettingsStore();
   const isEditing = !!project;
   const isPending = creating || updating;
 
+  // Date defaults must be the browser's LOCAL calendar date — the UTC date
+  // (toISOString) is already tomorrow after ~8 PM Eastern.
   const [name, setName] = useState(project?.name ?? "");
   const [clientId, setClientId] = useState(project?.clientId ?? "");
   const [address, setAddress] = useState(project?.address ?? "");
+  const [city, setCity] = useState(project?.city ?? "");
+  const [state, setState] = useState(project?.state ?? "");
+  const [zip, setZip] = useState(project?.zip ?? "");
   const [contractPrice, setContractPrice] = useState(project ? String((project.contractPrice ?? 0) / 100) : "");
-  const [startDate, setStartDate] = useState(project?.startDate ?? new Date().toISOString().split("T")[0]);
+  const [startDate, setStartDate] = useState(project?.startDate ?? todayLocalISODate());
+  const [endDate, setEndDate] = useState(project?.endDate ?? "");
+  const [budgetHours, setBudgetHours] = useState(project?.budgetHours != null ? String(project.budgetHours) : "");
   const [status, setStatus] = useState<ProjectStatus>(project?.status ?? "sold");
 
   // Re-sync form state if a different project is opened for editing (dialog
@@ -399,19 +417,44 @@ function NewProjectDialog({
     setName(project?.name ?? "");
     setClientId(project?.clientId ?? "");
     setAddress(project?.address ?? "");
+    setCity(project?.city ?? "");
+    setState(project?.state ?? "");
+    setZip(project?.zip ?? "");
     setContractPrice(project ? String((project.contractPrice ?? 0) / 100) : "");
-    setStartDate(project?.startDate ?? new Date().toISOString().split("T")[0]);
+    setStartDate(project?.startDate ?? todayLocalISODate());
+    setEndDate(project?.endDate ?? "");
+    setBudgetHours(project?.budgetHours != null ? String(project.budgetHours) : "");
     setStatus(project?.status ?? "sold");
   }, [open, project]);
 
   function reset() {
-    setName(""); setClientId(""); setAddress("");
+    setName(""); setClientId(""); setAddress(""); setCity(""); setState(""); setZip("");
     setContractPrice(""); setStatus("sold");
-    setStartDate(new Date().toISOString().split("T")[0]);
+    setStartDate(todayLocalISODate());
+    setEndDate("");
+    setBudgetHours("");
   }
+
+  // Picking a client with no address typed yet pre-fills the site address
+  // from the client's billing address (still editable).
+  function handleClientChange(nextClientId: string) {
+    setClientId(nextClientId);
+    const c = (clients ?? []).find((x) => x.id === nextClientId);
+    if (c && !address && !city && !state && !zip) {
+      setAddress(c.billingAddress ?? "");
+      setCity(c.billingCity ?? "");
+      setState(c.billingState ?? "");
+      setZip(c.billingZip ?? "");
+    }
+  }
+
+  const endBeforeStart = !!endDate && !!startDate && endDate < startDate;
 
   async function submit() {
     if (!name) { toast.error("Project name is required"); return; }
+    if (endBeforeStart) { toast.error("End date must be on or after the start date"); return; }
+    const parsedBudgetHours = parseFloat(budgetHours);
+    const budgetHoursValue = Number.isFinite(parsedBudgetHours) && parsedBudgetHours > 0 ? parsedBudgetHours : null;
     const selectedClient = (clients ?? []).find((c) => c.id === clientId);
     try {
       if (isEditing && project) {
@@ -419,9 +462,14 @@ function NewProjectDialog({
           id: project.id,
           name,
           customerName: selectedClient?.displayName ?? project.customerName,
-          address: address || selectedClient?.billingAddress || project.address,
+          address,
+          city,
+          state,
+          zip,
           status,
           startDate,
+          endDate: endDate || null,
+          budgetHours: budgetHoursValue,
           contractPrice: Math.round(parseFloat(contractPrice || "0") * 100),
           clientId: clientId || null,
         });
@@ -430,20 +478,23 @@ function NewProjectDialog({
         await create({
           name,
           customerName: selectedClient?.displayName ?? "",
-          address: address || selectedClient?.billingAddress || "",
-          city: selectedClient?.billingCity || "",
-          state: selectedClient?.billingState || "",
-          zip: selectedClient?.billingZip || "",
+          address,
+          city,
+          state,
+          zip,
           status,
           startDate,
-          endDate: null,
+          endDate: endDate || null,
           laborHours: null,
           notes: null,
           contractPrice: Math.round(parseFloat(contractPrice || "0") * 100),
           clientId: clientId || null,
-          budgetHours: null,
-          laborRateCents: null,
-          burdenedRateCents: null,
+          budgetHours: budgetHoursValue,
+          // Snapshot the org's current labor rates so Budgeted Labor Cost
+          // (budget_hours × burdened rate) is computable on the Analysis tab —
+          // same as the PO-side NewProjectDialog.
+          laborRateCents: breakevenLaborRateCents || null,
+          burdenedRateCents: burdenedLaborRateCents || null,
         });
         toast.success("Project created");
         reset();
@@ -465,7 +516,7 @@ function NewProjectDialog({
           </div>
           <div className="flex flex-col gap-1.5">
             <Label>Client</Label>
-            <Select value={clientId} onValueChange={setClientId}>
+            <Select value={clientId} onValueChange={handleClientChange}>
               <SelectTrigger><SelectValue placeholder="Select client…" /></SelectTrigger>
               <SelectContent>
                 {(clients ?? []).map((c) => (
@@ -474,6 +525,29 @@ function NewProjectDialog({
               </SelectContent>
             </Select>
           </div>
+
+          {/* Site address — split street / city / state / zip (mirrors the PO NewProjectDialog) */}
+          <div className="flex flex-col gap-1.5">
+            <Label>Site Address</Label>
+            <Input value={address} onChange={(e) => setAddress(e.target.value)} placeholder="123 Main St" />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="flex flex-col gap-1.5">
+              <Label>City</Label>
+              <Input value={city} onChange={(e) => setCity(e.target.value)} placeholder="Springfield" />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="flex flex-col gap-1.5">
+                <Label>State</Label>
+                <Input value={state} onChange={(e) => setState(e.target.value)} placeholder="MA" />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label>ZIP</Label>
+                <Input value={zip} onChange={(e) => setZip(e.target.value)} placeholder="01234" />
+              </div>
+            </div>
+          </div>
+
           <div className="grid grid-cols-2 gap-3">
             <div className="flex flex-col gap-1.5">
               <Label>Status</Label>
@@ -487,8 +561,33 @@ function NewProjectDialog({
               </Select>
             </div>
             <div className="flex flex-col gap-1.5">
+              <Label>Budgeted Hours</Label>
+              <Input
+                type="number" step="any" min="0"
+                value={budgetHours}
+                onChange={(e) => setBudgetHours(e.target.value)}
+                placeholder="0"
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="flex flex-col gap-1.5">
               <Label>Start Date</Label>
               <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label>End Date</Label>
+              <Input
+                type="date"
+                value={endDate}
+                min={startDate || undefined}
+                onChange={(e) => setEndDate(e.target.value)}
+                aria-invalid={endBeforeStart || undefined}
+                className={endBeforeStart ? "border-red-400 focus-visible:ring-red-400" : undefined}
+              />
+              {endBeforeStart && (
+                <p className="text-xs text-red-600">End date must be on or after the start date.</p>
+              )}
             </div>
           </div>
           <div className="flex flex-col gap-1.5">
@@ -503,7 +602,7 @@ function NewProjectDialog({
         </div>
         <div className="flex justify-end gap-2">
           <Button variant="outline" onClick={() => { if (!isEditing) reset(); onOpenChange(false); }}>Cancel</Button>
-          <Button onClick={submit} disabled={isPending}>
+          <Button onClick={submit} disabled={isPending || endBeforeStart}>
             {isEditing ? (isPending ? "Saving…" : "Save Changes") : (isPending ? "Creating…" : "Create Project")}
           </Button>
         </div>
