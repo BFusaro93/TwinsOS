@@ -477,7 +477,10 @@ export function useClientJobs(clientId?: string) {
       const supabase = createClient();
       let q = supabase
         .from('crm_jobs')
-        .select('*, crm_job_services(*), clients(display_name, primary_phone), sales_rep:crm_employees!crm_jobs_sales_rep_id_fkey(first_name,last_name)')
+        // crm_job_visits is a lightweight aggregate (no crew join) so the
+        // client's Jobs card can show the actual next/last visit date instead
+        // of crm_jobs.scheduled_date, which is only the original start date.
+        .select('*, crm_job_services(*), clients(display_name, primary_phone), sales_rep:crm_employees!crm_jobs_sales_rep_id_fkey(first_name,last_name), crm_job_visits(id, scheduled_date, status, deleted_at, job_service_id)')
         .is('deleted_at', null)
         .order('created_at', { ascending: false });
       if (clientId) q = q.eq('client_id', clientId);

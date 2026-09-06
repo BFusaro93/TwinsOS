@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import Link from "next/link";
 import { ColumnChooser } from "@/components/shared/ColumnChooser";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useVisitsForDate,
@@ -2498,9 +2498,33 @@ function formatDisplayDate(dateStr: string): string {
 
 // ── main board ─────────────────────────────────────────────────────────────────
 
+/** "YYYY-MM-DD" that round-trips through a local Date, else null (malformed / impossible dates). */
+function parseISODateParam(raw: string | null): string | null {
+  if (!raw || !/^\d{4}-\d{2}-\d{2}$/.test(raw)) return null;
+  const d = new Date(`${raw}T00:00:00`);
+  return !isNaN(d.getTime()) && toLocalDateString(d) === raw ? raw : null;
+}
+
 export function DispatchBoard() {
   const { can, isLoading: permissionsLoading } = usePermissions();
-  const [selectedDate,    setSelectedDate]    = useState(() => toLocalDateString(new Date()));
+  // Selected day lives in the URL (?date=YYYY-MM-DD) so browser Back from a
+  // client link, refresh, and shared links all land on the same day. Today is
+  // the default when the param is absent or malformed.
+  const urlRouter    = useRouter();
+  const pathname     = usePathname();
+  const searchParams = useSearchParams();
+  const [selectedDate,    setSelectedDate]    = useState(() => parseISODateParam(searchParams.get("date")) ?? todayLocalISODate());
+  useEffect(() => {
+    const current = searchParams.get("date");
+    const isToday = selectedDate === todayLocalISODate();
+    // Keep the URL clean on the default day; otherwise mirror the selection.
+    if ((isToday && current === null) || current === selectedDate) return;
+    const params = new URLSearchParams(searchParams.toString());
+    if (isToday) params.delete("date"); else params.set("date", selectedDate);
+    const qs = params.toString();
+    // replace (not push) so paging through days doesn't spam history.
+    urlRouter.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  }, [selectedDate, searchParams, pathname, urlRouter]);
   const [endDate,         setEndDate]         = useState("");
   const [crewFilters,     setCrewFilters]     = useState<string[]>([]);
   const [statusFilter,    setStatusFilter]    = useState<FilterTab>("all");

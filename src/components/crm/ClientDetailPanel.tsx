@@ -90,7 +90,7 @@ import {
   useUpsertClientCustomFieldValue,
 } from "@/lib/hooks/use-client-custom-fields";
 import { useClientSourceOptions } from "@/lib/hooks/use-client-sources";
-import { formatCurrency, formatDate, formatHours } from "@/lib/utils";
+import { formatCurrency, formatDate, formatHours, todayLocalISODate } from "@/lib/utils";
 import { computeActualHours } from "@/lib/utils/visit-hours";
 import { useOrgSettings } from "@/lib/hooks/use-org-settings";
 import type { CRMPayment, CRMInvoice, CRMContract } from "@/types/crm-invoices";
@@ -2046,11 +2046,15 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
                             </p>
                           ) : null;
                         })()}
-                        {job.scheduledDate && (
-                          <p className="text-[10px] text-slate-400">
-                            {formatDate(job.scheduledDate)}
-                          </p>
-                        )}
+                        {(() => {
+                          const rel = relevantVisitDate(job);
+                          if (!rel) return null;
+                          return (
+                            <p className="text-[10px] text-slate-400">
+                              {rel.label ? `${rel.label} ${formatDate(rel.date)}` : formatDate(rel.date)}
+                            </p>
+                          );
+                        })()}
                       </div>
                     </div>
                   </button>
@@ -2366,6 +2370,27 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
 }
 
 // ── JobVisitsModal ────────────────────────────────────────────────────────────
+
+/**
+ * The date most worth showing for a job on the client's Jobs card.
+ * crm_jobs.scheduled_date is only the *original* start — a visit moved on the
+ * dispatch board leaves it untouched — so prefer the visits themselves:
+ * next upcoming non-cancelled/non-skipped visit, else the most recent visit,
+ * else fall back to the job's scheduled_date (unlabelled, as before).
+ */
+function relevantVisitDate(job: CRMJob): { date: string; label: "Next visit" | "Last visit" | null } | null {
+  const visits = job.visits ?? [];
+  if (visits.length > 0) {
+    const today = todayLocalISODate();
+    const upcoming = visits
+      .filter((v) => v.scheduledDate >= today && v.status !== "cancelled" && v.status !== "skipped")
+      .sort((a, b) => a.scheduledDate.localeCompare(b.scheduledDate));
+    if (upcoming.length > 0) return { date: upcoming[0].scheduledDate, label: "Next visit" };
+    const latest = [...visits].sort((a, b) => b.scheduledDate.localeCompare(a.scheduledDate))[0];
+    if (latest) return { date: latest.scheduledDate, label: "Last visit" };
+  }
+  return job.scheduledDate ? { date: job.scheduledDate, label: null } : null;
+}
 
 function fmtDate(iso: string) {
   return new Date(iso + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "2-digit", day: "2-digit", year: "numeric" });
