@@ -1,6 +1,7 @@
 import type { EstimateLineItem, DirectCostType } from "@/types/crm-estimates";
 import type { CRMService } from "@/types/crm-jobs";
 import type { OverheadSettings } from "@/lib/hooks/use-overhead-settings";
+import { productionRateAppliesToUnit } from "@/lib/estimates/units";
 
 // Duplicated from use-overhead-settings.ts rather than imported — that module
 // is "use client" and pulls in @tanstack/react-query + the browser Supabase
@@ -99,7 +100,10 @@ export function computeLineItem(
       : effectiveRate; // fixed: total IS the rate
 
   // Auto-calculate budgeted hours from production rate (Aspire engine) — only
-  // when the line item is explicitly set to that budget method.
+  // when the line item is explicitly set to that budget method AND its qty is
+  // an area. The production rate is sq ft per man-hour, so dividing a "visit"
+  // or "each" quantity by it (1 ÷ 15,000 = 0.00007 hrs) is meaningless; such
+  // lines keep whatever hours were entered manually and the grid flags them.
   let budgetedHours = item.budgetedHours;
   if (item.unitType === "hr" && item.qty > 0) {
     // Direct hours: budgeted hours = qty, regardless of budget method
@@ -109,7 +113,7 @@ export function computeLineItem(
     item.productionRateSqftPerHr &&
     item.productionRateSqftPerHr > 0 &&
     item.qty > 0 &&
-    item.unitType !== "each"
+    productionRateAppliesToUnit(item.unitType)
   ) {
     budgetedHours = item.qty / item.productionRateSqftPerHr;
   }

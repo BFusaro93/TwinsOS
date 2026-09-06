@@ -95,12 +95,53 @@ function useBreadcrumbs() {
     jobs: "Job Photos",
     dashboards: "Dashboards",
     home: "Home",
+    crm: "Landscapt",
+    clients: "Clients",
+    leads: "Leads",
+    estimates: "Estimates",
+    tickets: "Tickets",
+    invoices: "Invoices",
+    contracts: "Contracts",
+    scheduling: "Scheduling",
+    accounting: "Accounting",
+    communication: "Communication",
+    "sales-meetings": "Sales Meetings",
+  };
+
+  // Label for a UUID segment, keyed by the collection segment before it —
+  // previously every UUID read "Job Details", so /crm/clients/{id} and
+  // /crm/estimates/{id} both showed "… / job details".
+  const detailLabels: Record<string, string> = {
+    clients: "Client Details",
+    leads: "Lead Details",
+    estimates: "Estimate Details",
+    tickets: "Ticket Details",
+    invoices: "Invoice Details",
+    contracts: "Contract Details",
+    jobs: "Job Details",
+    projects: "Project Details",
+    orders: "Purchase Order Details",
+    requisitions: "Requisition Details",
+    receiving: "Receipt Details",
+    vendors: "Vendor Details",
+    products: "Product Details",
+    "work-orders": "Work Order Details",
+    requests: "Request Details",
+    "pm-schedules": "PM Schedule Details",
+    assets: "Asset Details",
+    vehicles: "Vehicle Details",
+    parts: "Part Details",
+    meters: "Meter Details",
+    automations: "Automation Details",
   };
 
   const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-  return segments.map((seg) => {
-    if (UUID_RE.test(seg)) return "Job Details";
+  return segments.map((seg, i) => {
+    if (UUID_RE.test(seg)) {
+      const parent = i > 0 ? segments[i - 1] : "";
+      return detailLabels[parent] ?? "Details";
+    }
     return labels[seg] ?? seg;
   });
 }

@@ -114,6 +114,9 @@ export interface ProposalData {
   taxRateBps: number;
   taxCents: number;
   discountCents: number;
+  /** Estimate-level discount rule; `percent` values are in bps of the subtotal. */
+  discountType: "percent" | "flat" | null;
+  discountValue: number | null;
   showDiscounts: boolean;
   totalCents: number;
 

@@ -3,6 +3,15 @@ import { createClient } from "@supabase/supabase-js";
 import { Resend } from "resend";
 import { recalcEstimateTotals } from "@/lib/estimate-calc";
 import { notifyStaffOfEstimateDecision } from "@/lib/estimate-client-notify";
+import { orgEmailFrom } from "@/lib/email/send";
+import { logger } from "@/lib/logger";
+
+const log = logger.child("proposal-accept");
+
+// A drawn signature arrives as a PNG data URL from the canvas. Cap the size so
+// the column can't be abused as blob storage (a 520×120 signature is ~5-20KB).
+const SIGNATURE_DATA_RE = /^data:image\/png;base64,[A-Za-z0-9+/=]+$/;
+const SIGNATURE_MAX_CHARS = 512 * 1024;
 
 const serviceClient = () =>
   createClient(
@@ -28,6 +37,16 @@ export async function POST(
 
   if (!body.acceptedByName?.trim()) {
     return NextResponse.json({ error: "Name is required" }, { status: 400 });
+  }
+
+  // The proposal page tells the client "By signing below … legally binding"
+  // — an acceptance with a blank pad must not be recorded.
+  const signature = body.signatureData?.trim() ?? "";
+  if (!signature) {
+    return NextResponse.json({ error: "Signature is required" }, { status: 400 });
+  }
+  if (signature.length > SIGNATURE_MAX_CHARS || !SIGNATURE_DATA_RE.test(signature)) {
+    return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
   }
 
   // acceptedLineItemIds gets interpolated directly into a PostgREST
@@ -87,7 +106,7 @@ export async function POST(
     .update({
       accepted_at: now,
       accepted_by_name: body.acceptedByName.trim(),
-      signature_data: body.signatureData ?? null,
+      signature_data: signature,
       ip_address: ipAddress,
     })
     .eq("id", shareToken.id)
@@ -167,7 +186,11 @@ export async function POST(
   // 3b. Line items are now split into won/lost — recompute the estimate's
   // stored totals down to just the won subset, so the confirmation email
   // below and any later invoice/job-conversion reflect what was actually
-  // accepted, not the full pre-acceptance (e.g. all-tiers) total.
+  // accepted, not the full pre-acceptance (e.g. all-tiers) total. This
+  // re-applies the estimate-level discount rule (percent re-derived from the
+  // won subtotal, flat clamped) and taxes the discounted amount — the same
+  // figures the public page displayed, so the recorded total_cents is the
+  // amount the client actually accepted.
   await recalcEstimateTotals(supabase, shareToken.estimate_id);
 
   // 4. Log to client_activity
@@ -237,7 +260,7 @@ export async function POST(
     try {
       const resend = new Resend(process.env.RESEND_API_KEY!);
       const { data: sent } = await resend.emails.send({
-        from: `${orgName} <noreply@twinslawnservice.com>`,
+        from: orgEmailFrom(orgName),
         to: clientEmail,
         subject: `You accepted Estimate #${est.estimate_number} — ${orgName}`,
         html: confirmHtml,
@@ -256,11 +279,16 @@ export async function POST(
       });
     } catch (err) {
       // Don't fail the accept flow if the confirmation email fails
-      console.error("[proposal-accept] confirmation email error:", err);
+      log.error("confirmation email error", {
+        estimateId: shareToken.estimate_id,
+        error: err instanceof Error ? err.message : String(err),
+      });
     }
   }
 
-  return NextResponse.json({ ok: true });
+  // Echo the recorded (post-recalc, discount-and-tax-applied) total so the
+  // client sees the same figure that was stored.
+  return NextResponse.json({ ok: true, totalCents: est?.total_cents ?? null });
 }
 
 function buildConfirmationEmail({

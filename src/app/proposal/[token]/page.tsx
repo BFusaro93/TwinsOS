@@ -9,24 +9,58 @@ import { Textarea } from "@/components/ui/textarea";
 import { CheckCircle2, Loader2, MessageSquarePlus } from "lucide-react";
 import type { ProposalData, ProposalLineItem } from "@/types/crm-proposals";
 import { groupIntoSections, type DisplaySettings } from "@/lib/estimate-display-settings";
+import { unitLabel } from "@/lib/estimates/units";
+import { looksLikeHtml, sanitizeHtml } from "@/lib/utils/sanitize-html";
 
 function cents(n: number) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n / 100);
 }
 
 // Meta line combining visit count / qty (gated by showQuantities) and the
-// per-visit rate (gated by showLinePrices, with hideZeroPrices suppressing
-// just the rate when it's $0 rather than dropping the whole row).
+// per-unit rate (gated by showLinePrices, with hideZeroPrices suppressing
+// just the rate when it's $0 rather than dropping the whole row). The rate's
+// suffix is the line's own unit ("/cu yd" for mulch, "/visit" when unitless).
 function lineMeta(li: ProposalLineItem, settings: DisplaySettings): string | null {
   const parts: string[] = [];
   if (settings.showQuantities) {
     if (li.visits > 1) parts.push(`${li.visits} visits`);
-    if (li.qty > 1) parts.push(`${li.qty.toLocaleString()} ${li.unitType ?? ""}`.trim());
+    if (li.qty > 1) parts.push(`${li.qty.toLocaleString()} ${unitLabel(li.unitType, "")}`.trim());
   }
   if (settings.showLinePrices && !(settings.hideZeroPrices && li.rateCents === 0)) {
-    parts.push(`${cents(li.rateCents)}/visit`);
+    parts.push(`${cents(li.rateCents)}/${unitLabel(li.unitType)}`);
   }
   return parts.length ? parts.join(" × ") : null;
+}
+
+// Line descriptions are authored as rich text on the service ("<p>Mulch</p>
+// <ul><li>…</li></ul>") and may be stored either as HTML or as already
+// flattened plain text with line breaks. Render HTML through the allowlist
+// sanitizer with list/paragraph styling; render plain text preserving its
+// line breaks — never collapse blocks together ("Mulchx yards").
+function LineDescription({ html }: { html: string }) {
+  if (looksLikeHtml(html)) {
+    return (
+      <div
+        className="mt-0.5 text-sm text-slate-500 [&_p]:my-0.5 [&_ul]:my-0.5 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:my-0.5 [&_ol]:list-decimal [&_ol]:pl-5 [&_a]:underline"
+        dangerouslySetInnerHTML={{ __html: sanitizeHtml(html) }}
+      />
+    );
+  }
+  return <p className="mt-0.5 whitespace-pre-line text-sm text-slate-500">{html}</p>;
+}
+
+// Client-side mirror of recalcEstimateTotals' discount/tax rule, used ONLY
+// when the client changes the selection (unchecks items / picks a tier) and
+// the stored totals no longer describe what they're accepting. A percent
+// discount is re-derived from the new subtotal; a flat discount is clamped
+// to it; tax is applied to the discounted amount.
+function deriveTotals(proposal: ProposalData, subtotalCents: number) {
+  const rawDiscount = proposal.discountType === "percent"
+    ? Math.round(subtotalCents * ((proposal.discountValue ?? 0) / 10000))
+    : proposal.discountCents;
+  const discountCents = Math.max(0, Math.min(rawDiscount, subtotalCents));
+  const taxCents = Math.round(((subtotalCents - discountCents) * proposal.taxRateBps) / 10000);
+  return { subtotalCents, discountCents, taxCents, totalCents: subtotalCents - discountCents + taxCents };
 }
 
 // ── Signature pad ─────────────────────────────────────────────────────────────
@@ -34,6 +68,9 @@ function lineMeta(li: ProposalLineItem, settings: DisplaySettings): string | nul
 function SignaturePad({ onSave }: { onSave: (dataUrl: string | null) => void }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const drawing = useRef(false);
+  // Ref mirrors the state so endDraw (bound as a native listener) always sees
+  // whether ink was laid down during THIS stroke, even before React re-renders.
+  const hasInk = useRef(false);
   const [hasSignature, setHasSignature] = useState(false);
 
   function getPos(e: MouseEvent | TouchEvent, canvas: HTMLCanvasElement) {
@@ -66,15 +103,17 @@ function SignaturePad({ onSave }: { onSave: (dataUrl: string | null) => void }) 
     const { x, y } = getPos(e, canvas);
     ctx.lineTo(x, y);
     ctx.stroke();
+    hasInk.current = true;
     setHasSignature(true);
   }, []);
 
   const endDraw = useCallback(() => {
+    if (!drawing.current) return;
     drawing.current = false;
     const canvas = canvasRef.current;
-    if (!canvas || !hasSignature) return;
+    if (!canvas || !hasInk.current) return;
     onSave(canvas.toDataURL("image/png"));
-  }, [hasSignature, onSave]);
+  }, [onSave]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -99,6 +138,7 @@ function SignaturePad({ onSave }: { onSave: (dataUrl: string | null) => void }) 
     const canvas = canvasRef.current;
     if (!canvas) return;
     canvas.getContext("2d")!.clearRect(0, 0, canvas.width, canvas.height);
+    hasInk.current = false;
     setHasSignature(false);
     onSave(null);
   }
@@ -278,7 +318,7 @@ export default function ProposalPage() {
   function toggleItem(id: string) {
     setSelectedIds((prev) => {
       const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
+      if (next.has(id)) next.delete(id); else next.add(id);
       return next;
     });
   }
@@ -293,15 +333,31 @@ export default function ProposalPage() {
   const sections = proposal ? groupIntoSections(visibleLineItems, proposal.displaySettings) : [];
 
   // Live subtotal from visible items (tier-filtered) or selected items (checkbox mode)
+  const quoteItems = proposal?.lineItems.filter((li) => li.rowType !== "section") ?? [];
   const selectedTotal = proposal?.tiersEnabled
     ? visibleLineItems.filter((li) => li.rowType !== "section").reduce((sum, li) => sum + li.totalCents, 0)
-    : (proposal?.lineItems
-        .filter((li) => li.rowType !== "section" && selectedIds.has(li.id))
-        .reduce((sum, li) => sum + li.totalCents, 0) ?? 0);
+    : quoteItems.filter((li) => selectedIds.has(li.id)).reduce((sum, li) => sum + li.totalCents, 0);
 
-  const taxAmount = proposal
-    ? Math.round(selectedTotal * (proposal.taxRateBps / 10000))
-    : 0;
+  // Totals shown to the client. While the proposal is untouched (all items
+  // selected, no tier choice) these are EXACTLY the estimate's stored
+  // subtotal / discount / tax / total — the same figures staff see in the
+  // app — so the estimate-level discount is honored and tax is charged on
+  // the discounted amount. Only a changed selection falls back to deriving.
+  const isUntouchedSelection =
+    !!proposal && !proposal.tiersEnabled && quoteItems.every((li) => selectedIds.has(li.id));
+  const totals = !proposal
+    ? { subtotalCents: 0, discountCents: 0, taxCents: 0, totalCents: 0 }
+    : isUntouchedSelection
+      ? {
+          subtotalCents: proposal.subtotalCents,
+          discountCents: proposal.discountCents,
+          taxCents: proposal.taxCents,
+          totalCents: proposal.totalCents,
+        }
+      : deriveTotals(proposal, selectedTotal);
+  const discountLabel = proposal?.discountType === "percent" && proposal.discountValue
+    ? `Discount (${(proposal.discountValue / 100).toLocaleString("en-US", { maximumFractionDigits: 2 })}%)`
+    : "Discount";
 
   async function submitAccept(extraDepositFields?: {
     depositMethod?: 'cash' | 'check' | 'ach' | 'credit_card' | 'other';
@@ -337,6 +393,12 @@ export default function ProposalPage() {
 
   async function handleAccept() {
     if (!acceptedByName.trim()) return;
+    // The copy promises a signed, legally binding acceptance — hold it to that.
+    if (!signatureData) {
+      setError("Please sign in the signature box before accepting.");
+      return;
+    }
+    setError(null);
 
     // If deposit is required and not yet collected, show the deposit step
     if (
@@ -515,12 +577,7 @@ export default function ProposalPage() {
                           <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-500">Included in all</span>
                         )}
                       </div>
-                      {li.estimateDesc && (
-                        <p
-                          className="mt-0.5 text-sm text-slate-500"
-                          dangerouslySetInnerHTML={{ __html: li.estimateDesc }}
-                        />
-                      )}
+                      {li.estimateDesc && <LineDescription html={li.estimateDesc} />}
                       {meta && <p className="mt-1 text-xs text-slate-400">{meta}</p>}
                     </div>
                     {proposal.displaySettings.showLineTotals && (
@@ -541,12 +598,7 @@ export default function ProposalPage() {
                     />
                     <div className="flex-1 min-w-0">
                       <p className="font-medium text-slate-800">{li.serviceName ?? "Service"}</p>
-                      {li.estimateDesc && (
-                        <p
-                          className="mt-0.5 text-sm text-slate-500"
-                          dangerouslySetInnerHTML={{ __html: li.estimateDesc }}
-                        />
-                      )}
+                      {li.estimateDesc && <LineDescription html={li.estimateDesc} />}
                       {meta && <p className="mt-1 text-xs text-slate-400">{meta}</p>}
                     </div>
                     {proposal.displaySettings.showLineTotals && (
@@ -565,26 +617,27 @@ export default function ProposalPage() {
         ))}
       </div>
 
-      {/* Totals */}
+      {/* Totals — stored estimate figures (see `totals` above), never recomputed
+          from line items while the selection is untouched. */}
       <div className="mb-8 flex justify-end">
         <div className="w-64 space-y-1.5 rounded-lg border bg-white p-4 shadow-sm text-sm">
           <div className="flex justify-between text-slate-600">
-            <span>Subtotal</span><span className="font-medium">{cents(selectedTotal)}</span>
+            <span>Subtotal</span><span className="font-medium">{cents(totals.subtotalCents)}</span>
           </div>
-          {proposal.showDiscounts && proposal.discountCents > 0 && (
+          {totals.discountCents > 0 && (
             <div className="flex justify-between text-green-600">
-              <span>Discount</span><span className="font-medium">-{cents(proposal.discountCents)}</span>
+              <span>{discountLabel}</span><span className="font-medium">-{cents(totals.discountCents)}</span>
             </div>
           )}
           {proposal.taxRateBps > 0 && (
             <div className="flex justify-between text-slate-600">
               <span>Tax ({(proposal.taxRateBps / 100).toFixed(2)}%)</span>
-              <span className="font-medium">{cents(taxAmount)}</span>
+              <span className="font-medium">{cents(totals.taxCents)}</span>
             </div>
           )}
           <div className="flex justify-between border-t pt-2 text-base font-bold" style={{ color: brand }}>
             <span>Total</span>
-            <span>{cents(selectedTotal + taxAmount)}</span>
+            <span>{cents(totals.totalCents)}</span>
           </div>
         </div>
       </div>
@@ -748,13 +801,13 @@ export default function ProposalPage() {
         <Button
           className="w-full h-11 text-base font-semibold"
           style={{ backgroundColor: brand, borderColor: brand }}
-          disabled={!acceptedByName.trim() || submitting || (!proposal.tiersEnabled && selectedIds.size === 0)}
+          disabled={!acceptedByName.trim() || !signatureData || submitting || (!proposal.tiersEnabled && selectedIds.size === 0)}
           onClick={handleAccept}
         >
           {submitting ? (
             <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Submitting…</>
           ) : (
-            `Accept Proposal — ${cents(selectedTotal + taxAmount)}`
+            `Accept Proposal — ${cents(totals.totalCents)}`
           )}
         </Button>
         <p className="text-center text-xs text-slate-400">

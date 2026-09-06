@@ -193,4 +193,6 @@ export interface NewClientFormValues {
   billingZip: string;
   source: string;
   salesRepId: string;
+  /** Initial lifecycle status. Defaults to "active"; the New Client dialog can create a Lead instead. */
+  status?: Extract<ClientStatus, "lead" | "active">;
 }

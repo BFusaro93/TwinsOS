@@ -5,7 +5,7 @@ import { Plus, Minimize2, Maximize2, UserSearch } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { EmptyState } from "@/components/shared/EmptyState";
-import { LeadsList } from "@/components/crm/leads/LeadsList";
+import { LeadsList, NewLeadDialog } from "@/components/crm/leads/LeadsList";
 import { LeadsListView } from "@/components/crm/leads/LeadsListView";
 import { ImportExportMenu } from "@/components/shared/ImportExportMenu";
 import { PermissionGate } from "@/components/shared/PermissionGate";
@@ -110,11 +110,14 @@ export default function LeadsPage() {
         }
       />
 
+      {/* Mounted once at page level so the header "New Lead" button works in
+          both views — previously it lived inside LeadsList (table view only),
+          so in the default List view the click set state nobody rendered. */}
+      <NewLeadDialog open={newOpen} onOpenChange={setNewOpen} />
+
       <div className="flex-1 overflow-hidden">
         {viewMode === "table" ? (
           <LeadsList
-            newDialogOpen={newOpen}
-            onNewDialogOpenChange={setNewOpen}
             onSelect={(lead) => { setSelected(lead); setViewMode("list"); }}
           />
         ) : (

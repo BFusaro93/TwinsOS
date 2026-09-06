@@ -49,6 +49,22 @@ import { useEstimates } from "@/lib/hooks/use-estimates";
 import { ColumnSelector, type ColumnDef } from "@/components/crm/shared/ColumnSelector";
 import { useColumnPrefs } from "@/lib/hooks/use-column-prefs";
 import { ACCOUNT_TYPE_COLOR } from "@/lib/account-type-colors";
+import { useClientSourceOptions } from "@/lib/hooks/use-client-sources";
+
+/** "Date added" for the leads table: the lead-specific client_since date when
+ *  set, else the row's created_at. Both are rendered in the browser's local
+ *  timezone — a date-only string is pinned to noon so it can't roll back a day
+ *  in negative-offset zones, and a timestamp is formatted as-is (never via
+ *  toISOString().slice(0,10), which is UTC and reads as tomorrow after ~8 PM ET). */
+function formatDateAdded(lead: Client): string {
+  const fmt: Intl.DateTimeFormatOptions = { month: "short", day: "numeric", year: "numeric" };
+  if (lead.clientSince) return new Date(lead.clientSince + "T12:00:00").toLocaleDateString("en-US", fmt);
+  if (lead.createdAt) {
+    const d = new Date(lead.createdAt);
+    if (!isNaN(d.getTime())) return d.toLocaleDateString("en-US", fmt);
+  }
+  return "—";
+}
 
 // ── Column visibility ─────────────────────────────────────────────────────────
 
@@ -78,18 +94,18 @@ export function LeadRevenuePotential({ leadId, className, hideEmpty }: { leadId:
   return <span className={cn("font-medium text-green-700", className)}>{formatCurrency(total)}</span>;
 }
 
-const SOURCE_OPTIONS = [
-  "Referral", "Google", "Facebook", "Door Hanger", "Yard Sign",
-  "Direct Mail", "Website", "Phone Call", "Other",
-];
-
 const CLOSE_REASONS = ["Price", "No response", "Went with competitor", "Not ready", "Out of service area", "Other"];
 
 // ── New lead dialog ───────────────────────────────────────────────────────────
 
-function NewLeadDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (o: boolean) => void }) {
+/** Exported so the Leads page can mount it once at page level — it has to open
+ *  from the header button in BOTH the List and Table views, not just when
+ *  LeadsList (the table) happens to be rendered. */
+export function NewLeadDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (o: boolean) => void }) {
   const { mutateAsync: createLead, isPending } = useCreateLead();
   const router = useRouter();
+  // Same org-level source list the Edit Client dialog uses (A-06).
+  const { options: sourceOptions } = useClientSourceOptions();
 
   const [form, setForm] = useState({
     displayName: "", accountType: "residential", primaryPhone: "", primaryEmail: "", source: "",
@@ -140,7 +156,7 @@ function NewLeadDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (o
               <Label>Source</Label>
               <Select value={form.source} onValueChange={(v) => patch("source", v)}>
                 <SelectTrigger><SelectValue placeholder="How found?" /></SelectTrigger>
-                <SelectContent>{SOURCE_OPTIONS.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
+                <SelectContent>{sourceOptions.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
               </Select>
             </div>
             <div className="flex flex-col gap-1.5">
@@ -541,9 +557,7 @@ export function LeadsList({ newDialogOpen, onNewDialogOpenChange, onSelect }: Le
                     )}
                     {cols.dateAdded && (
                       <td className="px-4 py-2.5 text-xs text-slate-400">
-                        {lead.clientSince
-                          ? new Date(lead.clientSince + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
-                          : "—"}
+                        {formatDateAdded(lead)}
                       </td>
                     )}
                     <td className="px-4 py-2.5">

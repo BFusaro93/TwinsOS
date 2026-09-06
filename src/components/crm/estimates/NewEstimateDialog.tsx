@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -114,9 +114,19 @@ export function NewEstimateDialog({ open, onOpenChange, defaultClientId, onCreat
     if (defaultClientId) setValue("clientId", defaultClientId);
   }, [defaultClientId, setValue]);
 
+  // The auto-generated "Estimate - <date>" description is only a placeholder
+  // for an untouched field. Once the user types their own text it must never
+  // be overwritten by a later re-run of the defaults effect (which was wiping
+  // it when Sales Rep was picked) — track that with a dirty flag.
+  const descriptionDirty = useRef(false);
+  const descriptionField = register("description", {
+    onChange: () => { descriptionDirty.current = true; },
+  });
+
   // Refresh date-based defaults each time the dialog opens
   useEffect(() => {
     if (open) {
+      descriptionDirty.current = false;
       setValue("description", `Estimate - ${defaultDescription()}`);
       setValue("estimateDate", todayStr());
       setValue("validUntilDate", thirtyDaysOut());
@@ -249,7 +259,7 @@ export function NewEstimateDialog({ open, onOpenChange, defaultClientId, onCreat
           <div className="flex flex-col gap-1.5">
             <Label>Description *</Label>
             <Input
-              {...register("description")}
+              {...descriptionField}
               placeholder="e.g. Spring Cleanup Estimate"
               className={errors.description ? "border-red-400" : ""}
             />

@@ -8,7 +8,11 @@ import { useCRMServices } from "@/lib/hooks/use-crm-jobs";
 import { useProducts } from "@/lib/hooks/use-products";
 import { useOrgSettings } from "@/lib/hooks/use-org-settings";
 import { useDiscounts } from "@/lib/hooks/use-crm-discounts";
+import { useClient } from "@/lib/hooks/use-clients";
+import { useCustomFieldDefs, useClientCustomFieldValues } from "@/lib/hooks/use-client-custom-fields";
 import { stripHtml } from "@/lib/utils/strip-html";
+import { isAreaUnit, needsProductionRateUnitWarning, unitLabel } from "@/lib/estimates/units";
+import { resolveTakeoffSqft, type ClientTakeoff } from "@/lib/estimates/client-takeoff";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
@@ -16,7 +20,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";
-import { Trash2, Copy, Plus, ChevronDown, ChevronRight, Pencil, Heading2, GripVertical } from "lucide-react";
+import { Trash2, Copy, Plus, ChevronDown, ChevronRight, Pencil, Heading2, GripVertical, AlertTriangle } from "lucide-react";
 import {
   DndContext,
   closestCenter,
@@ -262,6 +266,7 @@ function LineItemRow({
   tiersEnabled,
   discounts,
   onStatusChange,
+  takeoff,
 }: {
   item: EstimateLineItem;
   estimateId: string;
@@ -274,6 +279,8 @@ function LineItemRow({
   tiersEnabled?: boolean;
   discounts: CRMDiscount[];
   onStatusChange?: (status: LineItemStatus) => void;
+  /** The estimate's client measurements, for the "use takeoff" shortcut on sq ft lines. */
+  takeoff: ClientTakeoff | null;
 }) {
   const [row, setRow] = useState<RowState>(() => item);
   const [dirty, setDirty] = useState(false);
@@ -387,13 +394,24 @@ function LineItemRow({
   }
 
   // Is budgeted hours auto-calculated? Only when the line item is explicitly
-  // set to the production-rate budget method (not just because a rate is present).
+  // set to the production-rate budget method (not just because a rate is
+  // present) AND its qty is an area — the production rate is sq ft/hr, so a
+  // "visit"/"each" quantity can't be divided by it (see computeLineItem).
   const isAutoHrs =
     row.budgetMethod === "production_rate" &&
     !!row.productionRateSqftPerHr &&
     row.productionRateSqftPerHr > 0 &&
-    row.unitType !== "hr" &&
-    row.unitType !== "each";
+    isAreaUnit(row.unitType);
+
+  // ── row-level warnings (shown in a sub-row under the line) ────────────────
+  // Production-rate budgeting with a non-area unit: hours can't be derived, so
+  // the line would quietly go out with 0 budgeted hours.
+  const unitWarning = needsProductionRateUnitWarning(row.budgetMethod, row.unitType);
+  // No rate: the line totals $0 and would be sent to the client as free.
+  const noRateWarning = row.rowType !== "section" && row.rateCents === 0 && (row.adjRateCents ?? 0) === 0;
+  // Client takeoff the sq ft qty could be defaulted from (offered, never forced).
+  const takeoffSqft = isAreaUnit(row.unitType) ? resolveTakeoffSqft(row.serviceName, takeoff) : null;
+  const offerTakeoff = takeoffSqft !== null && row.qty !== takeoffSqft;
 
   // Is Cost auto-calculated from Budgeted Hours × the org's breakeven labor
   // rate? costCents stays 0 (see computeLineItem) for as long as this is
@@ -679,16 +697,51 @@ function LineItemRow({
       </tr>
 
       {/* ── sub-row: production rate hint ─────────────────────────────────── */}
-      {row.productionRateSqftPerHr && row.productionRateSqftPerHr > 0 && row.qty > 0 && row.unitType && row.unitType !== "hr" && row.unitType !== "each" && (
+      {/* The production rate is always sq ft per man-hour — label it that way
+          regardless of the service unit (a "visit"-unit line never gets here). */}
+      {isAutoHrs && row.qty > 0 && (
         <tr className="border-b border-slate-50 bg-blue-50/40 text-[10px] text-blue-500">
           <td colSpan={3} />
           <td colSpan={3} className="px-2 py-0.5 italic">
-            {row.qty.toLocaleString()} {row.unitType} ÷ {row.productionRateSqftPerHr.toLocaleString()} {row.unitType}/hr
+            {row.qty.toLocaleString()} sq ft ÷ {row.productionRateSqftPerHr!.toLocaleString()} sq ft/hr
           </td>
           <td className="px-2 py-0.5 text-right text-blue-600 font-medium">
             = {row.budgetedHours.toFixed(2)} hrs/occ
           </td>
           <td colSpan={11} />
+        </tr>
+      )}
+
+      {/* ── sub-row: warnings / takeoff shortcut ───────────────────────────── */}
+      {(unitWarning || noRateWarning || offerTakeoff) && (
+        <tr className="border-b border-slate-50 bg-amber-50/60 text-[10px] text-amber-800">
+          <td colSpan={18} className="px-3 py-1">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-0.5">
+              {unitWarning && (
+                <span className="inline-flex items-center gap-1">
+                  <AlertTriangle className="h-3 w-3 shrink-0 text-amber-600" />
+                  Production-rate budgeting needs an area unit (sq ft) — set the service unit
+                  {" "}or enter hours manually. Current unit: {unitLabel(row.unitType, "none")}.
+                </span>
+              )}
+              {noRateWarning && (
+                <span className="inline-flex items-center gap-1">
+                  <AlertTriangle className="h-3 w-3 shrink-0 text-amber-600" />
+                  No rate set — this line totals $0.00.
+                </span>
+              )}
+              {offerTakeoff && takeoffSqft !== null && (
+                <button
+                  type="button"
+                  onClick={() => { update("qty", takeoffSqft); }}
+                  className="font-medium text-brand-600 hover:underline"
+                  title="Set Qty from the client's measured area"
+                >
+                  Use client takeoff ({takeoffSqft.toLocaleString()} sq ft)
+                </button>
+              )}
+            </div>
+          </td>
         </tr>
       )}
 
@@ -715,6 +768,8 @@ function LineItemRow({
 
 interface Props {
   estimateId: string;
+  /** The estimate's client — used to default sq ft quantities from their takeoff. */
+  clientId?: string;
   items: EstimateLineItem[];
   selectedIds?: string[];
   onSelectionChange?: (ids: string[]) => void;
@@ -722,10 +777,32 @@ interface Props {
   onItemStatusChange?: (status: LineItemStatus) => void;
 }
 
-export function EstimateLineItemsGrid({ estimateId, items, selectedIds = [], onSelectionChange, tiersEnabled = false, onItemStatusChange }: Props) {
+export function EstimateLineItemsGrid({ estimateId, clientId, items, selectedIds = [], onSelectionChange, tiersEnabled = false, onItemStatusChange }: Props) {
   const { data: services } = useCRMServices();
   const { data: orgSettings } = useOrgSettings();
   const breakevenRateCents = getBreakevenRateCents(orgSettings?.customizations);
+
+  // Client takeoff (measured areas) — from the client's fixed measurement
+  // columns plus any numeric custom fields — so a production-rate sq ft
+  // service can default its qty instead of starting at 1.
+  const { data: client } = useClient(clientId ?? "");
+  const { data: customFieldDefs = [] } = useCustomFieldDefs();
+  const { data: customFieldValues = [] } = useClientCustomFieldValues(clientId ?? "");
+  const takeoff: ClientTakeoff | null = client
+    ? {
+        turfSqft: client.turfSqft ?? null,
+        mulchBedSqft: client.mulchBedSqft ?? null,
+        grossSqft: client.grossSqft ?? null,
+        customNumeric: Object.fromEntries(
+          customFieldValues.flatMap((v) => {
+            const def = customFieldDefs.find((d) => d.id === v.fieldDefId);
+            return def && def.fieldType === "number" && typeof v.valueNumber === "number"
+              ? [[def.name.toLowerCase(), v.valueNumber]]
+              : [];
+          }),
+        ),
+      }
+    : null;
   const { data: productCatalog = [] } = useProducts();
   const materialProducts = productCatalog.filter(
     (p) => p.category === "stocked_material" || p.category === "project_material"
@@ -815,12 +892,20 @@ export function EstimateLineItemsGrid({ estimateId, items, selectedIds = [], onS
     const prodRate = svc.productionRate ?? null;
     const budgetMethod = svc.budgetMethod ?? "manual";
 
+    // A production-rate service measured in sq ft starts from the client's
+    // takeoff (e.g. Turf Sq. Ft.) so budgeted hours are real from the first
+    // render, instead of qty 1 ÷ rate ≈ 0 hrs. Nothing is written to the client.
+    const takeoffQty = budgetMethod === "production_rate" && isAreaUnit(unit)
+      ? resolveTakeoffSqft(svc.name, takeoff)
+      : null;
+    const qty = takeoffQty ?? 1;
+
     const computed = computeLineItem({
       calcType: 1,
-      qty: 1,
+      qty,
       rateCents: svc.rateCents ?? 0,
       visits: 1,
-      budgetedHours: 0, // will be calculated when qty is entered (production_rate) or set manually
+      budgetedHours: 0, // derived from qty ÷ production rate (production_rate) or set manually
       costCents: 0,
       adjRateCents: null,
       unitType: unit,
@@ -836,7 +921,7 @@ export function EstimateLineItemsGrid({ estimateId, items, selectedIds = [], onS
           service_name: svc.name,
           status: "quote",
           calc_type: 1,
-          qty: 1,
+          qty,
           unit_type: unit,
           // Both are authored via a rich-text editor on the Service (Descriptions
           // tab), but are only ever displayed/edited as plain text once copied
@@ -957,7 +1042,7 @@ export function EstimateLineItemsGrid({ estimateId, items, selectedIds = [], onS
                   <span className="font-medium text-slate-900">{s.name}</span>
                   {s.productionRateSqftPerHr && (
                     <span className="ml-2 shrink-0 text-[10px] text-slate-400">
-                      {s.productionRateSqftPerHr.toLocaleString()} {s.unit}/hr
+                      {s.productionRateSqftPerHr.toLocaleString()} sq ft/hr
                     </span>
                   )}
                 </button>
@@ -1075,6 +1160,7 @@ export function EstimateLineItemsGrid({ estimateId, items, selectedIds = [], onS
                       tiersEnabled={tiersEnabled}
                       discounts={activeDiscounts}
                       onStatusChange={onItemStatusChange}
+                      takeoff={takeoff}
                     />
                   )
                 )}

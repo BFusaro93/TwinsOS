@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -114,8 +114,15 @@ export function SalesMeetingDialog({
     },
   });
 
+  // Seed the form only on the closed → open transition. Re-running reset() on
+  // any later re-render of an open dialog (e.g. the parent re-rendering after
+  // a client is picked and the estimate/ticket link fields appear) wiped
+  // whatever the user had already typed — the Title in particular.
+  const wasOpenRef = useRef(false);
   useEffect(() => {
-    if (!open) return;
+    const justOpened = open && !wasOpenRef.current;
+    wasOpenRef.current = open;
+    if (!justOpened) return;
     if (meeting) {
       const { date, time } = toLocalDateTimeParts(meeting.scheduledAt);
       reset({
@@ -271,7 +278,13 @@ export function SalesMeetingDialog({
             <ClientCombobox
               clients={selectableClients}
               value={clientId}
-              onValueChange={(v) => setValue("clientId", v)}
+              onValueChange={(v) => {
+                setValue("clientId", v);
+                // Only the client-scoped link fields reset with the client —
+                // never the rest of the form.
+                setValue("estimateId", "");
+                setValue("ticketId", "");
+              }}
               noneLabel="No client (new lead)"
             />
           </div>

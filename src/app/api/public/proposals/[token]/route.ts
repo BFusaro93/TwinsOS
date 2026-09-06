@@ -124,10 +124,15 @@ export async function GET(
     orgBrandColor: (org?.brand_color as string) ?? "#60ab45",
     orgLogoUrl: (customizations.logoDataUrl as string) ?? null,
 
+    // Stored totals are authoritative — the page displays these as-is and only
+    // re-derives (with the same discount rule as recalcEstimateTotals) when
+    // the client deselects items or picks a tier.
     subtotalCents: est.subtotal_cents ?? 0,
     taxRateBps: est.tax_rate_bps ?? 0,
     taxCents: est.tax_cents ?? 0,
     discountCents: est.discount_cents ?? 0,
+    discountType: (est.discount_type as "percent" | "flat" | null) ?? null,
+    discountValue: (est.discount_value as number | null) ?? null,
     showDiscounts: est.show_discounts ?? false,
     totalCents: est.total_cents ?? 0,
 

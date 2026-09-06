@@ -896,6 +896,7 @@ function CustomFieldDefsEditor() {
 
 function EstimatesTab() {
   const { data: estimateReasonItems = [] } = useOrgList("estimate_reasons");
+  const { data: estimateLostReasonItems = [] } = useOrgList("estimate_lost_reasons");
   const { data: estimateStages = [] } = useEstimateStages();
   const { data: approvalFlows = [] } = useApprovalFlows();
   const estimateApprovalSteps = approvalFlows.find((f) => f.entityType === "crm_estimate")?.steps.length ?? 0;
@@ -912,8 +913,19 @@ function EstimatesTab() {
       >
         <ApprovalFlowsPage entityTypes={["crm_estimate"]} />
       </AccordionSection>
-      <AccordionSection title="Won/Lost Reasons" count={estimateReasonItems.length}>
-        <OrgListEditor listName="estimate_reasons" addPlaceholder="e.g. Seasonal" />
+      <AccordionSection
+        title="Won Reasons"
+        count={estimateReasonItems.length}
+        description="Offered when an estimate is marked Accepted. Leave empty to use the built-in defaults."
+      >
+        <OrgListEditor listName="estimate_reasons" addPlaceholder="e.g. Best value" />
+      </AccordionSection>
+      <AccordionSection
+        title="Lost Reasons"
+        count={estimateLostReasonItems.length}
+        description="Offered when an estimate is marked Closed - Lost. Leave empty to use the built-in defaults (Price too high, Timing, Went with competitor, No response, Scope changed, Other)."
+      >
+        <OrgListEditor listName="estimate_lost_reasons" addPlaceholder="e.g. Went with competitor" />
       </AccordionSection>
       <AccordionSection title="Labor Rates" count={0}>
         <LaborRatesEditor />

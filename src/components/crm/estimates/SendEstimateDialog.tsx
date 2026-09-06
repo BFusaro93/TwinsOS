@@ -12,9 +12,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Paperclip } from "lucide-react";
+import { Paperclip, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { useEmailTemplates } from "@/lib/hooks/use-email-templates";
+import { useOrgSettings } from "@/lib/hooks/use-org-settings";
 import { EMAIL_MERGE_TAGS } from "@/types/crm-proposals";
 import { RichTextEditor, type RichTextEditorHandle } from "@/components/crm/services/RichTextEditor";
 import { RecipientChipInput } from "@/components/shared/RecipientChipInput";
@@ -41,15 +42,30 @@ interface Props {
   estimateNumber: number;
   clientName: string | null;
   clientEmail: string | null;
+  /** Resolved the same way the server resolves [salesrepname]: rep's full name, else the company name. */
+  salesRepName?: string | null;
+  /** Estimate total (cents) for the [quotetotal] preview. */
+  totalCents?: number;
+  /** Estimate date (ISO) for the [quotedate] preview; defaults to today. */
+  estimateDate?: string | null;
+  /** Number of quote line items that total $0 — surfaces a warning (not a block) before sending. */
+  zeroTotalLineCount?: number;
   open: boolean;
   onClose: () => void;
   onSent: () => void;
 }
 
 export function SendEstimateDialog({
-  estimateId, estimateNumber, clientName, clientEmail, open, onClose, onSent,
+  estimateId, estimateNumber, clientName, clientEmail,
+  salesRepName, totalCents, estimateDate, zeroTotalLineCount = 0,
+  open, onClose, onSent,
 }: Props) {
   const { data: templates = [] } = useEmailTemplates("estimate");
+  // Same org values the send route substitutes, so Preview matches the sent email.
+  const { data: orgSettings } = useOrgSettings();
+  const orgName = orgSettings?.name?.trim() || "Your Company";
+  const orgPhone = orgSettings?.address?.phone?.trim() || "";
+  const brandColor = orgSettings?.brandColor || "#60ab45";
 
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
   const [subject, setSubject]   = useState(DEFAULT_SUBJECT);
@@ -83,19 +99,24 @@ export function SendEstimateDialog({
     }
   }, [open, templates, selectedTemplateId]);
 
-  // Simple preview: replace merge tags with placeholder values for display
+  // Preview: resolve merge tags with the same values the send route uses
+  // (org name/phone from org settings, rep name falling back to the company,
+  // real estimate total/date) — not "Your Company"/"Your Rep" placeholders.
   function previewResolve(text: string) {
+    const quoteDate = estimateDate ? new Date(estimateDate) : new Date();
+    const quoteTotal = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" })
+      .format((totalCents ?? 0) / 100);
     return text
       .replace(/\[clientfirstname\]/gi,    clientName?.split(" ")[0] ?? "Client")
       .replace(/\[clientlastname\]/gi,     clientName?.split(" ").slice(1).join(" ") ?? "")
       .replace(/\[clientfullname\]/gi,     clientName ?? "Client")
-      .replace(/\[companyname\]/gi,        "Your Company")
-      .replace(/\[quotelink\]/gi,          `<a href="#" style="color:#fff;background:#60ab45;padding:10px 20px;border-radius:4px;text-decoration:none;font-weight:600;display:inline-block">View Your Proposal →</a>`)
+      .replace(/\[companyname\]/gi,        orgName)
+      .replace(/\[quotelink\]/gi,          `<a href="#" style="color:#fff;background:${brandColor};padding:10px 20px;border-radius:4px;text-decoration:none;font-weight:600;display:inline-block">View Your Proposal →</a>`)
       .replace(/\[quotenumber\]/gi,        String(estimateNumber).padStart(5, "0"))
-      .replace(/\[quotedate\]/gi,          new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }))
-      .replace(/\[quotetotal\]/gi,         "$0.00")
-      .replace(/\[salesrepname\]/gi,       "Your Rep")
-      .replace(/\[companyphonenumber\]/gi, "(555) 000-0000");
+      .replace(/\[quotedate\]/gi,          quoteDate.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }))
+      .replace(/\[quotetotal\]/gi,         quoteTotal)
+      .replace(/\[salesrepname\]/gi,       salesRepName?.trim() || orgName)
+      .replace(/\[companyphonenumber\]/gi, orgPhone);
   }
 
   async function handleSend() {
@@ -217,6 +238,18 @@ export function SendEstimateDialog({
             <Paperclip className="h-3.5 w-3.5" />
             Attach the estimate PDF to this email
           </label>
+
+          {zeroTotalLineCount > 0 && (
+            <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600" />
+              <span>
+                {zeroTotalLineCount === 1
+                  ? "1 line item totals $0.00 — the client will see it priced at $0.00."
+                  : `${zeroTotalLineCount} line items total $0.00 — the client will see them priced at $0.00.`}{" "}
+                Set a rate on those lines if that isn&apos;t intended.
+              </span>
+            </div>
+          )}
         </div>
 
         <DialogFooter>

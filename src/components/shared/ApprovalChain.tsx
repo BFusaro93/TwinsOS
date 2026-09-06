@@ -7,8 +7,25 @@ import { formatDate } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useApprovalRequests, useDecideApproval } from "@/lib/hooks/use-approval-requests";
+import { useRoles } from "@/lib/hooks/use-roles";
 import { useCurrentUserStore } from "@/stores";
 import type { ApprovalRequest, ApprovalRequestStatus } from "@/types";
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Human label for a step's required approver. PO/requisition steps store a
+ * generic role word ("manager"); crm_estimate steps store a `crm_roles.id`,
+ * which must be resolved to the role's name — never shown raw.
+ */
+function approverRoleLabel(approverRole: string, roleNames: Map<string, string>): string {
+  if (UUID_RE.test(approverRole)) {
+    const name = roleNames.get(approverRole);
+    return name ? `${name} Approval` : "Approval";
+  }
+  if (!approverRole) return "Approval";
+  return `${approverRole.charAt(0).toUpperCase()}${approverRole.slice(1)} Approval`;
+}
 
 interface ApprovalChainProps {
   entityId: string;
@@ -276,7 +293,13 @@ function StepGroupCard({
   const overall = groupOverallStatus(group);
   const isMultiApprover = group.requests.filter((r) => r.status !== "skipped").length > 1;
   const firstRequest = group.requests[0];
-  const stepLabel = `Step ${stepNumber} · ${firstRequest.approverRole.charAt(0).toUpperCase()}${firstRequest.approverRole.slice(1)} Approval`;
+  // crm_estimate steps carry a crm_roles.id as approverRole — resolve it to the
+  // role's name instead of printing the UUID.
+  const { data: roles } = useRoles();
+  const roleNames = new Map<string, string>(
+    ((roles ?? []) as { id: string; name: string }[]).map((r) => [r.id, r.name]),
+  );
+  const stepLabel = `Step ${stepNumber} · ${approverRoleLabel(firstRequest.approverRole, roleNames)}`;
 
   return (
     <div className="flex gap-3">

@@ -5,6 +5,22 @@ export const EMAIL_FROM = "Landscapt <noreply@landscapt.com>";
 /** Same mailbox/domain as EMAIL_FROM — only the display name differs, for CMMS/Equipt-triggered notifications (work orders, maintenance requests, PO/requisitions). */
 export const EMAIL_FROM_EQUIPT = "Equipt <noreply@landscapt.com>";
 
+/** The bare mailbox behind EMAIL_FROM ("noreply@landscapt.com"). */
+export const EMAIL_FROM_ADDRESS = EMAIL_FROM.match(/<([^>]+)>/)?.[1] ?? EMAIL_FROM;
+
+/**
+ * Sender for org-branded, client-facing emails (estimates, invoices, proposal
+ * confirmations): the tenant's own display name as the friendly part, on the
+ * shared verified sending domain — never a hard-coded tenant's name. Falls
+ * back to EMAIL_FROM when the org has no usable name.
+ */
+export function orgEmailFrom(orgName: string | null | undefined): string {
+  // RFC 5322 display-name: drop characters that would break or escape the
+  // header (quotes, angle brackets, newlines) rather than trying to quote them.
+  const friendly = (orgName ?? "").replace(/["<>\r\n]/g, "").trim();
+  return friendly ? `${friendly} <${EMAIL_FROM_ADDRESS}>` : EMAIL_FROM;
+}
+
 /**
  * Escapes text for safe interpolation into HTML markup. Merge-tag values
  * here originate from freeform fields (client display name, org name/phone)

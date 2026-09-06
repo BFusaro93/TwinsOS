@@ -981,9 +981,21 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                              {(clients ?? []).filter((c) => c.status !== "lead").map((c) => (
-                                <SelectItem key={c.id} value={c.id}>{c.displayName}</SelectItem>
-                              ))}
+                              {/* Leads are legitimate estimate recipients (most
+                                  estimates are written for prospects), and the
+                                  estimate's current client must always be listed
+                                  regardless of status — otherwise the combobox
+                                  renders blank and invites an accidental reassign. */}
+                              {(clients ?? [])
+                                .filter((c) => c.id === estimate.clientId || (c.status !== "inactive" && c.status !== "cancelled"))
+                                .map((c) => (
+                                  <SelectItem key={c.id} value={c.id}>
+                                    {c.displayName}{c.status === "lead" ? " (lead)" : ""}
+                                  </SelectItem>
+                                ))}
+                              {estimate.clientId && !(clients ?? []).some((c) => c.id === estimate.clientId) && (
+                                <SelectItem value={estimate.clientId}>{estimate.clientName ?? "Current client"}</SelectItem>
+                              )}
                             </SelectContent>
                           </Select>
                         </FieldRow>
@@ -1358,6 +1370,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
               {/* Line items grid */}
               <EstimateLineItemsGrid
                 estimateId={estimate.id}
+                clientId={estimate.clientId}
                 items={visibleLineItems}
                 selectedIds={selectedLineItemIds}
                 onSelectionChange={setSelectedLineItemIds}
@@ -1610,6 +1623,12 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
         estimateNumber={estimate.estimateNumber}
         clientName={estimate.clientName ?? null}
         clientEmail={estimate.clientEmail ?? null}
+        salesRepName={estimate.salesRepName ?? null}
+        totalCents={estimate.totalCents}
+        estimateDate={estimate.createdAt}
+        zeroTotalLineCount={(estimate.lineItems ?? []).filter(
+          (li) => !li.deletedAt && li.status === "quote" && li.rowType !== "section" && (li.totalCents - (li.discountCents ?? 0)) <= 0
+        ).length}
         open={sendDialogOpen}
         onClose={() => setSendDialogOpen(false)}
         onSent={() => {

@@ -7,6 +7,7 @@ import {
   useClient,
   useClients,
   useClientContacts,
+  useClientProperties,
   useChildClients,
   useSetParentClient,
   useConvertLeadToClient,
@@ -78,7 +79,7 @@ import {
   useClientCustomFieldValues,
   useUpsertClientCustomFieldValue,
 } from "@/lib/hooks/use-client-custom-fields";
-import { useOrgList } from "@/lib/hooks/use-org-lists";
+import { useClientSourceOptions } from "@/lib/hooks/use-client-sources";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { computeActualHours } from "@/lib/utils/visit-hours";
 import { useOrgSettings } from "@/lib/hooks/use-org-settings";
@@ -623,7 +624,7 @@ function ClientCombobox({
     : [];
 
   return (
-    <div className="relative">
+    <div className="relative" data-client-combobox="">
       <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
       <Input
         className="pl-8"
@@ -634,7 +635,15 @@ function ClientCombobox({
         placeholder={placeholder}
       />
       {open && filtered.length > 0 && (
-        <div className="absolute z-50 mt-1 w-full rounded-md border bg-white shadow-lg text-sm max-h-52 overflow-y-auto">
+        <div
+          className="absolute z-50 mt-1 w-full rounded-md border bg-white shadow-lg text-sm max-h-52 overflow-y-auto"
+          // Keep focus on the input while a suggestion is pressed: without this
+          // the input blurs first, the list unmounts under the pointer, and the
+          // click lands on whatever is beneath — which the enclosing Radix
+          // Dialog could read as an outside interaction and close, discarding
+          // every unsaved edit (A-03). Selection happens on mousedown below.
+          onMouseDown={(e) => e.preventDefault()}
+        >
           {filtered.map((c) => (
             <button
               key={c.id}
@@ -662,7 +671,9 @@ function EditClientDialog({ client, open, onOpenChange }: { client: Client; open
   const { data: fieldValues = [], isLoading: fieldValuesLoading } = useClientCustomFieldValues(client.id);
   const { mutateAsync: upsertFieldValue } = useUpsertClientCustomFieldValue();
   const { data: allClients = [] } = useClients();
-  const { data: sourcesOptions = [] } = useOrgList("client_sources");
+  // Shared org-level source list (same one the New Lead dialog uses) — the
+  // client's current value is appended if it isn't in the list so it still shows.
+  const { options: sourcesOptions } = useClientSourceOptions(client.source);
   const { data: orgSettings } = useOrgSettings();
 
   const [editTab, setEditTab] = useState("personal");
@@ -722,6 +733,7 @@ function EditClientDialog({ client, open, onOpenChange }: { client: Client; open
     defaultTerms: client.defaultTerms,
     invoiceDelivery: client.invoiceDelivery ?? "email",
     accountType: client.accountType,
+    status: client.status,
     priority: client.priority ?? "normal",
     clientSince: client.clientSince ?? "",
     isTaxable: client.isTaxable,
@@ -798,6 +810,7 @@ function EditClientDialog({ client, open, onOpenChange }: { client: Client; open
       defaultTerms: client.defaultTerms,
       invoiceDelivery: client.invoiceDelivery ?? "email",
       accountType: client.accountType,
+      status: client.status,
       priority: client.priority ?? "normal",
       clientSince: client.clientSince ?? "",
       isTaxable: client.isTaxable,
@@ -895,9 +908,31 @@ function EditClientDialog({ client, open, onOpenChange }: { client: Client; open
 
   const tabClass = "rounded-none border-b-2 border-transparent px-3 py-2 text-xs font-medium data-[state=active]:border-brand-500 data-[state=active]:bg-transparent data-[state=active]:shadow-none";
 
+  // Cancelled must keep going through the More → Cancel Client flow (it
+  // records a cancellation reason); reactivation is More → Activate Client.
+  const statusLocked = client.status === "cancelled";
+  const statusOptions: { value: string; label: string }[] = [
+    { value: "lead", label: "Lead" },
+    { value: "active", label: "Active" },
+    { value: "inactive", label: "Inactive" },
+  ];
+  if (form.status === "lost") statusOptions.push({ value: "lost", label: "Lost" });
+  if (form.status === "cancelled") statusOptions.push({ value: "cancelled", label: "Cancelled" });
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl h-[85vh] flex flex-col p-0">
+      <DialogContent
+        className="max-w-2xl h-[85vh] flex flex-col p-0"
+        // The Referred-By suggestion list unmounts on the same mousedown that
+        // selects a suggestion; if Radix resolves that pointer event against a
+        // detached node it reads as "outside" and would close the dialog and
+        // drop every unsaved edit. Anything originating inside the combobox
+        // is never an outside interaction.
+        onInteractOutside={(e) => {
+          const target = e.target as Element | null;
+          if (target?.closest?.("[data-client-combobox]")) e.preventDefault();
+        }}
+      >
         <DialogHeader className="px-6 pt-5 pb-0 shrink-0">
           <DialogTitle>Edit Client — {client.displayName}</DialogTitle>
         </DialogHeader>
@@ -1082,17 +1117,35 @@ function EditClientDialog({ client, open, onOpenChange }: { client: Client; open
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="flex flex-col gap-1.5">
+                  <Label>Status</Label>
+                  <Select value={form.status} onValueChange={(v) => patch("status", v)} disabled={statusLocked}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {statusOptions.map((o) => (
+                        <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-slate-400">
+                    {statusLocked
+                      ? "Cancelled accounts are reactivated from More → Activate Client."
+                      : "To cancel this account use More → Cancel Client (records a reason)."}
+                  </p>
+                </div>
+                <div className="flex flex-col gap-1.5">
                   <Label>Client Since</Label>
                   <Input type="date" value={form.clientSince} onChange={(e) => patch("clientSince", e.target.value)} />
                 </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
                 <div className="flex flex-col gap-1.5">
                   <Label>Source{rf.req("source")}</Label>
                   <Select value={form.source || "__none__"} onValueChange={(v) => patch("source", v === "__none__" ? "" : v)}>
                     <SelectTrigger><SelectValue placeholder="Select source…" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="__none__">— None —</SelectItem>
-                      {sourcesOptions.map((o) => (
-                        <SelectItem key={o.id} value={o.value}>{o.value}</SelectItem>
+                      {sourcesOptions.map((s) => (
+                        <SelectItem key={s} value={s}>{s}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -3022,6 +3075,7 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
   const { can } = usePermissions();
   const { data: client, isLoading } = useClient(clientId);
   const { data: contacts } = useClientContacts(clientId);
+  const { data: properties } = useClientProperties(clientId);
   const { data: clientTickets } = useTickets({ clientId });
   const { data: childClients } = useChildClients(clientId);
   const { data: parentClient } = useClient(client?.parentClientId ?? "");
@@ -3032,6 +3086,7 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
   const [editContact, setEditContact] = useState<ClientContact | null>(null);
   const [allContactsOpen, setAllContactsOpen] = useState(false);
   const [addPropertyOpen, setAddPropertyOpen] = useState(false);
+  const [editProperty, setEditProperty] = useState<ClientProperty | null>(null);
   const [aerialMeasurementOpen, setAerialMeasurementOpen] = useState(false);
   const [linkParentOpen, setLinkParentOpen] = useState(false);
   const [newTicketOpen, setNewTicketOpen] = useState(false);
@@ -3189,7 +3244,7 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
                 {client.priority && <InfoRow label="Priority" value={client.priority.charAt(0).toUpperCase() + client.priority.slice(1)} />}
                 {client.source && <InfoRow label="Source" value={client.source} />}
                 {client.clientSince && (
-                  <InfoRow label="Client since" value={new Date(client.clientSince).toLocaleDateString()} />
+                  <InfoRow label="Client since" value={formatDate(client.clientSince)} />
                 )}
                 {client.paymentMethod && <InfoRow label="Payment" value={client.paymentMethod} />}
                 {client.mapCode && <InfoRow label="Map code" value={client.mapCode} />}
@@ -3674,6 +3729,62 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
                 <InfoRow label="Gate code" value={client.gateCode} />
                 <InfoRow label="Notes to crew" value={client.notesToCrew} />
               </div>
+
+              {/* Compact address-only property list. Properties are created from
+                  More → Add Property and feed the Aerial Measurement tool; the
+                  old "Related Properties" card on Home was replaced by Open
+                  Tickets, so this is where they're viewed and edited now. */}
+              <div className="mb-3 mt-6 flex items-center justify-between">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                  Properties{properties && properties.length > 0 ? ` (${properties.length})` : ""}
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => setAddPropertyOpen(true)}
+                  className="flex items-center gap-1 text-xs text-brand-600 hover:text-brand-700"
+                >
+                  <Plus className="h-3 w-3" /> Add
+                </button>
+              </div>
+              {(properties ?? []).length === 0 ? (
+                <p className="text-xs text-slate-400">No additional properties on file.</p>
+              ) : (
+                <ul className="divide-y rounded-md border">
+                  {(properties ?? []).map((p) => {
+                    const addr = [p.address, [p.city, p.state].filter(Boolean).join(", "), p.zip].filter(Boolean).join(" · ");
+                    return (
+                      <li key={p.id} className="flex items-start justify-between gap-2 px-3 py-2">
+                        <div className="min-w-0 text-sm">
+                          <div className="flex items-center gap-1.5">
+                            <MapPin className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+                            <span className="truncate font-medium text-slate-800">{p.name || p.address || "Property"}</span>
+                            {p.isMaster && (
+                              <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-500">Primary</span>
+                            )}
+                          </div>
+                          {p.name && addr && <p className="truncate text-xs text-slate-500">{addr}</p>}
+                          {(p.gateCode || p.notesToCrew) && (
+                            <p className="mt-0.5 text-xs text-slate-500">
+                              {p.gateCode && <span>Gate code: <span className="font-medium text-slate-700">{p.gateCode}</span></span>}
+                              {p.gateCode && p.notesToCrew && <span> · </span>}
+                              {p.notesToCrew && <span>Crew: {p.notesToCrew}</span>}
+                            </p>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setEditProperty(p)}
+                          className="shrink-0 rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                          title="Edit property"
+                          aria-label={`Edit property ${p.name || p.address || ""}`.trim()}
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
             </div>
           </div>
         </TabsContent>
@@ -3719,14 +3830,18 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
           onAddContact={() => { setAllContactsOpen(false); setAddContactOpen(true); }}
         />
       )}
-      {/* Property creation is preserved via the "More" menu's "Add Property" item (above) —
-          this is now the only in-app path to create a client_properties row, since the
-          Aerial Measurement tool below only lets you pick among existing properties and
-          cannot create one itself. Editing/browsing the full property list was only reachable
-          from the "Related Properties" box that this row replaced with Open Tickets, so that
-          list/edit UI (AddPropertyDialog's edit mode, AllPropertiesModal) is no longer wired up
-          here; the components remain defined above in case they're needed again. */}
+      {/* Properties are created from the "More" menu's "Add Property" item (and the
+          "+ Add" link on Details → Properties); the Aerial Measurement tool only picks
+          among existing properties. The compact list on the Details tab is where they
+          are viewed and edited — the edit instance below reuses AddPropertyDialog's
+          edit mode. */}
       <AddPropertyDialog clientId={clientId} open={addPropertyOpen} onOpenChange={setAddPropertyOpen} />
+      <AddPropertyDialog
+        clientId={clientId}
+        open={!!editProperty}
+        onOpenChange={(o) => { if (!o) setEditProperty(null); }}
+        property={editProperty}
+      />
       <AerialMeasurementDialog clientId={clientId} open={aerialMeasurementOpen} onOpenChange={setAerialMeasurementOpen} />
       <NewTicketDialog open={newTicketOpen} onOpenChange={setNewTicketOpen} defaultClientId={clientId} />
       <LinkParentDialog

@@ -9,8 +9,40 @@ import type { EstimatePDFData, EstimatePDFLineItem, EstimatePDFMilestone, Estima
 import { toDisplaySettings } from "@/lib/estimate-display-settings";
 import { fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
 import { addParagraphSpacing } from "@/lib/utils/document-template-renderer";
+import { orgEmailFrom } from "@/lib/email/send";
+import { logger } from "@/lib/logger";
 
-const FROM = "Twins Lawn Service <noreply@twinslawnservice.com>";
+const log = logger.child("send-estimate");
+
+// Resend's error `name` codes → what we tell the client. Recipient/content
+// problems are the sender's to fix (4xx, with the provider's own message —
+// e.g. a rejected @example.com address); everything else is a provider-side
+// or configuration problem (5xx, generic copy, full details logged).
+const RECIPIENT_ERROR_CODES = new Set([
+  "validation_error",
+  "missing_required_field",
+  "invalid_parameter",
+  "invalid_attachment",
+]);
+const QUOTA_ERROR_CODES = new Set([
+  "rate_limit_exceeded",
+  "daily_quota_exceeded",
+  "monthly_quota_exceeded",
+]);
+
+function mapSendError(err: { name?: string; message?: string }): { status: number; error: string } {
+  const code = err.name ?? "";
+  if (RECIPIENT_ERROR_CODES.has(code)) {
+    return {
+      status: 422,
+      error: `Email provider rejected the message: ${err.message ?? "invalid recipient or content"}`,
+    };
+  }
+  if (QUOTA_ERROR_CODES.has(code)) {
+    return { status: 429, error: "Email sending limit reached — please try again shortly." };
+  }
+  return { status: 502, error: "Email provider error — the estimate was not sent. Please try again." };
+}
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function getNextVersionNumber(supabase: any, estimateId: string): Promise<number> {
@@ -108,20 +140,56 @@ export async function POST(
     ? new Date(Date.now() + body.expiresInDays * 86_400_000).toISOString()
     : null;
 
+  // Re-sends (and retries after a failed send) reuse the estimate's existing
+  // live link instead of minting a fresh token every time — one estimate was
+  // observed with four tokens after three failed attempts. A token is
+  // reusable while it is not deleted, not yet accepted and not expired.
+  const nowIso = new Date().toISOString();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: shareToken, error: tokenErr } = await (supabase as any)
+  const { data: existingTokens } = await (supabase as any)
     .from("estimate_share_tokens")
-    .insert({
-      org_id: profile?.org_id,
-      estimate_id: estimateId,
-      expires_at: expiresAt,
-      created_by: user.id,
-    })
-    .select("token")
-    .single();
+    .select("id, token, expires_at")
+    .eq("estimate_id", estimateId)
+    .is("deleted_at", null)
+    .is("accepted_at", null)
+    .or(`expires_at.is.null,expires_at.gt.${nowIso}`)
+    .order("created_at", { ascending: false })
+    .limit(1);
 
-  if (tokenErr || !shareToken) {
-    return NextResponse.json({ error: "Failed to create share token" }, { status: 500 });
+  let shareToken: { id: string; token: string } | null =
+    (existingTokens as { id: string; token: string; expires_at: string | null }[] | null)?.[0] ?? null;
+  // Only a token minted by THIS request is cleaned up if the send fails.
+  let createdTokenId: string | null = null;
+
+  if (shareToken) {
+    const existingExpiry = (existingTokens as { expires_at: string | null }[])[0].expires_at;
+    // Extend the link if this send asks for a later expiry than it has.
+    if (expiresAt && existingExpiry && new Date(existingExpiry) < new Date(expiresAt)) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (supabase as any)
+        .from("estimate_share_tokens")
+        .update({ expires_at: expiresAt })
+        .eq("id", shareToken.id);
+    }
+  } else {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: inserted, error: tokenErr } = await (supabase as any)
+      .from("estimate_share_tokens")
+      .insert({
+        org_id: profile?.org_id,
+        estimate_id: estimateId,
+        expires_at: expiresAt,
+        created_by: user.id,
+      })
+      .select("id, token")
+      .single();
+
+    if (tokenErr || !inserted) {
+      log.error("Failed to create share token", { estimateId, error: tokenErr?.message });
+      return NextResponse.json({ error: "Failed to create share token" }, { status: 500 });
+    }
+    shareToken = inserted as { id: string; token: string };
+    createdTokenId = shareToken.id;
   }
 
   const proposalUrl = `${process.env.NEXT_PUBLIC_APP_URL ?? "https://landscapt.com"}/proposal/${shareToken.token}`;
@@ -158,48 +226,12 @@ export async function POST(
   // template is selected.
   const includePdf = body.includePdf !== false;
 
-  // Snapshot estimate state at time of send
-  const versionNumber = await getNextVersionNumber(supabase, estimateId);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const lineItems = ((est.estimate_line_items ?? []) as any[])
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     .filter((li: any) => !li.deleted_at)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     .sort((a: any, b: any) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  await (supabase as any).from("estimate_versions").insert({
-    org_id: est.org_id,
-    estimate_id: estimateId,
-    version_number: versionNumber,
-    sent_to_email: toEmailsJoined,
-    created_by: user.id,
-    snapshot: {
-      estimateNumber: est.estimate_number,
-      description: est.description,
-      stage: est.stage,
-      subtotalCents: est.subtotal_cents,
-      taxCents: est.tax_cents,
-      discountCents: est.discount_cents,
-      totalCents: est.total_cents,
-      notes: est.notes,
-      validUntil: est.valid_until,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      lineItems: lineItems.map((li: any) => ({
-        id: li.id,
-        serviceName: li.service_name,
-        qty: li.qty,
-        rateCents: li.rate_cents,
-        visits: li.visits,
-        totalCents: li.total_cents,
-        unitType: li.unit_type,
-        estimateDesc: li.estimate_desc,
-        status: li.status,
-        rowType: li.row_type ?? "item",
-        sectionName: li.section_name,
-      })),
-    },
-  });
 
   // Render the estimate PDF for attachment — same pipeline as the "Preview"/
   // "Print" buttons (src/app/api/crm/estimates/[id]/pdf/route.ts).
@@ -316,14 +348,15 @@ export async function POST(
     } catch (err) {
       // Non-fatal — send the email without the attachment rather than blocking
       // the whole send over a PDF rendering issue.
-      console.error("[send-estimate] PDF render error:", err);
+      log.error("PDF render error", { estimateId, error: err instanceof Error ? err.message : String(err) });
     }
   }
 
-  // Send via Resend
+  // Send via Resend — from the tenant's own display name on the shared
+  // verified sending domain (never a hard-coded tenant).
   const resend = new Resend(process.env.RESEND_API_KEY!);
   const { data: sent, error: sendErr } = await resend.emails.send({
-    from: FROM,
+    from: orgEmailFrom(orgName),
     to: toEmails,
     subject: resolvedSubject,
     html: resolvedBody,
@@ -332,9 +365,60 @@ export async function POST(
   });
 
   if (sendErr) {
-    console.error("[send-estimate] Resend error:", sendErr);
-    return NextResponse.json({ error: "Failed to send email" }, { status: 500 });
+    log.error("Resend error", {
+      estimateId,
+      to: toEmailsJoined,
+      code: sendErr.name,
+      message: sendErr.message,
+    });
+    // Nothing was delivered, so leave no trace of this attempt: retire the
+    // token minted for it (a reused pre-existing token is left alone).
+    if (createdTokenId) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (supabase as any)
+        .from("estimate_share_tokens")
+        .update({ deleted_at: new Date().toISOString() })
+        .eq("id", createdTokenId);
+    }
+    const mapped = mapSendError(sendErr);
+    return NextResponse.json({ error: mapped.error }, { status: mapped.status });
   }
+
+  // Snapshot estimate state at time of (successful) send
+  const versionNumber = await getNextVersionNumber(supabase, estimateId);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await (supabase as any).from("estimate_versions").insert({
+    org_id: est.org_id,
+    estimate_id: estimateId,
+    version_number: versionNumber,
+    sent_to_email: toEmailsJoined,
+    created_by: user.id,
+    snapshot: {
+      estimateNumber: est.estimate_number,
+      description: est.description,
+      stage: est.stage,
+      subtotalCents: est.subtotal_cents,
+      taxCents: est.tax_cents,
+      discountCents: est.discount_cents,
+      totalCents: est.total_cents,
+      notes: est.notes,
+      validUntil: est.valid_until,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      lineItems: lineItems.map((li: any) => ({
+        id: li.id,
+        serviceName: li.service_name,
+        qty: li.qty,
+        rateCents: li.rate_cents,
+        visits: li.visits,
+        totalCents: li.total_cents,
+        unitType: li.unit_type,
+        estimateDesc: li.estimate_desc,
+        status: li.status,
+        rowType: li.row_type ?? "item",
+        sectionName: li.section_name,
+      })),
+    },
+  });
 
   // Log the email
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -352,12 +436,12 @@ export async function POST(
 
   // Move estimate to "sent" — sent_at is set only on the first send, as the
   // anchor timestamp for "no response in N days" automation triggers.
-  const nowIso = new Date().toISOString();
+  const sentIso = new Date().toISOString();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   await (supabase as any).from("estimates").update({
     stage: "sent",
-    updated_at: nowIso,
-    ...(est.sent_at ? {} : { sent_at: nowIso }),
+    updated_at: sentIso,
+    ...(est.sent_at ? {} : { sent_at: sentIso }),
   }).eq("id", estimateId);
 
   // Log activity
@@ -389,7 +473,7 @@ export async function POST(
     });
   } catch (enrollErr) {
     // best-effort — don't fail the send if enrollment errors
-    console.error("[send-estimate] Enrollment error:", enrollErr);
+    log.error("Enrollment error", { estimateId, error: enrollErr instanceof Error ? enrollErr.message : String(enrollErr) });
   }
 
   return NextResponse.json({ ok: true, proposalUrl });

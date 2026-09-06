@@ -577,8 +577,9 @@ export function EstimatesList({ clientId }: Props) {
               </tr>
             ) : (
               filtered.map((e) => {
-                const marginBps = e.revenueCents > 0
-                  ? Math.round((e.grossProfitCents / e.revenueCents) * 10000)
+                const hasRevenue = typeof e.revenueCents === "number" && e.revenueCents > 0;
+                const marginBps = hasRevenue
+                  ? Math.round(((e.grossProfitCents ?? 0) / e.revenueCents) * 10000)
                   : 0;
                 return (
                   <tr key={e.id} className={cn(
@@ -639,14 +640,17 @@ export function EstimatesList({ clientId }: Props) {
                           return <td key={col.key} className="px-3 py-2.5 text-xs text-slate-600">{e.salesRepName ?? "—"}</td>;
                         case "prob":
                           return <td key={col.key} className="px-3 py-2.5 text-right text-xs text-slate-500">{e.probabilityBps > 0 ? `${(e.probabilityBps / 100).toFixed(0)}%` : "—"}</td>;
+                        // Income / GP / Margin: "—" only when the estimate has no
+                        // priced revenue yet (truly unknown). Once revenue exists,
+                        // a $0 gross profit or 0% margin is a real figure — show it.
                         case "income":
-                          return <td key={col.key} className="px-3 py-2.5 text-right text-xs font-medium text-slate-700">{e.revenueCents > 0 ? formatCurrency(e.revenueCents) : "—"}</td>;
+                          return <td key={col.key} className="px-3 py-2.5 text-right text-xs font-medium text-slate-700">{hasRevenue ? formatCurrency(e.revenueCents) : "—"}</td>;
                         case "gp":
-                          return <td key={col.key} className="px-3 py-2.5 text-right text-xs font-medium text-slate-700">{e.grossProfitCents > 0 ? formatCurrency(e.grossProfitCents) : "—"}</td>;
+                          return <td key={col.key} className="px-3 py-2.5 text-right text-xs font-medium text-slate-700">{hasRevenue ? formatCurrency(e.grossProfitCents ?? 0) : "—"}</td>;
                         case "margin":
                           return (
                             <td key={col.key} className={cn("px-3 py-2.5 text-right text-xs font-medium", marginBps >= 3000 ? "text-green-600" : marginBps >= 1500 ? "text-yellow-600" : marginBps > 0 ? "text-red-500" : "text-slate-400")}>
-                              {marginBps !== 0 ? bpsToPercent(marginBps) : "—"}
+                              {hasRevenue ? bpsToPercent(marginBps) : "—"}
                             </td>
                           );
                         default: return null;
