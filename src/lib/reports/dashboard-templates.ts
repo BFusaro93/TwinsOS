@@ -1,4 +1,5 @@
 import type { DashboardConfig } from "@/types/crm-reports";
+import { cashPaymentFilter, issuedInvoiceFilter } from "@/lib/reports/helpers";
 
 // ============================================================
 // Starter dashboard templates offered from the "New Dashboard" flow.
@@ -43,7 +44,7 @@ export const DASHBOARD_TEMPLATES: DashboardTemplate[] = [
                 config: {
                   dataset: "rpt_invoices",
                   columns: [],
-                  filters: [{ column: "status", op: "neq", value: "void" }],
+                  filters: [...issuedInvoiceFilter()],
                   groupBy: [],
                   aggregates: [{ column: "total_cents", fn: "sum" }],
                   sortDir: "asc",
@@ -138,7 +139,7 @@ export const DASHBOARD_TEMPLATES: DashboardTemplate[] = [
                 config: {
                   dataset: "rpt_estimates",
                   columns: [],
-                  filters: [{ column: "stage", op: "in", value: ["draft", "quote"] }],
+                  filters: [{ column: "stage", op: "in", value: ["draft", "quote", "sent"] }],
                   groupBy: ["sales_rep"],
                   aggregates: [{ column: "*", fn: "count" }],
                   sortColumn: "count_all",
@@ -456,7 +457,7 @@ export const DASHBOARD_TEMPLATES: DashboardTemplate[] = [
                 config: {
                   dataset: "rpt_estimates",
                   columns: [],
-                  filters: [{ column: "stage", op: "in", value: ["draft", "quote"] }],
+                  filters: [{ column: "stage", op: "in", value: ["draft", "quote", "sent"] }],
                   groupBy: ["sales_rep"],
                   aggregates: [{ column: "total_cents", fn: "sum" }],
                   sortColumn: "sum_total_cents",
@@ -476,7 +477,7 @@ export const DASHBOARD_TEMPLATES: DashboardTemplate[] = [
                 config: {
                   dataset: "rpt_estimates",
                   columns: [],
-                  filters: [{ column: "stage", op: "in", value: ["draft", "quote"] }],
+                  filters: [{ column: "stage", op: "in", value: ["draft", "quote", "sent"] }],
                   groupBy: ["stage"],
                   aggregates: [{ column: "total_cents", fn: "sum" }],
                   sortColumn: "sum_total_cents",
@@ -534,7 +535,7 @@ export const DASHBOARD_TEMPLATES: DashboardTemplate[] = [
                 config: {
                   dataset: "rpt_estimates",
                   columns: ["client_name", "total_cents", "probability_pct", "sales_rep"],
-                  filters: [{ column: "stage", op: "in", value: ["draft", "quote"] }],
+                  filters: [{ column: "stage", op: "in", value: ["draft", "quote", "sent"] }],
                   groupBy: [],
                   aggregates: [],
                   sortColumn: "total_cents",
@@ -553,7 +554,7 @@ export const DASHBOARD_TEMPLATES: DashboardTemplate[] = [
                 config: {
                   dataset: "rpt_estimates",
                   columns: ["client_name", "total_cents"],
-                  filters: [{ column: "stage", op: "in", value: ["draft", "quote"] }],
+                  filters: [{ column: "stage", op: "in", value: ["draft", "quote", "sent"] }],
                   groupBy: [],
                   aggregates: [],
                   sortColumn: "total_cents",
@@ -601,7 +602,7 @@ export const DASHBOARD_TEMPLATES: DashboardTemplate[] = [
                 config: {
                   dataset: "rpt_estimates",
                   columns: ["client_name", "total_cents", "probability_pct"],
-                  filters: [{ column: "stage", op: "in", value: ["draft", "quote"] }],
+                  filters: [{ column: "stage", op: "in", value: ["draft", "quote", "sent"] }],
                   groupBy: [],
                   aggregates: [],
                   sortColumn: "total_cents",
@@ -663,7 +664,7 @@ export const DASHBOARD_TEMPLATES: DashboardTemplate[] = [
                 config: {
                   dataset: "rpt_estimates",
                   columns: [],
-                  filters: [{ column: "stage", op: "in", value: ["draft", "quote"] }],
+                  filters: [{ column: "stage", op: "in", value: ["draft", "quote", "sent"] }],
                   groupBy: ["stage"],
                   aggregates: [{ column: "total_cents", fn: "sum" }],
                   sortColumn: "sum_total_cents",
@@ -703,7 +704,7 @@ export const DASHBOARD_TEMPLATES: DashboardTemplate[] = [
                 config: {
                   dataset: "rpt_estimates",
                   columns: [],
-                  filters: [{ column: "stage", op: "in", value: ["draft", "quote"] }],
+                  filters: [{ column: "stage", op: "in", value: ["draft", "quote", "sent"] }],
                   groupBy: ["sales_rep"],
                   aggregates: [{ column: "total_cents", fn: "sum" }],
                   sortColumn: "sum_total_cents",
@@ -723,7 +724,7 @@ export const DASHBOARD_TEMPLATES: DashboardTemplate[] = [
                 config: {
                   dataset: "rpt_invoices",
                   columns: [],
-                  filters: [{ column: "status", op: "neq", value: "void" }],
+                  filters: [...issuedInvoiceFilter()],
                   groupBy: ["sales_rep"],
                   aggregates: [{ column: "total_cents", fn: "sum" }],
                   sortColumn: "sum_total_cents",
@@ -818,7 +819,7 @@ export const DASHBOARD_TEMPLATES: DashboardTemplate[] = [
                 config: {
                   dataset: "rpt_invoices",
                   columns: [],
-                  filters: [{ column: "status", op: "neq", value: "void" }],
+                  filters: [...issuedInvoiceFilter()],
                   groupBy: [],
                   aggregates: [{ column: "total_cents", fn: "sum" }],
                   sortDir: "asc",
@@ -832,14 +833,14 @@ export const DASHBOARD_TEMPLATES: DashboardTemplate[] = [
               visual: {
                 type: "kpi",
                 useTabDateRange: true,
-                kpiColumn: "sum_amount_cents",
+                kpiColumn: "sum_net_amount_cents",
                 valueColumns: [],
                 config: {
                   dataset: "rpt_payments",
                   columns: [],
-                  filters: [],
+                  filters: [...cashPaymentFilter()],
                   groupBy: [],
-                  aggregates: [{ column: "amount_cents", fn: "sum" }],
+                  aggregates: [{ column: "net_amount_cents", fn: "sum" }],
                   sortDir: "asc",
                 },
               },
@@ -852,14 +853,14 @@ export const DASHBOARD_TEMPLATES: DashboardTemplate[] = [
                 type: "kpi",
                 useTabDateRange: false,
                 relativeDateFilter: "today",
-                kpiColumn: "sum_amount_cents",
+                kpiColumn: "sum_net_amount_cents",
                 valueColumns: [],
                 config: {
                   dataset: "rpt_payments",
                   columns: [],
-                  filters: [],
+                  filters: [...cashPaymentFilter()],
                   groupBy: [],
-                  aggregates: [{ column: "amount_cents", fn: "sum" }],
+                  aggregates: [{ column: "net_amount_cents", fn: "sum" }],
                   sortDir: "asc",
                 },
               },
@@ -872,14 +873,14 @@ export const DASHBOARD_TEMPLATES: DashboardTemplate[] = [
                 type: "kpi",
                 useTabDateRange: false,
                 relativeDateFilter: "yesterday",
-                kpiColumn: "sum_amount_cents",
+                kpiColumn: "sum_net_amount_cents",
                 valueColumns: [],
                 config: {
                   dataset: "rpt_payments",
                   columns: [],
-                  filters: [],
+                  filters: [...cashPaymentFilter()],
                   groupBy: [],
-                  aggregates: [{ column: "amount_cents", fn: "sum" }],
+                  aggregates: [{ column: "net_amount_cents", fn: "sum" }],
                   sortDir: "asc",
                 },
               },
@@ -915,14 +916,14 @@ export const DASHBOARD_TEMPLATES: DashboardTemplate[] = [
                 type: "pie",
                 useTabDateRange: true,
                 labelColumn: "method",
-                valueColumns: ["sum_amount_cents"],
+                valueColumns: ["sum_net_amount_cents"],
                 config: {
                   dataset: "rpt_payments",
                   columns: [],
-                  filters: [],
+                  filters: [...cashPaymentFilter()],
                   groupBy: ["method"],
-                  aggregates: [{ column: "amount_cents", fn: "sum" }],
-                  sortColumn: "sum_amount_cents",
+                  aggregates: [{ column: "net_amount_cents", fn: "sum" }],
+                  sortColumn: "sum_net_amount_cents",
                   sortDir: "desc",
                 },
               },

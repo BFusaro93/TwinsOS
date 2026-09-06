@@ -270,7 +270,10 @@ async function computeEstimates(supabase: Client, w: YearWindow): Promise<Values
     aggregate(
       supabase,
       "rpt_estimates",
-      [{ column: "stage", op: "in", value: ["quote", "sent", "approved"] }],
+      // Real system stages (crm_estimate_stages): draft/quote/sent/accepted/
+      // lost/invoiced — there is no "approved" stage. "Open" = not yet
+      // decided either way, matching Company Report's OPEN_ESTIMATE_STAGES.
+      [{ column: "stage", op: "in", value: ["draft", "quote", "sent"] }],
       [{ column: "total_cents", fn: "sum" }],
       ["stage"]
     ),
@@ -283,7 +286,8 @@ async function computeEstimates(supabase: Client, w: YearWindow): Promise<Values
   }
   const get = (stage: string) => sums.get(stage) ?? { cents: 0, count: 0 };
 
-  const won = { cents: get("won").cents + get("invoiced").cents, count: get("won").count + get("invoiced").count };
+  // "accepted" is this app's real won stage — there is no "won" stage.
+  const won = { cents: get("accepted").cents + get("invoiced").cents, count: get("accepted").count + get("invoiced").count };
   const lost = get("lost");
   const nonDraft = [...sums.entries()]
     .filter(([stage]) => stage !== "draft")
