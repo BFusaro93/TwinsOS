@@ -37,6 +37,55 @@ const JOB_TYPES = [
   { value: "waiting_list",label: "Waiting List" },
 ];
 
+/**
+ * Net revenue per selected line after the line's own discount and its share
+ * of the estimate-level discount. Mirrors recalcEstimateTotals: a "percent"
+ * header discount is a % of the (line-discounted) subtotal; a flat one is a
+ * fixed amount clamped to the subtotal, of which the selected lines carry
+ * their proportional share. Cents are distributed largest-remainder so the
+ * allocated discount sums exactly.
+ */
+function allocateHeaderDiscount(
+  estimate: Estimate,
+  allLines: EstimateLineItem[],
+  selectedLines: EstimateLineItem[],
+): Map<string, number> {
+  const lineNet = (li: EstimateLineItem) => Math.max(0, li.totalCents - li.discountCents);
+  const fullSubtotal = allLines.reduce((s, li) => s + lineNet(li), 0);
+  const selectedSubtotal = selectedLines.reduce((s, li) => s + lineNet(li), 0);
+
+  let headerDiscount = 0;
+  if (estimate.discountType === "percent") {
+    headerDiscount = Math.round(selectedSubtotal * ((estimate.discountValue ?? 0) / 10000));
+  } else if ((estimate.discountCents ?? 0) > 0 && fullSubtotal > 0) {
+    const clamped = Math.min(estimate.discountCents, fullSubtotal);
+    headerDiscount = Math.round(clamped * (selectedSubtotal / fullSubtotal));
+  }
+  headerDiscount = Math.max(0, Math.min(headerDiscount, selectedSubtotal));
+
+  const result = new Map<string, number>();
+  if (headerDiscount === 0 || selectedSubtotal === 0) {
+    for (const li of selectedLines) result.set(li.id, lineNet(li));
+    return result;
+  }
+
+  const shares = selectedLines.map((li) => {
+    const exact = (headerDiscount * lineNet(li)) / selectedSubtotal;
+    return { id: li.id, floor: Math.floor(exact), frac: exact - Math.floor(exact) };
+  });
+  let remainder = headerDiscount - shares.reduce((s, x) => s + x.floor, 0);
+  for (const x of [...shares].sort((a, b) => b.frac - a.frac)) {
+    if (remainder <= 0) break;
+    x.floor += 1;
+    remainder -= 1;
+  }
+  const discountById = new Map(shares.map((x) => [x.id, x.floor]));
+  for (const li of selectedLines) {
+    result.set(li.id, Math.max(0, lineNet(li) - (discountById.get(li.id) ?? 0)));
+  }
+  return result;
+}
+
 interface Props {
   open: boolean;
   estimate: Estimate;
@@ -105,9 +154,13 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
   }
 
   const selectedItems = lineItems.filter((li) => selected.has(li.id));
-  // Net of each line's own discount — this is what the client actually
-  // agreed to pay, and what feeds the new job's rate_cents snapshot below.
-  const totalCents = selectedItems.reduce((s, li) => s + (li.totalCents - li.discountCents), 0);
+  // Net of each line's own discount AND its share of the estimate-level
+  // (header) discount — this is what the client actually agreed to pay, and
+  // what feeds the new job's rate_cents snapshot below. Before the header
+  // discount was included here, a 10%-off estimate produced a job (and thus
+  // an invoice) priced at the undiscounted subtotal.
+  const netByLineId = allocateHeaderDiscount(estimate, lineItems, selectedItems);
+  const totalCents = selectedItems.reduce((s, li) => s + (netByLineId.get(li.id) ?? 0), 0);
   const selectedMaterialItems = materialItems.filter((dc) => selectedMaterials.has(dc.id));
 
   async function handleCreate() {
@@ -146,8 +199,12 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
           // service, so anything re-deriving a price from qty x rate
           // (job value rollups, invoice line items) billed a different
           // number than the client actually accepted.
-          rateCents:     li.adjRateCents ?? li.rateCents,
-          totalCents:    li.totalCents - li.discountCents,
+          // When a header discount applies, re-derive the unit rate from the
+          // net line total so qty x rate still reproduces what the job bills.
+          rateCents:     netByLineId.get(li.id) === li.totalCents - li.discountCents
+            ? (li.adjRateCents ?? li.rateCents)
+            : (li.qty > 0 ? Math.round((netByLineId.get(li.id) ?? 0) / li.qty) : (li.adjRateCents ?? li.rateCents)),
+          totalCents:    netByLineId.get(li.id) ?? 0,
           budgetedHours: budgetedHoursFromLineItem(li),
           budgetMethod:  li.budgetMethod,
         })),
