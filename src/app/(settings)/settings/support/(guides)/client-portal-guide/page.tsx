@@ -204,11 +204,16 @@ export default function ClientPortalGuidePage() {
             subtotals — staff configured on the estimate itself). If the estimate has line items, each one
             has its own checkbox, pre-checked, so a client can accept only part of an estimate; the dialog
             recalculates the selected total live. Typing a full name into the signature field and confirming
-            posts the acceptance (and which line items were accepted, if partial) to the estimate.
+            posts the acceptance (and which line items were accepted, if partial) to the estimate. Lines the
+            client left unchecked are marked lost on the estimate and are excluded from the Accepted
+            Estimates by Service reports.
           </li>
           <li>
             <strong>Decline</strong> — a confirmation dialog that notifies the org&apos;s team; no reason
-            is required.
+            is required from the client. On the staff side the estimate moves to the{" "}
+            <strong>Lost</strong> stage with the reason &quot;Declined by client via portal&quot; —
+            the same outcome the office would record by hand, so it counts against Close Ratios and
+            drops out of the open pipeline immediately.
           </li>
           <li>
             <strong>Request Changes</strong> — a free-text message sent back to the org without accepting

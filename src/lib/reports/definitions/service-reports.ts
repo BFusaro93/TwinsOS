@@ -236,8 +236,8 @@ export const SERVICE_REPORTS: PrebuiltReportDef[] = [
       "Shows visit progress and earned vs pending revenue for each service package.",
     filters: [],
     notes: [
-      "Total Visits counts each package job's visits (all statuses except cancelled); Completed counts visits in Completed status.",
-      "Earned is completed visits × the per-visit amount — the visit's own rate × qty when set, otherwise the job total split evenly across its visits. Pending is the job total minus Earned. A package job with no visits generated yet shows entirely as Pending.",
+      "Total Visits counts every visit on each package job, cancelled included; Completed counts visits in Completed status; Cancelled counts cancelled visits; Remaining is Total − Completed − Cancelled.",
+      "Earned is completed visits × the per-visit amount — the visit's own rate × qty when set, otherwise the job total split evenly across its non-cancelled visits. Pending is the job total minus Earned. A package job with no visits generated yet shows entirely as Pending.",
     ],
     run: async ({ supabase }) => {
       interface Row {
@@ -268,6 +268,7 @@ export const SERVICE_REPORTS: PrebuiltReportDef[] = [
       interface JobVisits {
         total: number;
         completed: number;
+        cancelled: number;
         completedCents: number | null; // null until a completed visit lacks its own rate
         min: string | null;
         max: string | null;
@@ -283,17 +284,18 @@ export const SERVICE_REPORTS: PrebuiltReportDef[] = [
             .select("job_id, scheduled_date, status, rate_cents, qty")
             .in("job_id", chunk)
             .is("deleted_at", null)
-            .neq("status", "cancelled")
         );
         for (const v of visits) {
           const jv = visitsByJob.get(v.job_id) ?? {
             total: 0,
             completed: 0,
+            cancelled: 0,
             completedCents: 0,
             min: null,
             max: null,
           };
           jv.total += 1;
+          if (v.status === "cancelled") jv.cancelled += 1;
           if (v.status === "completed") {
             jv.completed += 1;
             if (v.rate_cents != null && jv.completedCents !== null) {
@@ -316,6 +318,7 @@ export const SERVICE_REPORTS: PrebuiltReportDef[] = [
         package_name: string;
         total_visits: number;
         completed: number;
+        cancelled: number;
         remaining: number;
         first_date: string | null;
         last_date: string | null;
@@ -331,6 +334,7 @@ export const SERVICE_REPORTS: PrebuiltReportDef[] = [
             package_name: key,
             total_visits: 0,
             completed: 0,
+            cancelled: 0,
             remaining: 0,
             first_date: null,
             last_date: null,
@@ -343,17 +347,22 @@ export const SERVICE_REPORTS: PrebuiltReportDef[] = [
         const jobTotal = r.total_cents ?? 0;
         const total = jv?.total ?? 0;
         const completed = jv?.completed ?? 0;
+        const cancelled = jv?.cancelled ?? 0;
+        // Cancelled visits are never delivered, so the even split of the job
+        // total is over the deliverable (non-cancelled) visits.
+        const deliverable = total - cancelled;
         let earned = 0;
         if (completed > 0) {
           earned =
             jv?.completedCents != null
               ? jv.completedCents
-              : total > 0
-                ? Math.round((jobTotal * completed) / total)
+              : deliverable > 0
+                ? Math.round((jobTotal * completed) / deliverable)
                 : 0;
         }
         summary.total_visits += total;
         summary.completed += completed;
+        summary.cancelled += cancelled;
         summary.earned_cents += earned;
         summary.pending_cents += Math.max(jobTotal - earned, 0);
 
@@ -368,7 +377,7 @@ export const SERVICE_REPORTS: PrebuiltReportDef[] = [
       }
 
       const resultRows = [...byPackage.values()]
-        .map((s) => ({ ...s, remaining: s.total_visits - s.completed }))
+        .map((s) => ({ ...s, remaining: Math.max(s.total_visits - s.completed - s.cancelled, 0) }))
         .sort((a, b) => a.package_name.localeCompare(b.package_name));
 
       return buildResult(
@@ -376,6 +385,7 @@ export const SERVICE_REPORTS: PrebuiltReportDef[] = [
           col("package_name", "Package"),
           col("total_visits", "Total Visits", "number", false),
           col("completed", "Completed", "number", false),
+          col("cancelled", "Cancelled", "number", false),
           col("remaining", "Remaining", "number", false),
           col("first_date", "First Visit", "date"),
           col("last_date", "Last Visit", "date"),

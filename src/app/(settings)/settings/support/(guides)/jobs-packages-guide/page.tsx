@@ -162,6 +162,15 @@ export default function JobsPackagesGuidePage() {
           Until a package job&apos;s recurring dates are actually set, it behaves like a Waiting List
           job — no fixed date, only a range — and surfaces on the Waiting List page the same way.
         </p>
+        <p>
+          The <strong>Package Summary Report</strong> tracks progress per package job by counting{" "}
+          <em>visits</em>, not jobs: Total Visits is every visit on the job (cancelled ones
+          included), Completed and Cancelled are counted by visit status, and Remaining is Total −
+          Completed − Cancelled — so a cancelled visit reduces what is left to deliver rather than
+          sitting in Remaining forever. Earned revenue is completed visits × the per-visit amount;
+          Pending is the job total minus Earned, which means a package job with no visits generated
+          yet shows as entirely Pending.
+        </p>
       </Section>
 
       <Section id="projects" title="Projects (Landscapt vs. Equipt/PO)">

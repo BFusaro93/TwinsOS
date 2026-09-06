@@ -109,10 +109,10 @@ export default function UsersRolesGuidePage() {
         <Callout>
           <strong>The role descriptions in Settings → Users → Roles also adapt to your plan.</strong>{" "}
           Admin, Manager, Viewer, and Crew exist regardless of which module(s) you have, but the
-          permission bullets under each one are filtered to what your org's plan actually includes —
-          a Landscapt-only org won't see work-order or purchase-order bullets under Admin/Manager,
-          and an Equipt-only org won't see client/estimate/dispatch bullets. Nothing about the
-          underlying role or its real access changes — this only cleans up what's displayed.
+          permission bullets under each one are filtered to what your org&apos;s plan actually includes —
+          a Landscapt-only org won&apos;t see work-order or purchase-order bullets under Admin/Manager,
+          and an Equipt-only org won&apos;t see client/estimate/dispatch bullets. Nothing about the
+          underlying role or its real access changes — this only cleans up what&apos;s displayed.
         </Callout>
       </Section>
 
@@ -184,6 +184,34 @@ export default function UsersRolesGuidePage() {
           every CRM permission check passes automatically — an Admin never needs a{" "}
           <code>crm_employees</code> link or a CRM role assigned.
         </Callout>
+        <p>
+          <strong>Report permissions</strong> live on the role editor&apos;s Reports tab and work
+          in two layers, both enforced server-side:
+        </p>
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            <strong>View Report Center</strong> (Home &gt; Report Access) is the front door. It is
+            required to open the Report Center, and — as of the latest reporting changes — to
+            run or save a custom analysis, open a saved report, view a Custom Dashboard, or use the
+            Graphics Library. <strong>Manage Report Center</strong> additionally allows building
+            those and editing the KPI Scorecard.
+          </li>
+          <li>
+            <strong>Individual report keys</strong> under CRM Reports, Scheduling Reports, and
+            Accounting Reports each unlock one pre-built report by name (Client Balance, Job Cost
+            Summary, A/R Aging Report, …). The same keys also gate the raw datasets behind custom
+            analyses and dashboard panels, so a role that can&apos;t see a payroll or accounting
+            report can&apos;t rebuild it ad hoc either: <strong>Employees</strong> needs Employee
+            Directory; <strong>Timesheets</strong> needs Job Hours Summary or Employee Directory;{" "}
+            <strong>Invoices</strong> and <strong>Invoice Line Items</strong> need Invoiced Income
+            by Client, Invoices with Balances, or A/R Aging Report; <strong>Payments</strong> needs
+            Payment Audit Summary or one of those three; <strong>Estimates</strong> and{" "}
+            <strong>Estimate Line Items</strong> need View Estimates, Estimates by Stage, or Won
+            Estimates by Service. A dashboard panel the user can&apos;t query shows &quot;You
+            don&apos;t have permission to view this panel&quot; rather than failing the whole
+            dashboard.
+          </li>
+        </ul>
       </Section>
 
       <Section id="inviting" title="Inviting a new user">

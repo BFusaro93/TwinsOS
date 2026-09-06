@@ -28,7 +28,7 @@ const DATASETS = [
   "Job Services (Production Rate Accuracy)", "Invoices", "Invoice Line Items",
   "Payments", "Estimates", "Estimate Line Items", "Contracts", "Timesheets",
   "Employees", "Services", "Vendors", "Products", "Chemical Applications",
-  "Projects — WIP Schedule",
+  "Projects — WIP Schedule", "Sales Rep — Current Month", "Contract Service Usage",
 ];
 
 const CURATED_DASHBOARDS: [string, string, string][] = [
@@ -60,12 +60,13 @@ export default function ReportCenterGuidePage() {
           <TOCLink href="#report-center">The Report Center tab</TOCLink>
           <TOCLink href="#how-a-report-runs">How a report actually runs</TOCLink>
           <TOCLink href="#worked-example">Worked example: Production Rate Accuracy</TOCLink>
+          <TOCLink href="#dates-and-limits">Date ranges, Eastern time, and large results</TOCLink>
           <TOCLink href="#custom-analysis">Custom analyses (&quot;My Reports&quot;)</TOCLink>
           <TOCLink href="#dashboards-vs-reports">Dashboards vs. individual reports</TOCLink>
           <TOCLink href="#curated-dashboards">The curated, top-level dashboards</TOCLink>
           <TOCLink href="#kpi-scorecard">The KPI Scorecard</TOCLink>
           <TOCLink href="#company-report">The Company Report</TOCLink>
-          <TOCLink href="#export">Exporting and printing</TOCLink>
+          <TOCLink href="#export">Exporting, printing, and scheduled delivery</TOCLink>
           <TOCLink href="#permissions">Permissions and gating</TOCLink>
         </div>
       </div>
@@ -84,9 +85,9 @@ export default function ReportCenterGuidePage() {
           The CRM admin sidebar has a <strong>Reports</strong> link that points to{" "}
           <code>/crm/admin/reports</code>. That route renders a single client component,{" "}
           <code>ReportsHub</code>, which is a
-          four-tab shell driven by a <code>?tab=</code> query param — <strong>Dashboard</strong>,{" "}
-          <strong>Custom Dashboards</strong>, <strong>Report Center</strong>, and{" "}
-          <strong>My Reports</strong>. This is the &quot;Report
+          five-tab shell driven by a <code>?tab=</code> query param — <strong>Dashboard</strong>,{" "}
+          <strong>Custom Dashboards</strong>, <strong>Report Center</strong>,{" "}
+          <strong>My Reports</strong>, and <strong>Graphics Library</strong>. This is the &quot;Report
           Center&quot; proper. It&apos;s a separate thing from the top-level{" "}
           <code>/dashboards</code> route group covered below — that one is reached from its own
           sidebar (<code>ReportsSidebar</code>) and holds a set of hand-built, curated
@@ -158,7 +159,13 @@ export default function ReportCenterGuidePage() {
             Costing Report and COGS Report) are really
             pointers to an existing standalone page under <code>/crm/reports/*</code> — the
             catalog entry exists so they&apos;re searchable and appear in the same list, but{" "}
-            <code>ReportViewer</code> just redirects (<code>LinkOutCard</code>).
+            <code>ReportViewer</code> just redirects (<code>LinkOutCard</code>). Job Costing and
+            COGS share one loader (<code>src/lib/visit-costing.ts</code>) whose unit of analysis
+            is a <strong>completed visit</strong> in the date window: revenue is the visit&apos;s
+            service rate, labor is the crew&apos;s clock-out labor cost or — when nobody clocked out
+            — an estimate of man-hours × the crew&apos;s labor burden rate (marked with a dagger,
+            †), materials are the job materials logged against the visit, and a multi-service
+            visit is split across its services by man-hour share.
           </li>
         </ul>
         <p>
@@ -170,7 +177,7 @@ export default function ReportCenterGuidePage() {
           <code>useRunReport</code>.
         </p>
         <p>
-          Every declarative report reads from one of <strong>19 named datasets</strong> defined
+          Every declarative report reads from one of <strong>21 named datasets</strong> defined
           in <code>REPORT_DATASETS</code>, each a
           flat, pre-joined view over the underlying tables (columns, types, and — for
           enum-like text columns — a fixed option list). The full set:
@@ -197,13 +204,16 @@ export default function ReportCenterGuidePage() {
             Month, Last 30/90 Days, This Year, All Time, or Custom) recomputes the{" "}
             <code>from</code>/<code>to</code> window client-side
             (<code>computePresetRange</code>) and re-runs the
-            query.
+            query. <strong>All Time</strong> sends an explicitly unbounded range — it really means
+            every row, not a silent fallback to This Month.
           </li>
           <li>
             Under the hood, its <code>analysis()</code> builds a query against the{" "}
             <code>rpt_job_services</code> dataset, filtered to{" "}
             <code>budget_method = &quot;production_rate&quot;</code> and{" "}
-            <code>job_status = &quot;completed&quot;</code>, plus the date-range filter on{" "}
+            <code>visit_status = &quot;completed&quot;</code> — the <em>visit&apos;s</em> status,
+            so a recurring job&apos;s not-yet-done visits stay out even once the job itself is
+            marked complete — plus the date-range filter on{" "}
             <code>scheduled_date</code>. It pulls columns like scheduled date, client, service
             name, quantity/unit, assumed vs. actual production rate, rate variance (in basis
             points), budgeted vs. actual hours, and crew size — sorted ascending by{" "}
@@ -223,6 +233,40 @@ export default function ReportCenterGuidePage() {
         </Callout>
       </Section>
 
+      <Section id="dates-and-limits" title="Date ranges, Eastern time, and large results">
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            <strong>Everything is Eastern time.</strong> Every date and time a report evaluates —
+            the relative presets (Today, Yesterday, Month to Date, Year to Date), a custom
+            From/To pair, a bare date typed into a filter — is interpreted on America/New_York
+            calendar days. A filter on a single date matches the whole Eastern day, and a visit
+            completed at 11:30 PM Eastern lands on that day, not the next UTC day. Scheduled PDFs
+            format their times in Eastern as well.
+          </li>
+          <li>
+            <strong>&quot;All Time&quot; means all time.</strong> Picking All Time in a date-range
+            filter (or clearing both From and To) sends an explicitly unbounded window. It used
+            to quietly run the report&apos;s default preset instead.
+          </li>
+          <li>
+            <strong>Large results are truncated, and say so.</strong> The engine returns at most
+            5,000 rows. When a report or panel matches more than that, a banner reads
+            &quot;Showing the first N of M rows&quot; and the totals row covers{" "}
+            <em>only the returned rows</em> — narrow the date range or add a filter to get a
+            complete total.
+          </li>
+          <li>
+            <strong>Group subtotals cover the whole result</strong>, not just the rows on the
+            page you are looking at, so the on-screen subtotal for a crew or client matches the
+            PDF.
+          </li>
+          <li>
+            <strong>Exports carry the totals row.</strong> CSV, Excel, and PDF downloads end with
+            the same Totals row the on-screen table shows.
+          </li>
+        </ul>
+      </Section>
+
       <Section id="custom-analysis" title='Custom analyses ("My Reports")'>
         <p>
           The <strong>My Reports</strong> tab (<code>MyReportsList</code>) lists
@@ -235,6 +279,32 @@ export default function ReportCenterGuidePage() {
           in a definitions file, and it&apos;s persisted (name + description + config) rather
           than shipped in the registry. It executes through the identical{" "}
           <code>crm_run_report</code> RPC path.
+        </p>
+        <p>
+          A few dataset columns exist specifically so a custom analysis can apply the same rules
+          the pre-built reports do (see the{" "}
+          <a href="/settings/support/reports-reference-guide" className="font-semibold underline">
+            Reports Reference guide
+          </a>{" "}
+          for the rules themselves):
+        </p>
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            <strong>Invoices</strong> and <strong>Invoice Line Items</strong> — an{" "}
+            <strong>Issued (not draft/void)</strong> boolean (&quot;Is Issued&quot;). Filter on it
+            for any revenue or receivables figure; the pre-built reports do.
+          </li>
+          <li>
+            <strong>Payments</strong> — <strong>Cash Received (not credit/write-off)</strong>{" "}
+            (&quot;Is Cash&quot;), <strong>Account Credit</strong> (&quot;Is Credit&quot;),{" "}
+            <strong>Net Amount (after refunds)</strong>, and <strong>Processing Fee</strong>. A
+            &quot;Collected&quot; number should filter Is Cash = true and sum Net Amount.
+          </li>
+        </ul>
+        <p>
+          Saving or running a custom analysis requires the <strong>View Report Center</strong>{" "}
+          permission, and some datasets additionally require a report permission — see{" "}
+          <a href="#permissions" className="font-semibold underline">Permissions and gating</a>.
         </p>
       </Section>
 
@@ -257,6 +327,22 @@ export default function ReportCenterGuidePage() {
           dashboard is reachable through either the Report Center&apos;s own tab or the top-level
           Dashboards sidebar, both pointing at the same underlying record and{" "}
           <code>useDashboards()</code> query.
+        </p>
+        <p>
+          <strong>Panel dates.</strong> A tab can carry a shared date picker, and each panel
+          chooses whether to follow it. A panel can instead pin its own relative window —{" "}
+          <strong>Filter to today</strong>, <strong>Filter to yesterday</strong>,{" "}
+          <strong>Month to date</strong>, or <strong>Year to date</strong> — computed in Eastern
+          time every time the dashboard loads. The seeded templates use this for their annual
+          gauges: &quot;Invoiced Revenue (YTD)&quot;, &quot;New Leads YTD&quot;, and &quot;New
+          Clients / Converted Leads YTD&quot; are true January-1-to-today figures and{" "}
+          <em>do not</em> move when you change the tab&apos;s date picker, so the gauge maximum
+          keeps meaning an annual target.
+        </p>
+        <p>
+          A panel whose dataset the signed-in user isn&apos;t allowed to query renders &quot;You
+          don&apos;t have permission to view this panel&quot; in place of the chart — see{" "}
+          <a href="#permissions" className="font-semibold underline">Permissions and gating</a>.
         </p>
       </Section>
 
@@ -311,7 +397,9 @@ export default function ReportCenterGuidePage() {
             <strong>Auto</strong> — computed live from Landscapt data every time the page loads
             (invoices, payments, jobs, visits, timesheets, estimates, clients, employees, tickets).
             Nothing is cached, so the number is never stale. Hover the <em>auto</em> badge for the
-            exact definition. A dash means there was nothing to compute from for that year — for
+            exact definition. Revenue metrics count issued invoices only (no drafts or voids), and
+            Cash Collected counts cash payments only — no account credits or AR write-offs, net of
+            refunds. A dash means there was nothing to compute from for that year — for
             example Revenue (Sold) needs jobs with a Date Sold, and Maintenance Retention needs
             recurring or package jobs that existed before January&nbsp;1.
           </li>
@@ -421,7 +509,7 @@ export default function ReportCenterGuidePage() {
         </p>
       </Section>
 
-      <Section id="export" title="Exporting and printing">
+      <Section id="export" title="Exporting, printing, and scheduled delivery">
         <p>
           Every pre-built report and custom analysis runs through the same viewer chrome
           (<code>PrebuiltReportRunner</code>), which offers four
@@ -433,11 +521,21 @@ export default function ReportCenterGuidePage() {
           <li><strong>PDF</strong> — <code>exportReportPDF</code>, backed by <code>/api/crm/reports/export/pdf</code>.</li>
           <li><strong>Print</strong> — a plain <code>window.print()</code> call; the filter bar and page header carry a <code>print:hidden</code> class so only the table prints.</li>
         </ul>
-        <Callout>
-          No scheduled or emailed reports were found anywhere in the codebase — every export
-          action found is a manual, on-demand download or browser print triggered from the
-          viewer. If recurring/emailed report delivery exists, it isn&apos;t wired up here.
-        </Callout>
+        <p>
+          All three downloads end with a <strong>Totals</strong> row matching the one on screen
+          (per-group subtotals for grouped reports). If the on-screen result was truncated at
+          5,000 rows, the export is too — and its totals cover only those rows.
+        </p>
+        <p>
+          <strong>Scheduled delivery.</strong> Reports flagged as schedulable — currently the five
+          fixed-window <em>Actual v. Budgeted Hours</em> reports (Today, Yesterday, Week to Date,
+          Last Week, Month to Date) — show a <strong>Schedule</strong> button in the viewer. It
+          sets up daily email delivery of that report as a PDF: enter one or more recipient
+          addresses and pick a <strong>Send time</strong> (an hour of the day, Eastern). An hourly
+          job delivers each schedule on the <strong>first run at or after its scheduled hour</strong>{" "}
+          — so a 7 AM schedule goes out on the 7 AM run, or the 8 AM run if the 7 AM one fired late
+          — and never twice in the same day. Times inside the PDF are formatted in Eastern.
+        </p>
       </Section>
 
       <Section id="permissions" title="Permissions and gating">
@@ -483,11 +581,48 @@ export default function ReportCenterGuidePage() {
           layout (see the KPI Scorecard section above).
         </p>
         <p>
-          No per-report role or per-report visibility list was found — every report in{" "}
-          <code>ALL_REPORTS</code> is visible to any authenticated user who can reach{" "}
-          <code>/crm/admin/reports</code> (the CRM sidebar &quot;Reports&quot; link itself has no
-          role check beyond ordinary CRM access). Row-level data scoping still applies through
-          Supabase RLS on whatever tables <code>crm_run_report</code> reads.
+          On top of that, CRM role permissions (CRM Settings &gt; Roles, Reports tab) gate the
+          Report Center itself, and they are enforced server-side, not just hidden in the UI:
+        </p>
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            <strong>View Report Center</strong> is required for custom analyses, saved reports
+            (&quot;My Reports&quot;), Custom Dashboards, and the Graphics Library. Without it the
+            API returns 403 regardless of what the sidebar shows.
+          </li>
+          <li>
+            <strong>Per-report keys.</strong> Most pre-built reports map to a permission of the
+            same name in the role editor&apos;s CRM Reports, Scheduling Reports, and Accounting
+            Reports sections (<code>REPORT_PERMISSION_KEYS</code> in{" "}
+            <code>src/lib/reports/report-permissions.ts</code>). A report with no entry there is
+            visible to anyone who can reach the Report Center.
+          </li>
+          <li>
+            <strong>Per-dataset keys for ad-hoc queries.</strong> Because base-table RLS is
+            org-wide rather than role-aware, a custom analysis or dashboard panel over a sensitive
+            dataset also requires the matching report permission — otherwise anyone with View
+            Report Center could pull pay rates or invoice history a role was meant to hide
+            (<code>DATASET_PERMISSION_KEYS</code>). Any one of the listed permissions is enough:
+            <ul className="mt-2 list-disc space-y-1 pl-5">
+              <li><strong>Employees</strong> — Employee Directory.</li>
+              <li><strong>Timesheets</strong> — Job Hours Summary or Employee Directory.</li>
+              <li><strong>Invoices</strong> and <strong>Invoice Line Items</strong> — Invoiced Income by Client, Invoices with Balances, or A/R Aging Report.</li>
+              <li><strong>Payments</strong> — Payment Audit Summary, or any of the three invoice permissions above.</li>
+              <li><strong>Estimates</strong> and <strong>Estimate Line Items</strong> — View Estimates, Estimates by Stage, or Won Estimates by Service.</li>
+            </ul>
+            Every other dataset (clients, jobs, visits, services, products, vendors, contracts,
+            chemicals, WIP, sales-rep month, contract usage) is gated only by View Report Center.
+          </li>
+          <li>
+            A dashboard panel the signed-in user can&apos;t query is not an error state — it
+            renders &quot;You don&apos;t have permission to view this panel&quot; and the rest of
+            the dashboard loads normally. Org Admins bypass CRM role checks entirely.
+          </li>
+        </ul>
+        <p>
+          Row-level data scoping still applies through Supabase RLS on whatever tables{" "}
+          <code>crm_run_report</code> reads — permissions decide which reports and datasets a role
+          may run; RLS decides which org&apos;s rows come back.
         </p>
       </Section>
     </DocsFontScope>

@@ -29,6 +29,11 @@ const STATUS_ROWS: [string, string, string][] = [
     "Set manually, and only after a cancellation reason is picked.",
     "Read-only for scheduling and invoicing going forward. History stays intact for churn reporting.",
   ],
+  [
+    "Lost",
+    "A Lead closed without converting — via Close as Lost on the Leads list, or when the client declines an estimate in the portal.",
+    "Still a lead, not a client: it never appears in client counts or Client Since reporting, and shows up in the Closed Leads Summary instead.",
+  ],
 ];
 
 const CONTACT_TYPES = [
@@ -67,6 +72,7 @@ export default function ClientsGuidePage() {
         <div className="flex flex-col gap-1">
           <TOCLink href="#creating-a-client">Creating a client</TOCLink>
           <TOCLink href="#status">Client status &amp; the Lead-to-Client transition</TOCLink>
+          <TOCLink href="#client-since">Client Since, and how leads are counted</TOCLink>
           <TOCLink href="#hierarchy">Commercial parent/child hierarchy</TOCLink>
           <TOCLink href="#properties">Properties</TOCLink>
           <TOCLink href="#custom-fields">Custom Fields &amp; zone measurements</TOCLink>
@@ -104,11 +110,12 @@ export default function ClientsGuidePage() {
           Every client has exactly one status. There is no separate &quot;lead&quot; object or
           conversion record anywhere in the schema — <strong>a Lead is a client whose status field
           happens to say &quot;Lead.&quot;</strong> Converting a lead to a client is nothing more
-          than changing that one field to Active. Everything else — the display name, contacts,
-          properties, custom fields, activity history already on the record — carries straight
-          through untouched. This is also why the Zapier &quot;Lead Converted to Client&quot;
-          trigger (see the Zapier guide) is really just watching for a status change to
-          &quot;active,&quot; not a distinct event type.
+          than changing that one field to Active (which also stamps the record&apos;s{" "}
+          <strong>Client Since</strong> date — see below). Everything else — the display name,
+          contacts, properties, custom fields, activity history already on the record — carries
+          straight through untouched. This is also why the Zapier &quot;Lead Converted to
+          Client&quot; trigger (see the Zapier guide) is really just watching for a status change
+          to &quot;active,&quot; not a distinct event type.
         </p>
         <Table>
           <thead>
@@ -144,6 +151,41 @@ export default function ClientsGuidePage() {
         </Callout>
       </Section>
 
+      <Section id="client-since" title="Client Since, and how leads are counted">
+        <p>
+          <strong>Client Since</strong> is the date a lead became a client — not the date the
+          record was created. It is set automatically the moment a lead converts: clicking{" "}
+          <strong>Convert</strong>, or changing a Lead&apos;s status to Active in Edit. A record
+          created directly as an Active client gets its creation date. Leads — open or Lost —
+          have no Client Since at all, which is what lets reports tell &quot;when did we first
+          hear from them&quot; (created date) apart from &quot;when did they start paying
+          us&quot; (Client Since).
+        </p>
+        <p>The lead and client reports lean on exactly that split:</p>
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            <strong>New Leads</strong> figures (Company Scorecard, Clients/Leads Monthly Matrix,
+            the dashboard gauges) count every account <em>created</em> in the window, whatever its
+            status is today — a lead that converted the same week still counts as a new lead that
+            week.
+          </li>
+          <li>
+            <strong>New Clients / Converted</strong> figures use Client Since, so a lead created in
+            March and converted in May is a May client.
+          </li>
+          <li>
+            <strong>Closed Leads</strong> means leads with status <strong>Lost</strong>. A lost lead
+            is never counted as a client anywhere — client totals are Active + Inactive +
+            Cancelled only.
+          </li>
+        </ul>
+        <Callout>
+          The Clients list can filter and sort by <strong>Client Since Date</strong>; the Leads
+          list shows a &quot;Date added&quot; column instead — the day the lead was created — since
+          a lead has nothing to put in Client Since yet.
+        </Callout>
+      </Section>
+
       <Section id="hierarchy" title="Commercial parent/child hierarchy">
         <p>
           Commercial clients can be nested under a property-manager parent using{" "}
@@ -159,6 +201,14 @@ export default function ClientsGuidePage() {
           balance <em>plus</em> the sum of every child&apos;s outstanding balance — not just the
           children&apos;s total — so the number on the banner always reflects everything owed across
           the whole account family, including the parent record itself if it carries its own charges.
+        </p>
+        <p>
+          &quot;Outstanding balance&quot; here means the client&apos;s <strong>Account
+          Balance</strong>: the unpaid portion of <em>issued</em> invoices only. Draft invoices —
+          auto-generated from completed visits but not yet printed or sent — are deliberately left
+          out and shown as a separate <strong>Uninvoiced</strong> line on the client header, which
+          links to those drafts. The same rule applies to every balance, receivables, and revenue
+          figure in the Report Center; drafts appear only on the Income Not Invoiced report.
         </p>
         <p>
           <strong>Worked example.</strong> A property management company, &quot;Ridgeline

@@ -121,6 +121,17 @@ export default function InvoicingGuidePage() {
           Draft, Paid, and Void invoices are never shown as Overdue no matter how old their due date
           gets.
         </p>
+        <Callout>
+          <strong>Only issued invoices count.</strong> An invoice is &quot;issued&quot; once it has
+          left Draft and isn&apos;t Void — Sent, Viewed, Partial, Paid, or printed. Draft and Void
+          invoices are excluded from every revenue and receivables report, dashboard, and KPI
+          (Invoiced Revenue, A/R Aging, Invoices with Balances, Sales Tax, P&amp;L, and so on), and
+          from a client&apos;s <strong>Account Balance</strong> — the client header shows drafts
+          separately as the <strong>Uninvoiced</strong> line instead. The one place drafts appear
+          in reporting is the <strong>Income Not Invoiced</strong> report, which exists to list
+          them. Practically: a completed visit isn&apos;t revenue on the books until you print or
+          send its invoice.
+        </Callout>
       </Section>
 
       <Section id="recording-payments" title="Recording payments">
@@ -146,6 +157,16 @@ export default function InvoicingGuidePage() {
             ))}
           </tbody>
         </Table>
+        <p>
+          <strong>What counts as &quot;collected.&quot;</strong> Payment reports and every
+          &quot;Collected&quot; or &quot;Payments&quot; figure (Payment Audit Summary, Invoices
+          and Payments, P&amp;L Cash Basis, the Cash Collected KPI, dashboard gauges) count only{" "}
+          <em>cash</em> payments: an <strong>AR Write-off</strong> zeroes a balance without money
+          changing hands, so it is excluded, and so are account credits applied from a previous
+          overpayment. Amounts are also net of refunds — a $500 card payment refunded $100 counts
+          as $400 collected. In the Custom Analysis builder the Payments dataset exposes this as
+          the Cash Received, Account Credit, and Net Amount (after refunds) columns.
+        </p>
         <p>
           Whatever portion of a payment isn&apos;t allocated to an invoice is tracked as unused —
           available later as a credit rather than lost. Applying (or un-applying, if a payment gets

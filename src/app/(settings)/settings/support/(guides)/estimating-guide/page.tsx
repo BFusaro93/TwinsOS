@@ -9,11 +9,11 @@ import {
 } from "@/components/docs/DocsBrand";
 
 const STAGES: [string, string][] = [
-  ["Draft", "Default stage for a brand-new estimate. Still being built — line items and pricing are in flux."],
+  ["Draft", "Default stage for a brand-new estimate. Still being built — line items and pricing are in flux. Drafts were never presented to a client, so Close Ratios and win-rate figures leave them out of both counts and amounts."],
   ["Quote", "Set manually once the estimate is ready for internal review — the numbers are considered final pending sign-off."],
-  ["Sent", "Set when the estimate is actually delivered to the client (email, PDF, or the client portal). Blocked from actually going out if Approval Status is still Pending — see the callout below."],
+  ["Sent", "Set when the estimate is actually delivered to the client (email, PDF, or the client portal). Blocked from actually going out if Approval Status is still Pending — see the callout below. Pipeline dashboards count Sent estimates as open pipeline alongside Draft and Quote."],
   ["Accepted", "Set when the client accepts — in full or via a tiered/partial acceptance. Converting to a job normally happens from here."],
-  ["Lost", "Set when the client declines, or when an estimate is manually marked dead. Line items already marked “lost” individually (e.g. a rejected tier) don’t count toward totals."],
+  ["Lost", "Set when the client declines — including a Decline in the client portal, which records the reason “Declined by client via portal” — or when an estimate is manually marked dead. Line items already marked “lost” individually (e.g. a tier the client unchecked when accepting) don’t count toward totals, and the Accepted Estimates by Service reports skip them."],
   ["Invoiced", "Set once billing has started against the estimate (a deposit, milestone, or the full amount has been invoiced)."],
 ];
 
