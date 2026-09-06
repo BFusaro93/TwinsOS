@@ -49,8 +49,15 @@ const PAGE_SIZE = 1000;
 
 const ISSUED_INVOICE_STATUSES = ["printed", "sent", "viewed", "partial", "paid", "overdue"];
 const AR_WRITE_OFF_METHOD = "AR Write-off";
-const OPEN_ESTIMATE_STAGES = ["quote", "sent", "approved"];
-const WON_ESTIMATE_STAGES = ["won", "invoiced"];
+// Stage keys are the app's real system stages (crm_estimate_stages /
+// use-estimate-stages.ts) — draft, quote, sent, accepted, lost, invoiced.
+// There is no "won" or "approved" stage; "accepted" is won. Matches every
+// other "won" filter in the codebase (dashboard-templates.ts,
+// graphic-templates.ts, definitions/estimates.ts). "Open" = not yet decided
+// either way — draft, quote, or sent — matching the original SA report,
+// which counted both "Estimate Sent" and "Estimate Drafted" as open pipeline.
+const OPEN_ESTIMATE_STAGES = ["draft", "quote", "sent"];
+const WON_ESTIMATE_STAGES = ["accepted", "invoiced"];
 
 function issuedInvoiceFilter(): AnalysisFilter[] {
   return [{ column: "status", op: "in", value: ISSUED_INVOICE_STATUSES }];
@@ -447,7 +454,10 @@ async function computeTickets(supabase: Client, now: Date): Promise<TicketBreakd
       .from("crm_tickets")
       .select("category, assigned_to, due_date")
       .is("deleted_at", null)
-      .is("closed_at", null)
+      // Rely on status, not closed_at: a handful of tickets on prod are
+      // status='closed' with closed_at never stamped, which is_("closed_at",
+      // null) would wrongly count as still open.
+      .neq("status", "closed")
       .order("created_at", { ascending: true })
       .range(from, to)
   );

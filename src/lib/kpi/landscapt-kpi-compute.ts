@@ -601,7 +601,9 @@ async function computeTickets(supabase: Client, w: YearWindow): Promise<Values> 
       .from("crm_tickets")
       .select("id", { count: "exact", head: true })
       .is("deleted_at", null)
-      .is("closed_at", null),
+      // status is authoritative, not closed_at: a few tickets are
+      // status='closed' with closed_at never stamped.
+      .neq("status", "closed"),
   ]);
   if (open.error) throw new Error(open.error.message);
 
