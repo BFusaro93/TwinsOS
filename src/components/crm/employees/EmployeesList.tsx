@@ -43,6 +43,7 @@ import { MasterDetailLayout } from "@/components/shared/MasterDetailLayout";
 import { PermissionGate } from "@/components/shared/PermissionGate";
 import { usePermissions } from "@/lib/hooks/use-permissions";
 import { PhoneInput } from "@/components/shared/PhoneInput";
+import { CurrencyInput } from "@/components/shared/CurrencyInput";
 import { toast } from "sonner";
 import type { CRMEmployee, EmploymentStatus, UserType } from "@/types/crm-employees";
 
@@ -333,16 +334,16 @@ function PayrollTab({
           <div className="space-y-2.5 p-4">
             <PermissionGate permission="payroll_show_pay_rate">
               <Field label="Hourly Rate ($)">
-                <FieldInput type="number" step="0.01" min="0"
-                  value={form.hourly_rate_cents != null ? (form.hourly_rate_cents / 100).toFixed(2) : "0.00"}
-                  onChange={(e) => onChange("hourly_rate_cents", Math.round(parseFloat(e.target.value || "0") * 100))}
+                <CurrencyInput
+                  cents={form.hourly_rate_cents ?? 0}
+                  onChange={(cents) => onChange("hourly_rate_cents", cents)}
                   className="h-8 w-28 text-sm"
                 />
               </Field>
               <Field label="Overtime Rate ($)">
-                <FieldInput type="number" step="0.01" min="0"
-                  value={form.overtime_rate_cents != null ? (form.overtime_rate_cents / 100).toFixed(2) : "0.00"}
-                  onChange={(e) => onChange("overtime_rate_cents", Math.round(parseFloat(e.target.value || "0") * 100))}
+                <CurrencyInput
+                  cents={form.overtime_rate_cents ?? 0}
+                  onChange={(cents) => onChange("overtime_rate_cents", cents)}
                   className="h-8 w-28 text-sm"
                 />
               </Field>
@@ -397,11 +398,11 @@ function PayrollTab({
             </Select>
           </Field>
           <Field label="Last Pay Raise ($)">
-            <FieldInput type="number" step="0.01" min="0"
-              value={form.last_pay_raise_cents != null ? (form.last_pay_raise_cents / 100).toFixed(2) : "0.00"}
-              onChange={(e) => onChange("last_pay_raise_cents", Math.round(parseFloat(e.target.value || "0") * 100))}
-              className="h-8 w-28 text-sm"
-            />
+            <CurrencyInput
+                  cents={form.last_pay_raise_cents ?? 0}
+                  onChange={(cents) => onChange("last_pay_raise_cents", cents)}
+                  className="h-8 w-28 text-sm"
+                />
           </Field>
           <Field label="Last Pay Raise Date">
             <FieldInput type="date" value={form.last_pay_raise_date ?? ""} onChange={(e) => onChange("last_pay_raise_date", e.target.value)} />
@@ -423,8 +424,7 @@ function SalesGoalsTab({
 }) {
   const goals: Record<string, number> = form.sales_goals ?? {};
 
-  function setGoal(month: string, dollars: string) {
-    const cents = Math.round(parseFloat(dollars || "0") * 100);
+  function setGoal(month: string, cents: number) {
     onChange("sales_goals", { ...goals, [month]: cents || undefined });
   }
 
@@ -434,13 +434,10 @@ function SalesGoalsTab({
       <div className="grid grid-cols-4 gap-4 p-4">
         {MONTH_KEYS.map((month, i) => (
           <Field key={month} label={MONTH_LABELS[i]}>
-            <FieldInput
-              type="number"
-              step="0.01"
-              min="0"
-              value={goals[month] != null ? (goals[month] / 100).toFixed(2) : ""}
-              onChange={(e) => setGoal(month, e.target.value)}
-              placeholder="0.00"
+            <CurrencyInput
+              cents={goals[month] ?? 0}
+              blankWhenZero
+              onChange={(cents) => setGoal(month, cents)}
               className="h-8 w-28 text-sm"
             />
           </Field>

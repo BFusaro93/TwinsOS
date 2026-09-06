@@ -13,6 +13,7 @@ import {
   useSetInvoiceLock,
   useAssignInvoiceNumber,
   useDeleteInvoice,
+  LINE_ITEM_MUTATION_KEY,
   useVoidInvoice,
 } from "@/lib/hooks/use-invoices";
 import { useCRMServices } from "@/lib/hooks/use-crm-jobs";
@@ -47,6 +48,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn, formatCurrency } from "@/lib/utils";
+import { parseCurrencyToCents } from "@/components/shared/CurrencyInput";
 import { Plus, Trash2, Save, DollarSign, CreditCard, ChevronDown, Mail, Printer, Lock, Unlock, Search, MoreVertical, Ban } from "lucide-react";
 import { toast } from "sonner";
 import type { InvoiceStatus, InvoiceLineItem, PaymentMethod, CRMPayment } from "@/types/crm-invoices";
@@ -94,6 +96,9 @@ const METHODS: { value: PaymentMethod; label: string }[] = [
   { value: "ACH/E-Check",              label: "ACH / E-Check" },
   { value: "AutoPay",                  label: "AutoPay" },
   { value: "Other",                    label: "Other" },
+  // Non-cash: reduces the invoice balance without any money received.
+  // Excluded from cash-basis reporting (rpt_payments.is_cash = false).
+  { value: "AR Write-off",             label: "AR Write-off (non-cash)" },
 ];
 
 function todayStr() {
@@ -186,6 +191,10 @@ function LineItemRow({
   const [row, setRow] = useState(item);
   const [dirty, setDirty] = useState(false);
   const [rateStr, setRateStr] = useState(() => (item.rateCents / 100).toFixed(2));
+  // Bumped on every keystroke. A save that started BEFORE later edits must not
+  // clear `dirty` when it lands (that let the refetch-sync effect below wipe a
+  // rate the user was still typing — D-15's "typed values lost").
+  const editSeq = useRef(0);
   const { mutateAsync: upsert, isPending } = useUpsertInvoiceLineItem();
   const { mutateAsync: remove, isPending: removing } = useDeleteInvoiceLineItem();
 
@@ -208,7 +217,13 @@ function LineItemRow({
       n.discountCents = Math.min(n.discountCents, n.totalCents);
       return n;
     });
+    editSeq.current += 1;
     setDirty(true);
+  }
+
+  /** Clear `dirty` only if no further edits happened while the save was in flight. */
+  function settleIfUnchanged(seqAtSave: number) {
+    if (editSeq.current === seqAtSave) setDirty(false);
   }
 
   function buildUpsertPayload(r: InvoiceLineItem) {
@@ -244,16 +259,18 @@ function LineItemRow({
 
   async function save() {
     if (!dirty) return;
+    const seq = editSeq.current;
     try {
       await upsert({ invoiceId, item: buildUpsertPayload(row) });
-      setDirty(false);
+      settleIfUnchanged(seq);
     } catch { toast.error("Save failed"); }
   }
 
   async function saveRow(r: InvoiceLineItem) {
+    const seq = editSeq.current;
     try {
       await upsert({ invoiceId, item: buildUpsertPayload(r) });
-      setDirty(false);
+      settleIfUnchanged(seq);
     } catch { toast.error("Save failed"); }
   }
 
@@ -375,9 +392,15 @@ function LineItemRow({
           type="text"
           inputMode="decimal"
           value={rateStr}
-          onChange={(e) => setRateStr(e.target.value)}
+          onChange={(e) => {
+            setRateStr(e.target.value);
+            // Typing a rate is an edit too — without this, a sibling save
+            // finishing mid-keystroke re-synced the row and wiped the rate.
+            editSeq.current += 1;
+            setDirty(true);
+          }}
           onBlur={() => {
-            const cents = Math.round((parseFloat(rateStr) || 0) * 100);
+            const cents = parseCurrencyToCents(rateStr);
             setRateStr((cents / 100).toFixed(2));
             const totalCents = Math.round(row.qty * cents);
             const updated = { ...row, rateCents: cents, totalCents, discountCents: Math.min(row.discountCents, totalCents) };
@@ -447,14 +470,36 @@ function RecordPaymentDialog({
   const [ref, setRef] = useState("");
   const { mutateAsync: record, isPending } = useRecordPayment();
 
+  const amountCents = parseCurrencyToCents(amount);
+  // Never apply more than the invoice is owed (D-18: an $80 check on a $55
+  // invoice used to apply all $80 and lose the $25). The overage stays on
+  // the payment as unused credit on the client's account.
+  const appliedCents = Math.min(amountCents, Math.max(0, balanceCents));
+  const overageCents = Math.max(0, amountCents - appliedCents);
+  const isWriteOff = method === "AR Write-off";
+
   async function submit() {
-    const cents = Math.round(parseFloat(amount) * 100);
-    if (!cents || cents <= 0) { toast.error("Enter a valid amount"); return; }
+    if (!amountCents || amountCents <= 0) { toast.error("Enter a valid amount"); return; }
+    if (isWriteOff && overageCents > 0) {
+      toast.error(`A write-off can't exceed the invoice balance (${formatCurrency(balanceCents)})`);
+      return;
+    }
     try {
-      await record({ clientId, amountCents: cents, paymentDate: date, method, reference: ref || undefined, allocations: invoiceId ? [{ invoiceId, amountCents: cents }] : [] });
-      toast.success("Payment recorded");
+      await record({
+        clientId,
+        amountCents,
+        paymentDate: date,
+        method,
+        reference: ref || undefined,
+        allocations: invoiceId && appliedCents > 0 ? [{ invoiceId, amountCents: appliedCents }] : [],
+      });
+      toast.success(overageCents > 0
+        ? `Payment recorded — ${formatCurrency(appliedCents)} applied, ${formatCurrency(overageCents)} kept as account credit`
+        : "Payment recorded");
       onOpenChange(false);
-    } catch { toast.error("Failed to record payment"); }
+    } catch (err) {
+      toast.error(err instanceof Error && err.message ? err.message : "Failed to record payment");
+    }
   }
 
   return (
@@ -466,8 +511,15 @@ function RecordPaymentDialog({
             <Label>Amount</Label>
             <div className="relative">
               <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-sm text-slate-400">$</span>
-              <Input value={amount} onChange={(e) => setAmount(e.target.value)} className="pl-6" />
+              <Input value={amount} inputMode="decimal" onChange={(e) => setAmount(e.target.value)} className="pl-6" />
             </div>
+            {overageCents > 0 && (
+              <p className={cn("text-xs", isWriteOff ? "text-red-600" : "text-amber-600")}>
+                {isWriteOff
+                  ? `Exceeds the invoice balance of ${formatCurrency(balanceCents)}.`
+                  : `${formatCurrency(appliedCents)} will be applied to this invoice; ${formatCurrency(overageCents)} stays as unused credit on the client's account.`}
+              </p>
+            )}
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="flex flex-col gap-1.5">
@@ -558,6 +610,10 @@ export function InvoiceDetail({
   const [lineItemPickerOpen, setLineItemPickerOpen] = useState(false);
   const [lineItemSearch, setLineItemSearch] = useState("");
   const lineItemSearchRef = useRef<HTMLInputElement>(null);
+  // In-flight guard for addLineItem: the picker's click handler can fire again
+  // (double click, or a second click while the row hasn't rendered yet) and
+  // each call used to insert another blank row — the "3 empty $0 rows" of D-15.
+  const addingLineItemRef = useRef(false);
   const [paymentOpen, setPaymentOpen] = useState(false);
   const [chargeCardOpen, setChargeCardOpen] = useState(false);
   const [emailDialogOpen, setEmailDialogOpen] = useState(false);
@@ -676,6 +732,8 @@ export function InvoiceDetail({
   }
 
   async function addLineItem(name?: string, description = "", rateCents = 0, isTaxable = false) {
+    if (addingLineItemRef.current) return;
+    addingLineItemRef.current = true;
     try {
       await upsertItem({
         invoiceId: invoice!.id,
@@ -690,6 +748,22 @@ export function InvoiceDetail({
         },
       });
     } catch { toast.error("Failed to add item"); }
+    finally { addingLineItemRef.current = false; }
+  }
+
+  /**
+   * Row saves are fire-on-blur, so clicking Save right after typing races the
+   * row's own upsert. Wait for any in-flight line-item mutations, then read the
+   * invoice back so validation and totals use what's actually persisted.
+   */
+  async function settledLineItems(): Promise<InvoiceLineItem[]> {
+    const deadline = Date.now() + 5000;
+    while (queryClient.isMutating({ mutationKey: LINE_ITEM_MUTATION_KEY }) > 0 && Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, 75));
+    }
+    await queryClient.invalidateQueries({ queryKey: ["crm-invoices", "detail", invoice!.id] });
+    const fresh = queryClient.getQueryData<{ lineItems?: InvoiceLineItem[] }>(["crm-invoices", "detail", invoice!.id]);
+    return [...(fresh?.lineItems ?? lineItems)].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
   }
 
   async function handleEmailSent() {
@@ -728,14 +802,27 @@ export function InvoiceDetail({
   async function handleSave() {
     setSaving(true);
     try {
+      const savedLines = await settledLineItems();
+      const isBlankLine = (li: InvoiceLineItem) =>
+        !(li.description ?? "").trim() && !(li.name ?? "").trim() && (li.totalCents ?? 0) === 0;
+      if (savedLines.length === 0 || savedLines.every(isBlankLine)) {
+        toast.error("Add at least one line item with a description or amount before saving this invoice");
+        return;
+      }
+      const netLine = (li: InvoiceLineItem) => li.totalCents - li.discountCents;
+      const savedSubtotal = savedLines.reduce((s, li) => s + netLine(li), 0);
+      const savedTaxable = savedLines.filter((li) => li.isTaxable).reduce((s, li) => s + netLine(li), 0);
+      const savedTax = Math.round((Math.max(0, savedTaxable - discountCents) * taxRateBps) / 10000);
+      const savedTotal = savedSubtotal - discountCents + savedTax;
+
       // If this is a fresh draft (no number yet), assign one now
       if (invoice!.invoiceNumber == null) {
-        await assignNumber({ id: invoice!.id, clientId: invoice!.clientId, amountCents: previewTotal });
+        await assignNumber({ id: invoice!.id, clientId: invoice!.clientId, amountCents: savedTotal });
       }
       await Promise.all([
         updateFinancials({
           id: invoice!.id,
-          lineItems,
+          lineItems: savedLines,
           taxRateBps,
           discountCents,
           discountType,

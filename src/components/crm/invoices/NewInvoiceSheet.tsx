@@ -33,6 +33,11 @@ export function NewInvoiceSheet({ open, onClose, defaultClientId }: Props) {
   const startX = useRef(0);
   const startW = useRef(0);
   const savedRef = useRef(false);
+  // Guards the auto-create effect against firing twice for one open (React
+  // StrictMode double-invokes effects in dev, and a parent re-render before
+  // setInvoiceId lands would otherwise start a second insert) — each extra
+  // run left a stray empty draft behind (D-23).
+  const creatingRef = useRef(false);
 
   const { data: clients } = useClients();
   const invoiceableClients = (clients ?? []).filter((c) => c.status !== "lead");
@@ -41,14 +46,15 @@ export function NewInvoiceSheet({ open, onClose, defaultClientId }: Props) {
 
   // Auto-create a draft (no invoice number assigned yet) when a client is known
   useEffect(() => {
-    if (open && defaultClientId && !invoiceId) {
+    if (open && defaultClientId && !invoiceId && !creatingRef.current) {
+      creatingRef.current = true;
       setCreating(true);
       const d = new Date();
       const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
       createInvoice({ clientId: defaultClientId, description: "", invoiceDate: today })
         .then((inv) => { setInvoiceId(inv.id); setDraftClientId(defaultClientId); })
         .catch(() => toast.error("Failed to create invoice"))
-        .finally(() => setCreating(false));
+        .finally(() => { setCreating(false); creatingRef.current = false; });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, defaultClientId]);
@@ -60,11 +66,17 @@ export function NewInvoiceSheet({ open, onClose, defaultClientId }: Props) {
       setDraftClientId(null);
       setCreating(false);
       savedRef.current = false;
+      creatingRef.current = false;
     }
   }, [open]);
 
   // Any way the sheet closes with an unsaved draft still open discards it,
   // so the invoice number is never consumed by a record the user abandoned.
+  // The draft row is inserted as soon as a client is known (InvoiceDetail
+  // needs a real id to edit against), so this soft-delete is what keeps
+  // abandoned sheets from leaving empty drafts in the Invoices list (D-23).
+  // Routed through every close path: backdrop, X, Escape, AND InvoiceDetail's
+  // own close button (which previously called the raw onClose and skipped it).
   function handleClose() {
     if (invoiceId && draftClientId && !savedRef.current) {
       deleteInvoice({ id: invoiceId, clientId: draftClientId }).catch(() => {});
@@ -109,6 +121,8 @@ export function NewInvoiceSheet({ open, onClose, defaultClientId }: Props) {
   }
 
   async function handleSelectClient(clientId: string) {
+    if (creatingRef.current || invoiceId) return;
+    creatingRef.current = true;
     setCreating(true);
     try {
       const d = new Date();
@@ -120,6 +134,7 @@ export function NewInvoiceSheet({ open, onClose, defaultClientId }: Props) {
       toast.error("Failed to create invoice");
     } finally {
       setCreating(false);
+      creatingRef.current = false;
     }
   }
 
@@ -155,7 +170,7 @@ export function NewInvoiceSheet({ open, onClose, defaultClientId }: Props) {
             // onSaved marks the draft as kept; onDiscard soft-deletes it if closed unsaved.
             <InvoiceDetail
               invoiceId={invoiceId}
-              onClose={onClose}
+              onClose={handleClose}
               onSaved={() => { savedRef.current = true; }}
               onDiscard={onClose}
             />

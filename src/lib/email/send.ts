@@ -52,6 +52,48 @@ export function resolveMergeTags(template: string, vars: Record<string, string>)
   });
 }
 
+// ── Resend error → HTTP response mapping ──────────────────────────────────────
+
+// Resend's error `name` codes → what we tell the client. Recipient/content
+// problems are the sender's to fix (4xx, with the provider's own message —
+// e.g. a rejected @example.com address); quota problems are "try again later"
+// (429); everything else is a provider-side or configuration problem (502,
+// generic copy — full details belong in the server log, not the toast).
+const RESEND_RECIPIENT_ERROR_CODES = new Set([
+  "validation_error",
+  "missing_required_field",
+  "invalid_parameter",
+  "invalid_attachment",
+]);
+const RESEND_QUOTA_ERROR_CODES = new Set([
+  "rate_limit_exceeded",
+  "daily_quota_exceeded",
+  "monthly_quota_exceeded",
+]);
+
+/**
+ * Maps a failed `resend.emails.send()` error to an HTTP status + user-facing
+ * message. `subject` names what wasn't sent ("the invoice", "the estimate")
+ * for the generic 502 copy. Shared by every route that sends through Resend so
+ * an undeliverable address never surfaces as a bare 500 / "Failed to send".
+ */
+export function mapSendError(
+  err: { name?: string; message?: string },
+  subject = "the email",
+): { status: number; error: string } {
+  const code = err.name ?? "";
+  if (RESEND_RECIPIENT_ERROR_CODES.has(code)) {
+    return {
+      status: 422,
+      error: `Email provider rejected the message: ${err.message ?? "invalid recipient or content"}`,
+    };
+  }
+  if (RESEND_QUOTA_ERROR_CODES.has(code)) {
+    return { status: 429, error: "Email sending limit reached — please try again shortly." };
+  }
+  return { status: 502, error: `Email provider error — ${subject} was not sent. Please try again.` };
+}
+
 interface ClientForMergeVars {
   displayName: string | null;
   balanceOutstandingCents?: number | null;

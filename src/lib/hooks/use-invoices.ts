@@ -625,6 +625,54 @@ async function applyPaymentToInvoice(supabase: any, invoiceId: string, deltaCent
   return { newStatus: data.new_status, wasNewlyPaid: data.was_newly_paid };
 }
 
+// ── allocation validation ─────────────────────────────────────────────────────
+
+/**
+ * Normalizes a requested payment split before any money moves (D-18 / D-22):
+ *   - drops zero/negative rows
+ *   - rejects invoices that aren't issued (draft / void) — they can't carry
+ *     payments; the DB trigger guard_payment_allocation_limits enforces the
+ *     same rule as the second layer
+ *   - caps each allocation at the invoice's open balance (plus whatever this
+ *     same payment already had applied there, when editing — the invoice's
+ *     stored balance already excludes our own prior allocation)
+ * Whatever gets capped off stays on the payment as unused_amount_cents, which
+ * sync_client_balance already counts as client credit — instead of being
+ * over-applied to the invoice and silently lost.
+ */
+async function resolveAllocations(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  requested: { invoiceId: string; amountCents: number }[] | undefined,
+  priorByInvoiceId: Map<string, number> = new Map(),
+): Promise<{ invoiceId: string; amountCents: number }[]> {
+  const active = (requested ?? []).filter((a) => a.amountCents > 0);
+  if (active.length === 0) return [];
+
+  const { data: invoices, error } = await supabase
+    .from("crm_invoices")
+    .select("id, invoice_number, status, balance_cents")
+    .in("id", active.map((a) => a.invoiceId));
+  if (error) throw error;
+  const byId = new Map(
+    ((invoices ?? []) as { id: string; invoice_number: number | null; status: string; balance_cents: number }[])
+      .map((inv) => [inv.id, inv] as const)
+  );
+
+  const resolved: { invoiceId: string; amountCents: number }[] = [];
+  for (const a of active) {
+    const inv = byId.get(a.invoiceId);
+    if (!inv) throw new Error("One of the selected invoices no longer exists");
+    if (inv.status === "draft" || inv.status === "void") {
+      throw new Error(`Invoice #${inv.invoice_number ?? "—"} is ${inv.status} — payments can only be applied to issued invoices`);
+    }
+    const cap = Math.max(0, (inv.balance_cents ?? 0) + (priorByInvoiceId.get(a.invoiceId) ?? 0));
+    const amountCents = Math.min(a.amountCents, cap);
+    if (amountCents > 0) resolved.push({ invoiceId: a.invoiceId, amountCents });
+  }
+  return resolved;
+}
+
 export function useRecordPayment() {
   const qc = useQueryClient();
   return useMutation({
@@ -651,9 +699,13 @@ export function useRecordPayment() {
     }) => {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
-      const activeAllocations = (allocations ?? []).filter((a) => a.amountCents > 0);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const activeAllocations = await resolveAllocations(supabase as any, allocations);
       const primaryInvoiceId = activeAllocations.length === 1 ? activeAllocations[0].invoiceId : null;
       const allocatedCents = activeAllocations.reduce((s, a) => s + a.amountCents, 0);
+      if (allocatedCents > amountCents) {
+        throw new Error("Allocated amount exceeds the payment amount");
+      }
 
       // insert payment row
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -672,14 +724,11 @@ export function useRecordPayment() {
       }).select("id").single();
       if (pmtErr) throw pmtErr;
 
-      // apply to each allocated invoice, and record the exact split so it can
-      // be reconstructed (not guessed) if this payment is edited later
-      const newlyPaidInvoiceIds: string[] = [];
-      for (const alloc of activeAllocations) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const result = await applyPaymentToInvoice(supabase as any, alloc.invoiceId, alloc.amountCents);
-        if (result.wasNewlyPaid) newlyPaidInvoiceIds.push(alloc.invoiceId);
-      }
+      // Record the exact split FIRST (so the DB guard trigger on
+      // crm_payment_allocations can reject an over-allocation or a draft
+      // invoice before any invoice balance has moved), then apply to each
+      // invoice. The split is what lets a later edit reverse precisely
+      // instead of guessing.
       if (activeAllocations.length > 0) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { error: allocErr } = await (supabase as any).from("crm_payment_allocations").insert(
@@ -689,7 +738,18 @@ export function useRecordPayment() {
             amount_cents: a.amountCents,
           }))
         );
-        if (allocErr) throw allocErr;
+        if (allocErr) {
+          // Don't leave an orphaned payment row behind a rejected split.
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          await (supabase as any).from("crm_payments").delete().eq("id", inserted.id);
+          throw allocErr;
+        }
+      }
+      const newlyPaidInvoiceIds: string[] = [];
+      for (const alloc of activeAllocations) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const result = await applyPaymentToInvoice(supabase as any, alloc.invoiceId, alloc.amountCents);
+        if (result.wasNewlyPaid) newlyPaidInvoiceIds.push(alloc.invoiceId);
       }
 
       // sync client balance
@@ -762,6 +822,26 @@ export function useUpdatePayment() {
     }) => {
       const supabase = createClient();
 
+      // Validate + cap the NEW split up front, before anything is reversed,
+      // so a rejected edit leaves the payment exactly as it was.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: priorRows, error: priorErr } = await (supabase as any)
+        .from("crm_payment_allocations")
+        .select("invoice_id, amount_cents")
+        .eq("payment_id", id);
+      if (priorErr) throw priorErr;
+      const priorByInvoiceId = new Map<string, number>();
+      for (const r of (priorRows ?? []) as { invoice_id: string; amount_cents: number }[]) {
+        priorByInvoiceId.set(r.invoice_id, (priorByInvoiceId.get(r.invoice_id) ?? 0) + r.amount_cents);
+      }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const activeAllocations = await resolveAllocations(supabase as any, allocations, priorByInvoiceId);
+      const primaryInvoiceId = activeAllocations.length === 1 ? activeAllocations[0].invoiceId : null;
+      const allocatedCents = activeAllocations.reduce((s, a) => s + a.amountCents, 0);
+      if (allocatedCents > amountCents) {
+        throw new Error("Allocated amount exceeds the payment amount");
+      }
+
       // Reverse the ORIGINAL allocations, not a guess. Historical payments
       // recorded before crm_payment_allocations existed fall back to the
       // single invoice_id the old code stored (only ever set for
@@ -794,17 +874,8 @@ export function useUpdatePayment() {
         }
       }
 
-      const activeAllocations = (allocations ?? []).filter((a) => a.amountCents > 0);
-      const primaryInvoiceId = activeAllocations.length === 1 ? activeAllocations[0].invoiceId : null;
-      const allocatedCents = activeAllocations.reduce((s, a) => s + a.amountCents, 0);
-
-      // apply new allocations to invoices
-      for (const alloc of activeAllocations) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await applyPaymentToInvoice(supabase as any, alloc.invoiceId, alloc.amountCents);
-      }
-
-      // update payment row
+      // update payment row (amount first — the allocation guard trigger
+      // checks the split against crm_payments.amount_cents)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any).from("crm_payments").update({
         invoice_id: primaryInvoiceId,
@@ -831,6 +902,12 @@ export function useUpdatePayment() {
           }))
         );
         if (allocErr) throw allocErr;
+      }
+
+      // apply new allocations to invoices
+      for (const alloc of activeAllocations) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await applyPaymentToInvoice(supabase as any, alloc.invoiceId, alloc.amountCents);
       }
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -893,9 +970,13 @@ export function useRefundPayment() {
 
 // ── upsert line item ──────────────────────────────────────────────────────────
 
+/** Shared by the line-item upsert/delete mutations so InvoiceDetail can wait for in-flight row saves before validating a Save. */
+export const LINE_ITEM_MUTATION_KEY = ["crm-invoice-line-item"] as const;
+
 export function useUpsertInvoiceLineItem() {
   const qc = useQueryClient();
   return useMutation({
+    mutationKey: LINE_ITEM_MUTATION_KEY,
     mutationFn: async ({
       invoiceId,
       item,
@@ -994,6 +1075,7 @@ export async function deleteInvoiceLineItemAndRecalc(supabase: any, id: string, 
 export function useDeleteInvoiceLineItem() {
   const qc = useQueryClient();
   return useMutation({
+    mutationKey: LINE_ITEM_MUTATION_KEY,
     mutationFn: async ({ id, invoiceId }: { id: string; invoiceId: string }) => {
       const supabase = createClient();
       return deleteInvoiceLineItemAndRecalc(supabase, id, invoiceId);
@@ -1223,6 +1305,42 @@ export function usePayment(id: string | undefined) {
  * created before crm_payment_allocations existed — callers should fall back
  * to the payment's single invoiceId (if any) in that case, not guess further.
  */
+/**
+ * Payments recorded on a DIFFERENT client (a parent account — e.g. one check
+ * from a property manager) but allocated to one of THIS client's invoices.
+ * The sub-account's own usePayments() never sees them (crm_payments.client_id
+ * is the parent), so without this the money shows nowhere on the sub-account
+ * except inside the invoice's Payment History. Read-only; one query, same
+ * allocation join useInvoice() uses. `displayAmountCents` is the share
+ * allocated to this client's invoice (not the payment's full amount).
+ */
+export function useAllocatedPaymentsFromOtherClients(clientId: string | undefined) {
+  return useQuery({
+    queryKey: ["crm-payments", "allocated-from-parent", clientId],
+    queryFn: async () => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
+        .from("crm_payment_allocations")
+        .select("amount_cents, invoice_id, crm_invoices!inner(client_id, invoice_number), crm_payments!inner(*, clients(display_name))")
+        .eq("crm_invoices.client_id", clientId)
+        .neq("crm_payments.client_id", clientId)
+        .is("crm_payments.deleted_at", null);
+      if (error) throw error;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return ((data ?? []) as any[])
+        .filter((row) => row.crm_payments)
+        .map((row): CRMPayment & { displayAmountCents: number; allocatedInvoiceNumber: number | null } => ({
+          ...mapPayment(row.crm_payments),
+          displayAmountCents: row.amount_cents as number,
+          isSplitAllocation: true,
+          allocatedInvoiceNumber: (row.crm_invoices?.invoice_number as number | undefined) ?? null,
+        }));
+    },
+    enabled: !!clientId,
+  });
+}
+
 export function usePaymentAllocations(paymentId: string | undefined) {
   return useQuery({
     queryKey: ["crm-payment-allocations", paymentId],

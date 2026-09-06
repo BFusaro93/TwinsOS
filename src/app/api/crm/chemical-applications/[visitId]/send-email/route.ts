@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { Resend } from "resend";
-import { orgEmailFrom } from "@/lib/email/send";
+import { orgEmailFrom, mapSendError } from "@/lib/email/send";
 
 function resolveMergeTags(template: string, vars: Record<string, string>): string {
   return template.replace(/\[(\w+)\]/g, (match) => {
@@ -152,7 +152,8 @@ export async function POST(
 
   if (sendErr) {
     console.error("[send-chemical-notice] Resend error:", sendErr);
-    return NextResponse.json({ error: "Failed to send email" }, { status: 500 });
+    const mapped = mapSendError(sendErr, "the notice");
+    return NextResponse.json({ error: mapped.error }, { status: mapped.status });
   }
 
   // Log the email

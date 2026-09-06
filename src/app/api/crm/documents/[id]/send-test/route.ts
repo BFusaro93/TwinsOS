@@ -10,7 +10,7 @@ import {
 } from "@/lib/utils/document-template-renderer";
 import { DocumentTemplatePdf } from "@/components/crm/documents/pdf/DocumentTemplatePdf";
 import type { BlockType } from "@/types/crm-documents";
-import { orgEmailFrom } from "@/lib/email/send";
+import { orgEmailFrom, mapSendError } from "@/lib/email/send";
 
 export async function POST(
   req: NextRequest,
@@ -89,7 +89,8 @@ export async function POST(
 
   if (sendErr) {
     console.error("[send-test-document] Resend error:", sendErr);
-    return NextResponse.json({ error: "Failed to send test email" }, { status: 500 });
+    const mapped = mapSendError(sendErr, "the test email");
+    return NextResponse.json({ error: mapped.error }, { status: mapped.status });
   }
 
   return NextResponse.json({ sentTo: user.email });

@@ -57,6 +57,7 @@ import { ColumnChooser } from "@/components/shared/ColumnChooser";
 import type { ColumnDef } from "@/components/shared/ColumnChooser";
 import { AttachmentsSection } from "@/components/shared/AttachmentsSection";
 import { ClientCombobox } from "@/components/shared/ClientCombobox";
+import { CurrencyInput } from "@/components/shared/CurrencyInput";
 import { AuditTrailTab } from "@/components/shared/AuditTrailTab";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { usePermissions } from "@/lib/hooks/use-permissions";
@@ -139,36 +140,6 @@ function FieldRow({ label, children }: { label: string; children: React.ReactNod
 //    from the formatted-cents value never fights an in-progress keystroke
 //    (the previous controlled `(cents/100).toFixed(2)` value reformatted on
 //    every character, which is why e.g. typing "25" could land on "2.01") ──
-
-function MoneyInput({
-  cents,
-  onCommit,
-  className,
-}: {
-  cents: number;
-  onCommit: (cents: number) => void;
-  className?: string;
-}) {
-  const [text, setText] = useState(() => (cents / 100).toFixed(2));
-  const [focused, setFocused] = useState(false);
-
-  const displayValue = focused ? text : (cents / 100).toFixed(2);
-
-  return (
-    <Input
-      type="text"
-      inputMode="decimal"
-      className={className}
-      value={displayValue}
-      onFocus={() => setText((cents / 100).toFixed(2))}
-      onChange={(e) => { setFocused(true); setText(e.target.value); }}
-      onBlur={() => {
-        setFocused(false);
-        onCommit(Math.round((parseFloat(text) || 0) * 100));
-      }}
-    />
-  );
-}
 
 // ── contract details tab ──────────────────────────────────────────────────────
 
@@ -288,7 +259,7 @@ function ContractDetailsTab({
             {monthsLeft.map(({ key, label }) => (
               <div key={key} className="flex items-center gap-2">
                 <span className="w-24 shrink-0 text-sm text-slate-600">{label}</span>
-                <MoneyInput
+                <CurrencyInput
                   className="h-7 w-28 text-sm"
                   cents={state.monthlyAmounts[key] ?? 0}
                   onCommit={(cents) => onChange({
@@ -311,7 +282,7 @@ function ContractDetailsTab({
             {monthsRight.map(({ key, label }) => (
               <div key={key} className="flex items-center gap-2">
                 <span className="w-24 shrink-0 text-sm text-slate-600">{label}</span>
-                <MoneyInput
+                <CurrencyInput
                   className="h-7 w-28 text-sm"
                   cents={state.monthlyAmounts[key] ?? 0}
                   onCommit={(cents) => onChange({
@@ -982,7 +953,7 @@ export function ContractDialog({
     // very differently: absent falls back to the contract's averaged
     // monthlyAmountCents, while explicit 0 means "don't bill this month."
     // Without this, a seasonal contract whose off-months are never focused
-    // (so MoneyInput never commits them) could get billed the averaged
+    // (so CurrencyInput never commits them) could get billed the averaged
     // amount in a month the user meant to leave at $0.
     monthlyAmounts: contract
       ? MONTHS.reduce((acc, { key }) => {

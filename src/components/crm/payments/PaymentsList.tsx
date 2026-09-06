@@ -16,6 +16,7 @@ import {
 } from "@/lib/hooks/use-multi-invoice-charge";
 import { hasPublishableKey, getScopedStripeJs } from "@/lib/stripe/client";
 import { ImportExportMenu } from "@/components/shared/ImportExportMenu";
+import { CurrencyInput } from "@/components/shared/CurrencyInput";
 import { exportCSV } from "@/lib/csv";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -84,6 +85,13 @@ interface InvoiceAllocation {
   invoiceDate: string;
   payInFull: boolean;
   amountCents: number;
+  /**
+   * The most this payment may apply to the invoice: its open balance plus
+   * whatever THIS payment already had allocated to it (edit mode — the
+   * invoice's balance already excludes our own prior allocation, so it
+   * alone would understate the cap). Allocation inputs clamp to this.
+   */
+  maxCents: number;
   // Which client (parent or child sub-account) this invoice actually belongs
   // to — used to group rows by account when the selected client has children.
   clientId: string;
@@ -211,14 +219,22 @@ export function AddPaymentDialog({
   );
   const { data: existingAllocations } = usePaymentAllocations(isEdit ? payment?.id : undefined);
 
-  // In create mode: only show unpaid invoices.
-  // In edit mode: show all non-voided invoices (paid or unpaid, but must have totalCents > 0)
-  // so that any invoice previously allocated to this payment remains visible and editable.
+  // Only ISSUED invoices can take a payment — drafts are still "uninvoiced
+  // work" (a draft that got an allocation showed a balance and left the
+  // Uninvoiced bucket while still a draft, D-22) and voids are dead. The DB
+  // trigger guard_payment_allocation_limits enforces the same rule.
+  // In create mode: only show unpaid issued invoices.
+  // In edit mode: show all issued invoices (paid or unpaid, totalCents > 0)
+  // so that any invoice previously allocated to this payment remains visible
+  // and editable — plus any invoice this payment is ALREADY allocated to,
+  // whatever its status, so a legacy allocation can still be reviewed/undone.
   const allocationInvoices = useMemo(() => {
     const all = invoices ?? [];
-    if (isEdit) return all.filter((inv) => inv.status !== "void" && inv.totalCents > 0);
-    return all.filter((inv) => inv.status !== "paid" && inv.status !== "void" && inv.totalCents > 0);
-  }, [invoices, isEdit]);
+    const alreadyAllocated = new Set((existingAllocations ?? []).map((a) => a.invoice_id));
+    const issued = (inv: CRMInvoice) => inv.status !== "draft" && inv.status !== "void";
+    if (isEdit) return all.filter((inv) => (issued(inv) && inv.totalCents > 0) || alreadyAllocated.has(inv.id));
+    return all.filter((inv) => issued(inv) && inv.status !== "paid" && inv.totalCents > 0);
+  }, [invoices, isEdit, existingAllocations]);
 
   const openInvoices = useMemo(
     () => (invoices ?? []).filter((inv) => inv.status !== "paid" && inv.status !== "void"),
@@ -265,14 +281,18 @@ export function AddPaymentDialog({
           }
         }
         const balCents = inv.balanceCents ?? inv.totalCents;
+        // In edit mode our own prior allocation has already been subtracted
+        // from the invoice's balance, so the cap is balance + that amount.
+        const maxCents = Math.max(0, balCents + (isEdit ? prefilledCents : 0));
         return {
           invoiceId: inv.id,
           invoiceNumber: inv.invoiceNumber,
           balanceCents: balCents,
           totalCents: inv.totalCents,
           invoiceDate: inv.invoiceDate,
-          payInFull: prefilledCents > 0 && prefilledCents >= balCents,
-          amountCents: prefilledCents,
+          payInFull: prefilledCents > 0 && prefilledCents >= maxCents,
+          amountCents: Math.min(prefilledCents, maxCents),
+          maxCents,
           clientId: inv.clientId,
           clientName: inv.clientName ?? null,
           clientAddress: inv.clientAddress ?? null,
@@ -286,9 +306,9 @@ export function AddPaymentDialog({
     let remaining = amountCents;
     setAllocations((prev) =>
       prev.map((a) => {
-        const apply = Math.min(remaining, a.balanceCents);
+        const apply = Math.min(remaining, a.maxCents);
         remaining -= apply;
-        return { ...a, amountCents: apply, payInFull: apply >= a.balanceCents };
+        return { ...a, amountCents: apply, payInFull: apply > 0 && apply >= a.maxCents };
       })
     );
   }
@@ -306,18 +326,26 @@ export function AddPaymentDialog({
     setAllocations((prev) =>
       prev.map((a) =>
         a.invoiceId === invoiceId
-          ? { ...a, payInFull: checked, amountCents: checked ? a.balanceCents : 0 }
+          ? { ...a, payInFull: checked, amountCents: checked ? a.maxCents : 0 }
           : a
       )
     );
   }
 
-  function setAllocationAmount(invoiceId: string, val: string) {
-    const cents = Math.round(parseFloat(val || "0") * 100);
+  // Never let a single invoice take more than its open balance (D-18: an $80
+  // check against a $55 invoice applied all $80 and lost the $25). Anything
+  // above the cap stays on the payment as unused credit instead.
+  function setAllocationAmount(invoiceId: string, requestedCents: number) {
+    const target = allocations.find((a) => a.invoiceId === invoiceId);
+    if (target && requestedCents > target.maxCents && target.amountCents !== target.maxCents) {
+      toast.info(`Capped at this invoice's balance (${formatCurrency(target.maxCents)}) — the rest stays as unused credit`);
+    }
     setAllocations((prev) =>
-      prev.map((a) =>
-        a.invoiceId === invoiceId ? { ...a, amountCents: cents, payInFull: cents >= a.balanceCents } : a
-      )
+      prev.map((a) => {
+        if (a.invoiceId !== invoiceId) return a;
+        const cents = Math.max(0, Math.min(requestedCents, a.maxCents));
+        return { ...a, amountCents: cents, payInFull: cents > 0 && cents >= a.maxCents };
+      })
     );
   }
 
@@ -781,14 +809,12 @@ export function AddPaymentDialog({
                               />
                             </td>
                             <td className="px-3 py-2">
-                              <Input
-                                type="number"
-                                step="0.01"
-                                min="0"
+                              <CurrencyInput
                                 className="h-6 w-20 text-xs px-1.5"
-                                value={a.amountCents > 0 ? (a.amountCents / 100).toFixed(2) : ""}
-                                onChange={(e) => setAllocationAmount(a.invoiceId, e.target.value)}
-                                placeholder="0.00"
+                                cents={a.amountCents}
+                                blankWhenZero
+                                onChange={(cents) => setAllocationAmount(a.invoiceId, cents)}
+                                aria-label={`Amount to apply to invoice #${a.invoiceNumber}`}
                               />
                             </td>
                             <td className="px-3 py-2 text-right font-medium">

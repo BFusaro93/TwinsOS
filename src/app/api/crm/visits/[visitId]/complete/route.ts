@@ -98,7 +98,7 @@ export async function POST(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: job } = await (supabase as any)
     .from("crm_jobs")
-    .select("id, job_type, contract_id, client_id, invoice_description, rate_cents, po_number, sales_rep_id, crm_job_services(id, service_name, qty, rate_cents, crm_services(invoice_description)), clients(invoice_frequency)")
+    .select("id, job_type, contract_id, client_id, estimate_id, invoice_description, rate_cents, po_number, sales_rep_id, crm_job_services(id, service_name, qty, rate_cents, is_taxable, crm_services(invoice_description, is_taxable)), clients(invoice_frequency, default_tax_rate_bps)")
     .eq("id", (visit as any).job_id)
     .single();
 
@@ -181,7 +181,7 @@ export async function POST(
       // whole job (no linked service) falls back to all of the job's services, same as
       // before splitting existed.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const allServices: { id: string; service_name: string; qty: number; rate_cents: number; crm_services: { invoice_description: string | null } | null }[] = j.crm_job_services ?? [];
+      const allServices: { id: string; service_name: string; qty: number; rate_cents: number; is_taxable: boolean | null; crm_services: { invoice_description: string | null; is_taxable: boolean | null } | null }[] = j.crm_job_services ?? [];
       const services = visitJobServiceId
         ? allServices.filter((s) => s.id === visitJobServiceId)
         : allServices;
@@ -193,7 +193,27 @@ export async function POST(
       // description (set in Services settings), then its plain name.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const visitDate: string | null = (visit as any).scheduled_date ?? null;
-      const lineItems = services.length > 0
+
+      // Taxability (D-12): each job service snapshots is_taxable when the job
+      // is created (from the accepted estimate, or the service catalog via the
+      // crm_job_services default trigger). Rows predating that column fall
+      // back to the catalog flag. The rate comes from the accepted estimate
+      // when the job was converted from one — so the invoice reproduces the
+      // tax the client agreed to — otherwise the client's default rate.
+      let taxRateBps = 0;
+      if (j.estimate_id) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: est } = await (supabase as any)
+          .from("estimates")
+          .select("tax_rate_bps")
+          .eq("id", j.estimate_id)
+          .maybeSingle();
+        taxRateBps = (est as { tax_rate_bps: number | null } | null)?.tax_rate_bps ?? 0;
+      }
+      if (taxRateBps <= 0) taxRateBps = j.clients?.default_tax_rate_bps ?? 0;
+
+      type AutoInvoiceLine = { name: string; description: string; qty: number; rate_cents: number; total_cents: number; service_date: string | null; is_taxable: boolean };
+      const lineItems: AutoInvoiceLine[] = services.length > 0
         ? services.map((s) => {
             const description = visitInvoiceDescription || j.invoice_description || stripHtml(s.crm_services?.invoice_description || "") || s.service_name;
             return {
@@ -203,13 +223,16 @@ export async function POST(
               rate_cents: s.rate_cents ?? 0,
               total_cents: (s.qty ?? 1) * (s.rate_cents ?? 0),
               service_date: visitDate,
+              is_taxable: s.is_taxable ?? s.crm_services?.is_taxable ?? false,
             };
           })
         : j.rate_cents
-          ? [{ name: visitInvoiceDescription ?? j.invoice_description ?? "Service", description: visitInvoiceDescription ?? j.invoice_description ?? "Service", qty: 1, rate_cents: j.rate_cents as number, total_cents: j.rate_cents as number, service_date: visitDate }]
+          ? [{ name: visitInvoiceDescription ?? j.invoice_description ?? "Service", description: visitInvoiceDescription ?? j.invoice_description ?? "Service", qty: 1, rate_cents: j.rate_cents as number, total_cents: j.rate_cents as number, service_date: visitDate, is_taxable: false }]
           : [];
 
       const subtotal = lineItems.reduce((s: number, li: { total_cents: number }) => s + li.total_cents, 0);
+      const taxableSubtotal = lineItems.filter((li) => li.is_taxable).reduce((s, li) => s + li.total_cents, 0);
+      const taxCents = Math.round((taxableSubtotal * taxRateBps) / 10000);
 
       if (subtotal > 0) {
         // Clients billed weekly/monthly get every visit in the same period folded into
@@ -254,7 +277,7 @@ export async function POST(
 
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           await (supabase as any).from("crm_invoice_line_items").insert(
-            lineItems.map((li: { name: string; description: string; qty: number; rate_cents: number; total_cents: number; service_date: string | null }, i: number) => ({
+            lineItems.map((li, i) => ({
               invoice_id: invoiceId,
               name: li.name,
               description: li.description,
@@ -262,6 +285,7 @@ export async function POST(
               rate_cents: li.rate_cents,
               total_cents: li.total_cents,
               service_date: li.service_date,
+              is_taxable: li.is_taxable,
               sort_order: (existingItemCount ?? 0) + i,
             }))
           );
@@ -269,7 +293,10 @@ export async function POST(
           // Atomic increment — two visits for the same client completing
           // concurrently must not both read the same stale totals and have
           // the second write clobber the first (see increment_invoice_totals
-          // migration for the full race description).
+          // migration for the full race description). The RPC also
+          // re-derives tax_cents from the invoice's line items (inserted
+          // just above) at the invoice's tax_rate_bps, so appended taxable
+          // visits are taxed too.
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           await (supabase.rpc as any)("increment_invoice_totals", {
             p_invoice_id: invoiceId,
@@ -293,10 +320,10 @@ export async function POST(
               invoice_date: visitDate ?? today,
               status: "draft",
               subtotal_cents: subtotal,
-              tax_rate_bps: 0,
-              tax_cents: 0,
-              total_cents: subtotal,
-              balance_cents: subtotal,
+              tax_rate_bps: taxRateBps,
+              tax_cents: taxCents,
+              total_cents: subtotal + taxCents,
+              balance_cents: subtotal + taxCents,
               amount_paid_cents: 0,
               po_number: j.po_number ?? null,
             })
@@ -306,7 +333,7 @@ export async function POST(
           if (newInvoice && lineItems.length > 0) {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             await (supabase as any).from("crm_invoice_line_items").insert(
-              lineItems.map((li: { name: string; description: string; qty: number; rate_cents: number; total_cents: number; service_date: string | null }, i: number) => ({
+              lineItems.map((li, i) => ({
                 invoice_id: (newInvoice as any).id,
                 name: li.name,
                 description: li.description,
@@ -314,6 +341,7 @@ export async function POST(
                 rate_cents: li.rate_cents,
                 total_cents: li.total_cents,
                 service_date: li.service_date,
+                is_taxable: li.is_taxable,
                 sort_order: i,
               }))
             );
@@ -343,7 +371,7 @@ export async function POST(
                 client_id: j.client_id,
                 activity_type: "invoice",
                 subject: `Invoice #${invoiceNumber}`,
-                amount_cents: subtotal,
+                amount_cents: subtotal + taxCents,
                 ref_id: (newInvoice as any).id,
                 ref_table: "crm_invoices",
               });

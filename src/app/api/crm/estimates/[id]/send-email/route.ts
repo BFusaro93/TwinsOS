@@ -9,40 +9,11 @@ import type { EstimatePDFData, EstimatePDFLineItem, EstimatePDFMilestone, Estima
 import { toDisplaySettings } from "@/lib/estimate-display-settings";
 import { fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
 import { addParagraphSpacing } from "@/lib/utils/document-template-renderer";
-import { orgEmailFrom } from "@/lib/email/send";
+import { orgEmailFrom, mapSendError } from "@/lib/email/send";
 import { logger } from "@/lib/logger";
+import { findLiveShareToken, proposalUrlFor } from "@/lib/estimates/share-token";
 
 const log = logger.child("send-estimate");
-
-// Resend's error `name` codes → what we tell the client. Recipient/content
-// problems are the sender's to fix (4xx, with the provider's own message —
-// e.g. a rejected @example.com address); everything else is a provider-side
-// or configuration problem (5xx, generic copy, full details logged).
-const RECIPIENT_ERROR_CODES = new Set([
-  "validation_error",
-  "missing_required_field",
-  "invalid_parameter",
-  "invalid_attachment",
-]);
-const QUOTA_ERROR_CODES = new Set([
-  "rate_limit_exceeded",
-  "daily_quota_exceeded",
-  "monthly_quota_exceeded",
-]);
-
-function mapSendError(err: { name?: string; message?: string }): { status: number; error: string } {
-  const code = err.name ?? "";
-  if (RECIPIENT_ERROR_CODES.has(code)) {
-    return {
-      status: 422,
-      error: `Email provider rejected the message: ${err.message ?? "invalid recipient or content"}`,
-    };
-  }
-  if (QUOTA_ERROR_CODES.has(code)) {
-    return { status: 429, error: "Email sending limit reached — please try again shortly." };
-  }
-  return { status: 502, error: "Email provider error — the estimate was not sent. Please try again." };
-}
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function getNextVersionNumber(supabase: any, estimateId: string): Promise<number> {
@@ -143,26 +114,19 @@ export async function POST(
   // Re-sends (and retries after a failed send) reuse the estimate's existing
   // live link instead of minting a fresh token every time — one estimate was
   // observed with four tokens after three failed attempts. A token is
-  // reusable while it is not deleted, not yet accepted and not expired.
-  const nowIso = new Date().toISOString();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: existingTokens } = await (supabase as any)
-    .from("estimate_share_tokens")
-    .select("id, token, expires_at")
-    .eq("estimate_id", estimateId)
-    .is("deleted_at", null)
-    .is("accepted_at", null)
-    .or(`expires_at.is.null,expires_at.gt.${nowIso}`)
-    .order("created_at", { ascending: false })
-    .limit(1);
+  // reusable while it is not deleted, not yet accepted and not expired
+  // (findLiveShareToken — shared with the share-link route so "Copy
+  // proposal link" and the emailed button always point at the same URL).
+  const existingLive = await findLiveShareToken(supabase, estimateId);
 
-  let shareToken: { id: string; token: string } | null =
-    (existingTokens as { id: string; token: string; expires_at: string | null }[] | null)?.[0] ?? null;
+  let shareToken: { id: string; token: string } | null = existingLive
+    ? { id: existingLive.id, token: existingLive.token }
+    : null;
   // Only a token minted by THIS request is cleaned up if the send fails.
   let createdTokenId: string | null = null;
 
-  if (shareToken) {
-    const existingExpiry = (existingTokens as { expires_at: string | null }[])[0].expires_at;
+  if (shareToken && existingLive) {
+    const existingExpiry = existingLive.expiresAt;
     // Extend the link if this send asks for a later expiry than it has.
     if (expiresAt && existingExpiry && new Date(existingExpiry) < new Date(expiresAt)) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -192,7 +156,7 @@ export async function POST(
     createdTokenId = shareToken.id;
   }
 
-  const proposalUrl = `${process.env.NEXT_PUBLIC_APP_URL ?? "https://landscapt.com"}/proposal/${shareToken.token}`;
+  const proposalUrl = proposalUrlFor(shareToken.token);
 
   const clientDisplayName = (est.clients?.display_name as string) ?? "";
   const firstName = clientDisplayName.split(" ")[0] ?? clientDisplayName;
@@ -380,7 +344,7 @@ export async function POST(
         .update({ deleted_at: new Date().toISOString() })
         .eq("id", createdTokenId);
     }
-    const mapped = mapSendError(sendErr);
+    const mapped = mapSendError(sendErr, "the estimate");
     return NextResponse.json({ error: mapped.error }, { status: mapped.status });
   }
 

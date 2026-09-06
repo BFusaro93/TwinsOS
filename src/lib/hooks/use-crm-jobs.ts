@@ -835,6 +835,22 @@ async function fetchVisitServiceIds(
   return ((data ?? []) as { service_id: string | null }[]).map((s) => s.service_id).filter((v): v is string => !!v);
 }
 
+/**
+ * Client-timeline subject for a visit status change: "Visit dispatched 9/9",
+ * "Visit skipped 9/9 — Client requested delay", "Visit cancelled 9/9". Shared by
+ * both status mutations so the wording matches the "Visit moved" rows.
+ */
+export function visitOutcomeActivitySubject(
+  status: VisitStatus,
+  scheduledDate: string,
+  reason?: string | null,
+): string {
+  const verb = status === 'skipped' ? 'skipped' : status === 'cancelled' ? 'cancelled' : 'dispatched';
+  const base = `Visit ${verb} ${formatMonthDay(scheduledDate)}`;
+  const r = reason?.trim();
+  return r ? `${base} — ${r}` : base;
+}
+
 export function useUpdateVisitStatus() {
   const qc = useQueryClient();
   return useMutation({
@@ -843,11 +859,16 @@ export function useUpdateVisitStatus() {
       status,
       jobId,
       jobType,
+      reason,
     }: {
       id: string;
       status: VisitStatus;
       jobId?: string;
       jobType?: string;
+      /** Why the visit was skipped/cancelled — stored on crm_job_visits.skip_reason
+       * (the column the crew app's skip route writes) and echoed on the client's
+       * Activity timeline. Ignored for other statuses. */
+      reason?: string | null;
     }) => {
       const supabase = createClient();
       if (status === 'completed') {
@@ -863,18 +884,20 @@ export function useUpdateVisitStatus() {
 
       const patch: Record<string, unknown> = { status };
       if (status === 'dispatched') patch.dispatched_at = new Date().toISOString();
+      const isOutcome = status === 'skipped' || status === 'cancelled';
+      if (isOutcome) patch.skip_reason = reason?.trim() || null;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
         .from('crm_job_visits').update(patch).eq('id', id)
         .select('client_id, job_id, job_service_id, scheduled_date').single();
       if (error) throw error;
-      if (status === 'dispatched' && data?.client_id) {
+      if ((status === 'dispatched' || isOutcome) && data?.client_id) {
         // Same lightweight timeline row useUpdateVisit writes — no notification.
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         await (supabase as any).from('client_activity').insert({
           client_id: data.client_id,
           activity_type: 'job',
-          subject: `Visit dispatched ${formatMonthDay(data.scheduled_date)}`,
+          subject: visitOutcomeActivitySubject(status, data.scheduled_date, isOutcome ? reason : null),
           ref_id: data.job_id,
           ref_table: 'crm_jobs',
         });
@@ -946,6 +969,7 @@ export function useUpdateVisit() {
         notes_to_client: string | null;
         completion_notes: string | null;
         invoice_description: string | null;
+        skip_reason: string | null;
         job_comments: unknown;
         priority: number;
         assigned_employee_id: string | null;
@@ -997,7 +1021,16 @@ export function useUpdateVisit() {
       if (updates.status === 'dispatched' && before && before.status !== 'dispatched') {
         activityRows.push({
           client_id: before.client_id,
-          subject: `Visit dispatched ${formatMonthDay(updates.scheduled_date ?? before.scheduled_date)}`,
+          subject: visitOutcomeActivitySubject('dispatched', updates.scheduled_date ?? before.scheduled_date),
+          ref_id: before.job_id,
+        });
+      }
+      // Skipped / cancelled from the visit sheet — same row the ST menu writes,
+      // carrying the reason the dispatcher entered ("Visit skipped 9/9 — Weather").
+      if ((updates.status === 'skipped' || updates.status === 'cancelled') && before && before.status !== updates.status) {
+        activityRows.push({
+          client_id: before.client_id,
+          subject: visitOutcomeActivitySubject(updates.status, updates.scheduled_date ?? before.scheduled_date, updates.skip_reason),
           ref_id: before.job_id,
         });
       }
@@ -1723,7 +1756,16 @@ export function useCreateJobsFromEstimate() {
       /** Crew size from the convert dialog — lands on crm_jobs.man_count and every visit's men_count. */
       manCount?: number | null;
       notesToCrew: string | null;
-      services: { serviceName: string; serviceId: string | null; qty: number; rateCents: number | null; totalCents: number; budgetedHours?: number; budgetMethod?: string }[];
+      /**
+       * `isTaxable` is optional: when omitted, taxability is derived from the
+       * estimate itself (estimates tax their whole revenue base at
+       * estimates.tax_rate_bps — see recalcEstimateTotals), so a taxed
+       * estimate makes every converted service taxable and an untaxed one
+       * makes none of them taxable. That snapshot lands on
+       * crm_job_services.is_taxable and is what the visit-completion
+       * auto-invoice bills tax on (D-12).
+       */
+      services: { serviceName: string; serviceId: string | null; qty: number; rateCents: number | null; totalCents: number; budgetedHours?: number; budgetMethod?: string; isTaxable?: boolean }[];
       materials?: { productItemId: string; productName: string; qty: number; unitPriceCents: number | null }[];
       /** Only meaningful when jobType === "project" — links the job to a Projects (PO cost-tracking) row. */
       projectId?: string | null;
@@ -1734,6 +1776,19 @@ export function useCreateJobsFromEstimate() {
       const { data: { user } } = await supabase.auth.getUser();
       const jobManCount = Math.max(1, Math.round(manCount ?? 1));
       const totalBudgetedHours = roundHours(services.reduce((s, sv) => s + (sv.budgetedHours ?? 0), 0));
+
+      // The accepted estimate's tax treatment must reproduce on the invoice
+      // the job eventually generates. Estimates have one document-level
+      // rate applied to all revenue, so tax_rate_bps > 0 means "every line
+      // is taxable" — snapshot that per service (callers may override per
+      // line via `isTaxable`).
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: estimateTax } = await (supabase as any)
+        .from("estimates")
+        .select("tax_rate_bps")
+        .eq("id", estimateId)
+        .maybeSingle();
+      const estimateIsTaxed = ((estimateTax as { tax_rate_bps: number | null } | null)?.tax_rate_bps ?? 0) > 0;
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
@@ -1794,6 +1849,7 @@ export function useCreateJobsFromEstimate() {
               budget_method: s.budgetMethod ?? 'manual',
               team_size: jobManCount,
               days_count: 1,
+              is_taxable: s.isTaxable ?? estimateIsTaxed,
             }))
           );
         if (svcError) throw svcError;

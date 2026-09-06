@@ -11,7 +11,10 @@ import { addParagraphSpacing } from "@/lib/utils/document-template-renderer";
 import { buildInvoiceStatementData } from "@/lib/invoices/statement-data";
 import { getOrCreateInvoiceShareToken, buildInvoiceViewUrl } from "@/lib/invoices/share-token";
 import { pushInvoiceToQuickBooks } from "@/lib/integrations/quickbooks";
-import { orgEmailFrom } from "@/lib/email/send";
+import { orgEmailFrom, mapSendError } from "@/lib/email/send";
+import { logger } from "@/lib/logger";
+
+const log = logger.child("email-invoice");
 
 const DEFAULT_SUBJECT = "Invoice #[invoicenumber] from [companyname] — [invoicetotal] due [duedate]";
 const DEFAULT_BODY = `<p>Hi [clientfirstname],</p>
@@ -284,8 +287,12 @@ export async function POST(req: NextRequest) {
   });
 
   if (sendErr) {
-    console.error("[email-invoice] Resend error:", sendErr);
-    return NextResponse.json({ error: "Failed to send email" }, { status: 500 });
+    // Same mapping as the estimate send route: an undeliverable/rejected
+    // address is a 422 carrying the provider's reason (so the toast can say
+    // WHY), quota is 429, anything else is a 502 — never a bare 500.
+    log.error("Resend error", { invoiceId, to: toEmails.join(", "), code: sendErr.name, message: sendErr.message });
+    const mapped = mapSendError(sendErr, "the invoice");
+    return NextResponse.json({ error: mapped.error }, { status: mapped.status });
   }
 
   const toEmailsJoined = toEmails.join(", ");
