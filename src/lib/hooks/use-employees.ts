@@ -2,6 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
+import type { BulkImportResult } from "@/lib/csv";
 import type { CRMEmployee, CRMCrew, CRMCrewMember, CRMCrewLogin } from "@/types/crm-employees";
 
 // ── mappers ───────────────────────────────────────────────────────────────────
@@ -215,55 +216,83 @@ export function useCreateEmployee() {
 export function useBulkImportEmployees() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (rows: Record<string, string>[]) => {
+    mutationFn: async (rows: Record<string, string>[]): Promise<BulkImportResult> => {
       const supabase = createClient();
 
       const { data: existing } = await supabase.from("crm_employees").select("id, email").is("deleted_at", null);
       const byEmail = new Map((existing ?? []).filter((e) => e.email).map((e) => [e.email!.trim().toLowerCase(), e.id]));
 
-      let created = 0;
-      let updated = 0;
-      let skipped = 0;
+      let succeeded = 0;
+      const failed: BulkImportResult["failed"] = [];
 
-      for (const r of rows) {
-        const firstName = r.firstName?.trim();
-        const lastName = r.lastName?.trim();
-        if (!firstName || !lastName) { skipped++; continue; }
+      for (let i = 0; i < rows.length; i++) {
+        const r = rows[i];
+        const rowNum = i + 1;
+        try {
+          const firstName = r.firstName?.trim();
+          const lastName = r.lastName?.trim();
+          if (!firstName || !lastName) {
+            failed.push({ row: rowNum, error: "Missing required field: First Name / Last Name" });
+            continue;
+          }
 
-        const email = r.email?.trim() || null;
-        const payload = {
-          first_name: firstName,
-          last_name: lastName,
-          email,
-          phone: r.phone?.trim() || null,
-          cell_phone: r.cellPhone?.trim() || null,
-          address: r.address?.trim() || null,
-          city: r.city?.trim() || null,
-          state: r.state?.trim() || null,
-          zip: r.zip?.trim() || null,
-          date_hired: r.dateHired?.trim() || null,
-          resource_code: r.resourceCode?.trim() || null,
-          hourly_rate_cents: r.hourlyRate ? Math.round(parseFloat(r.hourlyRate) * 100) : 0,
-        };
+          // parseFloat("N/A") etc. returns NaN, and Math.round(NaN) is NaN —
+          // which silently serializes to `null`, corrupting payroll data with
+          // no error. Treat an unparseable hourly rate as a row failure
+          // instead of silently importing a null/zero rate.
+          let hourlyRateCents = 0;
+          if (r.hourlyRate?.trim()) {
+            const parsed = Math.round(parseFloat(r.hourlyRate) * 100);
+            if (Number.isNaN(parsed)) {
+              failed.push({ row: rowNum, error: `"${firstName} ${lastName}": invalid hourly rate ("${r.hourlyRate}")` });
+              continue;
+            }
+            hourlyRateCents = parsed;
+          }
 
-        const existingId = email ? byEmail.get(email.toLowerCase()) : undefined;
-        if (existingId) {
-          const { error } = await supabase.from("crm_employees").update(payload).eq("id", existingId);
-          if (error) throw error;
-          updated++;
-        } else {
-          const { data: newEmployee, error } = await supabase.from("crm_employees").insert(payload).select("id").single();
-          if (error) throw error;
-          // The dedup map was only built once from the DB before this loop —
-          // without updating it here, two rows in the SAME csv sharing an
-          // email would both create a new employee instead of the second
-          // one matching (updating) the first.
-          if (newEmployee && email) byEmail.set(email.toLowerCase(), newEmployee.id);
-          created++;
+          const email = r.email?.trim() || null;
+          const payload = {
+            first_name: firstName,
+            last_name: lastName,
+            email,
+            phone: r.phone?.trim() || null,
+            cell_phone: r.cellPhone?.trim() || null,
+            address: r.address?.trim() || null,
+            city: r.city?.trim() || null,
+            state: r.state?.trim() || null,
+            zip: r.zip?.trim() || null,
+            date_hired: r.dateHired?.trim() || null,
+            resource_code: r.resourceCode?.trim() || null,
+            hourly_rate_cents: hourlyRateCents,
+          };
+
+          const existingId = email ? byEmail.get(email.toLowerCase()) : undefined;
+          if (existingId) {
+            const { error } = await supabase.from("crm_employees").update(payload).eq("id", existingId);
+            if (error) {
+              failed.push({ row: rowNum, error: `"${firstName} ${lastName}": ${error.message}` });
+              continue;
+            }
+          } else {
+            const { data: newEmployee, error } = await supabase.from("crm_employees").insert(payload).select("id").single();
+            if (error) {
+              failed.push({ row: rowNum, error: `"${firstName} ${lastName}": ${error.message}` });
+              continue;
+            }
+            // The dedup map was only built once from the DB before this loop —
+            // without updating it here, two rows in the SAME csv sharing an
+            // email would both create a new employee instead of the second
+            // one matching (updating) the first.
+            if (newEmployee && email) byEmail.set(email.toLowerCase(), newEmployee.id);
+          }
+
+          succeeded++;
+        } catch (err) {
+          failed.push({ row: rowNum, error: err instanceof Error ? err.message : "Unknown error" });
         }
       }
 
-      return { created, updated, skipped };
+      return { succeeded, failed };
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["crm-employees"] });

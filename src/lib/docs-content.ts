@@ -849,7 +849,7 @@ export const DOC_SECTIONS: DocSection[] = [
           {
             step: "Sub-properties on one contract",
             detail:
-              "A commercial contract can be set to include sub-properties — billing every property under a parent client's hierarchy from a single contract rather than issuing one contract per site.",
+              "A commercial contract can be set to include sub-properties — billing every property on the SAME client's account from a single contract rather than issuing one contract per address. This is for one client billed together across multiple sites, not the parent/child (sub-account) hierarchy — that's for locations that need their own independent jobs/invoicing.",
           },
           {
             step: "The 'PO Number' field is not the internal PO module",

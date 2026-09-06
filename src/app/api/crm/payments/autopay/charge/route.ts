@@ -11,6 +11,19 @@ const log = logger.child("stripe autopay charge");
 
 const ChargeSchema = z.object({ invoiceId: z.string().uuid() });
 
+// See the duplicate-charge guard below: how far back to look for an
+// already-in-flight/succeeded PaymentIntent against the same invoice, and
+// which statuses count as "still real money that might land" rather than a
+// dead end the staff member is free to retry past.
+const RECENT_CHARGE_WINDOW_SECONDS = 120;
+const BLOCKING_PAYMENT_INTENT_STATUSES = new Set([
+  "succeeded",
+  "processing",
+  "requires_capture",
+  "requires_action",
+  "requires_confirmation",
+]);
+
 /** Charges an invoice's balance against the client's saved payment method (card or
  * ACH) off-session — the "Invoices to Charge" / "ACH Invoices to Charge" queues use
  * this instead of the customer confirming a PaymentElement themselves. On success the
@@ -27,6 +40,17 @@ export async function POST(request: Request) {
 
   const { data: profile } = await supabase.from("profiles").select("org_id").eq("id", user.id).single();
   if (!profile) return NextResponse.json({ error: "Profile not found" }, { status: 403 });
+
+  // This actually moves the client's money — gate it behind the same
+  // permission that gates recording/modifying payments in the Invoices UI
+  // (admins always pass — see has_settings_permission()'s own definition).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: canCharge } = await (supabase.rpc as any)("has_settings_permission", {
+    p_key: "acct_add_modify_payments",
+  });
+  if (!canCharge) {
+    return NextResponse.json({ error: "You don't have permission to charge payment methods" }, { status: 403 });
+  }
 
   const body = await request.json();
   const parsed = ChargeSchema.safeParse(body);
@@ -88,6 +112,42 @@ export async function POST(request: Request) {
       : { feeCents: 0, totalChargeCents: invoice.balance_cents };
 
   const stripe = getStripe();
+
+  // chargeIdempotencyKey only collapses attempts within the same 10-second
+  // bucket — a double-submit further apart than that (two staff, or one
+  // staff in two tabs) would otherwise sail through as two genuinely
+  // separate, real charges. Ask Stripe directly whether a PaymentIntent for
+  // this exact invoice already exists from the last few minutes and hasn't
+  // definitively failed, and refuse to charge again if so.
+  try {
+    const recentIntents = await stripe.paymentIntents.list(
+      {
+        customer: client.stripe_customer_id,
+        created: { gte: Math.floor(Date.now() / 1000) - RECENT_CHARGE_WINDOW_SECONDS },
+        limit: 20,
+      },
+      { stripeAccount: org.stripe_connect_account_id }
+    );
+    const duplicate = recentIntents.data.find(
+      (pi) => pi.metadata?.invoice_id === invoice.id && BLOCKING_PAYMENT_INTENT_STATUSES.has(pi.status)
+    );
+    if (duplicate) {
+      return NextResponse.json(
+        {
+          error:
+            "A charge was already just submitted for this invoice. Please wait a moment or check Payment History before retrying.",
+        },
+        { status: 409 }
+      );
+    }
+  } catch (err) {
+    // Fail open on the lookup itself (a Stripe API hiccup shouldn't block a
+    // legitimate charge) — chargeIdempotencyKey's 10-second window still
+    // catches an exact-duplicate retry; this is the belt-and-suspenders
+    // layer for a slower double-submit.
+    log.error("failed to check for a recent duplicate charge", { error: err, invoiceId });
+  }
+
   try {
     const paymentIntent = await stripe.paymentIntents.create(
       {

@@ -1132,6 +1132,15 @@ function tabLabel(tab: string): string {
 // ── IntegrationsTab ───────────────────────────────────────────────────────────
 
 function IntegrationsTab() {
+  const { currentUser, currentUserLoaded } = useCurrentUserStore();
+  // The 'samsara' integrations row holds a plaintext API key, so RLS
+  // (20260905140000_integrations_samsara_admin_only.sql) now restricts it to
+  // admins only — same as 'zapier'. This page itself is reachable by
+  // admins & managers (EQUIPT_SETTINGS_ROLES above), so a manager would
+  // otherwise land on this tab with the DB silently denying the read/write:
+  // gate it here too rather than showing a confusing empty/broken card.
+  const isAdmin = currentUser.role === "admin";
+
   const { data: samsara, refetch } = useIntegration("samsara");
   const { mutate: upsertIntegration, isPending: saving } = useUpsertIntegration();
 
@@ -1199,6 +1208,15 @@ function IntegrationsTab() {
 
   const lastSync   = samsara?.lastSyncAt;
   const lastStatus = samsara?.lastSyncStatus;
+
+  if (currentUserLoaded && !isAdmin) {
+    return (
+      <div className="max-w-2xl rounded-xl border bg-white p-6 text-sm text-slate-500 shadow-sm">
+        The Samsara integration (API key & vehicle sync) is limited to admins.
+        Ask an admin if you need something changed here.
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-2xl space-y-8">

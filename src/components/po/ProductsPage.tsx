@@ -137,14 +137,16 @@ export function ProductsPage() {
                 )
               }
               onImport={async (rows) => {
-                const { inserted, skipped } = await bulkImportProducts(rows);
-                if (skipped > 0) {
+                const result = await bulkImportProducts(rows);
+                const { succeeded, failed } = result;
+                if (failed.length > 0) {
                   toast.warning(
-                    `Imported ${inserted} product${inserted !== 1 ? "s" : ""}. ${skipped} row${skipped !== 1 ? "s" : ""} skipped (missing name or unrecognised category).`
+                    `Imported ${succeeded} product${succeeded !== 1 ? "s" : ""}. ${failed.length} row${failed.length !== 1 ? "s" : ""} failed — see details below.`
                   );
                 } else {
-                  toast.success(`Successfully imported ${inserted} product${inserted !== 1 ? "s" : ""}.`);
+                  toast.success(`Successfully imported ${succeeded} product${succeeded !== 1 ? "s" : ""}.`);
                 }
+                return result;
               }}
             />
             {canBulkEditProducts && (

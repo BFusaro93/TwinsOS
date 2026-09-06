@@ -103,14 +103,16 @@ export default function ClientsPage() {
                 )
               }
               onImport={async (rows) => {
-                const { inserted, skipped } = await bulkImportClients(rows);
-                if (skipped > 0) {
+                const result = await bulkImportClients(rows);
+                const { succeeded, failed } = result;
+                if (failed.length > 0) {
                   toast.warning(
-                    `Imported ${inserted} client${inserted !== 1 ? "s" : ""}. ${skipped} row${skipped !== 1 ? "s" : ""} skipped (missing display name).`
+                    `Imported ${succeeded} client${succeeded !== 1 ? "s" : ""}. ${failed.length} row${failed.length !== 1 ? "s" : ""} failed — see details below.`
                   );
                 } else {
-                  toast.success(`Successfully imported ${inserted} client${inserted !== 1 ? "s" : ""}.`);
+                  toast.success(`Successfully imported ${succeeded} client${succeeded !== 1 ? "s" : ""}.`);
                 }
+                return result;
               }}
               hideImport={!can("client_bulk_create")}
             />

@@ -26,7 +26,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { exportCSVTemplate, readCSVFile } from "@/lib/csv";
+import { exportCSVTemplate, readCSVFile, isBulkImportResult, type BulkImportResult } from "@/lib/csv";
 import { usePermissions } from "@/lib/hooks/use-permissions";
 
 interface ImportExportMenuProps {
@@ -204,6 +204,8 @@ export function ImportExportMenu({
   const [parseError, setParseError] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
+  const [importSummary, setImportSummary] = useState<BulkImportResult | null>(null);
+  const [showFailedRows, setShowFailedRows] = useState(false);
 
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -274,10 +276,23 @@ export function ImportExportMenu({
   async function handleConfirmImport() {
     setImporting(true);
     setImportError(null);
+    setImportSummary(null);
     try {
-      await onImport(parsedRows);
-      setPreviewOpen(false);
-      setParsedRows([]);
+      const result = await onImport(parsedRows);
+      if (isBulkImportResult(result)) {
+        // Row-level result: show a summary instead of just closing, so a
+        // partial failure (e.g. 187 imported, 13 failed) is visible with
+        // per-row detail rather than one opaque success/error message.
+        setImportSummary(result);
+        setShowFailedRows(false);
+        if (result.failed.length === 0) {
+          setPreviewOpen(false);
+          setParsedRows([]);
+        }
+      } else {
+        setPreviewOpen(false);
+        setParsedRows([]);
+      }
       setImportError(null);
     } catch (err) {
       setImportError(
@@ -301,6 +316,8 @@ export function ImportExportMenu({
     setParsedRows([]);
     setParseError(null);
     setImportError(null);
+    setImportSummary(null);
+    setShowFailedRows(false);
   }
 
   const previewCols = parsedRows.length > 0 ? Object.keys(parsedRows[0]) : [];
@@ -470,11 +487,46 @@ export function ImportExportMenu({
             </div>
           )}
 
+          {importSummary && (
+            <div
+              className={`rounded-md border px-4 py-3 text-sm ${
+                importSummary.failed.length > 0
+                  ? "border-amber-200 bg-amber-50 text-amber-800"
+                  : "border-green-200 bg-green-50 text-green-700"
+              }`}
+            >
+              <p className="font-medium">
+                {importSummary.succeeded} imported
+                {importSummary.failed.length > 0 && `, ${importSummary.failed.length} failed`}
+              </p>
+              {importSummary.failed.length > 0 && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setShowFailedRows((s) => !s)}
+                    className="mt-1 text-xs font-medium underline underline-offset-2"
+                  >
+                    {showFailedRows ? "Hide details" : "Show details"}
+                  </button>
+                  {showFailedRows && (
+                    <ul className="mt-2 max-h-40 overflow-y-auto rounded border border-amber-200 bg-white text-xs">
+                      {importSummary.failed.map((f, i) => (
+                        <li key={i} className="border-b border-amber-100 px-2 py-1 last:border-0">
+                          <span className="font-medium">Row {f.row}:</span> {f.error}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+
           <DialogFooter>
             <Button variant="outline" onClick={resetAll}>
-              Cancel
+              {importSummary ? "Close" : "Cancel"}
             </Button>
-            {!parseError && (
+            {!parseError && !importSummary && (
               <Button onClick={handleConfirmImport} disabled={importing}>
                 {importing ? "Importing..." : `Import ${parsedRows.length} Row${parsedRows.length !== 1 ? "s" : ""}`}
               </Button>

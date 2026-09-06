@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/client";
 import { mapPart } from "@/lib/supabase/mappers";
 import { setParts } from "@/lib/hooks/cost-store";
 import { useSettingsStore } from "@/stores/settings-store";
+import type { BulkImportResult } from "@/lib/csv";
 import type { Part } from "@/types/cmms";
 
 export function useParts() {
@@ -320,20 +321,48 @@ export function useReceivePartCostLayer() {
 export function useBulkImportParts() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (rows: Record<string, string>[]) => {
+    mutationFn: async (rows: Record<string, string>[]): Promise<BulkImportResult> => {
       const supabase = createClient();
-      const inserts = rows
-        .filter((r) => r.name?.trim() && r.partNumber?.trim())
-        .map((r) => {
+      const { data: { user } } = await supabase.auth.getUser();
+      const { data: profile } = await supabase.from("profiles").select("org_id").eq("id", user!.id).single();
+
+      let succeeded = 0;
+      const failed: BulkImportResult["failed"] = [];
+
+      for (let i = 0; i < rows.length; i++) {
+        const r = rows[i];
+        const rowNum = i + 1;
+        try {
+          const name = r.name?.trim();
+          const partNumber = r.partNumber?.trim();
+          if (!name || !partNumber) {
+            failed.push({ row: rowNum, error: "Missing required field: Name / Part Number" });
+            continue;
+          }
+
+          // parseFloat("N/A") etc. returns NaN, and Math.round(NaN) is NaN —
+          // which silently serializes to `null`, corrupting pricing data with
+          // no error. Treat an unparseable unit cost as a row failure instead
+          // of silently importing a null cost.
+          let unitCostCents = 0;
+          if (r.unitCost?.trim()) {
+            const parsed = Math.round(parseFloat(r.unitCost) * 100);
+            if (Number.isNaN(parsed)) {
+              failed.push({ row: rowNum, error: `"${name}": invalid unit cost ("${r.unitCost}")` });
+              continue;
+            }
+            unitCostCents = parsed;
+          }
+
           const qoh = parseInt(r.quantityOnHand) || 0;
           const minStock = parseInt(r.minimumStock) || 0;
-          return {
-            name: r.name.trim(),
-            part_number: r.partNumber.trim(),
+          const row = {
+            name,
+            part_number: partNumber,
             description: r.description?.trim() || "",
             category: r.category?.trim() || "mechanical",
             categories: [r.category?.trim() || "mechanical"],
-            unit_cost: r.unitCost ? Math.round(parseFloat(r.unitCost) * 100) : 0,
+            unit_cost: unitCostCents,
             quantity_on_hand: qoh,
             minimum_stock: minStock,
             vendor_name: r.vendorName?.trim() || null,
@@ -342,67 +371,70 @@ export function useBulkImportParts() {
             cost_layers: [] as unknown as import("@/types/supabase").Json,
             alternate_vendors: [] as unknown as import("@/types/supabase").Json,
           };
-        });
-      if (inserts.length === 0) return 0;
 
-      // Insert new parts one-by-one; if a part_number already exists,
-      // update it instead (the partial unique index prevents bulk upsert).
-      let count = 0;
-      for (const row of inserts) {
-        const { data: newPart, error } = await supabase
-          .from("parts")
-          .insert(row)
-          .select("id, product_item_id")
-          .single();
-        if (error?.code === "23505") {
-          // Duplicate — update existing record by part_number
-          const { data: { user } } = await supabase.auth.getUser();
-          const { data: profile } = await supabase.from("profiles").select("org_id").eq("id", user!.id).single();
-          await supabase.from("parts").update({
-            name: row.name,
-            description: row.description,
-            category: row.category,
-            categories: row.categories as string[],
-            unit_cost: row.unit_cost,
-            quantity_on_hand: row.quantity_on_hand,
-            minimum_stock: row.minimum_stock,
-            vendor_name: row.vendor_name,
-            location: row.location,
-            is_inventory: row.is_inventory,
-          }).eq("part_number", row.part_number).eq("org_id", profile!.org_id).is("deleted_at", null);
-        } else if (error) {
-          throw error;
-        } else if (newPart && !newPart.product_item_id) {
-          // Auto-create a product_items entry so this part appears in the PO catalog
-          const { data: product } = await supabase
-            .from("product_items")
-            .insert({
+          // Insert new parts one-by-one; if a part_number already exists,
+          // update it instead (the partial unique index prevents bulk upsert).
+          const { data: newPart, error } = await supabase
+            .from("parts")
+            .insert(row)
+            .select("id, product_item_id")
+            .single();
+          if (error?.code === "23505") {
+            // Duplicate — update existing record by part_number
+            const { error: updateError } = await supabase.from("parts").update({
               name: row.name,
-              part_number: row.part_number,
               description: row.description,
-              category: "maintenance_part",
+              category: row.category,
+              categories: row.categories as string[],
               unit_cost: row.unit_cost,
-              price: row.unit_cost,
-              vendor_name: row.vendor_name || "",
-              alternate_vendors: [] as unknown as import("@/types/supabase").Json,
-              is_inventory: row.is_inventory,
               quantity_on_hand: row.quantity_on_hand,
               minimum_stock: row.minimum_stock,
-              part_category: row.category || null,
-              cost_layers: [] as unknown as import("@/types/supabase").Json,
-            })
-            .select("id")
-            .single();
-          if (product) {
-            await supabase
-              .from("parts")
-              .update({ product_item_id: product.id })
-              .eq("id", newPart.id);
+              vendor_name: row.vendor_name,
+              location: row.location,
+              is_inventory: row.is_inventory,
+            }).eq("part_number", row.part_number).eq("org_id", profile!.org_id).is("deleted_at", null);
+            if (updateError) {
+              failed.push({ row: rowNum, error: `"${name}": ${updateError.message}` });
+              continue;
+            }
+          } else if (error) {
+            failed.push({ row: rowNum, error: `"${name}": ${error.message}` });
+            continue;
+          } else if (newPart && !newPart.product_item_id) {
+            // Auto-create a product_items entry so this part appears in the PO catalog
+            const { data: product } = await supabase
+              .from("product_items")
+              .insert({
+                name: row.name,
+                part_number: row.part_number,
+                description: row.description,
+                category: "maintenance_part",
+                unit_cost: row.unit_cost,
+                price: row.unit_cost,
+                vendor_name: row.vendor_name || "",
+                alternate_vendors: [] as unknown as import("@/types/supabase").Json,
+                is_inventory: row.is_inventory,
+                quantity_on_hand: row.quantity_on_hand,
+                minimum_stock: row.minimum_stock,
+                part_category: row.category || null,
+                cost_layers: [] as unknown as import("@/types/supabase").Json,
+              })
+              .select("id")
+              .single();
+            if (product) {
+              await supabase
+                .from("parts")
+                .update({ product_item_id: product.id })
+                .eq("id", newPart.id);
+            }
           }
+
+          succeeded++;
+        } catch (err) {
+          failed.push({ row: rowNum, error: err instanceof Error ? err.message : "Unknown error" });
         }
-        count++;
       }
-      return count;
+      return { succeeded, failed };
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["parts"] });

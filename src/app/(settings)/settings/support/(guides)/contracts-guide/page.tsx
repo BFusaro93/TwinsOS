@@ -206,15 +206,18 @@ export default function ContractsGuidePage() {
         </p>
         <ol className="list-decimal space-y-2 pl-5">
           <li>
-            Set up the parent/child client hierarchy first (see the Clients guide, linked below) —
-            the property manager as the parent client, each of the 5 sites as a child client under
-            it.
+            Add each of the 5 sites as a Property on the ONE client record first (More menu → Add
+            Property, on the client&apos;s detail page — see the Clients guide, linked below).
+            This is a single client billed as one account across multiple addresses, not several
+            separate client records — if the sites actually need independent jobs, invoicing, or
+            estimates instead of one shared bill, that&apos;s the parent/child client hierarchy
+            (sub-accounts) instead, a different feature covered in the Clients guide.
           </li>
           <li>
-            Create the contract against the <strong>parent</strong> client. In Contract Details,
-            check <strong>Include Sub Properties by Default</strong> — this is on by default and
-            documents that the contract covers the whole hierarchy, not just the parent&apos;s own
-            site.
+            Create the contract against that client. In Contract Details, check{" "}
+            <strong>Include Sub Properties by Default</strong> — this is on by default and
+            documents that the contract covers every property on the client&apos;s account, not
+            just one address.
           </li>
           <li>
             Set the invoice line items to the services covered across the sites (e.g. &quot;Weekly
@@ -234,11 +237,11 @@ export default function ContractsGuidePage() {
         </ol>
         <Callout>
           <strong>Sub-properties is a billing-scope flag, not an auto-aggregation feature.</strong>{" "}
-          Turning it on tells the contract it&apos;s meant to cover the parent&apos;s full property
-          hierarchy instead of issuing a separate contract per site — but the monthly amount you
-          enter is still one flat number per month. It won&apos;t sum up child-property pricing for
-          you, so double-check the combined total by hand whenever a site is added to or dropped
-          from the hierarchy.
+          Turning it on tells the contract it&apos;s meant to cover every property on the
+          client&apos;s account instead of issuing a separate contract per site — but the monthly
+          amount you enter is still one flat number per month. It won&apos;t sum up per-property
+          pricing for you, so double-check the combined total by hand whenever a property is added
+          to or removed from the client.
         </Callout>
       </Section>
 
@@ -262,7 +265,8 @@ export default function ContractsGuidePage() {
             <a href="/settings/support/clients-guide" className="text-[#60ab45] hover:underline">
               Clients
             </a>{" "}
-            — the parent/child hierarchy that sub-properties billing relies on.
+            — adding properties to a client, and when to use the parent/child (sub-account)
+            hierarchy instead.
           </li>
         </ul>
       </Section>

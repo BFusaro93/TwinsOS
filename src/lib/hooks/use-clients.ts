@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import { useOrgList } from "@/lib/hooks/use-org-lists";
 import { fireAutomationTrigger } from "@/lib/automations/fire-trigger-client";
+import type { BulkImportResult } from "@/lib/csv";
 import type {
   Client,
   ClientContact,
@@ -483,23 +484,80 @@ function normalizeAccountType(value: string): "residential" | "commercial" {
   return v === "commercial" ? "commercial" : "residential";
 }
 
+/** Basic, permissive email format check — mirrors the vendor-form validation
+ *  in NewVendorDialog.tsx so every CSV import enforces the same standard
+ *  rather than accepting arbitrary strings into `primary_email`. */
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/**
+ * Loads every existing (non-deleted) client's normalized email/phone into
+ * lookup maps so a CSV row can be matched against an existing account
+ * instead of creating a duplicate. Shared by useBulkImportClients and
+ * useBulkImportLeads so both importers dedup identically.
+ */
+async function loadClientDedupMaps(supabase: ReturnType<typeof createClient>) {
+  const { data: existing } = await supabase
+    .from("clients")
+    .select("id, primary_email, primary_phone")
+    .is("deleted_at", null);
+  const byEmail = new Map(
+    (existing ?? []).filter((c) => c.primary_email).map((c) => [c.primary_email!.trim().toLowerCase(), c.id])
+  );
+  const byPhone = new Map(
+    (existing ?? []).filter((c) => c.primary_phone).map((c) => [c.primary_phone!.replace(/\D/g, ""), c.id])
+  );
+  return { byEmail, byPhone };
+}
+
 export function useBulkImportClients() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (rows: Record<string, string>[]) => {
+    mutationFn: async (rows: Record<string, string>[]): Promise<BulkImportResult> => {
       const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
 
-      let skipped = 0;
-      const inserts = rows
-        .map((r) => {
+      // Load existing clients once so each row can be matched against an
+      // existing account by email/phone instead of creating a duplicate —
+      // the same dedup approach useBulkImportLeads already uses, previously
+      // missing here (dedup only ever triggered on a Postgres unique-
+      // constraint conflict on account_number, a field rarely populated in
+      // a user's CSV).
+      const { byEmail, byPhone } = await loadClientDedupMaps(supabase);
+
+      let succeeded = 0;
+      const failed: BulkImportResult["failed"] = [];
+
+      for (let i = 0; i < rows.length; i++) {
+        const r = rows[i];
+        const rowNum = i + 1;
+        try {
           const displayName = r.displayName?.trim();
-          if (!displayName) { skipped++; return null; }
-          return {
+          if (!displayName) {
+            failed.push({ row: rowNum, error: "Missing required field: Display Name" });
+            continue;
+          }
+
+          const emailRaw = r.primaryEmail?.trim() || null;
+          if (emailRaw && !EMAIL_RE.test(emailRaw)) {
+            failed.push({ row: rowNum, error: `"${displayName}": invalid email format ("${emailRaw}")` });
+            continue;
+          }
+
+          const email = emailRaw?.toLowerCase() || null;
+          const phone = r.primaryPhone?.trim() || null;
+          const phoneDigits = phone?.replace(/\D/g, "") || null;
+          const matchedClientId = (email && byEmail.get(email)) || (phoneDigits && byPhone.get(phoneDigits));
+          if (matchedClientId) {
+            failed.push({ row: rowNum, error: `"${displayName}": matches an existing client by email or phone (likely duplicate) — skipped` });
+            continue;
+          }
+
+          const row = {
             display_name: displayName,
             account_type: normalizeAccountType(r.accountType ?? ""),
             account_number: r.accountNumber?.trim() || undefined,
-            primary_phone: r.primaryPhone?.trim() || null,
-            primary_email: r.primaryEmail?.trim() || null,
+            primary_phone: phone,
+            primary_email: emailRaw,
             billing_address: r.billingAddress?.trim() || null,
             billing_city: r.billingCity?.trim() || null,
             billing_state: r.billingState?.trim() || null,
@@ -511,40 +569,51 @@ export function useBulkImportClients() {
             source: r.source?.trim() || null,
             client_since: new Date().toISOString().split("T")[0],
           };
-        })
-        .filter((r): r is NonNullable<typeof r> => r !== null);
 
-      if (inserts.length === 0) return { inserted: 0, skipped };
+          const { data: newClient, error } = await supabase
+            .from("clients")
+            .insert({ ...row, created_by: user?.id ?? null })
+            .select("id")
+            .single();
 
-      // Insert one-by-one so a duplicate account_number can be upserted instead of failing the batch.
-      // Clients without an account_number are always inserted fresh (the org auto-assigns one).
-      let inserted = 0;
-      const { data: { user } } = await supabase.auth.getUser();
+          if (error?.code === "23505" && row.account_number) {
+            // Duplicate account_number — update the existing record instead of failing the row.
+            const { error: updateError } = await supabase.from("clients").update({
+              display_name: row.display_name,
+              account_type: row.account_type,
+              primary_phone: row.primary_phone,
+              primary_email: row.primary_email,
+              billing_address: row.billing_address,
+              billing_city: row.billing_city,
+              billing_state: row.billing_state,
+              billing_zip: row.billing_zip,
+              service_address: row.service_address,
+              service_city: row.service_city,
+              service_state: row.service_state,
+              service_zip: row.service_zip,
+              source: row.source,
+            }).eq("account_number", row.account_number).is("deleted_at", null);
+            if (updateError) {
+              failed.push({ row: rowNum, error: `"${displayName}": ${updateError.message}` });
+              continue;
+            }
+          } else if (error) {
+            failed.push({ row: rowNum, error: `"${displayName}": ${error.message}` });
+            continue;
+          } else if (newClient) {
+            // Keep the dedup maps current so two rows in the SAME csv sharing
+            // an email/phone match each other instead of both inserting.
+            if (email) byEmail.set(email, newClient.id);
+            if (phoneDigits) byPhone.set(phoneDigits, newClient.id);
+          }
 
-      for (const row of inserts) {
-        const { error } = await supabase.from("clients").insert({ ...row, created_by: user?.id ?? null });
-        if (error?.code === "23505" && row.account_number) {
-          await supabase.from("clients").update({
-            display_name: row.display_name,
-            account_type: row.account_type,
-            primary_phone: row.primary_phone,
-            primary_email: row.primary_email,
-            billing_address: row.billing_address,
-            billing_city: row.billing_city,
-            billing_state: row.billing_state,
-            billing_zip: row.billing_zip,
-            service_address: row.service_address,
-            service_city: row.service_city,
-            service_state: row.service_state,
-            service_zip: row.service_zip,
-            source: row.source,
-          }).eq("account_number", row.account_number).is("deleted_at", null);
-        } else if (error) {
-          throw error;
+          succeeded++;
+        } catch (err) {
+          failed.push({ row: rowNum, error: err instanceof Error ? err.message : "Unknown error" });
         }
-        inserted++;
       }
-      return { inserted, skipped };
+
+      return { succeeded, failed };
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["clients"] });
@@ -928,12 +997,7 @@ export function useBulkImportLeads() {
 
       // Load every existing (non-deleted) client once so each row can be matched
       // against an existing account by email/phone instead of creating a duplicate.
-      const { data: existing } = await supabase
-        .from("clients")
-        .select("id, primary_email, primary_phone")
-        .is("deleted_at", null);
-      const byEmail = new Map((existing ?? []).filter((c) => c.primary_email).map((c) => [c.primary_email!.trim().toLowerCase(), c.id]));
-      const byPhone = new Map((existing ?? []).filter((c) => c.primary_phone).map((c) => [c.primary_phone!.replace(/\D/g, ""), c.id]));
+      const { byEmail, byPhone } = await loadClientDedupMaps(supabase);
 
       let created = 0;
       let matched = 0;

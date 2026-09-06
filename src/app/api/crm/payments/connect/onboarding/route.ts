@@ -50,7 +50,8 @@ export async function POST(request: Request) {
     }
   }
 
-  let accountId = org.stripe_connect_account_id;
+  const previousAccountId = org.stripe_connect_account_id;
+  let accountId = previousAccountId;
   if (!accountId) {
     const account = await stripe.accounts.create({
       type: "standard",
@@ -67,6 +68,35 @@ export async function POST(request: Request) {
     if (updateError) {
       log.error("failed to save connect account id", { error: updateError, orgId: org.id });
       return NextResponse.json({ error: "Failed to save Stripe account" }, { status: 500 });
+    }
+
+    // Customers and PaymentMethods live on the connected account, not the
+    // platform account (see src/lib/stripe/saved-payment-methods.ts) — a
+    // reconnect (this org previously had a DIFFERENT connected account) means
+    // every client's saved card/bank reference now points at an account that
+    // no longer exists for this org. Clear them so the UI stops showing a
+    // "valid" saved method that will fail with "No such PaymentMethod" the
+    // next time anyone tries to charge it, and so autopay doesn't silently
+    // keep trying. A first-time connect (previousAccountId is null) has
+    // nothing stale to clear.
+    if (previousAccountId) {
+      const { error: clearError } = await serviceClient
+        .from("clients")
+        .update({
+          stripe_customer_id: null,
+          saved_payment_method_id: null,
+          saved_payment_method_type: null,
+          saved_payment_method_summary: null,
+          autopay_enabled: false,
+        })
+        .eq("org_id", org.id);
+      if (clearError) {
+        log.error("failed to clear stale saved payment methods after reconnect", {
+          error: clearError,
+          orgId: org.id,
+          previousAccountId,
+        });
+      }
     }
   }
 

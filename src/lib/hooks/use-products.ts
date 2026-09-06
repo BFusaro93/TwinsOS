@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/client";
 import { mapProductItem } from "@/lib/supabase/mappers";
 import { setProducts } from "@/lib/hooks/cost-store";
 import { useSettingsStore } from "@/stores/settings-store";
+import type { BulkImportResult } from "@/lib/csv";
 import type { ProductItem } from "@/types";
 
 export function useProducts() {
@@ -359,114 +360,139 @@ function normalizeProductCategory(raw: string): string | null {
  * `unitCost` is a dollar decimal string stored as cents.
  * Returns { inserted, skipped } so callers can surface an accurate count.
  */
+/** Parses a dollar-decimal CSV cell into integer cents. Returns `null` for a
+ *  blank cell (meaning "use the default"), or `NaN` if the cell has content
+ *  that isn't a valid number — callers must check for NaN and treat it as a
+ *  row validation failure rather than silently inserting a corrupted cost. */
+function parseCentsOrNaN(raw: string | undefined): number | null {
+  if (!raw?.trim()) return null;
+  return Math.round(parseFloat(raw) * 100);
+}
+
 export function useBulkImportProducts() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (rows: Record<string, string>[]) => {
+    mutationFn: async (rows: Record<string, string>[]): Promise<BulkImportResult> => {
       const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      const { data: profile } = await supabase.from("profiles").select("org_id").eq("id", user!.id).single();
 
-      let skipped = 0;
-      const inserts = rows
-        .map((r) => {
+      let succeeded = 0;
+      const failed: BulkImportResult["failed"] = [];
+
+      for (let i = 0; i < rows.length; i++) {
+        const r = rows[i];
+        const rowNum = i + 1;
+        try {
           const name = r.name?.trim();
           const category = normalizeProductCategory(r.category ?? "");
-          if (!name || !category) { skipped++; return null; }
+          if (!name || !category) {
+            failed.push({ row: rowNum, error: "Missing required field: Name / Category (or category not recognised)" });
+            continue;
+          }
+
+          const unitCostCents = parseCentsOrNaN(r.unitCost);
+          if (unitCostCents !== null && Number.isNaN(unitCostCents)) {
+            failed.push({ row: rowNum, error: `"${name}": invalid unit cost ("${r.unitCost}")` });
+            continue;
+          }
+          const salePriceCents = parseCentsOrNaN(r.salePrice);
+          if (salePriceCents !== null && Number.isNaN(salePriceCents)) {
+            failed.push({ row: rowNum, error: `"${name}": invalid sale price ("${r.salePrice}")` });
+            continue;
+          }
+
           const qoh = parseInt(r.quantityOnHand) || 0;
           const isInventory = r.isInventory?.trim().toLowerCase() === "yes" || qoh > 0;
-          return {
+          const row = {
             name,
             part_number: r.partNumber?.trim() || "",
             description: r.description?.trim() || undefined,
             category,
-            unit_cost: r.unitCost ? Math.round(parseFloat(r.unitCost) * 100) : 0,
-            price: r.salePrice
-              ? Math.round(parseFloat(r.salePrice) * 100)
-              : r.unitCost ? Math.round(parseFloat(r.unitCost) * 100) : 0,
+            unit_cost: unitCostCents ?? 0,
+            price: salePriceCents ?? unitCostCents ?? 0,
             vendor_name: r.vendorName?.trim() || undefined,
             is_inventory: isInventory,
             quantity_on_hand: qoh,
             cost_layers: [] as unknown as import("@/types/supabase").Json,
             alternate_vendors: [] as unknown as import("@/types/supabase").Json,
           };
-        })
-        .filter((r): r is NonNullable<typeof r> => r !== null);
 
-      if (inserts.length === 0) return { inserted: 0, skipped };
-
-      // Insert one-by-one so we can handle duplicate part_number upserts gracefully.
-      // Products without a part_number are always inserted fresh (no natural dedup key).
-      let inserted = 0;
-      const { data: { user } } = await supabase.auth.getUser();
-      const { data: profile } = await supabase.from("profiles").select("org_id").eq("id", user!.id).single();
-
-      for (const row of inserts) {
-        const { data: created, error } = await supabase
-          .from("product_items")
-          .insert({ ...row, created_by: user?.id ?? null })
-          .select()
-          .single();
-        let productId: string | undefined = created?.id;
-
-        if (error?.code === "23505" && row.part_number) {
-          // Duplicate part_number — update the existing record instead
-          const { data: updated } = await supabase.from("product_items").update({
-            name: row.name,
-            description: row.description,
-            category: row.category,
-            unit_cost: row.unit_cost,
-            price: row.price,
-            vendor_name: row.vendor_name,
-            is_inventory: row.is_inventory,
-            quantity_on_hand: row.quantity_on_hand,
-          }).eq("part_number", row.part_number).eq("org_id", profile!.org_id).is("deleted_at", null)
+          const { data: created, error } = await supabase
+            .from("product_items")
+            .insert({ ...row, created_by: user?.id ?? null })
             .select()
             .single();
-          productId = updated?.id;
-        } else if (error) {
-          throw error;
-        }
+          let productId: string | undefined = created?.id;
 
-        // Mirror maintenance_part rows into CMMS parts inventory — matches
-        // useCreateProduct's mirroring so a bulk-imported maintenance part
-        // shows up in Parts, not just Products.
-        if (row.category === "maintenance_part" && productId) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const { data: existingPart } = await (supabase as any)
-            .from("parts")
-            .select("id")
-            .eq("product_item_id", productId)
-            .maybeSingle();
-
-          if (existingPart) {
-            await supabase.from("parts").update({
+          if (error?.code === "23505" && row.part_number) {
+            // Duplicate part_number — update the existing record instead
+            const { data: updated, error: updateError } = await supabase.from("product_items").update({
               name: row.name,
-              part_number: row.part_number || "",
-              description: row.description || "",
+              description: row.description,
+              category: row.category,
               unit_cost: row.unit_cost,
-              quantity_on_hand: row.quantity_on_hand,
-              vendor_name: row.vendor_name || "",
+              price: row.price,
+              vendor_name: row.vendor_name,
               is_inventory: row.is_inventory,
-            }).eq("id", existingPart.id);
-          } else {
-            await supabase.from("parts").insert({
-              name: row.name,
-              part_number: row.part_number || "",
-              description: row.description || "",
-              category: "maintenance_part",
-              unit_cost: row.unit_cost,
               quantity_on_hand: row.quantity_on_hand,
-              minimum_stock: 0,
-              vendor_name: row.vendor_name || "",
-              product_item_id: productId,
-              is_inventory: row.is_inventory,
-              created_by: user?.id ?? null,
-            });
+            }).eq("part_number", row.part_number).eq("org_id", profile!.org_id).is("deleted_at", null)
+              .select()
+              .single();
+            if (updateError) {
+              failed.push({ row: rowNum, error: `"${name}": ${updateError.message}` });
+              continue;
+            }
+            productId = updated?.id;
+          } else if (error) {
+            failed.push({ row: rowNum, error: `"${name}": ${error.message}` });
+            continue;
           }
-        }
 
-        inserted++;
+          // Mirror maintenance_part rows into CMMS parts inventory — matches
+          // useCreateProduct's mirroring so a bulk-imported maintenance part
+          // shows up in Parts, not just Products.
+          if (row.category === "maintenance_part" && productId) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const { data: existingPart } = await (supabase as any)
+              .from("parts")
+              .select("id")
+              .eq("product_item_id", productId)
+              .maybeSingle();
+
+            if (existingPart) {
+              await supabase.from("parts").update({
+                name: row.name,
+                part_number: row.part_number || "",
+                description: row.description || "",
+                unit_cost: row.unit_cost,
+                quantity_on_hand: row.quantity_on_hand,
+                vendor_name: row.vendor_name || "",
+                is_inventory: row.is_inventory,
+              }).eq("id", existingPart.id);
+            } else {
+              await supabase.from("parts").insert({
+                name: row.name,
+                part_number: row.part_number || "",
+                description: row.description || "",
+                category: "maintenance_part",
+                unit_cost: row.unit_cost,
+                quantity_on_hand: row.quantity_on_hand,
+                minimum_stock: 0,
+                vendor_name: row.vendor_name || "",
+                product_item_id: productId,
+                is_inventory: row.is_inventory,
+                created_by: user?.id ?? null,
+              });
+            }
+          }
+
+          succeeded++;
+        } catch (err) {
+          failed.push({ row: rowNum, error: err instanceof Error ? err.message : "Unknown error" });
+        }
       }
-      return { inserted, skipped };
+      return { succeeded, failed };
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["products"] });

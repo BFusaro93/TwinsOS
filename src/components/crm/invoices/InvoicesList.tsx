@@ -540,7 +540,7 @@ export function InvoicesList({ clientId }: Props) {
               >
                 Print Selected
               </DropdownMenuItem>
-              {onChargeTab && (
+              {onChargeTab && can("acct_add_modify_payments") && (
                 <>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem
@@ -778,7 +778,7 @@ export function InvoicesList({ clientId }: Props) {
                       <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setOpenInvoiceId(inv.id)}>
                         <FileText className="mr-1 h-3 w-3" /> Open
                       </Button>
-                      {inv.clientSavedPaymentMethodType && inv.balanceCents > 0 && inv.status !== "void" && (
+                      {inv.clientSavedPaymentMethodType && inv.balanceCents > 0 && inv.status !== "void" && can("acct_add_modify_payments") && (
                         <Button
                           variant="ghost"
                           size="sm"

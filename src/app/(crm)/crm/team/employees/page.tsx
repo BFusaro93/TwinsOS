@@ -105,11 +105,13 @@ export default function EmployeesPage() {
                 )
               }
               onImport={async (rows) => {
-                const { created, updated, skipped } = await bulkImportEmployees(rows);
-                const parts = [`${created} created`];
-                if (updated > 0) parts.push(`${updated} updated`);
-                if (skipped > 0) parts.push(`${skipped} skipped (missing first/last name)`);
-                toast[skipped > 0 ? "warning" : "success"](`Employees import: ${parts.join(", ")}.`);
+                const result = await bulkImportEmployees(rows);
+                const { succeeded, failed } = result;
+                const message = failed.length > 0
+                  ? `Employees import: ${succeeded} succeeded, ${failed.length} failed — see details below.`
+                  : `Employees import: ${succeeded} succeeded.`;
+                toast[failed.length > 0 ? "warning" : "success"](message);
+                return result;
               }}
             />
             <PermissionGate permission="emp_add">
